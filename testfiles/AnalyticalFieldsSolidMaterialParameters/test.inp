@@ -43,14 +43,14 @@ configuration, overwrite=yes
 model       = Gaussian
 mean        = 30000
 variance    = 1e7
-lengthscale = 10
+lengthScale = 10
 seed        = 3
 
 *AnalyticalField, name=AnalyticalField-02, type=randomScalar
 model       = Gaussian
 mean        = .5
 variance    = .5e-2
-lengthscale = 10
+lengthScale = 10
 seed        = 4
 
 *step, solver=theSolver, maxInc=1e0, minInc=1e0, maxNumInc=100, maxIter=25, stepLength=1
