@@ -221,7 +221,7 @@ def findSimilarString(s, ll: list[str]):
 
 def kwargsChecker(kwargsRequired: list[str], kwargsOptional: list[str]):
     def wrapper(fun, *args, **kwargs):
-        def decorator(*args, **kwargs):
+        def wrapped(*args, **kwargs):
             missing_kwargs = []
             for kwarg in kwargsRequired:
                 try:
@@ -261,8 +261,8 @@ def kwargsChecker(kwargsRequired: list[str], kwargsOptional: list[str]):
                     + hint
                 )
 
-            fun(*args, **kwargs)
+            return fun(*args, **kwargs)
 
-        return decorator
+        return wrapped
 
     return wrapper
