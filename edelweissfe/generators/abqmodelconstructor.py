@@ -51,7 +51,12 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.misc import convertLinesToFlatArray, isInteger, splitLineAtCommas
+from edelweissfe.utils.misc import (
+    convertLinesToFlatArray,
+    convertLinesToStringDictionary,
+    isInteger,
+    splitLineAtCommas,
+)
 
 
 class AbqModelConstructor:
@@ -342,10 +347,10 @@ class AbqModelConstructor:
         for fieldDef in inputFile["*analyticalField"]:
             analyticalFieldName = fieldDef["name"]
             analyticalFieldType = fieldDef["type"]
-            analyticalFieldData = fieldDef["data"]
+            analyticalFieldKwargs = convertLinesToStringDictionary(fieldDef["data"])
 
             analyticalFieldClass = getAnalyticalFieldByName(analyticalFieldType)
-            analyticalField = analyticalFieldClass(analyticalFieldName, analyticalFieldData, model)
+            analyticalField = analyticalFieldClass(analyticalFieldName, model, **analyticalFieldKwargs)
 
             model.analyticalFields[analyticalFieldName] = analyticalField
 

@@ -34,33 +34,33 @@ import pyvista
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
-from edelweissfe.utils.misc import convertLinesToStringDictionary
+from edelweissfe.utils.misc import kwargsChecker
 
 documentation = {
-    "file": "path to database file",
-    "result": "result name in database (optional if database contains only one dataset)",
+    "required": dict(
+        file="path to database file",
+        result="result name in database (optional if database contains only one dataset)",
+    ),
+    "optional": dict(),
 }
 
 # from inspect import signature
 
 
 class AnalyticalField(AnalyticalFieldBase):
-    """ """
-
-    def __init__(self, name, data, model):
+    @kwargsChecker(documentation["required"], documentation["optional"])
+    def __init__(self, name, FEModel, **kwargs):
         self.name = name
         self.type = "fromVtk"
 
-        options = convertLinesToStringDictionary(data)
+        self.domainSize = FEModel.domainSize
 
-        self.domainSize = model.domainSize
-
-        file = options["file"]
+        file = kwargs["file"]
 
         reader = pyvista.get_reader(file)
         self.data = reader.read()
 
-        result = options.get("result")
+        result = kwargs["result"]
         availableResults = self.data.array_names
 
         try:

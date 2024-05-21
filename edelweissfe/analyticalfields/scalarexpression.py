@@ -34,24 +34,27 @@ from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
 from edelweissfe.utils.math import createModelAccessibleFunction
-from edelweissfe.utils.misc import convertLinesToStringDictionary
+from edelweissfe.utils.misc import kwargsChecker
 
 documentation = {
-    "f(x,y,z)": "Python expression using variables x, y, z (coordinates); dictionaries contained in model can be accessed",
+    "required": {
+        "f(x,y,z)": "Python expression using variables x, y, z (coordinates); dictionaries contained in model can be accessed",
+    },
+    "optional": {},
 }
 
 
 class AnalyticalField(AnalyticalFieldBase):
-    def __init__(self, name, data, model):
+    @kwargsChecker(documentation["required"], documentation["optional"])
+    def __init__(self, name, FEModel, **kwargs):
         self.name = name
         self.type = "scalarExpression"
 
-        self.domainSize = model.domainSize
-        self.options = convertLinesToStringDictionary(data)
+        self.domainSize = FEModel.domainSize
 
-        expressionString = self.options["f(x,y,z)"]
+        expressionString = kwargs["f(x,y,z)"]
 
-        self.expression = createModelAccessibleFunction(expressionString, model, *"xyz")  # [: self.domainSize])
+        self.expression = createModelAccessibleFunction(expressionString, FEModel, *"xyz")  # [: self.domainSize])
 
         return
 
