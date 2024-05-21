@@ -38,3 +38,8 @@ import importlib
 def getAnalyticalFieldByName(name):
     module = importlib.import_module("edelweissfe.analyticalfields." + name.lower())
     return module.AnalyticalField
+
+
+def getAnalyticalFieldFactoryByName(name):
+    module = importlib.import_module("edelweissfe.analyticalfields." + name.lower())
+    return module.analyticalFieldFactory

@@ -44,23 +44,25 @@ documentation = {
     "optional": dict(),
 }
 
-# from inspect import signature
+
+@kwargsChecker(documentation["required"], documentation["optional"])
+def analyticalFieldFactory(name, FEModel, **kwargs):
+    file = kwargs["file"]
+    result = kwargs["result"]
+
+    return AnalyticalField(name, FEModel, file, result)
 
 
 class AnalyticalField(AnalyticalFieldBase):
-    @kwargsChecker(documentation["required"], documentation["optional"])
-    def __init__(self, name, FEModel, **kwargs):
+    def __init__(self, name: str, FEModel, file: str, result: str):
         self.name = name
         self.type = "fromVtk"
 
         self.domainSize = FEModel.domainSize
 
-        file = kwargs["file"]
-
         reader = pyvista.get_reader(file)
         self.data = reader.read()
 
-        result = kwargs["result"]
         availableResults = self.data.array_names
 
         try:

@@ -39,29 +39,41 @@ from edelweissfe.utils.misc import kwargsChecker
 documentation = {
     "required": dict(),
     "optional": dict(
-        model="default = Gaussian",
-        mean="default = 0.",
-        variance="default = 1.",
-        lengthScale="default = 10.",
-        seed="default = 0",
+        model="Gaussian",
+        mean=0.0,
+        variance=1.0,
+        lengthScale=10.0,
+        seed=0,
     ),
 }
 
 
+@kwargsChecker(documentation["required"], documentation["optional"])
+def analyticalFieldFactory(name, FEModel, **kwargs):
+    modelType = kwargs.get("model", "Gaussian")
+    mean = float(kwargs.get("mean", 0.0))
+    variance = float(kwargs.get("variance", 1.0))
+    lengthScale = float(kwargs.get("lengthScale", 10.0))
+    seed = int(kwargs.get("seed", 0))
+
+    return AnalyticalField(name, FEModel, modelType, mean, variance, lengthScale, seed)
+
+
 class AnalyticalField(AnalyticalFieldBase):
-    @kwargsChecker(documentation["required"], documentation["optional"])
-    def __init__(self, name, FEModel, **kwargs):
+    def __init__(
+        self,
+        name: str,
+        FEModel,
+        modelType="Gaussian",
+        mean: float = 0,
+        variance: float = 1.0,
+        lengthScale: float = 10.0,
+        seed: int = 0,
+    ):
         self.name = name
         self.type = "randomScalar"
 
         self.domainSize = FEModel.domainSize
-
-        # optional keywords
-        modelType = kwargs.get("model", "Gaussian")
-        mean = float(kwargs.get("mean", 0.0))
-        variance = float(kwargs.get("variance", 1.0))
-        lengthScale = float(kwargs.get("lengthScale", 10.0))
-        seed = int(kwargs.get("seed", 0))
 
         modelMethod = getattr(gstools, modelType)
         model = modelMethod(

@@ -43,7 +43,7 @@ employing an Abaqus-like syntax.
 
 import numpy as np
 
-from edelweissfe.config.analyticalfields import getAnalyticalFieldByName
+from edelweissfe.config.analyticalfields import getAnalyticalFieldFactoryByName
 from edelweissfe.config.constraints import getConstraintClass
 from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.sections import getSectionClass
@@ -349,8 +349,8 @@ class AbqModelConstructor:
             analyticalFieldType = fieldDef["type"]
             analyticalFieldKwargs = convertLinesToStringDictionary(fieldDef["data"])
 
-            analyticalFieldClass = getAnalyticalFieldByName(analyticalFieldType)
-            analyticalField = analyticalFieldClass(analyticalFieldName, model, **analyticalFieldKwargs)
+            analyticalFieldFactory = getAnalyticalFieldFactoryByName(analyticalFieldType)
+            analyticalField = analyticalFieldFactory(analyticalFieldName, model, **analyticalFieldKwargs)
 
             model.analyticalFields[analyticalFieldName] = analyticalField
 

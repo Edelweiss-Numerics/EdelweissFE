@@ -28,6 +28,8 @@
 """Define a field using a sclar expression.
 """
 
+from typing import Callable
+
 import numpy as np
 
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
@@ -44,17 +46,22 @@ documentation = {
 }
 
 
+@kwargsChecker(documentation["required"], documentation["optional"])
+def analyticalFieldFactory(name, FEModel, **kwargs):
+    expressionString = kwargs["f(x,y,z)"]
+    expression = createModelAccessibleFunction(expressionString, FEModel, *"xyz")
+
+    return AnalyticalField(name, FEModel, expression)
+
+
 class AnalyticalField(AnalyticalFieldBase):
-    @kwargsChecker(documentation["required"], documentation["optional"])
-    def __init__(self, name, FEModel, **kwargs):
+    def __init__(self, name: str, FEModel, expression: Callable):
         self.name = name
         self.type = "scalarExpression"
 
         self.domainSize = FEModel.domainSize
 
-        expressionString = kwargs["f(x,y,z)"]
-
-        self.expression = createModelAccessibleFunction(expressionString, FEModel, *"xyz")  # [: self.domainSize])
+        self.expression = expression
 
         return
 
