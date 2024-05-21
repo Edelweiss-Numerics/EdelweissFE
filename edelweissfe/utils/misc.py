@@ -30,6 +30,7 @@ Created on Mon Apr 18 17:36:07 2016
 @author: Matthias Neuner
 """
 
+import difflib
 import shlex
 
 import numpy as np
@@ -211,3 +212,57 @@ def strtobool(val: str) -> bool:
         return 0
     else:
         raise ValueError("invalid truth value %r" % (val,))
+
+
+def findSimilarString(s, ll: list[str]):
+    result = [difflib.SequenceMatcher(a=s.casefold(), b=item.casefold()).ratio() for item in ll]
+    return ll[np.argmax(result)]
+
+
+def kwargsChecker(kwargsRequired: list[str], kwargsOptional: list[str]):
+    def wrapper(fun, *args, **kwargs):
+        def decorator(*args, **kwargs):
+            missing_kwargs = []
+            for kwarg in kwargsRequired:
+                try:
+                    assert kwarg in kwargs
+                except AssertionError:
+                    missing_kwargs.append(kwarg)
+
+            nMissing = len(missing_kwargs)
+            try:
+                assert nMissing == 0
+            except AssertionError:
+                raise ValueError(
+                    f"Function call to {fun} missing {nMissing} required keyword argument{'s'[:nMissing ^ 1]}: "
+                    + ", ".join(missing_kwargs)
+                )
+
+            unexpected_kwargs = []
+            for kwarg in kwargs:
+                try:
+                    assert kwarg in kwargsRequired or kwarg in kwargsOptional
+                except AssertionError:
+                    unexpected_kwargs.append(kwarg)
+
+            nUnexpected = len(unexpected_kwargs)
+            try:
+                assert nUnexpected == 0
+            except AssertionError:
+                if nUnexpected == 1:
+                    similarKeyword = findSimilarString(unexpected_kwargs[0], [item for item in kwargsOptional])
+                    hint = f" Did you mean {similarKeyword}?"
+                else:
+                    hint = ""
+                raise ValueError(
+                    f"Function call to {fun} got {nUnexpected} unexpected keyword argument{'s'[:nUnexpected ^ 1]}: "
+                    + ", ".join(unexpected_kwargs)
+                    + "."
+                    + hint
+                )
+
+            fun(*args, **kwargs)
+
+        return decorator
+
+    return wrapper
