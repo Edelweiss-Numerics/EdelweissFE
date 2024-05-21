@@ -61,7 +61,7 @@ from edelweissfe.utils.misc import (
 
 class AbqModelConstructor:
     def __init__(self, journal):
-        pass
+        self.journal = journal
 
     def createGeometryFromInputFile(self, model: FEModel, inputFile: dict) -> dict:
         """Collects nodes, elements, node sets and element sets from
@@ -303,7 +303,7 @@ class AbqModelConstructor:
             try:
                 name = definition.pop("name")
             except KeyError:
-                raise KeyError(f"No name specified for section {name}.")
+                raise KeyError("No name specified for section.")
             try:
                 sectionType = definition.pop("type")
             except KeyError:
@@ -344,10 +344,32 @@ class AbqModelConstructor:
             The updated model tree.
         """
 
-        for fieldDef in inputFile["*analyticalField"]:
-            analyticalFieldName = fieldDef["name"]
-            analyticalFieldType = fieldDef["type"]
-            analyticalFieldKwargs = convertLinesToStringDictionary(fieldDef["data"])
+        for definition in inputFile["*analyticalField"]:
+            try:
+                analyticalFieldName = definition.pop("name")
+            except KeyError:
+                raise KeyError("No name specified for AnalyticalField.")
+            try:
+                analyticalFieldType = definition.pop("type")
+            except KeyError:
+                raise KeyError(f"No type specified for AnalyticalField {analyticalFieldName}.")
+            try:  # should data be required?
+                data = definition.pop("data")
+            except KeyError:
+                raise KeyError(f"No data specified for AnalyticalField {analyticalFieldName}.")
+
+            nUnexpected = len(definition)
+            try:
+                assert nUnexpected == 0
+            except AssertionError:
+                f"Definition of AnalyticalField {analyticalFieldName} got {nUnexpected} unexpected keyword argument{'s'[:nUnexpected ^ 1]}: "
+
+            try:
+                assert analyticalFieldName not in model.analyticalFields
+            except AssertionError:
+                raise Exception(f"AnalyticalField with name {analyticalFieldName} already exists")
+
+            analyticalFieldKwargs = convertLinesToStringDictionary(data)
 
             analyticalFieldFactory = getAnalyticalFieldFactoryByName(analyticalFieldType)
             analyticalField = analyticalFieldFactory(analyticalFieldName, model, **analyticalFieldKwargs)
