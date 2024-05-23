@@ -34,10 +34,10 @@ import textwrap
 from os.path import dirname, join
 
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     convertAssignmentsToCaseInsensitiveStringDictionary,
-    findSimilarString,
     splitLineAtCommas,
     strCaseCmp,
 )
@@ -78,124 +78,6 @@ def parseKeywordLine(line, fileName):
         options["data"] = []
 
     return keyword, options
-
-
-class InputLanguage:
-    def __init__(self):
-        self.keywords = []
-
-        self._i1 = 0
-
-        return
-
-    def __repr__(self) -> str:
-        return str(self.keywords)
-
-    def __getitem__(self, keyword: str):
-        casefoldedKeywords = [kw.name.casefold() for kw in self.keywords]
-        try:
-            idx = casefoldedKeywords.index(keyword.casefold())
-            return self.keywords[idx]
-        except ValueError:
-            similarKeyword = findSimilarString(keyword, [kw.name for kw in self.keywords])
-            raise ValueError(f"{keyword} is not a valid keyword. Did you mean {similarKeyword}?")
-
-    def __iter__(self):
-        return self.keywords.__iter__()
-
-    def addKeyword(self, name: str, description: str):
-        kw = self.InputFileKeyword(name, description)
-        self.keywords.append(kw)
-        return kw
-
-    class InputFileKeyword:
-        def __init__(self, name, description):
-            self.name = name
-            self.description = description
-            self.requiredArgs = []
-            self.optionalArgs = []
-            self.dtype = []
-
-            self.expectsRequiredDatalines = False
-            self.requiredDatalines = None
-
-            self.expectsOptionalDatalines = False
-            self.optionalDatalines = None
-
-            return
-
-        @property
-        def args(self):
-            return self.requiredArgs + self.optionalArgs
-
-        def __getitem__(self, arg: str):
-            casefoldedArgs = [arg_.name.casefold() for arg_ in self.args]
-            try:
-                idx = casefoldedArgs.index(arg.casefold())
-                return self.args[idx]
-            except ValueError:
-                similarKeyword = findSimilarString(arg, [arg_.name for arg_ in self.args])
-                raise ValueError(f"{arg} is not a valid argument. Did you mean {similarKeyword}?")
-
-        def __repr__(self) -> str:
-            return f"< {self.name} >"
-
-        def addRequiredArg(self, name: str, description: str, dataType: type):
-            arg = self.KeywordArg(name, description, dataType)
-            self.requiredArgs.append(arg)
-
-            return arg
-
-        def addOptionalArg(self, name: str, description: str, dataType: type, defaultValue):
-            arg = self.OptionalKeywordArg(name, description, dataType, default=defaultValue)
-            self.optionalArgs.append(arg)
-
-            return arg
-
-        class KeywordArg:
-            def __init__(self, name: str, description: str, dtype: type):
-                self.name = name
-                self.description = description
-                self.dtype = dtype
-
-                return
-
-            def __repr__(self) -> str:
-                return f"< {self.name} >"
-
-        class OptionalKeywordArg(KeywordArg):
-            def __init__(self, name: str, description: str, dtype: type, default):
-                self.default = default
-                super().__init__(name, description, dtype)
-
-                return
-
-        def addRequiredDatalines(self, description: str, dtype: str):
-            datalines = self.DataLines(description, dtype)
-
-            self.expectsRequiredDatalines = True
-            self.requiredDatalines = datalines
-
-            return datalines
-
-        def addOptionalDatalines(self, description: str, dtype: str):
-            datalines = self.DataLines(description, dtype)
-
-            self.expectsOptionalDatalines = True
-            self.optionalDatalines = datalines
-
-            return datalines
-
-        class DataLines:
-            def __init__(self, description: str, dtype: str):
-                self.name = "datalines"
-                self.description = description
-                self.dtype = dtype
-
-                return
-
-            def __repr__(self) -> str:
-                return self.name
 
 
 inputLanguage = InputLanguage()
@@ -247,6 +129,24 @@ kw = inputLanguage.addKeyword("*analyticalField", "define an analytical field")
 kw.addRequiredArg("name", "name of analytical field", str)
 kw.addRequiredArg("type", "type of analytical field", str)
 kw.addRequiredDatalines("definition lines", "")
+
+module = kw.addModule("randomScalar", "input language for randomscalar module")
+module.addOptionalArg("model", "Covariance Model of the spatial random field", str, "Gaussian")
+module.addOptionalArg("mean", "Mean of the spatial random field", float, 0.0)
+module.addOptionalArg("variance", "Variance of the model", float, 1.0)
+module.addOptionalArg("lengthScale", "Length scale of the model", float, 10.0)
+module.addOptionalArg("seed", "Seed of the random number generator", int, 0)
+
+module = kw.addModule("fromVtk", "input language for fromVtk module")
+module.addRequiredArg("file", "path to database file", str)
+module.addRequiredArg("result", "result name in database", str)
+
+module = kw.addModule("scalarExpression", "input language for scalarExpression module")
+module.addRequiredArg(
+    "f(x,y,z)",
+    "Python expression using variables x, y, z (coordinates); dictionaries contained in model can be accessed",
+    str,
+)
 
 kw = inputLanguage.addKeyword("*output", "define an output module")
 kw.addOptionalArg("name", "name of output manager", str, None)

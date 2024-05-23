@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#  ---------------------------------------------------------------------
+#
+#  _____    _      _              _         _____ _____
+# | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|
+# |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|
+# | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___
+# |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
+#
+#
+#  Unit of Strength of Materials and Structural Analysis
+#  University of Innsbruck,
+#  2017 - today
+#
+#  Paul Hofer Paul.Neuner@uibk.ac.at
+#
+#  This file is part of EdelweissFE.
+#
+#  This library is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU Lesser General Public
+#  License as published by the Free Software Foundation; either
+#  version 2.1 of the License, or (at your option) any later version.
+#
+#  The full text of the license can be found in the file LICENSE.md at
+#  the top level directory of EdelweissFE.
+#  ---------------------------------------------------------------------
+
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.misc import findSimilarString
+
+
+def singleton(class_):
+    """class decorated with this function will only be instantiated once"""
+    instances = {}
+
+    def getinstance(*args, **kwargs):
+        if class_ not in instances:
+            instances[class_] = class_(*args, **kwargs)
+        return instances[class_]
+
+    return getinstance
+
+
+@singleton
+class InputLanguage:
+    def __init__(self):
+        self.keywords = []
+
+        self._i1 = 0
+
+        return
+
+    def __repr__(self) -> str:
+        return str(self.keywords)
+
+    def __getitem__(self, keyword: str):
+        casefoldedKeywords = [kw.name.casefold() for kw in self.keywords]
+        try:
+            idx = casefoldedKeywords.index(keyword.casefold())
+            return self.keywords[idx]
+        except ValueError:
+            similarKeyword = findSimilarString(keyword, [kw.name for kw in self.keywords])
+            raise ValueError(f"{keyword} is not a valid keyword. Did you mean {similarKeyword}?")
+
+    def __iter__(self):
+        return self.keywords.__iter__()
+
+    def addKeyword(self, name: str, description: str):
+        kw = InputFileKeyword(name, description)
+        self.keywords.append(kw)
+        return kw
+
+
+class InputFileKeyword:
+    def __init__(self, name, description):
+        self.name = name
+        self.description = description
+        self.requiredArgs = []
+        self.optionalArgs = []
+        self.dtype = []
+
+        self.expectsRequiredDatalines = False
+        self.requiredDatalines = None
+
+        self.expectsOptionalDatalines = False
+        self.optionalDatalines = None
+
+        self.modules = []
+
+        return
+
+    def addModule(self, name: str, description: str):
+        module = Module(name, description)
+        self.modules.append(module)
+
+        return module
+
+    @property
+    def args(self):
+        return self.requiredArgs + self.optionalArgs
+
+    def __getitem__(self, arg: str):
+        casefoldedArgs = [arg_.name.casefold() for arg_ in self.args]
+        try:
+            idx = casefoldedArgs.index(arg.casefold())
+            return self.args[idx]
+        except ValueError:
+            similarKeyword = findSimilarString(arg, [arg_.name for arg_ in self.args])
+            raise ValueError(f"{arg} is not a valid argument. Did you mean {similarKeyword}?")
+
+    def getModule(self, module: str):
+        casefoldedModules = [module_.name.casefold() for module_ in self.modules]
+        try:
+            idx = casefoldedModules.index(module.casefold())
+            return self.modules[idx]
+        except ValueError:
+            similarModule = findSimilarString(module, [module_.name for module_ in self.modules])
+            raise ValueError(f"{module} is not a valid argument. Did you mean {similarModule}?")
+
+    def __repr__(self) -> str:
+        return f"< {self.name} >"
+
+    def addRequiredArg(self, name: str, description: str, dataType: type):
+        arg = KeywordArg(name, description, dataType)
+        self.requiredArgs.append(arg)
+
+        return arg
+
+    def addOptionalArg(self, name: str, description: str, dataType: type, defaultValue):
+        arg = OptionalKeywordArg(name, description, dataType, default=defaultValue)
+        self.optionalArgs.append(arg)
+
+        return arg
+
+    def addRequiredDatalines(self, description: str, dtype: str):
+        datalines = DataLines(description, dtype)
+
+        self.expectsRequiredDatalines = True
+        self.requiredDatalines = datalines
+
+        return datalines
+
+    def addOptionalDatalines(self, description: str, dtype: str):
+        datalines = DataLines(description, dtype)
+
+        self.expectsOptionalDatalines = True
+        self.optionalDatalines = datalines
+
+        return datalines
+
+
+class Module:
+    def __init__(self, name: str, description: str):
+        self.name = name
+        self.description = description
+        self.requiredArgs = []
+        self.optionalArgs = []
+
+        return
+
+    @property
+    def args(self):
+        return self.requiredArgs + self.optionalArgs
+
+    def __getitem__(self, arg: str):
+        casefoldedArgs = [arg_.name.casefold() for arg_ in self.args]
+        try:
+            idx = casefoldedArgs.index(arg.casefold())
+            return self.args[idx]
+        except ValueError:
+            similarKeyword = findSimilarString(arg, [arg_.name for arg_ in self.args])
+            raise ValueError(f"{arg} is not a valid argument. Did you mean {similarKeyword}?")
+
+    def addRequiredArg(self, name: str, description: str, dataType: type):
+        arg = KeywordArg(name, description, dataType)
+        self.requiredArgs.append(arg)
+
+        return arg
+
+    def addOptionalArg(self, name: str, description: str, dataType: type, defaultValue):
+        arg = OptionalKeywordArg(name, description, dataType, default=defaultValue)
+        self.optionalArgs.append(arg)
+
+        return arg
+
+    def __repr__(self) -> str:
+        return f"[{self.name}]"
+
+
+class KeywordArg:
+    def __init__(self, name: str, description: str, dtype: type):
+        self.name = name
+        self.description = description
+        self.dtype = dtype
+
+        return
+
+    def getValueFromKwargs(self, kwargs: dict):
+        kwargs = CaseInsensitiveDict(kwargs)
+        return kwargs[self.name]
+
+    def __repr__(self) -> str:
+        return f"[{self.name}]"
+
+
+class OptionalKeywordArg(KeywordArg):
+    def __init__(self, name: str, description: str, dtype: type, default):
+        self.default = default
+        super().__init__(name, description, dtype)
+
+        return
+
+    def getValueFromKwargs(self, kwargs: dict):
+        try:
+            caseInsensitiveKwargs = CaseInsensitiveDict(kwargs)
+            return self.dtype(caseInsensitiveKwargs[self.name])
+        except ValueError:
+            raise ValueError(f"Cannot convert {kwargs[self.name]} to {self.dtype}")
+        except KeyError:
+            return self.default
+
+
+class DataLines:
+    def __init__(self, description: str, dtype: str):
+        self.name = "datalines"
+        self.description = description
+        self.dtype = dtype
+
+        return
+
+    def __repr__(self) -> str:
+        return self.name

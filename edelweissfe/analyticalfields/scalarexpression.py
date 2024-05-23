@@ -35,20 +35,17 @@ import numpy as np
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
+from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.math import createModelAccessibleFunction
-from edelweissfe.utils.misc import kwargsChecker
+from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
 
-documentation = {
-    "required": {
-        "f(x,y,z)": "Python expression using variables x, y, z (coordinates); dictionaries contained in model can be accessed",
-    },
-    "optional": {},
-}
+inputLanguage = InputLanguage()
+module = inputLanguage["*analyticalField"].getModule("scalarExpression")
 
 
-@kwargsChecker(documentation["required"], documentation["optional"])
+@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
 def analyticalFieldFactory(name, FEModel, **kwargs):
-    expressionString = kwargs["f(x,y,z)"]
+    expressionString = module["f(x,y,z)"].getValueFromKwargs(kwargs)
     expression = createModelAccessibleFunction(expressionString, FEModel, *"xyz")
 
     return AnalyticalField(name, FEModel, expression)

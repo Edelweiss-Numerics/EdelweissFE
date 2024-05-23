@@ -26,6 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """Define a random field using the GSTools library.
+    "Müller, S., Schüler, L., Zech, A., and Heße, F.: GSTools v1.3: a toolbox for geostatistical modelling in Python, Geosci. Model Dev., 15, 3161–3182, https://doi.org/10.5194/gmd-15-3161-2022, 2022."
 """
 
 import gstools
@@ -34,27 +35,20 @@ import numpy as np
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
-from edelweissfe.utils.misc import kwargsChecker
+from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
 
-documentation = {
-    "required": dict(),
-    "optional": dict(
-        model="Gaussian",
-        mean=0.0,
-        variance=1.0,
-        lengthScale=10.0,
-        seed=0,
-    ),
-}
+inputLanguage = InputLanguage()
+module = inputLanguage["*analyticalField"].getModule("randomScalar")
 
 
-@kwargsChecker(documentation["required"], documentation["optional"])
+@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
 def analyticalFieldFactory(name, FEModel, **kwargs):
-    modelType = kwargs.get("model", "Gaussian")
-    mean = float(kwargs.get("mean", 0.0))
-    variance = float(kwargs.get("variance", 1.0))
-    lengthScale = float(kwargs.get("lengthScale", 10.0))
-    seed = int(kwargs.get("seed", 0))
+    modelType = module["model"].getValueFromKwargs(kwargs)
+    mean = module["mean"].getValueFromKwargs(kwargs)
+    variance = module["variance"].getValueFromKwargs(kwargs)
+    lengthScale = module["lengthScale"].getValueFromKwargs(kwargs)
+    seed = module["seed"].getValueFromKwargs(kwargs)
 
     return AnalyticalField(name, FEModel, modelType, mean, variance, lengthScale, seed)
 
@@ -64,11 +58,11 @@ class AnalyticalField(AnalyticalFieldBase):
         self,
         name: str,
         FEModel,
-        modelType="Gaussian",
-        mean: float = 0,
-        variance: float = 1.0,
-        lengthScale: float = 10.0,
-        seed: int = 0,
+        modelType=module["model"].default,
+        mean: float = module["mean"].default,
+        variance: float = module["variance"].default,
+        lengthScale: float = module["lengthScale"].default,
+        seed: int = module["seed"].default,
     ):
         self.name = name
         self.type = "randomScalar"

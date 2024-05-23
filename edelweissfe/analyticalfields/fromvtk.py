@@ -34,21 +34,17 @@ import pyvista
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
-from edelweissfe.utils.misc import kwargsChecker
+from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
 
-documentation = {
-    "required": dict(
-        file="path to database file",
-        result="result name in database (optional if database contains only one dataset)",
-    ),
-    "optional": dict(),
-}
+inputLanguage = InputLanguage()
+module = inputLanguage["*analyticalField"].getModule("fromVtk")
 
 
-@kwargsChecker(documentation["required"], documentation["optional"])
+@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
 def analyticalFieldFactory(name, FEModel, **kwargs):
-    file = kwargs["file"]
-    result = kwargs["result"]
+    file = module["file"].getValueFromKwargs(kwargs)
+    result = module["result"].getValueFromKwargs(kwargs)
 
     return AnalyticalField(name, FEModel, file, result)
 

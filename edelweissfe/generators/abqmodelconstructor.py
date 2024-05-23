@@ -300,25 +300,15 @@ class AbqModelConstructor:
         """
 
         for definition in inputFile["*section"]:
-            try:
-                name = definition.pop("name")
-            except KeyError:
-                raise KeyError("No name specified for section.")
-            try:
-                sectionType = definition.pop("type")
-            except KeyError:
-                raise KeyError(f"No type specified for section {name}.")
-            try:  # should data be required?
-                data = definition.pop("data")
-            except KeyError:
-                raise KeyError(f"No data specified for section {name}.")
-            try:
-                materialName = definition.pop("material")
-            except KeyError:
-                raise KeyError(f"No material specified for section {name}.")
+            name = definition.pop("name")
+            sectionType = definition.pop("type")
+            data = definition.pop("data")
+            materialName = definition.pop("material")
 
-            if name in model.sections:
-                raise KeyError("Redundant definition for section f{name}")
+            try:
+                assert name not in model.sections
+            except AssertionError:
+                raise Exception(f"Section with name {name} already exists")
 
             Section = getSectionClass(sectionType)
 
@@ -345,24 +335,9 @@ class AbqModelConstructor:
         """
 
         for definition in inputFile["*analyticalField"]:
-            try:
-                analyticalFieldName = definition.pop("name")
-            except KeyError:
-                raise KeyError("No name specified for AnalyticalField.")
-            try:
-                analyticalFieldType = definition.pop("type")
-            except KeyError:
-                raise KeyError(f"No type specified for AnalyticalField {analyticalFieldName}.")
-            try:  # should data be required?
-                data = definition.pop("data")
-            except KeyError:
-                raise KeyError(f"No data specified for AnalyticalField {analyticalFieldName}.")
-
-            nUnexpected = len(definition)
-            try:
-                assert nUnexpected == 0
-            except AssertionError:
-                f"Definition of AnalyticalField {analyticalFieldName} got {nUnexpected} unexpected keyword argument{'s'[:nUnexpected ^ 1]}: "
+            analyticalFieldName = definition["name"]
+            analyticalFieldType = definition["type"]
+            data = definition["data"]
 
             try:
                 assert analyticalFieldName not in model.analyticalFields
