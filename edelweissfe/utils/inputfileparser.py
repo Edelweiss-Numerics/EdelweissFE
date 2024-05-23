@@ -14,6 +14,7 @@
 #  2017 - today
 #
 #  Matthias Neuner matthias.neuner@uibk.ac.at
+#  Paul Hofer Paul.Hofer@uibk.ac.at
 #
 #  This file is part of EdelweissFE.
 #
@@ -25,217 +26,283 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-# Created on Tue Jan  17 19:10:42 2017
-
-# @author: Matthias Neuner
 """
 Inputfileparser for inputfiles employing an Abaqus-like syntax.
 """
 
-import shlex
 import textwrap
-import warnings
 from os.path import dirname, join
 
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-
-typeMappings = {
-    "integer": int,
-    "float": float,
-    "bool": bool,
-    "string": lambda x: x,
-    # "numpy float array": lambda x: np.asarray(x, dtype=np.double),
-    # "numpy integer array": lambda x: np.asarray(x, dtype=np.int),
-}
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    convertAssignmentsToCaseInsensitiveStringDictionary,
+    findSimilarString,
+    splitLineAtCommas,
+    strCaseCmp,
+)
 
 
-inputLanguage = {
-    "*element": (
-        "definition of element(s)",
-        {
-            "elSet": ("string", "name"),
-            "type": ("string", "assign one of the types defined in the elementlibrary"),
-            "provider": (
-                "string",
-                "provider (library) for the element type. Default: Marmot",
-            ),
-            "data": ("numpy integer array", "Abaqus like element definition lines"),
-        },
-    ),
-    "*elSet": (
-        "definition of an element set",
-        {
-            "elSet": ("string", "name"),
-            "generate": (
-                "string",
-                "set True to generate from data line 1: start-element, end-element, step",
-            ),
-            "data": ("string", "Abaqus like element set definition lines"),
-        },
-    ),
-    "*node": (
-        "definition of nodes",
-        {
-            "nSet": ("string", "name"),
-            "data": (
-                "numpy float array",
-                "Abaqus like node definition lines: label, x, [y], [z]",
-            ),
-        },
-    ),
-    "*nSet": (
-        "definition of an element set",
-        {
-            "nSet": ("string", "name"),
-            "generate": (
-                "string",
-                "set True to generate from data line 1: start-node, end-node, step",
-            ),
-            "data": ("string", "Abaqus like node set definition lines"),
-        },
-    ),
-    "*surface": (
-        "definition of surface set",
-        {
-            "type": ("string", "type of surface (currently 'element' only)"),
-            "name": ("string", "name"),
-            "data": ("string", "Abaqus like definition. Type 'element': elSet, faceID"),
-        },
-    ),
-    "*section": (
-        "definition of a section",
-        {
-            "name": ("string", "name"),
-            "thickness": ("float", "associated element set"),
-            "material": ("string", "associated id of defined material"),
-            "data": ("string", "list of associated element sets"),
-            "type": ("string", "type of the section"),
-        },
-    ),
-    "*material": (
-        "definition of a material",
-        {
-            "name": ("string", "name of the property"),
-            "id": ("string", "name of the property"),
-            "statevars": ("integer", "(deprecated and ignored) number of statevars"),
-            "data": ("numpy float array", "material properties, multiline possible"),
-        },
-    ),
-    "*fieldOutput": (
-        "define fieldoutput, which is used by outputmanagers",
-        {
-            "data": ("string", "definition lines for the output module"),
-        },
-    ),
-    "*analyticalField": (
-        "define an analytical field",
-        {
-            "name": ("string", "name of analytical field"),
-            "type": (
-                "string",
-                "type of analytical field (currently 'expression' only)",
-            ),
-            "data": ("string", "definition"),
-        },
-    ),
-    "*output": (
-        "define an output module",
-        {
-            "name": ("string", "(optional), name of manager, standard=None"),
-            "type": ("string", "output module "),
-            "data": ("string", "definition lines for the output module"),
-        },
-    ),
-    "*job": (
-        "definition of an analysis job",
-        {
-            "name": ("string", "(optional) name of job, standard = defaultJob"),
-            "domain": ("string", "define spatial domain: 1d, 2d, 3d"),
-            "solver": ("string", "(deprecated) define the solver to be used"),
-            "startTime": ("float", "(optional) start time of job, standard = 0.0"),
-        },
-    ),
-    "*solver": (
-        "definition of solver",
-        {
-            "name": ("string", "Name of this solver"),
-            "solver": ("string", "Solvertype"),
-            "data": (
-                "string",
-                "define options which are passed to the respective solver instance.",
-            ),
-        },
-    ),
-    "*step": (
-        "definition of job steps",
-        {
-            "stepLength": ("float", "time period of step"),
-            "startInc": ("float", "size of the start increment"),
-            "maxInc": ("float", "maximum size of increment"),
-            "minInc": ("float", "minimum size of increment"),
-            "maxNumInc": ("integer", "maximum number of increments"),
-            "maxIter": ("integer", "maximum number of iterations"),
-            "type": ("string", "(optional) define step type, default = AdaptiveStep"),
-            "solver": ("string", "(optional) solver to be used"),
-            "criticalIter": (
-                "integer",
-                "maximum number of iterations to prevent from increasing the increment",
-            ),
-            "data": (
-                "string",
-                "define step actions, which are handled by the corresponding stepaction modules",
-            ),
-        },
-    ),
-    "*updateConfiguration": (
-        "update a configuration",
-        {
-            "configuration": ("string", " name of the modified settings category"),
-            "data": ("string", "key=value pairs"),
-        },
-    ),
-    "*modelGenerator": (
-        "define a model generator, loaded from a module",
-        {
-            "generator": ("string", "generator module"),
-            "name": ("string", "(optional) name of the generator"),
-            "executeAfterManualGeneration": (
-                "bool",
-                "(optional) Delay the execution of the generator after the manual creation of the mesh, default=False",
-            ),
-            "data": ("string", "key=value pairs"),
-        },
-    ),
-    "*constraint": (
-        "define a constraint",
-        {
-            "type": ("string", "constraint type"),
-            "name": ("string", "(optional) name of the constraint"),
-            "data": ("string", "definition of the constraint"),
-        },
-    ),
-    "*configurePlots": (
-        "customize the figures and axes",
-        {
-            "data": ("string", "key=value pairs for configuration of figures and axes"),
-        },
-    ),
-    "*exportPlots": (
-        "export your figures",
-        {
-            "data": ("string", "key=value pairs for exporting of figures and axes"),
-        },
-    ),
-    "*include": (
-        "(optional) load extra .inp file (fragment), use relative path to current .inp",
-        {"input": ("string", "filename")},
-    ),
-}
+def parseKeywordLine(line, fileName):
+    lineElements = splitLineAtCommas(line)
 
-inputLanguage_ = CaseInsensitiveDict()
-for kw, (doc, opts) in inputLanguage.items():
-    inputLanguage_[kw] = (doc, CaseInsensitiveDict(opts))
-inputLanguage = inputLanguage_
+    keyword = lineElements[0]
+    optionAssignments = lineElements[1:]
+
+    options = convertAssignmentsToCaseInsensitiveStringDictionary(optionAssignments)
+
+    kw = inputLanguage[keyword]
+
+    @caseInsensitiveKwargsChecker([kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs])
+    def checkKeywordInput(*args, **kwargs):
+        """this is a dummy function needed to apply kwargsChecker"""
+        return
+
+    try:
+        checkKeywordInput(**options)
+    except ValueError as e:
+        e.args = (f"Error during parsing of keyword {keyword}: " + e.args[0],)
+        raise e
+
+    for optKey, optVal in options.items():
+        try:
+            options[optKey] = kw[optKey].dtype(optVal)
+        except ValueError:
+            raise ValueError(f"{keyword}, option {optKey}: cannot convert {optVal} to {kw[optKey].dtype}")
+        # except Exception as e:
+        #     raise e
+
+    options["inputFile"] = fileName  # save also the filename of the original inputfile!
+
+    if kw.expectsRequiredDatalines or kw.expectsOptionalDatalines:
+        options["data"] = []
+
+    return keyword, options
+
+
+class InputLanguage:
+    def __init__(self):
+        self.keywords = []
+
+        self._i1 = 0
+
+        return
+
+    def __repr__(self) -> str:
+        return str(self.keywords)
+
+    def __getitem__(self, keyword: str):
+        casefoldedKeywords = [kw.name.casefold() for kw in self.keywords]
+        try:
+            idx = casefoldedKeywords.index(keyword.casefold())
+            return self.keywords[idx]
+        except ValueError:
+            similarKeyword = findSimilarString(keyword, [kw.name for kw in self.keywords])
+            raise ValueError(f"{keyword} is not a valid keyword. Did you mean {similarKeyword}?")
+
+    def __iter__(self):
+        return self.keywords.__iter__()
+
+    def addKeyword(self, name: str, description: str):
+        kw = self.InputFileKeyword(name, description)
+        self.keywords.append(kw)
+        return kw
+
+    class InputFileKeyword:
+        def __init__(self, name, description):
+            self.name = name
+            self.description = description
+            self.requiredArgs = []
+            self.optionalArgs = []
+            self.dtype = []
+
+            self.expectsRequiredDatalines = False
+            self.requiredDatalines = None
+
+            self.expectsOptionalDatalines = False
+            self.optionalDatalines = None
+
+            return
+
+        @property
+        def args(self):
+            return self.requiredArgs + self.optionalArgs
+
+        def __getitem__(self, arg: str):
+            casefoldedArgs = [arg_.name.casefold() for arg_ in self.args]
+            try:
+                idx = casefoldedArgs.index(arg.casefold())
+                return self.args[idx]
+            except ValueError:
+                similarKeyword = findSimilarString(arg, [arg_.name for arg_ in self.args])
+                raise ValueError(f"{arg} is not a valid argument. Did you mean {similarKeyword}?")
+
+        def __repr__(self) -> str:
+            return f"< {self.name} >"
+
+        def addRequiredArg(self, name: str, description: str, dataType: type):
+            arg = self.KeywordArg(name, description, dataType)
+            self.requiredArgs.append(arg)
+
+            return arg
+
+        def addOptionalArg(self, name: str, description: str, dataType: type, defaultValue):
+            arg = self.OptionalKeywordArg(name, description, dataType, default=defaultValue)
+            self.optionalArgs.append(arg)
+
+            return arg
+
+        class KeywordArg:
+            def __init__(self, name: str, description: str, dtype: type):
+                self.name = name
+                self.description = description
+                self.dtype = dtype
+
+                return
+
+            def __repr__(self) -> str:
+                return f"< {self.name} >"
+
+        class OptionalKeywordArg(KeywordArg):
+            def __init__(self, name: str, description: str, dtype: type, default):
+                self.default = default
+                super().__init__(name, description, dtype)
+
+                return
+
+        def addRequiredDatalines(self, description: str, dtype: str):
+            datalines = self.DataLines(description, dtype)
+
+            self.expectsRequiredDatalines = True
+            self.requiredDatalines = datalines
+
+            return datalines
+
+        def addOptionalDatalines(self, description: str, dtype: str):
+            datalines = self.DataLines(description, dtype)
+
+            self.expectsOptionalDatalines = True
+            self.optionalDatalines = datalines
+
+            return datalines
+
+        class DataLines:
+            def __init__(self, description: str, dtype: str):
+                self.name = "datalines"
+                self.description = description
+                self.dtype = dtype
+
+                return
+
+            def __repr__(self) -> str:
+                return self.name
+
+
+inputLanguage = InputLanguage()
+
+kw = inputLanguage.addKeyword("*element", "definition of element(s)")
+kw.addRequiredArg("type", "assign one of the types defined in the elementlibrary", str)
+kw.addOptionalArg("elSet", "name of elSet to be created", str, None)
+kw.addOptionalArg("provider", "provider (library) for the element type. Default: Marmot", str, "Marmot")
+kw.addRequiredDatalines("Abaqus like element definition lines", "")
+
+kw = inputLanguage.addKeyword("*elSet", "definition of an element set")
+kw.addRequiredArg("elSet", "name", str)
+kw.addOptionalArg("generate", "set True to generate from data line 1: start-element, end-element, step", bool, False)
+kw.addRequiredDatalines("Abaqus like element set definition lines", "")
+
+kw = inputLanguage.addKeyword("*node", "definition of nodes")
+kw.addOptionalArg("nSet", "name of nSet to be created", str, None)
+kw.addRequiredDatalines("Abaqus like node definition lines: label, x, [y], [z]", "")
+
+kw = inputLanguage.addKeyword("*nSet", "definition of an element set")
+kw.addRequiredArg("nSet", "name", str)
+kw.addOptionalArg("generate", "set True to generate from data line 1: start-node, end-node, step", bool, False)
+kw.addRequiredDatalines("Abaqus like node set definition lines", "")
+
+kw = inputLanguage.addKeyword("*surface", "definition of surface set")
+kw.addRequiredArg("name", "name", str)
+kw.addRequiredArg("type", "type of surface (currently 'element' only)", str)
+kw.addRequiredDatalines("Abaqus like definition. Type 'element': elSet, faceID", "")
+
+kw = inputLanguage.addKeyword("*section", "definition of a section")
+kw.addRequiredArg("name", "name", str)
+kw.addRequiredArg("material", "associated id of defined material", str)
+kw.addRequiredArg("type", "type of the section", str)
+kw.addRequiredDatalines("list of associated element sets", "")
+
+kw.addOptionalArg("thickness", "associated element set", float, 1.0)
+
+kw = inputLanguage.addKeyword("*material", "definition of a material")
+kw.addRequiredArg("name", "name of material", str)
+kw.addRequiredArg("id", "id of material", str)
+kw.addRequiredDatalines("material properties", "")
+
+# kw.addOptionalArg("statevars", , , None)
+
+kw = inputLanguage.addKeyword("*fieldOutput", "define fieldoutput, which is used by outputmanagers")
+kw.addRequiredDatalines("definition lines for the output module", "")
+
+kw = inputLanguage.addKeyword("*analyticalField", "define an analytical field")
+kw.addRequiredArg("name", "name of analytical field", str)
+kw.addRequiredArg("type", "type of analytical field", str)
+kw.addRequiredDatalines("definition lines", "")
+
+kw = inputLanguage.addKeyword("*output", "define an output module")
+kw.addOptionalArg("name", "name of output manager", str, None)
+kw.addRequiredArg("type", "output module", str)
+kw.addRequiredDatalines("definition lines for the output module", "")
+
+kw = inputLanguage.addKeyword("*job", "definition of an analysis job")
+kw.addRequiredArg("domain", "define spatial domain: 1d, 2d, 3d", str)
+
+kw.addOptionalArg("startTime", "(optional) start time of job", float, 0.0)
+kw.addOptionalArg("name", "(optional) name of job, standard = defaultJob", str, None)
+kw.addOptionalArg("solver", "(deprecated) define the solver to be used", str, None)
+
+kw = inputLanguage.addKeyword("*solver", "define a solver")
+kw.addRequiredArg("name", "solver name", str)
+kw.addRequiredArg("solver", "solver type", str)
+kw.addOptionalDatalines("define options which are passed to the respective solver instance.", "")
+
+kw = inputLanguage.addKeyword("*step", "define steps")
+kw.addRequiredArg("solver", "solver to be used", str)
+
+kw.addOptionalArg("stepLength", "time period of step", float, None)
+kw.addOptionalArg("startInc", "size of the start increment", float, None)
+kw.addOptionalArg("maxInc", "maximum size of increment", float, None)
+kw.addOptionalArg("minInc", "minimum size of increment", float, None)
+kw.addOptionalArg("maxNumInc", "maximum number of increments", int, None)
+kw.addOptionalArg("maxIter", "maximum number of iterations", int, None)
+kw.addOptionalArg("type", "define step type, default = AdaptiveStep", str, None)
+kw.addOptionalArg("criticalIter", "maximum number of iterations to prevent from increasing the increment", int, None)
+kw.addOptionalDatalines("define step actions, which are handled by the corresponding stepaction modules", "")
+
+kw = inputLanguage.addKeyword("*updateConfiguration", "update a configuration")
+kw.addRequiredArg("configuration", "name of configuration to be changed", str)
+kw.addRequiredDatalines("keyword arguments", "")
+
+kw = inputLanguage.addKeyword("*modelGenerator", "define a model generator, loaded from a module")
+kw.addRequiredArg("name", "name of the generator", str)
+kw.addRequiredArg("generator", "name of generator module", str)
+kw.addOptionalArg(
+    "executeAfterManualGeneration", "Delay the execution of the generator after model generation", bool, False
+)
+kw.addRequiredDatalines("keyword arguments", "")
+
+kw = inputLanguage.addKeyword("*constraint", "define a constraint")
+kw.addRequiredArg("type", "constraint type", str)
+kw.addRequiredDatalines("definition of the constraint", "")
+kw.addOptionalArg("name", "name of the constraint", str, None)
+
+kw = inputLanguage.addKeyword("*configurePlots", "customize the figures and axes")
+kw.addRequiredDatalines("key=value pairs for configuration of figures and axes", "")
+
+kw = inputLanguage.addKeyword("*exportPlots", "export your figures")
+kw.addRequiredDatalines("key=value pairs for exporting of figures and axes", "")
+
+kw = inputLanguage.addKeyword("*include", "load contents of extra file")
+kw.addRequiredArg("input", "path to file (use relative path to current .inp)", str)
 
 
 def parseInputFile(
@@ -262,7 +329,7 @@ def parseInputFile(
     """
 
     if not existingFileDict:
-        fileDict = CaseInsensitiveDict({key: [] for key in inputLanguage.keys()})
+        fileDict = CaseInsensitiveDict({kw.name: [] for kw in inputLanguage})
     else:
         fileDict = existingFileDict
 
@@ -273,44 +340,13 @@ def parseInputFile(
         lines = (line for line in lines if line and not line.startswith("**"))
 
         for line in lines:
-            if line.startswith("*"):
-                lexer = shlex.shlex(line, posix=True)
-                lexer.whitespace_split = True
-                lexer.whitespace = ","
-
-                lineElements = [x.strip() for x in lexer]
-
-                # line is keywordline
+            if line.startswith("*"):  # line is keywordline
                 lastkeyword = keyword
-                keyword = lineElements[0]
-                optionAssignments = lineElements[1:]
-
-                objectentry = CaseInsensitiveDict()
-                objectentry["data"] = []
-                objectentry["inputFile"] = fileName  # save also the filename of the original inputfile!
-
-                for ass in optionAssignments:
-                    opts = ass.split("=")
-                    optKey = opts[0].strip()
-                    val = opts[1].strip()
-
-                    doc, options = inputLanguage[keyword]
-                    if optKey not in options:
-                        raise KeyError('option "{:}" not valid for {:}'.format(optKey, keyword))
-
-                    optionDataType, optionDoc = options[optKey]
-                    try:
-                        objectentry[optKey] = typeMappings[optionDataType](val)
-                    except ValueError:
-                        raise ValueError(
-                            '{:}, option {:}: cannot convert "{:}" to {:}'.format(keyword, optKey, val, optionDataType)
-                        )
-                    except Exception as e:
-                        raise e
+                keyword, options = parseKeywordLine(line, fileName)
 
                 # special treatment for *include:
-                if keyword.lower() == "*include":
-                    includeFile = objectentry["input"]
+                if strCaseCmp(keyword, "*include"):
+                    includeFile = options["input"]
                     parseInputFile(
                         join(dirname(fileName), includeFile),
                         currentKeyword=lastkeyword,
@@ -318,33 +354,18 @@ def parseInputFile(
                     )
                     keyword = lastkeyword
                 else:
-                    fileDict[keyword].append(objectentry)
+                    fileDict[keyword].append(options)
 
-            else:
-                # line is a dataline
-                if "data" not in inputLanguage[keyword][1]:
-                    raise KeyError("{:} expects no data lines".format(keyword))
-
-                fileDict[keyword][-1]["data"].append(line)
-
-    # raise deprecation warning if deprecated jobName option is set in keywords
-    keywords = ["*step", "*fieldOutput", "*output"]
-    for keyword in keywords:
-        for entry in fileDict[keyword]:
-            if "jobName" in entry:
-                warnings.warn(
-                    f'Option "jobName" in {keyword} is deprecated and will be removed in future',
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
-
-    for entry in fileDict["*job"]:
-        if "solver" in entry:
-            warnings.warn(
-                "Warning, defining a Solver in *job is deprecated; Define solver using *solver keyword",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            else:  # line is a dataline
+                try:
+                    assert (
+                        inputLanguage[keyword].expectsOptionalDatalines
+                        or inputLanguage[keyword].expectsRequiredDatalines
+                    )
+                except AssertionError:
+                    raise ValueError(f"{keyword} expects no data lines")
+                else:
+                    fileDict[keyword][-1]["data"].append(line)
 
     return fileDict
 

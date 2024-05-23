@@ -35,6 +35,8 @@ import shlex
 
 import numpy as np
 
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+
 
 def flagDict(configLine):
     parts = [x.strip() for x in configLine.split("=")]
@@ -81,7 +83,6 @@ def convertAssignmentsToStringDictionary(assignments: list) -> dict:
         The resulting dictionary.
     """
 
-    # resultDict = CaseInsensitiveDict()
     resultDict = dict()
     for entry in assignments:
         parts = [x.strip() for x in entry.split("=")]
@@ -90,6 +91,24 @@ def convertAssignmentsToStringDictionary(assignments: list) -> dict:
         resultDict[opt] = val
 
     return resultDict
+
+
+def convertAssignmentsToCaseInsensitiveStringDictionary(assignments: list) -> dict:
+    """Create a case insensitive dictionary from a list of assignments in
+    the form a=b.
+
+    Parameters
+    ----------
+    assignments
+        The list of assignments.
+
+    Returns
+    -------
+    dict
+        The resulting case insensitive dictionary.
+    """
+
+    return CaseInsensitiveDict(convertAssignmentsToStringDictionary(assignments))
 
 
 def convertLineToStringDictionary(line: str) -> dict:
@@ -249,7 +268,7 @@ def kwargsChecker(kwargsRequired: list[str], kwargsOptional: list[str]):
             try:
                 assert nUnexpected == 0
             except AssertionError:
-                if nUnexpected == 1:
+                if nUnexpected == 1 and len(kwargsOptional) > 0:
                     similarKeyword = findSimilarString(unexpected_kwargs[0], [item for item in kwargsOptional])
                     hint = f" Did you mean {similarKeyword}?"
                 else:
@@ -262,6 +281,21 @@ def kwargsChecker(kwargsRequired: list[str], kwargsOptional: list[str]):
                 )
 
             return fun(*args, **kwargs)
+
+        return wrapped
+
+    return wrapper
+
+
+def caseInsensitiveKwargsChecker(kwargsRequired: list[str], kwargsOptional: list[str]):
+    casefoldedKwargsRequired = [kw.casefold() for kw in kwargsRequired]
+    casefoldedKwargsOptional = [kw.casefold() for kw in kwargsOptional]
+
+    def wrapper(fun, *args, **kwargs):
+        def wrapped(*args, **kwargs):
+            casefoldedKwargs = {key.casefold(): val for key, val in kwargs.items()}
+
+            return kwargsChecker(casefoldedKwargsRequired, casefoldedKwargsOptional)(fun)(*args, **casefoldedKwargs)
 
         return wrapped
 
