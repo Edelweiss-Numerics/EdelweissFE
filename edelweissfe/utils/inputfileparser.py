@@ -130,24 +130,6 @@ kw.addRequiredArg("name", "name of analytical field", str)
 kw.addRequiredArg("type", "type of analytical field", str)
 kw.addRequiredDatalines("definition lines", "")
 
-module = kw.addModule("randomScalar", "input language for randomscalar module")
-module.addOptionalArg("model", "Covariance Model of the spatial random field", str, "Gaussian")
-module.addOptionalArg("mean", "Mean of the spatial random field", float, 0.0)
-module.addOptionalArg("variance", "Variance of the model", float, 1.0)
-module.addOptionalArg("lengthScale", "Length scale of the model", float, 10.0)
-module.addOptionalArg("seed", "Seed of the random number generator", int, 0)
-
-module = kw.addModule("fromVtk", "input language for fromVtk module")
-module.addRequiredArg("file", "path to database file", str)
-module.addRequiredArg("result", "result name in database", str)
-
-module = kw.addModule("scalarExpression", "input language for scalarExpression module")
-module.addRequiredArg(
-    "f(x,y,z)",
-    "Python expression using variables x, y, z (coordinates); dictionaries contained in model can be accessed",
-    str,
-)
-
 kw = inputLanguage.addKeyword("*output", "define an output module")
 kw.addOptionalArg("name", "name of output manager", str, None)
 kw.addRequiredArg("type", "output module", str)

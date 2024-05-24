@@ -39,7 +39,13 @@ from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
 
 inputLanguage = InputLanguage()
-module = inputLanguage["*analyticalField"].getModule("randomScalar")
+module = inputLanguage["*analyticalField"].addModule("randomScalar", "input language for randomscalar module")
+
+module.addOptionalArg("model", "Covariance Model of the spatial random field", str, "Gaussian")
+module.addOptionalArg("mean", "Mean of the spatial random field", float, 0.0)
+module.addOptionalArg("variance", "Variance of the model", float, 1.0)
+module.addOptionalArg("lengthScale", "Length scale of the model", float, 10.0)
+module.addOptionalArg("seed", "Seed of the random number generator", int, 0)
 
 
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])

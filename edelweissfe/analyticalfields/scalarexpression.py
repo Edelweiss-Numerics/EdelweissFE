@@ -40,7 +40,12 @@ from edelweissfe.utils.math import createModelAccessibleFunction
 from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
 
 inputLanguage = InputLanguage()
-module = inputLanguage["*analyticalField"].getModule("scalarExpression")
+module = inputLanguage["*analyticalField"].addModule("scalarExpression", "input language for scalarExpression module")
+module.addRequiredArg(
+    "f(x,y,z)",
+    "Python expression using variables x, y, z (coordinates); dictionaries contained in model can be accessed",
+    str,
+)
 
 
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
