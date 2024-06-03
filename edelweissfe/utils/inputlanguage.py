@@ -13,7 +13,7 @@
 #  University of Innsbruck,
 #  2017 - today
 #
-#  Paul Hofer Paul.Neuner@uibk.ac.at
+#  Paul Hofer Paul.Hofer@uibk.ac.at
 #
 #  This file is part of EdelweissFE.
 #
@@ -46,8 +46,6 @@ def singleton(class_):
 class InputLanguage:
     def __init__(self):
         self.keywords = []
-
-        self._i1 = 0
 
         return
 
@@ -107,7 +105,11 @@ class InputFileKeyword:
             return self.args[idx]
         except ValueError:
             similarKeyword = findSimilarString(arg, [arg_.name for arg_ in self.args])
-            raise ValueError(f"{arg} is not a valid argument. Did you mean {similarKeyword}?")
+            raise ValueError(f"{arg} is not a valid argument for {self.name}. Did you mean {similarKeyword}?")
+
+    # @property
+    # def datalines(self):
+    #     pass
 
     def getModule(self, module: str):
         casefoldedModules = [module_.name.casefold() for module_ in self.modules]
@@ -116,7 +118,7 @@ class InputFileKeyword:
             return self.modules[idx]
         except ValueError:
             similarModule = findSimilarString(module, [module_.name for module_ in self.modules])
-            raise ValueError(f"{module} is not a valid argument. Did you mean {similarModule}?")
+            raise ValueError(f"{module} is not a valid argument for {self.name}. Did you mean {similarModule}?")
 
     def __repr__(self) -> str:
         return f"< {self.name} >"
@@ -154,14 +156,50 @@ class Module:
     def __init__(self, name: str, description: str):
         self.name = name
         self.description = description
+
         self.requiredArgs = []
         self.optionalArgs = []
+
+        self.requiredKeywords = []
+        self.optionalKeywords = []
+
+        self.expectsRequiredDatalines = False
+        self.requiredDatalines = None
+
+        self.expectsOptionalDatalines = False
+        self.optionalDatalines = None
 
         return
 
     @property
     def args(self):
         return self.requiredArgs + self.optionalArgs
+
+    def getArg(self, arg: str):
+        casefoldedArgs = [arg_.name.casefold() for arg_ in self.args]
+        try:
+            idx = casefoldedArgs.index(arg.casefold())
+            return self.args[idx]
+        except ValueError:
+            similarArg = findSimilarString(arg, [arg_.name for arg_ in self.args])
+            raise ValueError(f"{arg} is not a valid argument. Did you mean {similarArg}?")
+
+    @property
+    def keywords(self):
+        return self.requiredKeywords + self.optionalKeywords
+
+    def getKeyword(self, keyword: str):
+        casefoldedKeywords = [keyword_.name.casefold() for keyword_ in self.keywords]
+        try:
+            idx = casefoldedKeywords.index(keyword.casefold())
+            return self.keywords[idx]
+        except ValueError:
+            similarKeyword = findSimilarString(keyword, [keyword_.name for keyword_ in self.keywords])
+            raise ValueError(f"{keyword} is not a valid argument. Did you mean {similarKeyword}?")
+
+    # def parseDatalines(self, datalines):
+    #
+    #     breakpoint()
 
     def __getitem__(self, arg: str):
         casefoldedArgs = [arg_.name.casefold() for arg_ in self.args]
@@ -183,6 +221,32 @@ class Module:
         self.optionalArgs.append(arg)
 
         return arg
+
+    def addRequiredKeyword(self, name: str, description: str):
+        kw = InputFileKeyword(name, description)
+        self.requiredKeywords.append(kw)
+        return kw
+
+    def addOptionalKeyword(self, name: str, description: str):
+        kw = InputFileKeyword(name, description)
+        self.optionalKeywords.append(kw)
+        return kw
+
+    def addRequiredDatalines(self, description: str, dtype: str):
+        datalines = DataLines(description, dtype)
+
+        self.expectsRequiredDatalines = True
+        self.requiredDatalines = datalines
+
+        return datalines
+
+    def addOptionalDatalines(self, description: str, dtype: str):
+        datalines = DataLines(description, dtype)
+
+        self.expectsOptionalDatalines = True
+        self.optionalDatalines = datalines
+
+        return datalines
 
     def __repr__(self) -> str:
         return f"[{self.name}]"
@@ -219,6 +283,18 @@ class OptionalKeywordArg(KeywordArg):
             raise ValueError(f"Cannot convert {kwargs[self.name]} to {self.dtype}")
         except KeyError:
             return self.default
+
+
+class ModuleKeywordArg:
+    def __init__(self, name: str, description: str, dtype: type):
+        self.name = name
+        self.description = description
+        self.dtype = dtype
+
+        self.requiredArgs = []
+        self.optionalArgs = []
+
+        return
 
 
 class DataLines:

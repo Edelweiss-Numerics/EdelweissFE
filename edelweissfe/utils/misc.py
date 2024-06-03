@@ -68,6 +68,27 @@ def splitLineAtCommas(line: str) -> list:
     return lineElements
 
 
+def splitLinesAtCommas(lines: list[str]) -> list:
+    """Split multiple lines at commas, strip the individual parts and return a list of all items.
+
+    Parameters
+    ----------
+    lines
+        The lines to be split.
+
+    Returns
+    -------
+    list
+        The list of parts.
+    """
+
+    lineElements = []
+    for line in lines:
+        lineElements += splitLineAtCommas(line)
+
+    return lineElements
+
+
 def convertAssignmentsToStringDictionary(assignments: list) -> dict:
     """Create a dictionary from a list of assignments in
     the form a=b.
@@ -91,6 +112,39 @@ def convertAssignmentsToStringDictionary(assignments: list) -> dict:
         resultDict[opt] = val
 
     return resultDict
+
+
+def parseModuleKeywordLine(module, line):
+    lineElements = splitLineAtCommas(line)
+
+    keyword = lineElements[0]
+    optionAssignments = lineElements[1:]
+
+    options = convertAssignmentsToCaseInsensitiveStringDictionary(optionAssignments)
+
+    moduleKw = module.getKeyword(keyword)
+
+    requiredArgs = [kw.name for kw in moduleKw.requiredArgs]
+    optionalArgs = [kw.name for kw in moduleKw.optionalArgs]
+
+    @caseInsensitiveKwargsChecker(requiredArgs, optionalArgs)
+    def checkKeywordInput(*args, **kwargs):
+        """this is a dummy function needed to apply kwargsChecker"""
+        return
+
+    try:
+        checkKeywordInput(**options)
+    except ValueError as e:
+        e.args = (f"Error during parsing of keyword {keyword}: " + e.args[0],)
+        raise e
+
+    for optKey, optVal in options.items():
+        try:
+            options[optKey] = moduleKw[optKey].dtype(optVal)
+        except ValueError:
+            raise ValueError(f"{keyword}, option {optKey}: cannot convert {optVal} to {moduleKw[optKey].dtype}")
+
+    return moduleKw.name, options
 
 
 def convertAssignmentsToCaseInsensitiveStringDictionary(assignments: list) -> dict:
@@ -234,7 +288,23 @@ def strtobool(val: str) -> bool:
 
 
 def findSimilarString(s, ll: list[str]):
-    result = [difflib.SequenceMatcher(a=s.casefold(), b=item.casefold()).ratio() for item in ll]
+    try:
+        assert len(ll) > 0
+        result = [difflib.SequenceMatcher(a=s.casefold(), b=item.casefold()).ratio() for item in ll]
+        print(result)
+        return ll[np.argmax(result)]
+    except AssertionError:
+        raise Exception("List has no entries.")
+
+
+def findSimilarStringThreshold(s, ll: list[str], threshold=0):
+    try:
+        assert len(ll) > 0
+        result = [difflib.SequenceMatcher(a=s.casefold(), b=item.casefold()).ratio() for item in ll]
+    except AssertionError:
+        raise Exception("List has no entries.")
+    similarity = np.max(result)
+    assert similarity >= threshold
     return ll[np.argmax(result)]
 
 

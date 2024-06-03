@@ -46,7 +46,7 @@ import numpy as np
 from edelweissfe.config.analyticalfields import getAnalyticalFieldFactoryByName
 from edelweissfe.config.constraints import getConstraintClass
 from edelweissfe.config.elementlibrary import getElementClass
-from edelweissfe.config.sections import getSectionClass
+from edelweissfe.config.sections import getSectionFactoryByName
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
@@ -54,9 +54,23 @@ from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.misc import (
     convertLinesToFlatArray,
     convertLinesToStringDictionary,
+    findSimilarStringThreshold,
     isInteger,
+    parseModuleKeywordLine,
     splitLineAtCommas,
 )
+
+# isort: off
+from edelweissfe.utils.inputfileparser import inputLanguage  # noqa: F811
+
+from edelweissfe.analyticalfields.randomscalar import inputLanguage  # noqa: F811
+from edelweissfe.analyticalfields.fromvtk import inputLanguage  # noqa: F811
+from edelweissfe.analyticalfields.scalarexpression import inputLanguage  # noqa: F811
+
+from edelweissfe.sections.solid import inputLanguage  # noqa: F811
+from edelweissfe.sections.plane import inputLanguage  # noqa: F811
+
+# isort: on
 
 
 class AbqModelConstructor:
@@ -302,19 +316,40 @@ class AbqModelConstructor:
         for definition in inputFile["*section"]:
             name = definition.pop("name")
             sectionType = definition.pop("type")
-            data = definition.pop("data")
             materialName = definition.pop("material")
+            data = definition.pop("data")
 
             try:
                 assert name not in model.sections
             except AssertionError:
                 raise Exception(f"Section with name {name} already exists")
 
-            Section = getSectionClass(sectionType)
+            sectionKwargs = {}
+            datalines = []
 
-            theSection = Section(name, data, materialName, model, **definition)
+            module = inputLanguage["*section"].getModule(sectionType)
 
-            model.sections[name] = theSection
+            possibleKeywords = [kw.name for kw in module.requiredKeywords] + [kw.name for kw in module.optionalKeywords]
+            for kw in possibleKeywords:
+                sectionKwargs[kw] = []
+
+            for line in data:
+                lineElements = splitLineAtCommas(line)
+                threshold = 1
+                try:
+                    keyword = findSimilarStringThreshold(lineElements[0], possibleKeywords, threshold=threshold)
+                except AssertionError:
+                    datalines.append(line)
+                    continue
+
+                keyword, options = parseModuleKeywordLine(module, line)
+                sectionKwargs[keyword].append(options)
+
+            sectionFactory = getSectionFactoryByName(sectionType)
+
+            section = sectionFactory(name, model, materialName, datalines, **sectionKwargs)
+
+            model.sections[name] = section
 
         return model
 
