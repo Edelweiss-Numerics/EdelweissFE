@@ -27,7 +27,13 @@
 #  ---------------------------------------------------------------------
 
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.misc import findSimilarString
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    convertAssignmentsToCaseInsensitiveStringDictionary,
+    convertAssignmentsToStringDictionary,
+    findSimilarString,
+    splitLineAtCommas,
+)
 
 
 def singleton(class_):
@@ -250,6 +256,62 @@ class Module:
 
     def __repr__(self) -> str:
         return f"[{self.name}]"
+
+    def parseKeywordLine(self, line):
+        lineElements = splitLineAtCommas(line)
+
+        keyword = lineElements[0]
+        optionAssignments = lineElements[1:]
+
+        options = convertAssignmentsToCaseInsensitiveStringDictionary(optionAssignments)
+
+        moduleKw = self.getKeyword(keyword)
+
+        requiredArgs = [kw.name for kw in moduleKw.requiredArgs]
+        optionalArgs = [kw.name for kw in moduleKw.optionalArgs]
+
+        @caseInsensitiveKwargsChecker(requiredArgs, optionalArgs)
+        def checkKeywordInput(*args, **kwargs):
+            """this is a dummy function needed to apply kwargsChecker"""
+            return
+
+        try:
+            checkKeywordInput(**options)
+        except ValueError as e:
+            e.args = (f"Error during parsing of keyword {keyword}: " + e.args[0],)
+            raise e
+
+        for optKey, optVal in options.items():
+            try:
+                options[optKey] = moduleKw[optKey].dtype(optVal)
+            except ValueError:
+                raise ValueError(f"{keyword}, option {optKey}: cannot convert {optVal} to {moduleKw[optKey].dtype}")
+
+        return moduleKw.name, options
+
+    def parseDatalines(self, datalines):
+        args = []
+        kwargs = CaseInsensitiveDict()
+
+        possibleKeywords = [kw.name for kw in self.keywords]
+        kwargs.update({key: [] for key in possibleKeywords})
+
+        datalineOptions = []
+        for line in datalines:
+            keyword = splitLineAtCommas(line)[0]
+            if keyword in kwargs:
+                keyword, options = self.parseKeywordLine(line)
+                kwargs[keyword].append(options)
+            else:
+                datalineOptions += splitLineAtCommas(line)
+
+        for option in datalineOptions:
+            if "=" in option:
+                kwargs.update(convertAssignmentsToStringDictionary(option))
+            else:
+                args.append(option)
+
+        return args, kwargs
 
 
 class KeywordArg:

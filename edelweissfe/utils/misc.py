@@ -114,39 +114,6 @@ def convertAssignmentsToStringDictionary(assignments: list) -> dict:
     return resultDict
 
 
-def parseModuleKeywordLine(module, line):
-    lineElements = splitLineAtCommas(line)
-
-    keyword = lineElements[0]
-    optionAssignments = lineElements[1:]
-
-    options = convertAssignmentsToCaseInsensitiveStringDictionary(optionAssignments)
-
-    moduleKw = module.getKeyword(keyword)
-
-    requiredArgs = [kw.name for kw in moduleKw.requiredArgs]
-    optionalArgs = [kw.name for kw in moduleKw.optionalArgs]
-
-    @caseInsensitiveKwargsChecker(requiredArgs, optionalArgs)
-    def checkKeywordInput(*args, **kwargs):
-        """this is a dummy function needed to apply kwargsChecker"""
-        return
-
-    try:
-        checkKeywordInput(**options)
-    except ValueError as e:
-        e.args = (f"Error during parsing of keyword {keyword}: " + e.args[0],)
-        raise e
-
-    for optKey, optVal in options.items():
-        try:
-            options[optKey] = moduleKw[optKey].dtype(optVal)
-        except ValueError:
-            raise ValueError(f"{keyword}, option {optKey}: cannot convert {optVal} to {moduleKw[optKey].dtype}")
-
-    return moduleKw.name, options
-
-
 def convertAssignmentsToCaseInsensitiveStringDictionary(assignments: list) -> dict:
     """Create a case insensitive dictionary from a list of assignments in
     the form a=b.
@@ -287,14 +254,18 @@ def strtobool(val: str) -> bool:
         raise ValueError("invalid truth value %r" % (val,))
 
 
-def findSimilarString(s, ll: list[str]):
+def findSimilarString(s: str, ll: list[str], threshold=0):
     try:
         assert len(ll) > 0
-        result = [difflib.SequenceMatcher(a=s.casefold(), b=item.casefold()).ratio() for item in ll]
-        print(result)
-        return ll[np.argmax(result)]
     except AssertionError:
-        raise Exception("List has no entries.")
+        raise Exception(f"You tried to find a string similar to {s} in an empty list.")
+    result = [difflib.SequenceMatcher(a=s.casefold(), b=item.casefold()).ratio() for item in ll]
+    try:
+        assert max(result) > threshold
+    except AssertionError:
+        raise ValueError(f"No similar string to {s} was found in list {ll}.")
+
+    return ll[np.argmax(result)]
 
 
 def kwargsChecker(kwargsRequired: list[str], kwargsOptional: list[str]):

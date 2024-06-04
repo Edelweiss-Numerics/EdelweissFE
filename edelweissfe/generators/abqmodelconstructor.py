@@ -52,13 +52,10 @@ from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.misc import (
-    convertAssignmentsToStringDictionary,
     convertLinesToFlatArray,
     convertLinesToStringDictionary,
     isInteger,
-    parseModuleKeywordLine,
     splitLineAtCommas,
-    splitLinesAtCommas,
 )
 
 # isort: off
@@ -329,26 +326,10 @@ class AbqModelConstructor:
             except AssertionError:
                 raise Exception(f"Section with name {name} already exists")
 
-            datalines = []
-
             module = inputLanguage["*section"].getModule(sectionType)
 
-            possibleKeywords = [kw.name for kw in module.requiredKeywords] + [kw.name for kw in module.optionalKeywords]
-            sectionKwargs.update({key: [] for key in possibleKeywords})
-
-            for line in data:
-                keyword = splitLineAtCommas(line)[0]
-                if keyword not in sectionKwargs:
-                    datalines.append(line)
-                    continue
-                keyword, options = parseModuleKeywordLine(module, line)
-                sectionKwargs[keyword].append(options)
-            entries = splitLinesAtCommas(datalines)
-
-            kwargs, args = [], []
-            for item in entries:
-                kwargs.append(item) if "=" in item else args.append(item)
-            sectionKwargs.update(convertAssignmentsToStringDictionary(kwargs))
+            args, kwargs = module.parseDatalines(data)
+            sectionKwargs.update(kwargs)
 
             sectionFactory = getSectionFactoryByName(sectionType)
 
