@@ -36,15 +36,13 @@ from edelweissfe.sections.base.sectionbase import Section as SectionBase
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker, splitLinesAtCommas
+from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
 
 inputLanguage = InputLanguage()
 module = inputLanguage["*section"].addModule(
     "plane", "This section represents a classical plane solid materal section."
 )
-
-# module.addOptionalArg("thickness", "thickness", float, 1.)
-
+module.addRequiredArg("thickness", "thickness", float)
 module.addRequiredDatalines("elementSets as comma separated list of element sets for this section", str)
 
 kw = module.addOptionalKeyword("materialParameterFromField", "use material properties given by an analytical field")
@@ -64,13 +62,10 @@ optional += [kw.name for kw in module.optionalKeywords]
 
 
 @caseInsensitiveKwargsChecker(required, optional)
-def sectionFactory(name, FEModel, materialName: str, datalines: list[str], **kwargs):
+def sectionFactory(name, FEModel, materialName: str, elementSetNames, **kwargs):
     kwargs = CaseInsensitiveDict(kwargs)
 
-    # thickness = module["thickness"].getValueFromKwargs(kwargs)
     thickness = inputLanguage["*section"]["thickness"].getValueFromKwargs(kwargs)
-
-    elementSetNames = splitLinesAtCommas(datalines)
 
     kw = module.getKeyword("materialParameterFromField")
     materialParameterFromFieldDefs = []

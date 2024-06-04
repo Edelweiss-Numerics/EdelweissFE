@@ -297,17 +297,6 @@ def findSimilarString(s, ll: list[str]):
         raise Exception("List has no entries.")
 
 
-def findSimilarStringThreshold(s, ll: list[str], threshold=0):
-    try:
-        assert len(ll) > 0
-        result = [difflib.SequenceMatcher(a=s.casefold(), b=item.casefold()).ratio() for item in ll]
-    except AssertionError:
-        raise Exception("List has no entries.")
-    similarity = np.max(result)
-    assert similarity >= threshold
-    return ll[np.argmax(result)]
-
-
 def kwargsChecker(kwargsRequired: list[str], kwargsOptional: list[str]):
     def wrapper(fun, *args, **kwargs):
         def wrapped(*args, **kwargs):

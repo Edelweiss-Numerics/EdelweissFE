@@ -52,12 +52,13 @@ from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.misc import (
+    convertAssignmentsToStringDictionary,
     convertLinesToFlatArray,
     convertLinesToStringDictionary,
-    findSimilarStringThreshold,
     isInteger,
     parseModuleKeywordLine,
     splitLineAtCommas,
+    splitLinesAtCommas,
 )
 
 # isort: off
@@ -314,40 +315,44 @@ class AbqModelConstructor:
         """
 
         for definition in inputFile["*section"]:
-            name = definition.pop("name")
-            sectionType = definition.pop("type")
-            materialName = definition.pop("material")
-            data = definition.pop("data")
+            sectionKwargs = definition.copy()
+
+            name = sectionKwargs.pop("name")
+            sectionType = sectionKwargs.pop("type")
+            materialName = sectionKwargs.pop("material")
+            data = sectionKwargs.pop("data")
+
+            sectionKwargs.pop("inputfile")
 
             try:
                 assert name not in model.sections
             except AssertionError:
                 raise Exception(f"Section with name {name} already exists")
 
-            sectionKwargs = {}
             datalines = []
 
             module = inputLanguage["*section"].getModule(sectionType)
 
             possibleKeywords = [kw.name for kw in module.requiredKeywords] + [kw.name for kw in module.optionalKeywords]
-            for kw in possibleKeywords:
-                sectionKwargs[kw] = []
+            sectionKwargs.update({key: [] for key in possibleKeywords})
 
             for line in data:
-                lineElements = splitLineAtCommas(line)
-                threshold = 1
-                try:
-                    keyword = findSimilarStringThreshold(lineElements[0], possibleKeywords, threshold=threshold)
-                except AssertionError:
+                keyword = splitLineAtCommas(line)[0]
+                if keyword not in sectionKwargs:
                     datalines.append(line)
                     continue
-
                 keyword, options = parseModuleKeywordLine(module, line)
                 sectionKwargs[keyword].append(options)
+            entries = splitLinesAtCommas(datalines)
+
+            kwargs, args = [], []
+            for item in entries:
+                kwargs.append(item) if "=" in item else args.append(item)
+            sectionKwargs.update(convertAssignmentsToStringDictionary(kwargs))
 
             sectionFactory = getSectionFactoryByName(sectionType)
 
-            section = sectionFactory(name, model, materialName, datalines, **sectionKwargs)
+            section = sectionFactory(name, model, materialName, args, **sectionKwargs)
 
             model.sections[name] = section
 
