@@ -254,6 +254,28 @@ def strtobool(val: str) -> bool:
         raise ValueError("invalid truth value %r" % (val,))
 
 
+def typeString(dtype: type or str) -> str:
+    """.
+
+    Parameters
+    ----------
+    dtype
+        data type or string
+
+    Returns
+    -------
+    str
+        string representing data type
+    """
+    dtypeMapping = {
+        str: "string",
+        bool: "boolean",
+        int: "integer",
+        float: "float",
+    }
+    return dtypeMapping.get(dtype, str(dtype))
+
+
 def findSimilarString(s: str, ll: list[str], threshold=0):
     try:
         assert len(ll) > 0

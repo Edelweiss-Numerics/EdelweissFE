@@ -365,6 +365,7 @@ class AbqModelConstructor:
             except AssertionError:
                 raise Exception(f"AnalyticalField with name {analyticalFieldName} already exists")
 
+            # analytical fields accept no module level keywords
             analyticalFieldKwargs = convertLinesToStringDictionary(data)
 
             analyticalFieldFactory = getAnalyticalFieldFactoryByName(analyticalFieldType)

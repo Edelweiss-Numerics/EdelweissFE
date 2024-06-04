@@ -40,6 +40,7 @@ from edelweissfe.utils.misc import (
     convertAssignmentsToCaseInsensitiveStringDictionary,
     splitLineAtCommas,
     strCaseCmp,
+    typeString,
 )
 
 
@@ -107,6 +108,9 @@ kw.addRequiredArg("name", "name", str)
 kw.addRequiredArg("type", "type of surface (currently 'element' only)", str)
 kw.addRequiredDatalines("Abaqus like definition. Type 'element': elSet, faceID", "")
 
+"""
+*section
+"""
 kw = inputLanguage.addKeyword("*section", "definition of a section")
 kw.addRequiredArg("name", "name", str)
 kw.addRequiredArg("material", "associated id of defined material", str)
@@ -114,6 +118,12 @@ kw.addRequiredArg("type", "type of the section", str)
 kw.addRequiredDatalines("list of associated element sets", "")
 
 kw.addOptionalArg("thickness", "associated element set", float, 1.0)
+
+# isort: off
+from edelweissfe.sections.solid import inputLanguage  # noqa: F811,E402
+from edelweissfe.sections.plane import inputLanguage  # noqa: F811,E402
+
+# isort: on
 
 kw = inputLanguage.addKeyword("*material", "definition of a material")
 kw.addRequiredArg("name", "name of material", str)
@@ -125,10 +135,20 @@ kw.addRequiredDatalines("material properties", "")
 kw = inputLanguage.addKeyword("*fieldOutput", "define fieldoutput, which is used by outputmanagers")
 kw.addRequiredDatalines("definition lines for the output module", "")
 
+"""
+*analyticalField
+"""
 kw = inputLanguage.addKeyword("*analyticalField", "define an analytical field")
 kw.addRequiredArg("name", "name of analytical field", str)
 kw.addRequiredArg("type", "type of analytical field", str)
 kw.addRequiredDatalines("definition lines", "")
+
+# isort: off
+from edelweissfe.analyticalfields.randomscalar import inputLanguage  # noqa: F811,E402
+from edelweissfe.analyticalfields.fromvtk import inputLanguage  # noqa: F811,E402
+from edelweissfe.analyticalfields.scalarexpression import inputLanguage  # noqa: F811,E402
+
+# isort: on
 
 kw = inputLanguage.addKeyword("*output", "define an output module")
 kw.addOptionalArg("name", "name of output manager", str, None)
@@ -259,25 +279,28 @@ def printKeywords():
     kwDataString = "        {:22}{:20}"
 
     wrapper = textwrap.TextWrapper(width=80, replace_whitespace=False)
-    for kw, (kwDoc, optiondict) in sorted(inputLanguage.items()):
-        wrapper.initial_indent = kwString.format(str(kw))
+    # for kw, (kwDoc, optiondict) in sorted(inputLanguage.items()):
+    for kw in inputLanguage:
+        wrapper.initial_indent = kwString.format(kw.name)
         wrapper.subsequent_indent = " " * len(wrapper.initial_indent)
-        print(wrapper.fill(kwDoc))
-        print("")
-        for key in sorted(optiondict.keys()):
-            optionName = key
-            dType, description = optiondict[key]
-            wrapper.initial_indent = kwDataString.format(str(optionName), dType)
+        print(wrapper.fill(kw.description))
+        # print("")
+        for arg in kw.requiredArgs:
+            wrapper.initial_indent = kwDataString.format(arg.name, typeString(arg.dtype))
             wrapper.subsequent_indent = " " * len(wrapper.initial_indent)
-            print(wrapper.fill(description))
+            print(wrapper.fill(arg.description))
+        for arg in kw.optionalArgs:
+            wrapper.initial_indent = kwDataString.format(arg.name, typeString(arg.dtype))
+            wrapper.subsequent_indent = " " * len(wrapper.initial_indent)
+            print(wrapper.fill(arg.description))
         print("\n")
 
 
 def printKeywordsRST():
     """Print the input file language set in an RST conform format."""
 
-    for kw, (kwDoc, optiondict) in sorted(inputLanguage.items()):
-        print(".. list-table:: " + "``{:}`` : {:}".format(kw, kwDoc))
+    for kw in inputLanguage:
+        print(".. list-table:: " + "``{:}`` : {:}".format(kw.name, kw.description))
         print("    :width: 100%")
         print("    :widths: 25 25 40")
         print("    :header-rows: 1")
@@ -285,11 +308,8 @@ def printKeywordsRST():
         print("    * - Option")
         print("      - Type")
         print("      - Description")
-        for key in sorted(optiondict.keys()):
-            optionName = key
-            dType, description = optiondict[key]
-
-            print("    * - ``{:}``".format(optionName))
-            print("      - ``{:}``".format(dType))
-            print("      - " + description)
+        for kw in kw.requiredArgs:
+            print("    * - ``{:}``".format(kw.name))
+            print("      - ``{:}``".format(kw.dtype))
+            print("      - " + kw.description)
         print(" ")
