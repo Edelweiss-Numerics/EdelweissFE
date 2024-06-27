@@ -51,6 +51,7 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.misc import (
     convertLinesToFlatArray,
     convertLinesToStringDictionary,
@@ -312,12 +313,13 @@ class AbqModelConstructor:
         """
 
         for definition in inputFile["*section"]:
-            sectionKwargs = definition.copy()
+            sectionKwargs = CaseInsensitiveDict(definition.copy())
 
             name = sectionKwargs.pop("name")
             sectionType = sectionKwargs.pop("type")
             materialName = sectionKwargs.pop("material")
             data = sectionKwargs.pop("data")
+            moduleOptions = sectionKwargs.pop("moduleOptions")
 
             sectionKwargs.pop("inputfile")
 
@@ -329,11 +331,11 @@ class AbqModelConstructor:
             module = inputLanguage["*section"].getModule(sectionType)
 
             args, kwargs = module.parseDatalines(data)
-            sectionKwargs.update(kwargs)
+            # sectionKwargs.update(kwargs)
 
             sectionFactory = getSectionFactoryByName(sectionType)
 
-            section = sectionFactory(name, model, materialName, args, **sectionKwargs)
+            section = sectionFactory(name, model, materialName, args, moduleOptions, **sectionKwargs)
 
             model.sections[name] = section
 

@@ -36,7 +36,7 @@ from edelweissfe.sections.base.sectionbase import Section as SectionBase
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
+from edelweissfe.utils.misc import caseInsensitiveKwargsChecker, splitLinesAtCommas
 
 inputLanguage = InputLanguage()
 module = inputLanguage["*section"].addModule(
@@ -45,13 +45,13 @@ module = inputLanguage["*section"].addModule(
 module.addRequiredArg("thickness", "thickness", float)
 module.addRequiredDatalines("elementSets as comma separated list of element sets for this section", str)
 
-kw = module.addOptionalKeyword("materialParameterFromField", "use material properties given by an analytical field")
+kw = module.addOptionalKeyword(">>materialParameterFromField", "use material properties given by an analytical field")
 kw.addRequiredArg("index", "index of material parameter", int)
 kw.addRequiredArg("field", "name of analytical field", str)
 kw.addRequiredArg("type", "either 'setToValue' or 'scale'", str)
 kw.addOptionalArg("f(p,f)", "p...value of parameter from material definition; f...value of analytical field", str, "f")
 
-kw = module.addOptionalKeyword("writeMaterialPropertiesToFile", "export material properties to file")
+kw = module.addOptionalKeyword(">>writeMaterialPropertiesToFile", "export material properties to file")
 kw.addRequiredArg("filename", "file name for material property export", str)
 
 required = [kw.name for kw in module.requiredArgs]
@@ -62,26 +62,15 @@ optional += [kw.name for kw in module.optionalKeywords]
 
 
 @caseInsensitiveKwargsChecker(required, optional)
-def sectionFactory(name, FEModel, materialName: str, elementSetNames, **kwargs):
+def sectionFactory(name, FEModel, materialName: str, datalines: list[str], moduleOptions, **kwargs):
     kwargs = CaseInsensitiveDict(kwargs)
 
     thickness = inputLanguage["*section"]["thickness"].getValueFromKwargs(kwargs)
 
-    kw = module.getKeyword("materialParameterFromField")
-    materialParameterFromFieldDefs = []
-    for moduleKwargs in kwargs["materialParameterFromField"]:
-        materialParameterFromFieldDef = CaseInsensitiveDict()
-        for arg in kw.args:
-            materialParameterFromFieldDef.update({arg.name: arg.getValueFromKwargs(moduleKwargs)})
-        materialParameterFromFieldDefs.append(materialParameterFromFieldDef)
+    elementSetNames = splitLinesAtCommas(datalines)
 
-    kw = module.getKeyword("writeMaterialPropertiesToFile")
-    writeMaterialPropertiesToFileDefs = []
-    for moduleKwargs in kwargs["writeMaterialPropertiesToFile"]:
-        writeMaterialPropertiesToFileDef = CaseInsensitiveDict()
-        for arg in kw.args:
-            writeMaterialPropertiesToFileDef.update({arg.name: arg.getValueFromKwargs(moduleKwargs)})
-        writeMaterialPropertiesToFileDefs.append(writeMaterialPropertiesToFileDef)
+    materialParameterFromFieldDefs = moduleOptions.get(">>materialParameterFromField", [])
+    writeMaterialPropertiesToFileDefs = moduleOptions.get(">>writeMaterialPropertiesToFile", [])
 
     return Section(
         name,

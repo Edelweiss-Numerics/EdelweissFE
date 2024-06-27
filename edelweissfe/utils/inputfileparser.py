@@ -81,6 +81,48 @@ def parseKeywordLine(line, fileName):
     return keyword, options
 
 
+def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions):
+    lineElements = splitLineAtCommas(line)
+
+    keyword = lineElements[0]
+    optionAssignments = lineElements[1:]
+
+    options = convertAssignmentsToCaseInsensitiveStringDictionary(optionAssignments)
+
+    module = inputLanguage[topLevelKeyword].getModule(topLevelOptions["type"])
+    kw = module.getKeyword(keyword)
+
+    @caseInsensitiveKwargsChecker([kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs])
+    def checkKeywordInput(*args, **kwargs):
+        """this is a dummy function needed to apply kwargsChecker"""
+        return
+
+    try:
+        checkKeywordInput(**options)
+    except ValueError as e:
+        e.args = (f"Error during parsing of module level keyword {keyword}: " + e.args[0],)
+        raise e
+
+    for optKey, optVal in options.items():
+        try:
+            options[optKey] = kw[optKey].dtype(optVal)
+        except ValueError:
+            raise ValueError(f"{keyword}, option {optKey}: cannot convert {optVal} to {kw[optKey].dtype}")
+        # except Exception as e:
+        #     raise e
+
+    for opt in kw.optionalArgs:
+        if opt.name not in options:
+            options[opt.name] = opt.default
+
+    options["inputFile"] = fileName  # save also the filename of the original inputfile!
+
+    if kw.expectsRequiredDatalines or kw.expectsOptionalDatalines:
+        options["data"] = []
+
+    return keyword, options
+
+
 inputLanguage = InputLanguage()
 
 kw = inputLanguage.addKeyword("*element", "definition of element(s)")
@@ -245,6 +287,7 @@ def parseInputFile(
             if line.startswith("*"):  # line is keywordline
                 lastkeyword = keyword
                 keyword, options = parseKeywordLine(line, fileName)
+                options["moduleOptions"] = dict()
 
                 # special treatment for *include:
                 if strCaseCmp(keyword, "*include"):
@@ -258,7 +301,34 @@ def parseInputFile(
                 else:
                     fileDict[keyword].append(options)
 
-            else:  # line is a dataline
+            elif line.startswith(">>"):  # line is a module level keyword line
+                moduleKeyword, moduleOptions = parseModuleKeywordLine(line, fileName, keyword, options)
+
+                if moduleKeyword in fileDict[keyword][-1]["moduleOptions"]:
+                    fileDict[keyword][-1]["moduleOptions"][moduleKeyword].append(moduleOptions)
+                else:
+                    fileDict[keyword][-1]["moduleOptions"] = {moduleKeyword: [moduleOptions]}
+
+            # else splitLineAtCommas(line)[]  # line is a module level keyword line
+
+            else:  # line is a data line
+                # # module kw parsing backward compatibility
+                # try:
+                #     module = inputLanguage[keyword].getModule(options["type"])
+                # except:
+                #     module = None
+                # moduleKeyword = ">>"+splitLineAtCommas(line)[0]
+                #
+                # if module and moduleKeyword in [kw.name for kw in module.keywords]:
+                #     moduleKeyword, moduleOptions = parseModuleKeywordLine(">>"+line, fileName, keyword, options)
+                #
+                #     if moduleKeyword in fileDict[keyword][-1]["moduleOptions"]:
+                #         fileDict[keyword][-1]["moduleOptions"][moduleKeyword].append(moduleOptions)
+                #     else:
+                #         fileDict[keyword][-1]["moduleOptions"] = {moduleKeyword: [moduleOptions]}
+                #     continue
+                # # module kw parsing backward compatibility
+
                 try:
                     assert (
                         inputLanguage[keyword].expectsOptionalDatalines

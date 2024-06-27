@@ -17,7 +17,7 @@ lZ      =10
 elType  =C3D8
 
 *section, name=section1, material=mat, type=solid
-materialParameterFromField, index=0, field=AnalyticalField-01, type=settovalue
+>>materialParameterFromField, index=0, field=AnalyticalField-01, type=settovalue
 ** materialParameterFromField, index=0, field=AnalyticalField-01, type=settovalue, "f(p,f)=3*f"
 ** materialParameterFromField, index=0, field=AnalyticalField-02, type=scale
 ** materialParameterFromField, index=0, field=AnalyticalField-02, type=scale, "f(p,f)=3*f"
