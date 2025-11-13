@@ -7,7 +7,7 @@
   <img width="512" height="512" src="./doc/source/borehole_damage_lowdilation.gif">
 </p>
 
-See the [documentation](https://edelweissfe.github.io/EdelweissFE).
+See the [documentation](https://edelweiss-numerics.github.io/EdelweissFE).
 
 EdelweissFE aims at an easy to understand, yet efficient implementation of the finite element method.
 Some features are:
