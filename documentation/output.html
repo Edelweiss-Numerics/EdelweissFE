@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Outputmanagers &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Parallelization" href="parallelization.html" />
+    <link rel="prev" title="Creating finite element meshes" href="mesh.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">DOF manager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="exceptions.html">Exceptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generators.html">Generators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="journal.html">Journal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Outputmanagers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.outputmanagers.ensight"><code class="docutils literal notranslate"><span class="pre">ensight</span></code> - Export to Ensight Gold format</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.outputmanagers.monitor"><code class="docutils literal notranslate"><span class="pre">monitor</span></code> - Monitor quantities in the terminal</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.outputmanagers.meshplot"><code class="docutils literal notranslate"><span class="pre">meshplot</span></code> - Export to matplotlib</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.outputmanagers.fractureenergyintegrator"><code class="docutils literal notranslate"><span class="pre">fractureenergyintegrator</span></code> - Determine the fracture energy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.outputmanagers.plotalongpath"><code class="docutils literal notranslate"><span class="pre">plotalongpath</span></code> - Plot a result along a line</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.outputmanagers.conditionalstop"><code class="docutils literal notranslate"><span class="pre">conditionalstop</span></code> - Conditional stop if expression becomes true</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.outputmanagers.statusfile"><code class="docutils literal notranslate"><span class="pre">statusfile</span></code> - Write the status of the simulation to a file</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.outputmanagers.meshdatatofile"><code class="docutils literal notranslate"><span class="pre">meshdatatofile</span></code> - Write the (generated) mesh data to a file</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.outputmanagers.computetimemonitor"><code class="docutils literal notranslate"><span class="pre">computetimemonitor</span></code> - Print and write compute times per increment</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l2"><a class="reference internal" href="plotter.html">Plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="points.html">Points</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sections.html">Sections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sets.html">Sets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stepactions.html">Step actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="utils.html">Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variables.html">Variables</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Documentation</a></li>
+      <li class="breadcrumb-item active">Outputmanagers</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/documentation/output.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <div class="section" id="module-edelweissfe.config.outputmanagers">
+<span id="outputmanagers"></span><h1>Outputmanagers<a class="headerlink" href="#module-edelweissfe.config.outputmanagers" title="Permalink to this heading"></a></h1>
+<p>Outputmanagers are used for monitoring and exporting results to variuous formats.
+They are defined globally:</p>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">ensight</span>,<span class="nv"> jobName</span><span class="ow">=</span><span class="m">cps4job</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">myEnsightExport</span>
+<span class="nv">    create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv">    elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">Displacement</span>
+<span class="nv">    create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">Stress</span>
+<span class="nv">    create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">Strain</span>
+</pre></div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id1">
+<div class="code-block-caption"><span class="caption-text">Full example: <code class="docutils literal notranslate"><span class="pre">testfiles/OutputManagers/test.inp</span></code></span><a class="headerlink" href="#id1" title="Permalink to this code"></a></div>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">VonMises</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">mat</span>
+210000, 0.3, 550, 1000, 200, 1400
+
+<span class="k">*section</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">section1</span>,<span class="nv"> thickness</span><span class="ow">=</span><span class="m">1.0</span>,<span class="nv"> material</span><span class="ow">=</span><span class="m">mat</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">plane</span>
+all
+
+<span class="k">*job</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">cps4job</span>,<span class="nv"> domain</span><span class="ow">=</span><span class="m">2d</span>
+<span class="k">*solver</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NIST</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">theSolver</span>
+
+<span class="k">*modelGenerator</span>,<span class="nv"> generator</span><span class="ow">=</span><span class="m">planeRectQuad</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">gen</span>
+<span class="nv">x0</span><span class="ow">=</span><span class="m">0</span>,<span class="nv"> l</span><span class="ow">=</span><span class="m">50</span>
+<span class="nv">y0</span><span class="ow">=</span><span class="m">0</span>,<span class="nv"> h</span><span class="ow">=</span><span class="m">100</span>
+<span class="nv">elType</span><span class="ow">=</span><span class="m">CPS4</span>
+<span class="nv">nX</span><span class="ow">=</span><span class="m">25</span>
+<span class="nv">nY</span><span class="ow">=</span><span class="m">50</span>
+
+<span class="k">*fieldOutput</span>
+<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">Displacement</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,
+<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">Stress</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">1</span>
+<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">Strain</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">1</span>
+<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">Kappa</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">kappa</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">1</span>
+<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">Displacement_Top</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_top</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>
+<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">Force_Bottom</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">P</span>,<span class="nv"> saveHistory</span><span class="ow">=</span><span class="m">True</span>,<span class="nv"> export</span><span class="ow">=</span><span class="m">ReactionForce</span>,<span class="nv"> f_export(x)</span><span class="ow">=</span><span class="s">&#39;x[:,:,1]&#39;</span>
+
+<span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">ensight</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">myEnsightExport</span>
+<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv">    fieldOutput</span><span class="ow">=</span><span class="m">Displacement</span>
+<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">Stress</span>
+<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">Strain</span>
+<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">Kappa</span>
+configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
+
+<span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">monitor</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">myNodeSetMonitor</span>
+<span class="nv">fieldOutput</span><span class="ow">=</span><span class="m">Displacement_Top</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;mean(x[:,1])&#39;</span>
+<span class="nv">fieldOutput</span><span class="ow">=</span><span class="m">Force_Bottom</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;sum(x[:,1])&#39;</span>
+
+<span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">plotAlongPath</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">myNodeSetPlotter</span>
+<span class="nv">fieldOutput</span><span class="ow">=</span><span class="m">Displacement_Top</span>,<span class="nv"> label</span><span class="ow">=</span><span class="m">Ualongtopsurface</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;x[:,1]&#39;</span>,<span class="nv"> nStages</span><span class="ow">=</span><span class="m">5</span>,<span class="nv"> export</span><span class="ow">=</span><span class="m">True</span>
+
+<span class="k">*step</span>,<span class="nv"> maxInc</span><span class="ow">=</span><span class="m">1e-1</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-8</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">100</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
+options,<span class="nv"> category</span><span class="ow">=</span><span class="m">Ensight</span>,<span class="nv"> intermediateSaveInterval</span><span class="ow">=</span><span class="m">2</span>,<span class="nv"> minDTForOutput</span><span class="ow">=</span><span class="m">20</span>
+options,<span class="nv"> category</span><span class="ow">=</span><span class="m">NISTSolver</span>,<span class="nv"> extrapolation</span><span class="ow">=</span><span class="m">linear</span>
+dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">1</span>,<span class="nv">          nSet</span><span class="ow">=</span><span class="m">gen_leftBottom</span>,<span class="nv">    field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0.0</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.0</span>
+dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">bottom</span>,<span class="nv">     nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv">        field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0</span>
+nodeforces,<span class="nv"> name</span><span class="ow">=</span><span class="m">top</span>,<span class="nv">       nSet</span><span class="ow">=</span><span class="m">gen_top</span>,<span class="nv">           field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">-1</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="m">t**2</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="module-edelweissfe.outputmanagers.ensight">
+<span id="ensight-export-to-ensight-gold-format"></span><h2><code class="docutils literal notranslate"><span class="pre">ensight</span></code> - Export to Ensight Gold format<a class="headerlink" href="#module-edelweissfe.outputmanagers.ensight" title="Permalink to this heading"></a></h2>
+<table class="docutils align-default" id="id2">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id2" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">configuration</span></code></td>
+<td><p>overwrite=y|n|yes|no|True|False|</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">create</span></code></td>
+<td><p>The of the variabl; valid values: perNode|perElement</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">fieldOutput</span></code></td>
+<td><p>Name of the result, defined on an elSet (also for perNode results!)</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
+<td><p>(Optional), default = the field output’s name</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">intermediateSaveInterval</span></code></td>
+<td><p>Step option in category “Ensight”: save .case file every N increments</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="module-edelweissfe.outputmanagers.monitor">
+<span id="monitor-monitor-quantities-in-the-terminal"></span><h2><code class="docutils literal notranslate"><span class="pre">monitor</span></code> - Monitor quantities in the terminal<a class="headerlink" href="#module-edelweissfe.outputmanagers.monitor" title="Permalink to this heading"></a></h2>
+<table class="docutils align-default" id="id3">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id3" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">fieldOutput</span></code></td>
+<td><p>Name of the field output to be monitored</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">f(x)</span></code></td>
+<td><p>(Optional), apply a model accessible function on the result</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="module-edelweissfe.outputmanagers.meshplot">
+<span id="meshplot-export-to-matplotlib"></span><h2><code class="docutils literal notranslate"><span class="pre">meshplot</span></code> - Export to matplotlib<a class="headerlink" href="#module-edelweissfe.outputmanagers.meshplot" title="Permalink to this heading"></a></h2>
+<p>&#64;author: Magdalena</p>
+<dl class="simple">
+<dt>Module meshplot divided into classes:</dt><dd><ul class="simple">
+<li><dl class="simple">
+<dt>Triangulation:</dt><dd><p>creates triangles out of rectangles in order to use matplotlib plotting
+options</p>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>Plotter:</dt><dd><p>creates figures, axes, grid, labels</p>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>Outputmanager:</dt><dd><p>creats the plotting specific for the defined keyword lines</p>
+</dd>
+</dl>
+</li>
+</ul>
+</dd>
+</dl>
+<table class="docutils align-default" id="id4">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id4" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">figure</span></code></td>
+<td><p>figure number, (default=1)</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">axSpec</span></code></td>
+<td><p>axis specification according to matplotlib syntax, (default=111)</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">create=perNode</span></code></td>
+<td><p>result per node is plotted in a meshplot</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">create=perElement</span></code></td>
+<td><p>result per element is plotted in a meshplot</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">create=meshOnly</span></code></td>
+<td><p>plot the mesh only</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">create=xyData</span></code></td>
+<td><p>2D Plot of results</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="module-edelweissfe.outputmanagers.fractureenergyintegrator">
+<span id="fractureenergyintegrator-determine-the-fracture-energy"></span><h2><code class="docutils literal notranslate"><span class="pre">fractureenergyintegrator</span></code> - Determine the fracture energy<a class="headerlink" href="#module-edelweissfe.outputmanagers.fractureenergyintegrator" title="Permalink to this heading"></a></h2>
+<table class="docutils align-default" id="id5">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id5" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">forceFieldOutput</span></code></td>
+<td><p>fieldOutput for force (with time history)</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">displacementFieldOutput</span></code></td>
+<td><p>fieldOutput for displacement (with time history)</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">fractureArea</span></code></td>
+<td><p>(math expression for) area of fracture</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="module-edelweissfe.outputmanagers.plotalongpath">
+<span id="plotalongpath-plot-a-result-along-a-line"></span><h2><code class="docutils literal notranslate"><span class="pre">plotalongpath</span></code> - Plot a result along a line<a class="headerlink" href="#module-edelweissfe.outputmanagers.plotalongpath" title="Permalink to this heading"></a></h2>
+<table class="docutils align-default" id="id6">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id6" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">fieldOutput</span></code></td>
+<td><p>Name of the field output to be plotted (defined on a nodeSet/elementSet)</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">figure</span></code></td>
+<td><p>(Optional), figure of the Plotter</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">axSpec</span></code></td>
+<td><p>(Optional), axSpec (MATLAB syntax) in the figure</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">label</span></code></td>
+<td><p>(Optional), label, standard=fieldOutputs name</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">f(x)</span></code></td>
+<td><p>(Optional), apply math</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">normalize</span></code></td>
+<td><p>(Optional), normalize peak to 1.0</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="module-edelweissfe.outputmanagers.conditionalstop">
+<span id="conditionalstop-conditional-stop-if-expression-becomes-true"></span><h2><code class="docutils literal notranslate"><span class="pre">conditionalstop</span></code> - Conditional stop if expression becomes true<a class="headerlink" href="#module-edelweissfe.outputmanagers.conditionalstop" title="Permalink to this heading"></a></h2>
+<table class="docutils align-default" id="id7">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id7" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">stop</span></code></td>
+<td><p>model accessible function describing the stop condition</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="module-edelweissfe.outputmanagers.statusfile">
+<span id="statusfile-write-the-status-of-the-simulation-to-a-file"></span><h2><code class="docutils literal notranslate"><span class="pre">statusfile</span></code> - Write the status of the simulation to a file<a class="headerlink" href="#module-edelweissfe.outputmanagers.statusfile" title="Permalink to this heading"></a></h2>
+<table class="docutils align-default" id="id8">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id8" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">filename</span></code></td>
+<td><p>(optional), custom filename for the status file; default: ‘jobname’.sta</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="module-edelweissfe.outputmanagers.meshdatatofile">
+<span id="meshdatatofile-write-the-generated-mesh-data-to-a-file"></span><h2><code class="docutils literal notranslate"><span class="pre">meshdatatofile</span></code> - Write the (generated) mesh data to a file<a class="headerlink" href="#module-edelweissfe.outputmanagers.meshdatatofile" title="Permalink to this heading"></a></h2>
+<table class="docutils align-default" id="id9">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id9" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">filename</span></code></td>
+<td><p>(optional), name of the file to write to; default: ‘jobname’_mesh.inc</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="module-edelweissfe.outputmanagers.computetimemonitor">
+<span id="computetimemonitor-print-and-write-compute-times-per-increment"></span><h2><code class="docutils literal notranslate"><span class="pre">computetimemonitor</span></code> - Print and write compute times per increment<a class="headerlink" href="#module-edelweissfe.outputmanagers.computetimemonitor" title="Permalink to this heading"></a></h2>
+<table class="docutils align-default" id="id10">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id10" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">export</span></code></td>
+<td><p>(optional), filename if compute time should be written in a file</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="mesh.html" class="btn btn-neutral float-left" title="Creating finite element meshes" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="parallelization.html" class="btn btn-neutral float-right" title="Parallelization" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

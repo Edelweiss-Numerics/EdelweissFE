@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DOF manager &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Field outputs" href="fieldoutputmanager.html" />
+    <link rel="prev" title="Constraints" href="constraints.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">DOF manager</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager"><code class="docutils literal notranslate"><span class="pre">DofManager</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.constructDofVector"><code class="docutils literal notranslate"><span class="pre">DofManager.constructDofVector()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.constructVIJSystemMatrix"><code class="docutils literal notranslate"><span class="pre">DofManager.constructVIJSystemMatrix()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector"><code class="docutils literal notranslate"><span class="pre">DofManager.getNodeForIndexInDofVector()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToNodeField"><code class="docutils literal notranslate"><span class="pre">DofManager.writeDofVectorToNodeField()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector"><code class="docutils literal notranslate"><span class="pre">DofManager.writeNodeFieldToDofVector()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.accumulatedConstraintNDof"><code class="docutils literal notranslate"><span class="pre">DofManager.accumulatedConstraintNDof</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.accumulatedElementNDof"><code class="docutils literal notranslate"><span class="pre">DofManager.accumulatedElementNDof</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.fields"><code class="docutils literal notranslate"><span class="pre">DofManager.fields</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfConstraintsInDofVector"><code class="docutils literal notranslate"><span class="pre">DofManager.idcsOfConstraintsInDofVector</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfElementsInDofVector"><code class="docutils literal notranslate"><span class="pre">DofManager.idcsOfElementsInDofVector</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfFieldVariablesInDofVector"><code class="docutils literal notranslate"><span class="pre">DofManager.idcsOfFieldVariablesInDofVector</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfFieldsInDofVector"><code class="docutils literal notranslate"><span class="pre">DofManager.idcsOfFieldsInDofVector</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfFieldsOnNodeSetsInDofVector"><code class="docutils literal notranslate"><span class="pre">DofManager.idcsOfFieldsOnNodeSetsInDofVector</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfNodeFieldsInDofVector"><code class="docutils literal notranslate"><span class="pre">DofManager.idcsOfNodeFieldsInDofVector</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfScalarVariablesInDofVector"><code class="docutils literal notranslate"><span class="pre">DofManager.idcsOfScalarVariablesInDofVector</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.indexToHostObjectMapping"><code class="docutils literal notranslate"><span class="pre">DofManager.indexToHostObjectMapping</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.largestNumberOfConstraintNDof"><code class="docutils literal notranslate"><span class="pre">DofManager.largestNumberOfConstraintNDof</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.largestNumberOfElNDof"><code class="docutils literal notranslate"><span class="pre">DofManager.largestNumberOfElNDof</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.nDof"><code class="docutils literal notranslate"><span class="pre">DofManager.nDof</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofVector"><code class="docutils literal notranslate"><span class="pre">DofVector</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofVector.copy"><code class="docutils literal notranslate"><span class="pre">DofVector.copy()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.VIJSystemMatrix"><code class="docutils literal notranslate"><span class="pre">VIJSystemMatrix</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="exceptions.html">Exceptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generators.html">Generators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="journal.html">Journal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l2"><a class="reference internal" href="plotter.html">Plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="points.html">Points</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sections.html">Sections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sets.html">Sets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stepactions.html">Step actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="utils.html">Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variables.html">Variables</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Documentation</a></li>
+      <li class="breadcrumb-item active">DOF manager</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/documentation/dofmanager.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <div class="section" id="dof-manager">
+<h1>DOF manager<a class="headerlink" href="#dof-manager" title="Permalink to this heading"></a></h1>
+<p>Module <code class="docutils literal notranslate"><span class="pre">edelweissfe.numerics.dofmanager</span></code></p>
+<span class="target" id="module-edelweissfe.numerics.dofmanager"></span><p>This module contains important classes for describing the global equation system by means of a sparse system.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.dofmanager.</span></span><span class="sig-name descname"><span class="pre">DofManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nodeFields</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scalarVariables</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elements</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">constraints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeSets</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initializeVIJPattern</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager" title="Permalink to this definition"></a></dt>
+<dd><p>The DofManager</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>analyzes the domain (nodes and constraints),</p></li>
+<li><p>collects information about the necessary structure of the degrees of freedom</p></li>
+<li><p>handles the active fields on each node</p></li>
+<li><p>counts the accumulated number of associated elements on each dof (for the Abaqus like convergence test)</p></li>
+<li><p>supplies the framework with DofVectors and VIJSystemMatrices</p></li>
+</ul>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>nodeFields</strong> (<em>list</em><em>[</em><a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField" title="edelweissfe.fields.nodefield.NodeField"><em>edelweissfe.fields.nodefield.NodeField</em></a><em>]</em>) – The list of NodeFields which should be represented in the DofVector structure.</p></li>
+<li><p><strong>scalarVariables</strong> (<em>list</em><em>[</em><a class="reference internal" href="variables.html#edelweissfe.variables.scalarvariable.ScalarVariable" title="edelweissfe.variables.scalarvariable.ScalarVariable"><em>edelweissfe.variables.scalarvariable.ScalarVariable</em></a><em>]</em>) – The list of ScalarVariables which should be represented in the DofVector structure.</p></li>
+<li><p><strong>elements</strong> (<em>list</em><em>[</em><em>edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity</em><em>]</em>) – The list of Elements for which a map to the respective indices should be created.</p></li>
+<li><p><strong>constraints</strong> (<em>list</em><em>[</em><em>edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity</em><em>]</em>) – The list of Constraints for which a map to the respective indices should be created.</p></li>
+<li><p><strong>nodeSets</strong> (<em>list</em><em>[</em><a class="reference internal" href="sets.html#edelweissfe.sets.nodeset.NodeSet" title="edelweissfe.sets.nodeset.NodeSet"><em>edelweissfe.sets.nodeset.NodeSet</em></a><em>]</em>) – The list of NodeSets for which a map to the respective indices should be created.</p></li>
+<li><p><strong>initializeVIJPattern</strong> (<em>bool</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.constructDofVector" title="edelweissfe.numerics.dofmanager.DofManager.constructDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">constructDofVector</span></code></a>()</p></td>
+<td><p>Construct a vector with size=nDof and which has knowledge about the location of each entity.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.constructVIJSystemMatrix" title="edelweissfe.numerics.dofmanager.DofManager.constructVIJSystemMatrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">constructVIJSystemMatrix</span></code></a>()</p></td>
+<td><p>Construct a VIJ (COO) Sparse System matrix object, which also has knowledge about the location of each entity.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector" title="edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNodeForIndexInDofVector</span></code></a>(index)</p></td>
+<td><p>Find the node for a given index in the equuation system.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToNodeField" title="edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToNodeField"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeDofVectorToNodeField</span></code></a>(dofVector, ...)</p></td>
+<td><p>Write the current values of an entire NodeField from the respective locations in a given DofVector.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector" title="edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeNodeFieldToDofVector</span></code></a>(dofVector, ...[, ...])</p></td>
+<td><p>Write the current values of an entire NodeField to the respective locations in a given DofVector.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.constructDofVector">
+<span class="sig-name descname"><span class="pre">constructDofVector</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.constructDofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.constructDofVector" title="Permalink to this definition"></a></dt>
+<dd><p>Construct a vector with size=nDof and which has knowledge about
+the location of each entity.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A DofVector.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofVector" title="edelweissfe.numerics.dofmanager.DofVector">DofVector</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.constructVIJSystemMatrix">
+<span class="sig-name descname"><span class="pre">constructVIJSystemMatrix</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.constructVIJSystemMatrix"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.constructVIJSystemMatrix" title="Permalink to this definition"></a></dt>
+<dd><p>Construct a VIJ (COO) Sparse System matrix object, which also has knowledge about
+the location of each entity.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The system Matrix.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.VIJSystemMatrix" title="edelweissfe.numerics.dofmanager.VIJSystemMatrix">VIJSystemMatrix</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector">
+<span class="sig-name descname"><span class="pre">getNodeForIndexInDofVector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.getNodeForIndexInDofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector" title="Permalink to this definition"></a></dt>
+<dd><p>Find the node for a given index in the equuation system.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – The index in the DofVector.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The attached Node.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="points.html#edelweissfe.points.node.Node" title="edelweissfe.points.node.Node">Node</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToNodeField">
+<span class="sig-name descname"><span class="pre">writeDofVectorToNodeField</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dofVector</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeField</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resultName</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.writeDofVectorToNodeField"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToNodeField" title="Permalink to this definition"></a></dt>
+<dd><p>Write the current values of an entire NodeField from the respective locations in a given DofVector.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dofVector</strong> – The source DofVector.</p></li>
+<li><p><strong>nodeField</strong> – The NodeField to get the updated values.</p></li>
+<li><p><strong>resultname</strong> – The name of the value entries held by the NodeField.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The updated NodeField.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField" title="edelweissfe.fields.nodefield.NodeField">NodeField</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector">
+<span class="sig-name descname"><span class="pre">writeNodeFieldToDofVector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dofVector</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeField</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resultName</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeSet</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.writeNodeFieldToDofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector" title="Permalink to this definition"></a></dt>
+<dd><p>Write the current values of an entire NodeField to the respective locations in a given DofVector.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dofVector</strong> (<a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofVector" title="edelweissfe.numerics.dofmanager.DofVector"><em>DofVector</em></a>) – The result DofVector.</p></li>
+<li><p><strong>nodeField</strong> (<a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField" title="edelweissfe.fields.nodefield.NodeField"><em>NodeField</em></a>) – The NodeField holding the values.</p></li>
+<li><p><strong>resultname</strong> – The name of the value entries held by the NodeField.</p></li>
+<li><p><strong>NodeSet</strong> – The NodeSet to consider. If None, all nodes of the NodeField are considered.</p></li>
+<li><p><strong>resultName</strong> (<em>str</em>) – </p></li>
+<li><p><strong>nodeSet</strong> (<a class="reference internal" href="sets.html#edelweissfe.sets.nodeset.NodeSet" title="edelweissfe.sets.nodeset.NodeSet"><em>NodeSet</em></a>) – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The DofVector.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofVector" title="edelweissfe.numerics.dofmanager.DofVector">DofVector</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.accumulatedConstraintNDof">
+<span class="sig-name descname"><span class="pre">accumulatedConstraintNDof</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.accumulatedConstraintNDof" title="Permalink to this definition"></a></dt>
+<dd><p>The accumulated number of constraint dofs (= the sum of all constraint vector sizes)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.accumulatedElementNDof">
+<span class="sig-name descname"><span class="pre">accumulatedElementNDof</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.accumulatedElementNDof" title="Permalink to this definition"></a></dt>
+<dd><p>The accumulated number of element dofs (= the sum of all element vector sizes)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.fields">
+<span class="sig-name descname"><span class="pre">fields</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.fields" title="Permalink to this definition"></a></dt>
+<dd><p>The list of fields which can be found in the Dofvector</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.idcsOfConstraintsInDofVector">
+<span class="sig-name descname"><span class="pre">idcsOfConstraintsInDofVector</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfConstraintsInDofVector" title="Permalink to this definition"></a></dt>
+<dd><p>The dictionary mapping a constraint to it’s indices in the DofVector</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.idcsOfElementsInDofVector">
+<span class="sig-name descname"><span class="pre">idcsOfElementsInDofVector</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfElementsInDofVector" title="Permalink to this definition"></a></dt>
+<dd><p>The dictionary mapping an element to it’s indices in the DofVector</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.idcsOfFieldVariablesInDofVector">
+<span class="sig-name descname"><span class="pre">idcsOfFieldVariablesInDofVector</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfFieldVariablesInDofVector" title="Permalink to this definition"></a></dt>
+<dd><p>The dictionary mapping the nodal field variables to the indices in the DofVector</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.idcsOfFieldsInDofVector">
+<span class="sig-name descname"><span class="pre">idcsOfFieldsInDofVector</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfFieldsInDofVector" title="Permalink to this definition"></a></dt>
+<dd><p>The dictionary mapping the field names to all indices in the DofVector</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.idcsOfFieldsOnNodeSetsInDofVector">
+<span class="sig-name descname"><span class="pre">idcsOfFieldsOnNodeSetsInDofVector</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfFieldsOnNodeSetsInDofVector" title="Permalink to this definition"></a></dt>
+<dd><p>The dictionary mapping for each field a NodeSet to the respective indices in the DofVector</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.idcsOfNodeFieldsInDofVector">
+<span class="sig-name descname"><span class="pre">idcsOfNodeFieldsInDofVector</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfNodeFieldsInDofVector" title="Permalink to this definition"></a></dt>
+<dd><p>The dictionary mapping the a complete NodeField to the all its indices in the DofVector</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.idcsOfScalarVariablesInDofVector">
+<span class="sig-name descname"><span class="pre">idcsOfScalarVariablesInDofVector</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfScalarVariablesInDofVector" title="Permalink to this definition"></a></dt>
+<dd><p>The dictionary mapping the scalar variables to all indices in the DofVector</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.indexToHostObjectMapping">
+<span class="sig-name descname"><span class="pre">indexToHostObjectMapping</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.indexToHostObjectMapping" title="Permalink to this definition"></a></dt>
+<dd><p>The reverse dictionary mapping an index to the Host (e.g., a Node) holding the index’s FieldvVariable</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.largestNumberOfConstraintNDof">
+<span class="sig-name descname"><span class="pre">largestNumberOfConstraintNDof</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.largestNumberOfConstraintNDof" title="Permalink to this definition"></a></dt>
+<dd><p>The size of the largest of all constraint dof vectors</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.largestNumberOfElNDof">
+<span class="sig-name descname"><span class="pre">largestNumberOfElNDof</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.largestNumberOfElNDof" title="Permalink to this definition"></a></dt>
+<dd><p>The size of the largest of all element dof vectors</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.nDof">
+<span class="sig-name descname"><span class="pre">nDof</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.nDof" title="Permalink to this definition"></a></dt>
+<dd><p>The total number of degrees of freedom (and size of the DofVector)</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofVector">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.dofmanager.</span></span><span class="sig-name descname"><span class="pre">DofVector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nDof</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entitiesInDofVector</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofVector" title="Permalink to this definition"></a></dt>
+<dd><p>This class represents a Dof Vector, which also has knowledge of each entities (elements, constraints) location within.
+The [] operator allows to access (non-contigouos read, write) at each entities location</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>nDof</strong> (<em>int</em>) – The size of the system.</p></li>
+<li><p><strong>entitiesInVIJ</strong> – A dictionary containing the indices of an entitiy in the value vector.</p></li>
+<li><p><strong>entitiesInDofVector</strong> (<em>dict</em>) – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Attributes</dt>
+<dd class="field-even"><dl class="simple">
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">T</span></code></dt><dd><p>View of the transposed array.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">base</span></code></dt><dd><p>Base object if memory is from some other object.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">ctypes</span></code></dt><dd><p>An object to simplify the interaction of the array with the ctypes module.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">data</span></code></dt><dd><p>Python buffer object pointing to the start of the array’s data.</p>
+</dd>
+<dt><strong>device</strong></dt><dd></dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">dtype</span></code></dt><dd><p>Data-type of the array’s elements.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">flags</span></code></dt><dd><p>Information about the memory layout of the array.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">flat</span></code></dt><dd><p>A 1-D iterator over the array.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">imag</span></code></dt><dd><p>The imaginary part of the array.</p>
+</dd>
+<dt><strong>itemset</strong></dt><dd></dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">itemsize</span></code></dt><dd><p>Length of one array element in bytes.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">mT</span></code></dt><dd><p>View of the matrix transposed array.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">nbytes</span></code></dt><dd><p>Total bytes consumed by the elements of the array.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">ndim</span></code></dt><dd><p>Number of array dimensions.</p>
+</dd>
+<dt><strong>newbyteorder</strong></dt><dd></dd>
+<dt><strong>ptp</strong></dt><dd></dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">real</span></code></dt><dd><p>The real part of the array.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">shape</span></code></dt><dd><p>Tuple of array dimensions.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">size</span></code></dt><dd><p>Number of elements in the array.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">strides</span></code></dt><dd><p>Tuple of bytes to step in each dimension when traversing an array.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">all</span></code>([axis, out, keepdims, where])</p></td>
+<td><p>Returns True if all elements evaluate to True.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">any</span></code>([axis, out, keepdims, where])</p></td>
+<td><p>Returns True if any of the elements of <cite>a</cite> evaluate to True.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">argmax</span></code>([axis, out, keepdims])</p></td>
+<td><p>Return indices of the maximum values along the given axis.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">argmin</span></code>([axis, out, keepdims])</p></td>
+<td><p>Return indices of the minimum values along the given axis.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">argpartition</span></code>(kth[, axis, kind, order])</p></td>
+<td><p>Returns the indices that would partition this array.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">argsort</span></code>([axis, kind, order])</p></td>
+<td><p>Returns the indices that would sort this array.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">astype</span></code>(dtype[, order, casting, subok, copy])</p></td>
+<td><p>Copy of the array, cast to a specified type.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">byteswap</span></code>([inplace])</p></td>
+<td><p>Swap the bytes of the array elements</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">choose</span></code>(choices[, out, mode])</p></td>
+<td><p>Use an index array to construct a new array from a set of choices.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">clip</span></code>([min, max, out])</p></td>
+<td><p>Return an array whose values are limited to <code class="docutils literal notranslate"><span class="pre">[min,</span> <span class="pre">max]</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">compress</span></code>(condition[, axis, out])</p></td>
+<td><p>Return selected slices of this array along given axis.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">conj</span></code>()</p></td>
+<td><p>Complex-conjugate all elements.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">conjugate</span></code>()</p></td>
+<td><p>Return the complex conjugate, element-wise.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofVector.copy" title="edelweissfe.numerics.dofmanager.DofVector.copy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">copy</span></code></a>()</p></td>
+<td><p>Create a copy of the DofVector, including the entitiesInDofVector mapping.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">cumprod</span></code>([axis, dtype, out])</p></td>
+<td><p>Return the cumulative product of the elements along the given axis.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">cumsum</span></code>([axis, dtype, out])</p></td>
+<td><p>Return the cumulative sum of the elements along the given axis.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">diagonal</span></code>([offset, axis1, axis2])</p></td>
+<td><p>Return specified diagonals.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">dump</span></code>(file)</p></td>
+<td><p>Dump a pickle of the array to the specified file.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">dumps</span></code>()</p></td>
+<td><p>Returns the pickle of the array as a string.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">fill</span></code>(value)</p></td>
+<td><p>Fill the array with a scalar value.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">flatten</span></code>([order])</p></td>
+<td><p>Return a copy of the array collapsed into one dimension.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getfield</span></code>(dtype[, offset])</p></td>
+<td><p>Returns a field of the given array as a certain type.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">item</span></code>(*args)</p></td>
+<td><p>Copy an element of an array to a standard Python scalar and return it.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">max</span></code>([axis, out, keepdims, initial, where])</p></td>
+<td><p>Return the maximum along a given axis.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">mean</span></code>([axis, dtype, out, keepdims, where])</p></td>
+<td><p>Returns the average of the array elements along given axis.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">min</span></code>([axis, out, keepdims, initial, where])</p></td>
+<td><p>Return the minimum along a given axis.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">nonzero</span></code>()</p></td>
+<td><p>Return the indices of the elements that are non-zero.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">partition</span></code>(kth[, axis, kind, order])</p></td>
+<td><p>Partially sorts the elements in the array in such a way that the value of the element in k-th position is in the position it would be in a sorted array.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">prod</span></code>([axis, dtype, out, keepdims, initial, ...])</p></td>
+<td><p>Return the product of the array elements over the given axis</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">put</span></code>(indices, values[, mode])</p></td>
+<td><p>Set <code class="docutils literal notranslate"><span class="pre">a.flat[n]</span> <span class="pre">=</span> <span class="pre">values[n]</span></code> for all <cite>n</cite> in indices.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ravel</span></code>([order])</p></td>
+<td><p>Return a flattened array.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">repeat</span></code>(repeats[, axis])</p></td>
+<td><p>Repeat elements of an array.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">reshape</span></code>(shape, /, *[, order, copy])</p></td>
+<td><p>Returns an array containing the same data with a new shape.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">resize</span></code>(new_shape[, refcheck])</p></td>
+<td><p>Change shape and size of array in-place.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">round</span></code>([decimals, out])</p></td>
+<td><p>Return <cite>a</cite> with each element rounded to the given number of decimals.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">searchsorted</span></code>(v[, side, sorter])</p></td>
+<td><p>Find indices where elements of v should be inserted in a to maintain order.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setfield</span></code>(val, dtype[, offset])</p></td>
+<td><p>Put a value into a specified place in a field defined by a data-type.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setflags</span></code>([write, align, uic])</p></td>
+<td><p>Set array flags WRITEABLE, ALIGNED, WRITEBACKIFCOPY, respectively.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sort</span></code>([axis, kind, order])</p></td>
+<td><p>Sort an array in-place.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">squeeze</span></code>([axis])</p></td>
+<td><p>Remove axes of length one from <cite>a</cite>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">std</span></code>([axis, dtype, out, ddof, keepdims, where])</p></td>
+<td><p>Returns the standard deviation of the array elements along given axis.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sum</span></code>([axis, dtype, out, keepdims, initial, where])</p></td>
+<td><p>Return the sum of the array elements over the given axis.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">swapaxes</span></code>(axis1, axis2)</p></td>
+<td><p>Return a view of the array with <cite>axis1</cite> and <cite>axis2</cite> interchanged.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">take</span></code>(indices[, axis, out, mode])</p></td>
+<td><p>Return an array formed from the elements of <cite>a</cite> at the given indices.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tobytes</span></code>([order])</p></td>
+<td><p>Construct Python bytes containing the raw data bytes in the array.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tofile</span></code>(fid[, sep, format])</p></td>
+<td><p>Write array to a file as text or binary (default).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tolist</span></code>()</p></td>
+<td><p>Return the array as an <code class="docutils literal notranslate"><span class="pre">a.ndim</span></code>-levels deep nested list of Python scalars.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">trace</span></code>([offset, axis1, axis2, dtype, out])</p></td>
+<td><p>Return the sum along diagonals of the array.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">transpose</span></code>(*axes)</p></td>
+<td><p>Returns a view of the array with axes transposed.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">var</span></code>([axis, dtype, out, ddof, keepdims, where])</p></td>
+<td><p>Returns the variance of the array elements, along given axis.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">view</span></code>([dtype][, type])</p></td>
+<td><p>New view of array with the same data.</p></td>
+</tr>
+</tbody>
+</table>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 57%" />
+<col style="width: 43%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><strong>dot</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p><strong>to_device</strong></p></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofVector.copy">
+<span class="sig-name descname"><span class="pre">copy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofVector.copy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofVector.copy" title="Permalink to this definition"></a></dt>
+<dd><p>Create a copy of the DofVector, including the entitiesInDofVector mapping.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The copied DofVector.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofVector" title="edelweissfe.numerics.dofmanager.DofVector">DofVector</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.VIJSystemMatrix">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.dofmanager.</span></span><span class="sig-name descname"><span class="pre">VIJSystemMatrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nDof</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">I</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">J</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entitiesInVIJ</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#VIJSystemMatrix"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.VIJSystemMatrix" title="Permalink to this definition"></a></dt>
+<dd><p>This class represents the V Vector of VIJ triple (sparse matrix in COO format),
+which</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>also contains the I and J vectors as class members,</p></li>
+<li><p>allows to directly access (contiguous read and write) access of each entity via the [] operator</p></li>
+</ul>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>nDof</strong> (<em>int</em>) – The size of the system.</p></li>
+<li><p><strong>I</strong> (<em>ndarray</em>) – The I vector for the VIJ triple.</p></li>
+<li><p><strong>J</strong> (<em>ndarray</em>) – The J vector for the VIJ triple.</p></li>
+<li><p><strong>entitiesInVIJ</strong> (<em>dict</em>) – A dictionary containing the indices of an entitiy in the value vector.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Attributes</dt>
+<dd class="field-even"><dl class="simple">
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">T</span></code></dt><dd><p>View of the transposed array.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">base</span></code></dt><dd><p>Base object if memory is from some other object.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">ctypes</span></code></dt><dd><p>An object to simplify the interaction of the array with the ctypes module.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">data</span></code></dt><dd><p>Python buffer object pointing to the start of the array’s data.</p>
+</dd>
+<dt><strong>device</strong></dt><dd></dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">dtype</span></code></dt><dd><p>Data-type of the array’s elements.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">flags</span></code></dt><dd><p>Information about the memory layout of the array.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">flat</span></code></dt><dd><p>A 1-D iterator over the array.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">imag</span></code></dt><dd><p>The imaginary part of the array.</p>
+</dd>
+<dt><strong>itemset</strong></dt><dd></dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">itemsize</span></code></dt><dd><p>Length of one array element in bytes.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">mT</span></code></dt><dd><p>View of the matrix transposed array.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">nbytes</span></code></dt><dd><p>Total bytes consumed by the elements of the array.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">ndim</span></code></dt><dd><p>Number of array dimensions.</p>
+</dd>
+<dt><strong>newbyteorder</strong></dt><dd></dd>
+<dt><strong>ptp</strong></dt><dd></dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">real</span></code></dt><dd><p>The real part of the array.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">shape</span></code></dt><dd><p>Tuple of array dimensions.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">size</span></code></dt><dd><p>Number of elements in the array.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">strides</span></code></dt><dd><p>Tuple of bytes to step in each dimension when traversing an array.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">all</span></code>([axis, out, keepdims, where])</p></td>
+<td><p>Returns True if all elements evaluate to True.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">any</span></code>([axis, out, keepdims, where])</p></td>
+<td><p>Returns True if any of the elements of <cite>a</cite> evaluate to True.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">argmax</span></code>([axis, out, keepdims])</p></td>
+<td><p>Return indices of the maximum values along the given axis.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">argmin</span></code>([axis, out, keepdims])</p></td>
+<td><p>Return indices of the minimum values along the given axis.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">argpartition</span></code>(kth[, axis, kind, order])</p></td>
+<td><p>Returns the indices that would partition this array.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">argsort</span></code>([axis, kind, order])</p></td>
+<td><p>Returns the indices that would sort this array.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">astype</span></code>(dtype[, order, casting, subok, copy])</p></td>
+<td><p>Copy of the array, cast to a specified type.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">byteswap</span></code>([inplace])</p></td>
+<td><p>Swap the bytes of the array elements</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">choose</span></code>(choices[, out, mode])</p></td>
+<td><p>Use an index array to construct a new array from a set of choices.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">clip</span></code>([min, max, out])</p></td>
+<td><p>Return an array whose values are limited to <code class="docutils literal notranslate"><span class="pre">[min,</span> <span class="pre">max]</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">compress</span></code>(condition[, axis, out])</p></td>
+<td><p>Return selected slices of this array along given axis.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">conj</span></code>()</p></td>
+<td><p>Complex-conjugate all elements.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">conjugate</span></code>()</p></td>
+<td><p>Return the complex conjugate, element-wise.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">copy</span></code>([order])</p></td>
+<td><p>Return a copy of the array.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">cumprod</span></code>([axis, dtype, out])</p></td>
+<td><p>Return the cumulative product of the elements along the given axis.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">cumsum</span></code>([axis, dtype, out])</p></td>
+<td><p>Return the cumulative sum of the elements along the given axis.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">diagonal</span></code>([offset, axis1, axis2])</p></td>
+<td><p>Return specified diagonals.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">dump</span></code>(file)</p></td>
+<td><p>Dump a pickle of the array to the specified file.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">dumps</span></code>()</p></td>
+<td><p>Returns the pickle of the array as a string.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">fill</span></code>(value)</p></td>
+<td><p>Fill the array with a scalar value.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">flatten</span></code>([order])</p></td>
+<td><p>Return a copy of the array collapsed into one dimension.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getfield</span></code>(dtype[, offset])</p></td>
+<td><p>Returns a field of the given array as a certain type.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">item</span></code>(*args)</p></td>
+<td><p>Copy an element of an array to a standard Python scalar and return it.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">max</span></code>([axis, out, keepdims, initial, where])</p></td>
+<td><p>Return the maximum along a given axis.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">mean</span></code>([axis, dtype, out, keepdims, where])</p></td>
+<td><p>Returns the average of the array elements along given axis.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">min</span></code>([axis, out, keepdims, initial, where])</p></td>
+<td><p>Return the minimum along a given axis.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">nonzero</span></code>()</p></td>
+<td><p>Return the indices of the elements that are non-zero.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">partition</span></code>(kth[, axis, kind, order])</p></td>
+<td><p>Partially sorts the elements in the array in such a way that the value of the element in k-th position is in the position it would be in a sorted array.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">prod</span></code>([axis, dtype, out, keepdims, initial, ...])</p></td>
+<td><p>Return the product of the array elements over the given axis</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">put</span></code>(indices, values[, mode])</p></td>
+<td><p>Set <code class="docutils literal notranslate"><span class="pre">a.flat[n]</span> <span class="pre">=</span> <span class="pre">values[n]</span></code> for all <cite>n</cite> in indices.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ravel</span></code>([order])</p></td>
+<td><p>Return a flattened array.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">repeat</span></code>(repeats[, axis])</p></td>
+<td><p>Repeat elements of an array.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">reshape</span></code>(shape, /, *[, order, copy])</p></td>
+<td><p>Returns an array containing the same data with a new shape.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">resize</span></code>(new_shape[, refcheck])</p></td>
+<td><p>Change shape and size of array in-place.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">round</span></code>([decimals, out])</p></td>
+<td><p>Return <cite>a</cite> with each element rounded to the given number of decimals.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">searchsorted</span></code>(v[, side, sorter])</p></td>
+<td><p>Find indices where elements of v should be inserted in a to maintain order.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setfield</span></code>(val, dtype[, offset])</p></td>
+<td><p>Put a value into a specified place in a field defined by a data-type.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setflags</span></code>([write, align, uic])</p></td>
+<td><p>Set array flags WRITEABLE, ALIGNED, WRITEBACKIFCOPY, respectively.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sort</span></code>([axis, kind, order])</p></td>
+<td><p>Sort an array in-place.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">squeeze</span></code>([axis])</p></td>
+<td><p>Remove axes of length one from <cite>a</cite>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">std</span></code>([axis, dtype, out, ddof, keepdims, where])</p></td>
+<td><p>Returns the standard deviation of the array elements along given axis.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sum</span></code>([axis, dtype, out, keepdims, initial, where])</p></td>
+<td><p>Return the sum of the array elements over the given axis.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">swapaxes</span></code>(axis1, axis2)</p></td>
+<td><p>Return a view of the array with <cite>axis1</cite> and <cite>axis2</cite> interchanged.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">take</span></code>(indices[, axis, out, mode])</p></td>
+<td><p>Return an array formed from the elements of <cite>a</cite> at the given indices.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tobytes</span></code>([order])</p></td>
+<td><p>Construct Python bytes containing the raw data bytes in the array.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tofile</span></code>(fid[, sep, format])</p></td>
+<td><p>Write array to a file as text or binary (default).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tolist</span></code>()</p></td>
+<td><p>Return the array as an <code class="docutils literal notranslate"><span class="pre">a.ndim</span></code>-levels deep nested list of Python scalars.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">trace</span></code>([offset, axis1, axis2, dtype, out])</p></td>
+<td><p>Return the sum along diagonals of the array.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">transpose</span></code>(*axes)</p></td>
+<td><p>Returns a view of the array with axes transposed.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">var</span></code>([axis, dtype, out, ddof, keepdims, where])</p></td>
+<td><p>Returns the variance of the array elements, along given axis.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">view</span></code>([dtype][, type])</p></td>
+<td><p>New view of array with the same data.</p></td>
+</tr>
+</tbody>
+</table>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 57%" />
+<col style="width: 43%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><strong>dot</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p><strong>to_device</strong></p></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="constraints.html" class="btn btn-neutral float-left" title="Constraints" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="fieldoutputmanager.html" class="btn btn-neutral float-right" title="Field outputs" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Input file syntax &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Inputfile driven simulations" href="jobs.html" />
+    <link rel="prev" title="Documentation" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Input file syntax</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.utils.inputfileparser.parseInputFile"><code class="docutils literal notranslate"><span class="pre">parseInputFile()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.utils.inputfileparser.printKeywords"><code class="docutils literal notranslate"><span class="pre">printKeywords()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.utils.inputfileparser.printKeywordsRST"><code class="docutils literal notranslate"><span class="pre">printKeywordsRST()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#keywords">Keywords</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">DOF manager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="exceptions.html">Exceptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generators.html">Generators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="journal.html">Journal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l2"><a class="reference internal" href="plotter.html">Plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="points.html">Points</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sections.html">Sections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sets.html">Sets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stepactions.html">Step actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="utils.html">Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variables.html">Variables</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Documentation</a></li>
+      <li class="breadcrumb-item active">Input file syntax</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/documentation/syntax.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <div class="section" id="input-file-syntax">
+<h1>Input file syntax<a class="headerlink" href="#input-file-syntax" title="Permalink to this heading"></a></h1>
+<p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.utils.inputfileparser.py</span></code></p>
+<p>EdelweissFE uses an input file syntax similar to Abaqus, using human readable input files.
+The general syntax makes use of <code class="docutils literal notranslate"><span class="pre">*keywords</span></code>, possibly with <code class="docutils literal notranslate"><span class="pre">option=values</span></code> in the same line and
+supplemented by data lines.
+In general, options and data entries are comma separated.
+Indentations and blank lines have no effect.</p>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*keyword</span>,<span class="nv"> option1</span><span class="ow">=</span><span class="m">value</span>,<span class="nv"> option2</span><span class="ow">=</span><span class="m">another_value</span>
+data, data, data, data
+data, data, data, data
+data, data, data, data
+
+<span class="c c-Singleline">**this is a comment</span>
+<span class="c c-Singleline">**again a comment</span>
+
+<span class="k">*another_keyword</span>,<span class="nv"> option1</span><span class="ow">=</span><span class="m">value</span>,<span class="nv"> option2</span><span class="ow">=</span><span class="m">another_value</span>
+data, data, data, data
+</pre></div>
+</div>
+<p>The available input syntax is defined in <code class="docutils literal notranslate"><span class="pre">fe/utils/inputfileparser.py</span></code>,
+and available keywords can be printed using</p>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span>python edelweiss.py --keywords
+</pre></div>
+</div>
+<span class="target" id="module-edelweissfe.utils.inputfileparser"></span><p>Inputfileparser for inputfiles employing an Abaqus-like syntax.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.inputfileparser.parseInputFile">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.inputfileparser.</span></span><span class="sig-name descname"><span class="pre">parseInputFile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fileName</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">currentKeyword</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">existingFileDict</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/inputfileparser.html#parseInputFile"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.inputfileparser.parseInputFile" title="Permalink to this definition"></a></dt>
+<dd><p>Parse an Abaqus-like input file to generate a dictionary with its content.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fileName</strong> (<em>str</em>) – The name of the file to parse.</p></li>
+<li><p><strong>currentKeyword</strong> (<em>str</em>) – If nested parsing is performed by using <code class="docutils literal notranslate"><span class="pre">*include</span></code>, this option tells which
+keyword is currently active.</p></li>
+<li><p><strong>existingFileDict</strong> (<em>CaseInsensitiveDict</em>) – An existing dictionary to append. If Nonde, a new dictionary is created.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The parsed input file.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>CaseInsensitiveDict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.inputfileparser.printKeywords">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.inputfileparser.</span></span><span class="sig-name descname"><span class="pre">printKeywords</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/inputfileparser.html#printKeywords"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.inputfileparser.printKeywords" title="Permalink to this definition"></a></dt>
+<dd><p>Print the input file language set.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.inputfileparser.printKeywordsRST">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.inputfileparser.</span></span><span class="sig-name descname"><span class="pre">printKeywordsRST</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/inputfileparser.html#printKeywordsRST"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.inputfileparser.printKeywordsRST" title="Permalink to this definition"></a></dt>
+<dd><p>Print the input file language set in an RST conform format.</p>
+</dd></dl>
+
+<div class="section" id="keywords">
+<h2>Keywords<a class="headerlink" href="#keywords" title="Permalink to this heading"></a></h2>
+<table class="colwidths-given docutils align-default" id="id1" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*advancedmaterial</span></code> : definition of an advanced material</span><a class="headerlink" href="#id1" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>material description, multiline possible</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">id</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>name of the property</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>name of the property</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id2" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*analyticalfield</span></code> : define an analytical field</span><a class="headerlink" href="#id2" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>definition</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>name of analytical field</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">type</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>type of analytical field (currently ‘expression’ only)</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id3" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*configureplots</span></code> : customize the figures and axes</span><a class="headerlink" href="#id3" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>key=value pairs for configuration of figures and axes</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id4" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*constraint</span></code> : define a constraint</span><a class="headerlink" href="#id4" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>definition of the constraint</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>(optional) name of the constraint</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">type</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>constraint type</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id5" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*element</span></code> : definition of element(s)</span><a class="headerlink" href="#id5" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">numpy</span> <span class="pre">integer</span> <span class="pre">array</span></code></p></td>
+<td><p>Abaqus like element definiton lines</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">elset</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>name</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">provider</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>provider (library) for the element type. Default: Marmot</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">type</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>assign one of the types definied in the elementlibrary</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id6" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*elset</span></code> : definition of an element set</span><a class="headerlink" href="#id6" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>Abaqus like element set definiton lines</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">elset</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>name</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">generate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>set True to generate from data line 1: start-element, end-element, step</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id7" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*exportplots</span></code> : export your figures</span><a class="headerlink" href="#id7" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>key=value pairs for exporting of figures and axes</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id8" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*fieldoutput</span></code> : define fieldoutput, which is used by outputmanagers</span><a class="headerlink" href="#id8" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>defintions lines for the output module</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">jobname</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>(optional), name of job, standard=defaultJob</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id9" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*include</span></code> : (optional) load extra .inp file (fragment), use relative path to current .inp</span><a class="headerlink" href="#id9" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">input</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>filename</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id10" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*job</span></code> : definition of an analysis job</span><a class="headerlink" href="#id10" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">domain</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>define spatial domain: 1d, 2d, 3d</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>(optional) name of job, standard = defaultJob</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">starttime</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p>(optional) start time of job, standard = 0.0</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id11" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*material</span></code> : definition of a material</span><a class="headerlink" href="#id11" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">numpy</span> <span class="pre">float</span> <span class="pre">array</span></code></p></td>
+<td><p>material properties, multiline possible</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">id</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>name of the property</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>name of the property</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">statevars</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">integer</span></code></p></td>
+<td><p>(deprecated and ignored) number of statevars</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id12" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*modelgenerator</span></code> : define a model generator, loaded from a module</span><a class="headerlink" href="#id12" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>key=value pairs</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">generator</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>generator module</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>(optional) name of the generator</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id13" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*node</span></code> : definition of nodes</span><a class="headerlink" href="#id13" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">numpy</span> <span class="pre">float</span> <span class="pre">array</span></code></p></td>
+<td><p>Abaqus like node definiton lines: label, x, [y], [z]</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nset</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>name</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id14" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*nset</span></code> : definition of an element set</span><a class="headerlink" href="#id14" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>Abaqus like node set definiton lines</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">generate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>set True to generate from data line 1: start-node, end-node, step</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nset</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>name</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id15" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*output</span></code> : define an output module</span><a class="headerlink" href="#id15" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>defintions lines for the output module</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">jobname</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>(optional), name of job, standard=defaultJob</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>(optional), name of manager, standard=None</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">type</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>output module</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id16" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*parameteridentification</span></code> : identify material parameter for given x and y data</span><a class="headerlink" href="#id16" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>key=value pairs</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">file</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>filename where identified parameters are written</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">id</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>name of the property</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">jobname</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>name of job</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">plot</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>True|False plot result with final parameters</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">xdata</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>filename where xData is given</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ydata</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>filename where yData is given</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id17" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*section</span></code> : definition of an section</span><a class="headerlink" href="#id17" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>list of associated element sets</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">material</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>associated id of defined material</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>name</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">thickness</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p>associated element set</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">type</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>type of the section</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id18" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*solver</span></code> : definition of a solver</span><a class="headerlink" href="#id18" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>name of this solver</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">solver</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>solver type</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>(optional) define options which are passed to the respective solver instance.</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id19" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*step</span></code> : definition of job steps</span><a class="headerlink" href="#id19" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">criticaliter</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">integer</span></code></p></td>
+<td><p>maximum number of iterations to prevent from increasing the increment</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>define step actions, which are handled by the corresponding stepaction modules</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">jobname</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>(optional), name of job, standard=defaultJob</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">maxinc</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p>maximum size of increment</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">maxiter</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">integer</span></code></p></td>
+<td><p>maximum number of iterations</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">maxnuminc</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">integer</span></code></p></td>
+<td><p>maximum number of increments</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mininc</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p>minimum size of increment</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">steplength</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">float</span></code></p></td>
+<td><p>time period of step</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id20" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*surface</span></code> : definition of surface set</span><a class="headerlink" href="#id20" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>Abaqus like definition. Type ‘element’: elSet, faceID</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>name</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">type</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>type of surface (currently ‘element’ only)</p></td>
+</tr>
+</tbody>
+</table>
+<table class="colwidths-given docutils align-default" id="id21" style="width: 100%">
+<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*updateconfiguration</span></code> : update an configuration</span><a class="headerlink" href="#id21" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 28%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">configuration</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>name of the modified settings category</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
+<td><p>key=value pairs</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="Documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="jobs.html" class="btn btn-neutral float-right" title="Inputfile driven simulations" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

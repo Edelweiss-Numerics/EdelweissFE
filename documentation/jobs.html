@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inputfile driven simulations &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Models" href="models.html" />
+    <link rel="prev" title="Input file syntax" href="syntax.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Inputfile driven simulations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.drivers.inputfiledrivensimulation.finiteElementSimulation"><code class="docutils literal notranslate"><span class="pre">finiteElementSimulation()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">DOF manager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="exceptions.html">Exceptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generators.html">Generators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="journal.html">Journal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l2"><a class="reference internal" href="plotter.html">Plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="points.html">Points</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sections.html">Sections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sets.html">Sets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stepactions.html">Step actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="utils.html">Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variables.html">Variables</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Documentation</a></li>
+      <li class="breadcrumb-item active">Inputfile driven simulations</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/documentation/jobs.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <div class="section" id="inputfile-driven-simulations">
+<h1>Inputfile driven simulations<a class="headerlink" href="#inputfile-driven-simulations" title="Permalink to this heading"></a></h1>
+<p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.drivers.inputfiledrivensimulation</span></code></p>
+<span class="target" id="module-edelweissfe.drivers.inputfiledrivensimulation"></span><p>This is the main module of EdelweissFE.</p>
+<p>Heart is the <code class="docutils literal notranslate"><span class="pre">*job</span></code> keyword, which defines the spatial dimension
+A <code class="docutils literal notranslate"><span class="pre">*job</span></code> definition consists of multiple <code class="docutils literal notranslate"><span class="pre">*steps</span></code>, associated with that job.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.drivers.inputfiledrivensimulation.finiteElementSimulation">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.drivers.inputfiledrivensimulation.</span></span><span class="sig-name descname"><span class="pre">finiteElementSimulation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputfile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">suppressPlots</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/drivers/inputfiledrivensimulation.html#finiteElementSimulation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.drivers.inputfiledrivensimulation.finiteElementSimulation" title="Permalink to this definition"></a></dt>
+<dd><p>This is core function of the finite element analysis.
+Based on the keyword <code class="docutils literal notranslate"><span class="pre">*job</span></code>, the finite element model is defined.</p>
+<dl class="simple">
+<dt>It assembles</dt><dd><ul class="simple">
+<li><p>the information on the job</p></li>
+<li><p>the model tree</p></li>
+<li><p>steps</p></li>
+<li><p>field outputs</p></li>
+<li><p>output managers</p></li>
+</ul>
+</dd>
+</dl>
+<p>and controls the respective solver based on the defined simulation steps.
+For each step, the step-actions (dirichlet, nodeforces) are collected by
+external modules.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>inputfile</strong> (<em>dict</em>) – The input file in dictionary form.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em>) – Be verbose during the simulation.</p></li>
+<li><p><strong>suppressPlots</strong> (<em>bool</em>) – Suppress plots at the end of simulation for batch runs.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>A tuple containing</dt><dd><ul class="simple">
+<li><p>The final model tree</p></li>
+<li><p>The fieldoutput controller containing all processed results.</p></li>
+</ul>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="syntax.html" class="btn btn-neutral float-left" title="Input file syntax" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="models.html" class="btn btn-neutral float-right" title="Models" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
