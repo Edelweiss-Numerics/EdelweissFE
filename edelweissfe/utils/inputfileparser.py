@@ -170,9 +170,16 @@ from edelweissfe.sections.plane import inputLanguage  # noqa: F811,E402
 kw = inputLanguage.addKeyword("*material", "definition of a material")
 kw.addRequiredArg("name", "name of material", str)
 kw.addRequiredArg("id", "id of material", str)
+kw.addOptionalArg("provider", "material provider", str, "marmotmaterial")
 kw.addRequiredDatalines("material properties", "")
 
 # kw.addOptionalArg("statevars", , , None)
+
+kw = inputLanguage.addKeyword("*advancedmaterial", "definition of an advanced material")
+kw.addRequiredArg("name", "name of material", str)
+kw.addRequiredArg("id", "id of material", str)
+kw.addOptionalArg("provider", "material provider", str, "marmotmaterial")
+kw.addRequiredDatalines("material properties", "")
 
 kw = inputLanguage.addKeyword("*fieldOutput", "define fieldoutput, which is used by outputmanagers")
 kw.addRequiredDatalines("definition lines for the output module", "")

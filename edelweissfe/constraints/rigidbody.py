@@ -81,6 +81,13 @@ class Constraint(ConstraintBase):
         self.indicesOfRPPhiInP = [nSlaves * nDim + nDim + j for j in range(nRot)]
 
         # all nodes
+
+        slaveNodeSet = nodeSets[rbNset]  # slave node set may contain the reference point
+
+        # reference point is removed (if present) and node set is converted to list
+        self.slaveNodes = [node for node in slaveNodeSet if not node == self.referencePoint]
+
+        # list of all nodes including RP at end
         self._nodes = self.slaveNodes + [self.referencePoint]
 
         self.slaveNodesFields = [["displacement"]] * nSlaves
@@ -100,6 +107,8 @@ class Constraint(ConstraintBase):
         self.nConstraints = nConstraints
 
         self.nRot = 3
+
+        self._reactions = np.zeros(self.nRot + self.nDim)
 
     @property
     def nodes(self) -> list:
@@ -234,6 +243,8 @@ class Constraint(ConstraintBase):
         # start and end of Lambda in P
         L0, LF = nU, nU + nDim
 
+        self._reactions.fill(0.0)
+
         for i in range(nSlaves):
             d0 = self.distancesSlaveNodeRP[i]
             indcsUNode = self.indicesOfSlaveNodesInP[i]
@@ -268,3 +279,6 @@ class Constraint(ConstraintBase):
 
             L0 += nDim
             LF += nDim
+
+            self._reactions[0 : self.nDim] += Lambda
+            self._reactions[self.nDim :] += np.cross(T @ d0, Lambda)

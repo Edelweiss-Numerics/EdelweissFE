@@ -5,15 +5,15 @@ cmake
 compilers
 cython
 docutils=0.16
-gfortran
 gstools
 make
 matplotlib
 numpy
 numpydoc
-petsc4py
-pymumps
-python>=3.9
+# petsc4py
+pyamg
+# pymumps
+python=3.12
 pytest
 pyvista
 prettytable
@@ -22,4 +22,5 @@ suitesparse
 sphinx
 sphinx_rtd_theme
 sympy
+vtk>=9.1.0
 difflib

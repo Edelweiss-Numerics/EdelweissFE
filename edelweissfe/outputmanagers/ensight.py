@@ -31,6 +31,7 @@
 
 import datetime
 import os
+from collections import defaultdict
 from distutils.util import strtobool
 from io import TextIOBase
 
@@ -73,7 +74,7 @@ def writeCInt(f, ndarray):
 
 
 def writeC80(f, string):
-    np.asarray(string, dtype="a80").tofile(f)
+    np.asarray(string, dtype="S80").tofile(f)
 
 
 ensightPerNodeVariableTypes = {
@@ -448,7 +449,7 @@ class EnsightChunkWiseCase:
         self.timeAndFileSets = {}
         self.geometryTrends = {}
         self.variableTrends = {}
-        self.fileHandles = {}
+        self.fileNames = {}
 
         if not os.path.exists(self.caseFileNamePrefix):
             os.mkdir(self.caseFileNamePrefix)
@@ -480,24 +481,28 @@ class EnsightChunkWiseCase:
             The associated time and fileset number.
         """
 
-        if ensightGeometry.name not in self.fileHandles:
+        if ensightGeometry.name not in self.fileNames:
             fileName = os.path.join(
                 self.caseFileNamePrefix,
                 ensightGeometry.name + ".geo",
             )
 
-            self.fileHandles[ensightGeometry.name] = open(fileName, mode="wb")
+            self.fileNames[ensightGeometry.name] = fileName
+            # create empty file
+            with open(fileName, mode="wb") as f:
+                pass
 
-        f = self.fileHandles[ensightGeometry.name]
+        filename = self.fileNames[ensightGeometry.name]
 
-        if ensightGeometry.name not in self.geometryTrends:
-            self.geometryTrends[ensightGeometry.name] = timeAndFileSetNumber
-            writeC80(f, "C Binary")
+        with open(filename, mode="ab") as f:
+            if ensightGeometry.name not in self.geometryTrends:
+                self.geometryTrends[ensightGeometry.name] = timeAndFileSetNumber
+                writeC80(f, "C Binary")
 
-        if self.writeTransientSingleFiles:
-            writeC80(f, "BEGIN TIME STEP")
-            ensightGeometry.writeToFile(f)
-            writeC80(f, "END TIME STEP")
+            if self.writeTransientSingleFiles:
+                writeC80(f, "BEGIN TIME STEP")
+                ensightGeometry.writeToFile(f)
+                writeC80(f, "END TIME STEP")
 
     def writeVariableTrendChunk(self, ensightVariable: EnsightVariableTrend, timeAndFileSetNumber: int = 2):
         """
@@ -511,24 +516,32 @@ class EnsightChunkWiseCase:
             The associated time and fileset number.
         """
 
-        if ensightVariable.name not in self.fileHandles:
+        if ensightVariable.name not in self.fileNames:
+            # create file name
             fileName = os.path.join(self.caseFileNamePrefix, ensightVariable.name + ".var")
 
-            self.fileHandles[ensightVariable.name] = open(fileName, mode="wb")
+            # append to file names
+            self.fileNames[ensightVariable.name] = fileName
 
-        f = self.fileHandles[ensightVariable.name]
+            # create empty file
+            with open(fileName, mode="wb") as f:
+                pass
 
-        if ensightVariable.name not in self.variableTrends:
-            self.variableTrends[ensightVariable.name] = (
-                timeAndFileSetNumber,
-                ensightVariable.varType,
-            )
-            writeC80(f, "C Binary")
+        filename = self.fileNames[ensightVariable.name]
 
-        if self.writeTransientSingleFiles:
-            writeC80(f, "BEGIN TIME STEP")
-            ensightVariable.writeToFile(f)
-            writeC80(f, "END TIME STEP")
+        with open(filename, mode="ab") as f:
+
+            if ensightVariable.name not in self.variableTrends:
+                self.variableTrends[ensightVariable.name] = (
+                    timeAndFileSetNumber,
+                    ensightVariable.varType,
+                )
+                writeC80(f, "C Binary")
+
+            if self.writeTransientSingleFiles:
+                writeC80(f, "BEGIN TIME STEP")
+                ensightVariable.writeToFile(f)
+                writeC80(f, "END TIME STEP")
 
     def finalize(self, replaceTimeValuesByEnumeration: bool = True, closeFileHandes: bool = True):
         """Write the file .case file containing all the required information."
@@ -542,10 +555,6 @@ class EnsightChunkWiseCase:
         """
 
         caseFName = self.caseFileNamePrefix + ".case"
-
-        if closeFileHandes:
-            for f in self.fileHandles.values():
-                f.close()
 
         with open(caseFName, mode="w") as cf:
             cf.write("FORMAT\n")
@@ -617,7 +626,7 @@ def createUnstructuredPartFromElementSet(setName, elementSet: list, partID: int)
         if elShape not in elementDict:
             elementDict[elShape] = dict()
         elNodeIndices = []
-        for node in element.nodes:
+        for node in element.visualizationNodes:
             # if the node is already in the dict, get its index,
             # else insert it, and get the current idx = counter. increase the counter
             idx = partNodes.setdefault(node, nodeCounter)
@@ -651,14 +660,14 @@ def createUnstructuredPartFromNodeSet(setName, nodeSet: list, partID: int):
 class OutputManager(OutputManagerBase):
     identification = "Ensight Export"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter):
+    def __init__(self, name, model, fieldOutputController, journal, plotter, **kwargs):
         self.name = name
 
         self.model = model
         self.timeAtLastOutput = -1e16
         self.minDTForOutput = -1e16
         self.finishedSteps = 0
-        self.intermediateSaveInterval = 10
+        self.intermediateSaveInterval = int(kwargs.get("intermediateSaveInterval", 10))
         self.intermediateSaveIntervalCounter = 0
         self.fieldOutputController = fieldOutputController
         self.journal = journal
@@ -669,8 +678,8 @@ class OutputManager(OutputManagerBase):
         self.elSetToEnsightPartMappings = {}
         self.nSetToEnsightPartMappings = {}
 
-        self.transientPerNodeJobs = []
-        self.transientPerElementJobs = []
+        self._transientPerNodeVariableJobs = defaultdict(list)
+        self._transientPerElementVariableJobs = defaultdict(list)
 
         self.exportName = name
 
@@ -750,7 +759,6 @@ class OutputManager(OutputManagerBase):
         variableJob["part"] = part
 
         if nEntries != len(fieldOutput.associatedSet):
-            print(len(fieldOutput.associatedSet))
             raise Exception(
                 "Variable {:} result size ({:}) does not match the number of nodes ({:})".format(
                     variableJob["name"], nEntries, len(variableJob["part"].nodes)
@@ -764,7 +772,7 @@ class OutputManager(OutputManagerBase):
         variableJob["elementsOfShape"] = disassembleElsetToEnsightShapes(fieldOutput.associatedSet)
 
         if transient:
-            self.transientPerElementJobs.append(variableJob)
+            self._transientPerElementVariableJobs[variableJob["name"]].append(variableJob)
         else:
             raise Exception("Only transient per element outputs are supported!")
 
@@ -818,7 +826,7 @@ class OutputManager(OutputManagerBase):
             )
 
         if transient:
-            self.transientPerNodeJobs.append(variableJob)
+            self._transientPerNodeVariableJobs[variableJob["name"]].append(variableJob)
         else:
             raise Exception("Only transient per node outputs are supported!")
 
@@ -856,33 +864,37 @@ class OutputManager(OutputManagerBase):
         self.timeAtLastOutput = model.time
         self.ensightCase.setCurrentTime(self.transientTAndFSetNumber, model.time)
 
-        for perNodeJob in self.transientPerNodeJobs:
-            # resultTypeLength = perNodeJob["varSize"]
-            jobName = perNodeJob["name"]
-            result = self._ensureArrayIs2D(perNodeJob["fieldOutput"].getLastResult())
+        for resultName, perNodeVariableJobs in self._transientPerNodeVariableJobs.items():
+            resultsByParts = {}
+            for perNodeVariableJob in perNodeVariableJobs:
+                result = self._ensureArrayIs2D(perNodeVariableJob["fieldOutput"].getLastResult())
 
-            if self.model.domainSize == 2 and result.shape[1] == 2:
-                result = self._make2DVector3D(result)
+                if self.model.domainSize == 2 and result.shape[1] == 2:
+                    result = self._make2DVector3D(result)
 
-            partsDict = {perNodeJob["part"].partNumber: ("coordinates", result)}
-            enSightVar = EnsightPerNodeVariable(jobName, partsDict, perNodeJob["varSize"])
-            self.ensightCase.writeVariableTrendChunk(enSightVar, self.transientTAndFSetNumber)
-            del enSightVar
+                resultsByParts[perNodeVariableJob["part"].partNumber] = ("coordinates", result)
+            enSightVariable = EnsightPerNodeVariable(resultName, resultsByParts, perNodeVariableJob["varSize"])
+            self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientTAndFSetNumber)
+            del enSightVariable
 
-        for perElementJob in self.transientPerElementJobs:
-            name = perElementJob["name"]
-            part = perElementJob["part"]
-            elementsOfShape = perElementJob["elementsOfShape"]
-            result = self._ensureArrayIs2D(perElementJob["fieldOutput"].getLastResult())
+        for resultName, perElementVariableJobs in self._transientPerElementVariableJobs.items():
+            resultsByParts = {}
+            for perElementVariableJob in perElementVariableJobs:
+                part = perElementVariableJob["part"]
+                elementsOfShape = perElementVariableJob["elementsOfShape"]
+                result = self._ensureArrayIs2D(perElementVariableJob["fieldOutput"].getLastResult())
 
-            if self.model.domainSize == 2 and result.shape[1] == 2:
-                result = self._make2DVector3D(result)
+                if self.model.domainSize == 2 and result.shape[1] == 2:
+                    result = self._make2DVector3D(result)
 
-            varDict = {shape: result[elIndicesOfShape] for shape, elIndicesOfShape in elementsOfShape.items()}
-            partsDict = {part.partNumber: varDict}
-            enSightVar = EnsightPerElementVariable(name, partsDict, perElementJob["varSize"])
-            self.ensightCase.writeVariableTrendChunk(enSightVar, self.transientTAndFSetNumber)
-            del enSightVar
+                partResultsByElementShape = {
+                    shape: result[elIndicesOfShape] for shape, elIndicesOfShape in elementsOfShape.items()
+                }
+                resultsByParts[part.partNumber] = partResultsByElementShape
+
+            enSightVariable = EnsightPerElementVariable(resultName, resultsByParts, perElementVariableJob["varSize"])
+            self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientTAndFSetNumber)
+            del enSightVariable
 
         # intermediate save of the case
         if self.intermediateSaveInterval:

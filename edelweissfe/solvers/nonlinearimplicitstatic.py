@@ -29,6 +29,7 @@
 
 # @author: Matthias Neuner
 
+import json
 from time import time as getCurrentTime
 
 import numpy as np
@@ -75,6 +76,7 @@ class NIST:
         "defaultMaxGrowingIter": 10,
         "extrapolation": "linear",
         "linsolver": "pardiso",
+        "linsolverConfigFile": "",
     }
 
     def __init__(self, jobInfo, journal, **kwargs):
@@ -169,13 +171,18 @@ class NIST:
             pass
 
         extrapolation = self.options["extrapolation"]
+        linsolverOptions = self.options["linsolverConfigFile"]
+        linsolverOptionDict = json.load(open(linsolverOptions, "r")) if linsolverOptions else ""
         self.linSolver = (
-            getLinSolverByName(self.options["linsolver"]) if "linsolver" in self.options else getDefaultLinSolver()
+            getLinSolverByName(self.options["linsolver"], linsolverOptionDict)
+            if "linsolver" in self.options
+            else getDefaultLinSolver()
         )
 
         maxIter = step.maxIter
         criticalIter = step.criticalIter
         maxGrowingIter = step.maxGrowIter
+        cutbackFactor = step.cutbackFactor
 
         # nodes = model.nodes
         # elements = model.elements
@@ -239,34 +246,41 @@ class NIST:
 
                 except CutbackRequest as e:
                     self.journal.message(str(e), self.identification, 1)
-                    step.discardAndChangeIncrement(max(e.cutbackSize, 0.25))
+                    step.discardAndChangeIncrement(max(e.cutbackSize, cutbackFactor))
                     prevTimeStep = None
 
                     statusInfoDict["iters"] = np.inf
                     statusInfoDict["notes"] = str(e)
 
+                    tic = getCurrentTime()
                     for man in outputmanagers:
                         man.finalizeFailedIncrement(
                             statusInfoDict=statusInfoDict,
                             currentComputingTimes=self.computationTimes,
                         )
+                    toc = getCurrentTime()
+                    self.computationTimes["output"] += toc - tic
 
                 except (ReachedMaxIterations, DivergingSolution) as e:
                     self.journal.message(str(e), self.identification, 1)
-                    step.discardAndChangeIncrement(0.25)
+                    step.discardAndChangeIncrement(cutbackFactor)
                     prevTimeStep = None
 
                     statusInfoDict["iters"] = np.inf
                     statusInfoDict["notes"] = str(e)
 
+                    tic = getCurrentTime()
                     for man in outputmanagers:
                         man.finalizeFailedIncrement(
                             statusInfoDict=statusInfoDict,
                             currentComputingTimes=self.computationTimes,
                         )
+                    toc = getCurrentTime()
+                    self.computationTimes["output"] += toc - tic
 
                 else:
                     prevTimeStep = timeStep
+
                     if iterationCounter >= criticalIter:
                         step.preventIncrementIncrease()
 
@@ -291,11 +305,14 @@ class NIST:
                     statusInfoDict["converged"] = True
 
                     fieldOutputController.finalizeIncrement()
+                    tic = getCurrentTime()
                     for man in outputmanagers:
                         man.finalizeIncrement(
                             currentComputingTimes=self.computationTimes,
                             statusInfoDict=statusInfoDict,
                         )
+                    toc = getCurrentTime()
+                    self.computationTimes["output"] += toc - tic
 
         except (ReachedMaxIncrements, ReachedMinIncrementSize):
             self.journal.errorMessage("Incrementation failed", self.identification)
@@ -310,7 +327,7 @@ class NIST:
 
         finally:
             self.journal.printTable(
-                [("Time in {:}".format(k), " {:10.4f}s".format(v)) for k, v in self.computationTimes.items()],
+                [("Time in {:}".format(k), " {:10.4e}s".format(v)) for k, v in self.computationTimes.items()],
                 self.identification,
             )
 

@@ -36,7 +36,7 @@ from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
 from edelweissfe.utils.inputlanguage import InputLanguage
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
+from edelweissfe.utils.misc import caseInsensitiveKwargsChecker, strCaseCmp
 
 inputLanguage = InputLanguage()
 module = inputLanguage["*analyticalField"].addModule("randomScalar", "input language for randomscalar module")
@@ -45,6 +45,7 @@ module.addOptionalArg("model", "Covariance Model of the spatial random field", s
 module.addOptionalArg("mean", "Mean of the spatial random field", float, 0.0)
 module.addOptionalArg("variance", "Variance of the model", float, 1.0)
 module.addOptionalArg("lengthScale", "Length scale of the model", float, 10.0)
+module.addOptionalArg("nu", "Smoothness parameter for Matern covariance function", float, 1.0)
 module.addOptionalArg("seed", "Seed of the random number generator", int, 0)
 
 
@@ -68,19 +69,32 @@ class AnalyticalField(AnalyticalFieldBase):
         mean: float = module["mean"].default,
         variance: float = module["variance"].default,
         lengthScale: float = module["lengthScale"].default,
+        nu: float = module["nu"].default,
         seed: int = module["seed"].default,
     ):
         self.name = name
-        self.type = "randomScalar"
+        # self.type = "randomScalar"
 
         self.domainSize = FEModel.domainSize
 
-        modelMethod = getattr(gstools, modelType)
-        model = modelMethod(
-            dim=self.domainSize,
-            var=variance,
-            len_scale=lengthScale,
-        )
+        if strCaseCmp(modelType, "Gaussian"):
+            # modelMethod = getattr(gstools, modelType)
+            model = gstools.Gaussian(
+                dim=self.domainSize,
+                var=variance,
+                len_scale=lengthScale,
+            )
+        elif strCaseCmp(modelType, "Matern"):
+            # modelMethod = getattr(gstools, modelType)
+            model = gstools.covmodel.Matern(
+                dim=self.domainSize,
+                var=variance,
+                len_scale=lengthScale,
+                nu=nu,
+            )
+        else:
+            raise NotImplementedError(f"Model type {modelType} not implemented.")
+
         self.srf = gstools.SRF(model, seed=seed, mean=mean)
 
         return

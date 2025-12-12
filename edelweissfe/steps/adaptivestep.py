@@ -60,6 +60,7 @@ class AdaptiveStep(StepBase):
     defaultMaxIter = 10
     defaultCriticalIter = 5
     defaultMaxGrowingIter = 10
+    defaultCutbackFactor = 0.25
 
     def __init__(
         self,
@@ -71,7 +72,7 @@ class AdaptiveStep(StepBase):
         solver,
         outputManagers: list,
         stepActions: dict,
-        **kwargs
+        **kwargs,
     ):
         kwargs = CaseInsensitiveDict(kwargs)
         self.number = number  #: The (unique) number of the step.
@@ -102,6 +103,9 @@ class AdaptiveStep(StepBase):
         self.maxGrowIter = kwargs.get(
             "maxGrowIter", self.defaultMaxGrowingIter
         )  #: The number of residual growths before the increment is discarded.
+        self.cutbackFactor = kwargs.get(
+            "cutbackFactor", self.defaultCutbackFactor
+        )  #: Factor by which the increment size is reduced if no convergence was achieved.
 
         self.incrementGenerator = AdaptiveTimeStepper(
             model.time,

@@ -28,8 +28,6 @@
 
 from edelweissfe.journal.journal import Journal
 from edelweissfe.timesteppers.timestep import TimeStep
-
-# @author: Matthias
 from edelweissfe.utils.exceptions import ReachedMaxIncrements, ReachedMinIncrementSize
 
 
@@ -45,6 +43,7 @@ class AdaptiveTimeStepper:
         minIncrement: float,
         maxNumberIncrements: int,
         journal: Journal,
+        increaseFactor=1.1,
     ):
         """
         An increment generator for incremental-iterative simulations.
@@ -67,10 +66,12 @@ class AdaptiveTimeStepper:
             The maximum number of allowed increments.
         journal
             The journal instance for logging purposes.
+        increaseFactor
+            The ratio to increase the increments in case of good convergence.
         """
 
         self.nPassedGoodIncrements = int(0)
-        self.totalIncrements = int(0)
+        self.incrementCounter = int(0)
         self.startIncrement = startIncrement
         self.maxIncrement = maxIncrement
         self.minIncrement = minIncrement
@@ -84,6 +85,7 @@ class AdaptiveTimeStepper:
         self.stepLength = stepLength
         self.dT = 0.0
         self.journal = journal
+        self.increaseFactor = increaseFactor
 
     def generateTimeStep(self) -> TimeStep:
         """
@@ -95,40 +97,41 @@ class AdaptiveTimeStepper:
             The current time step.
         """
 
-        # zero increment; return value for first function call
-        yield TimeStep(0, 0.0, 0.0, 0.0, 0.0, self.currentTime)
-
         while self.finishedStepProgress < (1.0 - 1e-15):
-            if self.totalIncrements >= self.maxNumberIncrements:
-                self.journal.errorMessage("Reached maximum number of increments", self.identification)
-                raise ReachedMaxIncrements()
-
-            if (self.nPassedGoodIncrements >= 3) and self.allowedToIncreasedNext:
-                self.increment *= 1.1
-                if self.increment > self.maxIncrement:
-                    self.increment = self.maxIncrement
-            self.allowedToIncreasedNext = True
 
             remainder = 1.0 - self.finishedStepProgress
             if remainder < self.increment:
                 self.increment = remainder
 
-            dT = self.stepLength * self.increment
-            self.finishedStepProgress += self.increment
+            # # zero increment; return value for first function call
+            theIncrement = self.increment if self.incrementCounter > 0 else 0.0
+
+            dT = self.stepLength * theIncrement
+            self.finishedStepProgress += theIncrement
             endTimeOfIncrementInStep = self.stepLength * self.finishedStepProgress
             endTimeOfIncrementInTotal = self.currentTime + endTimeOfIncrementInStep
 
-            self.totalIncrements += 1
-            self.nPassedGoodIncrements += 1
-
             yield TimeStep(
-                self.totalIncrements,
-                self.increment,
+                self.incrementCounter,
+                theIncrement,
                 self.finishedStepProgress,
                 dT,
                 endTimeOfIncrementInStep,
                 endTimeOfIncrementInTotal,
             )
+
+            if self.incrementCounter > self.maxNumberIncrements:
+                self.journal.errorMessage("Reached maximum number of increments", self.identification)
+                raise ReachedMaxIncrements()
+
+            if (self.nPassedGoodIncrements >= 3) and self.allowedToIncreasedNext:
+                self.increment *= self.increaseFactor
+                if self.increment > self.maxIncrement:
+                    self.increment = self.maxIncrement
+            self.allowedToIncreasedNext = True
+
+            self.incrementCounter += 1
+            self.nPassedGoodIncrements += 1
 
     def preventIncrementIncrease(
         self,
@@ -138,25 +141,13 @@ class AdaptiveTimeStepper:
 
         self.allowedToIncreasedNext = False
 
-    def discardAndChangeIncrement(self, scaleFactor: float):
-        """Change increment size between minIncrement and
-        maxIncrement by a given scale factor.
-
-        Parameters
-        ----------
-        scaleFactor
-            The factor for scaling based on the previous increment.
-        """
+    def reduceNextIncrement(self, scaleFactor: float):
+        """Reduce the increment size for the next increment."""
 
         if self.increment == self.minIncrement:
             self.journal.errorMessage("Cannot reduce increment size", self.identification)
             raise ReachedMinIncrementSize()
 
-        if self.finishedStepProgress == 0.0:
-            self.journal.errorMessage("Failed zero increment", self.identification)
-            raise ReachedMinIncrementSize()
-
-        self.finishedStepProgress -= self.increment
         newIncrement = self.increment * scaleFactor
         if newIncrement > self.maxIncrement:
             self.increment = self.maxIncrement
@@ -170,5 +161,69 @@ class AdaptiveTimeStepper:
             self.identification,
             2,
         )
-        self.totalIncrements -= 1
+
+    def discardAndChangeIncrement(self, scaleFactor: float):
+        """Change increment size between minIncrement and
+        maxIncrement by a given scale factor.
+
+        Parameters
+        ----------
+        scaleFactor
+            The factor for scaling based on the previous increment.
+        """
+
+        if self.incrementCounter == 0:
+            self.journal.errorMessage("Failed zero increment", self.identification)
+            raise ReachedMinIncrementSize()
+
+        self.finishedStepProgress -= self.increment
+        self.incrementCounter -= 1
         self.nPassedGoodIncrements = 0
+
+        self.reduceNextIncrement(scaleFactor)
+
+    def writeRestart(self, restartFile):
+        """Write restart information to a file.
+
+        Parameters
+        ----------
+        restartFile
+            The file to write the restart information to.
+        """
+        f = restartFile
+        f.create_group("timestepper")
+
+        f["timestepper"].attrs["currentTime"] = self.currentTime
+        f["timestepper"].attrs["stepLength"] = self.stepLength
+        f["timestepper"].attrs["startIncrement"] = self.startIncrement
+        f["timestepper"].attrs["maxIncrement"] = self.maxIncrement
+        f["timestepper"].attrs["minIncrement"] = self.minIncrement
+        f["timestepper"].attrs["maxNumberIncrements"] = self.maxNumberIncrements
+        f["timestepper"].attrs["nPassedGoodIncrements"] = self.nPassedGoodIncrements
+        f["timestepper"].attrs["incrementCounter"] = self.incrementCounter
+        f["timestepper"].attrs["finishedStepProgress"] = self.finishedStepProgress
+        f["timestepper"].attrs["increment"] = self.increment
+        f["timestepper"].attrs["allowedToIncreasedNext"] = self.allowedToIncreasedNext
+        f["timestepper"].attrs["dT"] = self.dT
+
+    def readRestart(self, restartFile):
+        """Read restart information from a file.
+
+        Parameters
+        ----------
+        restartFile
+            The file to read the restart information from.
+        """
+        f = restartFile
+        self.currentTime = f["timestepper"].attrs["currentTime"]
+        self.stepLength = f["timestepper"].attrs["stepLength"]
+        self.startIncrement = f["timestepper"].attrs["startIncrement"]
+        self.maxIncrement = f["timestepper"].attrs["maxIncrement"]
+        self.minIncrement = f["timestepper"].attrs["minIncrement"]
+        self.maxNumberIncrements = f["timestepper"].attrs["maxNumberIncrements"]
+        self.nPassedGoodIncrements = f["timestepper"].attrs["nPassedGoodIncrements"]
+        self.incrementCounter = f["timestepper"].attrs["incrementCounter"]
+        self.finishedStepProgress = f["timestepper"].attrs["finishedStepProgress"]
+        self.increment = f["timestepper"].attrs["increment"]
+        self.allowedToIncreasedNext = f["timestepper"].attrs["allowedToIncreasedNext"]
+        self.dT = f["timestepper"].attrs["dT"]

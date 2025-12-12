@@ -35,7 +35,7 @@ from os.path import expanduser, join
 
 import numpy
 from Cython.Build import build_ext, cythonize
-from setuptools import find_packages, setup
+from setuptools import setup
 from setuptools.extension import Extension
 
 directives = {
@@ -212,57 +212,42 @@ if buildPanuaPardiso:
         )
     ]
 
-print("Gather the KLU interface")
-extensions += [
-    Extension(
-        "*",
-        sources=[
-            "edelweissfe/linsolve/klu/klu.pyx",
-            "edelweissfe/linsolve/klu/kluInterface.c",
-        ],
-        include_dirs=[
-            numpy.get_include(),
-        ],
-        libraries=[
-            "klu",
-            "btf",
-            "amd",
-            "colamd",
-            "metis",
-            "cholmod",
-            "camd",
-            "ccolamd",
-            "iomp5",
-            "suitesparseconfig",
-        ],
-        language="c",
-        extra_compile_args=[
-            "-fopenmp",
-            "-Wno-maybe-uninitialized",
-        ],
-        extra_link_args=["-fopenmp"],
-    )
-]
+# print("Gather the KLU interface")
+# extensions += [
+#     Extension(
+#         "*",
+#         sources=[
+#             "edelweissfe/linsolve/klu/klu.pyx",
+#             "edelweissfe/linsolve/klu/kluInterface.c",
+#         ],
+#         include_dirs=[
+#             numpy.get_include(),
+#         ],
+#         libraries=[
+#             "klu",
+#             "btf",
+#             "amd",
+#             "colamd",
+#             "metis",
+#             "cholmod",
+#             "camd",
+#             "ccolamd",
+#             "iomp5",
+#             "suitesparseconfig",
+#         ],
+#         language="c",
+#         extra_compile_args=[
+#             "-fopenmp",
+#             "-Wno-maybe-uninitialized",
+#         ],
+#         extra_link_args=["-fopenmp"],
+#     )
+# ]
 
 print("Now compile!")
 
 setup(
-    name="EdelweissFE",
-    version="v22.09",
-    description="EdelweissFE: A light-weight, platform-independent, parallel finite element framework.",
-    license="LGPL-2.1",
-    packages=find_packages(),
-    include_package_data=True,
-    author="Matthias Neuner",
-    author_email="matthias.neuner@uibk.ac.at",
-    url="https://github.com/EdelweissFE/EdelweissFE",
     cmdclass={"build_ext": build_ext},
-    entry_points={
-        "console_scripts": [
-            "edelweissfe=edelweissfe._cli._edelweissfe:main",
-            "run_tests_edelweissfe=edelweissfe._cli._run_tests_edelweissfe:main",
-        ],
-    },
     ext_modules=cythonize(extensions, compiler_directives=directives, annotate=True, language_level=3),
 )
 
