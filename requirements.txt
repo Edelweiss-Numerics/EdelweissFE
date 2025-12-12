@@ -23,4 +23,3 @@ sphinx
 sphinx_rtd_theme
 sympy
 vtk>=9.1.0
-difflib
