@@ -20,7 +20,7 @@ all
 
 *fieldOutput
 create=perNode, name=load,  nSet=gen_left, field=displacement, result=P, f(x)='sum(x[:,1])'
-create=perNode, name=displacement, elSet=all, field=displacement, result=U, name=displacement
+create=perNode, name=displacement, elSet=all, field=displacement, result=U
 
 *output, type=monitor
 fieldOutput=load

@@ -10,7 +10,7 @@ all
 *solver, solver=NIST, name=theSolver
 
 *fieldOutput
-create=perNode, name=displacement, elSet=all, field=displacement, result=U, name=displacement
+create=perNode, name=displacement, elSet=all, field=displacement, result=U
 create=perElement, name=stress, elSet=all, result=stress, quadraturePoint=1
 create=perElement, name=strain, elSet=all, result=strain, quadraturePoint=1
 create=perNode, name=RF, nSet=top, result=P, field=displacement
