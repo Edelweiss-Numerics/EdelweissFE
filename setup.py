@@ -139,6 +139,18 @@ extensions += [
     )
 ]
 
+print("Gather the extension for the even fast er CSR matrix v2 generator")
+extensions += [
+    Extension(
+        "*",
+        ["edelweissfe/numerics/csrgeneratorv2.pyx"],
+        include_dirs=[numpy.get_include()],
+        language="c++",
+        extra_compile_args=["-O3", "-std=c++20", "-march=native"],
+        extra_link_args=["-ltbb"],
+    )
+]
+
 print("Gather the extension for the NISTParallel solver")
 extensions += [
     Extension(
