@@ -35,6 +35,9 @@ from edelweissfe.utils.misc import (
     splitLineAtCommas,
 )
 
+keywordIdentifier = "*"
+moduleLevelKeywordIdentifier = ">>"
+
 
 def singleton(class_):
     """class decorated with this function will only be instantiated once"""
@@ -293,21 +296,31 @@ class Module:
         args = []
         kwargs = CaseInsensitiveDict()
 
-        possibleKeywords = [kw.name for kw in self.keywords]
-        kwargs.update({key: [] for key in possibleKeywords})
+        # possibleKeywords = [kw.name for kw in self.keywords]
+        # kwargs.update({key: [] for key in possibleKeywords})
+        #
+        # datalineOptions = []
+        # for line in datalines:
+        #     keyword = splitLineAtCommas(line)[0]
+        #     if keyword in kwargs:
+        #         keyword, options = self.parseKeywordLine(line)
+        #         kwargs[keyword].append(options)
+        #     else:
+        #         datalineOptions += splitLineAtCommas(line)
+        #
+        # for option in datalineOptions:
+        #     if "=" in option:
+        #         kwargs.update(convertAssignmentsToStringDictionary(option))
+        #     else:
+        #         args.append(option)
 
         datalineOptions = []
         for line in datalines:
-            keyword = splitLineAtCommas(line)[0]
-            if keyword in kwargs:
-                keyword, options = self.parseKeywordLine(line)
-                kwargs[keyword].append(options)
-            else:
-                datalineOptions += splitLineAtCommas(line)
+            datalineOptions += splitLineAtCommas(line)
 
         for option in datalineOptions:
             if "=" in option:
-                kwargs.update(convertAssignmentsToStringDictionary(option))
+                kwargs.update(convertAssignmentsToStringDictionary([option]))
             else:
                 args.append(option)
 

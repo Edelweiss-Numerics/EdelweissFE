@@ -53,6 +53,10 @@ from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import (
+    keywordIdentifier,
+    moduleLevelKeywordIdentifier,
+)
 from edelweissfe.utils.misc import (
     convertLinesToFlatArray,
     convertLinesToMixedDictionary,
@@ -99,7 +103,7 @@ class AbqModelConstructor:
 
         # returns an dict of {node label: node}
         nodeDefinitions = model.nodes
-        for nodeDefs in inputFile["*node"]:
+        for nodeDefs in inputFile["node"]:
             currNodeDefs = {}
             for line in nodeDefs["data"]:
                 defLine = splitLineAtCommas(line)
@@ -120,7 +124,7 @@ class AbqModelConstructor:
         # returns an dict of {element Label: element}
         elements = model.elements
 
-        for elDefs in inputFile["*element"]:
+        for elDefs in inputFile["element"]:
             elementType = elDefs["type"]
             elementProvider = elDefs.get("provider")
             ElementClass = getElementClass(elementType, elementProvider)
@@ -145,7 +149,7 @@ class AbqModelConstructor:
         # or generate elementset by generate definition in inputfile
         elementSets = model.elementSets
 
-        for elSetDefinition in inputFile["*elSet"]:
+        for elSetDefinition in inputFile["elSet"]:
             name = elSetDefinition["elSet"]
 
             data = [splitLineAtCommas(line) for line in elSetDefinition["data"]]
@@ -196,7 +200,7 @@ class AbqModelConstructor:
         # generate dictionary of nodeObjects belonging to a specified nodeset
         # or generate nodeset by generate definition in inputfile
         nodeSets = model.nodeSets
-        for nSetDefinition in inputFile["*nSet"]:
+        for nSetDefinition in inputFile["nSet"]:
             name = nSetDefinition["nSet"]
 
             data = [splitLineAtCommas(line) for line in nSetDefinition["data"]]
@@ -225,7 +229,7 @@ class AbqModelConstructor:
         model.elementSets["all"] = ElementSet("all", model.elements.values())
 
         # generate surfaces sets
-        for surfaceDef in inputFile["*surface"]:
+        for surfaceDef in inputFile["surface"]:
             name = surfaceDef["name"]
             sType = surfaceDef.get("type", "element").lower()
             surface = {}
@@ -257,7 +261,7 @@ class AbqModelConstructor:
             The updated model tree.
         """
 
-        for materialDef in inputFile["*material"]:
+        for materialDef in inputFile["material"]:
             materialName = materialDef["name"]
             if "advanced" in materialName:
                 raise Exception("Please use the *advancedmaterial keyword for advanced materials!")
@@ -294,7 +298,7 @@ class AbqModelConstructor:
             The updated model tree.
         """
 
-        for materialDef in inputFile["*advancedmaterial"]:
+        for materialDef in inputFile["advancedmaterial"]:
             materialName = materialDef["name"]
             if "advanced" not in materialName:
                 raise Exception("The keyword *advancedmaterial only allows the use of advanced materials!")
@@ -327,7 +331,7 @@ class AbqModelConstructor:
             The updated model tree.
         """
 
-        for constraintDef in inputFile["*constraint"]:
+        for constraintDef in inputFile["constraint"]:
             name = constraintDef["name"]
             constraint = constraintDef["type"]
             data = constraintDef["data"]
@@ -355,7 +359,7 @@ class AbqModelConstructor:
             The updated model tree.
         """
 
-        for definition in inputFile["*section"]:
+        for definition in inputFile["section"]:
             sectionKwargs = CaseInsensitiveDict(definition.copy())
 
             name = sectionKwargs.pop("name")
@@ -371,10 +375,25 @@ class AbqModelConstructor:
             except AssertionError:
                 raise Exception(f"Section with name {name} already exists")
 
-            module = inputLanguage["*section"].getModule(sectionType)
+            module = inputLanguage["section"].getModule(sectionType)
 
             args, kwargs = module.parseDatalines(data)
             # sectionKwargs.update(kwargs)
+
+            try:
+                for elSet in args:
+                    assert elSet in model.elementSets
+            except AssertionError:
+                raise Exception(
+                    f"During parsing of keyword {keywordIdentifier}section: Element set {elSet} does not exist."
+                )
+
+            try:
+                assert not kwargs
+            except AssertionError:
+                raise Exception(
+                    f"During parsing of keyword {keywordIdentifier}section: Unexpected keyword arguments. Use module level keyword identifier {moduleLevelKeywordIdentifier} instead."
+                )
 
             sectionFactory = getSectionFactoryByName(sectionType)
 
@@ -400,7 +419,7 @@ class AbqModelConstructor:
             The updated model tree.
         """
 
-        for definition in inputFile["*analyticalField"]:
+        for definition in inputFile["analyticalField"]:
             analyticalFieldName = definition["name"]
             analyticalFieldType = definition["type"]
             data = definition["data"]

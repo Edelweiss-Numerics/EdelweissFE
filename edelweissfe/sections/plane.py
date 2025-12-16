@@ -39,19 +39,17 @@ from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import caseInsensitiveKwargsChecker, splitLinesAtCommas
 
 inputLanguage = InputLanguage()
-module = inputLanguage["*section"].addModule(
-    "plane", "This section represents a classical plane solid materal section."
-)
+module = inputLanguage["section"].addModule("plane", "This section represents a classical plane solid materal section.")
 module.addRequiredArg("thickness", "thickness", float)
 module.addRequiredDatalines("elementSets as comma separated list of element sets for this section", str)
 
-kw = module.addOptionalKeyword(">>materialParameterFromField", "use material properties given by an analytical field")
+kw = module.addOptionalKeyword("materialParameterFromField", "use material properties given by an analytical field")
 kw.addRequiredArg("index", "index of material parameter", int)
 kw.addRequiredArg("field", "name of analytical field", str)
 kw.addRequiredArg("type", "either 'setToValue' or 'scale'", str)
 kw.addOptionalArg("f(p,f)", "p...value of parameter from material definition; f...value of analytical field", str, "f")
 
-kw = module.addOptionalKeyword(">>writeMaterialPropertiesToFile", "export material properties to file")
+kw = module.addOptionalKeyword("writeMaterialPropertiesToFile", "export material properties to file")
 kw.addRequiredArg("filename", "file name for material property export", str)
 
 required = [kw.name for kw in module.requiredArgs]
@@ -65,12 +63,12 @@ optional += [kw.name for kw in module.optionalKeywords]
 def sectionFactory(name, FEModel, materialName: str, datalines: list[str], moduleOptions, **kwargs):
     kwargs = CaseInsensitiveDict(kwargs)
 
-    thickness = inputLanguage["*section"]["thickness"].getValueFromKwargs(kwargs)
+    thickness = inputLanguage["section"]["thickness"].getValueFromKwargs(kwargs)
 
     elementSetNames = splitLinesAtCommas(datalines)
 
-    materialParameterFromFieldDefs = moduleOptions.get(">>materialParameterFromField", [])
-    writeMaterialPropertiesToFileDefs = moduleOptions.get(">>writeMaterialPropertiesToFile", [])
+    materialParameterFromFieldDefs = moduleOptions.get("materialParameterFromField", [])
+    writeMaterialPropertiesToFileDefs = moduleOptions.get("writeMaterialPropertiesToFile", [])
 
     return Section(
         name,

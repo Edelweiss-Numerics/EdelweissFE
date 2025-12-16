@@ -17,7 +17,7 @@ elType  =CPE4
 ** materialParameterFromField, index=0, field=AnalyticalField-01, type=settovalue
 ** materialParameterFromField, index=0, field=AnalyticalField-01, type=settovalue, "f(p,f)=3*f"
 ** materialParameterFromField, index=0, field=AnalyticalField-02, type=scale
-materialParameterFromField, index=1, field=AnalyticalField-02, type=settovalue, "f(p,f)=max(0.15, min(f, .35))"
+>>materialParameterFromField, index=1, field=AnalyticalField-02, type=settovalue, "f(p,f)=max(0.15, min(f, .35))"
 all
 
 *fieldOutput

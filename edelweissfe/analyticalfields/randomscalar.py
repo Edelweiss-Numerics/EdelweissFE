@@ -39,7 +39,7 @@ from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import caseInsensitiveKwargsChecker, strCaseCmp
 
 inputLanguage = InputLanguage()
-module = inputLanguage["*analyticalField"].addModule("randomScalar", "input language for randomscalar module")
+module = inputLanguage["analyticalField"].addModule("randomScalar", "input language for randomscalar module")
 
 module.addOptionalArg("model", "Covariance Model of the spatial random field", str, "Gaussian")
 module.addOptionalArg("mean", "Mean of the spatial random field", float, 0.0)
@@ -55,9 +55,10 @@ def analyticalFieldFactory(name, FEModel, **kwargs):
     mean = module["mean"].getValueFromKwargs(kwargs)
     variance = module["variance"].getValueFromKwargs(kwargs)
     lengthScale = module["lengthScale"].getValueFromKwargs(kwargs)
+    nu = module["nu"].getValueFromKwargs(kwargs)
     seed = module["seed"].getValueFromKwargs(kwargs)
 
-    return AnalyticalField(name, FEModel, modelType, mean, variance, lengthScale, seed)
+    return AnalyticalField(name, FEModel, modelType, mean, variance, lengthScale, nu, seed)
 
 
 class AnalyticalField(AnalyticalFieldBase):
@@ -73,7 +74,7 @@ class AnalyticalField(AnalyticalFieldBase):
         seed: int = module["seed"].default,
     ):
         self.name = name
-        # self.type = "randomScalar"
+        self.type = "randomScalar"
 
         self.domainSize = FEModel.domainSize
 

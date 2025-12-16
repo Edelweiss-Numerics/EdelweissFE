@@ -32,6 +32,7 @@ Created on Mon Apr 18 17:36:07 2016
 
 import difflib
 import shlex
+from collections import Counter
 
 import numpy as np
 
@@ -105,11 +106,16 @@ def convertAssignmentsToStringDictionary(assignments: list) -> dict:
     """
 
     resultDict = dict()
+    keys = []
+    vals = []
     for entry in assignments:
         parts = [x.strip() for x in entry.split("=")]
-        opt = parts[0]
-        val = "=".join(parts[1:]) if len(parts) > 1 else "True"
-        resultDict[opt] = val
+        keys.append(parts[0])
+        vals.append("=".join(parts[1:]) if len(parts) > 1 else "True")
+    duplicates = [k for k, c in Counter(keys).items() if c > 1]
+    if duplicates:
+        raise ValueError(f"Key{'s'[:len(duplicates) ^ 1]} {", ".join(duplicates)} used more than once.")
+    resultDict = dict(zip(keys, vals))
 
     return resultDict
 
@@ -129,7 +135,21 @@ def convertAssignmentsToCaseInsensitiveStringDictionary(assignments: list) -> di
         The resulting case insensitive dictionary.
     """
 
-    return CaseInsensitiveDict(convertAssignmentsToStringDictionary(assignments))
+    # to do: avoid redundant code -> convertAssignmentsToStringDictionary
+
+    resultDict = dict()
+    keys = []
+    vals = []
+    for entry in assignments:
+        parts = [x.strip() for x in entry.split("=")]
+        keys.append(parts[0].casefold())
+        vals.append("=".join(parts[1:]) if len(parts) > 1 else "True")
+    duplicates = [k for k, c in Counter(keys).items() if c > 1]
+    if duplicates:
+        raise ValueError(f"Key{'s'[:len(duplicates) ^ 1]} {", ".join(duplicates)} used more than once.")
+    resultDict = dict(zip(keys, vals))
+
+    return CaseInsensitiveDict(resultDict)
 
 
 def convertLinesToMixedDictionary(lines: list) -> dict:
@@ -347,8 +367,11 @@ def kwargsChecker(kwargsRequired: list[str], kwargsOptional: list[str]):
                 assert nUnexpected == 0
             except AssertionError:
                 if nUnexpected == 1 and len(kwargsOptional) > 0:
-                    similarKeyword = findSimilarString(unexpected_kwargs[0], [item for item in kwargsOptional])
-                    hint = f" Did you mean {similarKeyword}?"
+                    try:  # try to find a matching optional keyword
+                        similarKeyword = findSimilarString(unexpected_kwargs[0], [item for item in kwargsOptional], 0.1)
+                        hint = f" Did you mean {similarKeyword}?"
+                    except ValueError:
+                        hint = ""
                 else:
                     hint = ""
                 raise ValueError(

@@ -113,7 +113,7 @@ def generateModelData(generatorDefinition, model, journal):
     fileDict = parseInputFile(outFile)
 
     if elType:
-        for elDef in fileDict["*element"]:
+        for elDef in fileDict["element"]:
             elDef["type"] = elType
 
     if elTypePerBlock:
@@ -121,7 +121,7 @@ def generateModelData(generatorDefinition, model, journal):
         s.whitespace_split = True
         s.whitespace = ","
         elDict = dict(item.split("=", 1) for item in s)
-        for elDef in fileDict["*element"]:
+        for elDef in fileDict["element"]:
             elSet = elDef["elset"]
             elDef["type"] = elDict[elSet]
 

@@ -69,8 +69,8 @@ def createFieldOutputFromInputFile(inputfile: dict, model: FEModel, journal: Jou
         The configured FieldOutputController instance.
     """
     fieldOutputController = FieldOutputController(model, journal)
-    if inputfile["*fieldOutput"]:
-        for definition in inputfile["*fieldOutput"]:
+    if inputfile["fieldOutput"]:
+        for definition in inputfile["fieldOutput"]:
             for defLine in definition["data"]:
                 kwargs = convertLineToStringDictionary(defLine)
 
@@ -186,7 +186,7 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
     """
 
     # call individual optional model generators
-    for generatorDefinition in inputfile["*modelGenerator"]:
+    for generatorDefinition in inputfile["modelGenerator"]:
         if generatorDefinition.get("executeAfterManualGeneration", False):
             continue
         gen = generatorDefinition["generator"]
@@ -202,7 +202,7 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
     model = abqModelConstructor.createSectionsFromInputFile(model, inputfile)
 
     # call individual optional model generators,
-    for generatorDefinition in inputfile["*modelGenerator"]:
+    for generatorDefinition in inputfile["modelGenerator"]:
         if not generatorDefinition.get("executeAfterManualGeneration", False):
             continue
         gen = generatorDefinition["generator"]
@@ -227,7 +227,7 @@ def createStepManagerFromInputFile(inputfile: dict):
     """
     stepManager = StepManager()
 
-    for stepLine in inputfile["*step"]:
+    for stepLine in inputfile["step"]:
         stepType = stepLine.pop("type", "AdaptiveStep")
         stepActionLines = stepLine.pop("data")
 
@@ -266,7 +266,7 @@ def createSolversFromInputFile(inputfile: dict, jobInfo: dict, journal: Journal)
         The dictionary containing the solver instances.
     """
     solvers = {}
-    for solverDefinition in inputfile["*solver"]:
+    for solverDefinition in inputfile["solver"]:
         try:
             solverName = solverDefinition["name"]
         except KeyError:
@@ -318,7 +318,7 @@ def createOutputManagersFromInputFile(
     """
     outputManagers = []
 
-    for outputDef in inputfile["*output"]:
+    for outputDef in inputfile["output"]:
         OutputManager = getOutputManagerClass(outputDef["type"].lower())
         managerName = outputDef.get("name", defaultName + outputDef["type"])
         definitionLines = outputDef["data"]
@@ -358,11 +358,11 @@ def createPlotterFromInputFile(inputfile: dict, journal: Journal) -> Plotter:
         The resulting plotter instance
     """
     plotConfigurations = [
-        convertLineToStringDictionary(c) for configEntry in inputfile["*configurePlots"] for c in configEntry["data"]
+        convertLineToStringDictionary(c) for configEntry in inputfile["configurePlots"] for c in configEntry["data"]
     ]
 
     exportJobs = [
-        convertLineToStringDictionary(c) for configEntry in inputfile["*exportPlots"] for c in configEntry["data"]
+        convertLineToStringDictionary(c) for configEntry in inputfile["exportPlots"] for c in configEntry["data"]
     ]
 
     plotter = Plotter(journal, plotConfigurations, exportJobs)

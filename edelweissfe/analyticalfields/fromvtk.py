@@ -37,7 +37,7 @@ from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
 
 inputLanguage = InputLanguage()
-module = inputLanguage["*analyticalField"].addModule("fromVtk", "input language for fromVtk module")
+module = inputLanguage["analyticalField"].addModule("fromVtk", "input language for fromVtk module")
 
 module.addRequiredArg("file", "path to database file", str)
 module.addRequiredArg("result", "result name in database", str)

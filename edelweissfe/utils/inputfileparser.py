@@ -34,7 +34,11 @@ import textwrap
 from os.path import dirname, join
 
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import (
+    InputLanguage,
+    keywordIdentifier,
+    moduleLevelKeywordIdentifier,
+)
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     convertAssignmentsToCaseInsensitiveStringDictionary,
@@ -45,12 +49,16 @@ from edelweissfe.utils.misc import (
 
 
 def parseKeywordLine(line, fileName):
-    lineElements = splitLineAtCommas(line)
+    lineElements = splitLineAtCommas(line.lstrip(keywordIdentifier))
 
     keyword = lineElements[0]
     optionAssignments = lineElements[1:]
 
-    options = convertAssignmentsToCaseInsensitiveStringDictionary(optionAssignments)
+    try:
+        options = convertAssignmentsToCaseInsensitiveStringDictionary(optionAssignments)
+    except ValueError as e:
+        e.args = (f"Error during parsing of keyword {keyword}: " + e.args[0],)
+        raise e
 
     kw = inputLanguage[keyword]
 
@@ -82,12 +90,16 @@ def parseKeywordLine(line, fileName):
 
 
 def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions):
-    lineElements = splitLineAtCommas(line)
+    lineElements = splitLineAtCommas(line.lstrip(moduleLevelKeywordIdentifier))
 
     keyword = lineElements[0]
     optionAssignments = lineElements[1:]
 
-    options = convertAssignmentsToCaseInsensitiveStringDictionary(optionAssignments)
+    try:
+        options = convertAssignmentsToCaseInsensitiveStringDictionary(optionAssignments)
+    except ValueError as e:
+        e.args = (f"Error during parsing of keyword {keyword}: " + e.args[0],)
+        raise e
 
     module = inputLanguage[topLevelKeyword].getModule(topLevelOptions["type"])
     kw = module.getKeyword(keyword)
@@ -125,27 +137,27 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions):
 
 inputLanguage = InputLanguage()
 
-kw = inputLanguage.addKeyword("*element", "definition of element(s)")
+kw = inputLanguage.addKeyword("element", "definition of element(s)")
 kw.addRequiredArg("type", "assign one of the types defined in the elementlibrary", str)
 kw.addOptionalArg("elSet", "name of elSet to be created", str, None)
 kw.addOptionalArg("provider", "provider (library) for the element type. Default: Marmot", str, "Marmot")
 kw.addRequiredDatalines("Abaqus like element definition lines", "")
 
-kw = inputLanguage.addKeyword("*elSet", "definition of an element set")
+kw = inputLanguage.addKeyword("elSet", "definition of an element set")
 kw.addRequiredArg("elSet", "name", str)
 kw.addOptionalArg("generate", "set True to generate from data line 1: start-element, end-element, step", bool, False)
 kw.addRequiredDatalines("Abaqus like element set definition lines", "")
 
-kw = inputLanguage.addKeyword("*node", "definition of nodes")
+kw = inputLanguage.addKeyword("node", "definition of nodes")
 kw.addOptionalArg("nSet", "name of nSet to be created", str, None)
 kw.addRequiredDatalines("Abaqus like node definition lines: label, x, [y], [z]", "")
 
-kw = inputLanguage.addKeyword("*nSet", "definition of an element set")
+kw = inputLanguage.addKeyword("nSet", "definition of an element set")
 kw.addRequiredArg("nSet", "name", str)
 kw.addOptionalArg("generate", "set True to generate from data line 1: start-node, end-node, step", bool, False)
 kw.addRequiredDatalines("Abaqus like node set definition lines", "")
 
-kw = inputLanguage.addKeyword("*surface", "definition of surface set")
+kw = inputLanguage.addKeyword("surface", "definition of surface set")
 kw.addRequiredArg("name", "name", str)
 kw.addRequiredArg("type", "type of surface (currently 'element' only)", str)
 kw.addRequiredDatalines("Abaqus like definition. Type 'element': elSet, faceID", "")
@@ -153,7 +165,7 @@ kw.addRequiredDatalines("Abaqus like definition. Type 'element': elSet, faceID",
 """
 *section
 """
-kw = inputLanguage.addKeyword("*section", "definition of a section")
+kw = inputLanguage.addKeyword("section", "definition of a section")
 kw.addRequiredArg("name", "name", str)
 kw.addRequiredArg("material", "associated id of defined material", str)
 kw.addRequiredArg("type", "type of the section", str)
@@ -167,7 +179,7 @@ from edelweissfe.sections.plane import inputLanguage  # noqa: F811,E402
 
 # isort: on
 
-kw = inputLanguage.addKeyword("*material", "definition of a material")
+kw = inputLanguage.addKeyword("material", "definition of a material")
 kw.addRequiredArg("name", "name of material", str)
 kw.addRequiredArg("id", "id of material", str)
 kw.addOptionalArg("provider", "material provider", str, "marmotmaterial")
@@ -175,19 +187,19 @@ kw.addRequiredDatalines("material properties", "")
 
 # kw.addOptionalArg("statevars", , , None)
 
-kw = inputLanguage.addKeyword("*advancedmaterial", "definition of an advanced material")
+kw = inputLanguage.addKeyword("advancedmaterial", "definition of an advanced material")
 kw.addRequiredArg("name", "name of material", str)
 kw.addRequiredArg("id", "id of material", str)
 kw.addOptionalArg("provider", "material provider", str, "marmotmaterial")
 kw.addRequiredDatalines("material properties", "")
 
-kw = inputLanguage.addKeyword("*fieldOutput", "define fieldoutput, which is used by outputmanagers")
+kw = inputLanguage.addKeyword("fieldOutput", "define fieldoutput, which is used by outputmanagers")
 kw.addRequiredDatalines("definition lines for the output module", "")
 
 """
 *analyticalField
 """
-kw = inputLanguage.addKeyword("*analyticalField", "define an analytical field")
+kw = inputLanguage.addKeyword("analyticalField", "define an analytical field")
 kw.addRequiredArg("name", "name of analytical field", str)
 kw.addRequiredArg("type", "type of analytical field", str)
 kw.addRequiredDatalines("definition lines", "")
@@ -199,24 +211,24 @@ from edelweissfe.analyticalfields.scalarexpression import inputLanguage  # noqa:
 
 # isort: on
 
-kw = inputLanguage.addKeyword("*output", "define an output module")
+kw = inputLanguage.addKeyword("output", "define an output module")
 kw.addOptionalArg("name", "name of output manager", str, None)
 kw.addRequiredArg("type", "output module", str)
 kw.addRequiredDatalines("definition lines for the output module", "")
 
-kw = inputLanguage.addKeyword("*job", "definition of an analysis job")
+kw = inputLanguage.addKeyword("job", "definition of an analysis job")
 kw.addRequiredArg("domain", "define spatial domain: 1d, 2d, 3d", str)
 
 kw.addOptionalArg("startTime", "(optional) start time of job", float, 0.0)
 kw.addOptionalArg("name", "(optional) name of job, standard = defaultJob", str, None)
 kw.addOptionalArg("solver", "(deprecated) define the solver to be used", str, None)
 
-kw = inputLanguage.addKeyword("*solver", "define a solver")
+kw = inputLanguage.addKeyword("solver", "define a solver")
 kw.addRequiredArg("name", "solver name", str)
 kw.addRequiredArg("solver", "solver type", str)
 kw.addOptionalDatalines("define options which are passed to the respective solver instance.", "")
 
-kw = inputLanguage.addKeyword("*step", "define steps")
+kw = inputLanguage.addKeyword("step", "define steps")
 kw.addRequiredArg("solver", "solver to be used", str)
 
 kw.addOptionalArg("stepLength", "time period of step", float, None)
@@ -229,11 +241,11 @@ kw.addOptionalArg("type", "define step type, default = AdaptiveStep", str, None)
 kw.addOptionalArg("criticalIter", "maximum number of iterations to prevent from increasing the increment", int, None)
 kw.addOptionalDatalines("define step actions, which are handled by the corresponding stepaction modules", "")
 
-kw = inputLanguage.addKeyword("*updateConfiguration", "update a configuration")
+kw = inputLanguage.addKeyword("updateConfiguration", "update a configuration")
 kw.addRequiredArg("configuration", "name of configuration to be changed", str)
 kw.addRequiredDatalines("keyword arguments", "")
 
-kw = inputLanguage.addKeyword("*modelGenerator", "define a model generator, loaded from a module")
+kw = inputLanguage.addKeyword("modelGenerator", "define a model generator, loaded from a module")
 kw.addRequiredArg("name", "name of the generator", str)
 kw.addRequiredArg("generator", "name of generator module", str)
 kw.addOptionalArg(
@@ -241,18 +253,18 @@ kw.addOptionalArg(
 )
 kw.addRequiredDatalines("keyword arguments", "")
 
-kw = inputLanguage.addKeyword("*constraint", "define a constraint")
+kw = inputLanguage.addKeyword("constraint", "define a constraint")
 kw.addRequiredArg("type", "constraint type", str)
 kw.addRequiredDatalines("definition of the constraint", "")
 kw.addOptionalArg("name", "name of the constraint", str, None)
 
-kw = inputLanguage.addKeyword("*configurePlots", "customize the figures and axes")
+kw = inputLanguage.addKeyword("configurePlots", "customize the figures and axes")
 kw.addRequiredDatalines("key=value pairs for configuration of figures and axes", "")
 
-kw = inputLanguage.addKeyword("*exportPlots", "export your figures")
+kw = inputLanguage.addKeyword("exportPlots", "export your figures")
 kw.addRequiredDatalines("key=value pairs for exporting of figures and axes", "")
 
-kw = inputLanguage.addKeyword("*include", "load contents of extra file")
+kw = inputLanguage.addKeyword("include", "load contents of extra file")
 kw.addRequiredArg("input", "path to file (use relative path to current .inp)", str)
 
 
@@ -297,7 +309,7 @@ def parseInputFile(
                 options["moduleOptions"] = dict()
 
                 # special treatment for *include:
-                if strCaseCmp(keyword, "*include"):
+                if strCaseCmp(keyword, "include"):
                     includeFile = options["input"]
                     parseInputFile(
                         join(dirname(fileName), includeFile),
@@ -308,7 +320,7 @@ def parseInputFile(
                 else:
                     fileDict[keyword].append(options)
 
-            elif line.startswith(">>"):  # line is a module level keyword line
+            elif line.startswith(moduleLevelKeywordIdentifier):  # line is a module level keyword line
                 moduleKeyword, moduleOptions = parseModuleKeywordLine(line, fileName, keyword, options)
 
                 if moduleKeyword in fileDict[keyword][-1]["moduleOptions"]:
