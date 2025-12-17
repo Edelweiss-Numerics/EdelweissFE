@@ -27,7 +27,7 @@
 #  ---------------------------------------------------------------------
 
 from edelweissfe.config.generators import getGeneratorFunction
-from edelweissfe.config.outputmanagers import getOutputManagerClass
+from edelweissfe.config.outputmanagers import getOutputManagerFactoryByName
 from edelweissfe.config.solvers import getSolverByName
 from edelweissfe.generators.abqmodelconstructor import AbqModelConstructor
 from edelweissfe.journal.journal import Journal
@@ -37,7 +37,14 @@ from edelweissfe.steps.stepmanager import (
     StepDefinition,
     StepManager,
 )
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.fieldoutput import FieldOutputController
+
+# from edelweissfe.utils.inputfileparser import inputLanguage  # noqa: F811
+from edelweissfe.utils.inputlanguage import (
+    keywordIdentifier,
+    moduleLevelKeywordIdentifier,
+)
 from edelweissfe.utils.math import createMathExpression, createModelAccessibleFunction
 from edelweissfe.utils.misc import (
     convertAssignmentsToStringDictionary,
@@ -48,6 +55,16 @@ from edelweissfe.utils.misc import (
     strToRange,
 )
 from edelweissfe.utils.plotter import Plotter
+
+
+def flattenDefinitions(ll):
+    flat = []
+    for item in ll:
+        if isinstance(item, list):
+            flat.extend(item)
+        else:
+            flat.append(item)
+    return flat
 
 
 def createFieldOutputFromInputFile(inputfile: dict, model: FEModel, journal: Journal) -> FieldOutputController:
@@ -69,99 +86,102 @@ def createFieldOutputFromInputFile(inputfile: dict, model: FEModel, journal: Jou
         The configured FieldOutputController instance.
     """
     fieldOutputController = FieldOutputController(model, journal)
-    if inputfile["fieldOutput"]:
-        for definition in inputfile["fieldOutput"]:
-            for defLine in definition["data"]:
-                kwargs = convertLineToStringDictionary(defLine)
+    for definition in inputfile["fieldOutput"]:
+        moduleOptions = definition["moduleoptions"]
+        perNodeDefs = moduleOptions.get("perNode", [])
+        perElementDefs = moduleOptions.get("perElement", [])
+        fromExpressionDefs = moduleOptions.get("fromExpression", [])
 
-                if "elSet" in kwargs:
-                    kwargs["elSet"] = model.elementSets[kwargs["elSet"]]
-                if "nSet" in kwargs:
-                    kwargs["nSet"] = model.nodeSets[kwargs["nSet"]]
+        for definition in perNodeDefs:
+            field = definition["field"]
+            nodeField = model.nodeFields[field]
 
-                name = kwargs.pop("name")
+            if bool(definition["nSet"]) and bool(definition["elSet"]):
+                raise Exception(
+                    f"During parsing of keyword {keywordIdentifier}fieldOutput ({moduleLevelKeywordIdentifier}perNode): Specify either nSet OR elSet."
+                )
 
-                f_of_x = kwargs.pop("f(x)", None)
-                if f_of_x:
-                    f_of_x = createMathExpression(f_of_x)
+            subset = None
+            if definition["nSet"]:
+                subset = model.nodeSets[definition["nSet"]]
+            elif definition["elSet"]:
+                subset = model.elementSets[definition["elSet"]]
 
-                f_export_of_x = kwargs.pop("f_export(x)", None)
-                if f_export_of_x:
-                    f_export_of_x = createMathExpression(f_export_of_x)
+            if subset:
+                nodeField = nodeField.subset(subset)
 
-                saveHistory = kwargs.pop("saveHistory", True)
-                if saveHistory:
-                    saveHistory = bool(saveHistory)
+            f_of_x = definition["f(x)"]
+            if f_of_x:
+                f_of_x = createMathExpression(f_of_x)
 
-                export = kwargs.pop("export", False)
+            f_export_of_x = definition["f_export(x)"]
+            if f_export_of_x:
+                f_export_of_x = createMathExpression(f_export_of_x)
 
-                theType = kwargs.pop("create")
+            fieldOutputController.addPerNodeFieldOutput(
+                name=definition["name"],
+                nodeField=nodeField,
+                result=definition["result"],
+                saveHistory=definition["saveHistory"],
+                f_x=f_of_x,
+                export=definition["export"],
+                fExport_x=f_export_of_x,
+            )
 
-                if theType == "perNode":
-                    field = kwargs.pop("field")
-                    nodeField = model.nodeFields[field]
-                    result = kwargs.pop("result")
+        for definition in perElementDefs:
+            elSet = model.elementSets[definition["elSet"]]
 
-                    subset = None
-                    if "nSet" in kwargs:
-                        subset = kwargs.pop("nSet")
-                    elif "elSet" in kwargs:
-                        subset = kwargs.pop("elSet")
+            qp = definition["quadraturePoint"]
+            quadraturePoints = strToRange(qp) if not isInteger(qp) else [int(qp)]
 
-                    if subset:
-                        nodeField = nodeField.subset(subset)
+            f_of_x = definition["f(x)"]
+            if f_of_x:
+                f_of_x = createMathExpression(f_of_x)
 
-                    fieldOutputController.addPerNodeFieldOutput(
-                        name,
-                        nodeField,
-                        result,
-                        saveHistory=saveHistory,
-                        f_x=f_of_x,
-                        export=export,
-                        fExport_x=f_export_of_x,
-                        **kwargs,
-                    )
+            f_export_of_x = definition["f_export(x)"]
+            if f_export_of_x:
+                f_export_of_x = createMathExpression(f_export_of_x)
 
-                elif theType == "perElement":
-                    elSet = kwargs.pop("elSet")
-                    result = kwargs.pop("result")
+            fieldOutputController.addPerElementFieldOutput(
+                name=definition["name"],
+                elSet=elSet,
+                result=definition["result"],
+                quadraturePoints=quadraturePoints,
+                saveHistory=definition["saveHistory"],
+                f_x=f_of_x,
+                export=definition["export"],
+                fExport_x=f_export_of_x,
+            )
 
-                    qp = kwargs.pop("quadraturePoint")
-                    quadraturePoints = strToRange(qp) if not isInteger(qp) else [int(qp)]
+        for definition in fromExpressionDefs:
+            if definition["nSet"]:
+                associatedSet = model.nodeSets[definition["nSet"]]
+            elif definition["elSet"]:
+                associatedSet = model.elementSets[definition["elSet"]]
+            else:
+                raise Exception(
+                    f"During parsing of keyword {keywordIdentifier}fieldOutput ({moduleLevelKeywordIdentifier}fromExpression): All fieldOuputs must be associated with a set!"
+                )
 
-                    fieldOutputController.addPerElementFieldOutput(
-                        name,
-                        elSet,
-                        result,
-                        saveHistory=saveHistory,
-                        f_x=f_of_x,
-                        export=export,
-                        fExport_x=f_export_of_x,
-                        quadraturePoints=quadraturePoints,
-                    )
+            theExpression = createModelAccessibleFunction(definition["expression"], model)
 
-                elif theType == "fromExpression":
+            f_of_x = definition["f(x)"]
+            if f_of_x:
+                f_of_x = createMathExpression(f_of_x)
 
-                    if "nSet" in kwargs:
-                        associatedSet = kwargs.pop("nSet")
-                    elif "elSet" in kwargs:
-                        associatedSet = kwargs.pop("elSet")
-                    else:
-                        raise Exception("All FieldOuputs must be associated with a set!")
+            f_export_of_x = definition["f_export(x)"]
+            if f_export_of_x:
+                f_export_of_x = createMathExpression(f_export_of_x)
 
-                    theExpression = createModelAccessibleFunction(kwargs["expression"], model)
-
-                    fieldOutputController.addExpressionFieldOutput(
-                        associatedSet,
-                        theExpression,
-                        name,
-                        saveHistory,
-                        f_of_x,
-                        export=export,
-                        fExport_x=f_export_of_x,
-                    )
-                else:
-                    raise Exception("Invalid FieldOuput request: {:}".format(theType))
+            fieldOutputController.addExpressionFieldOutput(
+                associatedSet=associatedSet,
+                theExpression=theExpression,
+                name=definition["name"],
+                saveHistory=definition["saveHistory"],
+                f_x=f_of_x,
+                export=definition["export"],
+                fExport_x=f_export_of_x,
+            )
 
     return fieldOutputController
 
@@ -318,23 +338,59 @@ def createOutputManagersFromInputFile(
     """
     outputManagers = []
 
-    for outputDef in inputfile["output"]:
-        OutputManager = getOutputManagerClass(outputDef["type"].lower())
-        managerName = outputDef.get("name", defaultName + outputDef["type"])
-        definitionLines = outputDef["data"]
+    for definition in inputfile["output"]:
+        outputManagerKwargs = CaseInsensitiveDict(definition.copy())
 
-        outputManager = OutputManager(managerName, model, fieldOutputController, journal, plotter)
+        name = outputManagerKwargs.pop("name")
+        outputManagerType = outputManagerKwargs.pop("type")
+        # data = outputManagerKwargs.pop("data")
+        moduleOptions = outputManagerKwargs.pop("moduleOptions")
 
-        for defLine in definitionLines:
-            kwargs = convertLineToStringDictionary(defLine)
-            if "elSet" in kwargs:
-                kwargs["elSet"] = model.elementSets[kwargs["elSet"]]
-            if "nSet" in kwargs:
-                kwargs["nSet"] = model.nodeSets[kwargs["nSet"]]
-            if "fieldOutput" in kwargs:
-                kwargs["fieldOutput"] = fieldOutputController.fieldOutputs[kwargs["fieldOutput"]]
+        outputManagerKwargs.pop("inputfile")
 
-            outputManager.updateDefinition(**kwargs)
+        if not name:
+            name = defaultName + definition["type"]
+
+        # definitionLines = outputDef["data"]
+        #
+        # options = outputDef["moduleoptions"]
+        #
+        # outputManager = OutputManager(
+        #     name=name,
+        #     model=model,
+        #     fieldOutputController=fieldOutputController,
+        #     journal=journal,
+        #     plotter=plotter,
+        # )
+
+        # module = inputLanguage["output"].getModule(outputManagerType)
+        # args, kwargs = module.parseDatalines(data)
+
+        outputManagerFactory = getOutputManagerFactoryByName(outputManagerType)
+
+        outputManager = outputManagerFactory(
+            name,
+            model,
+            fieldOutputController,
+            # args,
+            moduleOptions,
+            journal,
+            plotter,
+            # **kwargs
+        )
+
+        # for defLine in definitionLines:
+        #     kwargs = convertLineToStringDictionary(defLine)
+        #     if "elSet" in kwargs:
+        #         kwargs["elSet"] = model.elementSets[kwargs["elSet"]]
+        #     if "nSet" in kwargs:
+        #         kwargs["nSet"] = model.nodeSets[kwargs["nSet"]]
+        #     if "fieldOutput" in kwargs:
+        #         kwargs["fieldOutput"] = fieldOutputController.fieldOutputs[
+        #             kwargs["fieldOutput"]
+        #         ]
+
+        # outputManager.updateDefinition(**kwargs)
 
         outputManagers.append(outputManager)
 

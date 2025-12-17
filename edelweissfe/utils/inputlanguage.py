@@ -206,10 +206,6 @@ class Module:
             similarKeyword = findSimilarString(keyword, [keyword_.name for keyword_ in self.keywords])
             raise ValueError(f"{keyword} is not a valid argument. Did you mean {similarKeyword}?")
 
-    # def parseDatalines(self, datalines):
-    #
-    #     breakpoint()
-
     def __getitem__(self, arg: str):
         casefoldedArgs = [arg_.name.casefold() for arg_ in self.args]
         try:
@@ -281,7 +277,7 @@ class Module:
         try:
             checkKeywordInput(**options)
         except ValueError as e:
-            e.args = (f"Error during parsing of keyword {keyword}: " + e.args[0],)
+            e.args = (f"Error during parsing of keyword {keywordIdentifier}{keyword}: " + e.args[0],)
             raise e
 
         for optKey, optVal in options.items():

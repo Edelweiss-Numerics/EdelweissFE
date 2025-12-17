@@ -69,9 +69,9 @@ class OutputManagerBase(ABC):
     ):
         pass
 
-    @abstractmethod
-    def updateDefinition(self, **kwargs: dict):
-        pass
+    # @abstractmethod
+    # def updateDefinition(self, **kwargs: dict):
+    #     pass
 
     @abstractmethod
     def initializeJob(self):

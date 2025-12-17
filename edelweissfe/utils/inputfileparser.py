@@ -57,7 +57,7 @@ def parseKeywordLine(line, fileName):
     try:
         options = convertAssignmentsToCaseInsensitiveStringDictionary(optionAssignments)
     except ValueError as e:
-        e.args = (f"Error during parsing of keyword {keyword}: " + e.args[0],)
+        e.args = (f"Error during parsing of keyword {keywordIdentifier}{keyword}: " + e.args[0],)
         raise e
 
     kw = inputLanguage[keyword]
@@ -70,7 +70,7 @@ def parseKeywordLine(line, fileName):
     try:
         checkKeywordInput(**options)
     except ValueError as e:
-        e.args = (f"Error during parsing of keyword {keyword}: " + e.args[0],)
+        e.args = (f"Error during parsing of keyword {keywordIdentifier}{keyword}: " + e.args[0],)
         raise e
 
     for optKey, optVal in options.items():
@@ -98,10 +98,12 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions):
     try:
         options = convertAssignmentsToCaseInsensitiveStringDictionary(optionAssignments)
     except ValueError as e:
-        e.args = (f"Error during parsing of keyword {keyword}: " + e.args[0],)
+        e.args = (f"Error during parsing of keyword {keywordIdentifier}{keyword}: " + e.args[0],)
         raise e
 
-    module = inputLanguage[topLevelKeyword].getModule(topLevelOptions["type"])
+    module = inputLanguage[topLevelKeyword].getModule(
+        topLevelOptions["type"] if "type" in topLevelOptions else topLevelKeyword
+    )
     kw = module.getKeyword(keyword)
 
     @caseInsensitiveKwargsChecker([kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs])
@@ -112,7 +114,9 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions):
     try:
         checkKeywordInput(**options)
     except ValueError as e:
-        e.args = (f"Error during parsing of module level keyword {keyword}: " + e.args[0],)
+        e.args = (
+            f"Error during parsing of module level keyword {moduleLevelKeywordIdentifier}{keyword}: " + e.args[0],
+        )
         raise e
 
     for optKey, optVal in options.items():
@@ -193,8 +197,15 @@ kw.addRequiredArg("id", "id of material", str)
 kw.addOptionalArg("provider", "material provider", str, "marmotmaterial")
 kw.addRequiredDatalines("material properties", "")
 
+"""
+*fieldOutput
+"""
 kw = inputLanguage.addKeyword("fieldOutput", "define fieldoutput, which is used by outputmanagers")
-kw.addRequiredDatalines("definition lines for the output module", "")
+
+# isort: off
+from edelweissfe.utils.fieldoutput import inputLanguage  # noqa: F811,E402
+
+# isort: on
 
 """
 *analyticalField
@@ -211,10 +222,18 @@ from edelweissfe.analyticalfields.scalarexpression import inputLanguage  # noqa:
 
 # isort: on
 
+"""
+*output
+"""
 kw = inputLanguage.addKeyword("output", "define an output module")
 kw.addOptionalArg("name", "name of output manager", str, None)
 kw.addRequiredArg("type", "output module", str)
-kw.addRequiredDatalines("definition lines for the output module", "")
+# kw.addOptionalDatalines("definition lines for the output module", "")
+
+# isort: off
+from edelweissfe.outputmanagers.ensight import inputLanguage  # noqa: F811,E402
+
+# isort: on
 
 kw = inputLanguage.addKeyword("job", "definition of an analysis job")
 kw.addRequiredArg("domain", "define spatial domain: 1d, 2d, 3d", str)
@@ -326,7 +345,7 @@ def parseInputFile(
                 if moduleKeyword in fileDict[keyword][-1]["moduleOptions"]:
                     fileDict[keyword][-1]["moduleOptions"][moduleKeyword].append(moduleOptions)
                 else:
-                    fileDict[keyword][-1]["moduleOptions"] = {moduleKeyword: [moduleOptions]}
+                    fileDict[keyword][-1]["moduleOptions"].update({moduleKeyword: [moduleOptions]})
 
             # else splitLineAtCommas(line)[]  # line is a module level keyword line
 
@@ -354,7 +373,9 @@ def parseInputFile(
                         or inputLanguage[keyword].expectsRequiredDatalines
                     )
                 except AssertionError:
-                    raise ValueError(f"{keyword} expects no data lines")
+                    raise ValueError(
+                        f"Error during parsing of keyword {keywordIdentifier}{keyword}: {keywordIdentifier}{keyword} expects no data lines"
+                    )
                 else:
                     fileDict[keyword][-1]["data"].append(line)
 
