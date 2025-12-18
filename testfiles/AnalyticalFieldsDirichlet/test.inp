@@ -21,7 +21,7 @@ all
 *output, type=ensight, name=esExport
 >>perNode,     fieldOutput=displacement
 >>perElement,  fieldOutput=stress
->>configuration, overwrite=yes
+>>>>configuration, overwrite=yes
 
 *analyticalField, name=f01, type=scalarExpression
 "f(x,y,z)"="-(z-.5)"

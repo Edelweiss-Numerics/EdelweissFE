@@ -30,7 +30,10 @@
 # @author: Matthias Neuner
 
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.math import createMathExpression
+from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
 
 """
 A simple monitor to observe results (fieldOutputs) in the console during analysis.
@@ -42,10 +45,32 @@ A simple monitor to observe results (fieldOutputs) in the console during analysi
         fieldOutput=omega, f(x)='max(x)'
 """
 
-documentation = {
-    "fieldOutput": "Name of the field output to be monitored",
-    "f(x)": "(Optional), apply a model accessible function on the result",
-}
+# documentation = {
+#     "fieldOutput": "Name of the field output to be monitored",
+#     "f(x)": "(Optional), Apply a model accessible function on the result",
+# }
+
+inputLanguage = InputLanguage()
+module = inputLanguage["output"].addModule(
+    "monitor", "A simple monitor to observe results (fieldOutputs) in the console during analysis."
+)
+
+module.addRequiredArg("fieldOutput", "Name of the field output to monitor.", str)
+# module.addOptionalArg("name", "Name of the output manager.", str, None)
+module.addOptionalArg("f(x)", "Apply a model accessible function on the result.", str, None)
+
+required = [kw.name for kw in module.requiredArgs]
+required += [kw.name for kw in module.requiredKeywords]
+
+optional = [kw.name for kw in module.optionalArgs]
+optional += [kw.name for kw in module.optionalKeywords]
+
+
+@caseInsensitiveKwargsChecker(required, optional)
+def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
+    kwargs = CaseInsensitiveDict(kwargs)
+
+    return OutputManager(name, FEModel, fieldOutputController, journal, plotter)
 
 
 class OutputManager(OutputManagerBase):

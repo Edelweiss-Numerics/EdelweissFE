@@ -32,7 +32,7 @@ all
 >>perElement, fieldOutput=stress
 >>perElement, fieldOutput=strain
 >>perElement, fieldOutput=kappaMax
->>configuration, overwrite=yes
+>>>>configuration, overwrite=yes
 
 ***output, type=monitor
 

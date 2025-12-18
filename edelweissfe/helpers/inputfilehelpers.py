@@ -39,8 +39,7 @@ from edelweissfe.steps.stepmanager import (
 )
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.fieldoutput import FieldOutputController
-
-# from edelweissfe.utils.inputfileparser import inputLanguage  # noqa: F811
+from edelweissfe.utils.inputfileparser import inputLanguage  # noqa: F811
 from edelweissfe.utils.inputlanguage import (
     keywordIdentifier,
     moduleLevelKeywordIdentifier,
@@ -249,7 +248,7 @@ def createStepManagerFromInputFile(inputfile: dict):
 
     for stepLine in inputfile["step"]:
         stepType = stepLine.pop("type", "AdaptiveStep")
-        stepActionLines = stepLine.pop("data")
+        stepActionLines = stepLine.pop("datalines")
 
         stepActionDefinitions = []
 
@@ -296,7 +295,7 @@ def createSolversFromInputFile(inputfile: dict, jobInfo: dict, journal: Journal)
         except KeyError:
             raise KeyError(f"Missing type definition for solver {solverName}. Specify solver type with solver=...")
 
-        solverData = solverDefinition["data"]
+        solverData = solverDefinition["datalines"]
 
         Solver = getSolverByName(solverType)
 
@@ -341,58 +340,32 @@ def createOutputManagersFromInputFile(
     for definition in inputfile["output"]:
         outputManagerKwargs = CaseInsensitiveDict(definition.copy())
 
-        name = outputManagerKwargs.pop("name")
         outputManagerType = outputManagerKwargs.pop("type")
-        # data = outputManagerKwargs.pop("data")
-        moduleOptions = outputManagerKwargs.pop("moduleOptions")
+
+        datalines = outputManagerKwargs.pop("datalines")
 
         outputManagerKwargs.pop("inputfile")
 
-        if not name:
-            name = defaultName + definition["type"]
+        moduleOptions = outputManagerKwargs.pop("moduleOptions")
 
-        # definitionLines = outputDef["data"]
-        #
-        # options = outputDef["moduleoptions"]
-        #
-        # outputManager = OutputManager(
-        #     name=name,
-        #     model=model,
-        #     fieldOutputController=fieldOutputController,
-        #     journal=journal,
-        #     plotter=plotter,
-        # )
+        for dataline in datalines:
+            module = inputLanguage["output"].getModule(outputManagerType)
+            args, kwargs = module.parseDatalines(dataline)
 
-        # module = inputLanguage["output"].getModule(outputManagerType)
-        # args, kwargs = module.parseDatalines(data)
+            outputManagerFactory = getOutputManagerFactoryByName(outputManagerType)
 
-        outputManagerFactory = getOutputManagerFactoryByName(outputManagerType)
+            outputManager = outputManagerFactory(
+                "",
+                model,
+                fieldOutputController,
+                # args,
+                moduleOptions,
+                journal,
+                plotter,
+                **kwargs,
+            )
 
-        outputManager = outputManagerFactory(
-            name,
-            model,
-            fieldOutputController,
-            # args,
-            moduleOptions,
-            journal,
-            plotter,
-            # **kwargs
-        )
-
-        # for defLine in definitionLines:
-        #     kwargs = convertLineToStringDictionary(defLine)
-        #     if "elSet" in kwargs:
-        #         kwargs["elSet"] = model.elementSets[kwargs["elSet"]]
-        #     if "nSet" in kwargs:
-        #         kwargs["nSet"] = model.nodeSets[kwargs["nSet"]]
-        #     if "fieldOutput" in kwargs:
-        #         kwargs["fieldOutput"] = fieldOutputController.fieldOutputs[
-        #             kwargs["fieldOutput"]
-        #         ]
-
-        # outputManager.updateDefinition(**kwargs)
-
-        outputManagers.append(outputManager)
+            outputManagers.append(outputManager)
 
     return outputManagers
 

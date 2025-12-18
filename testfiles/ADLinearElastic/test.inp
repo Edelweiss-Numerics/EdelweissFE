@@ -54,17 +54,17 @@ distributedload, name=dload, surface=surfaceRight, type=pressure, magnitude=0.15
 
 *fieldOutput
 ** The results we are interested in
-create=perElement, name=strain,       elSet=all, result=strain, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
-create=perElement, name=stress,       elSet=all, result=stress, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
-create=perNode, name=RF_left,      nSet=left, field=displacement, result=P, f(x)='np.sum(x[:,1])'
-create=perNode, name=displacement, elSet=theOnlyElement, field=displacement, result=U
+>>perElement, name=strain,       elSet=all, result=strain, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perElement, name=stress,       elSet=all, result=stress, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perNode, name=RF_left,      nSet=left, field=displacement, result=P, f(x)='np.sum(x[:,1])'
+>>perNode, name=displacement, elSet=theOnlyElement, field=displacement, result=U
 
 *output, type=ensight
 ** For visualization in Paraview etc.
-create=perNode, fieldOutput=displacement
-create=perElement, fieldOutput=stress
-create=perElement, fieldOutput=strain
-configuration, overwrite=yes
+>>perNode, fieldOutput=displacement
+>>perElement, fieldOutput=stress
+>>perElement, fieldOutput=strain
+>>>>configuration, overwrite=yes
 
 *output, type=monitor, name=myMonitor
 ** Directly print to the terminal

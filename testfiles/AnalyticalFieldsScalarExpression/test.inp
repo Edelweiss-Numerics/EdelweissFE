@@ -30,7 +30,7 @@ all
 >>perNode, fieldOutput=displacement
 >>perElement, fieldOutput=stress
 >>perElement, fieldOutput=strain
->>configuration, overwrite=yes
+>>>>configuration, overwrite=yes
 
 *AnalyticalField, name=rdmF, type=randomScalar
 model       = Gaussian

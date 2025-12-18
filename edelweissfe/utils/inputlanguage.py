@@ -87,6 +87,9 @@ class InputFileKeyword:
         self.optionalArgs = []
         self.dtype = []
 
+        self.expectsDatalines = False
+        self.datalines = None
+
         self.expectsRequiredDatalines = False
         self.requiredDatalines = None
 
@@ -98,7 +101,7 @@ class InputFileKeyword:
         return
 
     def addModule(self, name: str, description: str):
-        module = Module(name, description)
+        module = Module(self, name, description)
         self.modules.append(module)
 
         return module
@@ -115,6 +118,25 @@ class InputFileKeyword:
         except ValueError:
             similarKeyword = findSimilarString(arg, [arg_.name for arg_ in self.args])
             raise ValueError(f"{arg} is not a valid argument for {self.name}. Did you mean {similarKeyword}?")
+
+    def parseDatalines(self, datalines):
+        args = []
+        kwargs = CaseInsensitiveDict()
+
+        if not isinstance(datalines, list):
+            datalines = [datalines]
+
+        datalineOptions = []
+        for line in datalines:
+            datalineOptions += splitLineAtCommas(line)
+
+        for option in datalineOptions:
+            if "=" in option:
+                kwargs.update(convertAssignmentsToStringDictionary([option]))
+            else:
+                args.append(option)
+
+        return args, kwargs
 
     # @property
     # def datalines(self):
@@ -147,6 +169,9 @@ class InputFileKeyword:
     def addRequiredDatalines(self, description: str, dtype: str):
         datalines = DataLines(description, dtype)
 
+        self.expectsDatalines = True
+        self.datalines = datalines
+
         self.expectsRequiredDatalines = True
         self.requiredDatalines = datalines
 
@@ -155,6 +180,9 @@ class InputFileKeyword:
     def addOptionalDatalines(self, description: str, dtype: str):
         datalines = DataLines(description, dtype)
 
+        self.expectsDatalines = True
+        self.datalines = datalines
+
         self.expectsOptionalDatalines = True
         self.optionalDatalines = datalines
 
@@ -162,7 +190,9 @@ class InputFileKeyword:
 
 
 class Module:
-    def __init__(self, name: str, description: str):
+    def __init__(self, inputFileKeyword: InputFileKeyword, name: str, description: str):
+        self.inputFileKeyword = inputFileKeyword
+
         self.name = name
         self.description = description
 
@@ -171,6 +201,9 @@ class Module:
 
         self.requiredKeywords = []
         self.optionalKeywords = []
+
+        # self.requiredDatalineKwArgs = []
+        # self.optionalDatalineKwArgs = []
 
         self.expectsRequiredDatalines = False
         self.requiredDatalines = None
@@ -219,26 +252,35 @@ class Module:
         arg = KeywordArg(name, description, dataType)
         self.requiredArgs.append(arg)
 
+        self.expectsRequiredDatalines = True
+
         return arg
 
     def addOptionalArg(self, name: str, description: str, dataType: type, defaultValue):
         arg = OptionalKeywordArg(name, description, dataType, default=defaultValue)
         self.optionalArgs.append(arg)
 
+        self.expectsOptionalDatalines = True
+
         return arg
 
     def addRequiredKeyword(self, name: str, description: str):
         kw = InputFileKeyword(name, description)
         self.requiredKeywords.append(kw)
+
         return kw
 
     def addOptionalKeyword(self, name: str, description: str):
         kw = InputFileKeyword(name, description)
         self.optionalKeywords.append(kw)
+
         return kw
 
     def addRequiredDatalines(self, description: str, dtype: str):
         datalines = DataLines(description, dtype)
+
+        self.expectsDatalines = True
+        self.datalines = datalines
 
         self.expectsRequiredDatalines = True
         self.requiredDatalines = datalines
@@ -247,6 +289,9 @@ class Module:
 
     def addOptionalDatalines(self, description: str, dtype: str):
         datalines = DataLines(description, dtype)
+
+        self.expectsDatalines = True
+        self.datalines = datalines
 
         self.expectsOptionalDatalines = True
         self.optionalDatalines = datalines
@@ -289,36 +334,20 @@ class Module:
         return moduleKw.name, options
 
     def parseDatalines(self, datalines):
-        args = []
-        kwargs = CaseInsensitiveDict()
+        args, kwargs = self.inputFileKeyword.parseDatalines(datalines)
 
-        # possibleKeywords = [kw.name for kw in self.keywords]
-        # kwargs.update({key: [] for key in possibleKeywords})
+        # @caseInsensitiveKwargsChecker(
+        #     [kw.name for kw in self.requiredDatalineKwArgs], [kw.name for kw in self.optionalDatalineKwArgs]
+        # )
+        # def checkKeywordInput(*args, **kwargs):
+        #     """this is a dummy function needed to apply kwargsChecker"""
+        #     return
         #
-        # datalineOptions = []
-        # for line in datalines:
-        #     keyword = splitLineAtCommas(line)[0]
-        #     if keyword in kwargs:
-        #         keyword, options = self.parseKeywordLine(line)
-        #         kwargs[keyword].append(options)
-        #     else:
-        #         datalineOptions += splitLineAtCommas(line)
-        #
-        # for option in datalineOptions:
-        #     if "=" in option:
-        #         kwargs.update(convertAssignmentsToStringDictionary(option))
-        #     else:
-        #         args.append(option)
-
-        datalineOptions = []
-        for line in datalines:
-            datalineOptions += splitLineAtCommas(line)
-
-        for option in datalineOptions:
-            if "=" in option:
-                kwargs.update(convertAssignmentsToStringDictionary([option]))
-            else:
-                args.append(option)
+        # try:
+        #     checkKeywordInput(**kwargs)
+        # except ValueError as e:
+        #     e.args = (f"Error during parsing of keyword {keywordIdentifier}{self.inputFileKeyword.name}: " + e.args[0],)
+        #     raise e
 
         return args, kwargs
 

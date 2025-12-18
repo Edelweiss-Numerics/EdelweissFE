@@ -83,8 +83,12 @@ def parseKeywordLine(line, fileName):
 
     options["inputFile"] = fileName  # save also the filename of the original inputfile!
 
-    if kw.expectsRequiredDatalines or kw.expectsOptionalDatalines:
-        options["data"] = []
+    # options["datalineArgs"] = []
+    # options["datalineKwArgs"] = []
+    # options["datalines"] = []
+
+    # if kw.expectsRequiredDatalines or kw.expectsOptionalDatalines:
+    options["datalines"] = []
 
     return keyword, options
 
@@ -134,7 +138,7 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions):
     options["inputFile"] = fileName  # save also the filename of the original inputfile!
 
     if kw.expectsRequiredDatalines or kw.expectsOptionalDatalines:
-        options["data"] = []
+        options["datalines"] = []
 
     return keyword, options
 
@@ -144,12 +148,22 @@ inputLanguage = InputLanguage()
 kw = inputLanguage.addKeyword("element", "definition of element(s)")
 kw.addRequiredArg("type", "assign one of the types defined in the elementlibrary", str)
 kw.addOptionalArg("elSet", "name of elSet to be created", str, None)
-kw.addOptionalArg("provider", "provider (library) for the element type. Default: Marmot", str, "Marmot")
+kw.addOptionalArg(
+    "provider",
+    "provider (library) for the element type. Default: Marmot",
+    str,
+    "Marmot",
+)
 kw.addRequiredDatalines("Abaqus like element definition lines", "")
 
 kw = inputLanguage.addKeyword("elSet", "definition of an element set")
 kw.addRequiredArg("elSet", "name", str)
-kw.addOptionalArg("generate", "set True to generate from data line 1: start-element, end-element, step", bool, False)
+kw.addOptionalArg(
+    "generate",
+    "set True to generate from data line 1: start-element, end-element, step",
+    bool,
+    False,
+)
 kw.addRequiredDatalines("Abaqus like element set definition lines", "")
 
 kw = inputLanguage.addKeyword("node", "definition of nodes")
@@ -158,7 +172,12 @@ kw.addRequiredDatalines("Abaqus like node definition lines: label, x, [y], [z]",
 
 kw = inputLanguage.addKeyword("nSet", "definition of an element set")
 kw.addRequiredArg("nSet", "name", str)
-kw.addOptionalArg("generate", "set True to generate from data line 1: start-node, end-node, step", bool, False)
+kw.addOptionalArg(
+    "generate",
+    "set True to generate from data line 1: start-node, end-node, step",
+    bool,
+    False,
+)
 kw.addRequiredDatalines("Abaqus like node set definition lines", "")
 
 kw = inputLanguage.addKeyword("surface", "definition of surface set")
@@ -226,12 +245,14 @@ from edelweissfe.analyticalfields.scalarexpression import inputLanguage  # noqa:
 *output
 """
 kw = inputLanguage.addKeyword("output", "define an output module")
-kw.addOptionalArg("name", "name of output manager", str, None)
 kw.addRequiredArg("type", "output module", str)
+kw.addOptionalArg("name", "name of output manager", str, None)
+kw.addOptionalDatalines("definition lines", "")
 # kw.addOptionalDatalines("definition lines for the output module", "")
 
 # isort: off
 from edelweissfe.outputmanagers.ensight import inputLanguage  # noqa: F811,E402
+from edelweissfe.outputmanagers.monitor import inputLanguage  # noqa: F811,E402
 
 # isort: on
 
@@ -257,7 +278,12 @@ kw.addOptionalArg("minInc", "minimum size of increment", float, None)
 kw.addOptionalArg("maxNumInc", "maximum number of increments", int, None)
 kw.addOptionalArg("maxIter", "maximum number of iterations", int, None)
 kw.addOptionalArg("type", "define step type, default = AdaptiveStep", str, None)
-kw.addOptionalArg("criticalIter", "maximum number of iterations to prevent from increasing the increment", int, None)
+kw.addOptionalArg(
+    "criticalIter",
+    "maximum number of iterations to prevent from increasing the increment",
+    int,
+    None,
+)
 kw.addOptionalDatalines("define step actions, which are handled by the corresponding stepaction modules", "")
 
 kw = inputLanguage.addKeyword("updateConfiguration", "update a configuration")
@@ -268,7 +294,10 @@ kw = inputLanguage.addKeyword("modelGenerator", "define a model generator, loade
 kw.addRequiredArg("name", "name of the generator", str)
 kw.addRequiredArg("generator", "name of generator module", str)
 kw.addOptionalArg(
-    "executeAfterManualGeneration", "Delay the execution of the generator after model generation", bool, False
+    "executeAfterManualGeneration",
+    "Delay the execution of the generator after model generation",
+    bool,
+    False,
 )
 kw.addRequiredDatalines("keyword arguments", "")
 
@@ -323,7 +352,7 @@ def parseInputFile(
 
         for line in lines:
             if line.startswith("*"):  # line is keywordline
-                lastkeyword = keyword
+                lastKeyword = keyword
                 keyword, options = parseKeywordLine(line, fileName)
                 options["moduleOptions"] = dict()
 
@@ -332,10 +361,10 @@ def parseInputFile(
                     includeFile = options["input"]
                     parseInputFile(
                         join(dirname(fileName), includeFile),
-                        currentKeyword=lastkeyword,
+                        currentKeyword=lastKeyword,
                         existingFileDict=fileDict,
                     )
-                    keyword = lastkeyword
+                    keyword = lastKeyword
                 else:
                     fileDict[keyword].append(options)
 
@@ -367,17 +396,27 @@ def parseInputFile(
                 #     continue
                 # # module kw parsing backward compatibility
 
-                try:
-                    assert (
-                        inputLanguage[keyword].expectsOptionalDatalines
-                        or inputLanguage[keyword].expectsRequiredDatalines
-                    )
-                except AssertionError:
-                    raise ValueError(
-                        f"Error during parsing of keyword {keywordIdentifier}{keyword}: {keywordIdentifier}{keyword} expects no data lines"
-                    )
-                else:
-                    fileDict[keyword][-1]["data"].append(line)
+                inputFileKeyword = inputLanguage[keyword]
+                if not inputFileKeyword.modules:  # for keywords with no modules:
+                    try:
+                        assert (
+                            inputLanguage[keyword].expectsOptionalDatalines
+                            or inputLanguage[keyword].expectsRequiredDatalines
+                        )
+                    except AssertionError:
+                        raise ValueError(
+                            f"Error during parsing of keyword {keywordIdentifier}{keyword}: {keywordIdentifier}{keyword} expects no data lines"
+                        )
+                    fileDict[keyword][-1]["datalines"].append(line)
+                else:  # for keywords with modules
+                    module = inputLanguage[keyword].getModule(options["type"] if "type" in options else keyword)
+                    try:
+                        assert module.expectsOptionalDatalines or module.expectsRequiredDatalines
+                    except AssertionError:
+                        raise ValueError(
+                            f"Error during parsing of keyword {keywordIdentifier}{keyword}: {module} expects no data lines"
+                        )
+                    fileDict[keyword][-1]["datalines"].append(line)
 
     return fileDict
 

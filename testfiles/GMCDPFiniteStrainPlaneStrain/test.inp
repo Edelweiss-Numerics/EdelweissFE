@@ -16,14 +16,14 @@ gen_shearBandCenter
 *job, name=cpe4job, domain=2d
 *solver, solver=NISTParallelForMarmotElements, name=theSolver
 *fieldOutput
-create=perNode, elSet=all, field=displacement, result=U, name=displacement
-create=perNode, elSet=all, field=micro rotation, result=U, name=micro rotation
-create=perNode, elSet=all, field=nonlocal damage, result=U, name=nonlocal damage
-create=perElement, elSet=all, result=alphaP, quadraturePoint=0:4, name=alphaP, f(x)='max( x[:,:], axis=1) '
-create=perElement, elSet=all, result=alphaD, quadraturePoint=0:4, name=alphaD, f(x)='max( x[:,:], axis=1) '
-create=perElement, elSet=all, result=omega, quadraturePoint=0:4, name=omega, f(x)='max( x[:,:], axis=1) '
-create=perNode, name=RF, nSet=gen_top, field=displacement, result=P, f(x)='sum(x[:,1])', saveHistory=True, export=RF
-create=perNode, name=U, nSet=gen_top, field=displacement, result=U, f(x)='mean(x[:,1])', saveHistory=True, export=U
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
+>>perNode, elSet=all, field=micro rotation, result=U, name=micro rotation
+>>perNode, elSet=all, field=nonlocal damage, result=U, name=nonlocal damage
+>>perElement, elSet=all, result=alphaP, quadraturePoint=0:4, name=alphaP, f(x)='max( x[:,:], axis=1) '
+>>perElement, elSet=all, result=alphaD, quadraturePoint=0:4, name=alphaD, f(x)='max( x[:,:], axis=1) '
+>>perElement, elSet=all, result=omega, quadraturePoint=0:4, name=omega, f(x)='max( x[:,:], axis=1) '
+>>perNode, name=RF, nSet=gen_top, field=displacement, result=P, f(x)='sum(x[:,1])', saveHistory=True, export=RF
+>>perNode, name=U, nSet=gen_top, field=displacement, result=U, f(x)='mean(x[:,1])', saveHistory=True, export=U
 
 *modelGenerator, generator=planeRectQuad, name=gen
 x0=0, h=100
@@ -40,12 +40,12 @@ fieldOutput=RF
 
 *output, type=ensight, name=esExport
 configuration,     overwrite=True
-create=perNode,    fieldOutput=displacement
-create=perNode,    fieldOutput=micro rotation
-create=perNode,    fieldOutput=nonlocal damage
-create=perElement, fieldOutput=alphaP
-create=perElement, fieldOutput=alphaD
-create=perElement, fieldOutput=omega
+>>perNode,    fieldOutput=displacement
+>>perNode,    fieldOutput=micro rotation
+>>perNode,    fieldOutput=nonlocal damage
+>>perElement, fieldOutput=alphaP
+>>perElement, fieldOutput=alphaD
+>>perElement, fieldOutput=omega
 
 *output, type=meshplot, name=RFPlot
 figure=1, axSpec=111, c=k, ls=solid, create=xyData, x=time, y=RF

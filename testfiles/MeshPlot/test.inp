@@ -10,21 +10,21 @@ all
 *solver, solver=NISTParallel, name=theSolver
 
 *fieldOutput
-create=perNode, name=ForceTop, nSet=topNodes, field=displacement, result=P,
-create=perNode, name=alphaDNonlocal, field=nonlocal damage, result=U, elSet=all
-create=perElement, name=omega, elSet=all, result=omega, quadraturePoint=0:4, f(x)='x[:,:]'
-create=perNode, name=UMag, elSet=all, field=displacement, result=U, f(x)='linalg.norm(x, axis=1)'
+>>perNode, name=ForceTop, nSet=topNodes, field=displacement, result=P,
+>>perNode, name=alphaDNonlocal, field=nonlocal damage, result=U, elSet=all
+>>perElement, name=omega, elSet=all, result=omega, quadraturePoint=0:4, f(x)='x[:,:]'
+>>perNode, name=UMag, elSet=all, field=displacement, result=U, f(x)='linalg.norm(x, axis=1)'
 **fieldOutputs for xy plot
-create=perNode, name=meanDispLoad, nSet=topNodes, field=displacement, result=U, f(x)='mean(x[:,1])', saveHistory=True
-create=perNode, name=sumRFNodes, nSet=topNodes, field=displacement, result=P, f(x)='sum(x[:,1])', saveHistory=True
+>>perNode, name=meanDispLoad, nSet=topNodes, field=displacement, result=U, f(x)='mean(x[:,1])', saveHistory=True
+>>perNode, name=sumRFNodes, nSet=topNodes, field=displacement, result=P, f(x)='sum(x[:,1])', saveHistory=True
 
 *output, type=monitor
 fieldOutput=ForceTop, f(x)='sum(x[:,1])'
 
 *output, type=meshPlot,
-figure=1, axSpec=211, create=perNode, fieldOutput=alphaDNonlocal
-figure=1, axSpec=212, create=perElement, fieldOutput=omega, f(x)='mean(x, axis=1)'
-figure=2, axSpec=111, create=perNode, fieldOutput=UMag
+figure=1, axSpec=211, >>perNode, fieldOutput=alphaDNonlocal
+figure=1, axSpec=212, >>perElement, fieldOutput=omega, f(x)='mean(x, axis=1)'
+figure=2, axSpec=111, >>perNode, fieldOutput=UMag
 figure=3, axSpec=111, c=red, ls=dashed, create=xyData, x=meanDispLoad, y=sumRFNodes
 figure=4, axpSec=111, create=meshOnly,
 

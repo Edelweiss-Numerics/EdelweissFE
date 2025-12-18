@@ -36,7 +36,6 @@ from edelweissfe.utils.misc import caseInsensitiveKwargsChecker, splitLinesAtCom
 
 inputLanguage = InputLanguage()
 module = inputLanguage["section"].addModule("solid", "This section represents a classical solid materal section.")
-
 module.addRequiredDatalines("elementSets as comma separated list of element sets for this section", str)
 
 kw = module.addOptionalKeyword("materialParameterFromField", "use material properties given by an analytical field")

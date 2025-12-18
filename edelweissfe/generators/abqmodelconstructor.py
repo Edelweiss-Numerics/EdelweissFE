@@ -105,7 +105,7 @@ class AbqModelConstructor:
         nodeDefinitions = model.nodes
         for nodeDefs in inputFile["node"]:
             currNodeDefs = {}
-            for line in nodeDefs["data"]:
+            for line in nodeDefs["datalines"]:
                 defLine = splitLineAtCommas(line)
 
                 label = int(defLine[0])
@@ -130,7 +130,7 @@ class AbqModelConstructor:
             ElementClass = getElementClass(elementType, elementProvider)
 
             currElDefs = {}
-            for line in elDefs["data"]:
+            for line in elDefs["datalines"]:
                 defLine = [int(i) for i in splitLineAtCommas(line)]
 
                 label = defLine[0]
@@ -152,7 +152,7 @@ class AbqModelConstructor:
         for elSetDefinition in inputFile["elSet"]:
             name = elSetDefinition["elSet"]
 
-            data = [splitLineAtCommas(line) for line in elSetDefinition["data"]]
+            data = [splitLineAtCommas(line) for line in elSetDefinition["datalines"]]
             # decide if entries are labels or existing nodeSets:
             if isInteger(data[0][0]):
                 elNumbers = [int(num) for line in data for num in line]
@@ -203,7 +203,7 @@ class AbqModelConstructor:
         for nSetDefinition in inputFile["nSet"]:
             name = nSetDefinition["nSet"]
 
-            data = [splitLineAtCommas(line) for line in nSetDefinition["data"]]
+            data = [splitLineAtCommas(line) for line in nSetDefinition["datalines"]]
             if isInteger(data[0][0]):
                 nodes = [int(n) for line in data for n in line]
                 if nSetDefinition.get("generate", False):
@@ -234,7 +234,7 @@ class AbqModelConstructor:
             sType = surfaceDef.get("type", "element").lower()
             surface = {}
             if sType == "element":
-                data = [splitLineAtCommas(line) for line in surfaceDef["data"]]
+                data = [splitLineAtCommas(line) for line in surfaceDef["datalines"]]
                 for line in data:
                     elSet, faceNumber = line
                     faceNumber = int(faceNumber.replace("S", ""))
@@ -268,7 +268,7 @@ class AbqModelConstructor:
             materialProvider = materialDef.get("provider", None)
             materialID = materialDef.get("id", materialName)
 
-            materialProperties = convertLinesToFlatArray(materialDef["data"], dtype=float)
+            materialProperties = convertLinesToFlatArray(materialDef["datalines"], dtype=float)
             materialClass = getMaterialClass(materialName, materialProvider)
 
             if materialClass is None:  # for Marmot
@@ -305,7 +305,7 @@ class AbqModelConstructor:
             materialProvider = materialDef.get("provider", None)
             materialID = materialDef.get("id", materialName)
 
-            materialProperties = convertLinesToMixedDictionary(materialDef["data"])
+            materialProperties = convertLinesToMixedDictionary(materialDef["datalines"])
             materialClass = getMaterialClass(materialName, materialProvider)
 
             if materialClass is None:  # for Marmot
@@ -334,7 +334,7 @@ class AbqModelConstructor:
         for constraintDef in inputFile["constraint"]:
             name = constraintDef["name"]
             constraint = constraintDef["type"]
-            data = constraintDef["data"]
+            data = constraintDef["datalines"]
 
             constraint = getConstraintClass(constraint)(name, data, model)
             model.constraints[name] = constraint
@@ -360,15 +360,15 @@ class AbqModelConstructor:
         """
 
         for definition in inputFile["section"]:
-            sectionKwargs = CaseInsensitiveDict(definition.copy())
+            sectionKwArgs = CaseInsensitiveDict(definition.copy())
 
-            name = sectionKwargs.pop("name")
-            sectionType = sectionKwargs.pop("type")
-            materialName = sectionKwargs.pop("material")
-            data = sectionKwargs.pop("data")
-            moduleOptions = sectionKwargs.pop("moduleOptions")
+            name = sectionKwArgs.pop("name")
+            sectionType = sectionKwArgs.pop("type")
+            materialName = sectionKwArgs.pop("material")
+            data = sectionKwArgs.pop("datalines")
+            moduleOptions = sectionKwArgs.pop("moduleOptions")
 
-            sectionKwargs.pop("inputfile")
+            sectionKwArgs.pop("inputfile")
 
             try:
                 assert name not in model.sections
@@ -378,7 +378,7 @@ class AbqModelConstructor:
             module = inputLanguage["section"].getModule(sectionType)
 
             args, kwargs = module.parseDatalines(data)
-            # sectionKwargs.update(kwargs)
+            # sectionKwArgs.update(kwargs)
 
             try:
                 for elSet in args:
@@ -397,7 +397,7 @@ class AbqModelConstructor:
 
             sectionFactory = getSectionFactoryByName(sectionType)
 
-            section = sectionFactory(name, model, materialName, args, moduleOptions, **sectionKwargs)
+            section = sectionFactory(name, model, materialName, args, moduleOptions, **sectionKwArgs)
 
             model.sections[name] = section
 
@@ -422,7 +422,7 @@ class AbqModelConstructor:
         for definition in inputFile["analyticalField"]:
             analyticalFieldName = definition["name"]
             analyticalFieldType = definition["type"]
-            data = definition["data"]
+            data = definition["datalines"]
 
             try:
                 assert analyticalFieldName not in model.analyticalFields

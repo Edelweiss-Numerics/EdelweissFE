@@ -89,7 +89,7 @@ documentation = {
 
 
 def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dict:
-    options = generatorDefinition["data"]
+    options = generatorDefinition["datalines"]
     options = convertLinesToStringDictionary(options)
 
     name = generatorDefinition.get("name", "boxGen")
