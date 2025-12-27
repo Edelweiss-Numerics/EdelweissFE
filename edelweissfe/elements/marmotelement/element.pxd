@@ -52,23 +52,17 @@ cdef extern from "Marmot/MarmotElement.h" namespace "MarmotElement":
         SurfaceTraction
         SurfaceTorsion
 
-cdef extern from "Marmot/Marmot.h" namespace "MarmotLibrary" nogil:
-    cdef cppclass MarmotMaterialFactory:
-        @staticmethod
-        int getMaterialCodeFromName(const string& materialName) except +IndexError
-
+cdef extern from "Marmot/MarmotElementFactory.h" namespace "MarmotLibrary" nogil:
     cdef cppclass MarmotElementFactory:
         @staticmethod
-        int getElementCodeFromName(const string& elementName) except +IndexError
-        @staticmethod
-        MarmotElement* createElement(int elementCode, int noEl,) except +ValueError
+        MarmotElement* createElement(const string& elementName, int noEl,) except +ValueError
 
 cdef extern from "Marmot/MarmotElementProperty.h":
     cdef cppclass MarmotElementProperty nogil:
         pass
 
     cdef cppclass MarmotMaterialSection(MarmotElementProperty) nogil:
-        MarmotMaterialSection(int materialCode, const double* _materialProperties, int nMaterialProperties)
+        MarmotMaterialSection(const string& materialName, const double* _materialProperties, int nMaterialProperties)
 
     cdef cppclass ElementProperties(MarmotElementProperty) nogil:
         ElementProperties(const double* _elementProperties, int nElementProperties)

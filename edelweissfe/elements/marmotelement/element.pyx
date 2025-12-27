@@ -101,8 +101,8 @@ cdef class MarmotElementWrapper:
             The number of the element."""
 
         try:
-            self.marmotElement = MarmotElementFactory.createElement(MarmotElementFactory.getElementCodeFromName( elementType.upper().encode('utf-8')), self._elNumber)
-        except IndexError:
+            self.marmotElement = MarmotElementFactory.createElement(elementType.upper().encode('utf-8'), self._elNumber)
+        except ValueError:
             raise NotImplementedError("Marmot element {:} not found in library.".format(elementType))
 
     @property
@@ -181,12 +181,11 @@ cdef class MarmotElementWrapper:
         try:
             self.marmotElement.assignProperty(
                     MarmotMaterialSection(
-                            MarmotMaterialFactory.getMaterialCodeFromName(
-                                    materialName.upper().encode('UTF-8')),
+                            materialName.upper().encode('UTF-8'),
                             &self._materialProperties[0],
                             self._materialProperties.shape[0] ) )
-        except IndexError:
-            raise NotImplementedError("Marmot material {:} not found in library.".format(materialName))
+        except ValueError:
+            raise NotImplementedError("Marmot material {:} not found in library.".format(materialName.upper()))
 
         self.nStateVars =           self.marmotElement.getNumberOfRequiredStateVars()
 
