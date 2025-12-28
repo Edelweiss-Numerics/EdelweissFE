@@ -53,7 +53,6 @@ print("*" * 80)
 
 marmot_dir = expanduser(os.environ.get("MARMOT_INSTALL_DIR", default_install_prefix))
 mkl_include = expanduser(os.environ.get("MKL_INCLUDE_DIR", join(default_install_prefix, "include")))
-buildPanuaPardiso = True if expanduser(os.environ.get("BUILD_PANUA_PARDISO", "0")) == "1" else False
 
 print("Marmot install directory (overwrite via environment var. MARMOT_INSTALL_DIR):")
 print(marmot_dir)
@@ -204,62 +203,72 @@ extensions += [
 ]
 
 
-if buildPanuaPardiso:
-    print("Gather the Panua pardiso interface")
-    extensions += [
-        Extension(
-            "*",
-            sources=[
-                "edelweissfe/linsolve/panuapardiso/panuapardiso.pyx",
-            ],
-            include_dirs=[
-                numpy.get_include(),
-            ],
-            libraries=[
-                "pardiso",
-            ],
-            language="c++",
-            extra_link_args=["-fopenmp", "-lgfortran", "-lpthread", "-lm"],
-            optional=True,
-        )
-    ]
+print("Gather the Panua pardiso interface")
+extensions += [
+    Extension(
+        "*",
+        sources=[
+            "edelweissfe/linsolve/panuapardiso/panuapardiso.pyx",
+        ],
+        include_dirs=[
+            numpy.get_include(),
+        ],
+        libraries=[
+            "pardiso",
+        ],
+        language="c++",
+        extra_link_args=["-fopenmp", "-lgfortran", "-lpthread", "-lm"],
+        optional=True,
+    )
+]
 
-# print("Gather the KLU interface")
-# extensions += [
-#     Extension(
-#         "*",
-#         sources=[
-#             "edelweissfe/linsolve/klu/klu.pyx",
-#             "edelweissfe/linsolve/klu/kluInterface.c",
-#         ],
-#         include_dirs=[
-#             numpy.get_include(),
-#         ],
-#         libraries=[
-#             "klu",
-#             "btf",
-#             "amd",
-#             "colamd",
-#             "metis",
-#             "cholmod",
-#             "camd",
-#             "ccolamd",
-#             "iomp5",
-#             "suitesparseconfig",
-#         ],
-#         language="c",
-#         extra_compile_args=[
-#             "-fopenmp",
-#             "-Wno-maybe-uninitialized",
-#         ],
-#         extra_link_args=["-fopenmp"],
-#     )
-# ]
+print("Gather the KLU interface")
+extensions += [
+    Extension(
+        "*",
+        sources=[
+            "edelweissfe/linsolve/klu/klu.pyx",
+            "edelweissfe/linsolve/klu/kluInterface.c",
+        ],
+        include_dirs=[
+            numpy.get_include(),
+        ],
+        libraries=[
+            "klu",
+            "btf",
+            "amd",
+            "colamd",
+            "metis",
+            "cholmod",
+            "camd",
+            "ccolamd",
+            "iomp5",
+            "suitesparseconfig",
+        ],
+        language="c",
+        extra_compile_args=[
+            "-fopenmp",
+            "-Wno-maybe-uninitialized",
+        ],
+        extra_link_args=["-fopenmp"],
+    )
+]
 
 print("Now compile!")
 
+
+# overwrite build_ext to make all extensions optional
+class optional_build_ext(build_ext):
+    def build_extension(self, ext):
+        try:
+            super().build_extension(ext)
+        except Exception as e:
+            print(f"Extension {ext.name} could not be built:")
+            print(e)
+
+
 setup(
-    cmdclass={"build_ext": build_ext},
+    cmdclass={"build_ext": optional_build_ext},
     ext_modules=cythonize(extensions, compiler_directives=directives, annotate=True, language_level=3),
 )
 
