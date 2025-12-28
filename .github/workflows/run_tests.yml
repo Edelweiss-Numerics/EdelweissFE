@@ -77,5 +77,6 @@ jobs:
       - name: Run tests
         shell: bash -l {0}
         run: |
-          run_tests_edelweissfe ./testfiles/
+          run_tests_edelweissfe ./testfiles/marmot/
+          run_tests_edelweissfe ./testfiles/edelweiss-only/
 
