@@ -172,20 +172,21 @@ class FEModel:
 
         for constraintName, constraint in self.constraints.items():
             nAdditionalScalarVariables = constraint.getNumberOfAdditionalNeededScalarVariables()
-            journal.message(
-                "Constraint {:} requests {:} additional ScalarVariables".format(
-                    constraintName, nAdditionalScalarVariables
-                ),
-                self.identification,
-                2,
-            )
+            if nAdditionalScalarVariables > 0:
+                journal.message(
+                    "Constraint {:} requests {:} additional ScalarVariables".format(
+                        constraintName, nAdditionalScalarVariables
+                    ),
+                    self.identification,
+                    2,
+                )
 
-            scalarVariables = [
-                self._requestAdditionalScalarVariable("{:}_{:}".format(constraintName, i))
-                for i in range(nAdditionalScalarVariables)
-            ]
+                scalarVariables = [
+                    self._requestAdditionalScalarVariable("{:}_{:}".format(constraintName, i))
+                    for i in range(nAdditionalScalarVariables)
+                ]
 
-            constraint.assignAdditionalScalarVariables(scalarVariables)
+                constraint.assignAdditionalScalarVariables(scalarVariables)
 
     def _prepareVariablesAndFields(self, journal):
         """Prepare all variables and fields for a simulation.
