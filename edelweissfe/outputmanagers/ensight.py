@@ -60,6 +60,7 @@ For each part, perNode and perElement results can be exported, which are importe
 
 inputLanguage = InputLanguage()
 module = inputLanguage["output"].addModule("ensight", "Ensight export.")
+module.addOptionalArg("name", "", str, "esExport")
 
 kw = module.addOptionalKeyword("perNode", "Node-based Ensight export.")
 kw.addRequiredArg(

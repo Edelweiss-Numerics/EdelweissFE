@@ -44,12 +44,13 @@ from edelweissfe.utils.misc import (
     convertAssignmentsToCaseInsensitiveStringDictionary,
     splitLineAtCommas,
     strCaseCmp,
+    strtobool,
     typeString,
 )
 
 
 def parseKeywordLine(line, fileName):
-    lineElements = splitLineAtCommas(line.lstrip(keywordIdentifier))
+    lineElements = splitLineAtCommas(line.removeprefix(keywordIdentifier))
 
     keyword = lineElements[0]
     optionAssignments = lineElements[1:]
@@ -75,7 +76,10 @@ def parseKeywordLine(line, fileName):
 
     for optKey, optVal in options.items():
         try:
-            options[optKey] = kw[optKey].dtype(optVal)
+            if kw[optKey].dtype == bool:
+                options[optKey] = strtobool(optVal)
+            else:
+                options[optKey] = kw[optKey].dtype(optVal)
         except ValueError:
             raise ValueError(f"{keyword}, option {optKey}: cannot convert {optVal} to {kw[optKey].dtype}")
         # except Exception as e:
@@ -94,7 +98,7 @@ def parseKeywordLine(line, fileName):
 
 
 def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions):
-    lineElements = splitLineAtCommas(line.lstrip(moduleLevelKeywordIdentifier))
+    lineElements = splitLineAtCommas(line.removeprefix(moduleLevelKeywordIdentifier))
 
     keyword = lineElements[0]
     optionAssignments = lineElements[1:]
@@ -125,7 +129,10 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions):
 
     for optKey, optVal in options.items():
         try:
-            options[optKey] = kw[optKey].dtype(optVal)
+            if kw[optKey].dtype == bool:
+                options[optKey] = strtobool(optVal)
+            else:
+                options[optKey] = kw[optKey].dtype(optVal)
         except ValueError:
             raise ValueError(f"{keyword}, option {optKey}: cannot convert {optVal} to {kw[optKey].dtype}")
         # except Exception as e:
@@ -202,14 +209,19 @@ from edelweissfe.sections.plane import inputLanguage  # noqa: F811,E402
 
 # isort: on
 
+"""
+*material
+"""
 kw = inputLanguage.addKeyword("material", "definition of a material")
 kw.addRequiredArg("name", "name of material", str)
 kw.addRequiredArg("id", "id of material", str)
 kw.addOptionalArg("provider", "material provider", str, "marmotmaterial")
 kw.addRequiredDatalines("material properties", "")
-
 # kw.addOptionalArg("statevars", , , None)
 
+"""
+*advancedmaterial
+"""
 kw = inputLanguage.addKeyword("advancedmaterial", "definition of an advanced material")
 kw.addRequiredArg("name", "name of material", str)
 kw.addRequiredArg("id", "id of material", str)
@@ -232,7 +244,7 @@ from edelweissfe.utils.fieldoutput import inputLanguage  # noqa: F811,E402
 kw = inputLanguage.addKeyword("analyticalField", "define an analytical field")
 kw.addRequiredArg("name", "name of analytical field", str)
 kw.addRequiredArg("type", "type of analytical field", str)
-kw.addRequiredDatalines("definition lines", "")
+# kw.addRequiredDatalines("definition lines", "")
 
 # isort: off
 from edelweissfe.analyticalfields.randomscalar import inputLanguage  # noqa: F811,E402
@@ -247,30 +259,44 @@ from edelweissfe.analyticalfields.scalarexpression import inputLanguage  # noqa:
 kw = inputLanguage.addKeyword("output", "define an output module")
 kw.addRequiredArg("type", "output module", str)
 kw.addOptionalArg("name", "name of output manager", str, None)
-kw.addOptionalDatalines("definition lines", "")
-# kw.addOptionalDatalines("definition lines for the output module", "")
+# kw.addOptionalDatalines("definition lines", "")
 
 # isort: off
+from edelweissfe.outputmanagers.computetimemonitor import inputLanguage  # noqa: F811,E402
+from edelweissfe.outputmanagers.conditionalstop import inputLanguage  # noqa: F811,E402
 from edelweissfe.outputmanagers.ensight import inputLanguage  # noqa: F811,E402
+from edelweissfe.outputmanagers.fractureenergyintegrator import inputLanguage  # noqa: F811,E402
+from edelweissfe.outputmanagers.meshdatatofile import inputLanguage  # noqa: F811,E402
+from edelweissfe.outputmanagers.meshplot import inputLanguage  # noqa: F811,E402
 from edelweissfe.outputmanagers.monitor import inputLanguage  # noqa: F811,E402
+from edelweissfe.outputmanagers.plotalongpath import inputLanguage  # noqa: F811,E402
+from edelweissfe.outputmanagers.statusfile import inputLanguage  # noqa: F811,E402
+from edelweissfe.outputmanagers.timemonitor import inputLanguage  # noqa: F811,E402
 
 # isort: on
 
+"""
+*job
+"""
 kw = inputLanguage.addKeyword("job", "definition of an analysis job")
 kw.addRequiredArg("domain", "define spatial domain: 1d, 2d, 3d", str)
-
 kw.addOptionalArg("startTime", "(optional) start time of job", float, 0.0)
 kw.addOptionalArg("name", "(optional) name of job, standard = defaultJob", str, None)
 kw.addOptionalArg("solver", "(deprecated) define the solver to be used", str, None)
 
+"""
+*solver
+"""
 kw = inputLanguage.addKeyword("solver", "define a solver")
 kw.addRequiredArg("name", "solver name", str)
 kw.addRequiredArg("solver", "solver type", str)
 kw.addOptionalDatalines("define options which are passed to the respective solver instance.", "")
 
+"""
+*solver
+"""
 kw = inputLanguage.addKeyword("step", "define steps")
 kw.addRequiredArg("solver", "solver to be used", str)
-
 kw.addOptionalArg("stepLength", "time period of step", float, None)
 kw.addOptionalArg("startInc", "size of the start increment", float, None)
 kw.addOptionalArg("maxInc", "maximum size of increment", float, None)
@@ -286,10 +312,16 @@ kw.addOptionalArg(
 )
 kw.addOptionalDatalines("define step actions, which are handled by the corresponding stepaction modules", "")
 
+"""
+*updateConfiguration
+"""
 kw = inputLanguage.addKeyword("updateConfiguration", "update a configuration")
 kw.addRequiredArg("configuration", "name of configuration to be changed", str)
 kw.addRequiredDatalines("keyword arguments", "")
 
+"""
+*modelGenerator
+"""
 kw = inputLanguage.addKeyword("modelGenerator", "define a model generator, loaded from a module")
 kw.addRequiredArg("name", "name of the generator", str)
 kw.addRequiredArg("generator", "name of generator module", str)
@@ -301,17 +333,29 @@ kw.addOptionalArg(
 )
 kw.addRequiredDatalines("keyword arguments", "")
 
+"""
+*constraint
+"""
 kw = inputLanguage.addKeyword("constraint", "define a constraint")
 kw.addRequiredArg("type", "constraint type", str)
 kw.addRequiredDatalines("definition of the constraint", "")
 kw.addOptionalArg("name", "name of the constraint", str, None)
 
+"""
+*configurePlots
+"""
 kw = inputLanguage.addKeyword("configurePlots", "customize the figures and axes")
 kw.addRequiredDatalines("key=value pairs for configuration of figures and axes", "")
 
+"""
+*exportPlots
+"""
 kw = inputLanguage.addKeyword("exportPlots", "export your figures")
 kw.addRequiredDatalines("key=value pairs for exporting of figures and axes", "")
 
+"""
+*include
+"""
 kw = inputLanguage.addKeyword("include", "load contents of extra file")
 kw.addRequiredArg("input", "path to file (use relative path to current .inp)", str)
 

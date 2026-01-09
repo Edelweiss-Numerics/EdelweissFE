@@ -217,6 +217,10 @@ class Module:
     def args(self):
         return self.requiredArgs + self.optionalArgs
 
+    @property
+    def argNames(self):
+        return [arg.name for arg in self.args]
+
     def getArg(self, arg: str):
         casefoldedArgs = [arg_.name.casefold() for arg_ in self.args]
         try:
@@ -299,7 +303,35 @@ class Module:
         return datalines
 
     def __repr__(self) -> str:
-        return f"[{self.name}]"
+        reprStrs = []
+
+        reprStrs.append(f"[{self.name}]")
+
+        if self.requiredArgs:
+            reprStrs.append(".." + "requiredArgs")
+            for arg in self.requiredArgs:
+                reprStrs.append("...." + repr(arg))
+
+        if self.optionalArgs:
+            reprStrs.append(".." + "optionalArgs")
+            for arg in self.optionalArgs:
+                reprStrs.append("...." + repr(arg))
+
+        if self.requiredKeywords:
+            reprStrs.append(".." + "requiredKeywords")
+            for kw in self.requiredKeywords:
+                reprStrs.append("...." + repr(kw))
+
+        if self.optionalKeywords:
+            reprStrs.append(".." + "optionalKeywords")
+            for kw in self.optionalKeywords:
+                reprStrs.append("...." + repr(kw))
+
+        reprStrs.append(".." + f"expectsRequiredDatalines: {self.expectsRequiredDatalines}")
+
+        reprStrs.append(".." + f"expectsOptionalDatalines: {self.expectsOptionalDatalines}")
+
+        return "\n".join(reprStrs)
 
     def parseKeywordLine(self, line):
         lineElements = splitLineAtCommas(line)

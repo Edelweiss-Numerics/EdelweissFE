@@ -53,7 +53,7 @@ documentation = {
 
 
 def generateModelData(generatorDefinition, model, journal):
-    options = generatorDefinition["data"]
+    options = generatorDefinition["datalines"]
     options = convertLinesToStringDictionary(options)
 
     # name = generatorDefinition.get("name", "cubit")

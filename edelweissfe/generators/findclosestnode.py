@@ -49,7 +49,7 @@ identification = "findclosestnode"
 
 
 def generateModelData(generatorDefinition: dict, model: FEModel, journal: Journal):
-    options = generatorDefinition["data"]
+    options = generatorDefinition["datalines"]
     options = convertLinesToStringDictionary(options)
 
     loc = np.fromstring(options["location"], sep=",", dtype=float)

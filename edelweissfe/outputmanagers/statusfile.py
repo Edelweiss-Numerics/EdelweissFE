@@ -27,6 +27,9 @@
 #  ---------------------------------------------------------------------
 
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
 
 """
 Writes a status file during the analysis.
@@ -38,9 +41,26 @@ Writes a status file during the analysis.
         filename=myStatus.sta
 """
 
-documentation = {
-    "filename": "(optional), custom filename for the status file; default: 'jobname'.sta",
-}
+inputLanguage = InputLanguage()
+module = inputLanguage["output"].addModule("statusfile", "Writes a status file during the analysis.")
+
+# module.addOptionalArg("filename", "Name of the output manager.", str, "<jobname>.sta")
+module.addOptionalArg("filename", "Name of the output manager.", str, "job.sta")
+
+required = [kw.name for kw in module.requiredArgs]
+required += [kw.name for kw in module.requiredKeywords]
+
+optional = [kw.name for kw in module.optionalArgs]
+optional += [kw.name for kw in module.optionalKeywords]
+
+
+@caseInsensitiveKwargsChecker(required, optional)
+def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
+    kwargs = CaseInsensitiveDict(kwargs)
+
+    filename = module.getArg("filename").getValueFromKwargs(kwargs)
+
+    return OutputManager(name, FEModel, fieldOutputController, journal, plotter, filename)
 
 
 class OutputManager(OutputManagerBase):
@@ -49,16 +69,9 @@ class OutputManager(OutputManagerBase):
     identification = "Statusfile"
     printTemplate = "{:}, {:}: {:}"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter):
+    def __init__(self, name, model, fieldOutputController, journal, plotter, filename):
         self.journal = journal
-        # self.filename = "{:}.sta".format(jobInfo.get("name", jobInfo["inputfile"].rstrip(".inp")))
-        self.filename = "job.sta"
-        self.statusFileExists = False
-
-    def updateDefinition(self, **kwargs: dict):
-        if "filename" in kwargs.keys():
-            self.filename = kwargs.get("filename")
-
+        self.filename = filename
         self.statusFileExists = False
 
     # def initializeSimulation(self, model):

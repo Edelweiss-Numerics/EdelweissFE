@@ -31,6 +31,9 @@ from typing import Union
 
 from edelweissfe.config.timing import createTimingDict, timingTypes
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
 
 """
 Prints the compute times per increment to the screen and writes them into a file (optional).
@@ -42,24 +45,41 @@ Prints the compute times per increment to the screen and writes them into a file
         export=myComputeTimes
 """
 
-documentation = {
-    "export": "(optional), filename if compute time should be written in a file",
-}
+inputLanguage = InputLanguage()
+module = inputLanguage["output"].addModule(
+    "computetimemonitor", "A simple monitor to observe results (fieldOutputs) in the console during analysis."
+)
+
+module.addOptionalArg("export", "Provide a filename to export the results.", str, None)
+
+required = [kw.name for kw in module.requiredArgs]
+required += [kw.name for kw in module.requiredKeywords]
+
+optional = [kw.name for kw in module.optionalArgs]
+optional += [kw.name for kw in module.optionalKeywords]
+
+
+@caseInsensitiveKwargsChecker(required, optional)
+def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
+    kwargs = CaseInsensitiveDict(kwargs)
+
+    filename = module.getArg("export").getValueFromKwargs(kwargs)
+
+    return OutputManager(name, FEModel, fieldOutputController, journal, plotter, filename)
 
 
 class OutputManager(OutputManagerBase):
     identification = "ComputeTimeMonitor"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter):
+    def __init__(self, name, model, fieldOutputController, journal, plotter, filename):
         self.journal = journal
         self.computingTimesOld = defaultdict(lambda: 0.0)
         self.stepcounter = 0
         self.exportFile = None
 
-    def updateDefinition(self, **kwargs: dict):
-        self.exportFile = kwargs.get("export")
+        self.exportFile = filename
 
-        if self.exportFile is not None:
+        if self.exportFile:
             with open(self.exportFile, "w+") as f:
                 f.write("# \n# EdelweissFE: computing times per increment\n#\n")
 

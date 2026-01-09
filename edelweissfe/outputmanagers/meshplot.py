@@ -36,7 +36,7 @@ Module meshplot divided into classes:
     * Plotter:
         creates figures, axes, grid, labels
     * Outputmanager:
-        creats the plotting specific for the defined keyword lines
+        creates the plotting specific for the defined keyword lines
 """
 from distutils.util import strtobool
 
@@ -46,6 +46,7 @@ from matplotlib import colors
 
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.sets.elementset import ElementSet
+from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.math import createMathExpression
 from edelweissfe.utils.meshtools import (
     extractNodeCoordinatesFromElset,
@@ -60,6 +61,11 @@ documentation = {
     "create=meshOnly": "plot the mesh only",
     "create=xyData": "2D Plot of results",
 }
+
+inputLanguage = InputLanguage()
+module = inputLanguage["output"].addModule("meshplot", "Create plots using Matplotlib.")
+
+module.addOptionalArg("dummyArg", "Mesh plot uses old input file parsing.", str, None)
 
 
 class Triangulation:

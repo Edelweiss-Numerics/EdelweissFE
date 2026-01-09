@@ -45,18 +45,14 @@ A simple monitor to observe results (fieldOutputs) in the console during analysi
         fieldOutput=omega, f(x)='max(x)'
 """
 
-# documentation = {
-#     "fieldOutput": "Name of the field output to be monitored",
-#     "f(x)": "(Optional), Apply a model accessible function on the result",
-# }
-
 inputLanguage = InputLanguage()
 module = inputLanguage["output"].addModule(
-    "monitor", "A simple monitor to observe results (fieldOutputs) in the console during analysis."
+    "monitor",
+    "A simple monitor to observe results (fieldOutputs) in the console during analysis.",
 )
 
 module.addRequiredArg("fieldOutput", "Name of the field output to monitor.", str)
-# module.addOptionalArg("name", "Name of the output manager.", str, None)
+module.addOptionalArg("name", "Name of the output manager.", str, "Monitor")
 module.addOptionalArg("f(x)", "Apply a model accessible function on the result.", str, None)
 
 required = [kw.name for kw in module.requiredArgs]
@@ -70,24 +66,31 @@ optional += [kw.name for kw in module.optionalKeywords]
 def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
     kwargs = CaseInsensitiveDict(kwargs)
 
-    return OutputManager(name, FEModel, fieldOutputController, journal, plotter)
+    fieldOutputName = module.getArg("fieldOutput").getValueFromKwargs(kwargs)
+    fx = module.getArg("f(x)").getValueFromKwargs(kwargs)
+    if not fx:
+        fx = "x"
+
+    return OutputManager(name, FEModel, fieldOutputController, journal, plotter, fieldOutputName, fx)
 
 
 class OutputManager(OutputManagerBase):
     """Simple monitor for nodes, nodeSets, elements and elementSets"""
 
     identification = "Monitor"
-    printTemplate = "{:}: {:}"
+    printTemplate = "{:} ({:}): {:}"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter):
+    def __init__(self, name, model, fieldOutputController, journal, plotter, fieldOutputName, fx):
+        self.name = name
+
         self.journal = journal
         self.monitorJobs = []
         self.fieldOutputController = fieldOutputController
 
-    def updateDefinition(self, **kwargs: dict):
         entry = dict()
-        entry["fieldOutput"] = kwargs["fieldOutput"]
-        entry["f(x)"] = createMathExpression(kwargs.get("f(x)", "x"))
+        entry["fieldOutput"] = fieldOutputController.fieldOutputs[fieldOutputName]
+        entry["f(x)"] = createMathExpression(fx)
+
         self.monitorJobs.append(entry)
 
     def initializeJob(self):
@@ -100,7 +103,7 @@ class OutputManager(OutputManagerBase):
         for nJob in self.monitorJobs:
             result = nJob["f(x)"](nJob["fieldOutput"].getLastResult())
             self.journal.message(
-                self.printTemplate.format(nJob["fieldOutput"].name, result),
+                self.printTemplate.format(self.name, nJob["fieldOutput"].name, result),
                 self.identification,
             )
 

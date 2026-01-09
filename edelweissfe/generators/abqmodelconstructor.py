@@ -397,7 +397,13 @@ class AbqModelConstructor:
 
             sectionFactory = getSectionFactoryByName(sectionType)
 
-            section = sectionFactory(name, model, materialName, args, moduleOptions, **sectionKwArgs)
+            try:
+                section = sectionFactory(name, model, materialName, args, moduleOptions, **sectionKwArgs)
+            except ValueError as e:
+                e.args = (
+                    f"Error during parsing of keyword {keywordIdentifier}section (type={sectionType}): " + e.args[0],
+                )
+                raise e
 
             model.sections[name] = section
 

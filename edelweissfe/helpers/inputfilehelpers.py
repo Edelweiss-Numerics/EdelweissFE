@@ -27,7 +27,10 @@
 #  ---------------------------------------------------------------------
 
 from edelweissfe.config.generators import getGeneratorFunction
-from edelweissfe.config.outputmanagers import getOutputManagerFactoryByName
+from edelweissfe.config.outputmanagers import (
+    getOutputManagerClass,
+    getOutputManagerFactoryByName,
+)
 from edelweissfe.config.solvers import getSolverByName
 from edelweissfe.generators.abqmodelconstructor import AbqModelConstructor
 from edelweissfe.journal.journal import Journal
@@ -340,6 +343,11 @@ def createOutputManagersFromInputFile(
     for definition in inputfile["output"]:
         outputManagerKwargs = CaseInsensitiveDict(definition.copy())
 
+        try:
+            outputManagerName = outputManagerKwargs.pop("name")
+        except KeyError:
+            outputManagerName = f"OutputManager-{len(outputManagers)}"
+
         outputManagerType = outputManagerKwargs.pop("type")
 
         datalines = outputManagerKwargs.pop("datalines")
@@ -348,24 +356,84 @@ def createOutputManagersFromInputFile(
 
         moduleOptions = outputManagerKwargs.pop("moduleOptions")
 
-        for dataline in datalines:
-            module = inputLanguage["output"].getModule(outputManagerType)
-            args, kwargs = module.parseDatalines(dataline)
+        # new input file parsing not yet implemented for meshplot
+        if outputManagerType.casefold() in ["meshplot"]:
+            OutputManager = getOutputManagerClass(definition["type"].lower())
+            definitionLines = definition["datalines"]
 
-            outputManagerFactory = getOutputManagerFactoryByName(outputManagerType)
+            outputManager = OutputManager(outputManagerName, model, fieldOutputController, journal, plotter)
 
-            outputManager = outputManagerFactory(
-                "",
-                model,
-                fieldOutputController,
-                # args,
-                moduleOptions,
-                journal,
-                plotter,
-                **kwargs,
-            )
+            for defLine in definitionLines:
+                kwargs = convertLineToStringDictionary(defLine)
+                if "elSet" in kwargs:
+                    kwargs["elSet"] = model.elementSets[kwargs["elSet"]]
+                if "nSet" in kwargs:
+                    kwargs["nSet"] = model.nodeSets[kwargs["nSet"]]
+                if "fieldOutput" in kwargs:
+                    kwargs["fieldOutput"] = fieldOutputController.fieldOutputs[kwargs["fieldOutput"]]
+
+                outputManager.updateDefinition(**kwargs)
 
             outputManagers.append(outputManager)
+            continue
+
+        if len(datalines) == 0:
+            module = inputLanguage["output"].getModule(outputManagerType)
+            args, kwargs = module.parseDatalines(datalines)
+            if "name" in module.argNames:
+                outputManagerName = module.getArg("name").getValueFromKwargs(kwargs)
+
+            outputManagerFactory = getOutputManagerFactoryByName(outputManagerType)
+            try:
+                outputManager = outputManagerFactory(
+                    outputManagerName,
+                    model,
+                    fieldOutputController,
+                    # args,
+                    moduleOptions,
+                    journal,
+                    plotter,
+                    **kwargs,
+                )
+            except ValueError as e:
+                e.args = (
+                    f"Error during parsing of keyword {keywordIdentifier}output (type={outputManagerType}): "
+                    + e.args[0],
+                )
+                raise e
+
+            outputManagers.append(outputManager)
+
+        else:
+            for dataline in datalines:
+                module = inputLanguage["output"].getModule(outputManagerType)
+                args, kwargs = module.parseDatalines(dataline)
+
+                if "name" in module.argNames:
+                    outputManagerName = module.getArg("name").getValueFromKwargs(kwargs)
+                    kwargs.pop("name", None)
+
+                outputManagerFactory = getOutputManagerFactoryByName(outputManagerType)
+
+                try:
+                    outputManager = outputManagerFactory(
+                        outputManagerName,
+                        model,
+                        fieldOutputController,
+                        # args,
+                        moduleOptions,
+                        journal,
+                        plotter,
+                        **kwargs,
+                    )
+                except ValueError as e:
+                    e.args = (
+                        f"Error during parsing of keyword {keywordIdentifier}output (type={outputManagerType}): "
+                        + e.args[0],
+                    )
+                    raise e
+
+                outputManagers.append(outputManager)
 
     return outputManagers
 

@@ -36,7 +36,7 @@ documentation = {}
 
 
 def generateModelData(generatorDefinition, model, journal):
-    codeLines = "\n".join(generatorDefinition["data"])
+    codeLines = "\n".join(generatorDefinition["datalines"])
 
     exec(codeLines, {"model": model})
 
