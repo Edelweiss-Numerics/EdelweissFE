@@ -3855,7 +3855,7 @@ all
 *solver, solver=NIST, name=theSolver
 
 *fieldOutput
->>perNode, name=displacement, elSet=all, field=displacement, result=U, name=displacement
+>>perNode, name=displacement, elSet=all, field=displacement, result=U
 >>perElement, name=stress, elSet=all, result=stress, quadraturePoint=1
 >>perElement, name=strain, elSet=all, result=strain, quadraturePoint=1
 

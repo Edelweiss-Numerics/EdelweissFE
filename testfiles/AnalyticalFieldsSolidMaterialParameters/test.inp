@@ -35,7 +35,7 @@ all
 >>perElement, fieldOutput=strain
 >>perElement, fieldOutput=E
 
->>>>configuration, overwrite=yes
+>>configuration, overwrite=yes
 
 ***output, type=monitor
 

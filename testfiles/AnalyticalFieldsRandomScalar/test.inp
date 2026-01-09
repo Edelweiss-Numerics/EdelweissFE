@@ -31,7 +31,7 @@ all
 >>perElement, fieldOutput=stress
 >>perElement, fieldOutput=strain
 >>perElement, fieldOutput=kappaMean
->>>>configuration, overwrite=yes
+>>configuration, overwrite=yes
 
 ***output, type=monitor
 

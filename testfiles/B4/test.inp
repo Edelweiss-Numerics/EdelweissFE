@@ -48,7 +48,7 @@ fieldOutput=LoadTop, f(x)='sum(x[:,1]) / (100*1)'
 
 *output, type=ensight,
 >>perNode, fieldOutput=Displacement
->>>>configuration, overwrite=yes
+>>configuration, overwrite=yes
 
 *step, maxInc=1e-1, minInc=1e-1, maxNumInc=1000, maxIter=25, stepLength=24, solver=theSolver
 dirichlet, name=bottom, nSet=gen_bottom, 2=0, field=displacement

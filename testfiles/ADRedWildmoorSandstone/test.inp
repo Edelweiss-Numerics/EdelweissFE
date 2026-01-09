@@ -31,7 +31,7 @@ fieldOutput=omega, f(x)='max(x)'
 fieldOutput=alphaP, f(x)='max(x)'
 **
 ** *output, type=ensight, name=esExport
-** >>>>configuration, overwrite=True
+** >>configuration, overwrite=True
 ** >>perNode, fieldOutput=displacement,
 ** >>perNode, fieldOutput=micro rotation
 ** >>perNode, fieldOutput=nonlocal damage

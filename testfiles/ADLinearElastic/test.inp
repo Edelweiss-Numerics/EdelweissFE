@@ -64,7 +64,7 @@ distributedload, name=dload, surface=surfaceRight, type=pressure, magnitude=0.15
 >>perNode, fieldOutput=displacement
 >>perElement, fieldOutput=stress
 >>perElement, fieldOutput=strain
->>>>configuration, overwrite=yes
+>>configuration, overwrite=yes
 
 *output, type=monitor, name=myMonitor
 ** Directly print to the terminal

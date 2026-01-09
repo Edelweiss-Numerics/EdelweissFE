@@ -45,24 +45,24 @@ dirichlet, name=leftZ, nSet=gen_left,  field=displacement, 3=0.
 dirichlet, name=right, nSet=gen_right, field=displacement, 1=1.
 
 *fieldOutput
-name=displacement,    >>perNode, elSet=all, field=displacement, result=U
-name=nonlocal_damage, >>perNode, elSet=all, field=nonlocal damage, result=U
+>>perNode, name=displacement,    elSet=all, field=displacement, result=U
+>>perNode, name=nonlocal_damage, elSet=all, field=nonlocal damage, result=U
 
-name=strain, >>perElement, elSet=all, result=strain, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
-name=stress, >>perElement, elSet=all, result=stress, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
-name=omega,  >>perElement, elSet=all, result=omega,  quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
-name=alphaP, >>perElement, elSet=all, result=alphaP, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
-name=alphaD, >>perElement, elSet=all, result=alphaD, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
-name=I1p,    >>perElement, elSet=all, result=I1p,    quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perElement, name=strain, elSet=all, result=strain, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perElement, name=stress, elSet=all, result=stress, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perElement, name=omega,  elSet=all, result=omega,  quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perElement, name=alphaP, elSet=all, result=alphaP, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perElement, name=alphaD, elSet=all, result=alphaD, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perElement, name=I1p,    elSet=all, result=I1p,    quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
 
-name=I1pMax,    >>perElement, elSet=all, result=I1p,    quadraturePoint=0:8, f(x)='np.max(x)', saveHistory=true
-name=alphaDMax, >>perElement, elSet=all, result=alphaD, quadraturePoint=0:8, f(x)='np.max(x)', saveHistory=true
-name=omegaMax,  >>perElement, elSet=all, result=omega,  quadraturePoint=0:8, f(x)='np.max(x)', saveHistory=true
+>>perElement, name=I1pMax,    elSet=all, result=I1p,    quadraturePoint=0:8, f(x)='np.max(x)', saveHistory=true
+>>perElement, name=alphaDMax, elSet=all, result=alphaD, quadraturePoint=0:8, f(x)='np.max(x)', saveHistory=true
+>>perElement, name=omegaMax,  elSet=all, result=omega,  quadraturePoint=0:8, f(x)='np.max(x)', saveHistory=true
 
-name=alphaDWeak, >>perElement, elSet=gen_centerSliceX, result=alphaD, quadraturePoint=0:8
+>>perElement, name=alphaDWeak, elSet=gen_centerSliceX, result=alphaD, quadraturePoint=0:8
 
-name=U1,  >>perNode, nSet=gen_right, field=displacement, result=U, f(x)='mean(x[:,0])', saveHistory=true, export=U
-name=RF1, >>perNode, nSet=gen_right, field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=true, export=RF
+>>perNode, name=U1,  nSet=gen_right, field=displacement, result=U, f(x)='mean(x[:,0])', saveHistory=true, export=U
+>>perNode, name=RF1, nSet=gen_right, field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=true, export=RF
 
 *output, type=ensight, name=test
 >>perNode, fieldOutput=displacement
