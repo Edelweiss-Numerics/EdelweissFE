@@ -49,11 +49,9 @@ from edelweissfe.utils.inputlanguage import (
 )
 from edelweissfe.utils.math import createMathExpression, createModelAccessibleFunction
 from edelweissfe.utils.misc import (
-    convertAssignmentsToStringDictionary,
     convertLinesToStringDictionary,
     convertLineToStringDictionary,
     isInteger,
-    splitLineAtCommas,
     strToRange,
 )
 from edelweissfe.utils.plotter import Plotter
@@ -249,20 +247,25 @@ def createStepManagerFromInputFile(inputfile: dict):
     """
     stepManager = StepManager()
 
-    for stepLine in inputfile["step"]:
-        stepType = stepLine.pop("type", "AdaptiveStep")
-        stepActionLines = stepLine.pop("datalines")
+    for stepDefinition in inputfile["step"]:
+        stepType = inputLanguage["step"].getArg("type").getValueFromKwargs(stepDefinition)
+        stepActionLines = stepDefinition.pop("moduleOptions")
 
         stepActionDefinitions = []
 
-        for line in stepActionLines:
-            module, *definition = splitLineAtCommas(line)
-            kwargs = convertAssignmentsToStringDictionary(definition)
-            name = kwargs.pop("name", kwargs.pop("category", module))
+        for module, definitions in stepActionLines.items():
+            for definition in definitions:
+                try:
+                    name = definition.pop("name")
+                except KeyError:
+                    num = 0
+                    for stepDef in stepManager.stepDefinitions:
+                        num += len(stepDef.stepActionDefinitions)
+                    num += len(stepActionDefinitions)
+                    name = f"StepAction-{num}"
+                stepActionDefinitions.append(StepActionDefinition(name, module, definition))
 
-            stepActionDefinitions.append(StepActionDefinition(name, module, kwargs))
-
-        stepDefinition = StepDefinition(stepType, stepLine, stepActionDefinitions)
+        stepDefinition = StepDefinition(stepType, stepDefinition, stepActionDefinitions)
 
         stepManager.enqueueStepDefinition(stepDefinition)
 

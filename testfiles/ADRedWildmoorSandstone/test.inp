@@ -49,15 +49,15 @@ referencePoint=gen_rightTop
 *job, name=redwildmoorjob, domain=2d
 *solver, solver=NISTParallel, name=theSolver
 *step, solver=theSolver, maxInc=1e-0, minInc=1e-7, maxNumInc=200, maxIter=12, stepLength=1
-initializematerial, name=init, elSet=all
-dirichlet, name=bottom, nSet=gen_bottom,  field=displacement, 2=0, 1=0
-dirichlet, name=topR, nSet=gen_rightTop, field=rotation, 1=0,
+>>initializematerial, name=init, elSet=all
+>>dirichlet, name=bottom, nSet=gen_bottom,  field=displacement, 2=0, 1=0
+>>dirichlet, name=topR, nSet=gen_rightTop, field=rotation, 1=0,
 
-distributedload, name=dloadl, surface=gen_left, type=pressure,  magnitude=3.5, f(t)=t
-distributedload, name=dloadr, surface=gen_right, type=pressure, magnitude=3.5, f(t)=t
-distributedload, name=dloadt, surface=gen_top, type=pressure,   magnitude=3.5, f(t)=t
+>>distributedload, name=dloadl, surface=gen_left, type=pressure,  magnitude=3.5, f(t)=t
+>>distributedload, name=dloadr, surface=gen_right, type=pressure, magnitude=3.5, f(t)=t
+>>distributedload, name=dloadt, surface=gen_top, type=pressure,   magnitude=3.5, f(t)=t
 
-nodeforces, name=cloadTop, nSet=gen_rightTop, field=displacement, 1=-100, f(t)=t
+>>nodeforces, name=cloadTop, nSet=gen_rightTop, field=displacement, 1=-100, f(t)=t
 
 *step, solver=theSolver, maxInc=5e-2, minInc=1e-5, maxNumInc=200, maxIter=12, stepLength=1
-dirichlet, name=the_load, nSet=gen_rightTop, field=displacement, 2=-3
+>>dirichlet, name=the_load, nSet=gen_rightTop, field=displacement, 2=-3

@@ -25,9 +25,9 @@ referencePoint=center_front
 fieldOutput=reaction force
 
 *step, solver=theSolver, maxInc=2e-1, minInc=1e-6, maxNumInc=1000, maxIter=20
-initializematerial, name=init, elSet=all
-dirichlet, name=rt,   nSet=back,         field=micro rotation, 1=0.0, 2=0, 3=0
-dirichlet, name=back,   nSet=back,         field=displacement, 1=0.0, 2=0, 3=0
+>>initializematerial, name=init, elSet=all
+>>dirichlet, name=rt,   nSet=back,         field=micro rotation, 1=0.0, 2=0, 3=0
+>>dirichlet, name=back,   nSet=back,         field=displacement, 1=0.0, 2=0, 3=0
 
-dirichlet, name=rf,   nSet=front,         field=micro rotation, 1=0.0, 2=3.141, 3=0
-dirichlet, name=rotRP,  nSet=center_front,   field=rotation, 2=3.141,
+>>dirichlet, name=rf,   nSet=front,         field=micro rotation, 1=0.0, 2=3.141, 3=0
+>>dirichlet, name=rotRP,  nSet=center_front,   field=rotation, 2=3.141,

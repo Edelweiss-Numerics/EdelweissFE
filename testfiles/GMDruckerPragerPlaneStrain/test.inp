@@ -42,8 +42,8 @@ figure=1, axSpec=122, >>perNode, fieldOutput=umag
 figure=1, fileName=plot
 
 *step, solver=theSolver, maxInc=5e-2, minInc=1e-7, maxNumInc=200, maxIter=12, stepLength=100
-initializematerial, name=init, elSet=all
-dirichlet, name=rbottom, nSet=gen_bottom,  field=micro rotation, 1=0,
-dirichlet, name=bottom, nSet=gen_bottom,  field=displacement, 2=0
-dirichlet, name=bc, nSet=gen_leftBottom,  field=displacement, 2=0, 1=0
-dirichlet, name=top, nSet=gen_top, field=displacement, 2=-10,
+>>initializematerial, name=init, elSet=all
+>>dirichlet, name=rbottom, nSet=gen_bottom,  field=micro rotation, 1=0,
+>>dirichlet, name=bottom, nSet=gen_bottom,  field=displacement, 2=0
+>>dirichlet, name=bc, nSet=gen_leftBottom,  field=displacement, 2=0, 1=0
+>>dirichlet, name=top, nSet=gen_top, field=displacement, 2=-10,

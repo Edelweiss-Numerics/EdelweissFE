@@ -27,8 +27,8 @@ fieldOutput=RF, f(x)='mean(x[:,1])'
 >>perNode,    fieldOutput=displacement
 
 *step, solver=theSolver, maxInc=1e-0, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100
-dirichlet, name=bottomleft, nSet=gen_bottom,  field=displacement, 2=0, 1=0
-nodeforces, name=cloadTop, nSet=gen_top, components='0,11111.1111', field=displacement
+>>dirichlet, name=bottomleft, nSet=gen_bottom,  field=displacement, 2=0, 1=0
+>>nodeforces, name=cloadTop, nSet=gen_top, components='0,11111.1111', field=displacement
 
 **convergence:  nX=1, nY=100, u=~0.74mm
 **              nX=2, nY=200, u=~0.75mm

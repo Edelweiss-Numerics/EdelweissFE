@@ -880,7 +880,7 @@ all
 figure=1, axSpec=111, c=red, ls=dashed, create=xyData, x=time, y=RF
 
 *step, solver=theSolver, maxInc=2e-2, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100
-options, category=NISTSolver, extrapolation=off
-dirichlet, name=bc, nSet=nSetEdge, field=displacement, 1=0, 2=0, 3=0
-dirichlet, name=sym, nSet=nSetSym, field=displacement, 1=0
-dirichlet, name=load, nSet=nSetLoad,  field=displacement, 2=-20
+>>options, category=NISTSolver, extrapolation=off
+>>dirichlet, name=bc, nSet=nSetEdge, field=displacement, 1=0, 2=0, 3=0
+>>dirichlet, name=sym, nSet=nSetSym, field=displacement, 1=0
+>>dirichlet, name=load, nSet=nSetLoad,  field=displacement, 2=-20

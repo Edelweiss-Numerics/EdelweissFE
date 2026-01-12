@@ -33,6 +33,12 @@ from edelweissfe.timesteppers.adaptivetimestepper import AdaptiveTimeStepper
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.fieldoutput import FieldOutputController
+from edelweissfe.utils.inputlanguage import InputLanguage
+
+inputLanguage = InputLanguage()
+module = inputLanguage["step"].addModule(
+    "adaptive", "A standard adaptive incremental step to be used in nonlinear simulations."
+)
 
 
 class AdaptiveStep(StepBase):

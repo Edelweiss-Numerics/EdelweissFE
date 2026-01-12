@@ -60,4 +60,5 @@ def stepActionFactory(name: str) -> type:
     """
 
     module = importlib.import_module("edelweissfe.stepactions." + name.lower())
+
     return module.StepAction

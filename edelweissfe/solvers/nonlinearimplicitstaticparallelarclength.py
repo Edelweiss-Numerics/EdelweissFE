@@ -40,6 +40,7 @@ from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstaticparallel import NISTParallel
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.stepactions.options import inputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -48,6 +49,10 @@ from edelweissfe.utils.exceptions import (
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.math import createModelAccessibleFunction
+
+kw = inputLanguage["step"].getModule("adaptive").getKeyword("options")
+kw.addOptionalArg("arcLengthController", "", str, None)
+kw.addOptionalArg("stopCondition", "", str, None)
 
 
 class NISTPArcLength(NISTParallel):

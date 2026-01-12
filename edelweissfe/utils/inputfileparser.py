@@ -97,7 +97,7 @@ def parseKeywordLine(line, fileName):
     return keyword, options
 
 
-def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions):
+def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fileDict):
     lineElements = splitLineAtCommas(line.removeprefix(moduleLevelKeywordIdentifier))
 
     keyword = lineElements[0]
@@ -109,9 +109,13 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions):
         e.args = (f"Error during parsing of keyword {keywordIdentifier}{keyword}: " + e.args[0],)
         raise e
 
-    module = inputLanguage[topLevelKeyword].getModule(
-        topLevelOptions["type"] if "type" in topLevelOptions else topLevelKeyword
-    )
+    if "type" in inputLanguage[topLevelKeyword].argNames:
+        module = inputLanguage[topLevelKeyword].getModule(
+            inputLanguage[topLevelKeyword].getArg("type").getValueFromKwargs(topLevelOptions)
+        )
+    else:
+        module = inputLanguage[topLevelKeyword].getModule(topLevelKeyword)
+
     kw = module.getKeyword(keyword)
 
     @caseInsensitiveKwargsChecker([kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs])
@@ -122,10 +126,46 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions):
     try:
         checkKeywordInput(**options)
     except ValueError as e:
-        e.args = (
-            f"Error during parsing of module level keyword {moduleLevelKeywordIdentifier}{keyword}: " + e.args[0],
-        )
-        raise e
+        if (  # stepaction update
+            topLevelKeyword == "step"
+            and module.name == "adaptive"
+            and kw.name
+            in [
+                # "bodyforce",
+                "dirichlet",
+                "distributedload",
+                # "geostatic",
+                "nodeforces",
+            ]  # these stepactions can be updated by repeating the module level keyword and using the same name as previously defined
+            and "name" in options
+            and options["name"].casefold()
+            in [  # check if a step action with the same name already exists
+                item["name"].casefold()
+                for step in fileDict["step"]
+                if keyword in step["moduleoptions"]
+                for item in step["moduleoptions"][keyword]
+            ]
+        ):
+            kw = module.getKeyword("update" + keyword)
+
+            @caseInsensitiveKwargsChecker([kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs])
+            def checkUpdateKeywordInput(*args, **kwargs):
+                """this is a dummy function needed to apply kwargsChecker"""
+                return
+
+            try:
+                checkUpdateKeywordInput(**options)
+            except ValueError as e2:
+                e2.args = (
+                    f"Error during updating stepaction {moduleLevelKeywordIdentifier}{keyword}, name={options['name']}: "
+                    + e2.args[0],
+                )
+                raise e2
+        else:
+            e.args = (
+                f"Error during parsing of module level keyword {moduleLevelKeywordIdentifier}{keyword}: " + e.args[0],
+            )
+            raise e
 
     for optKey, optVal in options.items():
         try:
@@ -254,6 +294,64 @@ from edelweissfe.analyticalfields.scalarexpression import inputLanguage  # noqa:
 # isort: on
 
 """
+*job
+"""
+kw = inputLanguage.addKeyword("job", "definition of an analysis job")
+kw.addRequiredArg("domain", "define spatial domain: 1d, 2d, 3d", str)
+kw.addOptionalArg("startTime", "(optional) start time of job", float, 0.0)
+kw.addOptionalArg("name", "(optional) name of job, standard = defaultJob", str, None)
+kw.addOptionalArg("solver", "(deprecated) define the solver to be used", str, None)
+
+"""
+*solver
+"""
+kw = inputLanguage.addKeyword("solver", "define a solver")
+kw.addRequiredArg("name", "solver name", str)
+kw.addRequiredArg("solver", "solver type", str)
+kw.addOptionalDatalines("define options which are passed to the respective solver instance.", "")
+
+"""
+*step
+"""
+kw = inputLanguage.addKeyword("step", "define steps")
+kw.addRequiredArg("solver", "solver to be used", str)
+kw.addOptionalArg("type", "step type", str, "adaptive")
+kw.addOptionalArg("stepLength", "time period of step", float, None)
+kw.addOptionalArg("startInc", "size of the start increment", float, None)
+kw.addOptionalArg("maxInc", "maximum size of increment", float, None)
+kw.addOptionalArg("minInc", "minimum size of increment", float, None)
+kw.addOptionalArg("maxNumInc", "maximum number of increments", int, None)
+kw.addOptionalArg("maxIter", "maximum number of iterations", int, None)
+kw.addOptionalArg("type", "define step type, default = AdaptiveStep", str, None)
+kw.addOptionalArg(
+    "criticalIter",
+    "maximum number of iterations to prevent from increasing the increment",
+    int,
+    None,
+)
+kw.addOptionalDatalines("define stepactions, which are handled by the corresponding stepaction modules", "")
+
+# isort: off
+from edelweissfe.stepactions.bodyforce import inputLanguage  # noqa: F811,E402
+from edelweissfe.stepactions.changematerialproperty import inputLanguage  # noqa: F811,E402
+from edelweissfe.stepactions.dirichlet import inputLanguage  # noqa: F811,E402
+from edelweissfe.stepactions.distributedload import inputLanguage  # noqa: F811,E402
+from edelweissfe.stepactions.geostatic import inputLanguage  # noqa: F811,E402
+from edelweissfe.stepactions.indirectcontractioncontrol import inputLanguage  # noqa: F811,E402
+from edelweissfe.stepactions.indirectcontrol import inputLanguage  # noqa: F811,E402
+from edelweissfe.stepactions.initializematerial import inputLanguage  # noqa: F811,E402
+from edelweissfe.stepactions.modelupdate import inputLanguage  # noqa: F811,E402
+from edelweissfe.stepactions.nodeforces import inputLanguage  # noqa: F811,E402
+from edelweissfe.stepactions.setfield import inputLanguage  # noqa: F811,E402
+from edelweissfe.stepactions.setinitialconditions import inputLanguage  # noqa: F811,E402
+
+from edelweissfe.stepactions.options import inputLanguage  # noqa: F811,E402
+from edelweissfe.solvers.nonlinearimplicitstatic import inputLanguage  # noqa: F811,E402
+from edelweissfe.solvers.nonlinearimplicitstaticparallelarclength import inputLanguage  # noqa: F811,E402
+
+# isort: on
+
+"""
 *output
 """
 kw = inputLanguage.addKeyword("output", "define an output module")
@@ -274,43 +372,6 @@ from edelweissfe.outputmanagers.statusfile import inputLanguage  # noqa: F811,E4
 from edelweissfe.outputmanagers.timemonitor import inputLanguage  # noqa: F811,E402
 
 # isort: on
-
-"""
-*job
-"""
-kw = inputLanguage.addKeyword("job", "definition of an analysis job")
-kw.addRequiredArg("domain", "define spatial domain: 1d, 2d, 3d", str)
-kw.addOptionalArg("startTime", "(optional) start time of job", float, 0.0)
-kw.addOptionalArg("name", "(optional) name of job, standard = defaultJob", str, None)
-kw.addOptionalArg("solver", "(deprecated) define the solver to be used", str, None)
-
-"""
-*solver
-"""
-kw = inputLanguage.addKeyword("solver", "define a solver")
-kw.addRequiredArg("name", "solver name", str)
-kw.addRequiredArg("solver", "solver type", str)
-kw.addOptionalDatalines("define options which are passed to the respective solver instance.", "")
-
-"""
-*solver
-"""
-kw = inputLanguage.addKeyword("step", "define steps")
-kw.addRequiredArg("solver", "solver to be used", str)
-kw.addOptionalArg("stepLength", "time period of step", float, None)
-kw.addOptionalArg("startInc", "size of the start increment", float, None)
-kw.addOptionalArg("maxInc", "maximum size of increment", float, None)
-kw.addOptionalArg("minInc", "minimum size of increment", float, None)
-kw.addOptionalArg("maxNumInc", "maximum number of increments", int, None)
-kw.addOptionalArg("maxIter", "maximum number of iterations", int, None)
-kw.addOptionalArg("type", "define step type, default = AdaptiveStep", str, None)
-kw.addOptionalArg(
-    "criticalIter",
-    "maximum number of iterations to prevent from increasing the increment",
-    int,
-    None,
-)
-kw.addOptionalDatalines("define step actions, which are handled by the corresponding stepaction modules", "")
 
 """
 *updateConfiguration
@@ -413,7 +474,7 @@ def parseInputFile(
                     fileDict[keyword].append(options)
 
             elif line.startswith(moduleLevelKeywordIdentifier):  # line is a module level keyword line
-                moduleKeyword, moduleOptions = parseModuleKeywordLine(line, fileName, keyword, options)
+                moduleKeyword, moduleOptions = parseModuleKeywordLine(line, fileName, keyword, options, fileDict)
 
                 if moduleKeyword in fileDict[keyword][-1]["moduleOptions"]:
                     fileDict[keyword][-1]["moduleOptions"][moduleKeyword].append(moduleOptions)
@@ -453,7 +514,13 @@ def parseInputFile(
                         )
                     fileDict[keyword][-1]["datalines"].append(line)
                 else:  # for keywords with modules
-                    module = inputLanguage[keyword].getModule(options["type"] if "type" in options else keyword)
+                    # module = inputLanguage[keyword].getModule(options["type"] if "type" in options else keyword)
+                    if "type" in inputLanguage[keyword].argNames:
+                        module = inputLanguage[keyword].getModule(
+                            inputLanguage[keyword].getArg("type").getValueFromKwargs(options)
+                        )
+                    else:
+                        module = inputLanguage[keyword].getModule(keyword)
                     try:
                         assert module.expectsOptionalDatalines or module.expectsRequiredDatalines
                     except AssertionError:

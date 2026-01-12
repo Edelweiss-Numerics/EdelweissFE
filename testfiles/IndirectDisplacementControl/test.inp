@@ -31,18 +31,18 @@ location='60, 0, 0'
 storeIn=IDC2
 
 *step, maxInc=1, minInc=1, maxNumInc=100000, maxIter=25, stepLength=1, solver=NISTPArcLen
-setfield,   name=omegaIni,  fieldOutput=alphaDWeak, value=1e-2, type=uniform
+>>setfield,   name=omegaIni,  fieldOutput=alphaDWeak, value=1e-2, type=uniform
 
 *step, maxInc=1e-2, startInc=1e-2, minInc=1e-6, maxNumInc=100000, maxIter=25, stepLength=1, solver=NISTPArcLen
-options, category=Ensight, intermediateSaveInterval=1, minDTForOutput=0
-options, category=NISTArcLength, arcLengthController=indirectcontrol, stopCondition='fieldOutputs["I1pMax"] > 0.01'
+>>options, category=Ensight, intermediateSaveInterval=1, minDTForOutput=0
+>>options, category=NISTArcLength, arcLengthController=indirectcontrol, stopCondition='fieldOutputs["I1pMax"] > 0.01'
 
-indirectcontrol, dof1='model.nodeSets["IDC1"][0].fields["displacement"]', cVector1='[-1,0,0]', dof2='model.nodeSets["IDC2"][0].fields["displacement"]', cVector2='[1,0,0]', L=1.,
+>>indirectcontrol, dof1='model.nodeSets["IDC1"][0].fields["displacement"]', cVector1='[-1,0,0]', dof2='model.nodeSets["IDC2"][0].fields["displacement"]', cVector2='[1,0,0]', L=1.,
 
-dirichlet, name=leftX, nSet=gen_left,  field=displacement, 1=0.
-dirichlet, name=leftY, nSet=gen_left,  field=displacement, 2=0.
-dirichlet, name=leftZ, nSet=gen_left,  field=displacement, 3=0.
-dirichlet, name=right, nSet=gen_right, field=displacement, 1=1.
+>>dirichlet, name=leftX, nSet=gen_left,  field=displacement, 1=0.
+>>dirichlet, name=leftY, nSet=gen_left,  field=displacement, 2=0.
+>>dirichlet, name=leftZ, nSet=gen_left,  field=displacement, 3=0.
+>>dirichlet, name=right, nSet=gen_right, field=displacement, 1=1.
 
 *fieldOutput
 >>perNode, name=displacement,    elSet=all, field=displacement, result=U

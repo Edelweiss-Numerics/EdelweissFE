@@ -110,6 +110,19 @@ class InputFileKeyword:
     def args(self):
         return self.requiredArgs + self.optionalArgs
 
+    @property
+    def argNames(self):
+        return [arg.name for arg in self.args]
+
+    def getArg(self, arg: str):
+        casefoldedArgs = [arg_.name.casefold() for arg_ in self.args]
+        try:
+            idx = casefoldedArgs.index(arg.casefold())
+            return self.args[idx]
+        except ValueError:
+            similarArg = findSimilarString(arg, [arg_.name for arg_ in self.args])
+            raise ValueError(f"{arg} is not a valid argument. Did you mean {similarArg}?")
+
     def __getitem__(self, arg: str):
         casefoldedArgs = [arg_.name.casefold() for arg_ in self.args]
         try:
@@ -117,7 +130,9 @@ class InputFileKeyword:
             return self.args[idx]
         except ValueError:
             similarKeyword = findSimilarString(arg, [arg_.name for arg_ in self.args])
-            raise ValueError(f"{arg} is not a valid argument for {self.name}. Did you mean {similarKeyword}?")
+            raise ValueError(
+                f"{arg} is not a valid argument for {keywordIdentifier}{self.name}. Did you mean {similarKeyword}?"
+            )
 
     def parseDatalines(self, datalines):
         args = []
@@ -149,7 +164,9 @@ class InputFileKeyword:
             return self.modules[idx]
         except ValueError:
             similarModule = findSimilarString(module, [module_.name for module_ in self.modules])
-            raise ValueError(f"{module} is not a valid argument for {self.name}. Did you mean {similarModule}?")
+            raise ValueError(
+                f"{module} is not a valid argument for {keywordIdentifier}{self.name}. Did you mean {similarModule}?"
+            )
 
     def __repr__(self) -> str:
         return f"< {self.name} >"
@@ -303,35 +320,36 @@ class Module:
         return datalines
 
     def __repr__(self) -> str:
-        reprStrs = []
-
-        reprStrs.append(f"[{self.name}]")
-
-        if self.requiredArgs:
-            reprStrs.append(".." + "requiredArgs")
-            for arg in self.requiredArgs:
-                reprStrs.append("...." + repr(arg))
-
-        if self.optionalArgs:
-            reprStrs.append(".." + "optionalArgs")
-            for arg in self.optionalArgs:
-                reprStrs.append("...." + repr(arg))
-
-        if self.requiredKeywords:
-            reprStrs.append(".." + "requiredKeywords")
-            for kw in self.requiredKeywords:
-                reprStrs.append("...." + repr(kw))
-
-        if self.optionalKeywords:
-            reprStrs.append(".." + "optionalKeywords")
-            for kw in self.optionalKeywords:
-                reprStrs.append("...." + repr(kw))
-
-        reprStrs.append(".." + f"expectsRequiredDatalines: {self.expectsRequiredDatalines}")
-
-        reprStrs.append(".." + f"expectsOptionalDatalines: {self.expectsOptionalDatalines}")
-
-        return "\n".join(reprStrs)
+        # reprStrs = []
+        #
+        # reprStrs.append(f"[{self.name}]")
+        #
+        # if self.requiredArgs:
+        #     reprStrs.append(".." + "requiredArgs")
+        #     for arg in self.requiredArgs:
+        #         reprStrs.append("...." + repr(arg))
+        #
+        # if self.optionalArgs:
+        #     reprStrs.append(".." + "optionalArgs")
+        #     for arg in self.optionalArgs:
+        #         reprStrs.append("...." + repr(arg))
+        #
+        # if self.requiredKeywords:
+        #     reprStrs.append(".." + "requiredKeywords")
+        #     for kw in self.requiredKeywords:
+        #         reprStrs.append("...." + repr(kw))
+        #
+        # if self.optionalKeywords:
+        #     reprStrs.append(".." + "optionalKeywords")
+        #     for kw in self.optionalKeywords:
+        #         reprStrs.append("...." + repr(kw))
+        #
+        # reprStrs.append(".." + f"expectsRequiredDatalines: {self.expectsRequiredDatalines}")
+        #
+        # reprStrs.append(".." + f"expectsOptionalDatalines: {self.expectsOptionalDatalines}")
+        #
+        # return "\n".join(reprStrs)
+        return f"[{self.name}]"
 
     def parseKeywordLine(self, line):
         lineElements = splitLineAtCommas(line)

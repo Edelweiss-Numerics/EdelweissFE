@@ -39,7 +39,7 @@ fieldOutput=maxDisp
 >>configuration, overwrite=yes
 
 *step, solver=theSolver, maxInc=1e-1, minInc=1e-8, maxNumInc=10000, maxIter=25, stepLength=100
-options, category=NISTSolver, extrapolation=off,
-dirichlet, name=left, nSet=gen_left,  field=displacement, 2=0, 1=0
-distributedload, name=dload, surface=gen_top, magnitude=10, f(t)=t, type=pressure
+>>options, category=NISTSolver, extrapolation=off,
+>>dirichlet, name=left, nSet=gen_left,  field=displacement, 2=0, 1=0
+>>distributedload, name=dload, surface=gen_top, magnitude=10, f(t)=t, type=pressure
 
