@@ -52,6 +52,7 @@ from edelweissfe.utils.misc import (
     convertLinesToStringDictionary,
     convertLineToStringDictionary,
     isInteger,
+    strCaseCmp,
     strToRange,
 )
 from edelweissfe.utils.plotter import Plotter
@@ -205,12 +206,19 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
         The updated, filled model tree.
     """
 
-    # call individual optional model generators
-    for generatorDefinition in inputfile["modelGenerator"]:
-        if generatorDefinition.get("executeAfterManualGeneration", False):
+    # call individual optional model generators with executeAfterManualGeneration == True
+    for definition in inputfile["modelGenerator"]:
+        if definition.get("executeAfterManualGeneration", False):
             continue
-        gen = generatorDefinition["generator"]
-        model = getGeneratorFunction(gen)(generatorDefinition, model, journal)
+        generatorDefinition = CaseInsensitiveDict(definition.copy())
+
+        generatorType = generatorDefinition.pop("generator")
+        data = generatorDefinition.pop("datalines")
+        module = inputLanguage["modelGenerator"].getModule(generatorType)
+
+        args, kwargs = module.parseDatalines(data)
+
+        model = getGeneratorFunction(generatorType)(generatorDefinition, model, journal, *args, **kwargs)
 
     # the standard 'Abaqus like' model generator is invoked unconditionally, and it has direct access to the inputfile
     abqModelConstructor = AbqModelConstructor(journal)
@@ -221,12 +229,22 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
     model = abqModelConstructor.createAnalyticalFieldsFromInputFile(model, inputfile)
     model = abqModelConstructor.createSectionsFromInputFile(model, inputfile)
 
-    # call individual optional model generators,
-    for generatorDefinition in inputfile["modelGenerator"]:
-        if not generatorDefinition.get("executeAfterManualGeneration", False):
+    # call individual optional model generators with executeAfterManualGeneration == False
+    for definition in inputfile["modelGenerator"]:
+        if not definition.get("executeAfterManualGeneration", False):
             continue
-        gen = generatorDefinition["generator"]
-        model = getGeneratorFunction(gen)(generatorDefinition, model, journal)
+        generatorDefinition = CaseInsensitiveDict(definition.copy())
+
+        generatorType = generatorDefinition.pop("generator")
+        data = generatorDefinition.pop("datalines")
+        module = inputLanguage["modelGenerator"].getModule(generatorType)
+
+        args, kwargs = module.parseDatalines(data)
+
+        if strCaseCmp(module.name, "executePythoncode"):
+            args = data
+
+        model = getGeneratorFunction(generatorType)(generatorDefinition, model, journal, *args, **kwargs)
 
     return model
 
@@ -346,12 +364,15 @@ def createOutputManagersFromInputFile(
     for definition in inputfile["output"]:
         outputManagerKwargs = CaseInsensitiveDict(definition.copy())
 
+        outputManagerType = outputManagerKwargs.pop("type")
+
         try:
             outputManagerName = outputManagerKwargs.pop("name")
         except KeyError:
-            outputManagerName = f"OutputManager-{len(outputManagers)}"
-
-        outputManagerType = outputManagerKwargs.pop("type")
+            if strCaseCmp(outputManagerType, "ensight"):
+                outputManagerName = "esExport"
+            else:
+                outputManagerName = f"OutputManager-{len(outputManagers)}"
 
         datalines = outputManagerKwargs.pop("datalines")
 

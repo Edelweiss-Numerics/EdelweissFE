@@ -345,6 +345,12 @@ def kwargsChecker(kwargsRequired: list[str], kwargsOptional: list[str]):
                 except AssertionError:
                     missing_kwargs.append(kwarg)
 
+            # functionality to modify kwargs to automatically set default values for optional arguments would be handy
+            # maybe this should be done by a separate decorator function setDefaultArguments(optionalArgs, optionalValues)
+            # for kwarg in kwargsOptional:
+            #     if not kwarg in kwargs:
+            #         kwargs[kwarg] = defaultValue
+
             nMissing = len(missing_kwargs)
             try:
                 assert nMissing == 0

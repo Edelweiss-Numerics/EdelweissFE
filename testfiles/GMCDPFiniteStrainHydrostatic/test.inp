@@ -32,13 +32,13 @@ fieldOutput=alphaD, f(x)='max(x)'
 fieldOutput=RF
 
 *output, type=ensight, name=esExport
-configuration,     overwrite=True
->>perNode,    fieldOutput=displacement
->>perNode,    fieldOutput=micro rotation
->>perNode,    fieldOutput=nonlocal damage
->>perElement, fieldOutput=alphaP
->>perElement, fieldOutput=alphaD
->>perElement, fieldOutput=omega
+>>configuration, overwrite=True
+>>perNode,       fieldOutput=displacement
+>>perNode,       fieldOutput=micro rotation
+>>perNode,       fieldOutput=nonlocal damage
+>>perElement,    fieldOutput=alphaP
+>>perElement,    fieldOutput=alphaD
+>>perElement,    fieldOutput=omega
 
 *output, type=meshplot, name=RFPlot
 figure=1, axSpec=111, c=k, ls=solid, create=xyData, x=time, y=RF

@@ -72,41 +72,73 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.misc import convertLinesToStringDictionary
+from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
 
-documentation = {
-    "x0": "(optional) origin at x axis",
-    "y0": "(optional) origin at y axis",
-    "z0": "(optional) origin at z axis",
-    "lX": "(optional) length of the body along x axis",
-    "lY": "(optional) length of the body along y axis",
-    "lZ": "(optional) length of the body along z axis",
-    "nX": "(optional) number of elements along x",
-    "nY": "(optional) number of elements along y",
-    "nZ": "(optional) number of elements along z",
-    "elType": "type of element",
-}
+# documentation = {
+#     "x0": "(optional) origin at x axis",
+#     "y0": "(optional) origin at y axis",
+#     "z0": "(optional) origin at z axis",
+#     "lX": "(optional) length of the body along x axis",
+#     "lY": "(optional) length of the body along y axis",
+#     "lZ": "(optional) length of the body along z axis",
+#     "nX": "(optional) number of elements along x",
+#     "nY": "(optional) number of elements along y",
+#     "nZ": "(optional) number of elements along z",
+#     "elType": "type of element",
+# }
+
+inputLanguage = InputLanguage()
+module = inputLanguage["modelGenerator"].addModule(
+    "boxgen", "A mesh generator for cuboid geometries and structured hex meshes."
+)
+
+module.addOptionalArg("x0", "Origin along the x axis.", float, 0.0)
+module.addOptionalArg("y0", "Origin along the y axis.", float, 0.0)
+module.addOptionalArg("z0", "Origin along the z axis.", float, 0.0)
+
+module.addOptionalArg("lX", "Length of the body along the x axis.", float, 1.0)
+module.addOptionalArg("lY", "Length of the body along the y axis.", float, 1.0)
+module.addOptionalArg("lZ", "Length of the body along the z axis.", float, 1.0)
+
+module.addOptionalArg("nX", "Number of elements along the x axis.", int, 1)
+module.addOptionalArg("nY", "Number of elements along the y axis.", int, 1)
+module.addOptionalArg("nZ", "Number of elements along the z axis.", int, 1)
+
+module.addRequiredArg("elType", "Element type.", str)
+module.addOptionalArg("elProvider", "Element provider.", str, None)
+
+# def modelGeneratorFactory(name, FEModel, **kwargs):
+#     modelType = module["model"].getValueFromKwargs(kwargs)
+#     mean = module["mean"].getValueFromKwargs(kwargs)
+#     variance = module["variance"].getValueFromKwargs(kwargs)
+#     lengthScale = module["lengthScale"].getValueFromKwargs(kwargs)
+#     nu = module["nu"].getValueFromKwargs(kwargs)
+#     seed = module["seed"].getValueFromKwargs(kwargs)
+#
+#     return AnalyticalField(name, FEModel, modelType, mean, variance, lengthScale, nu, seed)
 
 
-def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dict:
-    options = generatorDefinition["datalines"]
-    options = convertLinesToStringDictionary(options)
+@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args, **kwargs) -> dict:
 
     name = generatorDefinition.get("name", "boxGen")
 
-    x0 = float(options.get("x0", 0.0))
-    y0 = float(options.get("y0", 0.0))
-    z0 = float(options.get("z0", 0.0))
-    lX = float(options.get("lX", 1.0))
-    lY = float(options.get("lY", 1.0))
-    lZ = float(options.get("lZ", 1.0))
-    nX = int(options.get("nX", 1))
-    nY = int(options.get("nY", 1))
-    nZ = int(options.get("nZ", 1))
-    elType = getElementClass(options["elType"], options.get("elProvider", None))
+    x0 = module.getArg("x0").getValueFromKwargs(kwargs)
+    y0 = module.getArg("y0").getValueFromKwargs(kwargs)
+    z0 = module.getArg("z0").getValueFromKwargs(kwargs)
+    lX = module.getArg("lX").getValueFromKwargs(kwargs)
+    lY = module.getArg("lY").getValueFromKwargs(kwargs)
+    lZ = module.getArg("lZ").getValueFromKwargs(kwargs)
+    nX = module.getArg("nX").getValueFromKwargs(kwargs)
+    nY = module.getArg("nY").getValueFromKwargs(kwargs)
+    nZ = module.getArg("nZ").getValueFromKwargs(kwargs)
+    elType = getElementClass(
+        module.getArg("elType").getValueFromKwargs(kwargs), module.getArg("elProvider").getValueFromKwargs(kwargs)
+    )
 
     testEl = elType(
-        options["elType"],
+        module.getArg("elType").getValueFromKwargs(kwargs),
         0,
     )
 
@@ -303,7 +335,7 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dic
                 # plotNodeList( nodeList )
 
                 # newEl = elType(options["elType"], nodeList, currentElementLabel)
-                newEl = elType(options["elType"], currentElementLabel)
+                newEl = elType(module.getArg("elType").getValueFromKwargs(kwargs), currentElementLabel)
                 newEl.setNodes(nodeList)
 
                 elements.append(newEl)

@@ -35,9 +35,8 @@ Interface to Cubit. Generate mesh using Cubit .jou files.
 import os
 import shlex
 
-from edelweissfe.generators.abqmodelconstructor import AbqModelConstructor
-from edelweissfe.utils.inputfileparser import parseInputFile
-from edelweissfe.utils.misc import convertLinesToStringDictionary, strtobool
+from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
 
 documentation = {
     "cubitCmd": "(Optional) Cubit executable; default=cubit",
@@ -51,27 +50,47 @@ documentation = {
     "silent": "(Optional) hide Cubit output; default=False",
 }
 
+inputLanguage = InputLanguage()
+module = inputLanguage["modelGenerator"].addModule("cubit", "Interface to Cubit. Generate mesh using Cubit .jou files.")
 
-def generateModelData(generatorDefinition, model, journal):
-    options = generatorDefinition["datalines"]
-    options = convertLinesToStringDictionary(options)
+module.addOptionalArg("cubitCmd", "Cubit executable.", str, "cubit")
+module.addRequiredArg("jouFile", "Path to Cubit journal (.jou) file.", str)
+module.addOptionalArg("outFile", "Path to output mesh file.", str, "mesh.inc")
+module.addOptionalArg("APREPROVars", "APREPRO variables as comma-separated <key>=<value> pairs.", str, None)
+module.addOptionalArg("overwrite", "Overwrite existing output files.", bool, True)
+module.addOptionalArg("runCubit", "Run Cubit GUI for debugging purposes.", bool, False)
+module.addOptionalArg("silent", "Hide Cubit output.", bool, False)
 
+module.addOptionalArg("elType", "Specify element type for all sections.", str, None)
+module.addOptionalArg(
+    "elTypePerBlock", "Specify element type per block as comma-separated <key>=<value> pairs.", str, None
+)
+module.addOptionalArg("elProvider", "Element provider.", str, None)
+
+
+@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+def generateModelData(generatorDefinition, model, journal, *args, **kwargs):
+    from edelweissfe.generators.abqmodelconstructor import AbqModelConstructor
+    from edelweissfe.utils.inputfileparser import parseInputFile
+
+    # options = generatorDefinition["datalines"]
+    # options = convertLinesToStringDictionary(options)
     # name = generatorDefinition.get("name", "cubit")
 
-    cubitCmd = options.get("cubitCmd", "cubit")
-    jouFile = options.get("jouFile")
-    outFile = options.get("outFile", "mesh.inc")
-    APREPROVars = options.get("APREPROVars")
-    elType = options.get("elType")
-    elTypePerBlock = options.get("elTypePerBlock")
-    overwrite = options.get("overwrite", "True")
-    runCubit = options.get("runCubit", "False")
-    silent = options.get("silent", "False")
+    cubitCmd = module.getArg("cubitCmd").getValueFromKwargs(kwargs)
+    jouFile = module.getArg("jouFile").getValueFromKwargs(kwargs)
+    outFile = module.getArg("outFile").getValueFromKwargs(kwargs)
+    APREPROVars = module.getArg("APREPROVars").getValueFromKwargs(kwargs)
+    elType = module.getArg("elType").getValueFromKwargs(kwargs)
+    elTypePerBlock = module.getArg("elTypePerBlock").getValueFromKwargs(kwargs)
+    overwrite = module.getArg("overwrite").getValueFromKwargs(kwargs)
+    runCubit = module.getArg("runCubit").getValueFromKwargs(kwargs)
+    silent = module.getArg("silent").getValueFromKwargs(kwargs)
 
     # getElementClass(options["elType"], options.get("elProvider", None))
 
     generate = False
-    if not os.path.exists(outFile) or strtobool(overwrite):
+    if not os.path.exists(outFile) or overwrite:
         generate = True
 
     if generate:
@@ -79,7 +98,7 @@ def generateModelData(generatorDefinition, model, journal):
         cubitOptns.append("-information off")
         cubitOptns.append("-nojournal")
 
-        if not strtobool(runCubit):
+        if not runCubit:
             cubitOptns.append("-batch")
             cubitOptns.append("-nographics")
 
@@ -104,7 +123,7 @@ def generateModelData(generatorDefinition, model, journal):
             f.write('export abaqus "{}" partial overwrite\n'.format(outFile))
         cmd = " ".join([cmd, exportFile])
 
-        if strtobool(silent):
+        if silent:
             cmd = " ".join([cmd, "> /dev/null"])
 
         os.system(cmd)

@@ -32,6 +32,7 @@
 import numpy as np
 
 from edelweissfe.numerics.dofmanager import DofManager
+from edelweissfe.solvers.nonlinearimplicitstaticparallelarclength import NISTPArcLength
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -113,3 +114,6 @@ class StepAction(StepActionBase):
         self.c2 = np.asarray(eval(action["cVector2"].replace("x", "0")), dtype=float)
 
         self.c = np.hstack([self.c1, self.c2])
+
+        arcLengthController = NISTPArcLength(jobInfo, journal)
+        self.arcLengthController = arcLengthController

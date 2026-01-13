@@ -78,12 +78,21 @@ class NISTPArcLength(NISTParallel):
         if "arc length parameter" in model.additionalParameters:
             self.Lambda = model.additionalParameters["arc length parameter"]
 
-        arcLengthControllerOptions = step.actions["options"].get("NISTArcLength")
+        arcLengthControllerOptions = [
+            stepAction
+            for stepAction in step.actions["options"].values()
+            if stepAction.options["category"] == "NISTArcLength"
+        ]
+        assert len(arcLengthControllerOptions) < 2
+
+        # arcLengthControllerOptions = step.actions["options"].get("NISTArcLength")
         if arcLengthControllerOptions:
+            arcLengthControllerOptions = arcLengthControllerOptions[0].options
             arcLengthController = arcLengthControllerOptions.get("arcLengthController")
             if arcLengthController:
                 try:
-                    self.arcLengthController = step.actions[arcLengthController][arcLengthController]
+                    arcLengthControllerStepAction = [action for action in step.actions["indirectcontrol"].values()][0]
+                    self.arcLengthController = arcLengthControllerStepAction
                     self.dLambda = 0.0
                 except KeyError:
                     self.journal.errorMessage(

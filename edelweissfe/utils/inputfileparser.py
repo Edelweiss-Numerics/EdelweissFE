@@ -392,7 +392,18 @@ kw.addOptionalArg(
     bool,
     False,
 )
-kw.addRequiredDatalines("keyword arguments", "")
+# kw.addRequiredDatalines("keyword arguments", "")
+
+# isort: off
+# from edelweissfe.generators.abqmodelconstructor import inputLanguage  # noqa: F811,E402
+from edelweissfe.generators.boxgen import inputLanguage  # noqa: F811,E402
+from edelweissfe.generators.cubit import inputLanguage  # noqa: F811,E402
+from edelweissfe.generators.executepythoncode import inputLanguage  # noqa: F811,E402
+from edelweissfe.generators.findclosestnode import inputLanguage  # noqa: F811,E402
+from edelweissfe.generators.pipegen import inputLanguage  # noqa: F811,E402
+from edelweissfe.generators.planerectquad import inputLanguage  # noqa: F811,E402
+
+# isort: on
 
 """
 *constraint
@@ -518,6 +529,10 @@ def parseInputFile(
                     if "type" in inputLanguage[keyword].argNames:
                         module = inputLanguage[keyword].getModule(
                             inputLanguage[keyword].getArg("type").getValueFromKwargs(options)
+                        )
+                    elif "generator" in inputLanguage[keyword].argNames:
+                        module = inputLanguage[keyword].getModule(
+                            inputLanguage[keyword].getArg("generator").getValueFromKwargs(options)
                         )
                     else:
                         module = inputLanguage[keyword].getModule(keyword)
