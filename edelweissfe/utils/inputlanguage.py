@@ -33,6 +33,7 @@ from edelweissfe.utils.misc import (
     convertAssignmentsToStringDictionary,
     findSimilarString,
     splitLineAtCommas,
+    strtobool,
 )
 
 keywordIdentifier = "*"
@@ -320,35 +321,6 @@ class Module:
         return datalines
 
     def __repr__(self) -> str:
-        # reprStrs = []
-        #
-        # reprStrs.append(f"[{self.name}]")
-        #
-        # if self.requiredArgs:
-        #     reprStrs.append(".." + "requiredArgs")
-        #     for arg in self.requiredArgs:
-        #         reprStrs.append("...." + repr(arg))
-        #
-        # if self.optionalArgs:
-        #     reprStrs.append(".." + "optionalArgs")
-        #     for arg in self.optionalArgs:
-        #         reprStrs.append("...." + repr(arg))
-        #
-        # if self.requiredKeywords:
-        #     reprStrs.append(".." + "requiredKeywords")
-        #     for kw in self.requiredKeywords:
-        #         reprStrs.append("...." + repr(kw))
-        #
-        # if self.optionalKeywords:
-        #     reprStrs.append(".." + "optionalKeywords")
-        #     for kw in self.optionalKeywords:
-        #         reprStrs.append("...." + repr(kw))
-        #
-        # reprStrs.append(".." + f"expectsRequiredDatalines: {self.expectsRequiredDatalines}")
-        #
-        # reprStrs.append(".." + f"expectsOptionalDatalines: {self.expectsOptionalDatalines}")
-        #
-        # return "\n".join(reprStrs)
         return f"[{self.name}]"
 
     def parseKeywordLine(self, line):
@@ -412,7 +384,15 @@ class KeywordArg:
 
     def getValueFromKwargs(self, kwargs: dict):
         kwargs = CaseInsensitiveDict(kwargs)
-        return kwargs[self.name]
+
+        try:
+            if self.dtype == bool:
+                kwargs[self.name] = strtobool(kwargs[self.name])
+            else:
+                kwargs[self.name] = self.dtype(kwargs[self.name])
+            return kwargs[self.name]
+        except ValueError:
+            raise ValueError(f"Cannot convert {kwargs[self.name]} to {self.dtype}")
 
     def __repr__(self) -> str:
         return f"[{self.name}]"
@@ -427,10 +407,7 @@ class OptionalKeywordArg(KeywordArg):
 
     def getValueFromKwargs(self, kwargs: dict):
         try:
-            caseInsensitiveKwargs = CaseInsensitiveDict(kwargs)
-            return self.dtype(caseInsensitiveKwargs[self.name])
-        except ValueError:
-            raise ValueError(f"Cannot convert {kwargs[self.name]} to {self.dtype}")
+            return super().getValueFromKwargs(kwargs)
         except KeyError:
             return self.default
 

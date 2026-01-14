@@ -37,7 +37,10 @@ import numpy as np
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
 inputLanguage = InputLanguage()
 module = inputLanguage["output"].addModule(
@@ -54,10 +57,11 @@ optional += [kw.name for kw in module.optionalKeywords]
 
 
 @caseInsensitiveKwargsChecker(required, optional)
+@castKwargsValuesAndAddDefaults(module)
 def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
     kwargs = CaseInsensitiveDict(kwargs)
 
-    filename = module.getArg("export").getValueFromKwargs(kwargs)
+    filename = kwargs["export"]
 
     return OutputManager(name, FEModel, fieldOutputController, journal, plotter, filename)
 

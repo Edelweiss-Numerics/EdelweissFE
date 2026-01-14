@@ -35,7 +35,10 @@ from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.math import createMathExpression
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
 """
 A simple integrator to compute the fracture energy by integrating a load-displacement curve.
@@ -65,12 +68,13 @@ optional += [kw.name for kw in module.optionalKeywords]
 
 
 @caseInsensitiveKwargsChecker(required, optional)
+@castKwargsValuesAndAddDefaults(module)
 def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
     kwargs = CaseInsensitiveDict(kwargs)
 
-    forceFieldOutputName = module.getArg("forceFieldOutput").getValueFromKwargs(kwargs)
-    displacementFieldOutputName = module.getArg("displacementFieldOutput").getValueFromKwargs(kwargs)
-    fractureArea = module.getArg("f(x)").getValueFromKwargs(kwargs)
+    forceFieldOutputName = kwargs["forceFieldOutput"]
+    displacementFieldOutputName = kwargs["displacementFieldOutput"]
+    fractureArea = kwargs["f(x)"]
 
     if not fractureArea:
         fractureArea = "x"

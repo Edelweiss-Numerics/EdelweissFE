@@ -29,7 +29,10 @@
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
 """
 Writes a status file during the analysis.
@@ -55,10 +58,11 @@ optional += [kw.name for kw in module.optionalKeywords]
 
 
 @caseInsensitiveKwargsChecker(required, optional)
+@castKwargsValuesAndAddDefaults(module)
 def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
     kwargs = CaseInsensitiveDict(kwargs)
 
-    filename = module.getArg("filename").getValueFromKwargs(kwargs)
+    filename = kwargs["filename"]
 
     return OutputManager(name, FEModel, fieldOutputController, journal, plotter, filename)
 

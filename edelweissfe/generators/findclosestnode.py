@@ -37,9 +37,13 @@ import numpy as np
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.exceptions import WrongDomain
 from edelweissfe.utils.inputlanguage import InputLanguage
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
 # documentation = {
 #     "location": "The location of the node",
@@ -58,8 +62,11 @@ module.addRequiredArg("storeIn", "Node set to store closest node in.", str)
 
 
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
 def generateModelData(generatorDefinition: dict, model: FEModel, journal: Journal, *args, **kwargs):
-    loc = np.fromstring(module.getArg("location").getValueFromKwargs(kwargs), sep=",", dtype=float)
+    kwargs = CaseInsensitiveDict(kwargs)
+
+    loc = np.fromstring(kwargs["location"], sep=",", dtype=float)
 
     if len(loc) != model.domainSize:
         raise WrongDomain("Spatial dimension of specified location does not match model dimension")
@@ -72,7 +79,7 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal: Journa
 
     closestNode = list(model.nodes.values())[indexClosest]
 
-    storeIn = module.getArg("storeIn").getValueFromKwargs(kwargs)
+    storeIn = kwargs["storeIn"]
     try:
         assert storeIn not in model.nodeSets
     except AssertionError:

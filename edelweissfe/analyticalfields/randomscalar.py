@@ -35,8 +35,13 @@ import numpy as np
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker, strCaseCmp
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+    strCaseCmp,
+)
 
 inputLanguage = InputLanguage()
 module = inputLanguage["analyticalField"].addModule("randomScalar", "input language for randomscalar module")
@@ -50,13 +55,16 @@ module.addOptionalArg("seed", "Seed of the random number generator", int, 0)
 
 
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
 def analyticalFieldFactory(name, FEModel, **kwargs):
-    modelType = module["model"].getValueFromKwargs(kwargs)
-    mean = module["mean"].getValueFromKwargs(kwargs)
-    variance = module["variance"].getValueFromKwargs(kwargs)
-    lengthScale = module["lengthScale"].getValueFromKwargs(kwargs)
-    nu = module["nu"].getValueFromKwargs(kwargs)
-    seed = module["seed"].getValueFromKwargs(kwargs)
+    kwargs = CaseInsensitiveDict(kwargs)
+
+    modelType = kwargs["model"]
+    mean = kwargs["mean"]
+    variance = kwargs["variance"]
+    lengthScale = kwargs["lengthScale"]
+    nu = kwargs["nu"]
+    seed = kwargs["seed"]
 
     return AnalyticalField(name, FEModel, modelType, mean, variance, lengthScale, nu, seed)
 

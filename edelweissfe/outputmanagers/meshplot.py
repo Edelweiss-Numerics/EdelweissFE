@@ -38,8 +38,6 @@ Module meshplot divided into classes:
     * Outputmanager:
         creates the plotting specific for the defined keyword lines
 """
-from distutils.util import strtobool
-
 import matplotlib.tri as mtri
 import numpy as np
 from matplotlib import colors
@@ -52,6 +50,7 @@ from edelweissfe.utils.meshtools import (
     extractNodeCoordinatesFromElset,
     transferElsetResultsToElset,
 )
+from edelweissfe.utils.misc import strtobool
 
 documentation = {
     "figure": "figure number, (default=1)",

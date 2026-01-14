@@ -413,6 +413,15 @@ kw.addRequiredArg("type", "constraint type", str)
 kw.addRequiredDatalines("definition of the constraint", "")
 kw.addOptionalArg("name", "name of the constraint", str, None)
 
+# isort: off
+from edelweissfe.constraints.equalvaluelagrangian import inputLanguage  # noqa: F811,E402
+from edelweissfe.constraints.equalvaluepenalty import inputLanguage  # noqa: F811,E402
+from edelweissfe.constraints.linearizedrigidbody import inputLanguage  # noqa: F811,E402
+from edelweissfe.constraints.penaltyindirectcontrol import inputLanguage  # noqa: F811,E402
+from edelweissfe.constraints.rigidbody import inputLanguage  # noqa: F811,E402
+
+# isort: on
+
 """
 *configurePlots
 """

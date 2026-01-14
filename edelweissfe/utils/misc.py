@@ -345,12 +345,6 @@ def kwargsChecker(kwargsRequired: list[str], kwargsOptional: list[str]):
                 except AssertionError:
                     missing_kwargs.append(kwarg)
 
-            # functionality to modify kwargs to automatically set default values for optional arguments would be handy
-            # maybe this should be done by a separate decorator function setDefaultArguments(optionalArgs, optionalValues)
-            # for kwarg in kwargsOptional:
-            #     if not kwarg in kwargs:
-            #         kwargs[kwarg] = defaultValue
-
             nMissing = len(missing_kwargs)
             try:
                 assert nMissing == 0
@@ -402,6 +396,25 @@ def caseInsensitiveKwargsChecker(kwargsRequired: list[str], kwargsOptional: list
             casefoldedKwargs = {key.casefold(): val for key, val in kwargs.items()}
 
             return kwargsChecker(casefoldedKwargsRequired, casefoldedKwargsOptional)(fun)(*args, **casefoldedKwargs)
+
+        return wrapped
+
+    return wrapper
+
+
+def castKwargsValuesAndAddDefaults(module):
+    def wrapper(fun, *args, **kwargs):
+        def wrapped(*args, **kwargs):
+            kwargs = CaseInsensitiveDict(kwargs)
+            for arg in module.requiredArgs:
+                kwargs[arg.name] = arg.getValueFromKwargs(kwargs)
+            for arg in module.optionalArgs:
+                if arg.name in kwargs:
+                    kwargs[arg.name] = arg.getValueFromKwargs(kwargs)
+                else:
+                    kwargs[arg.name] = arg.default
+
+            return fun(*args, **kwargs)
 
         return wrapped
 

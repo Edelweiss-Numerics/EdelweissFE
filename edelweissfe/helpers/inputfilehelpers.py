@@ -404,8 +404,6 @@ def createOutputManagersFromInputFile(
         if len(datalines) == 0:
             module = inputLanguage["output"].getModule(outputManagerType)
             args, kwargs = module.parseDatalines(datalines)
-            if "name" in module.argNames:
-                outputManagerName = module.getArg("name").getValueFromKwargs(kwargs)
 
             outputManagerFactory = getOutputManagerFactoryByName(outputManagerType)
             try:
@@ -432,10 +430,6 @@ def createOutputManagersFromInputFile(
             for dataline in datalines:
                 module = inputLanguage["output"].getModule(outputManagerType)
                 args, kwargs = module.parseDatalines(dataline)
-
-                if "name" in module.argNames:
-                    outputManagerName = module.getArg("name").getValueFromKwargs(kwargs)
-                    kwargs.pop("name", None)
 
                 outputManagerFactory = getOutputManagerFactoryByName(outputManagerType)
 

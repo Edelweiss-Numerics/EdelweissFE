@@ -72,8 +72,12 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
 # documentation = {
 #     "x0": "(optional) origin at x axis",
@@ -108,39 +112,26 @@ module.addOptionalArg("nZ", "Number of elements along the z axis.", int, 1)
 module.addRequiredArg("elType", "Element type.", str)
 module.addOptionalArg("elProvider", "Element provider.", str, None)
 
-# def modelGeneratorFactory(name, FEModel, **kwargs):
-#     modelType = module["model"].getValueFromKwargs(kwargs)
-#     mean = module["mean"].getValueFromKwargs(kwargs)
-#     variance = module["variance"].getValueFromKwargs(kwargs)
-#     lengthScale = module["lengthScale"].getValueFromKwargs(kwargs)
-#     nu = module["nu"].getValueFromKwargs(kwargs)
-#     seed = module["seed"].getValueFromKwargs(kwargs)
-#
-#     return AnalyticalField(name, FEModel, modelType, mean, variance, lengthScale, nu, seed)
-
 
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
 def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args, **kwargs) -> dict:
+    kwargs = CaseInsensitiveDict(kwargs)
 
     name = generatorDefinition.get("name", "boxGen")
 
-    x0 = module.getArg("x0").getValueFromKwargs(kwargs)
-    y0 = module.getArg("y0").getValueFromKwargs(kwargs)
-    z0 = module.getArg("z0").getValueFromKwargs(kwargs)
-    lX = module.getArg("lX").getValueFromKwargs(kwargs)
-    lY = module.getArg("lY").getValueFromKwargs(kwargs)
-    lZ = module.getArg("lZ").getValueFromKwargs(kwargs)
-    nX = module.getArg("nX").getValueFromKwargs(kwargs)
-    nY = module.getArg("nY").getValueFromKwargs(kwargs)
-    nZ = module.getArg("nZ").getValueFromKwargs(kwargs)
-    elType = getElementClass(
-        module.getArg("elType").getValueFromKwargs(kwargs), module.getArg("elProvider").getValueFromKwargs(kwargs)
-    )
+    x0 = kwargs["x0"]
+    y0 = kwargs["y0"]
+    z0 = kwargs["z0"]
+    lX = kwargs["lX"]
+    lY = kwargs["lY"]
+    lZ = kwargs["lZ"]
+    nX = kwargs["nX"]
+    nY = kwargs["nY"]
+    nZ = kwargs["nZ"]
+    elType = getElementClass(kwargs["elType"], kwargs["elProvider"])
 
-    testEl = elType(
-        module.getArg("elType").getValueFromKwargs(kwargs),
-        0,
-    )
+    testEl = elType(kwargs["elType"], 0)
 
     if testEl.nNodes == 8:
         nNodesX = nX + 1
@@ -335,7 +326,7 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args,
                 # plotNodeList( nodeList )
 
                 # newEl = elType(options["elType"], nodeList, currentElementLabel)
-                newEl = elType(module.getArg("elType").getValueFromKwargs(kwargs), currentElementLabel)
+                newEl = elType(kwargs["elType"], currentElementLabel)
                 newEl.setNodes(nodeList)
 
                 elements.append(newEl)

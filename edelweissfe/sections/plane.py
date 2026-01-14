@@ -36,7 +36,11 @@ from edelweissfe.sections.base.sectionbase import Section as SectionBase
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker, splitLinesAtCommas
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+    splitLinesAtCommas,
+)
 
 inputLanguage = InputLanguage()
 module = inputLanguage["section"].addModule("plane", "This section represents a classical plane solid materal section.")
@@ -60,10 +64,11 @@ optional += [kw.name for kw in module.optionalKeywords]
 
 
 @caseInsensitiveKwargsChecker(required, optional)
+@castKwargsValuesAndAddDefaults(module)
 def sectionFactory(name, FEModel, materialName: str, datalines: list[str], moduleOptions, **kwargs):
     kwargs = CaseInsensitiveDict(kwargs)
 
-    thickness = inputLanguage["section"]["thickness"].getValueFromKwargs(kwargs)
+    thickness = kwargs["thickness"]
 
     elementSetNames = splitLinesAtCommas(datalines)
 

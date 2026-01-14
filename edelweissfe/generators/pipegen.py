@@ -36,8 +36,12 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
 # documentation = {
 #     "x0": "(optional) origin at x axis",
@@ -81,32 +85,35 @@ module.addOptionalArg("elProvider", "Element provider.", str, None)
 
 
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
 def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args, **kwargs) -> dict:
     name = generatorDefinition.get("name", "pipeGen")
 
-    x0 = module.getArg("x0").getValueFromKwargs(kwargs)
-    y0 = module.getArg("y0").getValueFromKwargs(kwargs)
-    z0 = module.getArg("z0").getValueFromKwargs(kwargs)
+    kwargs = CaseInsensitiveDict(kwargs)
 
-    Roy = module.getArg("Ro(y)").getValueFromKwargs(kwargs)
-    Riy = module.getArg("Ri(y)").getValueFromKwargs(kwargs)
+    x0 = kwargs["x0"]
+    y0 = kwargs["y0"]
+    z0 = kwargs["z0"]
 
-    lT = module.getArg("lT").getValueFromKwargs(kwargs)
-    lY = module.getArg("lY").getValueFromKwargs(kwargs)
+    Roy = kwargs["Ro(y)"]
+    Riy = kwargs["Ri(y)"]
 
-    phi = module.getArg("phi").getValueFromKwargs(kwargs)
+    lT = kwargs["lT"]
+    lY = kwargs["lY"]
 
-    nT = module.getArg("nT").getValueFromKwargs(kwargs)
-    nC = module.getArg("nC").getValueFromKwargs(kwargs)
-    nY = module.getArg("nY").getValueFromKwargs(kwargs)
+    phi = kwargs["phi"]
 
-    exG = module.getArg("exG").getValueFromKwargs(kwargs)
+    nT = kwargs["nT"]
+    nC = kwargs["nC"]
+    nY = kwargs["nY"]
+
+    exG = kwargs["exG"]
 
     if np.abs(phi) > 360:
         raise Exception("The angle can't be higher than 360° or lower than -360°.")
 
-    elTypeName = module.getArg("elType").getValueFromKwargs(kwargs)
-    elProvider = module.getArg("elProvider").getValueFromKwargs(kwargs)
+    elTypeName = kwargs["elType"]
+    elProvider = kwargs["elProvider"]
 
     elType = getElementClass(elTypeName, elProvider)
 

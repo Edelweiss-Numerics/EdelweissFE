@@ -36,7 +36,10 @@ from edelweissfe.analyticalfields.base.analyticalfieldbase import (
 )
 from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.math import createModelAccessibleFunction
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
 inputLanguage = InputLanguage()
 module = inputLanguage["analyticalField"].addModule("scalarExpression", "input language for scalarExpression module")
@@ -48,9 +51,9 @@ module.addRequiredArg(
 
 
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
 def analyticalFieldFactory(name, FEModel, **kwargs):
-    expressionString = module["f(x,y,z)"].getValueFromKwargs(kwargs)
-    expression = createModelAccessibleFunction(expressionString, FEModel, *"xyz")
+    expression = createModelAccessibleFunction(kwargs["f(x,y,z)"], FEModel, *"xyz")
 
     return AnalyticalField(name, FEModel, expression)
 

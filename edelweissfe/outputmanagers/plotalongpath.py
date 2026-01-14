@@ -37,7 +37,10 @@ from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.math import createMathExpression
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
 """
 Plot result for a nodeSet or an elementSet along the true geometrical distance.
@@ -69,19 +72,20 @@ optional += [kw.name for kw in module.optionalKeywords]
 
 
 @caseInsensitiveKwargsChecker(required, optional)
+@castKwargsValuesAndAddDefaults(module)
 def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
     kwargs = CaseInsensitiveDict(kwargs)
 
-    fieldOutputName = module.getArg("fieldOutput").getValueFromKwargs(kwargs)
-    figure = module.getArg("figure").getValueFromKwargs(kwargs)
-    axSpec = module.getArg("axSpec").getValueFromKwargs(kwargs)
-    normalize = module.getArg("normalize").getValueFromKwargs(kwargs)
-    label = module.getArg("label").getValueFromKwargs(kwargs)
-    fx = module.getArg("f(x)").getValueFromKwargs(kwargs)
+    fieldOutputName = kwargs["fieldOutput"]
+    figure = kwargs["figure"]
+    axSpec = kwargs["axSpec"]
+    normalize = kwargs["normalize"]
+    label = kwargs["label"]
+    fx = kwargs["f(x)"]
     if not fx:
         fx = "x"
-    nStages = module.getArg("nStages").getValueFromKwargs(kwargs)
-    export = module.getArg("export").getValueFromKwargs(kwargs)
+    nStages = kwargs["nStages"]
+    export = kwargs["export"]
 
     return OutputManager(
         name,

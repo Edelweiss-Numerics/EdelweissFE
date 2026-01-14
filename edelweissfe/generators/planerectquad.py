@@ -59,8 +59,12 @@ from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
 # documentation = {
 #     "x0": "(optional) origin at x axis",
@@ -71,6 +75,7 @@ from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
 #     "nY": "(optional) number of elements along y",
 #     "elType": "type of element",
 # }
+
 inputLanguage = InputLanguage()
 module = inputLanguage["modelGenerator"].addModule(
     "planeRectQuad", "A mesh generator for cuboid geometries and structured hex meshes."
@@ -92,20 +97,23 @@ module.addOptionalArg("elProvider", "Element provider.", str, None)
 
 
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
 def generateModelData(generatorDefinition, model, journal, *args, **kwargs):
+    kwargs = CaseInsensitiveDict(kwargs)
+
     name = generatorDefinition.get("name", "planeRectQuad")
 
-    x0 = module.getArg("x0").getValueFromKwargs(kwargs)
-    y0 = module.getArg("y0").getValueFromKwargs(kwargs)
+    x0 = kwargs["x0"]
+    y0 = kwargs["y0"]
 
-    l = module.getArg("l").getValueFromKwargs(kwargs)  # noqa: E741
-    h = module.getArg("h").getValueFromKwargs(kwargs)
+    l = kwargs["l"]  # noqa: E741
+    h = kwargs["h"]
 
-    nX = module.getArg("nX").getValueFromKwargs(kwargs)
-    nY = module.getArg("nY").getValueFromKwargs(kwargs)
+    nX = kwargs["nX"]
+    nY = kwargs["nY"]
 
-    elTypeName = module.getArg("elType").getValueFromKwargs(kwargs)
-    elProvider = module.getArg("elProvider").getValueFromKwargs(kwargs)
+    elTypeName = kwargs["elType"]
+    elProvider = kwargs["elProvider"]
 
     elType = getElementClass(elTypeName, elProvider)
 

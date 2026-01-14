@@ -331,12 +331,18 @@ class AbqModelConstructor:
             The updated model tree.
         """
 
-        for constraintDef in inputFile["constraint"]:
-            name = constraintDef["name"]
-            constraint = constraintDef["type"]
-            data = constraintDef["datalines"]
+        for definition in inputFile["constraint"]:
+            constraintKwArgs = CaseInsensitiveDict(definition.copy())
 
-            constraint = getConstraintClass(constraint)(name, data, model)
+            name = constraintKwArgs.pop("name")
+            constraintType = constraintKwArgs.pop("type")
+            data = constraintKwArgs.pop("datalines")
+
+            module = inputLanguage["constraint"].getModule(constraintType)
+
+            args, kwargs = module.parseDatalines(data)
+
+            constraint = getConstraintClass(constraintType)(name, model, **kwargs)
             model.constraints[name] = constraint
 
         return model

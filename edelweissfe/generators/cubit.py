@@ -35,20 +35,24 @@ Interface to Cubit. Generate mesh using Cubit .jou files.
 import os
 import shlex
 
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
-documentation = {
-    "cubitCmd": "(Optional) Cubit executable; default=cubit",
-    "jouFile": "Path to Cubit journal (.jou) file",
-    "outFile": "(Optional) path to output file; default=mesh.inc",
-    "vars": "(Optional) APREPRO variables as string '...' of comma-separated <key>=<value> pairs",
-    "elType": "Specify element type for all sections",
-    "elTypePerBlock": "Specify element type for each section as string '...' of comma-separated <key>=<value> pairs",
-    "overwrite": "(Optional) overwrite existing outFiles; default=False",
-    "runCubit": "(Optional) run Cubit GUI for debugging purposes; default=False",
-    "silent": "(Optional) hide Cubit output; default=False",
-}
+# documentation = {
+#     "cubitCmd": "(Optional) Cubit executable; default=cubit",
+#     "jouFile": "Path to Cubit journal (.jou) file",
+#     "outFile": "(Optional) path to output file; default=mesh.inc",
+#     "vars": "(Optional) APREPRO variables as string '...' of comma-separated <key>=<value> pairs",
+#     "elType": "Specify element type for all sections",
+#     "elTypePerBlock": "Specify element type for each section as string '...' of comma-separated <key>=<value> pairs",
+#     "overwrite": "(Optional) overwrite existing outFiles; default=False",
+#     "runCubit": "(Optional) run Cubit GUI for debugging purposes; default=False",
+#     "silent": "(Optional) hide Cubit output; default=False",
+# }
 
 inputLanguage = InputLanguage()
 module = inputLanguage["modelGenerator"].addModule("cubit", "Interface to Cubit. Generate mesh using Cubit .jou files.")
@@ -69,23 +73,26 @@ module.addOptionalArg("elProvider", "Element provider.", str, None)
 
 
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
 def generateModelData(generatorDefinition, model, journal, *args, **kwargs):
     from edelweissfe.generators.abqmodelconstructor import AbqModelConstructor
     from edelweissfe.utils.inputfileparser import parseInputFile
+
+    kwargs = CaseInsensitiveDict(kwargs)
 
     # options = generatorDefinition["datalines"]
     # options = convertLinesToStringDictionary(options)
     # name = generatorDefinition.get("name", "cubit")
 
-    cubitCmd = module.getArg("cubitCmd").getValueFromKwargs(kwargs)
-    jouFile = module.getArg("jouFile").getValueFromKwargs(kwargs)
-    outFile = module.getArg("outFile").getValueFromKwargs(kwargs)
-    APREPROVars = module.getArg("APREPROVars").getValueFromKwargs(kwargs)
-    elType = module.getArg("elType").getValueFromKwargs(kwargs)
-    elTypePerBlock = module.getArg("elTypePerBlock").getValueFromKwargs(kwargs)
-    overwrite = module.getArg("overwrite").getValueFromKwargs(kwargs)
-    runCubit = module.getArg("runCubit").getValueFromKwargs(kwargs)
-    silent = module.getArg("silent").getValueFromKwargs(kwargs)
+    cubitCmd = kwargs["cubitCmd"]
+    jouFile = kwargs["jouFile"]
+    outFile = kwargs["outFile"]
+    APREPROVars = kwargs["APREPROVars"]
+    elType = kwargs["elType"]
+    elTypePerBlock = kwargs["elTypePerBlock"]
+    overwrite = kwargs["overwrite"]
+    runCubit = kwargs["runCubit"]
+    silent = kwargs["silent"]
 
     # getElementClass(options["elType"], options.get("elProvider", None))
 
