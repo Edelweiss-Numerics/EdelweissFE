@@ -407,7 +407,8 @@ def castKwargsValuesAndAddDefaults(module):
         def wrapped(*args, **kwargs):
             kwargs = CaseInsensitiveDict(kwargs)
             for arg in module.requiredArgs:
-                kwargs[arg.name] = arg.getValueFromKwargs(kwargs)
+                if arg.name in kwargs:
+                    kwargs[arg.name] = arg.getValueFromKwargs(kwargs)
             for arg in module.optionalArgs:
                 if arg.name in kwargs:
                     kwargs[arg.name] = arg.getValueFromKwargs(kwargs)

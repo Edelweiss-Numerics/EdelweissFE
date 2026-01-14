@@ -69,7 +69,9 @@ class InputLanguage:
             return self.keywords[idx]
         except ValueError:
             similarKeyword = findSimilarString(keyword, [kw.name for kw in self.keywords])
-            raise ValueError(f"{keyword} is not a valid keyword. Did you mean {similarKeyword}?")
+            raise ValueError(
+                f"{keywordIdentifier}{keyword} is not a valid keyword. Did you mean {keywordIdentifier}{similarKeyword}?"
+            )
 
     def __iter__(self):
         return self.keywords.__iter__()

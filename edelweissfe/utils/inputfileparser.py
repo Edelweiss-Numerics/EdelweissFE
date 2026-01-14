@@ -41,10 +41,10 @@ from edelweissfe.utils.inputlanguage import (
 )
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
     convertAssignmentsToCaseInsensitiveStringDictionary,
     splitLineAtCommas,
     strCaseCmp,
-    strtobool,
     typeString,
 )
 
@@ -63,6 +63,13 @@ def parseKeywordLine(line, fileName):
 
     kw = inputLanguage[keyword]
 
+    @castKwargsValuesAndAddDefaults(kw)
+    def checkKeywordInput(*args, **kwargs):
+        """this is a dummy function needed to apply kwargsChecker"""
+        return CaseInsensitiveDict(kwargs)
+
+    options = checkKeywordInput(**options)
+
     @caseInsensitiveKwargsChecker([kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs])
     def checkKeywordInput(*args, **kwargs):
         """this is a dummy function needed to apply kwargsChecker"""
@@ -71,27 +78,35 @@ def parseKeywordLine(line, fileName):
     try:
         checkKeywordInput(**options)
     except ValueError as e:
-        e.args = (f"Error during parsing of keyword {keywordIdentifier}{keyword}: " + e.args[0],)
-        raise e
-
-    for optKey, optVal in options.items():
         try:
-            if kw[optKey].dtype == bool:
-                options[optKey] = strtobool(optVal)
+            module = None  # in some cases, module-specific kwArgs arguments can be given in the keyword line
+            if strCaseCmp(kw.name, "section") and strCaseCmp(options.get("type", ""), "plane"):
+                module = kw.getModule("plane")
+
+            elif strCaseCmp(kw.name, "step") and strCaseCmp(options.get("type", ""), "adaptive"):
+                module = kw.getModule("adaptive")
+
+            if module is not None:
+                addRequired = [kw.name for kw in module.requiredArgs]
+                addOptional = [kw.name for kw in module.optionalArgs]
+
+                @caseInsensitiveKwargsChecker(
+                    [kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs] + addOptional + addRequired
+                )
+                def checkKeywordInput(*args, **kwargs):
+                    """this is a dummy function needed to apply kwargsChecker"""
+                    return
+
+                checkKeywordInput(**options)
+
             else:
-                options[optKey] = kw[optKey].dtype(optVal)
-        except ValueError:
-            raise ValueError(f"{keyword}, option {optKey}: cannot convert {optVal} to {kw[optKey].dtype}")
-        # except Exception as e:
-        #     raise e
+                e.args = (f"Error during parsing of keyword {keywordIdentifier}{keyword}: " + e.args[0],)
+                raise e
+        except ValueError as e:
+            raise e
 
     options["inputFile"] = fileName  # save also the filename of the original inputfile!
 
-    # options["datalineArgs"] = []
-    # options["datalineKwArgs"] = []
-    # options["datalines"] = []
-
-    # if kw.expectsRequiredDatalines or kw.expectsOptionalDatalines:
     options["datalines"] = []
 
     return keyword, options
@@ -119,12 +134,13 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fil
     kw = module.getKeyword(keyword)
 
     @caseInsensitiveKwargsChecker([kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs])
+    @castKwargsValuesAndAddDefaults(kw)
     def checkKeywordInput(*args, **kwargs):
         """this is a dummy function needed to apply kwargsChecker"""
-        return
+        return CaseInsensitiveDict(kwargs)
 
     try:
-        checkKeywordInput(**options)
+        options = checkKeywordInput(**options)
     except ValueError as e:
         if (  # stepaction update
             topLevelKeyword == "step"
@@ -149,12 +165,13 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fil
             kw = module.getKeyword("update" + keyword)
 
             @caseInsensitiveKwargsChecker([kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs])
+            @castKwargsValuesAndAddDefaults(kw)
             def checkUpdateKeywordInput(*args, **kwargs):
                 """this is a dummy function needed to apply kwargsChecker"""
-                return
+                return CaseInsensitiveDict(kwargs)
 
             try:
-                checkUpdateKeywordInput(**options)
+                options = checkUpdateKeywordInput(**options)
             except ValueError as e2:
                 e2.args = (
                     f"Error during updating stepaction {moduleLevelKeywordIdentifier}{keyword}, name={options['name']}: "
@@ -166,17 +183,6 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fil
                 f"Error during parsing of module level keyword {moduleLevelKeywordIdentifier}{keyword}: " + e.args[0],
             )
             raise e
-
-    for optKey, optVal in options.items():
-        try:
-            if kw[optKey].dtype == bool:
-                options[optKey] = strtobool(optVal)
-            else:
-                options[optKey] = kw[optKey].dtype(optVal)
-        except ValueError:
-            raise ValueError(f"{keyword}, option {optKey}: cannot convert {optVal} to {kw[optKey].dtype}")
-        # except Exception as e:
-        #     raise e
 
     for opt in kw.optionalArgs:
         if opt.name not in options:
@@ -241,7 +247,7 @@ kw.addRequiredArg("material", "associated id of defined material", str)
 kw.addRequiredArg("type", "type of the section", str)
 kw.addRequiredDatalines("list of associated element sets", "")
 
-kw.addOptionalArg("thickness", "associated element set", float, 1.0)
+# kw.addOptionalArg("thickness", "associated element set", float, 1.0)
 
 # isort: off
 from edelweissfe.sections.solid import inputLanguage  # noqa: F811,E402
@@ -299,8 +305,8 @@ from edelweissfe.analyticalfields.scalarexpression import inputLanguage  # noqa:
 kw = inputLanguage.addKeyword("job", "definition of an analysis job")
 kw.addRequiredArg("domain", "define spatial domain: 1d, 2d, 3d", str)
 kw.addOptionalArg("startTime", "(optional) start time of job", float, 0.0)
-kw.addOptionalArg("name", "(optional) name of job, standard = defaultJob", str, None)
-kw.addOptionalArg("solver", "(deprecated) define the solver to be used", str, None)
+kw.addOptionalArg("name", "Name of job.", str, "defaultJob")
+kw.addOptionalArg("solver", "(deprecated) define the solver to be used", str, "NIST")
 
 """
 *solver
@@ -316,20 +322,6 @@ kw.addOptionalDatalines("define options which are passed to the respective solve
 kw = inputLanguage.addKeyword("step", "define steps")
 kw.addRequiredArg("solver", "solver to be used", str)
 kw.addOptionalArg("type", "step type", str, "adaptive")
-kw.addOptionalArg("stepLength", "time period of step", float, None)
-kw.addOptionalArg("startInc", "size of the start increment", float, None)
-kw.addOptionalArg("maxInc", "maximum size of increment", float, None)
-kw.addOptionalArg("minInc", "minimum size of increment", float, None)
-kw.addOptionalArg("maxNumInc", "maximum number of increments", int, None)
-kw.addOptionalArg("maxIter", "maximum number of iterations", int, None)
-kw.addOptionalArg("type", "define step type, default = AdaptiveStep", str, None)
-kw.addOptionalArg(
-    "criticalIter",
-    "maximum number of iterations to prevent from increasing the increment",
-    int,
-    None,
-)
-kw.addOptionalDatalines("define stepactions, which are handled by the corresponding stepaction modules", "")
 
 # isort: off
 from edelweissfe.stepactions.bodyforce import inputLanguage  # noqa: F811,E402

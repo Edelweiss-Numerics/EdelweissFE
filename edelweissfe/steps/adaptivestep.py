@@ -34,11 +34,35 @@ from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
 inputLanguage = InputLanguage()
 module = inputLanguage["step"].addModule(
     "adaptive", "A standard adaptive incremental step to be used in nonlinear simulations."
 )
+
+kw = module.addOptionalArg("stepLength", "The durcation of the step.", float, 1.0)
+kw = module.addOptionalArg("startInc", "The initial fraction of the step to be computed.", float, 1.0)
+kw = module.addOptionalArg("maxInc", "The maximal fraction of the step to be computed.", float, 1.0)
+kw = module.addOptionalArg("minInc", "The minimal fraction of the step to be computed.", float, 1e-4)
+kw = module.addOptionalArg("maxNumInc", "The maximal number of increments allowed.", int, 1000)
+kw = module.addOptionalArg("maxIter", "The maximal number of iterations allowed.", int, 10)
+kw = module.addOptionalArg(
+    "criticalIter", "The number of critical iterations after which the next increment is reduced.", int, 5
+)
+kw = module.addOptionalArg("maxGrowIter", "The number of residual growths before the increment is discarded.", int, 10)
+kw = module.addOptionalArg(
+    "cutbackFactor", "Factor by which the increment size is reduced if no convergence was achieved.", float, 0.25
+)
+
+required = [kw.name for kw in module.requiredArgs]
+required += [kw.name for kw in module.requiredKeywords]
+
+optional = [kw.name for kw in module.optionalArgs]
+optional += [kw.name for kw in module.optionalKeywords]
 
 
 class AdaptiveStep(StepBase):
@@ -59,15 +83,8 @@ class AdaptiveStep(StepBase):
         The journal object for logging.
     """
 
-    defaultStartInc = 1.0
-    defaultMaxInc = 1.0
-    defaultMinInc = 1e-4
-    defaultMaxNumInc = 1000
-    defaultMaxIter = 10
-    defaultCriticalIter = 5
-    defaultMaxGrowingIter = 10
-    defaultCutbackFactor = 0.25
-
+    @caseInsensitiveKwargsChecker(required, optional)
+    @castKwargsValuesAndAddDefaults(module)
     def __init__(
         self,
         number: int,
@@ -90,28 +107,14 @@ class AdaptiveStep(StepBase):
         self.outputManagers = outputManagers
 
         self.length = kwargs.get("stepLength", 1.0)  #: The durcation of the step.
-        self.startIncrementSize = kwargs.get(
-            "startInc", self.defaultStartInc
-        )  #: The initial fraction of the step to be computed.
-        self.maxIncrementSize = kwargs.get(
-            "maxInc", self.defaultMaxInc
-        )  #: The maximal fraction of the step to be computed.
-        self.minIncrementSize = kwargs.get(
-            "minInc", self.defaultMinInc
-        )  #: The minimal fraction of the step to be computed.
-        self.maxNumberIncrements = kwargs.get(
-            "maxNumInc", self.defaultMaxNumInc
-        )  #: The maximal number of increments allowed.
-        self.maxIter = kwargs.get("maxIter", self.defaultMaxIter)  #: The maximal number of iterations allowed.
-        self.criticalIter = kwargs.get(
-            "criticalIter", self.defaultCriticalIter
-        )  #: The number of critical iterations after which the next increment is reduced.
-        self.maxGrowIter = kwargs.get(
-            "maxGrowIter", self.defaultMaxGrowingIter
-        )  #: The number of residual growths before the increment is discarded.
-        self.cutbackFactor = kwargs.get(
-            "cutbackFactor", self.defaultCutbackFactor
-        )  #: Factor by which the increment size is reduced if no convergence was achieved.
+        self.startIncrementSize = kwargs["startInc"]
+        self.maxIncrementSize = kwargs["maxInc"]
+        self.minIncrementSize = kwargs["minInc"]
+        self.maxNumberIncrements = kwargs["maxNumInc"]
+        self.maxIter = kwargs["maxIter"]
+        self.criticalIter = kwargs["criticalIter"]
+        self.maxGrowIter = kwargs["maxGrowIter"]
+        self.cutbackFactor = kwargs["cutbackFactor"]
 
         self.incrementGenerator = AdaptiveTimeStepper(
             model.time,

@@ -40,10 +40,12 @@ import numpy as np
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.utils.inputfileparser import (
+    inputLanguage,
     parseInputFile,
     printKeywords,
     printKeywordsRST,
 )
+from edelweissfe.utils.inputlanguage import keywordIdentifier
 from edelweissfe.utils.printdocumentation import printDocumentation
 
 warnings.simplefilter("always", DeprecationWarning)
@@ -108,7 +110,18 @@ def main():
     inputFiles = []
 
     for file in fileList:
-        inputFiles.append(parseInputFile(file))
+        inputFile = parseInputFile(file)
+        for keyword, definitions in inputFile.items():  # check if datalines are given where required
+            kw = inputLanguage[keyword]
+            for definition in definitions:
+                if kw.expectsRequiredDatalines:
+                    try:
+                        assert len(definition["datalines"]) > 0
+                    except AssertionError:
+                        raise ValueError(
+                            f"Error during parsing of keyword {keywordIdentifier}{keyword}: No datalines given. {keywordIdentifier}{keyword} expects data lines."
+                        )
+        inputFiles.append(inputFile)
 
     for inputFile in inputFiles:
         model, fieldOutputController = finiteElementSimulation(

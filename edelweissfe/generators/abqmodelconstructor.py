@@ -117,7 +117,7 @@ class AbqModelConstructor:
                 )
             nodeDefinitions.update(currNodeDefs)
 
-            if "nset" in nodeDefs.keys():
+            if nodeDefs["nSet"] is not None:
                 setName = nodeDefs["nset"]
                 model.nodeSets[setName] = NodeSet(setName, [nodeDefinitions[x] for x in currNodeDefs.keys()])
 
@@ -141,7 +141,7 @@ class AbqModelConstructor:
                 currElDefs[label] = newEl
             elements.update(currElDefs)
 
-            if "elset" in elDefs.keys():
+            if elDefs["elSet"] is not None:
                 setName = elDefs["elset"]
                 model.elementSets[setName] = ElementSet(setName, currElDefs.values())
 

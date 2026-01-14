@@ -5,7 +5,7 @@
 **E          nu         GcToG      lb         lt         polarRatio
 3000.0,     0.15,       .1,        10,        20.0,      1.49999
 
-*section, name=section1, thickness=1.0, material=le, type=solid
+*section, name=section1, material=le, type=solid
 all
 
 *constraint, type=rigidbody, name=rb1

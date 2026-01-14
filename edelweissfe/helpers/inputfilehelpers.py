@@ -266,8 +266,11 @@ def createStepManagerFromInputFile(inputfile: dict):
     stepManager = StepManager()
 
     for stepDefinition in inputfile["step"]:
-        stepType = inputLanguage["step"].getArg("type").getValueFromKwargs(stepDefinition)
+        stepType = stepDefinition.pop("type")
         stepActionLines = stepDefinition.pop("moduleOptions")
+
+        inputFile = stepDefinition.pop("inputfile")  # noqa F841
+        data = stepDefinition.pop("datalines")  # noqa F841
 
         stepActionDefinitions = []
 
@@ -366,13 +369,12 @@ def createOutputManagersFromInputFile(
 
         outputManagerType = outputManagerKwargs.pop("type")
 
-        try:
+        if outputManagerKwargs["name"] is not None:
             outputManagerName = outputManagerKwargs.pop("name")
-        except KeyError:
-            if strCaseCmp(outputManagerType, "ensight"):
-                outputManagerName = "esExport"
-            else:
-                outputManagerName = f"OutputManager-{len(outputManagers)}"
+        elif strCaseCmp(outputManagerType, "ensight"):
+            outputManagerName = "esExport"
+        else:
+            outputManagerName = f"OutputManager-{len(outputManagers)}"
 
         datalines = outputManagerKwargs.pop("datalines")
 

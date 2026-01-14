@@ -161,7 +161,7 @@ def finiteElementSimulation(
             stacklevel=2,
         )
 
-    defaultSolver = getSolverByName(job.get("solver", "NIST"))
+    defaultSolver = getSolverByName(job["solver"])
     solvers["default"] = defaultSolver(jobInfo, journal)
 
     try:
