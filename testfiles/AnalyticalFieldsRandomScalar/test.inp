@@ -46,7 +46,7 @@ seed        = 2
 model       = Matern
 mean        = 0.01
 variance    = 0.000001
-lengthscale = 3
+lengthScale = 3
 nu          = 0.2
 seed        = 3
 
