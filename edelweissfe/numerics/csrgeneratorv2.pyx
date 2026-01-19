@@ -4,7 +4,7 @@
 # | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|
 # |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|
 # | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___
-# |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
+# |_____\__, _|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
 #
 #
 #  Unit of Strength of Materials and Structural Analysis
@@ -64,10 +64,10 @@ cdef class CSRGenerator:
             del self.core
 
     def __init__(self, systemMatrix):
-        cdef int[::1] I = systemMatrix.I
+        cdef int[::1] I = systemMatrix.I  # noqa
         cdef int[::1] J = systemMatrix.J
 
-        self.nCooPairs = len(I) # Length is still 64-bit capable
+        self.nCooPairs = len(I)  # Length is still 64-bit capable
 
         cdef int nDof = int(systemMatrix.nDof)
 

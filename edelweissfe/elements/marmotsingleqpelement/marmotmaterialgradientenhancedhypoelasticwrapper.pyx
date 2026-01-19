@@ -6,7 +6,7 @@
 # | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|
 # |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|
 # | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___
-# |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
+# |_____\__, _|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
 #
 #
 #  Unit of Strength of Materials and Structural Analysis
@@ -30,7 +30,6 @@
 
 import numpy as np
 
-cimport cython
 cimport libcpp.cast
 cimport numpy as np
 
@@ -43,10 +42,7 @@ from edelweissfe.elements.marmotsingleqpelement.marmot cimport (
 
 from edelweissfe.utils.exceptions import CutbackRequest
 
-from libc.stdlib cimport free, malloc
-from libcpp.memory cimport allocator, make_unique, unique_ptr
 from libcpp.string cimport string
-from libcpp.vector cimport vector
 
 
 cdef class MarmotMaterialGradientEnhancedHypoElasticWrapper:
@@ -57,7 +53,8 @@ cdef class MarmotMaterialGradientEnhancedHypoElasticWrapper:
 
     cdef readonly int nU
 
-    cdef double[::1] stateVars, stressLikeInStateVars, strainLikeInStateVars, stateVarsMaterial, materialProperties, algorithmicTangentInStateVars
+    cdef double[::1] stateVars, stressLikeInStateVars, strainLikeInStateVars, stateVarsMaterial
+    cdef double[::1] materialProperties, algorithmicTangentInStateVars
 
     def __init__(self, ):
 
@@ -80,12 +77,12 @@ cdef class MarmotMaterialGradientEnhancedHypoElasticWrapper:
         pass
 
     def computeYourself(self,
-                         double[::1] Ke,
-                         double[::1] Pe,
-                         const double[::1] QTotal,
-                         const double[::1] dQ,
-                         const double[::1] time,
-                         double dTime):
+                        double[::1] Ke,
+                        double[::1] Pe,
+                        const double[::1] QTotal,
+                        const double[::1] dQ,
+                        const double[::1] time,
+                        double dTime):
 
         cdef double pNewDT
         pNewDT = 1e36
@@ -93,7 +90,7 @@ cdef class MarmotMaterialGradientEnhancedHypoElasticWrapper:
         cdef double[::1] S =np.zeros(6)
         cdef double[36] C
         cdef double[6] dKLocal_dDE = np.zeros(6)
-        cdef double[6] dS_dK  = np.zeros(6)
+        cdef double[6] dS_dK = np.zeros(6)
         cdef const double[::1] dStrain = dQ[0:6]
         cdef double dK = dQ[self.nU-1]
         cdef double KOld = QTotal[self.nU-1] - dK
@@ -128,25 +125,25 @@ cdef class MarmotMaterialGradientEnhancedHypoElasticWrapper:
         self.stressLikeInStateVars[0:6] = S
         self.stressLikeInStateVars[self.nU-1] = KLocal
 
-        Ke_ = np.zeros((7,7))
+        Ke_ = np.zeros((7, 7))
 
-        Ke_[0:6,0:6] = np.array( C ).reshape( (6,6) )
-        Ke_[0:6,6] = np.array( dS_dK ).reshape( 6 )
-        Ke_[6,0:6] = np.array( dKLocal_dDE ).reshape( 6 )
-        Ke_[6,6] = 1.0
+        Ke_[0:6, 0:6] = np.array(C).reshape((6, 6))
+        Ke_[0:6, 6] = np.array(dS_dK).reshape(6)
+        Ke_[6, 0:6] = np.array(dKLocal_dDE).reshape(6)
+        Ke_[6, 6] = 1.0
 
         Ke_ravel = Ke_.ravel()
         for i in range(self.nU*self.nU):
             Ke[i] = Ke_ravel[i]
             self.algorithmicTangentInStateVars[i] = Ke_ravel[i]
 
-
         if pNewDT < 1.0:
             raise CutbackRequest("Material requests for a cutback!", pNewDT)
 
-    def getNumberOfRequiredStateVars(self,):
+    def getNumberOfRequiredStateVars(self, ):
 
-        numberOfRequiredStateVarsMaterial = self.marmotMaterialGradientEnhancedHypoElastic.getNumberOfRequiredStateVars()
+        numberOfRequiredStateVarsMaterial = \
+         self.marmotMaterialGradientEnhancedHypoElastic.getNumberOfRequiredStateVars()
         numberOfRequiredStateVarsOverhead = 2 * self.nU + self.nU * self.nU
         return numberOfRequiredStateVarsOverhead + numberOfRequiredStateVarsMaterial
 
@@ -155,11 +152,11 @@ cdef class MarmotMaterialGradientEnhancedHypoElasticWrapper:
         self.stateVars = stateVars
         self.stressLikeInStateVars = self.stateVars[0:self.nU]
         self.strainLikeInStateVars = self.stateVars[self.nU:2*self.nU]
-        self.algorithmicTangentInStateVars = self.stateVars[2*self.nU:2*self.nU+self.nU*self.nU ]
+        self.algorithmicTangentInStateVars = self.stateVars[2*self.nU:2*self.nU+self.nU*self.nU]
         self.stateVarsMaterial = self.stateVars[2*self.nU+self.nU*self.nU:]
 
         self.marmotMaterialGradientEnhancedHypoElastic.assignStateVars(&self.stateVarsMaterial[0],
-                                                       len(self.stateVarsMaterial))
+                                                                       len(self.stateVarsMaterial))
 
     def getResultArray(self, result, getPersistentView=True):
 
@@ -172,13 +169,13 @@ cdef class MarmotMaterialGradientEnhancedHypoElasticWrapper:
         if result == "algorithmicTangent":
             return np.array(self.algorithmicTangentInStateVars, copy= not getPersistentView)
 
-        cdef string result_ =  result.encode('UTF-8')
+        cdef string result_ = result.encode("UTF-8")
 
         cdef StateView res = self.marmotMaterialGradientEnhancedHypoElastic.getStateView(result_)
 
-        cdef double[::1] theView = <double[:res.stateSize]> ( res.stateLocation )
+        cdef double[::1] theView = <double[:res.stateSize]> (res.stateLocation)
 
-        return np.array(  theView, copy= not getPersistentView)
+        return np.array(theView, copy= not getPersistentView)
 
     def __dealloc__(self):
 

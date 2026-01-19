@@ -6,7 +6,7 @@
 # | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|
 # |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|
 # | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___
-# |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
+# |_____\__, _|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
 #
 #
 #  Unit of Strength of Materials and Structural Analysis
@@ -60,8 +60,9 @@ cdef extern from "Marmot/Marmot.h" namespace "MarmotLibrary" nogil:
     cdef cppclass MarmotElementFactory:
         @staticmethod
         int getElementCodeFromName(const string& elementName) except +IndexError
+
         @staticmethod
-        MarmotElement* createElement(int elementCode, int noEl,) except +ValueError
+        MarmotElement* createElement(int elementCode, int noEl, ) except +ValueError
 
 cdef extern from "Marmot/MarmotElementProperty.h":
     cdef cppclass MarmotElementProperty nogil:
@@ -86,21 +87,21 @@ cdef extern from "Marmot/MarmotElement.h":
 
         void assignStateVars(double *_stateVars, int nStateVars)
 
-        void assignProperty( const MarmotElementProperty& property )
+        void assignProperty(const MarmotElementProperty& property)
 
-        void assignProperty( const MarmotMaterialSection& property ) except +ValueError
+        void assignProperty(const MarmotMaterialSection& property) except +ValueError
 
         void assignNodeCoordinates(const double* elementCoordinates)
 
         void initializeYourself()
 
-        void computeYourself( const double* QTotal,
-                                            const double* dQ,
-                                            double* Pe,
-                                            double* Ke,
-                                            const double* time,
-                                            double dT,
-                                            double& pNewdT,) except +ValueError
+        void computeYourself(const double* QTotal,
+                             const double* dQ,
+                             double* Pe,
+                             double* Ke,
+                             const double* time,
+                             double dT,
+                             double& pNewdT, ) except +ValueError
 
         void setInitialConditions(StateTypes state,
                                   const double* values)
@@ -166,9 +167,9 @@ cdef class MarmotElementWrapper:
     cpdef void _initializeStateVarsTemp(self, ) nogil
 
     cpdef void computeYourself(self,
-                     double[::1] Ke,
-                     double[::1] Pe,
-                     const double[::1] U,
-                     const double[::1] dU,
-                     const double[::1] time,
-                     double dTime, ) nogil except *
+                               double[::1] Ke,
+                               double[::1] Pe,
+                               const double[::1] U,
+                               const double[::1] dU,
+                               const double[::1] time,
+                               double dTime, ) nogil except *

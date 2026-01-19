@@ -28,3 +28,9 @@ repos:
        "--max-line-length", "120",
        "--ignore", "E203,E501",
        "--extend-ignore", "W503"]
+- repo: https://github.com/MarcoGorelli/cython-lint
+  rev: v0.16.2
+  hooks:
+   - id: cython-lint
+     args: ["--max-line-length=120", "--ignore=E741"]
+   - id: double-quote-cython-strings

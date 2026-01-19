@@ -6,7 +6,7 @@
 # | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|
 # |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|
 # | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___
-# |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
+# |_____\__, _|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
 #
 #
 #  Unit of Strength of Materials and Structural Analysis
@@ -42,23 +42,18 @@ Fri Oct 6 2018:
     This solver remains for teaching purposes to demonstrate how to interact with cpp objects.
 """
 import numpy as np
-from scipy.sparse import coo_matrix
-from scipy.sparse.linalg import spsolve
 
 from edelweissfe.solvers.nonlinearimplicitstaticparallelmk2 import NISTParallel
 from edelweissfe.utils.exceptions import CutbackRequest
 
-from cython.parallel cimport parallel, prange, threadid
+from cython.parallel cimport prange, threadid
 from libc.stdlib cimport free, malloc
-from libcpp.string cimport string
 
 from edelweissfe.elements.marmotelement.element cimport (
     MarmotElement,
     MarmotElementWrapper,
 )
 
-import os
-from multiprocessing import cpu_count
 from time import time as getCurrentTime
 
 
@@ -73,74 +68,73 @@ class NISTParallelForMarmotElements(NISTParallel):
             double dT = timeStep.timeIncrement
 
         cdef:
-            int elNDofPerEl, elNumber, elIdxInVIJ, elIdxInPe, threadID, currentIdxInU
+            int elNDofPerEl, elIdxInVIJ, elIdxInPe, threadID, currentIdxInU
             int desiredThreads = self.numThreads
             int nElements = len(elements.values())
             list elList = list(elements.values())
 
-            int[::1] I             = K.I
-            double[::1] K_mView     = K
-            double[::1] UN1_mView   = Un1
-            double[::1] dU_mView    = dU
-            double[::1] P_mView     = P
-            double[::1] F_mView     = F
+            int[::1] I = K.I
+            double[::1] K_mView = K
+            double[::1] UN1_mView = Un1
+            double[::1] dU_mView = dU
+            double[::1] P_mView = P
+            double[::1] F_mView = F
 
-            double[:, ::1] pNewDTVector = np.ones( (desiredThreads, 1), order='C' )  * 1e36 # as many pNewDTs as threads
+            double[:, ::1] pNewDTVector = np.ones((desiredThreads, 1), order="C") * 1e36  # as many pNewDTs as threads
 
             # oversized Buffers for parallel computing:
-            # tables [nThreads x max(elements.ndof) ] for U & dU (can be overwritten during parallel computing)
-            maxNDofOfAnyEl      = self.theDofManager.largestNumberOfElNDof
+            # tables [nThreads x max(elements.ndof)] for U & dU (can be overwritten during parallel computing)
+            maxNDofOfAnyEl = self.theDofManager.largestNumberOfElNDof
             double[:, ::1] UN1e = np.empty((desiredThreads, maxNDofOfAnyEl), )
-            double[:, ::1] dUe  = np.empty((desiredThreads, maxNDofOfAnyEl), )
-            # oversized buffer for Pe ( size = sum(elements.ndof) )
+            double[:, ::1] dUe = np.empty((desiredThreads, maxNDofOfAnyEl), )
+            # oversized buffer for Pe (size = sum(elements.ndof))
             double[::1] Pe = np.zeros(self.theDofManager.accumulatedElementNDof)
-
 
             MarmotElementWrapper backendBasedCythonElement
             # lists (cpp elements + indices and nDofs), which can be accessed parallely
-            MarmotElement** cppElements =      <MarmotElement**> malloc ( nElements * sizeof(MarmotElement*) )
-            int[::1] elIndicesInVIJ         = np.empty( (nElements,), dtype=np.intc )
-            int[::1] elIndexInPe            = np.empty( (nElements,), dtype=np.intc )
-            int[::1] elNDofs                = np.empty( (nElements,), dtype=np.intc )
+            MarmotElement** cppElements = <MarmotElement**> malloc (nElements * sizeof(MarmotElement*))
+            int[::1] elIndicesInVIJ = np.empty((nElements, ), dtype=np.intc)
+            int[::1] elIndexInPe = np.empty((nElements, ), dtype=np.intc)
+            int[::1] elNDofs = np.empty((nElements, ), dtype=np.intc)
 
-            int i,j=0
+            int i, j=0
 
         for i in range(nElements):
             # prepare all lists for upcoming parallel element computing
-            backendBasedCythonElement   = elList[i]
+            backendBasedCythonElement = elList[i]
             backendBasedCythonElement._initializeStateVarsTemp()
-            cppElements[i]              = backendBasedCythonElement.marmotElement
-            elIndicesInVIJ[i]           = self.theDofManager.idcsOfHigherOrderEntitiesInVIJ[backendBasedCythonElement]
-            elNDofs[i]                  = backendBasedCythonElement.nDof
+            cppElements[i] = backendBasedCythonElement.marmotElement
+            elIndicesInVIJ[i] = self.theDofManager.idcsOfHigherOrderEntitiesInVIJ[backendBasedCythonElement]
+            elNDofs[i] = backendBasedCythonElement.nDof
             # each element gets its place in the Pe buffer
             elIndexInPe[i] = j
             j += elNDofs[i]
 
         try:
             for i in prange(nElements,
-                        schedule='dynamic',
-                        num_threads=desiredThreads,
-                        nogil=True):
+                            schedule="dynamic",
+                            num_threads=desiredThreads,
+                            nogil=True):
 
-                threadID =      threadid()
-                elIdxInVIJ =    elIndicesInVIJ[i]
-                elIdxInPe =     elIndexInPe[i]
-                elNDofPerEl =   elNDofs[i]
+                threadID = threadid()
+                elIdxInVIJ = elIndicesInVIJ[i]
+                elIdxInPe = elIndexInPe[i]
+                elNDofPerEl = elNDofs[i]
 
                 for j in range (elNDofPerEl):
                     # copy global U & dU to buffer memories for element eval.
-                    currentIdxInU =     I [ elIndicesInVIJ[i] +  j ]
-                    UN1e[threadID, j] = UN1_mView[ currentIdxInU ]
-                    dUe[threadID, j] =  dU_mView[ currentIdxInU ]
+                    currentIdxInU = I [elIndicesInVIJ[i] + j]
+                    UN1e[threadID, j] = UN1_mView[currentIdxInU]
+                    dUe[threadID, j] = dU_mView[currentIdxInU]
 
                 (<MarmotElement*>
-                     cppElements[i] )[0].computeYourself(&UN1e[threadID, 0],
-                                                        &dUe[threadID, 0],
-                                                        &Pe[elIdxInPe],
-                                                        &K_mView[elIdxInVIJ],
-                                                        &time[0],
-                                                        dT,
-                                                        pNewDTVector[threadID, 0])
+                    cppElements[i])[0].computeYourself(&UN1e[threadID, 0],
+                                                       &dUe[threadID, 0],
+                                                       &Pe[elIdxInPe],
+                                                       &K_mView[elIdxInVIJ],
+                                                       &time[0],
+                                                       dT,
+                                                       pNewDTVector[threadID, 0])
 
                 if pNewDTVector[threadID, 0] <= 1.0:
                     break
@@ -149,19 +143,19 @@ class NISTParallelForMarmotElements(NISTParallel):
             if minPNewDT < 1.0:
                 raise CutbackRequest("An element requests for a cutback", minPNewDT)
 
-            #successful elements evaluation: condense oversize Pe buffer -> P
+            # successful elements evaluation: condense oversize Pe buffer -> P
             P_mView[:] = 0.0
             F_mView[:] = 0.0
             for i in range(nElements):
-                elIdxInVIJ =    elIndicesInVIJ[i]
-                elIdxInPe =     elIndexInPe[i]
-                elNDofPerEl =   elNDofs[i]
+                elIdxInVIJ = elIndicesInVIJ[i]
+                elIdxInPe = elIndexInPe[i]
+                elNDofPerEl = elNDofs[i]
                 for j in range (elNDofPerEl):
-                    P_mView[ I[elIdxInVIJ + j] ] +=      Pe[ elIdxInPe + j ]
-                    F_mView[ I[elIdxInVIJ + j] ] += abs( Pe[ elIdxInPe + j ] )
+                    P_mView[I[elIdxInVIJ + j]] += Pe[elIdxInPe + j]
+                    F_mView[I[elIdxInVIJ + j]] += abs(Pe[elIdxInPe + j])
         finally:
-            free( cppElements )
+            free(cppElements)
 
         toc = getCurrentTime()
-        self.computationTimes['elements'] += toc - tic
+        self.computationTimes["elements"] += toc - tic
         return P, K, F
