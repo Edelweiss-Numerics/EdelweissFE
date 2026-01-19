@@ -57,8 +57,8 @@ cdef class CSRGenerator:
         """
 
         cdef:
-            long[::1] I = systemMatrix.I
-            long[::1] J = systemMatrix.J
+            int[::1] I = systemMatrix.I
+            int[::1] J = systemMatrix.J
             long nDof = systemMatrix.nDof
 
         self.nDof = nDof
@@ -77,7 +77,7 @@ cdef class CSRGenerator:
         indptr = self.csrMatrix.indptr
 
         cdef int cooPairIdx, c, delta
-        cdef long row, col
+        cdef int row, col
         self.nCooPairs = len(I)
         for cooPairIdx in range(self.nCooPairs):
             row = I [ cooPairIdx ]

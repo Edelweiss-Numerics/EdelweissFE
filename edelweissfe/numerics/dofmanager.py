@@ -536,8 +536,8 @@ class DofManager:
 
         sizeVIJ = self._sizeVIJ
 
-        I = np.zeros(sizeVIJ, dtype=int)  # noqa: E741
-        J = np.zeros(sizeVIJ, dtype=int)  # noqa: E741
+        I = np.zeros(sizeVIJ, dtype=np.intc)  # noqa: E741
+        J = np.zeros(sizeVIJ, dtype=np.intc)  # noqa: E741
         idxInVIJ = 0
 
         for (

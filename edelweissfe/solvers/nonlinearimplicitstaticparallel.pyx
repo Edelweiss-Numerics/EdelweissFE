@@ -78,7 +78,7 @@ class NISTParallelForMarmotElements(NISTParallel):
             int nElements = len(elements.values())
             list elList = list(elements.values())
 
-            long[::1] I             = K.I
+            int[::1] I             = K.I
             double[::1] K_mView     = K
             double[::1] UN1_mView   = Un1
             double[::1] dU_mView    = dU
