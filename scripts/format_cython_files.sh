@@ -23,7 +23,6 @@ process_file() {
     echo "======================================================="
 
     # --- PHASE 1: Simple Whitespace, Punctuation & Comments ---
-    # Covers: E201, E202, W291, E231(comma), E265
     echo "1. Fixing basic punctuation and whitespace..."
 
     # E201: Whitespace after '[' or '('
@@ -34,8 +33,9 @@ process_file() {
     eval $SED_IN_PLACE "'s/ \]/]/g'" "$FILE"
     eval $SED_IN_PLACE "'s/ )/)/g'" "$FILE"
 
-    # E231: Missing whitespace after ',' (Global fix is usually safe for commas)
-    eval $SED_IN_PLACE $SED_EXT "'s/,([^[:space:]])/, \1/g'" "$FILE"
+    # E231: Missing whitespace after ','
+    # UPDATE: We added '/^[[:space:]]*#/! ...' to ignore lines starting with '#'
+    eval $SED_IN_PLACE $SED_EXT "'/^[[:space:]]*#/! s/,([^[:space:]])/, \1/g'" "$FILE"
 
     # E265: Block comment should start with '# '
     eval $SED_IN_PLACE $SED_EXT "'s/^([[:space:]]*)#([^ ![:space:]])/\1# \2/g'" "$FILE"
@@ -46,11 +46,8 @@ process_file() {
 
     # --- PHASE 2: Redundant Backslashes (E502) ---
     echo "2. Fixing E502 (Redundant backslash)..."
-    # Logic: If bracket is open, backslash is not needed.
     E502_LINES=$($LINT_CMD "$FILE" | grep "E502" | awk -F: '{print $2}' | sort -u -nr)
     for line in $E502_LINES; do
-        # Replace backslash at the very end of the line with nothing
-        # We escape the backslash twice: \\\\ matches a literal \
         CMD="$SED_IN_PLACE '${line}s/\\\\$//' \"$FILE\""
         eval "$CMD"
     done
@@ -89,18 +86,13 @@ process_file() {
 
 
     # --- PHASE 5: Operator, Colon & Comment Spacing ---
-    # Covers: E221, E222, E261, E231(colon)
     echo "5. Fixing Complex Spacing..."
 
     for ((i=1; i<=3; i++)); do
         # E231: Missing whitespace after ':' (Smart Fix)
-        # We do this here instead of Phase 1 to avoid breaking slices like x[1:2]
         E231_LINES=$($LINT_CMD "$FILE" | grep "E231" | awk -F: '{print $2}' | sort -u -nr)
         if [ ! -z "$E231_LINES" ]; then
              for line in $E231_LINES; do
-                # Only add space if followed by non-space.
-                # This might technically hit slices if they are on the same line as a dict error,
-                # but it is safer than a global replace.
                 CMD="$SED_IN_PLACE $SED_EXT '${line}s/:([^[:space:]])/: \1/g' \"$FILE\""
                 eval "$CMD"
              done
@@ -133,7 +125,6 @@ process_file() {
              done
         fi
 
-        # Break loop if no errors found
         if [ -z "$E231_LINES" ] && [ -z "$E221_LINES" ] && [ -z "$E222_LINES" ] && [ -z "$E261_LINES" ]; then break; fi
     done
 
