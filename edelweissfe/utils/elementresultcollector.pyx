@@ -6,7 +6,7 @@
 # | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|
 # |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|
 # | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___
-# |_____\__, _|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
+# |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
 #
 #
 #  Unit of Strength of Materials and Structural Analysis
@@ -50,12 +50,12 @@ cdef class ElementResultCollector:
 
         Collecting elemental results may be a performance critical part.
         This cdef class allows for the efficient gathering.
-        A 3D array is assembled if multiple quadrature points are requested (shape ``[elements, \
-    quadraturePoints, resultVector]``)
+        A 3D array is assembled if multiple quadrature points are requested
+        (shape ``[elements, quadraturePoints, resultVector]``)
         or a 2D array for one quadrature point (shape ``[elements, resultVector]``).
 
-        Method :func:`~edelweissfe.utils.elementresultcollector.ElementResultCollector.getCurrentResults` \
-    updates the assembly array and passes it back.
+        Method :func:`~edelweissfe.utils.elementresultcollector.ElementResultCollector.getCurrentResults`
+        updates the assembly array and passes it back.
 
         The caller is responsible to make a copy of it, if persistent results are needed!
 
