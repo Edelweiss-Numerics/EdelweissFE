@@ -162,48 +162,165 @@
             <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">key</span><span class="p">)</span></div>
 
 
+<div class="viewcode-block" id="ScatterDofVector"><a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.ScatterDofVector">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ScatterDofVector</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A Scatter Vector that stores data for entities contiguously.</span>
+<span class="sd">    Includes a fast lookup map to support random access by Entity.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    entitiesInDofVector</span>
+<span class="sd">        The dictionary mapping entities to their indices in the DofVector.</span>
+<span class="sd">    nDof</span>
+<span class="sd">        The total number of degrees of freedom.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">entitiesInDofVector</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">nDof</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="n">entities</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">entitiesInDofVector</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+
+        <span class="n">sizes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="nb">len</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">entitiesInDofVector</span><span class="o">.</span><span class="n">values</span><span class="p">()],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">)</span>
+        <span class="n">total_size</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">sizes</span><span class="p">)</span>
+
+        <span class="n">obj</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">total_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+
+        <span class="n">offsets</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">entities</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">)</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">sizes</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">offsets</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+
+        <span class="n">obj</span><span class="o">.</span><span class="n">_offset_map</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">entities</span><span class="p">,</span> <span class="n">offsets</span><span class="p">))</span>
+
+        <span class="n">obj</span><span class="o">.</span><span class="n">_global_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">total_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+
+        <span class="n">current_offset</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">entity</span><span class="p">,</span> <span class="n">indices</span> <span class="ow">in</span> <span class="n">entitiesInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
+            <span class="n">obj</span><span class="o">.</span><span class="n">_global_indices</span><span class="p">[</span><span class="n">current_offset</span> <span class="p">:</span> <span class="n">current_offset</span> <span class="o">+</span> <span class="n">n</span><span class="p">]</span> <span class="o">=</span> <span class="n">indices</span>
+            <span class="n">current_offset</span> <span class="o">+=</span> <span class="n">n</span>
+
+        <span class="n">obj</span><span class="o">.</span><span class="n">_entitiesInDofVector</span> <span class="o">=</span> <span class="n">entitiesInDofVector</span>
+        <span class="n">obj</span><span class="o">.</span><span class="n">_nDof</span> <span class="o">=</span> <span class="n">nDof</span>
+
+        <span class="k">return</span> <span class="n">obj</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__array_finalize__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">obj</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_offset_map</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">&quot;_offset_map&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_entitiesInDofVector</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">&quot;_entitiesInDofVector&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nDof</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">&quot;_nDof&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_global_indices</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">&quot;_global_indices&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns a VIEW into the expanded buffer.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        key</span>
+<span class="sd">            The key for indexing, either an entity or an integer index.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_offset_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">val</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_entitiesInDofVector</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">val</span> <span class="o">+</span> <span class="n">size</span><span class="p">))</span>
+
+        <span class="c1"># Case 2: Integer Indexing (Linear access into the big buffer)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ScatterDofVector.assembleInto"><a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.ScatterDofVector.assembleInto">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">assembleInto</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">targetDofVector</span><span class="p">,</span> <span class="n">absolute</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Scatter-Add into the global vector.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        targetDofVector</span>
+<span class="sd">            The target DofVector to assemble into.</span>
+<span class="sd">        absolute</span>
+<span class="sd">            If True, assemble the absolute values.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="k">if</span> <span class="n">absolute</span> <span class="k">else</span> <span class="bp">self</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">targetDofVector</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_global_indices</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="ScatterDofVector.toDofVector"><a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.ScatterDofVector.toDofVector">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">toDofVector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">absolute</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;DofVector&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a new DofVector from this scatter vector.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        absolute</span>
+<span class="sd">            If True, use absolute values.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        DofVector</span>
+<span class="sd">            The new DofVector.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">new_dof_vector</span> <span class="o">=</span> <span class="n">DofVector</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_nDof</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entitiesInDofVector</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assembleInto</span><span class="p">(</span><span class="n">new_dof_vector</span><span class="p">,</span> <span class="n">absolute</span><span class="o">=</span><span class="n">absolute</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">new_dof_vector</span></div></div>
+
+
 <div class="viewcode-block" id="DofVector"><a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofVector">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">DofVector</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    This class represents a Dof Vector, which also has knowledge of each entities (elements, constraints) location within.</span>
-<span class="sd">    The [] operator allows to access (non-contigouos read, write) at each entities location</span>
+<span class="sd">    Represents a Dof Vector with entity-aware indexing.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    nDof</span>
-<span class="sd">        The size of the system.</span>
-<span class="sd">    entitiesInVIJ</span>
-<span class="sd">        A dictionary containing the indices of an entitiy in the value vector.</span>
+<span class="sd">        The total number of degrees of freedom.</span>
+<span class="sd">    entitiesInDofVector</span>
+<span class="sd">        A dictionary mapping entities to their indices in the DofVector.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">nDof</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">entitiesInDofVector</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
         <span class="n">obj</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
         <span class="n">obj</span><span class="o">.</span><span class="n">entitiesInDofVector</span> <span class="o">=</span> <span class="n">entitiesInDofVector</span>
-
         <span class="k">return</span> <span class="n">obj</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">__array_finalize__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">obj</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">&quot;entitiesInDofVector&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
     <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="c1"># 1. Try Entity Lookup (Dict)</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
-        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+            <span class="c1"># 2. Fallback to Standard Indexing</span>
             <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">value</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">value</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
 
-<div class="viewcode-block" id="DofVector.copy"><a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofVector.copy">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">copy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a copy of the DofVector, including the entitiesInDofVector mapping.</span>
+<div class="viewcode-block" id="DofVector.copy"><a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofVector.copy">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">copy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s2">&quot;C&quot;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create a copy of this DofVector.</span>
 
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        order</span>
+<span class="sd">            The memory layout order.</span>
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        DofVector</span>
 <span class="sd">            The copied DofVector.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">newDofVector</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">DofVector</span><span class="p">)</span>
-        <span class="n">newDofVector</span><span class="o">.</span><span class="n">entitiesInDofVector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">newDofVector</span></div></div>
+        <span class="n">newDofVector</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">order</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">DofVector</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">newDofVector</span><span class="o">.</span><span class="n">entitiesInDofVector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">newDofVector</span></div>
+
+<div class="viewcode-block" id="DofVector.createScatterVector"><a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofVector.createScatterVector">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">createScatterVector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ScatterDofVector</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create a scatter vector for ALL entities in this DofVector.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ScatterDofVector</span>
+<span class="sd">            The ScatterDofVector.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">ScatterDofVector</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">size</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="DofManager"><a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">DofManager</span><span class="p">:</span>
