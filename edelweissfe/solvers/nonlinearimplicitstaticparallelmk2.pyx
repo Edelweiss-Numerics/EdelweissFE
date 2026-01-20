@@ -31,36 +31,31 @@
 """
 Parallel implementation of the NIST solver.
 """
-import numpy as np
-from scipy.sparse import coo_matrix
-from scipy.sparse.linalg import spsolve
-
-from edelweissfe.solvers.nonlinearimplicitstatic import NIST
-from edelweissfe.utils.exceptions import CutbackRequest
-
-from cython.parallel cimport parallel, prange, threadid
-from libc.stdlib cimport free, malloc
-from libcpp.string cimport string
+from cython.parallel cimport prange, threadid
 
 import os
 from multiprocessing import cpu_count
 from time import time as getCurrentTime
+
+import numpy as np
+
+from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 
 
 class NISTParallel(NIST):
     identification = "NISTPSolver"
 
     def solveStep(self, step, model, fieldOutputController, outputmanagers):
-        #determine number of threads
+        # determine number of threads
         self.numThreads = cpu_count()
 
-        if 'OMP_NUM_THREADS' in os.environ:
-            self.numThreads = int( os.environ ['OMP_NUM_THREADS'] ) # higher priority than .inp settings
+        if "OMP_NUM_THREADS" in os.environ:
+            self.numThreads = int(os.environ ["OMP_NUM_THREADS"])  # higher priority than .inp settings
         # else:
         #     if "NISTSolver" in step.actions["options"]:
         #         self.numThreads = int(step.actions["options"][self.identification].get('numThreads', self.numThreads))
 
-        self.journal.message('Using {:} threads'.format(self.numThreads), self.identification)
+        self.journal.message("Using {:} threads".format(self.numThreads), self.identification)
         return super().solveStep(step, model, fieldOutputController, outputmanagers)
 
     def applyDirichletK(self, K, dirichlets):
@@ -93,18 +88,18 @@ class NISTParallel(NIST):
         data_ = K.data
 
         tic = getCurrentTime()
-        for dirichlet in dirichlets: # for each bc
+        for dirichlet in dirichlets:  # for each bc
             dirichletIndices = self.findDirichletIndices(dirichlet)
-            for i in dirichletIndices: # for each node dof in the BC
-                for j in range ( indptr_[i] , indptr_ [i+1] ): # iterate along row
+            for i in dirichletIndices:  # for each node dof in the BC
+                for j in range (indptr_[i] , indptr_ [i+1]):  # iterate along row
                     if i == indices_ [j]:
-                        data_[ j ] = 1.0 # diagonal entry
+                        data_[j] = 1.0  # diagonal entry
                     else:
-                        data_[ j ] = 0.0 # off diagonal entry
+                        data_[j] = 0.0  # off diagonal entry
 
         K.eliminate_zeros()
         toc = getCurrentTime()
-        self.computationTimes['dirichlet K'] += toc - tic
+        self.computationTimes["dirichlet K"] += toc - tic
 
         return K
 
@@ -117,58 +112,58 @@ class NISTParallel(NIST):
             double dT = timeStep.timeIncrement
 
         cdef:
-            int elNDof, elNumber, elIdxInVIJ, elIdxInPe, threadID, currentIdxInU
+            int elNDof, elIdxInVIJ, elIdxInPe, threadID, currentIdxInU
             int desiredThreads = self.numThreads
             int nElements = len(elements.values())
             list elList = list(elements.values())
 
-            long[::1] I             = K.I
-            double[::1] K_mView     = K
-            double[::1] UN1_mView   = Un1
-            double[::1] dU_mView    = dU
-            double[::1] P_mView     = P
-            double[::1] F_mView     = F
+            int[::1] I = K.I
+            double[::1] K_mView = K
+            double[::1] UN1_mView = Un1
+            double[::1] dU_mView = dU
+            double[::1] P_mView = P
+            double[::1] F_mView = F
 
             # oversized Buffers for parallel computing:
-            # tables [nThreads x max(elements.ndof) ] for U & dU (can be overwritten during parallel computing)
-            maxNDofOfAnyEl      = self.theDofManager.largestNumberOfElNDof
+            # tables [nThreads x max(elements.ndof)] for U & dU (can be overwritten during parallel computing)
+            maxNDofOfAnyEl = self.theDofManager.largestNumberOfElNDof
             double[:, ::1] UN1e = np.empty((desiredThreads, maxNDofOfAnyEl), )
-            double[:, ::1] dUe  = np.empty((desiredThreads, maxNDofOfAnyEl), )
-            # oversized buffer for Pe ( size = sum(elements.ndof) )
+            double[:, ::1] dUe = np.empty((desiredThreads, maxNDofOfAnyEl), )
+            # oversized buffer for Pe (size = sum(elements.ndof))
             double[::1] Pe = np.zeros(self.theDofManager.accumulatedElementNDof)
 
             # lists (indices and nDofs), which can be accessed parallely
-            int[::1] elIndicesInVIJ         = np.empty( (nElements,), dtype=np.intc )
-            int[::1] elIndexInPe            = np.empty( (nElements,), dtype=np.intc )
-            int[::1] elNDofs                = np.empty( (nElements,), dtype=np.intc )
+            int[::1] elIndicesInVIJ = np.empty((nElements, ), dtype=np.intc)
+            int[::1] elIndexInPe = np.empty((nElements, ), dtype=np.intc)
+            int[::1] elNDofs = np.empty((nElements, ), dtype=np.intc)
 
             int i, j = 0
 
-        #TODO: this could be done once (__init__) and stored permanently in a cdef class
+        # TODO: this could be done once (__init__) and stored permanently in a cdef class
         for i in range(nElements):
             # prepare all lists for upcoming parallel element computing
-            el                      = elList[i]
-            elIndicesInVIJ[i]       = self.theDofManager.idcsOfHigherOrderEntitiesInVIJ[el]
-            elNDofs[i]              = el.nDof
+            el = elList[i]
+            elIndicesInVIJ[i] = self.theDofManager.idcsOfHigherOrderEntitiesInVIJ[el]
+            elNDofs[i] = el.nDof
             # each element gets its place in the Pe buffer
             elIndexInPe[i] = j
             j += elNDofs[i]
 
         for i in prange(nElements,
-                    schedule='dynamic',
-                    num_threads=desiredThreads,
-                    nogil=True):
+                        schedule="dynamic",
+                        num_threads=desiredThreads,
+                        nogil=True):
 
-            threadID    = threadid()
-            elIdxInVIJ  = elIndicesInVIJ[i]
-            elIdxInPe   = elIndexInPe[i]
-            elNDof      = elNDofs[i]
+            threadID = threadid()
+            elIdxInVIJ = elIndicesInVIJ[i]
+            elIdxInPe = elIndexInPe[i]
+            elNDof = elNDofs[i]
 
             for j in range (elNDof):
                 # copy global U & dU to buffer memories for element eval.
-                currentIdxInU =     I [ elIndicesInVIJ[i] +  j ]
-                UN1e[threadID, j] = UN1_mView[ currentIdxInU ]
-                dUe[threadID, j] =  dU_mView[ currentIdxInU ]
+                currentIdxInU = I [elIndicesInVIJ[i] + j]
+                UN1e[threadID, j] = UN1_mView[currentIdxInU]
+                dUe[threadID, j] = dU_mView[currentIdxInU]
 
             # for accessing the element in the list, and for passing the parameters
             # we have to enable the gil.
@@ -183,16 +178,16 @@ class NISTParallel(NIST):
                                           time,
                                           dT)
 
-        #successful elements evaluation: condense oversize Pe buffer -> P
+        # successful elements evaluation: condense oversize Pe buffer -> P
         for i in range(nElements):
-            elIdxInVIJ =    elIndicesInVIJ[i]
-            elIdxInPe =     elIndexInPe[i]
-            elNDof =   elNDofs[i]
+            elIdxInVIJ = elIndicesInVIJ[i]
+            elIdxInPe = elIndexInPe[i]
+            elNDof = elNDofs[i]
             for j in range (elNDof):
-                P_mView[ I[elIdxInVIJ + j] ] +=      Pe[ elIdxInPe + j ]
-                F_mView[ I[elIdxInVIJ + j] ] += abs( Pe[ elIdxInPe + j ] )
+                P_mView[I[elIdxInVIJ + j]] += Pe[elIdxInPe + j]
+                F_mView[I[elIdxInVIJ + j]] += abs(Pe[elIdxInPe + j])
 
         toc = getCurrentTime()
-        self.computationTimes['elements'] += toc - tic
+        self.computationTimes["elements"] += toc - tic
 
         return P, K, F

@@ -82,48 +82,165 @@ class VIJSystemMatrix(np.ndarray):
             return super().__getitem__(key)
 
 
+class ScatterDofVector(np.ndarray):
+    """
+    A Scatter Vector that stores data for entities contiguously.
+    Includes a fast lookup map to support random access by Entity.
+
+    Parameters
+    ----------
+    entitiesInDofVector
+        The dictionary mapping entities to their indices in the DofVector.
+    nDof
+        The total number of degrees of freedom.
+    """
+
+    def __new__(cls, entitiesInDofVector: dict, nDof: int):
+        entities = list(entitiesInDofVector.keys())
+
+        sizes = np.array([len(v) for v in entitiesInDofVector.values()], dtype=np.intc)
+        total_size = np.sum(sizes)
+
+        obj = np.zeros(total_size, dtype=float).view(cls)
+
+        offsets = np.zeros(len(entities) + 1, dtype=np.intc)
+        np.cumsum(sizes, out=offsets[1:])
+
+        obj._offset_map = dict(zip(entities, offsets))
+
+        obj._global_indices = np.empty(total_size, dtype=np.int32)
+
+        current_offset = 0
+        for entity, indices in entitiesInDofVector.items():
+            n = len(indices)
+            obj._global_indices[current_offset : current_offset + n] = indices
+            current_offset += n
+
+        obj._entitiesInDofVector = entitiesInDofVector
+        obj._nDof = nDof
+
+        return obj
+
+    def __array_finalize__(self, obj):
+        if obj is None:
+            return
+        self._offset_map = getattr(obj, "_offset_map", None)
+        self._entitiesInDofVector = getattr(obj, "_entitiesInDofVector", None)
+        self._nDof = getattr(obj, "_nDof", None)
+        self._global_indices = getattr(obj, "_global_indices", None)
+
+    def __getitem__(self, key):
+        """
+        Returns a VIEW into the expanded buffer.
+
+        Parameters
+        ----------
+        key
+            The key for indexing, either an entity or an integer index.
+        """
+        val = self._offset_map.get(key)
+        if val is not None:
+            size = len(self._entitiesInDofVector[key])
+            return super().__getitem__(slice(val, val + size))
+
+        # Case 2: Integer Indexing (Linear access into the big buffer)
+        return super().__getitem__(key)
+
+    def assembleInto(self, targetDofVector, absolute=False):
+        """Scatter-Add into the global vector.
+
+        Parameters
+        ----------
+        targetDofVector
+            The target DofVector to assemble into.
+        absolute
+            If True, assemble the absolute values.
+        """
+        data = np.abs(self) if absolute else self
+        np.add.at(targetDofVector, self._global_indices, data)
+
+    def toDofVector(self, absolute=False) -> "DofVector":
+        """Create a new DofVector from this scatter vector.
+
+        Parameters
+        ----------
+        absolute
+            If True, use absolute values.
+
+        Returns
+        -------
+        DofVector
+            The new DofVector.
+        """
+        new_dof_vector = DofVector(self._nDof, self._entitiesInDofVector)
+        self.assembleInto(new_dof_vector, absolute=absolute)
+        return new_dof_vector
+
+
 class DofVector(np.ndarray):
     """
-    This class represents a Dof Vector, which also has knowledge of each entities (elements, constraints) location within.
-    The [] operator allows to access (non-contigouos read, write) at each entities location
+    Represents a Dof Vector with entity-aware indexing.
 
     Parameters
     ----------
     nDof
-        The size of the system.
-    entitiesInVIJ
-        A dictionary containing the indices of an entitiy in the value vector.
+        The total number of degrees of freedom.
+    entitiesInDofVector
+        A dictionary mapping entities to their indices in the DofVector.
     """
 
     def __new__(cls, nDof: int, entitiesInDofVector: dict):
         obj = np.zeros(nDof, dtype=float).view(cls)
         obj.entitiesInDofVector = entitiesInDofVector
-
         return obj
 
+    def __array_finalize__(self, obj):
+        if obj is None:
+            return
+        self.entitiesInDofVector = getattr(obj, "entitiesInDofVector", None)
+
     def __getitem__(self, key):
+        # 1. Try Entity Lookup (Dict)
         try:
             return super().__getitem__(self.entitiesInDofVector[key])
-        except Exception:
+        except (KeyError, TypeError):
+            # 2. Fallback to Standard Indexing
             return super().__getitem__(key)
 
     def __setitem__(self, key, value):
         try:
-            return super().__setitem__(self.entitiesInDofVector[key], value)
-        except Exception:
-            return super().__setitem__(key, value)
+            super().__setitem__(self.entitiesInDofVector[key], value)
+        except (KeyError, TypeError):
+            super().__setitem__(key, value)
 
-    def copy(self):
-        """Create a copy of the DofVector, including the entitiesInDofVector mapping.
+    def copy(self, order="C"):
+        """
+        Create a copy of this DofVector.
 
+        Parameters
+        ----------
+        order
+            The memory layout order.
         Returns
         -------
         DofVector
             The copied DofVector.
         """
-        newDofVector = super().copy().view(DofVector)
-        newDofVector.entitiesInDofVector = self.entitiesInDofVector.copy()
+        newDofVector = super().copy(order).view(DofVector)
+        if self.entitiesInDofVector is not None:
+            newDofVector.entitiesInDofVector = self.entitiesInDofVector.copy()
         return newDofVector
+
+    def createScatterVector(self) -> ScatterDofVector:
+        """
+        Create a scatter vector for ALL entities in this DofVector.
+
+        Returns
+        -------
+        ScatterDofVector
+            The ScatterDofVector.
+        """
+        return ScatterDofVector(self.entitiesInDofVector, self.size)
 
 
 class DofManager:
@@ -536,8 +653,8 @@ class DofManager:
 
         sizeVIJ = self._sizeVIJ
 
-        I = np.zeros(sizeVIJ, dtype=int)  # noqa: E741
-        J = np.zeros(sizeVIJ, dtype=int)  # noqa: E741
+        I = np.zeros(sizeVIJ, dtype=np.intc)  # noqa: E741
+        J = np.zeros(sizeVIJ, dtype=np.intc)  # noqa: E741
         idxInVIJ = 0
 
         for (

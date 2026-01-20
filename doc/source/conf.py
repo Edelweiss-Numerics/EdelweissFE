@@ -74,7 +74,7 @@ numpydoc_show_inherited_class_members = True
 
 html_theme = "sphinx_rtd_theme"
 html_logo = "./edelweiss_fe_logo.png"
-#html_logo = "./logo.png"
+# html_logo = "./logo.png"
 
 html_static_path = ["_static"]
 

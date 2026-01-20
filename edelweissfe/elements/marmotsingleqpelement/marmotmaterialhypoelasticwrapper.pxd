@@ -35,7 +35,7 @@ from libcpp.vector cimport vector
 # get eigen Vector6d alis frm MarmotTypdefs
 cdef extern from "Eigen/Dense" nogil:
     cdef cppclass Vector6d "Eigen::Matrix<double, 6, 1>":
-        Vector6d( double* ) nogil
+        Vector6d(double*) nogil
         double& operator()(int row)
 
 cdef extern from "Marmot/MarmotMaterialHypoElasticFactory.h" namespace "MarmotLibrary" nogil:
@@ -56,9 +56,9 @@ cdef extern from "Marmot/MarmotUtils.h":
 cdef extern from "Marmot/MarmotMaterialHypoElastic.h":
     cdef cppclass MarmotMaterialHypoElastic nogil:
 
-        StateView getStateView( const string& stateName, double* stateVars ) except +ValueError
+        StateView getStateView(const string& stateName, double* stateVars) except +ValueError
 
-        void initializeYourself( double* stateVars, int nStateVars ) except +ValueError
+        void initializeYourself(double* stateVars, int nStateVars) except +ValueError
 
         void setCharacteristicElementLength(double length)
 
@@ -73,7 +73,7 @@ cdef extern from "Marmot/MarmotMaterialHypoElastic.h":
             double time
             double dT
 
-        void computeStress( state3D& state,
+        void computeStress(state3D& state,
                            double* dStress_dStrain,
                            const double* dStrain,
                            const timeInfo& timeInfo) except +ValueError
