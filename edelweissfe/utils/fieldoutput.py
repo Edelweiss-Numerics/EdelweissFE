@@ -82,6 +82,8 @@ class _FieldOutputBase:
         Export the results to a file.
     fExport_x
         Apply a math function on the results before exporting.
+    reshape_to_dimensions
+        Reshape the result to a specific number of dimensions.
     """
 
     def __init__(
@@ -93,6 +95,7 @@ class _FieldOutputBase:
         f_x: Callable = None,
         export: str = None,
         fExport_x: Callable = None,
+        reshape_to_dimensions: int = None,
     ):
         self.timeTotal = 0.0
         self.name = name
@@ -104,6 +107,7 @@ class _FieldOutputBase:
         self.f_export = fExport_x
         self.timeHistory = []
         self.export = export
+        self._reshape_to_dimensions = reshape_to_dimensions
 
     def getLastResult(
         self,
@@ -160,6 +164,9 @@ class _FieldOutputBase:
         """
 
         self.timeHistory.append(self.model.time)
+
+        if self._reshape_to_dimensions is not None:
+            result = np.reshape(result, (-1, self._reshape_to_dimensions))
 
         if self.f:
             result = self.f(result)
