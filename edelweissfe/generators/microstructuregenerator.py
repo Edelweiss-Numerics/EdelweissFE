@@ -27,7 +27,7 @@
 #  ---------------------------------------------------------------------
 """
 A mesh generator for generating a structure from a single unit cell mesh:
-
+The unit cell mesh must be readable by meshio (e.g., in .inp format).
 
 .. code-block:: edelweiss
     :caption: Generate meshes on the fly. Example:
@@ -49,6 +49,7 @@ import numpy as np
 from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
+from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.misc import convertLinesToStringDictionary
 
@@ -71,7 +72,7 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dic
     nX = int(options.get("nX", 1))
     nY = int(options.get("nY", 1))
     # nZ = int(options.get("nZ", 1))
-    elementType = getElementClass(options.get("elType", None), options.get("elProvioder", None))
+    elementType = getElementClass(options.get("elType", None), options.get("elProvider", None))
 
     unitCellMesh = meshio.read(unitCellMeshFile)
 
@@ -79,7 +80,21 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dic
     elements = unitCellMesh.cells
 
     all_nodes = nodes.copy()
-    all_elements = [el for el in elements[0].data]
+    all_elements = np.array([], dtype=int).reshape(0, elements[0].data.shape[1])
+    block_elements_assignments = {}
+    for i, block in enumerate(elements):
+        # stacke all elements together
+        all_elements = np.vstack((all_elements, block.data))
+        # store element ids for each block
+        block_elements_assignments[i] = list(range(len(all_elements) - len(block.data), len(all_elements)))
+        # create an empty element set for each block
+        model.elementSets[f"{name}_block-{i + 1}"] = ElementSet(f"{name}_block-{i + 1}", set())
+
+    # print information about the unit cell mesh
+    print(f"    Unit cell mesh has {len(all_nodes)} nodes and {len(all_elements)} elements.")
+    print(f"    Element blocks in unit cell mesh: {len(block_elements_assignments)} with assignments:")
+    for block_id, el_ids in block_elements_assignments.items():
+        print(f"      block-{block_id + 1}: {len(el_ids)} elements")
 
     # get unit cell dimensions
     x_min = np.min(nodes[:, 0])
@@ -97,12 +112,22 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dic
         _nodes.append(_node)
         model.nodes[idx + 1] = _node
 
-    for idx, element in enumerate(all_elements):
-        newEl = elementType(options["elType"], idx + 1)
-        nodeList = [_nodes[nid] for nid in element]
-        newEl.setNodes(nodeList)
+    idx = 0
+    for block_id, el_ids in block_elements_assignments.items():
+        elements_per_block = []
+        for local_el_id in el_ids:
+            newEl = elementType(options["elType"], idx + 1)
+            nodeList = [_nodes[nid] for nid in all_elements[local_el_id]]
+            newEl.setNodes(nodeList)
 
-        model.elements[idx + 1] = newEl
+            model.elements[idx + 1] = newEl
+            # add element to corresponding element set
+            elements_per_block.append(newEl)
+            idx += 1
+
+        model.elementSets[f"{name}_block-{block_id + 1}"] = ElementSet(
+            f"{name}_block-{block_id + 1}", set(elements_per_block)
+        )
 
     # replicate the mesh of the unit cell in x direction
     model = replicateMesh(model, direction=0, nReplications=nX, elementType=elementType, options=options)
@@ -117,21 +142,39 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dic
     nSet_right = set()
     nSet_bottom = set()
     nSet_top = set()
+    # add sets for corners as well
+    nSet_top_left = set()
+    nSet_top_right = set()
+    nSet_bottom_left = set()
+    nSet_bottom_right = set()
+
     # create node sets for left and bottom boundaries
     for nodeID, node in model.nodes.items():
         if np.isclose(node.coordinates[1], y_min, atol=1e-8):
             nSet_bottom.add(node)
+            if np.isclose(node.coordinates[0], x_min, atol=1e-8):
+                nSet_bottom_left.add(node)
+            elif np.isclose(node.coordinates[0], x_max + (nX - 1) * lX, atol=1e-8):
+                nSet_bottom_right.add(node)
         if np.isclose(node.coordinates[0], x_min, atol=1e-8):
             nSet_left.add(node)
         if np.isclose(node.coordinates[0], x_max + (nX - 1) * lX, atol=1e-8):
             nSet_right.add(node)
         if np.isclose(node.coordinates[1], y_max + (nY - 1) * lY, atol=1e-8):
             nSet_top.add(node)
+            if np.isclose(node.coordinates[0], x_min, atol=1e-8):
+                nSet_top_left.add(node)
+            elif np.isclose(node.coordinates[0], x_max + (nX - 1) * lX, atol=1e-8):
+                nSet_top_right.add(node)
 
     model.nodeSets[f"{name}_left"] = NodeSet(f"{name}_left", nSet_left)
     model.nodeSets[f"{name}_right"] = NodeSet(f"{name}_right", nSet_right)
     model.nodeSets[f"{name}_bottom"] = NodeSet(f"{name}_bottom", nSet_bottom)
     model.nodeSets[f"{name}_top"] = NodeSet(f"{name}_top", nSet_top)
+    model.nodeSets[f"{name}_bottom_left"] = NodeSet(f"{name}_bottom_left", nSet_bottom_left)
+    model.nodeSets[f"{name}_bottom_right"] = NodeSet(f"{name}_bottom_right", nSet_bottom_right)
+    model.nodeSets[f"{name}_top_left"] = NodeSet(f"{name}_top_left", nSet_top_left)
+    model.nodeSets[f"{name}_top_right"] = NodeSet(f"{name}_top_right", nSet_top_right)
 
     return model
 
@@ -145,23 +188,29 @@ def findInterfaceNodes(nodes, coordIndex, coordValue, idx_offset=0):
 
 def replicateMesh(model: FEModel, direction: int, nReplications: int, elementType, options: dict):
 
-    all_elements_in_x = [[n.label - 1 for n in el.nodes] for el in model.elements.values()]
-    all_nodes_in_x = [model.nodes[i + 1].coordinates for i in range(len(model.nodes))]
-    # replicate all created unit cells in y direction
+    all_elements_to_copy = [[n.label - 1 for n in el.nodes] for el in model.elements.values()]
+    all_nodes_to_copy = [model.nodes[i + 1].coordinates for i in range(len(model.nodes))]
 
-    all_nodes = np.array(all_nodes_in_x)
+    elements_in_block = {}
+    # separate elements according to their blocks
+    for elset_name, elset in model.elementSets.items():
+        elements_in_block[elset_name] = []
+        for el in elset.elements:
+            elements_in_block[elset_name].append(el.elNumber - 1)
 
-    direction_min = np.min([node[direction] for node in all_nodes_in_x])
-    direction_max = np.max([node[direction] for node in all_nodes_in_x])
+    all_nodes = np.array(all_nodes_to_copy)
+
+    direction_min = np.min([node[direction] for node in all_nodes])
+    direction_max = np.max([node[direction] for node in all_nodes])
     length_in_direction = direction_max - direction_min
 
-    shift = np.zeros(len(all_nodes_in_x[0]))
+    shift = np.zeros(len(all_nodes[0]))
 
     minNodes = np.array(
-        [k for k, node in enumerate(all_nodes_in_x) if np.isclose(node[direction], direction_min, atol=1e-8)]
+        [k for k, node in enumerate(all_nodes_to_copy) if np.isclose(node[direction], direction_min, atol=1e-8)]
     )
 
-    nodes_to_shift = [(k, node) for k, node in enumerate(all_nodes_in_x) if k not in minNodes]
+    nodes_to_shift = [(k, node) for k, node in enumerate(all_nodes_to_copy) if k not in minNodes]
 
     for j in range(1, nReplications):
         tic_total = time.time()
@@ -181,23 +230,38 @@ def replicateMesh(model: FEModel, direction: int, nReplications: int, elementTyp
         all_nodes = np.vstack((all_nodes, new_nodes))
 
         # create (smaller) array to search in
-        idx_offset = (j - 1) * (len(all_nodes_in_x) - len(minNodes))
+        idx_offset = (j - 1) * (len(all_nodes_to_copy) - len(minNodes))
         search_array = all_nodes[idx_offset:, :]
 
         for i_old in minNodes:
-            i_new_ = np.where(np.all(np.abs(search_array - all_nodes[i_old] - shift) < 1e-5, axis=1))[0][0] + idx_offset
+            i_new_ = (
+                np.where(np.all(np.abs(search_array - all_nodes_to_copy[i_old] - shift) < 1e-5, axis=1))[0][0]
+                + idx_offset
+            )
             associated_nodes.append([i_old, i_new_])
         associated_nodes_array = np.array(associated_nodes)
 
-        for el in all_elements_in_x:
-            new_el = []
-            for nid in el:
-                k = np.where(associated_nodes_array[:, 0] == nid)[0][0]
-                new_el.append(int(associated_nodes_array[k, 1]))
-            newEl = elementType(options["elType"], len(model.elements) + 1)
-            nodeList = [model.nodes[nid + 1] for nid in new_el]
-            newEl.setNodes(nodeList)
-            model.elements[len(model.elements) + 1] = newEl
+        # create elements per block
+        for elset_name, el_ids in elements_in_block.items():
+            new_el_ids = []
+            for local_el_id in el_ids:
+                el = all_elements_to_copy[local_el_id]
+                new_el = []
+                for nid in el:
+                    k = np.where(associated_nodes_array[:, 0] == nid)[0][0]
+                    new_el.append(int(associated_nodes_array[k, 1]))
+                newEl = elementType(options["elType"], len(model.elements) + 1)
+                nodeList = [model.nodes[nid + 1] for nid in new_el]
+                newEl.setNodes(nodeList)
+                model.elements[len(model.elements) + 1] = newEl
+                # add element to corresponding element set
+                new_el_ids.append(len(model.elements) - 1)
+
+            # create new element set becaus elsets are immutable
+            model.elementSets[elset_name] = ElementSet(
+                elset_name,
+                set(list(model.elementSets[elset_name].elements) + [model.elements[el_id + 1] for el_id in new_el_ids]),
+            )
 
         # remove nodes that are now internal
         toc_total = time.time()
