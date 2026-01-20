@@ -34,13 +34,6 @@ cimport cython
 cimport libcpp.cast
 cimport numpy as np
 
-from edelweissfe.elements.marmotsingleqpelement.marmot cimport (
-    MarmotMaterial,
-    MarmotMaterialHypoElastic,
-    StateView,
-    createMaterial,
-)
-
 from edelweissfe.utils.exceptions import CutbackRequest
 
 from libc.stdlib cimport free, malloc
@@ -66,15 +59,24 @@ cdef class MarmotMaterialHypoElasticWrapper:
 
     def createMaterial(self, materialName, materialProperties):
 
-        cdef MarmotMaterial* marmotMaterial = createMaterial(materialName, materialProperties)
+        cdef double[::1] matProps = materialProperties
+        cdef int nMatProps = len(materialProperties)
+        cdef string materialName_ = materialName.encode('UTF-8')
 
-        self.marmotMaterialHypoElastic = <MarmotMaterialHypoElastic*> (marmotMaterial)
+        cdef MarmotMaterialHypoElastic* marmotMaterial = MarmotMaterialHypoElasticFactory.createMaterial(
+            materialName_,
+            &matProps[0],
+            nMatProps,
+            1
+        )
+
+        self.marmotMaterialHypoElastic = marmotMaterial
 
         if self.marmotMaterialHypoElastic == NULL:
             raise ValueError("Casting to MarmotMaterialHypoElastic failed!")
 
     def initializeYourself(self):
-        self.marmotMaterialHypoElastic.initializeYourself()
+        self.marmotMaterialHypoElastic.initializeYourself(&self.stateVarsMaterial[0], self.stateVarsMaterial.shape[0])
 
     def setCharacteristicElementLength(self, double[::1] values):
         self.marmotMaterialHypoElastic.setCharacteristicElementLength(values[0])
@@ -87,32 +89,38 @@ cdef class MarmotMaterialHypoElasticWrapper:
                          const double[::1] time,
                          double dTime):
 
-        cdef double pNewDT
-        pNewDT = 1e36
-
-        cdef double [::1] stress = Pe
         cdef double [::1] dStress_dStrain = Ke
         cdef const double [::1] dStrain = dU
 
-        stress[:] = self.stressInStateVars
 
-        self.marmotMaterialHypoElastic.computeStress(
-                &stress[0],
+        cdef MarmotMaterialHypoElastic.state3D state3D
+        state3D.stateVars = &self.stateVarsMaterial[0]
+        state3D.stress = Vector6d( &self.stressInStateVars[0] )
+
+        cdef MarmotMaterialHypoElastic.timeInfo timeInfo
+        timeInfo.time = time[1]
+        timeInfo.dT = dTime
+
+        try:
+            self.marmotMaterialHypoElastic.computeStress(
+                state3D,
                 &dStress_dStrain[0],
                 &dStrain[0],
-                &time[0],
-                dTime,
-                pNewDT)
+                timeInfo )
+        except:
+            raise CutbackRequest("Material requests for a cutback!", 0.25)
 
         cdef int i = 0
         for i in range(6):
             self.strainInStateVars[i] += dU [i]
 
-        self.stressInStateVars[:] = stress
+        cdef double[::1] stressView = <double[:6]> ( &state3D.stress(0) )
+
+        self.stressInStateVars[:] = stressView
+        Pe[:] = stressView
+
         self.dStress_dStrainInStateVars[:] = dStress_dStrain
 
-        if pNewDT < 1.0:
-            raise CutbackRequest("Material requests for a cutback!", pNewDT)
 
     def getNumberOfRequiredStateVars(self,):
 
@@ -128,9 +136,6 @@ cdef class MarmotMaterialHypoElasticWrapper:
         self.dStress_dStrainInStateVars = self.stateVars[12:48]
         self.stateVarsMaterial = self.stateVars[48:]
 
-        self.marmotMaterialHypoElastic.assignStateVars(&self.stateVarsMaterial[0],
-                                                       len(self.stateVarsMaterial))
-
     def getResultArray(self, result, getPersistentView=True):
 
         if result == "stress":
@@ -144,7 +149,7 @@ cdef class MarmotMaterialHypoElasticWrapper:
 
         cdef string result_ =  result.encode('UTF-8')
 
-        cdef StateView res = self.marmotMaterialHypoElastic.getStateView(result_)
+        cdef StateView res = self.marmotMaterialHypoElastic.getStateView(result_, &self.stateVarsMaterial[0])
 
         cdef double[::1] theView = <double[:res.stateSize]> ( res.stateLocation )
 
