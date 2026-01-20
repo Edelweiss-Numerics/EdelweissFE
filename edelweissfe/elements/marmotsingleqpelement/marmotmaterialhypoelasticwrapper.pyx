@@ -131,7 +131,7 @@ cdef class MarmotMaterialHypoElasticWrapper:
         if result == "dStress_dStrain":
             return np.array(self.dStress_dStrainInStateVars, copy= not getPersistentView)
         cdef string result_ = result.encode("UTF-8")
-        cdef StateView res = self.marmotMaterialHypoElastic.getStateView(result_)
+        cdef StateView res = self.marmotMaterialHypoElastic.getStateView(result_, &self.stateVarsMaterial[0])
         cdef double[::1] theView = <double[:res.stateSize]> (res.stateLocation)
         return np.array(theView, copy= not getPersistentView)
 
