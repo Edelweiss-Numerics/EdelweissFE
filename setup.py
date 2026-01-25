@@ -74,22 +74,23 @@ extensions = [
     )
 ]
 
-print(
-    "Gather the extension for the single quadrature point element using MarmotMaterials, linked to the Marmot library"
-)
-extensions += [
-    Extension(
-        "*",
-        sources=[
-            "edelweissfe/elements/marmotsingleqpelement/marmot.pyx",
-        ],
-        include_dirs=[join(marmot_dir, "include"), numpy.get_include()],
-        libraries=["Marmot"],
-        library_dirs=[join(marmot_dir, "lib")],
-        runtime_library_dirs=[join(marmot_dir, "lib")],
-        language="c++",
-    )
-]
+# print(
+#     "Gather the extension for the single quadrature point element using MarmotMaterials, linked to the Marmot library"
+# )
+# extensions += [
+#     Extension(
+#         "*",
+#         sources=[
+#             "edelweissfe/elements/marmotsingleqpelement/marmot.pyx",
+#         ],
+#         include_dirs=[join(marmot_dir, "include"), numpy.get_include()],
+#         libraries=["Marmot"],
+#         library_dirs=[join(marmot_dir, "lib")],
+#         runtime_library_dirs=[join(marmot_dir, "lib")],
+#         language="c++",
+#         extra_compile_args=["-O3", "-std=c++20"],
+#     )
+# ]
 
 extensions += [
     Extension(
@@ -102,22 +103,23 @@ extensions += [
         library_dirs=[join(marmot_dir, "lib")],
         runtime_library_dirs=[join(marmot_dir, "lib")],
         language="c++",
+        extra_compile_args=["-O3", "-std=c++20"],
     )
 ]
 
-extensions += [
-    Extension(
-        "*",
-        sources=[
-            "edelweissfe/elements/marmotsingleqpelement/marmotmaterialgradientenhancedhypoelasticwrapper.pyx",
-        ],
-        include_dirs=[join(marmot_dir, "include"), numpy.get_include()],
-        libraries=["Marmot"],
-        library_dirs=[join(marmot_dir, "lib")],
-        runtime_library_dirs=[join(marmot_dir, "lib")],
-        language="c++",
-    )
-]
+# extensions += [
+#     Extension(
+#         "*",
+#         sources=[
+#             "edelweissfe/elements/marmotsingleqpelement/marmotmaterialgradientenhancedhypoelasticwrapper.pyx",
+#         ],
+#         include_dirs=[join(marmot_dir, "include"), numpy.get_include()],
+#         libraries=["Marmot"],
+#         library_dirs=[join(marmot_dir, "lib")],
+#         runtime_library_dirs=[join(marmot_dir, "lib")],
+#         language="c++",
+#     )
+# ]
 
 print("Gather the extension for the fast element result collector")
 extensions += [
