@@ -88,22 +88,24 @@ extensions = [
 #         library_dirs=[join(marmot_dir, "lib")],
 #         runtime_library_dirs=[join(marmot_dir, "lib")],
 #         language="c++",
+#         extra_compile_args=["-O3", "-std=c++20"],
 #     )
 # ]
 
-# extensions += [
-#     Extension(
-#         "*",
-#         sources=[
-#             "edelweissfe/elements/marmotsingleqpelement/marmotmaterialhypoelasticwrapper.pyx",
-#         ],
-#         include_dirs=[join(marmot_dir, "include"), numpy.get_include()],
-#         libraries=["Marmot"],
-#         library_dirs=[join(marmot_dir, "lib")],
-#         runtime_library_dirs=[join(marmot_dir, "lib")],
-#         language="c++",
-#     )
-# ]
+extensions += [
+    Extension(
+        "*",
+        sources=[
+            "edelweissfe/elements/marmotsingleqpelement/marmotmaterialhypoelasticwrapper.pyx",
+        ],
+        include_dirs=[join(marmot_dir, "include"), join(default_install_prefix, "include/eigen3"), numpy.get_include()],
+        libraries=["Marmot"],
+        library_dirs=[join(marmot_dir, "lib")],
+        runtime_library_dirs=[join(marmot_dir, "lib")],
+        language="c++",
+        extra_compile_args=["-O3", "-std=c++20"],
+    )
+]
 
 # extensions += [
 #     Extension(
@@ -136,6 +138,18 @@ extensions += [
         ["edelweissfe/numerics/csrgenerator.pyx"],
         include_dirs=[numpy.get_include()],
         language="c++",
+    )
+]
+
+print("Gather the extension for the even faster CSR matrix v2 generator")
+extensions += [
+    Extension(
+        "*",
+        ["edelweissfe/numerics/csrgeneratorv2.pyx"],
+        include_dirs=[numpy.get_include()],
+        language="c++",
+        extra_compile_args=["-O3", "-std=c++20", "-march=native", "-fopenmp"],
+        extra_link_args=["-fopenmp"],
     )
 ]
 

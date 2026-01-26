@@ -32,7 +32,6 @@
 import datetime
 import os
 from collections import defaultdict
-from distutils.util import strtobool
 from io import TextIOBase
 
 import numpy as np
@@ -48,6 +47,7 @@ from edelweissfe.utils.fieldoutput import (
     _FieldOutputBase,
 )
 from edelweissfe.utils.meshtools import disassembleElsetToEnsightShapes
+from edelweissfe.utils.misc import strtobool
 
 """
 Output manager for Ensight exports.
@@ -660,14 +660,14 @@ def createUnstructuredPartFromNodeSet(setName, nodeSet: list, partID: int):
 class OutputManager(OutputManagerBase):
     identification = "Ensight Export"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter):
+    def __init__(self, name, model, fieldOutputController, journal, plotter, **kwargs):
         self.name = name
 
         self.model = model
         self.timeAtLastOutput = -1e16
         self.minDTForOutput = -1e16
         self.finishedSteps = 0
-        self.intermediateSaveInterval = 10
+        self.intermediateSaveInterval = int(kwargs.get("intermediateSaveInterval", 10))
         self.intermediateSaveIntervalCounter = 0
         self.fieldOutputController = fieldOutputController
         self.journal = journal
@@ -864,8 +864,8 @@ class OutputManager(OutputManagerBase):
         self.timeAtLastOutput = model.time
         self.ensightCase.setCurrentTime(self.transientTAndFSetNumber, model.time)
 
-        resultsByParts = {}
         for resultName, perNodeVariableJobs in self._transientPerNodeVariableJobs.items():
+            resultsByParts = {}
             for perNodeVariableJob in perNodeVariableJobs:
                 result = self._ensureArrayIs2D(perNodeVariableJob["fieldOutput"].getLastResult())
 

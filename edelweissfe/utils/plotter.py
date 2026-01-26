@@ -32,7 +32,7 @@
 import itertools
 import os
 import sys
-from distutils.spawn import find_executable
+from shutil import which
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -114,7 +114,7 @@ class Plotter:
         self.exportJobs = exportJobs
 
         latexAvailable = False
-        if find_executable("latex"):
+        if which("latex"):
             latexAvailable = True
 
         self.rcParams = {

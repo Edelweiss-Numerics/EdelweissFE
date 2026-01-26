@@ -53,10 +53,9 @@ cdef extern from "Marmot/MarmotElement.h" namespace "MarmotElement":
         SurfaceTorsion
 
 cdef extern from "Marmot/MarmotElementFactory.h" namespace "MarmotLibrary" nogil:
-
     cdef cppclass MarmotElementFactory:
         @staticmethod
-        MarmotElement* createElement(const string& elementName, int noEl) except +ValueError
+        MarmotElement* createElement(const string& elementName, int noEl, ) except +ValueError
 
 cdef extern from "Marmot/MarmotElementProperty.h":
     cdef cppclass MarmotElementProperty nogil:
@@ -81,21 +80,21 @@ cdef extern from "Marmot/MarmotElement.h":
 
         void assignStateVars(double *_stateVars, int nStateVars)
 
-        void assignProperty( const MarmotElementProperty& property )
+        void assignProperty(const MarmotElementProperty& property)
 
-        void assignProperty( const MarmotMaterialSection& property ) except +ValueError
+        void assignProperty(const MarmotMaterialSection& property) except +ValueError
 
         void assignNodeCoordinates(const double* elementCoordinates)
 
         void initializeYourself()
 
-        void computeYourself( const double* QTotal,
-                                            const double* dQ,
-                                            double* Pe,
-                                            double* Ke,
-                                            const double* time,
-                                            double dT,
-                                            double& pNewdT,) except +ValueError
+        void computeYourself(const double* QTotal,
+                             const double* dQ,
+                             double* Pe,
+                             double* Ke,
+                             const double* time,
+                             double dT,
+                             double& pNewdT, ) except +ValueError
 
         void setInitialConditions(StateTypes state,
                                   const double* values)
@@ -161,9 +160,9 @@ cdef class MarmotElementWrapper:
     cpdef void _initializeStateVarsTemp(self, ) nogil
 
     cpdef void computeYourself(self,
-                     double[::1] Ke,
-                     double[::1] Pe,
-                     const double[::1] U,
-                     const double[::1] dU,
-                     const double[::1] time,
-                     double dTime, ) nogil except *
+                               double[::1] Ke,
+                               double[::1] Pe,
+                               const double[::1] U,
+                               const double[::1] dU,
+                               const double[::1] time,
+                               double dTime, ) nogil except *
