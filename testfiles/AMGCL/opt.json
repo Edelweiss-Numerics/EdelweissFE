@@ -1,0 +1,11 @@
+{
+  "solver": {
+    "type": "gmres",
+    "tol": 1e-8
+  },
+  "precond": {
+    "coarsening": {
+      "type": "smoothed_aggregation"
+    }
+  }
+}
