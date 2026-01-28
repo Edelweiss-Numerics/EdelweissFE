@@ -60,10 +60,6 @@ def getLinSolverByName(linsolverName, opts):
         from edelweissfe.linsolve.panuapardiso.panuapardiso import panuaPardisoSolve
 
         return panuaPardisoSolve
-    elif linsolverName.lower() == "amgcl":
-        from edelweissfe.linsolve.amgcl.amgcl import amgclSolve
-
-        return amgclSolve
     elif linsolverName.lower() == "klu":
         from edelweissfe.linsolve.klu.klu import kluSolve
 
@@ -82,5 +78,12 @@ def getLinSolverByName(linsolverName, opts):
         gm = Gmres(opts)
 
         return gm.gmresSolve
+    elif linsolverName.lower() == "amgcl":
+        from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver
+
+        amgclSolve = PyAMGCLSolver(dict(opts))
+
+        return amgclSolve.solve
+
     else:
         raise AttributeError("invalid linear solver {:} requested".format(linsolverName))
