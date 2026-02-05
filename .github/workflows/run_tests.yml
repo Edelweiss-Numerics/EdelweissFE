@@ -61,8 +61,19 @@ jobs:
       - name: Install Marmot
         shell: bash -l {0}
         run: |
+          # Determine the current branch name
+          # For PRs: github.head_ref. For pushes: github.ref_name.
+          TARGET_BRANCH="${{ github.head_ref || github.ref_name }}"
+          
+          echo "Target branch is $TARGET_BRANCH"
+          
+          # Clone without specifying a branch initially
           git clone --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/
           cd Marmot
+          
+          # Try to switch to the matching branch; if it fails, stay on default (master)
+          git checkout $TARGET_BRANCH || echo "Branch $TARGET_BRANCH not found in Marmot, using default branch."
+          
           mkdir build
           cd build
           cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
