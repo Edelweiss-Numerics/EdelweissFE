@@ -25,12 +25,12 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-# Created on Tue Dec 18 09:18:25 2018
 
-# @author: Matthias Neuner
 """
 This module contains important classes for describing the global equation system by means of a sparse system.
 """
+
+from itertools import chain
 
 import numpy as np
 
@@ -74,11 +74,26 @@ class VIJSystemMatrix(np.ndarray):
 
         return obj
 
+    def __array_finalize__(self, obj):
+        if obj is None:
+            return
+        self.nDof = getattr(obj, "nDof", None)
+        self.I = getattr(obj, "I", None)  # noqa: E741
+        self.J = getattr(obj, "J", None)  # noqa: E741
+        self.entitiesInVIJ = getattr(obj, "entitiesInVIJ", None)
+
     def __getitem__(self, key):
+        if isinstance(key, (int, slice, np.ndarray, list)):
+            return super().__getitem__(key)
+
         try:
+            # Entity Lookup
             idxInVIJ = self.entitiesInVIJ[key]
-            return super().__getitem__(slice(idxInVIJ, idxInVIJ + key.nDof**2))
-        except Exception:
+            # Use local entity size (key.nDof) for the slice, not global nDof
+            size = key.nDof**2
+            return super().__getitem__(slice(idxInVIJ, idxInVIJ + size))
+        except (KeyError, TypeError, AttributeError):
+            # Fallback for any other weird key types
             return super().__getitem__(key)
 
 
@@ -138,13 +153,15 @@ class ScatterDofVector(np.ndarray):
         key
             The key for indexing, either an entity or an integer index.
         """
-        val = self._offset_map.get(key)
-        if val is not None:
+        if isinstance(key, (int, slice, np.ndarray, list)):
+            return super().__getitem__(key)
+
+        try:
+            val = self._offset_map[key]
             size = len(self._entitiesInDofVector[key])
             return super().__getitem__(slice(val, val + size))
-
-        # Case 2: Integer Indexing (Linear access into the big buffer)
-        return super().__getitem__(key)
+        except (KeyError, TypeError):
+            return super().__getitem__(key)
 
     def assembleInto(self, targetDofVector, absolute=False):
         """Scatter-Add into the global vector.
@@ -200,14 +217,19 @@ class DofVector(np.ndarray):
         self.entitiesInDofVector = getattr(obj, "entitiesInDofVector", None)
 
     def __getitem__(self, key):
-        # 1. Try Entity Lookup (Dict)
+        if isinstance(key, (int, slice, np.ndarray, list)):
+            return super().__getitem__(key)
+
         try:
             return super().__getitem__(self.entitiesInDofVector[key])
         except (KeyError, TypeError):
-            # 2. Fallback to Standard Indexing
             return super().__getitem__(key)
 
     def __setitem__(self, key, value):
+        if isinstance(key, (int, slice, np.ndarray, list)):
+            super().__setitem__(key, value)
+            return
+
         try:
             super().__setitem__(self.entitiesInDofVector[key], value)
         except (KeyError, TypeError):
@@ -270,12 +292,20 @@ class DofManager:
     def __init__(
         self,
         nodeFields: list[NodeField],
-        scalarVariables: list[ScalarVariable] = [],
-        elements: list[BaseNodeCouplingEntity] = [],
-        constraints: list[BaseNodeCouplingEntity] = [],
-        nodeSets: list[NodeSet] = [],
+        scalarVariables: list[ScalarVariable] = None,
+        elements: list[BaseNodeCouplingEntity] = None,
+        constraints: list[BaseNodeCouplingEntity] = None,
+        nodeSets: list[NodeSet] = None,
         initializeVIJPattern: bool = True,
     ):
+        if scalarVariables is None:
+            scalarVariables = []
+        if elements is None:
+            elements = []
+        if constraints is None:
+            constraints = []
+        if nodeSets is None:
+            nodeSets = []
 
         self.nDof = int()  #: The total number of degrees of freedom (and size of the DofVector)
         self.fields = list()  #: The list of fields which can be found in the Dofvector
@@ -377,7 +407,7 @@ class DofManager:
         self,
         idxStart: int,
         nodeFields: list[NodeField],
-    ) -> tuple[int, dict[str, np.ndarray]]:
+    ) -> tuple[int, dict[str, np.ndarray], dict]:
         """Loop over all nodes to generate the global field-dof indices.
 
         Returns
@@ -385,9 +415,8 @@ class DofManager:
         tuple
             output is a tuple of:
              * number of total DOFS
-             * dictionary of fields and indices:
-                * field
-                * indices
+             * dictionary of field variables and indices
+             * dictionary of fields and indices
         """
 
         idcsOfFieldsInDofVector = dict()
@@ -395,20 +424,22 @@ class DofManager:
         currentIdxInDofVector = idxStart
 
         for nodeField in nodeFields:
-            nextIdxInDofVector = currentIdxInDofVector + nodeField.dimension * len(nodeField.nodes)
+            num_nodes = len(nodeField.nodes)
+            dim = nodeField.dimension
+            total_field_dofs = dim * num_nodes
+
+            nextIdxInDofVector = currentIdxInDofVector + total_field_dofs
             idcsOfFieldsInDofVector[nodeField.name] = slice(currentIdxInDofVector, nextIdxInDofVector)
 
-            idcsOfNodeFieldVariablesInDofVector |= {
-                n.fields[nodeField.name]: np.arange(
-                    currentIdxInDofVector + i * nodeField.dimension,
-                    currentIdxInDofVector + i * nodeField.dimension + nodeField.dimension,
-                    dtype=int,
-                )
-                for i, n in enumerate(nodeField.nodes)
-            }
+            all_indices = np.arange(currentIdxInDofVector, nextIdxInDofVector, dtype=int)
+            indices_reshaped = all_indices.reshape(num_nodes, dim)
+
+            for i, n in enumerate(nodeField.nodes):
+                idcsOfNodeFieldVariablesInDofVector[n.fields[nodeField.name]] = indices_reshaped[i, :]
+
             currentIdxInDofVector = nextIdxInDofVector
 
-        nDof = currentIdxInDofVector
+        nDof = currentIdxInDofVector - idxStart
 
         return (
             nDof,
@@ -449,8 +480,6 @@ class DofManager:
     ) -> dict[int, Node]:
         """Determine the map from each index (associated with a FieldVariable)
         in the DofVector to the corresponding attached Node oject.
-        Useful for determining, e.g., the Node associated with a residual outlier in nonlinear
-        simulations.
 
         Returns
         -------
@@ -517,7 +546,7 @@ class DofManager:
         accumulatedEntityVIJSize = 0
         largestNumberOfAnyEntitityDof = 0
 
-        nAccumulatedFluxesFieldwise = dict.fromkeys(phenomena.keys(), 0)
+        nAccumulatedFluxesFieldwise = {k: 0 for k in phenomena.keys()}
 
         for e in entities:
             accumulatedEntityNDof += e.nDof
@@ -525,7 +554,9 @@ class DofManager:
 
             for node in e.nodes:
                 for field, fv in node.fields.items():
-                    nAccumulatedFluxesFieldwise[field] += len(self.idcsOfFieldVariablesInDofVector[fv])
+                    indices = self.idcsOfFieldVariablesInDofVector.get(fv)
+                    if indices is not None:
+                        nAccumulatedFluxesFieldwise[field] += len(indices)
 
             largestNumberOfAnyEntitityDof = max(e.nDof, largestNumberOfAnyEntitityDof)
 
@@ -557,8 +588,6 @@ class DofManager:
 
         return self._gatherElementsInformation(entities)
 
-    # def _analyzeVIJPattern(self,):
-
     def _locateNodeCouplingEntitiesInDofVector(self, entities: list) -> dict:
         """Creates a dictionary containing the location (indices) of each entity (elements, constraints)
         within the DofVector structure.
@@ -570,20 +599,21 @@ class DofManager:
         """
 
         idcsOfElementsInDofVector = {}
+        field_var_map = self.idcsOfFieldVariablesInDofVector
 
         for ent in entities:
-            destList = np.hstack(
-                [
-                    self.idcsOfFieldVariablesInDofVector[node.fields[nodeField]]
-                    for iNode, node in enumerate(ent.nodes)  # for each node of the element..
-                    for nodeField in ent.fields[iNode]  # for each field of this node
-                ]
-            )  # the index in the global system
+            indices_gen = chain.from_iterable(
+                field_var_map[node.fields[nodeField]]
+                for iNode, node in enumerate(ent.nodes)
+                for nodeField in ent.fields[iNode]
+            )
+
+            destArr = np.fromiter(indices_gen, dtype=int)
 
             if ent.dofIndicesPermutation is not None:
-                idcsOfElementsInDofVector[ent] = destList[ent.dofIndicesPermutation]
+                idcsOfElementsInDofVector[ent] = destArr[ent.dofIndicesPermutation]
             else:
-                idcsOfElementsInDofVector[ent] = destList
+                idcsOfElementsInDofVector[ent] = destArr
 
         return idcsOfElementsInDofVector
 
@@ -597,19 +627,21 @@ class DofManager:
             A dictionary containing the location mapping.
         """
 
-        constraints = constraints
         idcsOfConstraintsInDofVector = {}
+        field_var_map = self.idcsOfFieldVariablesInDofVector
+        scalar_var_map = self.idcsOfScalarVariablesInDofVector
 
         for constraint in constraints:
-            destList = np.hstack(
-                [
-                    self.idcsOfFieldVariablesInDofVector[node.fields[nodeField]]
-                    for iNode, node in enumerate(constraint.nodes)  # for each node of the constraint
-                    for nodeField in constraint.fieldsOnNodes[iNode]  # for each field of this node
-                ]
-                + [self.idcsOfScalarVariablesInDofVector[v] for v in constraint.scalarVariables]
+            node_fields_gen = (
+                field_var_map[node.fields[nodeField]]
+                for iNode, node in enumerate(constraint.nodes)
+                for nodeField in constraint.fieldsOnNodes[iNode]
             )
-            idcsOfConstraintsInDofVector[constraint] = destList
+            scalar_vars_gen = ([scalar_var_map[v]] for v in constraint.scalarVariables)
+
+            indices_gen = chain(chain.from_iterable(node_fields_gen), chain.from_iterable(scalar_vars_gen))
+
+            idcsOfConstraintsInDofVector[constraint] = np.fromiter(indices_gen, dtype=int)
 
         return idcsOfConstraintsInDofVector
 
@@ -623,16 +655,16 @@ class DofManager:
             A dictionary containing the location mapping.
         """
 
-        nodeSets = nodeSets
         nodeSetFieldsInDofVector = {}
+        field_var_map = self.idcsOfFieldVariablesInDofVector
 
         for field in self.idcsOfNodeFieldsInDofVector:
             nodeSetFieldsInDofVector[field] = dict()
             for nSet in nodeSets:
-                nodeSetFieldsInDofVector[field][nSet] = np.array(
-                    [self.idcsOfFieldVariablesInDofVector[node.fields[field]] for node in nSet if field in node.fields],
-                    dtype=int,
-                ).flatten()
+                indices_gen = chain.from_iterable(
+                    field_var_map[node.fields[field]] for node in nSet if field in node.fields
+                )
+                nodeSetFieldsInDofVector[field][nSet] = np.fromiter(indices_gen, dtype=int)
 
         return nodeSetFieldsInDofVector
 
@@ -664,12 +696,12 @@ class DofManager:
             entitiesInVIJ[entity] = idxInVIJ
 
             nDofEntity = len(entityIdcsInDofVector)
+            block_size = nDofEntity**2
 
-            # looks like black magic, but it's an efficient way to generate all indices of Ke in K:
             VIJLocations = np.tile(entityIdcsInDofVector, (nDofEntity, 1))
-            I[idxInVIJ : idxInVIJ + nDofEntity**2] = VIJLocations.flatten()
-            J[idxInVIJ : idxInVIJ + nDofEntity**2] = VIJLocations.flatten("F")
-            idxInVIJ += nDofEntity**2
+            I[idxInVIJ : idxInVIJ + block_size] = VIJLocations.flatten()
+            J[idxInVIJ : idxInVIJ + block_size] = VIJLocations.flatten("F")
+            idxInVIJ += block_size
 
         return I, J, entitiesInVIJ
 
@@ -704,7 +736,6 @@ class DofManager:
         """
 
         return DofVector(self.nDof, self.idcsOfHigherOrderEntitiesInDofVector)
-        # return DofVector(self.nDof, self.idcsInDofVector)
 
     def getNodeForIndexInDofVector(self, index: int) -> Node:
         """Find the node for a given index in the equuation system.
@@ -744,9 +775,9 @@ class DofManager:
         if resultName not in nodeField:
             nodeField.createFieldValueEntry(resultName)
 
-        nodeField[resultName][:] = dofVector[self.idcsOfNodeFieldsInDofVector[nodeField.name]].reshape(
-            (-1, nodeField.dimension)
-        )
+        indices = self.idcsOfNodeFieldsInDofVector[nodeField.name]
+        data = dofVector[indices]
+        nodeField[resultName][:] = data.reshape((-1, nodeField.dimension))
 
         return nodeField
 
@@ -774,15 +805,17 @@ class DofManager:
         """
 
         if nodeSet is not None:
-            if nodeSet not in self.idcsOfFieldsOnNodeSetsInDofVector[nodeField.name]:
-                self.idcsOfFieldsOnNodeSetsInDofVector[nodeField.name] |= self._locateFieldsOnNodeSetsInDofVector(
-                    [nodeSet]
-                )
-            dofVector[self.idcsOfFieldsOnNodeSetsInDofVector[nodeField.name][nodeSet]] = nodeField.subset(nodeSet)[
-                resultName
-            ].flatten()
+            if nodeSet not in self.idcsOfFieldsOnNodeSetsInDofVector.get(nodeField.name, {}):
+                new_map = self._locateFieldsOnNodeSetsInDofVector([nodeSet])
+                if nodeField.name not in self.idcsOfFieldsOnNodeSetsInDofVector:
+                    self.idcsOfFieldsOnNodeSetsInDofVector[nodeField.name] = {}
+                self.idcsOfFieldsOnNodeSetsInDofVector[nodeField.name].update(new_map[nodeField.name])
+
+            indices = self.idcsOfFieldsOnNodeSetsInDofVector[nodeField.name][nodeSet]
+            dofVector[indices] = nodeField.subset(nodeSet)[resultName].flatten()
 
         else:
-            dofVector[self.idcsOfNodeFieldsInDofVector[nodeField.name]] = nodeField[resultName].flatten()
+            indices = self.idcsOfNodeFieldsInDofVector[nodeField.name]
+            dofVector[indices] = nodeField[resultName].flatten()
 
         return dofVector

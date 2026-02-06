@@ -35,10 +35,15 @@ def isFreeThreadingSupported() -> bool:
     This function checks if the current build of EdelweissFE supports this feature.
 
     Returns:
-        bool: True if free threading is supported, False otherwise.
+        bool: True if free threading is supported and the GIL is disabled, False otherwise.
     """
+    res = False
+    try:
+        res = not sys._is_gil_enabled()
+    except AttributeError:
+        pass
 
-    return not sys._is_gil_enabled()
+    return res
 
 
 def getNumberOfThreads() -> int:

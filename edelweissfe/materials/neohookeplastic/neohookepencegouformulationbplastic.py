@@ -135,7 +135,7 @@ def kirchhoffStress(e, K, mu):
         The Kirchhoff stress."""
 
     B, _ = tensorExp(2 * e)
-    I1 = lin.trace(B)
+    I1 = B.trace()
     J = np.sqrt(lin.det(B))
     muBar = K / 4 * (J**2 - 1 / J**2) - mu * I1 / (3 * J ** (2 / 3))
     T = mu / J ** (2 / 3) * B + muBar * Ieye
@@ -162,7 +162,7 @@ def dKirchhoff_dE(e, K, mu):
     B, n = tensorExp(2 * e)
     J = np.sqrt(lin.det(B))
     dExpE = np.einsum("ijmn,mnkl->ijkl", dTensorExp_dA(2 * e, n), Ieye4D)
-    I1 = lin.trace(B)
+    I1 = B.trace()
     p = 2 * mu / J ** (2 / 3)
     lambdaBar = K / 2 * (J**2 + 1 / J**2) + p * I1 / 9
     dT_de = (
