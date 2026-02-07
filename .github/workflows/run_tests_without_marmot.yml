@@ -26,8 +26,7 @@ jobs:
         shell: bash -l {0}
         run: |
           pip install .
-
-  test:
+      
       - name: Run tests without Marmot
         shell: bash -l {0}
         run: |
