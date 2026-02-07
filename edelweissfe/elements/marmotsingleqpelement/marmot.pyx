@@ -29,11 +29,6 @@
 
 # @author: matthias
 
-from libc.stdlib cimport free, malloc
-from libcpp.memory cimport allocator, make_unique, unique_ptr
-from libcpp.string cimport string
-from libcpp.vector cimport vector
-
 from edelweissfe.elements.marmotsingleqpelement.marmot cimport (
     MarmotMaterial,
     MarmotMaterialFactory,
@@ -49,7 +44,7 @@ cdef MarmotMaterial* createMaterial(materialName, materialProperties) except NUL
     try:
         marmotMaterial = MarmotMaterialFactory.createMaterial(
                             MarmotMaterialFactory.getMaterialCodeFromName(
-                            materialName.upper().encode('UTF-8')),
+                             materialName.upper().encode("UTF-8")),
                             &matPropsView[0],
                             materialProperties.shape[0],
                             0)

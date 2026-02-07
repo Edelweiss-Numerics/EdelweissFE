@@ -39,7 +39,8 @@ cdef extern from "Marmot/Marmot.h" namespace "MarmotLibrary" nogil:
         int getMaterialCodeFromName(const string& materialName) except +IndexError
 
         @staticmethod
-        MarmotMaterial* createMaterial(int materialCode, const double* materialProperties, int nMaterialProperties, int materialNumber) except +IndexError
+        MarmotMaterial* createMaterial(int materialCode, const double* materialProperties, int
+                                       nMaterialProperties, int materialNumber) except +IndexError
 
 cdef extern from "Marmot/MarmotUtils.h":
     cdef struct StateView:
@@ -53,9 +54,9 @@ cdef extern from "Marmot/MarmotMaterial.h":
 cdef extern from "Marmot/MarmotMaterialHypoElastic.h":
     cdef cppclass MarmotMaterialHypoElastic nogil:
 
-        void assignStateVars( double* stateVars, int nStateVars )
+        void assignStateVars(double* stateVars, int nStateVars)
 
-        StateView getStateView( const string& stateName ) except +ValueError
+        StateView getStateView(const string& stateName) except +ValueError
 
         void initializeYourself()
 
@@ -67,19 +68,19 @@ cdef extern from "Marmot/MarmotMaterialHypoElastic.h":
 
         double* getAssignedStateVars()
 
-        void computeStress( double*       stress,
-                              double*       dStressDDStrain,
-                              const double* dStrain,
-                              const double* timeOld,
-                              const double  dT,
-                              double&       pNewDT ) except +ValueError
+        void computeStress(double* stress,
+                           double* dStressDDStrain,
+                           const double* dStrain,
+                           const double* timeOld,
+                           const double  dT,
+                           double& pNewDT) except +ValueError
 
 cdef extern from "Marmot/MarmotMaterialGradientEnhancedHypoElastic.h":
     cdef cppclass MarmotMaterialGradientEnhancedHypoElastic nogil:
 
-        void assignStateVars( double* stateVars, int nStateVars )
+        void assignStateVars(double* stateVars, int nStateVars)
 
-        StateView getStateView( const string& stateName ) except +ValueError
+        StateView getStateView(const string& stateName) except +ValueError
 
         void initializeYourself()
 
@@ -91,18 +92,17 @@ cdef extern from "Marmot/MarmotMaterialGradientEnhancedHypoElastic.h":
 
         double* getAssignedStateVars()
 
-        void computeStress(   double*       stress,
-                              double&       K_local,
-                              double&       nonLocalRadius,
-                              double*       dStressDDStrain,
-                              double*       dK_localDDStrain,
-                              double*       dStressDK,
-                              const double* dStrain,
-                              double        KOld,
-                              double        dK,
-                              const double* timeOld,
-                              const double  dT,
-                              double&       pNewDT
-                           ) except +ValueError
+        void computeStress(double* stress,
+                           double& K_local,
+                           double& nonLocalRadius,
+                           double* dStressDDStrain,
+                           double* dK_localDDStrain,
+                           double* dStressDK,
+                           const double* dStrain,
+                           double        KOld,
+                           double        dK,
+                           const double* timeOld,
+                           const double  dT,
+                           double& pNewDT) except +ValueError
 
 cdef MarmotMaterial* createMaterial(materialName, materialProperties) except NULL

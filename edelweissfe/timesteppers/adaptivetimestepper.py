@@ -87,6 +87,9 @@ class AdaptiveTimeStepper:
         self.journal = journal
         self.increaseFactor = increaseFactor
 
+    def doesZeroIncrement(self):
+        return True
+
     def generateTimeStep(self) -> TimeStep:
         """
         Generate the next increment.

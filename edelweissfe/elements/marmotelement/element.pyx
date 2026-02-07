@@ -45,18 +45,19 @@ from libcpp.memory cimport allocator, make_unique, unique_ptr
 from edelweissfe.elements.base.baseelement import BaseElement
 
 mapLoadTypes={
-        'pressure' : DistributedLoadTypes.Pressure,
-        'surface torsion' : DistributedLoadTypes.SurfaceTorsion,
-        'surface traction' : DistributedLoadTypes.SurfaceTraction
+        "pressure" : DistributedLoadTypes.Pressure,
+        "surface torsion" : DistributedLoadTypes.SurfaceTorsion,
+        "surface traction" : DistributedLoadTypes.SurfaceTraction
      }
 
 mapStateTypes={
-        'geostatic stress' : StateTypes.GeostaticStress,
-        'sdvini' : StateTypes.MarmotMaterialStateVars,
-        'initialize material': StateTypes.MarmotMaterialInitialization
+        "geostatic stress" : StateTypes.GeostaticStress,
+        "sdvini" : StateTypes.MarmotMaterialStateVars,
+        "initialize material": StateTypes.MarmotMaterialInitialization
      }
 
-@cython.final # no subclassing -> cpdef with nogil possible
+
+@cython.final  # no subclassing -> cpdef with nogil possible
 cdef class MarmotElementWrapper:
     # cdef classes cannot subclass. Hence we do not subclass from the BaseElement,
     # but still we follow the interface for compatiblity.
@@ -64,7 +65,8 @@ cdef class MarmotElementWrapper:
     def __init__(self, elementType, elNumber):
         """This element serves as a wrapper for MarmotElements.
 
-        For the documentation of MarmotElements, please refer to `Marmot <https://github.com/MAteRialMOdelingToolbox/Marmot/>`_.
+        For the documentation of MarmotElements, please refer to `Marmot
+        <https://github.com/MAteRialMOdelingToolbox/Marmot/>`_.
 
         Parameters
         ----------
@@ -76,17 +78,17 @@ cdef class MarmotElementWrapper:
         self._elNumber = elNumber
         self._elType = elementType
 
-        self._nNodes                         = self.marmotElement.getNNodes()
-        self._nSpatialDimensions             = self.marmotElement.getNSpatialDimensions()
-        self._nDof                           = self.marmotElement.getNDofPerElement()
+        self._nNodes = self.marmotElement.getNNodes()
+        self._nSpatialDimensions = self.marmotElement.getNSpatialDimensions()
+        self._nDof = self.marmotElement.getNDofPerElement()
 
-        cdef vector[vector[string]] fields  = self.marmotElement.getNodeFields()
-        self._fields                         = [ [ s.decode('utf-8')  for s in n  ] for n in fields ]
+        cdef vector[vector[string]] fields = self.marmotElement.getNodeFields()
+        self._fields = [[s.decode("utf-8")  for s in n] for n in fields]
 
         cdef vector[int] permutationPattern = self.marmotElement.getDofIndicesPermutationPattern()
-        self._dofIndicesPermutation          = np.asarray(permutationPattern)
+        self._dofIndicesPermutation = np.asarray(permutationPattern)
 
-        self._ensightType                    = self.marmotElement.getElementShape().decode('utf-8')
+        self._ensightType = self.marmotElement.getElementShape().decode("utf-8")
 
         self._hasMaterial = False
 
@@ -101,8 +103,8 @@ cdef class MarmotElementWrapper:
             The number of the element."""
 
         try:
-            self.marmotElement = MarmotElementFactory.createElement(MarmotElementFactory.getElementCodeFromName( elementType.upper().encode('utf-8')), self._elNumber)
-        except IndexError:
+            self.marmotElement = MarmotElementFactory.createElement(elementType.upper().encode("utf-8"), self._elNumber)
+        except ValueError:
             raise NotImplementedError("Marmot element {:} not found in library.".format(elementType))
 
     @property
@@ -111,7 +113,7 @@ cdef class MarmotElementWrapper:
 
     @property
     def nSpatialDimensions(self):
-       return self._nSpatialDimensions
+        return self._nSpatialDimensions
 
     @property
     def elType(self):
@@ -153,7 +155,7 @@ cdef class MarmotElementWrapper:
         """Assign the nodes coordinates to the underyling MarmotElement"""
 
         self._nodes = nodes
-        self.nodeCoordinates = np.concatenate([ node.coordinates for node in nodes])
+        self.nodeCoordinates = np.concatenate([node.coordinates for node in nodes])
         self.marmotElement.assignNodeCoordinates(&self.nodeCoordinates[0])
 
     def setProperties(self, elementProperties):
@@ -164,7 +166,7 @@ cdef class MarmotElementWrapper:
         self.marmotElement.assignProperty(
                 ElementProperties(
                         &self._elementProperties[0],
-                        self._elementProperties.shape[0] ) )
+                        self._elementProperties.shape[0]))
 
     def initializeElement(self, ):
         """Let the underlying MarmotElement initialize itself"""
@@ -177,21 +179,20 @@ cdef class MarmotElementWrapper:
             - the actual set,
             - and a temporary set for backup in nonlinear iteration schemes.
         """
-        self._materialProperties =  materialProperties
+        self._materialProperties = materialProperties
         try:
             self.marmotElement.assignProperty(
                     MarmotMaterialSection(
-                            MarmotMaterialFactory.getMaterialCodeFromName(
-                                    materialName.upper().encode('UTF-8')),
+                            materialName.upper().encode("UTF-8"),
                             &self._materialProperties[0],
-                            self._materialProperties.shape[0] ) )
-        except IndexError:
-            raise NotImplementedError("Marmot material {:} not found in library.".format(materialName))
+                            self._materialProperties.shape[0]))
+        except ValueError:
+            raise NotImplementedError("Marmot material {:} not found in library.".format(materialName.upper()))
 
-        self.nStateVars =           self.marmotElement.getNumberOfRequiredStateVars()
+        self.nStateVars = self.marmotElement.getNumberOfRequiredStateVars()
 
-        self._stateVars =            np.zeros(self.nStateVars)
-        self._stateVarsTemp =        np.zeros(self.nStateVars)
+        self._stateVars = np.zeros(self.nStateVars)
+        self._stateVarsTemp = np.zeros(self.nStateVars)
 
         self.marmotElement.assignStateVars(&self._stateVarsTemp[0], self.nStateVars)
 
@@ -213,12 +214,12 @@ cdef class MarmotElementWrapper:
         self.acceptLastState()
 
     cpdef void computeYourself(self,
-                         double[::1] Ke,
-                         double[::1] Pe,
-                         const double[::1] U,
-                         const double[::1] dU,
-                         const double[::1] time,
-                         double dTime, ) nogil except *:
+                               double[::1] Ke,
+                               double[::1] Pe,
+                               const double[::1] U,
+                               const double[::1] dU,
+                               const double[::1] time,
+                               double dTime, ) nogil except *:
         """Evaluate residual and stiffness for given time, field, and field increment."""
 
         if not self._hasMaterial:
@@ -231,11 +232,11 @@ cdef class MarmotElementWrapper:
             pNewDT = 1e36
 
             self.marmotElement.computeYourself(&U[0], &dU[0],
-                                                &Pe[0],
-                                                &Ke[0],
-                                                &time[0],
-                                                dTime,
-                                                pNewDT)
+                                               &Pe[0],
+                                               &Ke[0],
+                                               &time[0],
+                                               dTime,
+                                               pNewDT)
             if pNewDT < 1.0:
                 raise CutbackRequest("Element {:} requests for a cutback!".format(self.elNumber), pNewDT)
 
@@ -251,21 +252,21 @@ cdef class MarmotElementWrapper:
         """Evaluate residual and stiffness for given time, field, and field increment due to a surface load."""
 
         self.marmotElement.computeDistributedLoad(mapLoadTypes[loadType],
-                                    &P[0],
-                                    &K[0],
-                                    faceID,
-                                    &load[0],
-                                    &U[0],
-                                    &time[0],
-                                    dTime)
+                                                  &P[0],
+                                                  &K[0],
+                                                  faceID,
+                                                  &load[0],
+                                                  &U[0],
+                                                  &time[0],
+                                                  dTime)
 
     def computeBodyForce(self,
-            double[::1] P,
-            double[::1] K,
-           const double[::1] load,
-           const double[::1] U,
-           const double[::1] time,
-           double dTime):
+                         double[::1] P,
+                         double[::1] K,
+                         const double[::1] load,
+                         const double[::1] U,
+                         const double[::1] time,
+                         double dTime):
         """Evaluate residual and stiffness for given time, field, and field increment due to a volume load."""
 
         self.marmotElement.computeBodyForce(
@@ -275,14 +276,14 @@ cdef class MarmotElementWrapper:
                                     &U[0],
                                     &time[0],
                                     dTime)
-    def acceptLastState(self,):
+
+    def acceptLastState(self, ):
         """Accept the computed state (in nonlinear iteration schemes)."""
 
         self._stateVars[:] = self._stateVarsTemp
 
-    def resetToLastValidState(self,):
+    def resetToLastValidState(self, ):
         """Reset to the last valid state."""
-
 
     def getResultArray(self, result, quadraturePoint, getPersistentView=True):
         """Get the array of a result, possibly as a persistent view which is continiously
@@ -291,8 +292,8 @@ cdef class MarmotElementWrapper:
         if not self._hasMaterial:
             raise Exception("Element {:} has no material assigned!".format(self._elNumber))
 
-        cdef string result_ =  result.encode('UTF-8')
-        return np.array(  self.getStateView(result_, quadraturePoint), copy= not getPersistentView)
+        cdef string result_ = result.encode("UTF-8")
+        return np.array(self.getStateView(result_, quadraturePoint), copy= not getPersistentView)
 
     cdef double[::1] getStateView(self, string result, int quadraturePoint, ):
         """Directly access the state vars of the underlying MarmotElement"""
@@ -300,19 +301,19 @@ cdef class MarmotElementWrapper:
         if not self._hasMaterial:
             raise Exception("Element {:} has no material assigned!".format(self._elNumber))
 
-        cdef StateView res = self.marmotElement.getStateView(result, quadraturePoint )
+        cdef StateView res = self.marmotElement.getStateView(result, quadraturePoint)
 
-        return <double[:res.stateSize]> ( res.stateLocation )
+        return <double[:res.stateSize]> (res.stateLocation)
 
     def getCoordinatesAtCenter(self):
         """Compute the underlying MarmotElement centroid coordinates."""
 
-        return np.asarray ( self.marmotElement.getCoordinatesAtCenter() )
+        return np.asarray (self.marmotElement.getCoordinatesAtCenter())
 
     def getCoordinatesAtQuadraturePoints(self):
         """Compute the underlying MarmotElement qp coordinates."""
 
-        return np.asarray ( self.marmotElement.getCoordinatesAtQuadraturePoints() )
+        return np.asarray (self.marmotElement.getCoordinatesAtQuadraturePoints())
 
     def getNumberOfQuadraturePoints(self):
         """Compute the underlying MarmotElement qp coordinates."""

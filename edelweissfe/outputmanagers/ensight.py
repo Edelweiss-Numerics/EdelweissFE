@@ -32,7 +32,6 @@
 import datetime
 import os
 from collections import defaultdict
-from distutils.util import strtobool
 from io import TextIOBase
 
 import numpy as np
@@ -48,6 +47,7 @@ from edelweissfe.utils.fieldoutput import (
     _FieldOutputBase,
 )
 from edelweissfe.utils.meshtools import disassembleElsetToEnsightShapes
+from edelweissfe.utils.misc import strtobool
 
 """
 Output manager for Ensight exports.
