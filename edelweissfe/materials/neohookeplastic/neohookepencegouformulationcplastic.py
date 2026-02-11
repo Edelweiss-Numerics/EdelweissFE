@@ -99,7 +99,7 @@ def energyAndStressAndElasticTangent(Btr, dF, invFold, Bold, K, mu):
         The elastic tangent dKirchhoff/dDeformationGradient."""
 
     J = np.sqrt(lin.det(Btr))
-    I1 = np.trace(Btr)
+    I1 = Btr.trace()
     invB = lin.inv(Btr)
     muBar = mu * J ** (2 / 3 - K / mu)
     lambdaBar = (K / mu - 2 / 3) * muBar / 2
@@ -130,7 +130,7 @@ def kirchhoffStress(e, K, mu):
         The Kirchhoff stress."""
 
     B, _ = tensorExp(2 * e)
-    muBar = np.exp((2 / 3 - K / mu) * lin.trace(e))
+    muBar = np.exp((2 / 3 - K / mu) * e.trace())
     T = mu * (B - muBar * Ieye)
     return T
 
