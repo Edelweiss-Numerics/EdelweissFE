@@ -81,3 +81,17 @@ class StepAction(StepActionBase):
         )
 
         self.theMaterial["properties"][self.theIndex] = theCurrentProperty
+        for secname, section in model.sections.items():
+            if section.material["name"] == self.theMaterial["name"]:
+                for elSet in section.elSets:
+                    for el in elSet:
+                        if isinstance(section.material, dict):  # for marmotmaterial provider
+                            modifiedMaterial = section.material.copy()
+                            modifiedMaterial["properties"] = self.theMaterial["properties"]
+                        else:  # for edelweissmaterial provider
+                            materialType = type(section.material)
+                            modifiedProperties = self.theMaterial["properties"]
+                            modifiedMaterial = materialType(modifiedProperties)
+                            if hasattr(self.material, "_materialEnergy"):  # for autodiff materials
+                                modifiedMaterial.setEnergyFunction(self.material._materialEnergy)
+                        section.assignSectionPropertiesToElement(el, material=modifiedMaterial)
