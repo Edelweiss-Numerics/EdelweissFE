@@ -87,7 +87,7 @@ jobs:
       - name: Build EdelweissFE
         shell: bash -l {0}
         run: |
-          pip install .
+          pip install -v .
 
       - name: Run tests
         shell: bash -l {0}
