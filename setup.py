@@ -81,11 +81,7 @@ extensions += [
         sources=[
             "edelweissfe/elements/marmotsingleqpelement/marmotmaterialhypoelasticwrapper.pyx",
         ],
-<<<<<<< fix-tests
-        include_dirs=[join(marmot_dir, "include"), numpy.get_include(), join(default_install_prefix, "include/eigen3")],
-=======
         include_dirs=[join(marmot_dir, "include"), numpy.get_include(), eigen_include],
->>>>>>> next_v26.05
         libraries=["Marmot"],
         library_dirs=[join(marmot_dir, "lib")],
         runtime_library_dirs=[join(marmot_dir, "lib")],
