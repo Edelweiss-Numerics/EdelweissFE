@@ -30,6 +30,7 @@ import sympy as sp
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 
 """
 Stepaction to change material properties.
@@ -49,7 +50,7 @@ class StepAction(StepActionBase):
     def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
         self.name = name
         self.theIndex = int(action["index"])
-        self.theMaterial = model.materials[action["material"]]
+        self.theMaterial = CaseInsensitiveDict(model.materials)[action["material"]]
 
         self.updateStepAction(action, jobInfo, model, fieldOutputController, journal)
 
