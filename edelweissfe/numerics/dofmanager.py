@@ -30,6 +30,7 @@
 This module contains important classes for describing the global equation system by means of a sparse system.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from itertools import chain
 
 import numpy as np
@@ -39,230 +40,15 @@ from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.nodecouplingentity.base.nodecouplingentity import (
     BaseNodeCouplingEntity,
 )
+from edelweissfe.numerics.dofvector import DofVector
+from edelweissfe.numerics.parallelizationutilities import (
+    getNumberOfThreads,
+    isFreeThreadingSupported,
+)
+from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
 from edelweissfe.points.node import Node
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.variables.scalarvariable import ScalarVariable
-
-
-class VIJSystemMatrix(np.ndarray):
-    """
-    This class represents the V Vector of VIJ triple (sparse matrix in COO format),
-    which
-
-      * also contains the I and J vectors as class members,
-      * allows to directly access (contiguous read and write) access of each entity via the [] operator
-
-    Parameters
-    ----------
-    nDof
-        The size of the system.
-    I
-        The I vector for the VIJ triple.
-    J
-        The J vector for the VIJ triple.
-    entitiesInVIJ
-        A dictionary containing the indices of an entitiy in the value vector.
-    """
-
-    def __new__(cls, nDof: int, I: np.ndarray, J: np.ndarray, entitiesInVIJ: dict):  # noqa: E741
-        obj = np.zeros_like(I, dtype=float).view(cls)
-
-        obj.nDof = nDof
-        obj.I = I  # noqa: E741
-        obj.J = J
-        obj.entitiesInVIJ = entitiesInVIJ
-
-        return obj
-
-    def __array_finalize__(self, obj):
-        if obj is None:
-            return
-        self.nDof = getattr(obj, "nDof", None)
-        self.I = getattr(obj, "I", None)  # noqa: E741
-        self.J = getattr(obj, "J", None)  # noqa: E741
-        self.entitiesInVIJ = getattr(obj, "entitiesInVIJ", None)
-
-    def __getitem__(self, key):
-        if isinstance(key, (int, slice, np.ndarray, list)):
-            return super().__getitem__(key)
-
-        try:
-            # Entity Lookup
-            idxInVIJ = self.entitiesInVIJ[key]
-            # Use local entity size (key.nDof) for the slice, not global nDof
-            size = key.nDof**2
-            return super().__getitem__(slice(idxInVIJ, idxInVIJ + size))
-        except (KeyError, TypeError, AttributeError):
-            # Fallback for any other weird key types
-            return super().__getitem__(key)
-
-
-class ScatterDofVector(np.ndarray):
-    """
-    A Scatter Vector that stores data for entities contiguously.
-    Includes a fast lookup map to support random access by Entity.
-
-    Parameters
-    ----------
-    entitiesInDofVector
-        The dictionary mapping entities to their indices in the DofVector.
-    nDof
-        The total number of degrees of freedom.
-    """
-
-    def __new__(cls, entitiesInDofVector: dict, nDof: int):
-        entities = list(entitiesInDofVector.keys())
-
-        sizes = np.array([len(v) for v in entitiesInDofVector.values()], dtype=np.intc)
-        total_size = np.sum(sizes)
-
-        obj = np.zeros(total_size, dtype=float).view(cls)
-
-        offsets = np.zeros(len(entities) + 1, dtype=np.intc)
-        np.cumsum(sizes, out=offsets[1:])
-
-        obj._offset_map = dict(zip(entities, offsets))
-
-        obj._global_indices = np.empty(total_size, dtype=np.int32)
-
-        current_offset = 0
-        for entity, indices in entitiesInDofVector.items():
-            n = len(indices)
-            obj._global_indices[current_offset : current_offset + n] = indices
-            current_offset += n
-
-        obj._entitiesInDofVector = entitiesInDofVector
-        obj._nDof = nDof
-
-        return obj
-
-    def __array_finalize__(self, obj):
-        if obj is None:
-            return
-        self._offset_map = getattr(obj, "_offset_map", None)
-        self._entitiesInDofVector = getattr(obj, "_entitiesInDofVector", None)
-        self._nDof = getattr(obj, "_nDof", None)
-        self._global_indices = getattr(obj, "_global_indices", None)
-
-    def __getitem__(self, key):
-        """
-        Returns a VIEW into the expanded buffer.
-
-        Parameters
-        ----------
-        key
-            The key for indexing, either an entity or an integer index.
-        """
-        if isinstance(key, (int, slice, np.ndarray, list)):
-            return super().__getitem__(key)
-
-        try:
-            val = self._offset_map[key]
-            size = len(self._entitiesInDofVector[key])
-            return super().__getitem__(slice(val, val + size))
-        except (KeyError, TypeError):
-            return super().__getitem__(key)
-
-    def assembleInto(self, targetDofVector, absolute=False):
-        """Scatter-Add into the global vector.
-
-        Parameters
-        ----------
-        targetDofVector
-            The target DofVector to assemble into.
-        absolute
-            If True, assemble the absolute values.
-        """
-        data = np.abs(self) if absolute else self
-        np.add.at(targetDofVector, self._global_indices, data)
-
-    def toDofVector(self, absolute=False) -> "DofVector":
-        """Create a new DofVector from this scatter vector.
-
-        Parameters
-        ----------
-        absolute
-            If True, use absolute values.
-
-        Returns
-        -------
-        DofVector
-            The new DofVector.
-        """
-        new_dof_vector = DofVector(self._nDof, self._entitiesInDofVector)
-        self.assembleInto(new_dof_vector, absolute=absolute)
-        return new_dof_vector
-
-
-class DofVector(np.ndarray):
-    """
-    Represents a Dof Vector with entity-aware indexing.
-
-    Parameters
-    ----------
-    nDof
-        The total number of degrees of freedom.
-    entitiesInDofVector
-        A dictionary mapping entities to their indices in the DofVector.
-    """
-
-    def __new__(cls, nDof: int, entitiesInDofVector: dict):
-        obj = np.zeros(nDof, dtype=float).view(cls)
-        obj.entitiesInDofVector = entitiesInDofVector
-        return obj
-
-    def __array_finalize__(self, obj):
-        if obj is None:
-            return
-        self.entitiesInDofVector = getattr(obj, "entitiesInDofVector", None)
-
-    def __getitem__(self, key):
-        if isinstance(key, (int, slice, np.ndarray, list)):
-            return super().__getitem__(key)
-
-        try:
-            return super().__getitem__(self.entitiesInDofVector[key])
-        except (KeyError, TypeError):
-            return super().__getitem__(key)
-
-    def __setitem__(self, key, value):
-        if isinstance(key, (int, slice, np.ndarray, list)):
-            super().__setitem__(key, value)
-            return
-
-        try:
-            super().__setitem__(self.entitiesInDofVector[key], value)
-        except (KeyError, TypeError):
-            super().__setitem__(key, value)
-
-    def copy(self, order="C"):
-        """
-        Create a copy of this DofVector.
-
-        Parameters
-        ----------
-        order
-            The memory layout order.
-        Returns
-        -------
-        DofVector
-            The copied DofVector.
-        """
-        newDofVector = super().copy(order).view(DofVector)
-        if self.entitiesInDofVector is not None:
-            newDofVector.entitiesInDofVector = self.entitiesInDofVector.copy()
-        return newDofVector
-
-    def createScatterVector(self) -> ScatterDofVector:
-        """
-        Create a scatter vector for ALL entities in this DofVector.
-
-        Returns
-        -------
-        ScatterDofVector
-            The ScatterDofVector.
-        """
-        return ScatterDofVector(self.entitiesInDofVector, self.size)
 
 
 class DofManager:
@@ -287,6 +73,12 @@ class DofManager:
         The list of Constraints for which a map to the respective indices should be created.
     nodeSets
         The list of NodeSets for which a map to the respective indices should be created.
+    initializeVIJPattern
+        Whether to initialize the VIJ pattern (I and J vectors) during construction. Can be set to False if the pattern will be initialized later or not needed.
+    initializeAccumulatedNodalFluxesFieldwise
+        Whether to compute the accumulated nodal fluxes fieldwise during construction. This is needed for the Abaqus like convergence test, but can be set to False if not needed.
+    determiningIndexToHostObjectMappping
+        Whether to determine the mapping from indices in the DofVector to their host objects (e.g., Nodes) during construction. This can be set to False if the mapping will be determined later or not needed.
     """
 
     def __init__(
@@ -297,6 +89,8 @@ class DofManager:
         constraints: list[BaseNodeCouplingEntity] = None,
         nodeSets: list[NodeSet] = None,
         initializeVIJPattern: bool = True,
+        initializeAccumulatedNodalFluxesFieldwise: bool = True,
+        determiningIndexToHostObjectMappping: bool = True,
     ):
         if scalarVariables is None:
             scalarVariables = []
@@ -347,22 +141,26 @@ class DofManager:
         # initialization:
 
         self._determineDofsAndTheirIndices(nodeFields, scalarVariables)
+
         self._gatherInformationAboutEntities(elements, constraints, nodeSets)
 
         self.idcsOfFieldsInDofVector = self.idcsOfNodeFieldsInDofVector
         self.fields = self.idcsOfFieldsInDofVector.keys()
-
-        self.nAccumulatedNodalFluxesFieldwise = self._computeAccumulatedNodalFluxesFieldWise(self.fields)
 
         self.idcsOfBasicVariablesInDofVector = (
             self.idcsOfFieldVariablesInDofVector | self.idcsOfScalarVariablesInDofVector
         )
         self.idcsOfHigherOrderEntitiesInDofVector = self.idcsOfElementsInDofVector | self.idcsOfConstraintsInDofVector
 
-        self._sizeVIJ = self._accumulatedElementVIJSize + self._accumulatedConstraintVIJSize
+        if initializeAccumulatedNodalFluxesFieldwise:
+            self.nAccumulatedNodalFluxesFieldwise = self._computeAccumulatedNodalFluxesFieldWise(self.fields)
 
         if initializeVIJPattern:
+            self._sizeVIJ = self._accumulatedElementVIJSize + self._accumulatedConstraintVIJSize
             (self.I, self.J, self.idcsOfHigherOrderEntitiesInVIJ) = self._initializeVIJPattern()
+
+        if determiningIndexToHostObjectMappping:
+            self.indexToHostObjectMapping |= self._determineIndexToNodeMap()
 
     def _determineDofsAndTheirIndices(self, nodeFields: list, scalarVariables: list):
 
@@ -373,8 +171,6 @@ class DofManager:
         ) = self._reserveSpaceForNodeFields(self.nDof, nodeFields)
 
         self.nDof += self._nDofNodeFields
-
-        self.indexToHostObjectMapping |= self._determineIndexToNodeMap()
 
         (
             self._nDofScalarVariables,
@@ -407,8 +203,15 @@ class DofManager:
         self,
         idxStart: int,
         nodeFields: list[NodeField],
-    ) -> tuple[int, dict[str, np.ndarray], dict]:
+    ) -> tuple[int, dict, dict]:
         """Loop over all nodes to generate the global field-dof indices.
+
+        Parameters
+        ----------
+        idxStart
+            The starting index for the DOF numbering.
+        nodeFields
+            The list of NodeFields to process.
 
         Returns
         -------
@@ -418,10 +221,10 @@ class DofManager:
              * dictionary of field variables and indices
              * dictionary of fields and indices
         """
-
         idcsOfFieldsInDofVector = dict()
-        idcsOfNodeFieldVariablesInDofVector = dict()
         currentIdxInDofVector = idxStart
+
+        idcsOfNodeFieldVariablesInDofVector = dict()
 
         for nodeField in nodeFields:
             num_nodes = len(nodeField.nodes)
@@ -434,18 +237,14 @@ class DofManager:
             all_indices = np.arange(currentIdxInDofVector, nextIdxInDofVector, dtype=int)
             indices_reshaped = all_indices.reshape(num_nodes, dim)
 
-            for i, n in enumerate(nodeField.nodes):
-                idcsOfNodeFieldVariablesInDofVector[n.fields[nodeField.name]] = indices_reshaped[i, :]
+            for i, node in enumerate(nodeField.nodes):
+                idcsOfNodeFieldVariablesInDofVector[node.fields[nodeField.name]] = indices_reshaped[i]
 
             currentIdxInDofVector = nextIdxInDofVector
 
         nDof = currentIdxInDofVector - idxStart
 
-        return (
-            nDof,
-            idcsOfNodeFieldVariablesInDofVector,
-            idcsOfFieldsInDofVector,
-        )
+        return nDof, idcsOfNodeFieldVariablesInDofVector, idcsOfFieldsInDofVector
 
     def _reserveSpaceForScalarVariables(
         self, idxStart: int, scalarVariables: list
@@ -589,31 +388,57 @@ class DofManager:
         return self._gatherElementsInformation(entities)
 
     def _locateNodeCouplingEntitiesInDofVector(self, entities: list) -> dict:
-        """Creates a dictionary containing the location (indices) of each entity (elements, constraints)
+        """Creates a dictionary containing the location (indices) of each entity (elements, ...)
         within the DofVector structure.
 
+        Parameters
+        ----------
+        entities
+            The list of entities to locate.
         Returns
         -------
         dict
             A dictionary containing the location mapping.
         """
 
+        if not entities:
+            return {}
+
+        entities = list(entities)
+        nEntities = len(entities)
+
+        numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
+        # Ensure a valid, bounded thread count to avoid ZeroDivisionError and ValueError
+        if numThreads <= 0:
+            numThreads = 1
+        numThreads = min(numThreads, nEntities)
+        chunk_size = max(1, nEntities // numThreads)
+        chunks = [entities[i : i + chunk_size] for i in range(0, len(entities), chunk_size)]
+
+        fieldVariables = self.idcsOfFieldVariablesInDofVector
+
+        def processEntityChunk(chunk):
+            localMap = {}
+            for ent in chunk:
+                indices = [
+                    idx
+                    for iNode, node in enumerate(ent.nodes)
+                    for f_name in ent.fields[iNode]
+                    for idx in fieldVariables[node.fields[f_name]]
+                ]
+                destArr = np.fromiter(indices, dtype=int)
+
+                if ent.dofIndicesPermutation is not None:
+                    localMap[ent] = destArr[ent.dofIndicesPermutation]
+                else:
+                    localMap[ent] = destArr
+            return localMap
+
         idcsOfElementsInDofVector = {}
-        field_var_map = self.idcsOfFieldVariablesInDofVector
-
-        for ent in entities:
-            indices_gen = chain.from_iterable(
-                field_var_map[node.fields[nodeField]]
-                for iNode, node in enumerate(ent.nodes)
-                for nodeField in ent.fields[iNode]
-            )
-
-            destArr = np.fromiter(indices_gen, dtype=int)
-
-            if ent.dofIndicesPermutation is not None:
-                idcsOfElementsInDofVector[ent] = destArr[ent.dofIndicesPermutation]
-            else:
-                idcsOfElementsInDofVector[ent] = destArr
+        with ThreadPoolExecutor(max_workers=numThreads) as executor:
+            results = executor.map(processEntityChunk, chunks)
+            for partial_map in results:
+                idcsOfElementsInDofVector.update(partial_map)
 
         return idcsOfElementsInDofVector
 
@@ -648,6 +473,11 @@ class DofManager:
     def _locateFieldsOnNodeSetsInDofVector(self, nodeSets: list) -> dict:
         """Creates a dictionary containing the location (indices) of each entity (elements, constraints)
         within the DofVector structure.
+
+        Parameters
+        ----------
+        nodeSets
+                The list of NodeSets to consider.
 
         Returns
         -------
