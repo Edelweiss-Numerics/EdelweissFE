@@ -57,7 +57,18 @@ jobs:
           cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX .
           make install
           cd ..
-
+          
+      - name: Install AMGCL
+        shell: bash -l {0}
+        run: |
+          git clone https://github.com/ddemidov/amgcl.git
+          cd amgcl
+          mkdir build
+          cd build
+          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
+          make install
+          cd ../..
+          
       - name: Install Marmot
         shell: bash -l {0}
         run: |
