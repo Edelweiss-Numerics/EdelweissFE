@@ -1,5 +1,30 @@
+#  ---------------------------------------------------------------------
+#
+#  _____    _      _              _         _____ _____
+# | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|
+# |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|
+# | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___
+# |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
+#
+#
+#  Unit of Strength of Materials and Structural Analysis
+#  University of Innsbruck,
+#  2017 - today
+#
+#  Alexander Dummer alexander.dummer@uibk.ac.at
+#
+#  This file is part of EdelweissFE.
+#
+#  This library is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU Lesser General Public
+#  License as published by the Free Software Foundation; either
+#  version 2.1 of the License, or (at your option) any later version.
+#
+#  The full text of the license can be found in the file LICENSE.md at
+#  the top level directory of EdelweissFE.
+#  ---------------------------------------------------------------------
+
 import json
-import time
 
 import numpy as np
 import scipy.sparse
@@ -43,18 +68,13 @@ cdef class PyAMGCLSolver:
         A: scipy.sparse.csr_matrix
         rhs: numpy.ndarray (1D)
         """
-        # 1. Validate and Enforce CSR Format
         if not scipy.sparse.isspmatrix_csr(A):
-            # If not CSR, convert it (might incur copy overhead)
             A = A.tocsr()
 
         cdef int n = A.shape[0]
         if rhs.shape[0] != n:
             raise ValueError(f"Dimension mismatch: Matrix {n}x{n}, RHS {rhs.shape[0]}")
 
-        # 2. Extract and Cast Arrays
-        # AMGCL expects C-int (int32 usually). SciPy indptr can be int64 for huge matrices.
-        # We enforce int32 here for safety with the C++ 'int*' signature.
         cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indptr = A.indptr.astype(np.int32, copy=False)
         cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indices = A.indices.astype(np.int32, copy=False)
         cdef np.ndarray[np.float64_t, ndim=1, mode="c"] data = A.data.astype(np.float64, copy=False)
@@ -79,8 +99,6 @@ cdef class PyAMGCLSolver:
         cdef double[::1] rhs_ = rhs
         cdef double[::1] x_ = x
 
-        tic = time.time()
-
         self.solver.solve(
                 n,
                 &indptr_[0],
@@ -91,7 +109,5 @@ cdef class PyAMGCLSolver:
                 iters,
                 error
             )
-        toc = time.time()
-        print(f"AMGCL solve time: {toc - tic:.6f} seconds, iters: {iters}, error: {error:.2e}")
 
         return x
