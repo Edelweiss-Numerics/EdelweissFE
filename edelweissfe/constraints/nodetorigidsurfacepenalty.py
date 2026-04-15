@@ -70,13 +70,9 @@ class Constraint(ConstraintBase):
 
         self.type = definition.get("type", "linear").lower()
         if self.type not in ["linear", "quadratic"]:
-            raise ValueError(
-                f"Constraint type '{self.type}' is not supported. Use 'linear' or 'quadratic'."
-            )
+            raise ValueError(f"Constraint type '{self.type}' is not supported. Use 'linear' or 'quadratic'.")
 
-        self.indices_component = np.arange(
-            self.component, self._nDof + self.component, self.sizeField
-        )
+        self.indices_component = np.arange(self.component, self._nDof + self.component, self.sizeField)
 
         self._fieldsOnNodes = [
             [

@@ -65,9 +65,7 @@ class Constraint(ConstraintBase):
         self._nNodes = len(self._nodes)
         self._nDof = self.sizeField * self._nNodes
 
-        self.indices_component = slice(
-            self.component, self._nDof + self.component, self.sizeField
-        )
+        self.indices_component = slice(self.component, self._nDof + self.component, self.sizeField)
 
         self._fieldsOnNodes = [
             [
