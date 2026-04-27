@@ -107,7 +107,7 @@ Module ``edelweissfe.constraints.directionalspringpenalty``
     :caption: Example: ``testfiles/DirectionalSpringPenaltyConstraint/test.inp``
 
 ``nodetorigidsurfacepenalty`` - Preventing nodes from penetrating a defined rigid boundary
----------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------
 
 Module ``edelweissfe.constraints.nodetorigidsurfacepenalty``
 
