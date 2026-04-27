@@ -53,12 +53,13 @@ print("*" * 80)
 
 marmot_dir = expanduser(os.environ.get("MARMOT_INSTALL_DIR", default_install_prefix))
 mkl_include = expanduser(os.environ.get("MKL_INCLUDE_DIR", join(default_install_prefix, "include")))
-buildPanuaPardiso = True if expanduser(os.environ.get("BUILD_PANUA_PARDISO", "0")) == "1" else False
-
+eigen_include = expanduser(os.environ.get("EIGEN_INCLUDE_DIR", join(default_install_prefix, "include/eigen3")))
 print("Marmot install directory (overwrite via environment var. MARMOT_INSTALL_DIR):")
 print(marmot_dir)
 print("MKL include directory (overwrite via environment var. MKL_INCLUDE_DIR):")
 print(mkl_include)
+print("Eigen include directory (overwrite via environment var. EIGEN_INCLUDE_DIR):")
+print(eigen_include)
 print("*" * 80)
 
 print("Gather the extension for the MarmotElement base element, linked to the Marmot library")
@@ -74,50 +75,34 @@ extensions = [
     )
 ]
 
-print(
-    "Gather the extension for the single quadrature point element using MarmotMaterials, linked to the Marmot library"
-)
-extensions += [
-    Extension(
-        "*",
-        sources=[
-            "edelweissfe/elements/marmotsingleqpelement/marmot.pyx",
-        ],
-        include_dirs=[join(marmot_dir, "include"), numpy.get_include()],
-        libraries=["Marmot"],
-        library_dirs=[join(marmot_dir, "lib")],
-        runtime_library_dirs=[join(marmot_dir, "lib")],
-        language="c++",
-    )
-]
-
 extensions += [
     Extension(
         "*",
         sources=[
             "edelweissfe/elements/marmotsingleqpelement/marmotmaterialhypoelasticwrapper.pyx",
         ],
-        include_dirs=[join(marmot_dir, "include"), numpy.get_include()],
+        include_dirs=[join(marmot_dir, "include"), numpy.get_include(), eigen_include],
         libraries=["Marmot"],
         library_dirs=[join(marmot_dir, "lib")],
         runtime_library_dirs=[join(marmot_dir, "lib")],
         language="c++",
+        extra_compile_args=["-O3", "-std=c++20"],
     )
 ]
 
-extensions += [
-    Extension(
-        "*",
-        sources=[
-            "edelweissfe/elements/marmotsingleqpelement/marmotmaterialgradientenhancedhypoelasticwrapper.pyx",
-        ],
-        include_dirs=[join(marmot_dir, "include"), numpy.get_include()],
-        libraries=["Marmot"],
-        library_dirs=[join(marmot_dir, "lib")],
-        runtime_library_dirs=[join(marmot_dir, "lib")],
-        language="c++",
-    )
-]
+# extensions += [
+#     Extension(
+#         "*",
+#         sources=[
+#             "edelweissfe/elements/marmotsingleqpelement/marmotmaterialgradientenhancedhypoelasticwrapper.pyx",
+#         ],
+#         include_dirs=[join(marmot_dir, "include"), numpy.get_include()],
+#         libraries=["Marmot"],
+#         library_dirs=[join(marmot_dir, "lib")],
+#         runtime_library_dirs=[join(marmot_dir, "lib")],
+#         language="c++",
+#     )
+# ]
 
 print("Gather the extension for the fast element result collector")
 extensions += [
@@ -204,62 +189,72 @@ extensions += [
 ]
 
 
-if buildPanuaPardiso:
-    print("Gather the Panua pardiso interface")
-    extensions += [
-        Extension(
-            "*",
-            sources=[
-                "edelweissfe/linsolve/panuapardiso/panuapardiso.pyx",
-            ],
-            include_dirs=[
-                numpy.get_include(),
-            ],
-            libraries=[
-                "pardiso",
-            ],
-            language="c++",
-            extra_link_args=["-fopenmp", "-lgfortran", "-lpthread", "-lm"],
-            optional=True,
-        )
-    ]
+print("Gather the Panua pardiso interface")
+extensions += [
+    Extension(
+        "*",
+        sources=[
+            "edelweissfe/linsolve/panuapardiso/panuapardiso.pyx",
+        ],
+        include_dirs=[
+            numpy.get_include(),
+        ],
+        libraries=[
+            "pardiso",
+        ],
+        language="c++",
+        extra_link_args=["-fopenmp", "-lgfortran", "-lpthread", "-lm"],
+        optional=True,
+    )
+]
 
-# print("Gather the KLU interface")
-# extensions += [
-#     Extension(
-#         "*",
-#         sources=[
-#             "edelweissfe/linsolve/klu/klu.pyx",
-#             "edelweissfe/linsolve/klu/kluInterface.c",
-#         ],
-#         include_dirs=[
-#             numpy.get_include(),
-#         ],
-#         libraries=[
-#             "klu",
-#             "btf",
-#             "amd",
-#             "colamd",
-#             "metis",
-#             "cholmod",
-#             "camd",
-#             "ccolamd",
-#             "iomp5",
-#             "suitesparseconfig",
-#         ],
-#         language="c",
-#         extra_compile_args=[
-#             "-fopenmp",
-#             "-Wno-maybe-uninitialized",
-#         ],
-#         extra_link_args=["-fopenmp"],
-#     )
-# ]
+print("Gather the KLU interface")
+extensions += [
+    Extension(
+        "*",
+        sources=[
+            "edelweissfe/linsolve/klu/klu.pyx",
+            "edelweissfe/linsolve/klu/kluInterface.c",
+        ],
+        include_dirs=[
+            numpy.get_include(),
+        ],
+        libraries=[
+            "klu",
+            "btf",
+            "amd",
+            "colamd",
+            "metis",
+            "cholmod",
+            "camd",
+            "ccolamd",
+            "iomp5",
+            "suitesparseconfig",
+        ],
+        language="c",
+        extra_compile_args=[
+            "-fopenmp",
+            "-Wno-maybe-uninitialized",
+        ],
+        extra_link_args=["-fopenmp"],
+    )
+]
 
 print("Now compile!")
 
+
+# overwrite build_ext to make all extensions optional
+class optional_build_ext(build_ext):
+    def build_extension(self, ext):
+        try:
+            super().build_extension(ext)
+        except Exception as e:
+            print(f"Extension {ext.name} could not be built:")
+            print(e)
+
+
 setup(
-    cmdclass={"build_ext": build_ext},
+    cmdclass={"build_ext": optional_build_ext},
     ext_modules=cythonize(extensions, compiler_directives=directives, annotate=True, language_level=3),
 )
 

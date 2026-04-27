@@ -31,9 +31,10 @@
 import numpy as np
 
 from edelweissfe.elements.base.baseelement import BaseElement
-from edelweissfe.elements.marmotsingleqpelement.marmotmaterialgradientenhancedhypoelasticwrapper import (
-    MarmotMaterialGradientEnhancedHypoElasticWrapper,
-)
+
+# from edelweissfe.elements.marmotsingleqpelement.marmotmaterialgradientenhancedhypoelasticwrapper import (
+#     MarmotMaterialGradientEnhancedHypoElasticWrapper,
+# )
 from edelweissfe.elements.marmotsingleqpelement.marmotmaterialhypoelasticwrapper import (
     MarmotMaterialHypoElasticWrapper,
 )
@@ -41,7 +42,7 @@ from edelweissfe.points.node import Node
 
 marmotMaterialWrappers = {
     "MarmotMaterialHypoElastic": MarmotMaterialHypoElasticWrapper,
-    "MarmotMaterialGradientEnhancedHypoElastic": MarmotMaterialGradientEnhancedHypoElasticWrapper,
+    # "MarmotMaterialGradientEnhancedHypoElastic": MarmotMaterialGradientEnhancedHypoElasticWrapper,
 }
 
 
@@ -157,7 +158,7 @@ class MarmotMaterialWrappingElement(BaseElement):
         """
 
         self._materialProperties = materialProperties
-        self._marmotMaterialWrapper.createMaterial(materialName, materialProperties)
+        self._marmotMaterialWrapper.createMaterial(materialName.upper(), materialProperties)
 
         self._nStateVars = self._marmotMaterialWrapper.getNumberOfRequiredStateVars()
 
