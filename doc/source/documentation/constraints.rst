@@ -106,7 +106,7 @@ Module ``edelweissfe.constraints.directionalspringpenalty``
     :language: edelweiss
     :caption: Example: ``testfiles/DirectionalSpringPenaltyConstraint/test.inp``
 
-``directionalspringpenalty`` - Assigning a stiffness to specific degrees of freedom
+``nodetorigidsurfacepenalty`` - Preventing nodes from penetrating a defined rigid boundary
 ---------------------------------------------------------------------------------------
 
 Module ``edelweissfe.constraints.nodetorigidsurfacepenalty``

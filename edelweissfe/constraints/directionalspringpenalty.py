@@ -46,7 +46,6 @@ documentation = {
     "component": "The component of the field.",
     "penalty": "The numerical penalty value.",
     "nSet": "The node set to be constrained.",
-    "value": "The prescribed target value for the constrained degrees of freedom.",
 }
 
 
@@ -60,7 +59,6 @@ class Constraint(ConstraintBase):
         self.sizeField = getFieldSize(theField, model.domainSize)
         self.component = int(definition["component"])
         self.penalty = float(definition["penalty"])
-        self.value = 0.0
         self._nodes = model.nodeSets[definition["nSet"]]
         self._nNodes = len(self._nodes)
         self._nDof = self.sizeField * self._nNodes
@@ -100,7 +98,7 @@ class Constraint(ConstraintBase):
 
         values = U_np[self.indices_component]
 
-        PExt[self.indices_component] -= self.penalty * (values - self.value)
+        PExt[self.indices_component] -= self.penalty * values
 
         diag = np.diag(K)
         diag.setflags(write=True)  # bug in numpy
