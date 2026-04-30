@@ -40,7 +40,7 @@ def printDocumentation(module):
         if mod.__doc__:
             print(mod.__doc__)
         for item in mod.documentation:
-            print(item)
+            print(item.__doc__())
             print()
 
     except ModuleNotFoundError as e:

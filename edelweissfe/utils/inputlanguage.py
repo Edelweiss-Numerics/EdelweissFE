@@ -177,19 +177,20 @@ class InputFileKeyword:
                 f"{module} is not a valid argument for {keywordIdentifier}{self.name}. Did you mean {similarModule}?"
             )
 
-    # def __repr__(self) -> str:
-    #     return f"< {self.name} >"
     def __repr__(self) -> str:
+        return f"< {self.name} >"
+
+    def __doc__(self) -> str:
         lines = []
-        lines.append(f"< {self.name} >" + " " + self.description)
+        lines.append(self.__repr__() + " " + self.description)
         if self.requiredArgs:
             lines.append(indent1 + "required arguments")
             for item in self.requiredArgs:
-                lines.append(indent2 + item.__repr__())
+                lines.append(indent2 + item.__doc__())
         if self.optionalArgs:
             lines.append(indent1 + "optional arguments")
             for item in self.optionalArgs:
-                lines.append(indent2 + item.__repr__())
+                lines.append(indent2 + item.__doc__())
         if self.optionalDatalines:
             lines.append(indent1 + "required datalines")
             lines.append(indent2 + self.requiredDatalines.__repr__())
@@ -347,30 +348,33 @@ class Module:
         return datalines
 
     def __repr__(self) -> str:
+        return f"[{self.name}]"
+
+    def __doc__(self) -> str:
         lines = []
         lines.append(f"[{self.name}]" + " " + self.description)
         if self.requiredArgs:
             lines.append(indent1 + "required arguments")
             for item in self.requiredArgs:
-                lines.append(indent2 + item.__repr__())
+                lines.append(indent2 + item.__doc__())
         if self.optionalArgs:
             lines.append(indent1 + "optional arguments")
             for item in self.optionalArgs:
-                lines.append(indent2 + item.__repr__())
+                lines.append(indent2 + item.__doc__())
         if self.requiredKeywords:
             lines.append(indent1 + "required keywords")
             for item in self.requiredKeywords:
-                lines.append(indent0 + item.__repr__())
+                lines.append(indent0 + item.__doc__())
         if self.optionalKeywords:
             lines.append(indent1 + "optional keywords")
             for item in self.optionalKeywords:
-                lines += [indent2 + line for line in item.__repr__().split("\n")]
+                lines += [indent2 + line for line in item.__doc__().split("\n")]
         if self.requiredDatalines:
             lines.append(indent1 + "required datalines")
-            lines.append(indent2 + self.requiredDatalines.__repr__())
+            lines.append(indent2 + self.requiredDatalines.__doc__())
         if self.optionalDatalines:
             lines.append(indent1 + "optional datalines")
-            lines.append(indent2 + self.optionalDatalines.__repr__())
+            lines.append(indent2 + self.optionalDatalines.__doc__())
         return "\n".join(lines)
 
     def parseKeywordLine(self, line):
@@ -445,7 +449,10 @@ class KeywordArg:
             raise ValueError(f"Cannot convert {kwargs[self.name]} to {self.dtype}")
 
     def __repr__(self) -> str:
-        return f"[{self.name}]" + " " + self.description + " " + f"({self.dtype})"
+        return f"[{self.name}]"
+
+    def __doc__(self) -> str:
+        return self.__repr__() + " " + self.description + " " + f"({self.dtype})"
 
 
 class OptionalKeywordArg(KeywordArg):
@@ -461,8 +468,8 @@ class OptionalKeywordArg(KeywordArg):
         except KeyError:
             return self.default
 
-    def __repr__(self) -> str:
-        return f"[{self.name}]" + " " + self.description + " " + f"({self.dtype}, default = {self.default})"
+    def __doc__(self) -> str:
+        return self.__repr__() + " " + self.description + " " + f"({self.dtype}, default = {self.default})"
 
 
 class ModuleKeywordArg:
@@ -486,4 +493,7 @@ class DataLines:
         return
 
     def __repr__(self) -> str:
+        return self.name
+
+    def __doc__(self) -> str:
         return self.description
