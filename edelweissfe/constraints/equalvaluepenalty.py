@@ -65,6 +65,8 @@ module.addRequiredArg("component", "The component of the field.", int)
 module.addRequiredArg("penalty", "The numerical penalty value.", float)
 module.addRequiredArg("nSet", "The node set to be constrained.", str)
 
+documentation = [module]
+
 
 class Constraint(ConstraintBase):
     @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])

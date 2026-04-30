@@ -44,11 +44,6 @@ Currently 2D only!
 The center is autotically computed from the bounding node coordinates.
 """
 
-# documentation = {
-#     "contractionNSet": "The node set defining the contraction ring",
-#     "L": "Final distance (e.g. crack opening)",
-#     "exportCVector": "(Optional) file to export the computed c vector",
-# }
 
 inputLanguage = InputLanguage()
 module = inputLanguage["step"].getModule("adaptive")
@@ -62,6 +57,8 @@ kw.addRequiredArg("contractionNSet", "The node set defining the contraction ring
 kw.addRequiredArg("L", "Final distance (e.g. crack opening)", float)
 kw.addOptionalArg("exportCVector", "File to export the computed c vector", str, "")
 kw.addOptionalArg("absolute", "Use absolute formulation", bool, True)
+
+documentation = [kw]
 
 
 class StepAction(StepActionBase):

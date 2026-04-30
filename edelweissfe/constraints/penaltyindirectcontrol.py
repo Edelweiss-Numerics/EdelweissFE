@@ -82,6 +82,8 @@ module.addOptionalArg(
 )
 module.addOptionalArg("f(t)", "Amplitude function.", str, None)
 
+documentation = [module]
+
 
 class Constraint(ConstraintBase):
     @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])

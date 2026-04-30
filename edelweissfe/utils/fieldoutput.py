@@ -64,6 +64,8 @@ kw.addOptionalArg("f(x)", "Function to apply in each increment.", str, None)
 kw.addOptionalArg("f_export(x)", "Function to apply on final result (table).", str, None)
 kw.addOptionalArg("export", "Export the field output to a file at the end of the job.", str, None)
 
+documentation = [kw]
+
 kw = module.addOptionalKeyword("perElement", "Create element-based field output.")
 kw.addRequiredArg("name", "Name of the field output.", str)
 kw.addRequiredArg("elSet", "Element set.", str)
@@ -74,6 +76,8 @@ kw.addOptionalArg("f(x)", "Function to apply in each increment.", str, None)
 kw.addOptionalArg("f_export(x)", "Function to apply on final result (table).", str, None)
 kw.addOptionalArg("export", "Export the field output to a file at the end of the job.", str, None)
 
+documentation.append(kw)
+
 kw = module.addOptionalKeyword("fromExpression", "Create field output from expression.")
 kw.addRequiredArg("name", "Name of the field output.", str)
 kw.addOptionalArg("elSet", "Element set.", str, None)
@@ -83,6 +87,8 @@ kw.addOptionalArg("saveHistory", "Save complete History or only last (increment)
 kw.addOptionalArg("f(x)", "Function to apply in each increment.", str, None)
 kw.addOptionalArg("f_export(x)", "Function to apply on final result (table).", str, None)
 kw.addOptionalArg("export", "Export the field output to a file at the end of the job.", str, None)
+
+documentation.append(kw)
 
 
 class _FieldOutputBase:

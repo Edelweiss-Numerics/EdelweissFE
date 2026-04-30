@@ -66,16 +66,6 @@ from edelweissfe.utils.misc import (
     castKwargsValuesAndAddDefaults,
 )
 
-# documentation = {
-#     "x0": "(optional) origin at x axis",
-#     "y0": "(optional) origin at y axis",
-#     "h": "(optional) height of the body",
-#     "l": "(optional) length of the body",
-#     "nX": "(optional) number of elements along x",
-#     "nY": "(optional) number of elements along y",
-#     "elType": "type of element",
-# }
-
 inputLanguage = InputLanguage()
 module = inputLanguage["modelGenerator"].addModule(
     "planeRectQuad", "A mesh generator for cuboid geometries and structured hex meshes."
@@ -94,6 +84,8 @@ module.addOptionalArg("nZ", "Number of elements along the z axis.", int, 1)
 
 module.addRequiredArg("elType", "Element type.", str)
 module.addOptionalArg("elProvider", "Element provider.", str, None)
+
+documentation = [module]
 
 
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])

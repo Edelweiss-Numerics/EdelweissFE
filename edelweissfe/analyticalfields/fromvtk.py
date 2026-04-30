@@ -41,10 +41,12 @@ from edelweissfe.utils.misc import (
 )
 
 inputLanguage = InputLanguage()
-module = inputLanguage["analyticalField"].addModule("fromVtk", "input language for fromVtk module")
+module = inputLanguage["analyticalField"].addModule("fromVtk", "Use PyVista to interpolate from vtk data.")
 
 module.addRequiredArg("file", "path to database file", str)
 module.addRequiredArg("result", "result name in database", str)
+
+documentation = [module]
 
 
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])

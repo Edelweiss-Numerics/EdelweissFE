@@ -43,6 +43,8 @@ kw = module.addOptionalKeyword(
 )
 kw.addRequiredArg("category", "Option category.", str)
 
+documentation = [kw]
+
 
 class StepAction(StepActionBase):
     def __init__(self, name, options, jobInfo, model, fieldOutputController, journal):

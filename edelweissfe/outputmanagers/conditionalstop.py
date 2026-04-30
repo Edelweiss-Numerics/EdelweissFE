@@ -58,6 +58,8 @@ module = inputLanguage["output"].addModule(
 
 module.addRequiredArg("stop", "Model accessible function describing the stop condition.", str)
 
+documentation = [module]
+
 required = [kw.name for kw in module.requiredArgs]
 required += [kw.name for kw in module.requiredKeywords]
 

@@ -58,6 +58,8 @@ module.addRequiredArg("fieldOutput", "Name of the field output to monitor.", str
 module.addOptionalArg("label", "Name of the output manager.", str, "Monitor")
 module.addOptionalArg("f(x)", "Apply a model accessible function on the result.", str, None)
 
+documentation = [module]
+
 required = [kw.name for kw in module.requiredArgs]
 required += [kw.name for kw in module.requiredKeywords]
 

@@ -50,6 +50,8 @@ module = inputLanguage["output"].addModule("statusfile", "Writes a status file d
 # module.addOptionalArg("filename", "Name of the output manager.", str, "<jobname>.sta")
 module.addOptionalArg("filename", "Name of the output manager.", str, "job.sta")
 
+documentation = [module]
+
 required = [kw.name for kw in module.requiredArgs]
 required += [kw.name for kw in module.requiredKeywords]
 

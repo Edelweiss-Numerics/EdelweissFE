@@ -62,6 +62,8 @@ required += [kw.name for kw in module.requiredKeywords]
 optional = [kw.name for kw in module.optionalArgs]
 optional += [kw.name for kw in module.optionalKeywords]
 
+documentation = [module]
+
 
 @caseInsensitiveKwargsChecker(required, optional)
 @castKwargsValuesAndAddDefaults(module)

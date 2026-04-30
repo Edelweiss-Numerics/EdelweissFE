@@ -64,6 +64,8 @@ module.addOptionalArg("f(x)", "Function to apply in each increment.", str, None)
 module.addOptionalArg("nStages", "", int, 1)
 module.addOptionalArg("export", "Export the field output to a file at the end of the job.", str, None)
 
+documentation = [module]
+
 required = [kw.name for kw in module.requiredArgs]
 required += [kw.name for kw in module.requiredKeywords]
 

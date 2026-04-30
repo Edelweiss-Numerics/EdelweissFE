@@ -83,6 +83,8 @@ kw.addOptionalArg("elSet", "Element set.", str, None)
 kw.addOptionalArg("nSet", "Node set.", str, None)
 kw.addOptionalArg("transient", "Set transient ensight output.", bool, True)
 
+documentation = [module]
+
 optionsModule = inputLanguage["step"].getModule("adaptive").getKeyword("options")
 optionsModule.addOptionalArg("intermediateSaveInterval", "", float, None)
 optionsModule.addOptionalArg("minDTForOutput", "", float, None)

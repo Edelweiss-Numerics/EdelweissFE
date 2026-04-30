@@ -49,6 +49,8 @@ module = inputLanguage["output"].addModule(
 
 module.addRequiredArg("export", "Provide a filename to export the results.", str)
 
+documentation = [module]
+
 required = [kw.name for kw in module.requiredArgs]
 required += [kw.name for kw in module.requiredKeywords]
 

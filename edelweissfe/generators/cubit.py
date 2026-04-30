@@ -42,18 +42,6 @@ from edelweissfe.utils.misc import (
     castKwargsValuesAndAddDefaults,
 )
 
-# documentation = {
-#     "cubitCmd": "(Optional) Cubit executable; default=cubit",
-#     "jouFile": "Path to Cubit journal (.jou) file",
-#     "outFile": "(Optional) path to output file; default=mesh.inc",
-#     "vars": "(Optional) APREPRO variables as string '...' of comma-separated <key>=<value> pairs",
-#     "elType": "Specify element type for all sections",
-#     "elTypePerBlock": "Specify element type for each section as string '...' of comma-separated <key>=<value> pairs",
-#     "overwrite": "(Optional) overwrite existing outFiles; default=False",
-#     "runCubit": "(Optional) run Cubit GUI for debugging purposes; default=False",
-#     "silent": "(Optional) hide Cubit output; default=False",
-# }
-
 inputLanguage = InputLanguage()
 module = inputLanguage["modelGenerator"].addModule("cubit", "Interface to Cubit. Generate mesh using Cubit .jou files.")
 
@@ -70,6 +58,8 @@ module.addOptionalArg(
     "elTypePerBlock", "Specify element type per block as comma-separated <key>=<value> pairs.", str, None
 )
 module.addOptionalArg("elProvider", "Element provider.", str, None)
+
+documentation = [module]
 
 
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])

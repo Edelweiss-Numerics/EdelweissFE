@@ -42,12 +42,16 @@ from edelweissfe.utils.misc import (
 )
 
 inputLanguage = InputLanguage()
-module = inputLanguage["analyticalField"].addModule("scalarExpression", "input language for scalarExpression module")
+module = inputLanguage["analyticalField"].addModule(
+    "scalarExpression", "Define an analytical field using a scalar expression."
+)
 module.addRequiredArg(
     "f(x,y,z)",
     "Python expression using variables x, y, z (coordinates); dictionaries contained in model can be accessed",
     str,
 )
+
+documentation = [module]
 
 
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])

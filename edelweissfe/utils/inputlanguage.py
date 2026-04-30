@@ -39,6 +39,12 @@ from edelweissfe.utils.misc import (
 keywordIdentifier = "*"
 moduleLevelKeywordIdentifier = ">>"
 
+indent0 = " " * 0
+indent1 = " " * 2
+indent2 = " " * 4
+indent3 = " " * 6
+indent4 = " " * 8
+
 
 def singleton(class_):
     """class decorated with this function will only be instantiated once"""
@@ -171,8 +177,26 @@ class InputFileKeyword:
                 f"{module} is not a valid argument for {keywordIdentifier}{self.name}. Did you mean {similarModule}?"
             )
 
+    # def __repr__(self) -> str:
+    #     return f"< {self.name} >"
     def __repr__(self) -> str:
-        return f"< {self.name} >"
+        lines = []
+        lines.append(f"< {self.name} >" + " " + self.description)
+        if self.requiredArgs:
+            lines.append(indent1 + "required arguments")
+            for item in self.requiredArgs:
+                lines.append(indent2 + item.__repr__())
+        if self.optionalArgs:
+            lines.append(indent1 + "optional arguments")
+            for item in self.optionalArgs:
+                lines.append(indent2 + item.__repr__())
+        if self.optionalDatalines:
+            lines.append(indent1 + "required datalines")
+            lines.append(indent2 + self.requiredDatalines.__repr__())
+        if self.optionalDatalines:
+            lines.append(indent1 + "optional datalines")
+            lines.append(indent2 + self.optionalDatalines.__repr__())
+        return "\n".join(lines)
 
     def addRequiredArg(self, name: str, description: str, dataType: type):
         arg = KeywordArg(name, description, dataType)
@@ -323,7 +347,31 @@ class Module:
         return datalines
 
     def __repr__(self) -> str:
-        return f"[{self.name}]"
+        lines = []
+        lines.append(f"[{self.name}]" + " " + self.description)
+        if self.requiredArgs:
+            lines.append(indent1 + "required arguments")
+            for item in self.requiredArgs:
+                lines.append(indent2 + item.__repr__())
+        if self.optionalArgs:
+            lines.append(indent1 + "optional arguments")
+            for item in self.optionalArgs:
+                lines.append(indent2 + item.__repr__())
+        if self.requiredKeywords:
+            lines.append(indent1 + "required keywords")
+            for item in self.requiredKeywords:
+                lines.append(indent0 + item.__repr__())
+        if self.optionalKeywords:
+            lines.append(indent1 + "optional keywords")
+            for item in self.optionalKeywords:
+                lines += [indent2 + line for line in item.__repr__().split("\n")]
+        if self.requiredDatalines:
+            lines.append(indent1 + "required datalines")
+            lines.append(indent2 + self.requiredDatalines.__repr__())
+        if self.optionalDatalines:
+            lines.append(indent1 + "optional datalines")
+            lines.append(indent2 + self.optionalDatalines.__repr__())
+        return "\n".join(lines)
 
     def parseKeywordLine(self, line):
         lineElements = splitLineAtCommas(line)
@@ -397,7 +445,7 @@ class KeywordArg:
             raise ValueError(f"Cannot convert {kwargs[self.name]} to {self.dtype}")
 
     def __repr__(self) -> str:
-        return f"[{self.name}]"
+        return f"[{self.name}]" + " " + self.description + " " + f"({self.dtype})"
 
 
 class OptionalKeywordArg(KeywordArg):
@@ -412,6 +460,9 @@ class OptionalKeywordArg(KeywordArg):
             return super().getValueFromKwargs(kwargs)
         except KeyError:
             return self.default
+
+    def __repr__(self) -> str:
+        return f"[{self.name}]" + " " + self.description + " " + f"({self.dtype}, default = {self.default})"
 
 
 class ModuleKeywordArg:
@@ -435,4 +486,4 @@ class DataLines:
         return
 
     def __repr__(self) -> str:
-        return self.name
+        return self.description

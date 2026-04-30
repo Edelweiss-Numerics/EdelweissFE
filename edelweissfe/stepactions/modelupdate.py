@@ -37,7 +37,6 @@ from edelweissfe.utils.math import execModelAccessibleExpression
 of a step.
 """
 
-# documentation = {"update": "Model accessible, executable expression"}
 
 inputLanguage = InputLanguage()
 module = inputLanguage["step"].getModule("adaptive")
@@ -47,6 +46,8 @@ kw = module.addOptionalKeyword(
 )
 # kw.addRequiredArg("name", "Name of the step action.", str)
 kw.addRequiredArg("update", "Model accessible, executable expression", str)
+
+documentation = [kw]
 
 
 class StepAction(StepActionBase):

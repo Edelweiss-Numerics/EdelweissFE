@@ -50,6 +50,8 @@ module = inputLanguage["constraint"].addModule("rigidbody", "A rigid body constr
 module.addRequiredArg("nSet", "Node set to tie.", float)
 module.addRequiredArg("referencePoint", "Node set containing only the reference point.", float)
 
+documentation = [module]
+
 
 class Constraint(ConstraintBase):
     """

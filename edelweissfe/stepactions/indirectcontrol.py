@@ -42,11 +42,6 @@ from edelweissfe.utils.math import evalModelAccessibleExpression
 Indirect (displacement) controller for the NISTArcLength solver
 """
 
-# documentation = {
-#     "dof1": "Degree of freedom for the constraint ( model access expression )",
-#     "dof2": "Degree of freedom for the constraint ( model access expression )",
-#     "L": "Final distance (e.g. crack opening)",
-# }
 
 inputLanguage = InputLanguage()
 module = inputLanguage["step"].getModule("adaptive")
@@ -63,6 +58,8 @@ kw.addRequiredArg("cVector2", "c vector.", str)
 kw.addRequiredArg("L", "Final distance (e.g. crack opening)", float)
 kw.addOptionalArg("exportCVector", "File to export the computed c vector", str, "")
 kw.addOptionalArg("absolute", "Use absolute formulation", bool, True)
+
+documentation = [kw]
 
 
 class StepAction(StepActionBase):

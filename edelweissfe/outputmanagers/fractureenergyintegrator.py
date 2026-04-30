@@ -60,6 +60,8 @@ module.addRequiredArg("forceFieldOutput", "fieldOutput for force (with time hist
 module.addRequiredArg("displacementFieldOutput", "fieldOutput for displacement (with time history).", str)
 module.addOptionalArg("f(x)", "Apply a model accessible function on the result.", str, "1")
 
+documentation = [module]
+
 required = [kw.name for kw in module.requiredArgs]
 required += [kw.name for kw in module.requiredKeywords]
 

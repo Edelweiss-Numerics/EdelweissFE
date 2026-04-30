@@ -41,11 +41,6 @@ Simple body force load.
 If not modified in subsequent steps, the load held constant.
 """
 
-# documentation = {
-#     "forceVector": "The force vector",
-#     "delta": "In subsequent steps only: define the updated force vector incrementally",
-#     "f(t)": "(Optional) define an amplitude in the step progress interval [0...1]",
-# }
 
 inputLanguage = InputLanguage()
 module = inputLanguage["step"].getModule("adaptive")
@@ -56,6 +51,8 @@ kw.addRequiredArg("elSet", "The element set for application of the boundary cond
 kw.addRequiredArg("forceVector", "The force vector.", str)
 kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
 kw.addOptionalArg("delta", "In subsequent steps only: define the updated force vector incrementally", str, 0)
+
+documentation = [kw]
 
 
 class StepAction(BodyLoadBase):

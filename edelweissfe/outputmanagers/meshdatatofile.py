@@ -50,6 +50,8 @@ module = inputLanguage["output"].addModule("meshdatatofile", "Writes the (genera
 
 module.addOptionalArg("filename", "Name of file for writing output.", str, None)
 
+documentation = [module]
+
 required = [kw.name for kw in module.requiredArgs]
 required += [kw.name for kw in module.requiredKeywords]
 

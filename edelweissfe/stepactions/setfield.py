@@ -40,11 +40,6 @@ from edelweissfe.steps.adaptivestep import InputLanguage
 Set a field (via fieldOutput) to a predefined value.
 """
 
-# documentation = {
-#     "fieldOutput": "Field output to be set",
-#     "type": "'Const' or 'analyticalField'",
-#     "value": "Scalar value if type 'const'; name of analyticalField if type 'analyticalField'",
-# }
 inputLanguage = InputLanguage()
 module = inputLanguage["step"].getModule("adaptive")
 
@@ -53,6 +48,8 @@ kw.addOptionalArg("name", "Name of the step action.", str, "setfield")
 kw.addRequiredArg("fieldOutput", "Field output to be set.", str)
 kw.addRequiredArg("type", "Either 'uniform' or 'analyticalField'.", str)
 kw.addRequiredArg("value", "Scalar value if type 'const'; name of analyticalField if type 'analyticalField'", str)
+
+documentation = [kw]
 
 
 class StepAction(StepActionBase):

@@ -42,13 +42,6 @@ from edelweissfe.timesteppers.timestep import TimeStep
 Apply node forces on a nSet.
 """
 
-# documentation = {
-#     "nSet": "Node set for application of the boundary condition",
-#     "1,2,3,...": "Prescribed values for components of the physical field",
-#     "components": "Prescribed values using a np.ndarray for representation; use 'x' for ignored values",
-#     "field": "Field for which the boundary condition is active",
-#     "f(t)": "(Optional) define an amplitude in the step progress interval [0...1]",
-# }
 
 inputLanguage = InputLanguage()
 module = inputLanguage["step"].getModule("adaptive")
@@ -70,6 +63,8 @@ kw.addOptionalArg(
 )
 kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
 
+documentation = [kw]
+
 kw = module.addOptionalKeyword("updateNodeforces", "Update a previously defined nodeforces definition.")
 kw.addRequiredArg("name", "Name of the step action to update.", str)
 # kw.addRequiredArg("nSet", "The node set for application of the boundary condition.", str)
@@ -86,6 +81,8 @@ kw.addOptionalArg(
     "components", "Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.", str, None
 )
 kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+
+documentation.append(kw)
 
 
 class StepAction(NodalLoadBase):

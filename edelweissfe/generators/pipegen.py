@@ -43,22 +43,6 @@ from edelweissfe.utils.misc import (
     castKwargsValuesAndAddDefaults,
 )
 
-# documentation = {
-#     "x0": "(optional) origin at x axis",
-#     "y0": "(optional) origin at y axis",
-#     "z0": "(optional) origin at z axis",
-#     "Ro(y)": "(optional) outer radius of the pipe as a function of height",
-#     "Ri(y)": "(optional) inner radius of the pipe as a function of height",
-#     "lT": "(optional) thickness of the pipe",
-#     "lY": "(optional) height of the pipe",
-#     "phi": "(optional) total angle for the pipe",
-#     "nT": "(optional) number of elements along thickness",
-#     "nC": "(optional) number of elements along circumference",
-#     "nY": "(optional) number of elements along height",
-#     "exG": "(optional) flag to place nodes on exact geometry (default = True)",
-#     "elType": "type of element",
-# }
-
 inputLanguage = InputLanguage()
 module = inputLanguage["modelGenerator"].addModule("pipegen", "A structured hex mesh generator for pipe geometries.")
 
@@ -82,6 +66,8 @@ module.addOptionalArg("exG", "Flag to place nodes on exact geometry.", bool, Tru
 
 module.addRequiredArg("elType", "Element type.", str)
 module.addOptionalArg("elProvider", "Element provider.", str, None)
+
+documentation = [module]
 
 
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])

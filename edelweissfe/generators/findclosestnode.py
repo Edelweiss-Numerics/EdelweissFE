@@ -45,13 +45,6 @@ from edelweissfe.utils.misc import (
     castKwargsValuesAndAddDefaults,
 )
 
-# documentation = {
-#     "location": "The location of the node",
-#     "storeIn": "Store in this node set",
-# }
-#
-# identification = "findclosestnode"
-
 inputLanguage = InputLanguage()
 module = inputLanguage["modelGenerator"].addModule(
     "findclosestnode", "Find the node closest to a given spatial position, and store it in an existing or new node set."
@@ -59,6 +52,8 @@ module = inputLanguage["modelGenerator"].addModule(
 
 module.addRequiredArg("location", "Query point.", str)
 module.addRequiredArg("storeIn", "Node set to store closest node in.", str)
+
+documentation = [module]
 
 
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
