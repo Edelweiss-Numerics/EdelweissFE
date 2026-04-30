@@ -272,6 +272,13 @@ def createStepManagerFromInputFile(inputfile: dict):
         inputFile = stepDefinition.pop("inputfile")  # noqa F841
         data = stepDefinition.pop("datalines")  # noqa F841
 
+        try:
+            assert len(data) == 0
+        except AssertionError:
+            raise ValueError(
+                f"Error during parsing of keyword {keywordIdentifier}step: {keywordIdentifier}step expects no data lines."
+            )
+
         stepActionDefinitions = []
 
         for module, definitions in stepActionLines.items():
