@@ -69,7 +69,7 @@ class Constraint(ConstraintBase):
         self.sizeField = getFieldSize(theField, model.domainSize)
         self.component = kwargs["component"]
         self.penalty = kwargs["penalty"]
-        self._nodes = model.nodeSets[kwargs["nSet"]]
+        self._nodes = model.nodeSets[kwargs["nset"]]
         self._nNodes = len(self._nodes)
         self._nDof = self.sizeField * self._nNodes
 

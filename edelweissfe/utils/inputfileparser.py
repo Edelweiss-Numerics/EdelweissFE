@@ -412,6 +412,7 @@ from edelweissfe.constraints.linearizedrigidbody import inputLanguage  # noqa: F
 from edelweissfe.constraints.penaltyindirectcontrol import inputLanguage  # noqa: F811,E402
 from edelweissfe.constraints.rigidbody import inputLanguage  # noqa: F811,E402
 from edelweissfe.constraints.directionalspringpenalty import inputLanguage  # noqa: F811,E402
+from edelweissfe.constraints.nodetorigidsurfacepenalty import inputLanguage  # noqa: F811,E402
 
 # isort: on
 

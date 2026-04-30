@@ -87,7 +87,7 @@ class Constraint(ConstraintBase):
         self.penalty = kwargs["penalty"]
         self.value = kwargs["value"]
         self.direction = kwargs["direction"]
-        self._nodes = model.nodeSets[kwargs["nSet"]]
+        self._nodes = model.nodeSets[kwargs["nset"]]
         self._nNodes = len(self._nodes)
         self._nDof = self.sizeField * self._nNodes
 
