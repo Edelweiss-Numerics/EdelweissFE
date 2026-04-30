@@ -571,22 +571,3 @@ def printKeywords():
             wrapper.subsequent_indent = " " * len(wrapper.initial_indent)
             print(wrapper.fill(arg.description))
         print("\n")
-
-
-def printKeywordsRST():
-    """Print the input file language set in an RST conform format."""
-
-    for kw in inputLanguage:
-        print(".. list-table:: " + "``{:}`` : {:}".format(kw.name, kw.description))
-        print("    :width: 100%")
-        print("    :widths: 25 25 40")
-        print("    :header-rows: 1")
-        print(" ")
-        print("    * - Option")
-        print("      - Type")
-        print("      - Description")
-        for kw in kw.requiredArgs:
-            print("    * - ``{:}``".format(kw.name))
-            print("      - ``{:}``".format(kw.dtype))
-            print("      - " + kw.description)
-        print(" ")

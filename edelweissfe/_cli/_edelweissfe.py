@@ -43,7 +43,6 @@ from edelweissfe.utils.inputfileparser import (
     inputLanguage,
     parseInputFile,
     printKeywords,
-    printKeywordsRST,
 )
 from edelweissfe.utils.inputlanguage import keywordIdentifier
 from edelweissfe.utils.printdocumentation import printDocumentation
@@ -76,12 +75,6 @@ def main():
         help="write the final solution to a file",
     )
     parser.add_argument("--keywords", dest="kw", action="store_true", help="print keywords")
-    parser.add_argument(
-        "--keywordsRST",
-        dest="kwRST",
-        action="store_true",
-        help="print keywords in RST format",
-    )
     parser.add_argument("--doc=module", dest="doc", help="print keywords")
     args = parser.parse_args()
 
@@ -93,10 +86,6 @@ def main():
 
     if args.kw:
         printKeywords()
-        exit(0)
-
-    if args.kwRST:
-        printKeywordsRST()
         exit(0)
 
     if args.doc:
