@@ -63,17 +63,21 @@ cdef class PyAMGCLSolver:
         if self.solver != NULL:
             del self.solver
 
-    def solve(self, object A, np.ndarray[np.float64_t, ndim=1, mode="c"] rhs):
+    def solve(self, object A, object rhs):
         """
         A: scipy.sparse.csr_matrix
-        rhs: numpy.ndarray (1D)
+        rhs: array-like, will be converted to 1D float64 (C-contiguous)
         """
         if not scipy.sparse.isspmatrix_csr(A):
             A = A.tocsr()
 
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] rhs_arr = np.asarray(rhs, dtype=np.float64, order="C")
+        if rhs_arr.ndim != 1:
+            raise ValueError("rhs must be a 1D array-like")
+
         cdef int n = A.shape[0]
-        if rhs.shape[0] != n:
-            raise ValueError(f"Dimension mismatch: Matrix {n}x{n}, RHS {rhs.shape[0]}")
+        if rhs_arr.shape[0] != n:
+            raise ValueError(f"Dimension mismatch: Matrix {n}x{n}, RHS {rhs_arr.shape[0]}")
 
         cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indptr = A.indptr.astype(np.int32, copy=False)
         cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indices = A.indices.astype(np.int32, copy=False)
@@ -96,7 +100,7 @@ cdef class PyAMGCLSolver:
         cdef int[::1] indptr_ = indptr
         cdef int[::1] indices_ = indices
         cdef double[::1] data_ = data
-        cdef double[::1] rhs_ = rhs
+        cdef double[::1] rhs_ = rhs_arr
         cdef double[::1] x_ = x
 
         self.solver.solve(

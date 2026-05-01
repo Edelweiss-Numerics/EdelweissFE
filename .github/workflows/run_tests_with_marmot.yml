@@ -20,7 +20,7 @@ jobs:
       - name: Install conda packages
         shell: bash -l {0}
         run: |
-          mamba install --file requirements.txt
+          mamba install --file requirements.txt boost-cpp
 
       - name: Install Eigen
         shell: bash -l {0}
@@ -61,7 +61,7 @@ jobs:
       - name: Install AMGCL
         shell: bash -l {0}
         run: |
-          git clone https://github.com/ddemidov/amgcl.git
+          git clone --branch v1.4.3 --depth 1 https://github.com/ddemidov/amgcl.git
           cd amgcl
           mkdir build
           cd build
