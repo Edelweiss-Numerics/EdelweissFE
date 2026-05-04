@@ -35,6 +35,7 @@ from edelweissfe.config.solvers import getSolverByName
 from edelweissfe.generators.abqmodelconstructor import AbqModelConstructor
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.steps.adaptivestep import inputLanguage
 from edelweissfe.steps.stepmanager import (
     StepActionDefinition,
     StepDefinition,
@@ -272,11 +273,13 @@ def createStepManagerFromInputFile(inputfile: dict):
         inputFile = stepDefinition.pop("inputfile")  # noqa F841
         data = stepDefinition.pop("datalines")  # noqa F841
 
+        # special treatment of *step/adaptive step module
+        # arguments for adaptive step module must be provided in keyword line
         try:
             assert len(data) == 0
         except AssertionError:
             raise ValueError(
-                f"Error during parsing of keyword {keywordIdentifier}step: {keywordIdentifier}step expects no data lines."
+                f"Error during parsing of keyword {keywordIdentifier}step: {inputLanguage['step'].modules[0]} expects no data lines.\nProvide arguments to {inputLanguage['step'].modules[0]} in keyword line!\nUse the module-level keyword identifier {moduleLevelKeywordIdentifier} to define step actions."
             )
 
         stepActionDefinitions = []
