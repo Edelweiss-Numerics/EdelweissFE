@@ -84,6 +84,7 @@ def parseKeywordLine(line, fileName):
                 module = kw.getModule("plane")
 
             elif strCaseCmp(kw.name, "step") and strCaseCmp(options.get("type", ""), "adaptive"):
+                # kwArgs arguments for adaptive step module must be given in the keyword line
                 module = kw.getModule("adaptive")
 
             if module is not None:
