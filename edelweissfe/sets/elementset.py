@@ -32,12 +32,15 @@ from edelweissfe.elements.displacementtlelement.element import DisplacementTLEle
 
 try:
     from edelweissfe.elements.marmotelement.element import MarmotElementWrapper
+except ImportError:
+    MarmotElementWrapper = None
+try:
     from edelweissfe.elements.marmotsingleqpelement.element import (
         MarmotMaterialWrappingElement,
     )
 except ImportError:
-    MarmotElementWrapper = None
     MarmotMaterialWrappingElement = None
+
 from edelweissfe.sets.orderedset import ImmutableOrderedSet
 from edelweissfe.utils.meshtools import extractNodesFromElementSet
 
