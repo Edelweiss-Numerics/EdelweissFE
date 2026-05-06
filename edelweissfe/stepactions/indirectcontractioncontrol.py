@@ -92,7 +92,7 @@ class StepAction(StepActionBase):
         self.currentL0 = self.cVector.dot(U[self.idcs])
 
     def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
-        if self.absolute == "absolute":
+        if self.absolute:
             self.L = action["L"] - self.currentL0
         else:
             self.L = action["L"]
