@@ -55,7 +55,7 @@ kw = module.addOptionalKeyword(
 kw.addRequiredArg("name", "Name of the step action.", str)
 kw.addRequiredArg("contractionNSet", "The node set defining the contraction ring", str)
 kw.addRequiredArg("L", "Final distance (e.g. crack opening)", float)
-kw.addOptionalArg("exportCVector", "File to export the computed c vector", str, "")
+kw.addOptionalArg("exportCVector", "File to export the computed c vector", str, None)
 kw.addOptionalArg("absolute", "Use absolute formulation", bool, True)
 
 documentation = [kw]
