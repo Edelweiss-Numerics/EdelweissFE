@@ -80,8 +80,8 @@ cdef class MarmotMaterialHypoElasticWrapper:
                         const double[::1] time,
                         double dTime):
 
-        cdef double [::1] dStress_dStrain = Ke
-        cdef const double [::1] dStrain = dU
+        cdef Matrix6d dStress_dStrain = Matrix6d(&Ke[0])
+        cdef Vector6d dStrain = Vector6d(&dU[0])
 
         cdef MarmotMaterialHypoElastic.state3D state3D
         state3D.stateVars = &self.stateVarsMaterial[0]
@@ -94,8 +94,8 @@ cdef class MarmotMaterialHypoElasticWrapper:
         try:
             self.marmotMaterialHypoElastic.computeStress(
                 state3D,
-                &dStress_dStrain[0],
-                &dStrain[0],
+                dStress_dStrain,
+                dStrain,
                 timeInfo)
         except ValueError:
             raise CutbackRequest("Material requests for a cutback!", 0.25)
@@ -109,7 +109,10 @@ cdef class MarmotMaterialHypoElasticWrapper:
         self.stressInStateVars[:] = stressView
         Pe[:] = stressView
 
-        self.dStress_dStrainInStateVars[:] = dStress_dStrain
+        cdef double[::1] dStress_dStrainView = <double[:36]> (&dStress_dStrain(0, 0))
+
+        self.dStress_dStrainInStateVars[:] = dStress_dStrainView
+        Ke[:] = dStress_dStrainView
 
     def getNumberOfRequiredStateVars(self, ):
         numberOfRequiredStateVarsMaterial = self.marmotMaterialHypoElastic.getNumberOfRequiredStateVars()

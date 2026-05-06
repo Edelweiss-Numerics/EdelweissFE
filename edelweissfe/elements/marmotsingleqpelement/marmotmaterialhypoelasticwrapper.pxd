@@ -32,11 +32,17 @@ from libcpp.string cimport string
 from libcpp.vector cimport vector
 
 
-# get eigen Vector6d alis frm MarmotTypdefs
-cdef extern from "Eigen/Dense" nogil:
-    cdef cppclass Vector6d "Eigen::Matrix<double, 6, 1>":
+cdef extern from "Marmot/MarmotTypedefs.h" nogil:
+    cdef cppclass Vector6d "Marmot::Vector6d":
+        Vector6d() nogil
         Vector6d(double*) nogil
         double& operator()(int row)
+
+    cdef cppclass Matrix6d "Marmot::Matrix6d":
+        Matrix6d() nogil
+        Matrix6d(double*) nogil
+        double& operator()(int row, int col)
+
 
 cdef extern from "Marmot/MarmotMaterialHypoElasticFactory.h" namespace "MarmotLibrary" nogil:
 
@@ -74,6 +80,6 @@ cdef extern from "Marmot/MarmotMaterialHypoElastic.h":
             double dT
 
         void computeStress(state3D& state,
-                           double* dStress_dStrain,
-                           const double* dStrain,
+                           Matrix6d& dStress_dStrain,
+                           const Vector6d& dStrain,
                            const timeInfo& timeInfo) except +ValueError
