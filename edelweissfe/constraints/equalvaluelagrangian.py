@@ -70,6 +70,8 @@ class Constraint(ConstraintBase):
     @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
     @castKwargsValuesAndAddDefaults(module)
     def __init__(self, name: str, model: FEModel, *args, **kwargs):
+        super().__init__(name, model, *args, **kwargs)
+
         kwargs = CaseInsensitiveDict(kwargs)
 
         theField = kwargs["field"]

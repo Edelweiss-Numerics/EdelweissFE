@@ -134,6 +134,8 @@ class Constraint(ConstraintBase):
     @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
     @castKwargsValuesAndAddDefaults(module)
     def __init__(self, name, model, *args, **kwargs):
+        super().__init__(name, model, *args, **kwargs)
+
         if model.domainSize not in [2, 3]:
             raise WrongDomain("Wrong domain size!")
 
