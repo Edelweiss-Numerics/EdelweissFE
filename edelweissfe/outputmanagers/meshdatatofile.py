@@ -77,10 +77,12 @@ class OutputManager(OutputManagerBase):
 
     def __init__(self, name, model, fieldOutputController, journal, plotter, filename):
         self.journal = journal
-        self.filename = "{:}_mesh.inc".format(name)
         self.model = model
 
-        self.filename = filename
+        if filename is not None:
+            self.filename = filename
+        else:
+            self.filename = f"{name}_mesh.inc"
 
         self.writeMeshDataToFile(self.model)
 
