@@ -35,6 +35,7 @@ from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
@@ -81,13 +82,15 @@ class Constraint(ConstraintBase):
     def __init__(self, name: str, model: FEModel, *args, **kwargs):
         super().__init__(name, model, *args, **kwargs)
 
+        kwargs = CaseInsensitiveDict(kwargs)
+
         theField = kwargs["field"]
         self.sizeField = getFieldSize(theField, model.domainSize)
         self.component = kwargs["component"]
         self.penalty = kwargs["penalty"]
         self.value = kwargs["value"]
         self.direction = kwargs["direction"]
-        self._nodes = model.nodeSets[kwargs["nset"]]
+        self._nodes = model.nodeSets[kwargs["nSet"]]
         self._nNodes = len(self._nodes)
         self._nDof = self.sizeField * self._nNodes
 
