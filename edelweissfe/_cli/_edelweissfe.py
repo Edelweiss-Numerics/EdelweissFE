@@ -104,9 +104,7 @@ def main():
             kw = inputLanguage[keyword]
             for definition in definitions:
                 if kw.expectsRequiredDatalines:
-                    try:
-                        assert len(definition["datalines"]) > 0
-                    except AssertionError:
+                    if not definition["datalines"]:
                         raise ValueError(
                             f"Error during parsing of keyword {keywordIdentifier}{keyword}: No datalines given. {keywordIdentifier}{keyword} expects data lines."
                         )

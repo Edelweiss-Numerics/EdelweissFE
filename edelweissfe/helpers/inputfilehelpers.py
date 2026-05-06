@@ -275,9 +275,7 @@ def createStepManagerFromInputFile(inputfile: dict):
 
         # special treatment of *step/adaptive step module
         # arguments for adaptive step module must be provided in keyword line
-        try:
-            assert len(data) == 0
-        except AssertionError:
+        if not len(data) == 0:
             raise ValueError(
                 f"Error during parsing of keyword {keywordIdentifier}step: {inputLanguage['step'].modules[0]} expects no data lines.\nProvide arguments to {inputLanguage['step'].modules[0]} in keyword line!\nUse the module-level keyword identifier {moduleLevelKeywordIdentifier} to define step actions."
             )

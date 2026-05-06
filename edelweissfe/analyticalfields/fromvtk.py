@@ -72,10 +72,8 @@ class AnalyticalField(AnalyticalFieldBase):
 
         availableResults = self.data.array_names
 
-        try:
-            assert len(availableResults) > 0
-        except AssertionError:
-            raise AssertionError("Database does not contain at least one result.")
+        if not len(availableResults) > 0:
+            raise ValueError("Database does not contain at least one result.")
 
         if not result:
             if len(availableResults) == 1:

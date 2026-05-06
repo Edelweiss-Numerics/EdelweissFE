@@ -322,14 +322,10 @@ def typeString(dtype: type or str) -> str:
 
 
 def findSimilarString(s: str, ll: list[str], threshold=0):
-    try:
-        assert len(ll) > 0
-    except AssertionError:
+    if not len(ll) > 0:
         raise Exception(f"You tried to find a string similar to {s} in an empty list.")
     result = [difflib.SequenceMatcher(a=s.casefold(), b=item.casefold()).ratio() for item in ll]
-    try:
-        assert max(result) > threshold
-    except AssertionError:
+    if not max(result) > threshold:
         raise ValueError(f"No similar string to {s} was found in list {ll}.")
 
     return ll[np.argmax(result)]
@@ -340,15 +336,11 @@ def kwargsChecker(kwargsRequired: list[str], kwargsOptional: list[str]):
         def wrapped(*args, **kwargs):
             missing_kwargs = []
             for kwarg in kwargsRequired:
-                try:
-                    assert kwarg in kwargs
-                except AssertionError:
+                if kwarg not in kwargs:
                     missing_kwargs.append(kwarg)
 
             nMissing = len(missing_kwargs)
-            try:
-                assert nMissing == 0
-            except AssertionError:
+            if not nMissing == 0:
                 raise ValueError(
                     f"Function call to {fun} missing {nMissing} required keyword argument{'s'[:nMissing ^ 1]}: "
                     + ", ".join(missing_kwargs)
@@ -356,15 +348,11 @@ def kwargsChecker(kwargsRequired: list[str], kwargsOptional: list[str]):
 
             unexpected_kwargs = []
             for kwarg in kwargs:
-                try:
-                    assert kwarg in kwargsRequired or kwarg in kwargsOptional
-                except AssertionError:
+                if not (kwarg in kwargsRequired or kwarg in kwargsOptional):
                     unexpected_kwargs.append(kwarg)
 
             nUnexpected = len(unexpected_kwargs)
-            try:
-                assert nUnexpected == 0
-            except AssertionError:
+            if not nUnexpected == 0:
                 if nUnexpected == 1 and len(kwargsOptional) > 0:
                     try:  # try to find a matching optional keyword
                         similarKeyword = findSimilarString(unexpected_kwargs[0], [item for item in kwargsOptional], 0.1)

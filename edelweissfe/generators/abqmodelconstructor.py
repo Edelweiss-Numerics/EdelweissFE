@@ -376,9 +376,7 @@ class AbqModelConstructor:
 
             sectionKwArgs.pop("inputfile")
 
-            try:
-                assert name not in model.sections
-            except AssertionError:
+            if name in model.sections:
                 raise Exception(f"Section with name {name} already exists")
 
             module = inputLanguage["section"].getModule(sectionType)
@@ -386,17 +384,13 @@ class AbqModelConstructor:
             args, kwargs = module.parseDatalines(data)
             # sectionKwArgs.update(kwargs)
 
-            try:
-                for elSet in args:
-                    assert elSet in model.elementSets
-            except AssertionError:
-                raise Exception(
-                    f"During parsing of keyword {keywordIdentifier}section: Element set {elSet} does not exist."
-                )
+            for elSet in args:
+                if elSet not in model.elementSets:
+                    raise Exception(
+                        f"During parsing of keyword {keywordIdentifier}section: Element set {elSet} does not exist."
+                    )
 
-            try:
-                assert not kwargs
-            except AssertionError:
+            if kwargs:
                 raise Exception(
                     f"During parsing of keyword {keywordIdentifier}section: Unexpected keyword arguments. Use module level keyword identifier {moduleLevelKeywordIdentifier} instead."
                 )
@@ -436,9 +430,7 @@ class AbqModelConstructor:
             analyticalFieldType = definition["type"]
             data = definition["datalines"]
 
-            try:
-                assert analyticalFieldName not in model.analyticalFields
-            except AssertionError:
+            if analyticalFieldName in model.analyticalFields:
                 raise Exception(f"AnalyticalField with name {analyticalFieldName} already exists")
 
             # analytical fields accept no module level keywords

@@ -57,11 +57,9 @@ class Section(ABC):
         self.writeMaterialPropertiesToFileDefs = writeMaterialPropertiesToFileDefs
 
         for definition in materialParameterFromFieldDefs:
-            try:
-                assert any(
-                    [strCaseCmp(definition["type"], implementedType) for implementedType in ["setToValue", "scale"]]
-                )
-            except AssertionError:
+            if not any(
+                [strCaseCmp(definition["type"], implementedType) for implementedType in ["setToValue", "scale"]]
+            ):
                 raise ValueError(
                     f"{name}: {definition['type']} is not a known type; currently available types: 'setToValue', 'scale'"
                 )

@@ -75,9 +75,7 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal: Journa
     closestNode = list(model.nodes.values())[indexClosest]
 
     storeIn = kwargs["storeIn"]
-    try:
-        assert storeIn not in model.nodeSets
-    except AssertionError:
+    if storeIn in model.nodeSets:
         raise Exception(f"Nodeset {storeIn} already exists")
 
     model.nodeSets[storeIn] = NodeSet(storeIn, [closestNode])

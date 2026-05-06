@@ -518,12 +518,10 @@ def parseInputFile(
 
                 inputFileKeyword = inputLanguage[keyword]
                 if not inputFileKeyword.modules:  # for keywords with no modules:
-                    try:
-                        assert (
-                            inputLanguage[keyword].expectsOptionalDatalines
-                            or inputLanguage[keyword].expectsRequiredDatalines
-                        )
-                    except AssertionError:
+                    if not (
+                        inputLanguage[keyword].expectsOptionalDatalines
+                        or inputLanguage[keyword].expectsRequiredDatalines
+                    ):
                         raise ValueError(
                             f"Error during parsing of keyword {keywordIdentifier}{keyword}: {keywordIdentifier}{keyword} expects no data lines"
                         )
@@ -540,9 +538,7 @@ def parseInputFile(
                         )
                     else:
                         module = inputLanguage[keyword].getModule(keyword)
-                    try:
-                        assert module.expectsOptionalDatalines or module.expectsRequiredDatalines
-                    except AssertionError:
+                    if not (module.expectsOptionalDatalines or module.expectsRequiredDatalines):
                         raise ValueError(
                             f"Error during parsing of keyword {keywordIdentifier}{keyword}: {module} expects no data lines"
                         )

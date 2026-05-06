@@ -83,7 +83,8 @@ class NISTPArcLength(NISTParallel):
             for stepAction in step.actions["options"].values()
             if stepAction.options["category"] == "NISTArcLength"
         ]
-        assert len(arcLengthControllerOptions) < 2
+        if not len(arcLengthControllerOptions) < 2:
+            raise Exception("Too many option definitions.")
 
         # arcLengthControllerOptions = step.actions["options"].get("NISTArcLength")
         if arcLengthControllerOptions:
