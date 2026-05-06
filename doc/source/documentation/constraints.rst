@@ -91,6 +91,36 @@ Module ``edelweissfe.constraints.penaltyindirectcontrol``
     :caption: Example: ``testfiles/PenaltyBasedIndirectControl/test.inp``
 
 
+``directionalspringpenalty`` - Assigning a stiffness to specific degrees of freedom
+---------------------------------------------------------------------------------------
+
+Module ``edelweissfe.constraints.directionalspringpenalty``
+
+.. automodule:: edelweissfe.constraints.directionalspringpenalty
+    :members: __doc__
+
+.. pprint:: edelweissfe.constraints.directionalspringpenalty.documentation
+    :caption: Options:
+
+.. literalinclude:: ../../../testfiles/DirectionalSpringPenaltyConstraint/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/DirectionalSpringPenaltyConstraint/test.inp``
+
+``nodetorigidsurfacepenalty`` - Preventing nodes from penetrating a defined rigid boundary
+-----------------------------------------------------------------------------------------------
+
+Module ``edelweissfe.constraints.nodetorigidsurfacepenalty``
+
+.. automodule:: edelweissfe.constraints.nodetorigidsurfacepenalty
+    :members: __doc__
+
+.. pprint:: edelweissfe.constraints.nodetorigidsurfacepenalty.documentation
+    :caption: Options:
+
+.. literalinclude:: ../../../testfiles/NodeToRigidSurfacePenaltyConstraintLinear/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/NodeToRigidSurfacePenaltyConstraintLinear/test.inp``
+
 Implementing your own constraints
 ---------------------------------
 

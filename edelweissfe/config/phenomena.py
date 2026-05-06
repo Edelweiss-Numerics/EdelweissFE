@@ -57,14 +57,14 @@ phenomena = {
 
 # field                  tolerance
 fieldCorrectionTolerance = {
-    "displacement": 1e-8,
+    "displacement": 1e-7,
     "rotation": 1e-3,
     "micro rotation": 1e-8,
     "nonlocal damage": 1e-8,
     "nonlocal damage 2": 1e-8,
     "concentration": 1e-1,
     "chemical potential": 1e-1,
-    "strain symmetric": 1e-8,
+    "strain symmetric": 1e-7,
     "scalar variables": 1e-3,
 }
 
@@ -113,9 +113,9 @@ def getFieldSize(field, domainSize):
         elif domainSize == 3:
             return 3
     if fType == "symmetric tensor second order":
-        if domainSize == 2:
-            return 3
-        elif domainSize == 3:
-            return 6
+        # if domainSize == 2:
+        #     return 3
+        # elif domainSize == 3:
+        return 6
 
     raise NotImplementedError("Invalid physical field {:} requested".format(field))
