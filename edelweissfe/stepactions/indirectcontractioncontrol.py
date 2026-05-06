@@ -72,7 +72,7 @@ class StepAction(StepActionBase):
 
         self.L = action["L"]
 
-        self.generateCVectorAndIndices(name, action, jobInfo, model, fieldOutputController, journal)
+        self.generateCVectorAndIndices(action, jobInfo, model, fieldOutputController, journal)
 
         if action["exportCVector"] is not None:
             np.savetxt(action["exportCVector"] + ".csv", self.cVector)
