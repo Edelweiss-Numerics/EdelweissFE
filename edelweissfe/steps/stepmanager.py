@@ -141,7 +141,6 @@ class StepManager:
 
             for action in stepDefinition.stepActionDefinitions:
                 if action.name in actionDefinitionsInThisStep:
-                    print(action.name, "Elo" * 20)
                     raise Exception(
                         "Warning: StepAction {:} has multiple definitions in step {:}".format(action.name, stepNumber)
                     )
