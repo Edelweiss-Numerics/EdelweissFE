@@ -47,8 +47,8 @@ from edelweissfe.utils.misc import (
 inputLanguage = InputLanguage()
 module = inputLanguage["constraint"].addModule("rigidbody", "A rigid body constraint tying nodes to a reference point.")
 
-module.addRequiredArg("nSet", "Node set to tie.", float)
-module.addRequiredArg("referencePoint", "Node set containing only the reference point.", float)
+module.addRequiredArg("nSet", "Node set to tie.", str)
+module.addRequiredArg("referencePoint", "Node set containing only the reference point.", str)
 
 documentation = [module]
 
