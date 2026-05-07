@@ -1,7 +1,7 @@
 *modelGenerator, generator=microstructuregenerator, name=gen
 unitCellMeshFile=mesh_quadratic.inp,
-nX=4,
-nY=4,
+nX=2,
+nY=2,
 nZ=1,
 elType=CPE8R,
 
@@ -9,8 +9,6 @@ elType=CPE8R,
 100, 3
 
 *section, name=section1, material=myMaterial, type=plane, thickness=1.0
-** element set 'all' is automatically created
-** we could also use the set 'theOnlyElement'
 all
 
 *job, name=mySingleElementJob, domain=2d
@@ -24,16 +22,10 @@ dirichlet, name=2, nSet=gen_bottom,       field=displacement, 1=0, 2=0
 filename=5x5mesh_quadratic.inp
 
 *fieldOutput
-** The results we are interested in
-** create=perElement, name=strain,       elSet=all, result=strain, quadraturePoint=0:3, f(x)='np.mean(x,axis=1)'
 create=perElement, name=stress,       elSet=all, result=stress, quadraturePoint=0:3, f(x)='np.mean(x,axis=1)'
 create=perNode, name=displacement, elSet=all, field=displacement, result=U
-create=perNode, name=reactionForces, nSet=gen_bottom, field=displacement, result=P, f(x)='np.sum(x[:,1])', export=RF
 
 *output, type=ensight, name=myEnsightOutput
-** For visualization in Paraview etc.
 create=perNode, fieldOutput=displacement
-create=perElement, fieldOutput=stress
-** create=perElement, fieldOutput=strain
 configuration, overwrite=yes
 

@@ -1,7 +1,7 @@
 *modelGenerator, generator=microstructuregenerator, name=gen
 unitCellMeshFile=mesh_quadratic.inp,
-nX=4,
-nY=4,
+nX=2,
+nY=2,
 nZ=1,
 elType=CPE8R,
 elProvider=edelweiss
