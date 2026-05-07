@@ -1,3 +1,5 @@
+#pragma once
+
 #include <amgcl/adapter/crs_tuple.hpp>
 #include <amgcl/backend/builtin.hpp>
 #include <amgcl/make_solver.hpp>
@@ -9,6 +11,7 @@
 #include <sstream>
 #include <string>
 #include <tuple>
+#include <vector>
 
 typedef amgcl::backend::builtin< double > Backend;
 
@@ -23,6 +26,8 @@ public:
   std::unique_ptr< Solver > solver_;
   int                       cached_n;
   int                       cached_nnz;
+  std::vector< int >        cached_ptr_;
+  std::vector< int >        cached_col_;
 
   // Constructor: Just stores the parameters
   LinearSolver( const char* json_params ) : solver_(), cached_n( -1 ), cached_nnz( -1 )
@@ -58,12 +63,17 @@ public:
       solver_.reset( new Solver( A, prm ) );
       cached_n   = n;
       cached_nnz = nnz;
+      cached_ptr_.assign( ptr, ptr + n + 1 );
+      cached_col_.assign( col, col + nnz );
     }
-    else if ( n != cached_n || nnz != cached_nnz ) {
+    else if ( n != cached_n || nnz != cached_nnz || !std::equal( ptr, ptr + n + 1, cached_ptr_.begin() ) ||
+              !std::equal( col, col + nnz, cached_col_.begin() ) ) {
       // Matrix structure changed: rebuild solver to preserve behavior
       solver_.reset( new Solver( A, prm ) );
       cached_n   = n;
       cached_nnz = nnz;
+      cached_ptr_.assign( ptr, ptr + n + 1 );
+      cached_col_.assign( col, col + nnz );
     }
     else {
       // Same structure: update preconditioner with new matrix values

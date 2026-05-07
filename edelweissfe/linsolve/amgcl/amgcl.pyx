@@ -78,6 +78,20 @@ cdef class PyAMGCLSolver:
         cdef int n = A.shape[0]
         if rhs_arr.shape[0] != n:
             raise ValueError(f"Dimension mismatch: Matrix {n}x{n}, RHS {rhs_arr.shape[0]}")
+        if n > np.iinfo(np.int32).max:
+            raise OverflowError(f"Matrix dimension {n} exceeds supported int32 range for AMGCL wrapper")
+
+        cdef long long int32_max = np.iinfo(np.int32).max
+        cdef long long nnz = int(A.indptr[-1])
+        if nnz > int32_max:
+            raise OverflowError(f"CSR nnz value {nnz} exceeds supported int32 range for AMGCL wrapper")
+        if int(A.indptr.min()) < 0:
+            raise OverflowError("CSR indptr contains negative values, which are unsupported")
+        if A.indices.size > 0:
+            if int(A.indices.max()) > int32_max:
+                raise OverflowError("CSR indices contain values that exceed int32 range for AMGCL wrapper")
+            if int(A.indices.min()) < 0:
+                raise OverflowError("CSR indices contain negative values, which are unsupported")
 
         cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indptr = A.indptr.astype(np.int32, copy=False)
         cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indices = A.indices.astype(np.int32, copy=False)
