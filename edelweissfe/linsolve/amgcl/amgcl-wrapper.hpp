@@ -76,8 +76,7 @@ public:
       cached_col_.assign( col, col + nnz );
     }
     else {
-      // Same structure: update preconditioner with new matrix values
-      solver_->precond().update( A );
+      solver_.reset( new Solver( A, prm ) );
     }
 
     std::tie( iters, error ) = ( *solver_ )( amgcl::make_iterator_range( rhs, rhs + n ),
