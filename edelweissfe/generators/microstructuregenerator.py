@@ -47,6 +47,7 @@ import meshio
 import numpy as np
 
 from edelweissfe.config.elementlibrary import getElementClass
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
@@ -60,18 +61,20 @@ documentation = {
     "nZ": "number of unit cells along z",
 }
 
+identification = "microgen"
 
-def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dict:
+
+def generateModelData(generatorDefinition: dict, model: FEModel, journal: Journal) -> dict:
     options = generatorDefinition["data"]
     options = convertLinesToStringDictionary(options)
 
-    print("  Generating microstructure mesh from unit cell mesh...")
+    journal.message("Generating microstructure mesh from unit cell mesh...", identification)
     name = generatorDefinition.get("name", "microgen")
 
     unitCellMeshFile = options.get("unitCellMeshFile", None)
     nX = int(options.get("nX", 1))
     nY = int(options.get("nY", 1))
-    # nZ = int(options.get("nZ", 1))
+    nZ = int(options.get("nZ", 1))
     elementType = getElementClass(options.get("elType", None), options.get("elProvider", None))
 
     unitCellMesh = meshio.read(unitCellMeshFile)
@@ -91,10 +94,12 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dic
         model.elementSets[f"{name}_block-{i + 1}"] = ElementSet(f"{name}_block-{i + 1}", set())
 
     # print information about the unit cell mesh
-    print(f"    Unit cell mesh has {len(all_nodes)} nodes and {len(all_elements)} elements.")
-    print(f"    Element blocks in unit cell mesh: {len(block_elements_assignments)} with assignments:")
+    journal.message(f"Unit cell mesh has {len(all_nodes)} nodes and {len(all_elements)} elements.", identification)
+    journal.message(
+        f"Element blocks in unit cell mesh: {len(block_elements_assignments)} with assignments:", identification
+    )
     for block_id, el_ids in block_elements_assignments.items():
-        print(f"      block-{block_id + 1}: {len(el_ids)} elements")
+        journal.message(f"block-{block_id + 1}: {len(el_ids)} elements", identification)
 
     # get unit cell dimensions
     x_min = np.min(nodes[:, 0])
@@ -130,10 +135,20 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dic
         )
 
     # replicate the mesh of the unit cell in x direction
-    model = replicateMesh(model, direction=0, nReplications=nX, elementType=elementType, options=options)
+    model = replicateMesh(
+        model, direction=0, nReplications=nX, elementType=elementType, options=options, journal=journal
+    )
 
     # replicate the already replicated mesh in y direction
-    model = replicateMesh(model, direction=1, nReplications=nY, elementType=elementType, options=options)
+    model = replicateMesh(
+        model, direction=1, nReplications=nY, elementType=elementType, options=options, journal=journal
+    )
+
+    if model.domainSize == 3:
+        # replicate the already replicated mesh in z direction
+        model = replicateMesh(
+            model, direction=2, nReplications=nZ, elementType=elementType, options=options, journal=journal
+        )
 
     model._populateNodeFieldVariablesFromElements()
 
@@ -186,7 +201,9 @@ def findInterfaceNodes(nodes, coordIndex, coordValue, idx_offset=0):
     return interfaceNodes
 
 
-def replicateMesh(model: FEModel, direction: int, nReplications: int, elementType, options: dict):
+def replicateMesh(
+    model: FEModel, direction: int, nReplications: int, elementType, options: dict, journal: Journal = None
+) -> FEModel:
 
     all_elements_to_copy = [[n.label - 1 for n in el.nodes] for el in model.elements.values()]
     all_nodes_to_copy = [model.nodes[i + 1].coordinates for i in range(len(model.nodes))]
@@ -265,9 +282,13 @@ def replicateMesh(model: FEModel, direction: int, nReplications: int, elementTyp
 
         # remove nodes that are now internal
         toc_total = time.time()
-        print(f"    Replication step {j}/{nReplications - 1} in direction {direction} done.")
-        print(f"      Total nodes so far: {len(model.nodes)}")
-        print(f"      Total elements so far: {len(model.elements)}")
-        print(f"      Total time for replication step: {round(toc_total - tic_total, 2)} seconds")
+
+        if journal:
+            journal.message(f"Replication step {j}/{nReplications - 1} in direction {direction} done.", identification)
+            journal.message(f" Total nodes so far: {len(model.nodes)}", identification)
+            journal.message(f" Total elements so far: {len(model.elements)}", identification)
+            journal.message(
+                f" Total time for replication step: {round(toc_total - tic_total, 2)} seconds", identification
+            )
 
     return model

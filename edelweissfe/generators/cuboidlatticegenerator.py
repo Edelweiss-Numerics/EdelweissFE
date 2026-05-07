@@ -113,6 +113,7 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dic
         f"nY={options['nEleY']}",
         f"nZ={options['nEleZ']}",
         f"elType={options['elType']}",
+        f"elProvider={options.get('elProvider', 'marmot')}",
     )
 
     boxmodel = copy.deepcopy(model)
@@ -207,9 +208,15 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dic
         node.label = nodel_label_to_index[node.label] + 1  # re-label nodes to have continuous numbering
 
     # replicate the mesh of the unit cell in x direction
-    model = replicateMesh(model, direction=0, nReplications=nX, elementType=elementType, options=options)
-    model = replicateMesh(model, direction=1, nReplications=nY, elementType=elementType, options=options)
-    model = replicateMesh(model, direction=2, nReplications=nZ, elementType=elementType, options=options)
+    model = replicateMesh(
+        model, direction=0, nReplications=nX, elementType=elementType, options=options, journal=journal
+    )
+    model = replicateMesh(
+        model, direction=1, nReplications=nY, elementType=elementType, options=options, journal=journal
+    )
+    model = replicateMesh(
+        model, direction=2, nReplications=nZ, elementType=elementType, options=options, journal=journal
+    )
 
     model._populateNodeFieldVariablesFromElements()
 
@@ -253,6 +260,8 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dic
     model.nodeSets[f"{name}_right"] = NodeSet(f"{name}_right", nSet_right)
     model.nodeSets[f"{name}_bottom"] = NodeSet(f"{name}_bottom", nSet_bottom)
     model.nodeSets[f"{name}_top"] = NodeSet(f"{name}_top", nSet_top)
+    model.nodeSets[f"{name}_front"] = NodeSet(f"{name}_front", nSet_front)
+    model.nodeSets[f"{name}_back"] = NodeSet(f"{name}_back", nSet_back)
     model.nodeSets[f"{name}_bottom_left"] = NodeSet(f"{name}_bottom_left", nSet_bottom_left)
     model.nodeSets[f"{name}_bottom_right"] = NodeSet(f"{name}_bottom_right", nSet_bottom_right)
     model.nodeSets[f"{name}_top_left"] = NodeSet(f"{name}_top_left", nSet_top_left)

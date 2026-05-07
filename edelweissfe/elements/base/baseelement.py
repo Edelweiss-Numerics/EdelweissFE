@@ -50,6 +50,9 @@ class BaseElement(BaseNodeCouplingEntity):
     def elNumber(self) -> int:
         """The unique number of this element"""
 
+    def elType(self) -> str:
+        """The type of this element."""
+
     @property
     @abstractmethod
     def hasMaterial(self) -> str:
