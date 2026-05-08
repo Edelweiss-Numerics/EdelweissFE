@@ -89,6 +89,12 @@ class DisplacementElement(BaseElement):
         return self._elNumber  # return number
 
     @property
+    def elType(self) -> str:
+        """The type of this element."""
+
+        return self._elType
+
+    @property
     def nNodes(self) -> int:
         """The number of nodes this element requires"""
 
@@ -139,6 +145,7 @@ class DisplacementElement(BaseElement):
         return self._hasMaterial
 
     def __init__(self, elementType: str, elNumber: int):
+        self._elType = elementType
         properties = elLibrary[elementType]
         if eval(properties["elClass"]) is not DisplacementElement:
             raise Exception("Something went wrong with the element initialization!")
