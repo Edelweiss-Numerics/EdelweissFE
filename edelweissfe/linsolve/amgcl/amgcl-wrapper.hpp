@@ -1,5 +1,4 @@
-#ifndef LIB_AMGCL_HPP
-#define LIB_AMGCL_HPP
+#pragma once
 
 #include <amgcl/adapter/crs_tuple.hpp>
 #include <amgcl/backend/builtin.hpp>
@@ -8,14 +7,14 @@
 #include <amgcl/solver/runtime.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <tuple>
+#include <vector>
 
-// OpenMP Backend
 typedef amgcl::backend::builtin< double > Backend;
 
-// Runtime Solver (Configurable via JSON)
 typedef amgcl::make_solver< amgcl::runtime::preconditioner< Backend >, amgcl::runtime::solver::wrapper< Backend > >
   Solver;
 
@@ -23,8 +22,15 @@ class LinearSolver {
 public:
   boost::property_tree::ptree prm;
 
+  // Cached solver and matrix structure information
+  std::unique_ptr< Solver > solver_;
+  int                       cached_n;
+  int                       cached_nnz;
+  std::vector< int >        cached_ptr_;
+  std::vector< int >        cached_col_;
+
   // Constructor: Just stores the parameters
-  LinearSolver( const char* json_params )
+  LinearSolver( const char* json_params ) : solver_(), cached_n( -1 ), cached_nnz( -1 )
   {
     std::string json_str( json_params );
     if ( !json_str.empty() ) {
@@ -33,7 +39,6 @@ public:
     }
   }
 
-  // Solve: Takes raw CRS pointers, builds solver, and solves
   void solve( int           n,
               const int*    ptr,
               const int*    col,
@@ -44,27 +49,37 @@ public:
               double&       error )
   {
 
-    // 1. Calculate Number of Non-Zeros (nnz)
-    // ptr has size n+1, so the last element ptr[n] is the total nnz
     int nnz = ptr[n];
 
-    // 2. Create Iterator Ranges for the raw pointers
-    // AMGCL needs ranges (begin, end) to know the bounds
     auto ptr_rng = amgcl::make_iterator_range( ptr, ptr + n + 1 );
     auto col_rng = amgcl::make_iterator_range( col, col + nnz );
     auto val_rng = amgcl::make_iterator_range( val, val + nnz );
 
-    // 3. Pack into std::tuple
-    // Order: (Rows, RowPointers, ColumnIndices, Values)
     auto A = std::make_tuple( n, ptr_rng, col_rng, val_rng );
 
-    // 2. Instantiate Solver (Setup Phase - Heavy computation)
-    //    This builds the AMG hierarchy using the stored 'prm'.
-    Solver S( A, prm );
+    // (Re)build or update the cached solver depending on matrix structure
+    if ( !solver_ ) {
+      // First call: construct the solver and cache matrix structure
+      solver_.reset( new Solver( A, prm ) );
+      cached_n   = n;
+      cached_nnz = nnz;
+      cached_ptr_.assign( ptr, ptr + n + 1 );
+      cached_col_.assign( col, col + nnz );
+    }
+    else if ( n != cached_n || nnz != cached_nnz || !std::equal( ptr, ptr + n + 1, cached_ptr_.begin() ) ||
+              !std::equal( col, col + nnz, cached_col_.begin() ) ) {
+      // Matrix structure changed: rebuild solver to preserve behavior
+      solver_.reset( new Solver( A, prm ) );
+      cached_n   = n;
+      cached_nnz = nnz;
+      cached_ptr_.assign( ptr, ptr + n + 1 );
+      cached_col_.assign( col, col + nnz );
+    }
+    else {
+      solver_.reset( new Solver( A, prm ) );
+    }
 
-    // 3. Solve (Solve Phase - Thread parallel)
-    std::tie( iters, error ) = S( amgcl::make_iterator_range( rhs, rhs + n ), amgcl::make_iterator_range( x, x + n ) );
+    std::tie( iters, error ) = ( *solver_ )( amgcl::make_iterator_range( rhs, rhs + n ),
+                                             amgcl::make_iterator_range( x, x + n ) );
   }
 };
-
-#endif

@@ -1,5 +1,30 @@
+#  ---------------------------------------------------------------------
+#
+#  _____    _      _              _         _____ _____
+# | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|
+# |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|
+# | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___
+# |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
+#
+#
+#  Unit of Strength of Materials and Structural Analysis
+#  University of Innsbruck,
+#  2017 - today
+#
+#  Alexander Dummer alexander.dummer@uibk.ac.at
+#
+#  This file is part of EdelweissFE.
+#
+#  This library is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU Lesser General Public
+#  License as published by the Free Software Foundation; either
+#  version 2.1 of the License, or (at your option) any later version.
+#
+#  The full text of the license can be found in the file LICENSE.md at
+#  the top level directory of EdelweissFE.
+#  ---------------------------------------------------------------------
+
 import json
-import time
 
 import numpy as np
 import scipy.sparse
@@ -38,23 +63,36 @@ cdef class PyAMGCLSolver:
         if self.solver != NULL:
             del self.solver
 
-    def solve(self, object A, np.ndarray[np.float64_t, ndim=1, mode="c"] rhs):
+    def solve(self, object A, object rhs):
         """
         A: scipy.sparse.csr_matrix
-        rhs: numpy.ndarray (1D)
+        rhs: array-like, will be converted to 1D float64 (C-contiguous)
         """
-        # 1. Validate and Enforce CSR Format
         if not scipy.sparse.isspmatrix_csr(A):
-            # If not CSR, convert it (might incur copy overhead)
             A = A.tocsr()
 
-        cdef int n = A.shape[0]
-        if rhs.shape[0] != n:
-            raise ValueError(f"Dimension mismatch: Matrix {n}x{n}, RHS {rhs.shape[0]}")
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] rhs_arr = np.asarray(rhs, dtype=np.float64, order="C")
+        if rhs_arr.ndim != 1:
+            raise ValueError("rhs must be a 1D array-like")
 
-        # 2. Extract and Cast Arrays
-        # AMGCL expects C-int (int32 usually). SciPy indptr can be int64 for huge matrices.
-        # We enforce int32 here for safety with the C++ 'int*' signature.
+        cdef int n = A.shape[0]
+        if rhs_arr.shape[0] != n:
+            raise ValueError(f"Dimension mismatch: Matrix {n}x{n}, RHS {rhs_arr.shape[0]}")
+        if n > np.iinfo(np.int32).max:
+            raise OverflowError(f"Matrix dimension {n} exceeds supported int32 range for AMGCL wrapper")
+
+        cdef long long int32_max = np.iinfo(np.int32).max
+        cdef long long nnz = int(A.indptr[-1])
+        if nnz > int32_max:
+            raise OverflowError(f"CSR nnz value {nnz} exceeds supported int32 range for AMGCL wrapper")
+        if int(A.indptr.min()) < 0:
+            raise OverflowError("CSR indptr contains negative values, which are unsupported")
+        if A.indices.size > 0:
+            if int(A.indices.max()) > int32_max:
+                raise OverflowError("CSR indices contain values that exceed int32 range for AMGCL wrapper")
+            if int(A.indices.min()) < 0:
+                raise OverflowError("CSR indices contain negative values, which are unsupported")
+
         cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indptr = A.indptr.astype(np.int32, copy=False)
         cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indices = A.indices.astype(np.int32, copy=False)
         cdef np.ndarray[np.float64_t, ndim=1, mode="c"] data = A.data.astype(np.float64, copy=False)
@@ -76,10 +114,8 @@ cdef class PyAMGCLSolver:
         cdef int[::1] indptr_ = indptr
         cdef int[::1] indices_ = indices
         cdef double[::1] data_ = data
-        cdef double[::1] rhs_ = rhs
+        cdef double[::1] rhs_ = rhs_arr
         cdef double[::1] x_ = x
-
-        tic = time.time()
 
         self.solver.solve(
                 n,
@@ -91,7 +127,5 @@ cdef class PyAMGCLSolver:
                 iters,
                 error
             )
-        toc = time.time()
-        print(f"AMGCL solve time: {toc - tic:.6f} seconds, iters: {iters}, error: {error:.2e}")
 
         return x

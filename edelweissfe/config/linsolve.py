@@ -31,6 +31,8 @@ Created on Sat Feb 10 10:27:25 2018
 @author: Matthias Neuner
 """
 
+from collections.abc import Mapping
+
 
 def getDefaultLinSolver():
     try:
@@ -81,7 +83,12 @@ def getLinSolverByName(linsolverName, opts):
     elif linsolverName.lower() == "amgcl":
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver
 
-        amgclSolve = PyAMGCLSolver(dict(opts))
+        if isinstance(opts, Mapping):
+            amgcl_opts = dict(opts)
+        else:
+            amgcl_opts = {}
+
+        amgclSolve = PyAMGCLSolver(amgcl_opts)
 
         return amgclSolve.solve
 

@@ -20,7 +20,7 @@ jobs:
       - name: Install conda packages
         shell: bash -l {0}
         run: |
-          mamba install --file requirements.txt
+          mamba install --file requirements.txt boost-cpp
 
       - name: Install Eigen
         shell: bash -l {0}
@@ -57,6 +57,17 @@ jobs:
           cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX .
           make install
           cd ..
+
+      - name: Install AMGCL
+        shell: bash -l {0}
+        run: |
+          git clone --branch 1.4.7 --depth 1 https://github.com/ddemidov/amgcl.git
+          cd amgcl
+          mkdir build
+          cd build
+          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ..
+          make install
+          cd ../..
 
       - name: Install Marmot
         shell: bash -l {0}
