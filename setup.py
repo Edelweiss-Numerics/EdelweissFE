@@ -208,6 +208,18 @@ extensions += [
     )
 ]
 
+print("Gather the AMGCL interface")
+extensions += [
+    Extension(
+        "*",
+        sources=["edelweissfe/linsolve/amgcl/amgcl.pyx"],
+        include_dirs=[numpy.get_include(), join(default_install_prefix, "include"), "."],
+        language="c++",
+        extra_compile_args=["-std=c++11", "-fopenmp", "-O3"],
+        extra_link_args=["-fopenmp"],
+    )
+]
+
 print("Gather the KLU interface")
 extensions += [
     Extension(
