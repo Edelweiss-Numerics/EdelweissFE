@@ -20,6 +20,9 @@ include-package-data = true
 [tool.setuptools.packages.find]
 where = ["."]
 
+[tool.setuptools.package-data]
+edelweissfe = ["built_extensions.log"]
+
 [project.scripts]
 edelweissfe = "edelweissfe._cli._edelweissfe:main"
 run_tests_edelweissfe = "edelweissfe._cli._run_tests_edelweissfe:main"
