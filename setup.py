@@ -31,6 +31,7 @@ Created on Thu May 21 14:23:14 2015
 """
 import os
 import pathlib
+import shutil
 import sys
 from os.path import expanduser, join
 
@@ -281,6 +282,14 @@ class optional_build_ext(build_ext):
         )
 
         print(f"Wrote build log to {log_file}")
+
+        # also copy into build/lib package dir
+        build_lib = pathlib.Path(self.build_lib) / "edelweissfe"
+        build_lib.mkdir(parents=True, exist_ok=True)
+
+        shutil.copy2(log_file, build_lib / "built_extensions.log")
+
+        print(f"Wrote build log to {build_lib / 'built_extensions.log'}")
 
 
 setup(
