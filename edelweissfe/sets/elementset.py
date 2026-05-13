@@ -31,12 +31,12 @@ from edelweissfe.elements.displacementelement.element import DisplacementElement
 from edelweissfe.elements.displacementtlelement.element import DisplacementTLElement
 from edelweissfe.utils.misc import checkSuccessfulExtension
 
-if checkSuccessfulExtension("edelweissfe.elements.marmotsingleqpelement.marmotmaterialhypoelasticwrapper"):
+if checkSuccessfulExtension("edelweissfe.elements.marmotelement.element"):
     from edelweissfe.elements.marmotelement.element import MarmotElementWrapper
 else:
     MarmotElementWrapper = None
 
-if checkSuccessfulExtension("edelweissfe.elements.marmotelement.element"):
+if checkSuccessfulExtension("edelweissfe.elements.marmotsingleqpelement.marmotmaterialhypoelasticwrapper"):
     from edelweissfe.elements.marmotsingleqpelement.element import (
         MarmotMaterialWrappingElement,
     )
