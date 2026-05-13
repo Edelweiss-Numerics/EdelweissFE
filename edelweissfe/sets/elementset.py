@@ -29,16 +29,18 @@
 
 from edelweissfe.elements.displacementelement.element import DisplacementElement
 from edelweissfe.elements.displacementtlelement.element import DisplacementTLElement
+from edelweissfe.utils.misc import checkSuccessfulExtension
 
-try:
+if checkSuccessfulExtension("edelweissfe.elements.marmotelement.element"):
     from edelweissfe.elements.marmotelement.element import MarmotElementWrapper
-except ImportError:
+else:
     MarmotElementWrapper = None
-try:
+
+if checkSuccessfulExtension("edelweissfe.elements.marmotsingleqpelement.marmotmaterialhypoelasticwrapper"):
     from edelweissfe.elements.marmotsingleqpelement.element import (
         MarmotMaterialWrappingElement,
     )
-except ImportError:
+else:
     MarmotMaterialWrappingElement = None
 
 from edelweissfe.sets.orderedset import ImmutableOrderedSet
