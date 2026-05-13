@@ -30,6 +30,7 @@ Created on Thu May 21 14:23:14 2015
 @author: c8441141
 """
 import os
+import pathlib
 import sys
 from os.path import expanduser, join
 
@@ -255,19 +256,40 @@ extensions += [
 print("Now compile!")
 
 
-# overwrite build_ext to make all extensions optional
 class optional_build_ext(build_ext):
-    def build_extension(self, ext):
-        try:
-            super().build_extension(ext)
-        except Exception as e:
-            print(f"Extension {ext.name} could not be built:")
-            print(e)
+    def build_extensions(self):
+        self.successful_extensions = []
+
+        for ext in self.extensions:
+            try:
+                self.build_extension(ext)
+                self.successful_extensions.append(ext.name)
+                print(f"[OK] Built extension: {ext.name}")
+            except Exception as e:
+                print(f"[FAIL] Could not build {ext.name}: {e}")
+
+        self.write_build_log()
+
+    def write_build_log(self):
+        log_file = pathlib.Path("edelweissfe") / "built_extensions.log"
+
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+
+        log_file.write_text(
+            "\n".join(self.successful_extensions) + "\n",
+            encoding="utf-8",
+        )
+
+        print(f"Wrote build log to {log_file}")
 
 
 setup(
     cmdclass={"build_ext": optional_build_ext},
     ext_modules=cythonize(extensions, compiler_directives=directives, annotate=True, language_level=3),
+    include_package_data=True,
+    package_data={
+        "edelweissfe": ["built_extensions.log"],
+    },
 )
 
 print("Finish!")
