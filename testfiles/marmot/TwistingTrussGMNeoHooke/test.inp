@@ -13,7 +13,7 @@ nSet=front
 referencePoint=center_front
 
 *job, name=gmneohookejob, domain=3d
-*solver, solver=NISTParallelForMarmotElements, name=theSolver
+*solver, solver=NISTParallel, name=theSolver
 *fieldOutput
 create=perNode, name=displacement, elSet=all, field=displacement, result=U,
 create=perNode, name=reaction force, nSet=back, field=displacement, result=P, f(x)=' sum  ( x, axis=0 )'

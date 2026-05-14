@@ -7,7 +7,7 @@
 all
 
 *job, name=c3d8tljob, domain=3d
-*solver, solver=NISTParallelForMarmotElements, name=theSolver
+*solver, solver=NISTParallel, name=theSolver
 *fieldOutput,
 name=displacement, elSet=all, field=displacement, result=U, name=displacement
 name=stress, elSet=all, result=stress, f(x)=' mean(x, axis=1) ', quadraturePoint=0:3

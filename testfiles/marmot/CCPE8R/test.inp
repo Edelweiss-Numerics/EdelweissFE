@@ -35,7 +35,7 @@ configuration, overwrite=yes
 *output, type=meshplot, name=RFPlot
 figure=1, axSpec=111, c=k, ls=solid, create=xyData, x=time, y=RF
 
-*solver, solver=NISTParallelForMarmotElements, name=theSolver
+*solver, solver=NISTParallel, name=theSolver
 
 *step, solver=theSolver, maxInc=1e-1, minInc=1e-5, maxNumInc=10000, maxIter=25, stepLength=100, solver=theSolver
 options, category=NISTSolver, extrapolation=linear,

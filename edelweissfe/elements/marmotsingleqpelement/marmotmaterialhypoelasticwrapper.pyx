@@ -31,20 +31,21 @@ import numpy as np
 
 cimport libcpp.cast
 cimport numpy as np
+from libcpp.string cimport string
 
 from edelweissfe.utils.exceptions import CutbackRequest
-
-from libcpp.string cimport string
 
 
 cdef class MarmotMaterialHypoElasticWrapper:
     cdef MarmotMaterialHypoElastic* marmotMaterialHypoElastic
     cdef readonly list fields
     cdef readonly int nU
-    cdef double[::1] stateVars, stressInStateVars, strainInStateVars, stateVarsMaterial
-    cdef double[::1] materialProperties, dStress_dStrainInStateVars
+
+    cdef double[::1] stateVars, stressInStateVars, strainInStateVars
+    cdef double[::1] stateVarsMaterial, materialProperties, dStress_dStrainInStateVars
 
     def __init__(self, ):
+
         self.fields = ["strain symmetric"]
         self.nU = 6
 
@@ -133,9 +134,11 @@ cdef class MarmotMaterialHypoElasticWrapper:
             return np.array(self.strainInStateVars, copy= not getPersistentView)
         if result == "dStress_dStrain":
             return np.array(self.dStress_dStrainInStateVars, copy= not getPersistentView)
+
         cdef string result_ = result.encode("UTF-8")
         cdef StateView res = self.marmotMaterialHypoElastic.getStateView(result_, &self.stateVarsMaterial[0])
         cdef double[::1] theView = <double[:res.stateSize]> (res.stateLocation)
+
         return np.array(theView, copy= not getPersistentView)
 
     def __dealloc__(self):

@@ -34,6 +34,9 @@ from edelweissfe.config.stepactions import stepActionFactory
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.steps.adaptivestep import AdaptiveStep
+from edelweissfe.steps.adaptivestepforexplicitsimulations import (
+    AdaptiveStepForExplicitSimulations,
+)
 from edelweissfe.steps.base.stepbase import StepBase
 from edelweissfe.utils.fieldoutput import FieldOutputController
 
@@ -187,14 +190,27 @@ class StepManager:
                     mssg += " Define solver using *solver keyword."
                 raise KeyError(mssg)
 
-            yield AdaptiveStep(
-                stepNumber,
-                model,
-                fieldOutputController,
-                journal,
-                jobInfo,
-                solver,
-                outputManagers,
-                self.stepActions,
-                **stepDefinition.stepOptions,
-            )
+            if solver.identification in ["NESTSolver", "NESTPSolver"]:
+                yield AdaptiveStepForExplicitSimulations(
+                    stepNumber,
+                    model,
+                    fieldOutputController,
+                    journal,
+                    jobInfo,
+                    solver,
+                    outputManagers,
+                    self.stepActions,
+                    **stepDefinition.stepOptions,
+                )
+            else:
+                yield AdaptiveStep(
+                    stepNumber,
+                    model,
+                    fieldOutputController,
+                    journal,
+                    jobInfo,
+                    solver,
+                    outputManagers,
+                    self.stepActions,
+                    **stepDefinition.stepOptions,
+                )

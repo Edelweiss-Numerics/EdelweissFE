@@ -51,8 +51,7 @@ class OutputManager(OutputManagerBase):
 
     def __init__(self, name, model, fieldOutputController, journal, plotter):
         self.journal = journal
-        # self.filename = "{:}.sta".format(jobInfo.get("name", jobInfo["inputfile"].rstrip(".inp")))
-        self.filename = "job.sta"
+        self.filename = f"{name}.sta"
         self.statusFileExists = False
 
     def updateDefinition(self, **kwargs: dict):

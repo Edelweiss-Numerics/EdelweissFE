@@ -77,6 +77,7 @@ extensions = [
     )
 ]
 
+print("Gather the extension for wrapping a hypoelastic Marmot material")
 extensions += [
     Extension(
         "*",
@@ -138,27 +139,12 @@ extensions += [
     )
 ]
 
-print("Gather the extension for the NISTParallel solver")
+print("Gather the extensions for fast dirichlet application")
 extensions += [
     Extension(
         "*",
-        sources=["edelweissfe/solvers/nonlinearimplicitstaticparallelmk2.pyx"],
+        sources=["edelweissfe/solvers/base/dirichlet.pyx"],
         include_dirs=[numpy.get_include()],
-        language="c++",
-        extra_compile_args=[
-            "-fopenmp",
-            "-Wno-maybe-uninitialized",
-        ],
-        extra_link_args=["-fopenmp"],
-    )
-]
-
-print("Gather the extension for the NISTParallel (MarmotElements only) solver")
-extensions += [
-    Extension(
-        "*",
-        sources=["edelweissfe/solvers/nonlinearimplicitstaticparallel.pyx"],
-        include_dirs=[numpy.get_include()] + [join(marmot_dir, "include")],
         language="c++",
         extra_compile_args=[
             "-fopenmp",

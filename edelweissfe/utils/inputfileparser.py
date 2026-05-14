@@ -106,7 +106,8 @@ inputLanguage = {
         "definition of a section",
         {
             "name": ("string", "name"),
-            "thickness": ("float", "associated element set"),
+            "thickness": ("float", "associated element thickness"),
+            "density": ("float", "associated material density"),
             "material": ("string", "associated id of defined material"),
             "data": ("string", "list of associated element sets"),
             "type": ("string", "type of the section"),

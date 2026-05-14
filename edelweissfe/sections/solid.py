@@ -30,6 +30,7 @@
 #
 # @author: Matthias Neuner, Paul Hofer
 
+
 from edelweissfe.sections.base.sectionbase import Section as SectionBase
 
 """This section represents a classical solid materal section.
@@ -46,6 +47,8 @@ class Section(SectionBase):
     def __init__(self, name, options, materialName, model, **kwargs):
         super().__init__(name, options, materialName, model, **kwargs)
 
+        # self.density = kwargs.get("density", 1)
+
     def assignSectionPropertiesToElement(self, element, **kwargs):
         material = kwargs.get("material", self.material)
 
@@ -54,6 +57,7 @@ class Section(SectionBase):
             raise Exception(f"Solid section is incompatible with {nSpatialDimensions}-dimensional finite elements.")
 
         element.initializeElement()
+
         # to make sure all elProviders work
         if not isinstance(material, dict):
             element.setMaterial(material)

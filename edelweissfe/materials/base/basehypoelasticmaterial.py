@@ -178,6 +178,15 @@ class BaseHypoElasticMaterial(ABC):
             Current time step size."""
 
     @abstractmethod
+    def getDensity(self) -> float:
+        """Determines the density of the material.
+
+        Returns
+        -------
+        float
+            The density of the material."""
+
+    @abstractmethod
     def getResult(self, result: str) -> float:
         """Get the result, as a persistent view which is continiously
         updated by the material.

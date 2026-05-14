@@ -20,11 +20,17 @@ jobs:
       - name: Install conda packages
         shell: bash -l {0}
         run: |
-          mamba install --file requirements.txt boost-cpp
+          mamba install --file conda_requirements.txt
+
+      - name: Install pip packages
+        shell: bash -l {0}
+        run: |
+          pip install -r pip_requirements.txt
 
       - name: Install Eigen
         shell: bash -l {0}
         run: |
+          cd ..
           git clone --branch 3.4.0 https://gitlab.com/libeigen/eigen.git
           cd eigen
           mkdir build
@@ -54,9 +60,11 @@ jobs:
         run: |
           git clone https://github.com/romeric/Fastor.git
           cd Fastor
-          cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX .
+          mkdir build
+          cd build
+          cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
           make install
-          cd ..
+          cd ../..
 
       - name: Install AMGCL
         shell: bash -l {0}
@@ -65,7 +73,7 @@ jobs:
           cd amgcl
           mkdir build
           cd build
-          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ..
+          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
           make install
           cd ../..
 

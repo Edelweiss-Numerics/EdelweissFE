@@ -42,6 +42,7 @@ documentation = {
     "material": "the material to be assigned",
     "materialParameterFromField, index=[index of material parameter], value=[name of analytical field], type=[either 'setToValue' or 'scale']": "(optional) set or scale a material parameter using the value of the given analytical field; modify the field value using the optional keyword f(p,f)=[...] (p...value of parameter from material definition; f...value of analytical field)",
     "thickness": "the thickness to be assigned",
+    "density": "the density to be assigned",
 }
 
 
@@ -53,6 +54,8 @@ class Section(SectionBase):
         except KeyError:
             raise KeyError(f"Thickness must be specified for section {name}")
 
+        self.density = kwargs.get("density", 1)
+
     def assignSectionPropertiesToElement(self, element, **kwargs):
         material = kwargs.get("material", self.material)
 
@@ -61,7 +64,9 @@ class Section(SectionBase):
             raise Exception(f"Plane section is incompatible with {nSpatialDimensions}-dimensional finite elements.")
 
         thickness = self.thickness
-        elProperties = np.array([thickness], dtype=float)
+        density = self.density
+
+        elProperties = np.array([thickness, density], dtype=float)
 
         element.setProperties(elProperties)
         element.initializeElement()

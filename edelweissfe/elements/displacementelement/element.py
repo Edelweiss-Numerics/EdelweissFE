@@ -165,6 +165,7 @@ class DisplacementElement(BaseElement):
         self.planeStrain = properties["plStrain"]
         if self.nSpatialDimensions == 3:
             self._t = 1  # "thickness" for 3D elements
+        self._rho = 1  # density
         self._fields = [["displacement"] for i in range(self._nNodes)]
         self._dStrain = np.zeros([self._nInt, 6])
 
@@ -352,6 +353,51 @@ class DisplacementElement(BaseElement):
             # update strain in stateVars
             self._stateVarsTemp[i][6:12] += self._dStrain[i]
 
+    def computeYourselfExplicit(
+        self,
+        P: np.ndarray,
+        U: np.ndarray,
+        dU: np.ndarray,
+        time: np.ndarray,
+        dTime: float,
+    ):
+        """Evaluate the residual for given time, field, and field increment due to a displacement or load.
+
+        Parameters
+        ----------
+        P
+            The internal load vector gets calculated.
+        U
+            The current solution vector.
+        dU
+            The current solution vector increment.
+        time
+            Array of step time and total time.
+        dTime
+            The time increment.
+        """
+        # copy all elements
+        self._stateVarsTemp = [self._stateVarsRef[i].copy() for i in range(self._nInt)].copy()
+        # strain increment
+        self._dStrain[:, self._activeVoigtIndices] = np.array([self.B[i] @ dU for i in range(self._nInt)])
+        for i in range(self._nInt):
+            # get stress and strain
+            stress = self._stateVarsTemp[i][0:6]
+            self.material.assignCurrentStateVars(self._stateVarsTemp[i][12:])
+            # use 3D for 2D planeStrain
+            if not self.planeStrain and self.nSpatialDimensions == 2:
+                self.material.computePlaneStress(stress, self._dStressdStrain[i], self._dStrain[i], time, dTime)
+            else:
+                self.material.computeStress(stress, self._dStressdStrain[i], self._dStrain[i], time, dTime)
+            # B operator
+            B = self.B[i]
+            # Jacobi determinant
+            detJ = lin.det(self.J[i])
+            # calculate P
+            P -= B.T @ stress[self._activeVoigtIndices] * detJ * self._weight[i] * self._t
+            # update strain in stateVars
+            self._stateVarsTemp[i][6:12] += self._dStrain[i]
+
     def computeBodyForce(
         self, P: np.ndarray, K: np.ndarray, load: np.ndarray, U: np.ndarray, time: np.ndarray, dTime: float
     ):
@@ -376,6 +422,42 @@ class DisplacementElement(BaseElement):
         N = computeNOperator(self._xi, self._eta, self._zeta, self._nInt, self.nNodes, self.nSpatialDimensions)
         for i in range(self._nInt):
             P += np.outer(N[i], load).flatten() * lin.det(self.J[i]) * self._t * self._weight[i]
+
+    def computeConsistentMassMatrix(self, M: np.ndarray):
+        """Compute the consistent mass matrix.
+
+        Parameters
+        ----------
+        M
+            The mass matrix to be defined.
+        """
+        N = computeNOperator(self._xi, self._eta, self._zeta, self._nInt, self.nNodes, self.nSpatialDimensions)
+        nDoFPerNode = int(self._nDof / self.nNodes)
+        for i in range(self._nInt):
+            # compute element volume
+            detJ = lin.det(self.J[i])
+            # compute mass matrix for element j in point i
+            N_ = np.zeros((self.nSpatialDimensions, self._nDof))
+            for j in range(self.nNodes):
+                for k in range(nDoFPerNode):
+                    N_[k, nDoFPerNode * j + k] = N[i][j]
+
+            M += self.material.getDensity() * N_.T @ N_ * detJ * self._weight[i] * self._t
+
+    def computeLumpedInertia(self, M: np.ndarray):
+        """Compute the lumped mass matrix with simple row summing of the consistent mass matrix.
+
+        Parameters
+        ----------
+        M
+            The mass matrix to be defined.
+        """
+        # compute element volume
+        cmm = np.zeros((self._nDof, self._nDof))
+        self.computeConsistentMassMatrix(cmm)
+
+        # compute lumped mass matrix by summing up the rows
+        M[:] = np.sum(cmm, axis=1)
 
     def acceptLastState(
         self,
@@ -439,7 +521,7 @@ class DisplacementElement(BaseElement):
         return self._nInt
 
     def getCoordinatesAtQuadraturePoints(self) -> np.ndarray:
-        """Compute the underlying MarmotElement qp coordinates.
+        """Compute the coordinates of the quadrature points.
 
         Returns
         -------

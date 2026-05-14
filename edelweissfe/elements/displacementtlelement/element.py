@@ -433,6 +433,75 @@ class DisplacementTLElement(BaseElement):
             # calculate complete stiffness matrix
             K += Hk * detJ * self._t * self._weight[i]
 
+    def computeYourselfExplicit(
+        self,
+        P: np.ndarray,
+        U: np.ndarray,
+        dU: np.ndarray,
+        time: np.ndarray,
+        dTime: float,
+    ):
+        """Evaluate the residual for given time, field, and field increment due to a displacement or load.
+
+        Parameters
+        ----------
+        P
+            The internal load vector gets calculated.
+        U
+            The current solution vector.
+        dU
+            The current solution vector increment.
+        time
+            Array of step time and total time.
+        dTime
+            The time increment.
+        """
+
+        dim = self.nSpatialDimensions
+        # get current state Vars
+        self._stateVarsTemp = [self._stateVarsRef[i].copy() for i in range(self._nInt)].copy()
+        # compute the deformation gradient
+        self._F = computeDeformationGradient(U, self.nablaN, self._nInt, self._nNodes, dim)
+        if not self._isHyperelastic:
+            B = computeBOperator(self._F, self.nablaN, self._nInt, self._nNodes, dim)
+        for i in range(self._nInt):
+            detJ = lin.det(self.J[i])
+            # get stress (PK2) and strain
+            stress = self._stateVarsTemp[i][0:6]
+            self.material.assignCurrentStateVars(self._stateVarsTemp[i][12:])
+            H = self._F[i] - np.eye(dim)
+            self._E[i] = 1 / 2 * (H + H.T + H.T @ H)
+            invF = lin.inv(self._F[i])
+            F = makeDeformationGradient3D(self._F[i], dim)
+            if self._isHyperelastic:
+                NAi = np.zeros([self._nNodes, 3])
+                _nablaN = np.zeros([3, self._nNodes])
+                NAi[:, :dim] = self.nablaN[i].T @ invF
+                _nablaN[:dim] = self.nablaN[i]
+                self._strain[i, self._activeVoigtIndices] = doVoigtStrain(dim, self._E[i])
+                # use 3D for 2D planeStrain
+                if not self.planeStrain and dim == 2:
+                    self.material.computePlaneKirchhoff(stress, self._dStress_dDeformationGradient[i], F, time, dTime)
+                    T = undoVoigtStress(2, stress)
+                else:
+                    invF = makeDeformationGradient3D(invF, dim)
+                    self.material.computeKirchhoff(stress, self._dStress_dDeformationGradient[i], F, time, dTime)
+                    T = undoVoigtStress(3, stress)
+                PK1 = invF @ T
+                # update strain in stateVars
+                self._stateVarsTemp[i][6:12] = self._strain[i]
+                # compute inner forces
+                P -= (self.nablaN[i].T @ PK1[:dim, :dim]).flatten() * detJ * self._t * self._weight[i]
+            else:  # for non-hyperelastic materials
+                self._dStrain[i, self._activeVoigtIndices] = doVoigtStrain(dim, self._E[i] - self._Eold[i])
+                if not self.planeStrain and dim == 2:
+                    self.material.computePlaneStress(stress, self._dStress_dStrain[i], self._dStrain[i], time, dTime)
+                else:
+                    self.material.computeStress(stress, self._dStress_dStrain[i], self._dStrain[i], time, dTime)
+                self._stateVarsTemp[i][6:12] += self._dStrain[i]
+                # compute inner forces
+                P -= B[i].T @ stress[self._matrixVoigtIndices] * detJ * self._weight[i] * self._t
+
     def computeBodyForce(
         self, P: np.ndarray, K: np.ndarray, load: np.ndarray, U: np.ndarray, time: np.ndarray, dTime: float
     ):
@@ -457,6 +526,42 @@ class DisplacementTLElement(BaseElement):
         N = computeNOperator(self._xi, self._eta, self._zeta, self._nInt, self.nNodes, self.nSpatialDimensions)
         for i in range(self._nInt):
             P += np.outer(N[i], load).flatten() * lin.det(self.J[i]) * self._t * self._weight[i]
+
+    def computeConsistentMassMatrix(self, M: np.ndarray):
+        """Compute the consistent mass matrix.
+
+        Parameters
+        ----------
+        M
+            The mass matrix to be defined.
+        """
+        N = computeNOperator(self._xi, self._eta, self._zeta, self._nInt, self.nNodes, self.nSpatialDimensions)
+        nDoFPerNode = int(self._nDof / self.nNodes)
+        for i in range(self._nInt):
+            # compute element volume
+            detJ = lin.det(self.J[i])
+            # compute mass matrix for element j in point i
+            N_ = np.zeros((self.nSpatialDimensions, self._nDof))
+            for j in range(self.nNodes):
+                for k in range(nDoFPerNode):
+                    N_[k, nDoFPerNode * j + k] = N[i][j]
+
+            M += self.material.getDensity() * N_.T @ N_ * detJ * self._weight[i] * self._t
+
+    def computeLumpedInertia(self, M: np.ndarray):
+        """Compute the lumped mass matrix with simple row summing of the consistent mass matrix.
+
+        Parameters
+        ----------
+        M
+            The mass matrix to be defined.
+        """
+        # compute element volume
+        cmm = np.zeros((self._nDof, self._nDof))
+        self.computeConsistentMassMatrix(cmm)
+
+        # compute lumped mass matrix by summing up the rows
+        M[:] = np.sum(cmm, axis=1)
 
     def acceptLastState(
         self,

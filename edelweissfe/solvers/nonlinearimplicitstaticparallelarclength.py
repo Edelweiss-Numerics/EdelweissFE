@@ -25,9 +25,7 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-# Created on Thu Nov  2 13:43:01 2017
 
-# @author: Matthias Neuner
 """
 (Parallel) Arc Length Solver, based on the proposed approach in Jirásek/Bažant 2001.
 Replaces the NewtonRaphson scheme of the NISTParallel Solver.

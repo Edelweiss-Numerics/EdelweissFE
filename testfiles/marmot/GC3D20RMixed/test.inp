@@ -3,7 +3,7 @@
 *section, name=section1, material=modleon, type=solid
 all
 
-*job, name=c3d8nljob, domain=3d, solver=NISTParallelForMarmotElements
+*job, name=c3d8nljob, domain=3d, solver=NISTParallel
 
 *include, input=mesh.inp
 

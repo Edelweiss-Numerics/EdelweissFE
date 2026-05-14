@@ -94,7 +94,14 @@ cdef extern from "Marmot/MarmotElement.h":
                              double* Ke,
                              const double* time,
                              double dT,
-                             double& pNewdT, ) except +ValueError
+                             double& pNewdT) except +ValueError
+
+        void computeYourselfExplicit(const double* QTotal,
+                                     const double* dQ,
+                                     double* Pe,
+                                     const double* time,
+                                     double dT,
+                                     double& pNewdT) except +ValueError
 
         void setInitialConditions(StateTypes state,
                                   const double* values)
@@ -116,6 +123,8 @@ cdef extern from "Marmot/MarmotElement.h":
                         const double* QTotal,
                         const double* time,
                         double dT)
+
+        void computeLumpedInertia(double* M)
 
         StateView getStateView(const string& stateName, int gaussPt)
 
@@ -157,7 +166,7 @@ cdef class MarmotElementWrapper:
 
     # nogil methods are already declared here:
 
-    cpdef void _initializeStateVarsTemp(self, ) nogil
+    cpdef void _initializeStateVarsTemp(self, ) noexcept  nogil
 
     cpdef void computeYourself(self,
                                double[::1] Ke,
@@ -165,4 +174,11 @@ cdef class MarmotElementWrapper:
                                const double[::1] U,
                                const double[::1] dU,
                                const double[::1] time,
-                               double dTime, ) nogil except *
+                               double dTime) except * nogil
+
+    cpdef void computeYourselfExplicit(self,
+                                       double[::1] Pe,
+                                       const double[::1] U,
+                                       const double[::1] dU,
+                                       const double[::1] time,
+                                       double dTime) except * nogil

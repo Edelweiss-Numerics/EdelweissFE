@@ -44,7 +44,7 @@ cdef MarmotMaterial* createMaterial(materialName, materialProperties) except NUL
     try:
         marmotMaterial = MarmotMaterialFactory.createMaterial(
                             MarmotMaterialFactory.getMaterialCodeFromName(
-                             materialName.upper().encode("UTF-8")),
+                                materialName.upper().encode("UTF-8")),
                             &matPropsView[0],
                             materialProperties.shape[0],
                             0)

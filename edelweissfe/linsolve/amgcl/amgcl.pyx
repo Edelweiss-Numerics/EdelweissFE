@@ -82,7 +82,7 @@ cdef class PyAMGCLSolver:
             raise OverflowError(f"Matrix dimension {n} exceeds supported int32 range for AMGCL wrapper")
 
         cdef long long int32_max = np.iinfo(np.int32).max
-        cdef long long nnz = int(A.indptr[-1])
+        cdef long long nnz = A.nnz
         if nnz > int32_max:
             raise OverflowError(f"CSR nnz value {nnz} exceeds supported int32 range for AMGCL wrapper")
         if int(A.indptr.min()) < 0:

@@ -35,9 +35,9 @@ weak
 *section, name=sectionLE, material=GMCDPLE, type=solid
 top
 bottom
-** *job, name=cpe4job, domain=3d, solver=NISTParallelForMarmotElements
+** *job, name=cpe4job, domain=3d, solver=NISTParallel
 *job, name=cpe4job, domain=3d,
-*solver, solver=NISTParallelForMarmotElements, name=theSolver
+*solver, solver=NISTParallel, name=theSolver
 ***job, name=cpe4job, domain=3d, solver=NISTPArcLength
 
 *fieldOutput,

@@ -73,9 +73,7 @@ class MarmotMaterialWrappingElement(BaseElement):
         self._hasMaterial = False
 
         self._marmotMaterialWrapper = marmotMaterialWrappers[self._materialType]()
-        self._fields = [
-            self._marmotMaterialWrapper.fields,
-        ]
+        self._fields = (self._marmotMaterialWrapper.fields,)
         self._nDof = self._marmotMaterialWrapper.nU
         self._dofIndicesPermutation = np.arange(0, self._nDof, 1, dtype=int)
 
@@ -199,6 +197,25 @@ class MarmotMaterialWrappingElement(BaseElement):
         self._marmotMaterialWrapper.computeYourself(Ke, Pe, U, dU, time, dTime)
 
         Pe *= -1
+
+    def computeYourselfExplicit(
+        self,
+        Pe,
+        U,
+        dU,
+        time,
+        dTime,
+    ):
+        self._initializeStateVarsTemp()
+
+        self._marmotMaterialWrapper.computeYourselfExplicit(Pe, U, dU, time, dTime)
+
+        Pe *= -1
+
+    def computeLumpedInertia(self, Me):
+        """Not implemented for this wrapper."""
+
+        raise ValueError("This should not be called for this wrapper.")
 
     def computeDistributedLoad(self, loadType, P, K, faceID, load, U, time, dTime):
         """Not implemented for this wrapper."""

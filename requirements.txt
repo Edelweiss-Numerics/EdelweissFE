@@ -1,6 +1,7 @@
 anaconda::mkl
 anaconda::mkl-include
 anaconda::intel-openmp
+boost-cpp
 cmake
 compilers
 cython
@@ -14,7 +15,7 @@ numpydoc
 # petsc4py
 pyamg
 # pymumps
-python=3.12
+python=3.14
 pytest
 pyvista
 prettytable
