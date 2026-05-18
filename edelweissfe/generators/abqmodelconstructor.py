@@ -43,26 +43,44 @@ employing an Abaqus-like syntax.
 
 import numpy as np
 
-from edelweissfe.config.analyticalfields import getAnalyticalFieldByName
+from edelweissfe.config.analyticalfields import getAnalyticalFieldFactoryByName
 from edelweissfe.config.constraints import getConstraintClass
 from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.materiallibrary import getMaterialClass
-from edelweissfe.config.sections import getSectionClass
+from edelweissfe.config.sections import getSectionFactoryByName
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import (
+    keywordIdentifier,
+    moduleLevelKeywordIdentifier,
+)
 from edelweissfe.utils.misc import (
     convertLinesToFlatArray,
     convertLinesToMixedDictionary,
+    convertLinesToStringDictionary,
     isInteger,
     splitLineAtCommas,
 )
 
+# isort: off
+from edelweissfe.utils.inputfileparser import inputLanguage  # noqa: F811
+
+from edelweissfe.analyticalfields.randomscalar import inputLanguage  # noqa: F811
+from edelweissfe.analyticalfields.fromvtk import inputLanguage  # noqa: F811
+from edelweissfe.analyticalfields.scalarexpression import inputLanguage  # noqa: F811
+
+from edelweissfe.sections.solid import inputLanguage  # noqa: F811
+from edelweissfe.sections.plane import inputLanguage  # noqa: F811
+
+# isort: on
+
 
 class AbqModelConstructor:
     def __init__(self, journal):
-        pass
+        self.journal = journal
 
     def createGeometryFromInputFile(self, model: FEModel, inputFile: dict) -> dict:
         """Collects nodes, elements, node sets and element sets from
@@ -85,9 +103,9 @@ class AbqModelConstructor:
 
         # returns an dict of {node label: node}
         nodeDefinitions = model.nodes
-        for nodeDefs in inputFile["*node"]:
+        for nodeDefs in inputFile["node"]:
             currNodeDefs = {}
-            for line in nodeDefs["data"]:
+            for line in nodeDefs["datalines"]:
                 defLine = splitLineAtCommas(line)
 
                 label = int(defLine[0])
@@ -99,20 +117,20 @@ class AbqModelConstructor:
                 )
             nodeDefinitions.update(currNodeDefs)
 
-            if "nset" in nodeDefs.keys():
+            if nodeDefs["nSet"] is not None:
                 setName = nodeDefs["nset"]
                 model.nodeSets[setName] = NodeSet(setName, [nodeDefinitions[x] for x in currNodeDefs.keys()])
 
         # returns an dict of {element Label: element}
         elements = model.elements
 
-        for elDefs in inputFile["*element"]:
+        for elDefs in inputFile["element"]:
             elementType = elDefs["type"]
             elementProvider = elDefs.get("provider")
             ElementClass = getElementClass(elementType, elementProvider)
 
             currElDefs = {}
-            for line in elDefs["data"]:
+            for line in elDefs["datalines"]:
                 defLine = [int(i) for i in splitLineAtCommas(line)]
 
                 label = defLine[0]
@@ -123,7 +141,7 @@ class AbqModelConstructor:
                 currElDefs[label] = newEl
             elements.update(currElDefs)
 
-            if "elset" in elDefs.keys():
+            if elDefs["elSet"] is not None:
                 setName = elDefs["elset"]
                 model.elementSets[setName] = ElementSet(setName, currElDefs.values())
 
@@ -131,10 +149,10 @@ class AbqModelConstructor:
         # or generate elementset by generate definition in inputfile
         elementSets = model.elementSets
 
-        for elSetDefinition in inputFile["*elSet"]:
+        for elSetDefinition in inputFile["elSet"]:
             name = elSetDefinition["elSet"]
 
-            data = [splitLineAtCommas(line) for line in elSetDefinition["data"]]
+            data = [splitLineAtCommas(line) for line in elSetDefinition["datalines"]]
             # decide if entries are labels or existing nodeSets:
             if isInteger(data[0][0]):
                 elNumbers = [int(num) for line in data for num in line]
@@ -182,10 +200,10 @@ class AbqModelConstructor:
         # generate dictionary of nodeObjects belonging to a specified nodeset
         # or generate nodeset by generate definition in inputfile
         nodeSets = model.nodeSets
-        for nSetDefinition in inputFile["*nSet"]:
+        for nSetDefinition in inputFile["nSet"]:
             name = nSetDefinition["nSet"]
 
-            data = [splitLineAtCommas(line) for line in nSetDefinition["data"]]
+            data = [splitLineAtCommas(line) for line in nSetDefinition["datalines"]]
             if isInteger(data[0][0]):
                 nodes = [int(n) for line in data for n in line]
                 if nSetDefinition.get("generate", False):
@@ -211,12 +229,12 @@ class AbqModelConstructor:
         model.elementSets["all"] = ElementSet("all", model.elements.values())
 
         # generate surfaces sets
-        for surfaceDef in inputFile["*surface"]:
+        for surfaceDef in inputFile["surface"]:
             name = surfaceDef["name"]
             sType = surfaceDef.get("type", "element").lower()
             surface = {}
             if sType == "element":
-                data = [splitLineAtCommas(line) for line in surfaceDef["data"]]
+                data = [splitLineAtCommas(line) for line in surfaceDef["datalines"]]
                 for line in data:
                     elSet, faceNumber = line
                     faceNumber = int(faceNumber.replace("S", ""))
@@ -243,14 +261,14 @@ class AbqModelConstructor:
             The updated model tree.
         """
 
-        for materialDef in inputFile["*material"]:
+        for materialDef in inputFile["material"]:
             materialName = materialDef["name"]
             if "advanced" in materialName:
                 raise Exception("Please use the *advancedmaterial keyword for advanced materials!")
             materialProvider = materialDef.get("provider", None)
             materialID = materialDef.get("id", materialName)
 
-            materialProperties = convertLinesToFlatArray(materialDef["data"], dtype=float)
+            materialProperties = convertLinesToFlatArray(materialDef["datalines"], dtype=float)
             materialClass = getMaterialClass(materialName, materialProvider)
 
             if materialClass is None:  # for Marmot
@@ -280,14 +298,14 @@ class AbqModelConstructor:
             The updated model tree.
         """
 
-        for materialDef in inputFile["*advancedmaterial"]:
+        for materialDef in inputFile["advancedmaterial"]:
             materialName = materialDef["name"]
             if "advanced" not in materialName:
                 raise Exception("The keyword *advancedmaterial only allows the use of advanced materials!")
             materialProvider = materialDef.get("provider", None)
             materialID = materialDef.get("id", materialName)
 
-            materialProperties = convertLinesToMixedDictionary(materialDef["data"])
+            materialProperties = convertLinesToMixedDictionary(materialDef["datalines"])
             materialClass = getMaterialClass(materialName, materialProvider)
 
             if materialClass is None:  # for Marmot
@@ -313,12 +331,18 @@ class AbqModelConstructor:
             The updated model tree.
         """
 
-        for constraintDef in inputFile["*constraint"]:
-            name = constraintDef["name"]
-            constraint = constraintDef["type"]
-            data = constraintDef["data"]
+        for definition in inputFile["constraint"]:
+            constraintKwArgs = CaseInsensitiveDict(definition.copy())
 
-            constraint = getConstraintClass(constraint)(name, data, model)
+            name = constraintKwArgs.pop("name")
+            constraintType = constraintKwArgs.pop("type")
+            data = constraintKwArgs.pop("datalines")
+
+            module = inputLanguage["constraint"].getModule(constraintType)
+
+            args, kwargs = module.parseDatalines(data)
+
+            constraint = getConstraintClass(constraintType)(name, model, **kwargs)
             model.constraints[name] = constraint
 
         return model
@@ -341,32 +365,47 @@ class AbqModelConstructor:
             The updated model tree.
         """
 
-        for definition in inputFile["*section"]:
-            try:
-                name = definition.pop("name")
-            except KeyError:
-                raise KeyError(f"No name specified for section {name}.")
-            try:
-                sectionType = definition.pop("type")
-            except KeyError:
-                raise KeyError(f"No type specified for section {name}.")
-            try:  # should data be required?
-                data = definition.pop("data")
-            except KeyError:
-                raise KeyError(f"No data specified for section {name}.")
-            try:
-                materialName = definition.pop("material")
-            except KeyError:
-                raise KeyError(f"No material specified for section {name}.")
+        for definition in inputFile["section"]:
+            sectionKwArgs = CaseInsensitiveDict(definition.copy())
+
+            name = sectionKwArgs.pop("name")
+            sectionType = sectionKwArgs.pop("type")
+            materialName = sectionKwArgs.pop("material")
+            data = sectionKwArgs.pop("datalines")
+            moduleOptions = sectionKwArgs.pop("moduleOptions")
+
+            sectionKwArgs.pop("inputfile")
 
             if name in model.sections:
-                raise KeyError("Redundant definition for section f{name}")
+                raise Exception(f"Section with name {name} already exists")
 
-            Section = getSectionClass(sectionType)
+            module = inputLanguage["section"].getModule(sectionType)
 
-            theSection = Section(name, data, materialName, model, **definition)
+            args, kwargs = module.parseDatalines(data)
+            # sectionKwArgs.update(kwargs)
 
-            model.sections[name] = theSection
+            for elSet in args:
+                if elSet not in model.elementSets:
+                    raise Exception(
+                        f"During parsing of keyword {keywordIdentifier}section: Element set {elSet} does not exist."
+                    )
+
+            if kwargs:
+                raise Exception(
+                    f"During parsing of keyword {keywordIdentifier}section: Unexpected keyword arguments. Use module level keyword identifier {moduleLevelKeywordIdentifier} instead."
+                )
+
+            sectionFactory = getSectionFactoryByName(sectionType)
+
+            try:
+                section = sectionFactory(name, model, materialName, args, moduleOptions, **sectionKwArgs)
+            except ValueError as e:
+                e.args = (
+                    f"Error during parsing of keyword {keywordIdentifier}section (type={sectionType}): " + e.args[0],
+                )
+                raise e
+
+            model.sections[name] = section
 
         return model
 
@@ -386,13 +425,19 @@ class AbqModelConstructor:
             The updated model tree.
         """
 
-        for fieldDef in inputFile["*analyticalField"]:
-            analyticalFieldName = fieldDef["name"]
-            analyticalFieldType = fieldDef["type"]
-            analyticalFieldData = fieldDef["data"]
+        for definition in inputFile["analyticalField"]:
+            analyticalFieldName = definition["name"]
+            analyticalFieldType = definition["type"]
+            data = definition["datalines"]
 
-            analyticalFieldClass = getAnalyticalFieldByName(analyticalFieldType)
-            analyticalField = analyticalFieldClass(analyticalFieldName, analyticalFieldData, model)
+            if analyticalFieldName in model.analyticalFields:
+                raise Exception(f"AnalyticalField with name {analyticalFieldName} already exists")
+
+            # analytical fields accept no module level keywords
+            analyticalFieldKwargs = convertLinesToStringDictionary(data)
+
+            analyticalFieldFactory = getAnalyticalFieldFactoryByName(analyticalFieldType)
+            analyticalField = analyticalFieldFactory(analyticalFieldName, model, **analyticalFieldKwargs)
 
             model.analyticalFields[analyticalFieldName] = analyticalField
 

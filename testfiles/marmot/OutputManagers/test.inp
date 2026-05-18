@@ -15,19 +15,19 @@ nX=25
 nY=50
 
 *fieldOutput
-create=perNode, name=Displacement, elSet=all, field=displacement, result=U,
-create=perElement, name=Stress, elSet=all, result=stress, quadraturePoint=1
-create=perElement, name=Strain, elSet=all, result=strain, quadraturePoint=1
-create=perElement, name=Kappa, elSet=all, result=kappa, quadraturePoint=1
-create=perNode, name=Displacement_Top, nSet=gen_top, field=displacement, result=U
-create=perNode, name=Force_Bottom, nSet=gen_bottom, field=displacement, result=P, saveHistory=True, export=ReactionForce, f_export(x)='x[:,:,1]'
+>>perNode, name=Displacement, elSet=all, field=displacement, result=U,
+>>perElement, name=Stress, elSet=all, result=stress, quadraturePoint=1
+>>perElement, name=Strain, elSet=all, result=strain, quadraturePoint=1
+>>perElement, name=Kappa, elSet=all, result=kappa, quadraturePoint=1
+>>perNode, name=Displacement_Top, nSet=gen_top, field=displacement, result=U
+>>perNode, name=Force_Bottom, nSet=gen_bottom, field=displacement, result=P, saveHistory=True, export=ReactionForce, f_export(x)='x[:,:,1]'
 
 *output, type=ensight, name=myEnsightExport
-create=perNode,    fieldOutput=Displacement
-create=perElement, fieldOutput=Stress
-create=perElement, fieldOutput=Strain
-create=perElement, fieldOutput=Kappa
-configuration, overwrite=yes
+>>perNode,    fieldOutput=Displacement
+>>perElement, fieldOutput=Stress
+>>perElement, fieldOutput=Strain
+>>perElement, fieldOutput=Kappa
+>>configuration, overwrite=yes
 
 *output, type=monitor, name=myNodeSetMonitor
 fieldOutput=Displacement_Top, f(x)='mean(x[:,1])'
@@ -37,8 +37,8 @@ fieldOutput=Force_Bottom, f(x)='sum(x[:,1])'
 fieldOutput=Displacement_Top, label=Ualongtopsurface, f(x)='x[:,1]', nStages=5, export=True
 
 *step, maxInc=1e-1, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100, solver=theSolver
-options, category=Ensight, intermediateSaveInterval=2, minDTForOutput=20
-options, category=NISTSolver, extrapolation=linear
-dirichlet, name=1,          nSet=gen_leftBottom,    field=displacement, 2=0.0, 1=0.0
-dirichlet, name=bottom,     nSet=gen_bottom,        field=displacement, 2=0
-nodeforces, name=top,       nSet=gen_top,           field=displacement, 2=-1, f(t)=t**2
+>>options, category=Ensight, intermediateSaveInterval=2, minDTForOutput=20
+>>options, category=NISTSolver, extrapolation=linear
+>>dirichlet, name=1,          nSet=gen_leftBottom,    field=displacement, 2=0.0, 1=0.0
+>>dirichlet, name=bottom,     nSet=gen_bottom,        field=displacement, 2=0
+>>nodeforces, name=top,       nSet=gen_top,           field=displacement, 2=-1, f(t)=t**2

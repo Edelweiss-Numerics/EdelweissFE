@@ -35,8 +35,16 @@ Let materials initialize themselves (e.g., state vars depending on material para
 import numpy as np
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.steps.adaptivestep import InputLanguage
 
-documentation = {}
+inputLanguage = InputLanguage()
+module = inputLanguage["step"].getModule("adaptive")
+
+kw = module.addOptionalKeyword("initializematerial", "Standard distributed load, applied on a surface set.")
+kw.addRequiredArg("name", "Name of the step action.", str)
+kw.addOptionalArg("elSet", "The element set for application of the boundary condition.", str, "all")
+
+documentation = [kw]
 
 
 class StepAction(StepActionBase):
@@ -45,7 +53,7 @@ class StepAction(StepActionBase):
     def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
         self.name = name
 
-        self.theElements = model.elementSets[action.get("elSet", "all")]
+        self.theElements = model.elementSets[action["elSet"]]
         self.active = True
         self.emptyDef = np.array([0.0])
 

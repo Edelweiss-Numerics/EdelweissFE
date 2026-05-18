@@ -30,8 +30,14 @@
 # @author: Matthias Neuner
 
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.exceptions import ConditionalStop
+from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.math import createModelAccessibleFunction
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
 """
 A conditional stop conditions wenn an expression becomes true.
@@ -44,26 +50,45 @@ Useful, e.g., for indirect displacement control.
         stop='fieldOutputs["damage"]  >= .99'
         stop='fieldOutputs["displacement"]  < -5'
 """
-documentation = {"stop": "model accessible function describing the stop condition"}
+
+inputLanguage = InputLanguage()
+module = inputLanguage["output"].addModule(
+    "ConditionalStop", "A simple monitor to observe results (fieldOutputs) in the console during analysis."
+)
+
+module.addRequiredArg("stop", "Model accessible function describing the stop condition.", str)
+
+documentation = [module]
+
+required = [kw.name for kw in module.requiredArgs]
+required += [kw.name for kw in module.requiredKeywords]
+
+optional = [kw.name for kw in module.optionalArgs]
+optional += [kw.name for kw in module.optionalKeywords]
+
+
+@caseInsensitiveKwargsChecker(required, optional)
+@castKwargsValuesAndAddDefaults(module)
+def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
+    kwargs = CaseInsensitiveDict(kwargs)
+
+    stopFunction = createModelAccessibleFunction(
+        kwargs["stop"], FEModel, fieldOutputs=fieldOutputController.fieldOutputs
+    )
+    return OutputManager(name, FEModel, fieldOutputController, journal, plotter, stopFunction)
 
 
 class OutputManager(OutputManagerBase):
     identification = "ConditionalStop"
     printTemplate = "{:}, {:}: {:}"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter):
+    def __init__(self, name, model, fieldOutputController, journal, plotter, stopFunction):
         self.model = model
         self.journal = journal
         self.monitorJobs = []
         self.fieldOutputController = fieldOutputController
 
-    def updateDefinition(self, **kwargs: dict):
-        # for defline in definitionLines:
-        entry = {}
-        entry["stop"] = createModelAccessibleFunction(
-            kwargs["stop"], self.model, fieldOutputs=self.fieldOutputController.fieldOutputs
-        )
-        self.monitorJobs.append(entry)
+        self.monitorJobs.append(stopFunction)
 
     def initializeJob(self):
         pass

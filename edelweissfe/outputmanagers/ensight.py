@@ -41,13 +41,15 @@ from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.fieldoutput import (
     ElementFieldOutput,
     NodeFieldOutput,
     _FieldOutputBase,
 )
+from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.meshtools import disassembleElsetToEnsightShapes
-from edelweissfe.utils.misc import strtobool
+from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
 
 """
 Output manager for Ensight exports.
@@ -56,13 +58,36 @@ For each part, perNode and perElement results can be exported, which are importe
 
 """
 
-documentation = {
-    "configuration": "overwrite=y|n|yes|no|True|False|",
-    "create": "The of the variabl; valid values: perNode|perElement",
-    "fieldOutput": "Name of the result, defined on an elSet (also for perNode results!)",
-    "name": "(Optional), default = the field output's name",
-    "intermediateSaveInterval": 'Step option in category "Ensight": save .case file every N increments',
-}
+inputLanguage = InputLanguage()
+module = inputLanguage["output"].addModule("ensight", "Ensight export.")
+# module.addOptionalArg("name", "", str, "esExport")
+
+kw = module.addOptionalKeyword("perNode", "Node-based Ensight export.")
+kw.addRequiredArg(
+    "fieldOutput",
+    "Name of the result, defined on an elSet (also for perNode results!)",
+    str,
+)
+
+kw = module.addOptionalKeyword("perElement", "Element-based Ensight export.")
+kw.addRequiredArg(
+    "fieldOutput",
+    "Name of the result, defined on an elSet (also for perNode results!)",
+    str,
+)
+
+kw = module.addOptionalKeyword("configuration", "")
+kw.addOptionalArg("overwrite", "Overwrite results.", bool, False)
+kw.addOptionalArg("intermediateSaveInterval", "Set intermediate save interval.", int, 10)
+kw.addOptionalArg("elSet", "Element set.", str, None)
+kw.addOptionalArg("nSet", "Node set.", str, None)
+kw.addOptionalArg("transient", "Set transient ensight output.", bool, True)
+
+documentation = [module]
+
+optionsModule = inputLanguage["step"].getModule("adaptive").getKeyword("options")
+optionsModule.addOptionalArg("intermediateSaveInterval", "", float, None)
+optionsModule.addOptionalArg("minDTForOutput", "", float, None)
 
 
 def writeCFloat(f, ndarray):
@@ -657,17 +682,57 @@ def createUnstructuredPartFromNodeSet(setName, nodeSet: list, partID: int):
     return EnsightUnstructuredPart("NSET_" + setName, partID, list(nodeSet), elementDict)
 
 
+required = [kw.name for kw in module.requiredArgs]
+required += [kw.name for kw in module.requiredKeywords]
+
+optional = [kw.name for kw in module.optionalArgs]
+optional += [kw.name for kw in module.optionalKeywords]
+
+
+@caseInsensitiveKwargsChecker(required, optional)
+def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
+    kwargs = CaseInsensitiveDict(kwargs)
+
+    perNodeDefs = moduleOptions.get("perNode", [])
+    perElementDefs = moduleOptions.get("perElement", [])
+    configurations = moduleOptions.get("configuration", [])
+
+    # datalineOptions = splitLinesAtCommas(datalines)
+
+    return OutputManager(
+        name,
+        FEModel,
+        fieldOutputController,
+        journal,
+        plotter,
+        perNodeDefs,
+        perElementDefs,
+        configurations,
+    )
+
+
 class OutputManager(OutputManagerBase):
     identification = "Ensight Export"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter, **kwargs):
+    def __init__(
+        self,
+        name,
+        model,
+        fieldOutputController,
+        journal,
+        plotter,
+        perNodeDefs: list[dict],
+        perElementDefs: list[dict],
+        configurations: list[dict],
+        **kwargs,
+    ):
         self.name = name
 
         self.model = model
         self.timeAtLastOutput = -1e16
         self.minDTForOutput = -1e16
         self.finishedSteps = 0
-        self.intermediateSaveInterval = int(kwargs.get("intermediateSaveInterval", 10))
+        # self.intermediateSaveInterval = int(kwargs.get("intermediateSaveInterval", 10))
         self.intermediateSaveIntervalCounter = 0
         self.fieldOutputController = fieldOutputController
         self.journal = journal
@@ -685,40 +750,49 @@ class OutputManager(OutputManagerBase):
 
         self.geometryParts = self._createGeometryParts(1)
 
-    def updateDefinition(self, **kwargs: dict):
-        self.model
-        # standard, transient jobs accessing the fieldoutput:
+        self.intermediateSaveInterval = module.getKeyword("configuration")["overwrite"].default
+        self.overwrite = module.getKeyword("configuration")["overwrite"].default
+        transient = module.getKeyword("configuration")["transient"].default
+        part = None
 
-        # Determine the type
-        if "create" in kwargs:
-            create = kwargs.pop("create")
-            fieldOutput = kwargs.pop("fieldOutput")
-            part = None
-            if "nSet" in kwargs:
-                part = self.nSetToEnsightPartMappings[kwargs.pop("nSet")]
-            elif "elSet" in kwargs:
-                part = self.elSetToEnsightPartMappings[kwargs.pop("elSet")]
+        # configuration keyword should only be allowed once
+        for configuration in configurations:
+            self.intermediateSaveInterval = configuration["intermediateSaveInterval"]
+            transient = configuration["transient"]
+            self.overwrite = configuration["overwrite"]
 
-            name = kwargs.get("name", fieldOutput.name).replace(" ", "_")
+            # if bool(definition["nSet"]) and bool(definition["elSet"]):
+            #     raise Exception(
+            #         f"During parsing of keyword {keywordIdentifier}output ({moduleLevelKeywordIdentifier}ensight): Specify either nSet OR elSet."
+            #     )
+
+            if configuration["nSet"]:
+                part = self.nSetToEnsightPartMappings[configuration["nSet"]]
+            elif configuration["elSet"]:
+                part = self.elSetToEnsightPartMappings[configuration["elSet"]]
+
+        if not self.overwrite:
+            self.exportName = "{:}_{:}".format(self.name, datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
+
+        for definition in perNodeDefs:
+            fieldOutput = fieldOutputController.fieldOutputs[definition["fieldOutput"]]
 
             nEntries, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
-
             if self.model.domainSize == 2 and varSize == 2:
                 varSize = 3
 
-            transient = kwargs.get("transient", "True")
-            transient = strtobool(transient)
+            fieldOutputName = kwargs.get("name", fieldOutput.name).replace(" ", "_")
+            self.createPerNodeOutput(fieldOutput, part, fieldOutputName, transient=transient, varSize=varSize)
 
-            if create == "perElement":
-                self.createPerElementOutput(fieldOutput, part, name, transient=transient, varSize=varSize)
-            elif create == "perNode":
-                self.createPerNodeOutput(fieldOutput, part, name, transient=transient, varSize=varSize)
+        for definition in perElementDefs:
+            fieldOutput = fieldOutputController.fieldOutputs[definition["fieldOutput"]]
 
-        if "configuration" in kwargs:
-            # ensight output is overwritten by default
-            self.overwrite = strtobool(kwargs.get("overwrite", "True"))
-            if not self.overwrite:
-                self.exportName = "{:}_{:}".format(self.name, datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
+            nEntries, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
+            if self.model.domainSize == 2 and varSize == 2:
+                varSize = 3
+
+            fieldOutputName = kwargs.get("name", fieldOutput.name).replace(" ", "_")
+            self.createPerElementOutput(fieldOutput, part, fieldOutputName, transient=transient, varSize=varSize)
 
     def createPerElementOutput(
         self,
@@ -864,7 +938,10 @@ class OutputManager(OutputManagerBase):
         self.timeAtLastOutput = model.time
         self.ensightCase.setCurrentTime(self.transientTAndFSetNumber, model.time)
 
-        for resultName, perNodeVariableJobs in self._transientPerNodeVariableJobs.items():
+        for (
+            resultName,
+            perNodeVariableJobs,
+        ) in self._transientPerNodeVariableJobs.items():
             resultsByParts = {}
             for perNodeVariableJob in perNodeVariableJobs:
                 result = self._ensureArrayIs2D(perNodeVariableJob["fieldOutput"].getLastResult())
@@ -872,12 +949,18 @@ class OutputManager(OutputManagerBase):
                 if self.model.domainSize == 2 and result.shape[1] == 2:
                     result = self._make2DVector3D(result)
 
-                resultsByParts[perNodeVariableJob["part"].partNumber] = ("coordinates", result)
+                resultsByParts[perNodeVariableJob["part"].partNumber] = (
+                    "coordinates",
+                    result,
+                )
             enSightVariable = EnsightPerNodeVariable(resultName, resultsByParts, perNodeVariableJob["varSize"])
             self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientTAndFSetNumber)
             del enSightVariable
 
-        for resultName, perElementVariableJobs in self._transientPerElementVariableJobs.items():
+        for (
+            resultName,
+            perElementVariableJobs,
+        ) in self._transientPerElementVariableJobs.items():
             resultsByParts = {}
             for perElementVariableJob in perElementVariableJobs:
                 part = perElementVariableJob["part"]

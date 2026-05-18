@@ -32,7 +32,13 @@
 import numpy as np
 
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.math import createMathExpression
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
 """
 A simple integrator to compute the fracture energy by integrating a load-displacement curve.
@@ -44,11 +50,47 @@ A simple integrator to compute the fracture energy by integrating a load-displac
         forceFieldOutput=RF, displacementFieldOutput=U, fractureArea='100.0*1.0'
 """
 
-documentation = {
-    "forceFieldOutput": "fieldOutput for force (with time history)",
-    "displacementFieldOutput": "fieldOutput for displacement (with time history)",
-    "fractureArea": "(math expression for) area of fracture",
-}
+inputLanguage = InputLanguage()
+module = inputLanguage["output"].addModule(
+    "fractureEnergyIntegrator",
+    "A simple integrator to compute the fracture energy by integrating a load-displacement curve.",
+)
+
+module.addRequiredArg("forceFieldOutput", "fieldOutput for force (with time history).", str)
+module.addRequiredArg("displacementFieldOutput", "fieldOutput for displacement (with time history).", str)
+module.addOptionalArg("f(x)", "Apply a model accessible function on the result.", str, "1")
+
+documentation = [module]
+
+required = [kw.name for kw in module.requiredArgs]
+required += [kw.name for kw in module.requiredKeywords]
+
+optional = [kw.name for kw in module.optionalArgs]
+optional += [kw.name for kw in module.optionalKeywords]
+
+
+@caseInsensitiveKwargsChecker(required, optional)
+@castKwargsValuesAndAddDefaults(module)
+def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
+    kwargs = CaseInsensitiveDict(kwargs)
+
+    forceFieldOutputName = kwargs["forceFieldOutput"]
+    displacementFieldOutputName = kwargs["displacementFieldOutput"]
+    fractureArea = kwargs["f(x)"]
+
+    if not fractureArea:
+        fractureArea = "x"
+
+    return OutputManager(
+        name,
+        FEModel,
+        fieldOutputController,
+        journal,
+        plotter,
+        forceFieldOutputName,
+        displacementFieldOutputName,
+        fractureArea,
+    )
 
 
 class OutputManager(OutputManagerBase):
@@ -57,15 +99,24 @@ class OutputManager(OutputManagerBase):
     identification = "FEI"
     printTemplate = "{:}, {:}: {:}"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter):
+    def __init__(
+        self,
+        name,
+        model,
+        fieldOutputController,
+        journal,
+        plotter,
+        forceFieldOutputName,
+        displacementFieldOutput,
+        fractureArea,
+    ):
         self.journal = journal
         self.monitorJobs = []
         self.fieldOutputController = fieldOutputController
 
-    def updateDefinition(self, **kwargs: dict):
-        self.fpF = self.fieldOutputController.fieldOutputs[kwargs["forceFieldOutput"]]
-        self.fpU = self.fieldOutputController.fieldOutputs[kwargs["displacementFieldOutput"]]
-        self.A = createMathExpression(kwargs["fractureArea"])(0.0)
+        self.fpF = self.fieldOutputController.fieldOutputs[forceFieldOutputName]
+        self.fpU = self.fieldOutputController.fieldOutputs[displacementFieldOutput]
+        self.A = createMathExpression(fractureArea)(0.0)
         self.fractureEnergy = 0.0
 
     def initializeJob(self):

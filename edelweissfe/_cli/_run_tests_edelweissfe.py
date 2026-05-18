@@ -85,8 +85,13 @@ def main():
         if not os.path.exists(testfile):
             continue
 
-        inputFile = parseInputFile(testfile)
-        print("Test {:50}".format(directory), end="\r")
+        try:
+            inputFile = parseInputFile(testfile)
+            print("Test {:50}".format(directory), end="\r")
+        except ValueError as e:
+            print("Test {:50} [red]FAILED DURING PARSING[/]: ".format(directory) + str(e))
+            failedTests += 1
+            continue
 
         try:
             tic = timer()

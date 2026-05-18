@@ -33,39 +33,47 @@ import pyvista
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
-from edelweissfe.utils.misc import convertLinesToStringDictionary
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
-documentation = {
-    "file": "path to database file",
-    "result": "result name in database (optional if database contains only one dataset)",
-}
+inputLanguage = InputLanguage()
+module = inputLanguage["analyticalField"].addModule("fromVtk", "Use PyVista to interpolate from vtk data.")
 
-# from inspect import signature
+module.addRequiredArg("file", "path to database file", str)
+module.addRequiredArg("result", "result name in database", str)
+
+documentation = [module]
+
+
+@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
+def analyticalFieldFactory(name, FEModel, **kwargs):
+    kwargs = CaseInsensitiveDict(kwargs)
+
+    file = kwargs["file"]
+    result = kwargs["result"]
+
+    return AnalyticalField(name, FEModel, file, result)
 
 
 class AnalyticalField(AnalyticalFieldBase):
-    """ """
-
-    def __init__(self, name, data, model):
+    def __init__(self, name: str, FEModel, file: str, result: str):
         self.name = name
         self.type = "fromVtk"
 
-        options = convertLinesToStringDictionary(data)
-
-        self.domainSize = model.domainSize
-
-        file = options["file"]
+        self.domainSize = FEModel.domainSize
 
         reader = pyvista.get_reader(file)
         self.data = reader.read()
 
-        result = options.get("result")
         availableResults = self.data.array_names
 
-        try:
-            assert len(availableResults) > 0
-        except AssertionError:
-            raise AssertionError("Database does not contain at least one result.")
+        if not len(availableResults) > 0:
+            raise ValueError("Database does not contain at least one result.")
 
         if not result:
             if len(availableResults) == 1:

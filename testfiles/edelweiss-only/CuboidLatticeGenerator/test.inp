@@ -29,14 +29,14 @@ storeIn=topRP
 
 *step, solver=theSolver, maxInc=1, minInc=1e-3, maxNumInc=100, maxIter=25, stepLength=180
 ** initializematerial, name=init, elSet=all
-dirichlet, name=1, nSet=gen_bottom,       field=displacement, 1=0, 2=0, 3=0
-dirichlet, name=4, nSet=gen_top,       field=displacement, 3=0.1, 2=0, 1=0
+>>dirichlet, name=1, nSet=gen_bottom,       field=displacement, 1=0, 2=0, 3=0
+>>dirichlet, name=4, nSet=gen_top,       field=displacement, 3=0.1, 2=0, 1=0
 
 *fieldOutput
-create=perNode, name=displacement, elSet=all, field=displacement, result=U
-create=perElement, name=stress,       elSet=all, result=stress, quadraturePoint=0:3, f(x)='np.mean(x,axis=1)'
+>>perNode, name=displacement, elSet=all, field=displacement, result=U
+>>perElement, name=stress,       elSet=all, result=stress, quadraturePoint=0:3, f(x)='np.mean(x,axis=1)'
 
 *output, type=ensight, name=myEnsightOutput
-create=perNode, fieldOutput=displacement
-configuration, overwrite=yes
+>>perNode, fieldOutput=displacement
+>>configuration, overwrite=yes
 

@@ -32,12 +32,25 @@
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
-from edelweissfe.utils.misc import convertLinesToStringDictionary
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
-documentation = {
-    "nSet": "(slave) node set, which is constrained to the reference point",
-    "referencePoint": "(master) reference point",
-}
+# documentation = {
+#     "nSet": "(slave) node set, which is constrained to the reference point",
+#     "referencePoint": "(master) reference point",
+# }
+
+inputLanguage = InputLanguage()
+module = inputLanguage["constraint"].addModule("rigidbody", "A rigid body constraint tying nodes to a reference point.")
+
+module.addRequiredArg("nSet", "Node set to tie.", str)
+module.addRequiredArg("referencePoint", "Node set containing only the reference point.", str)
+
+documentation = [module]
 
 
 class Constraint(ConstraintBase):
@@ -46,11 +59,14 @@ class Constraint(ConstraintBase):
     Currently only available for spatialdomain = 3D.
     """
 
-    def __init__(self, name, definitionLines, model):
-        super().__init__(name, definitionLines, model)
+    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+    @castKwargsValuesAndAddDefaults(module)
+    def __init__(self, name, model, *args, **kwargs):
+        super().__init__(name, model, *args, **kwargs)
 
         # self.name = name
-        definition = convertLinesToStringDictionary(definitionLines)
+
+        kwargs = CaseInsensitiveDict(kwargs)
 
         self.nDim = model.domainSize
         nDim = self.nDim
@@ -58,15 +74,15 @@ class Constraint(ConstraintBase):
         if nDim == 2:
             raise Exception("rigid body constraint not yet implemented for 2D")
 
-        rbNset = definition["nSet"]
+        rbNset = kwargs["nSet"]
         nodeSets = model.nodeSets
 
-        if len(nodeSets[definition["referencePoint"]]) > 1:
+        if len(nodeSets[kwargs["referencePoint"]]) > 1:
             raise Exception(
-                "node set for reference point '{:}' contains more than one node".format(definition["referencePoint"])
+                "node set for reference point '{:}' contains more than one node".format(kwargs["referencePoint"])
             )
 
-        self.referencePoint = nodeSets[definition["referencePoint"]][0]
+        self.referencePoint = nodeSets[kwargs["referencePoint"]][0]
 
         slaveNodeSet = nodeSets[rbNset]  # slave node set may contain the reference point
 

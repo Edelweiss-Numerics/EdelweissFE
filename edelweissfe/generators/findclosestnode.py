@@ -37,22 +37,31 @@ import numpy as np
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.exceptions import WrongDomain
-from edelweissfe.utils.misc import convertLinesToStringDictionary
+from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
-documentation = {
-    "location": "The location of the node",
-    "storeIn": "Store in this node set",
-}
+inputLanguage = InputLanguage()
+module = inputLanguage["modelGenerator"].addModule(
+    "findclosestnode", "Find the node closest to a given spatial position, and store it in an existing or new node set."
+)
 
-identification = "findclosestnode"
+module.addRequiredArg("location", "Query point.", str)
+module.addRequiredArg("storeIn", "Node set to store closest node in.", str)
+
+documentation = [module]
 
 
-def generateModelData(generatorDefinition: dict, model: FEModel, journal: Journal):
-    options = generatorDefinition["data"]
-    options = convertLinesToStringDictionary(options)
+@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
+def generateModelData(generatorDefinition: dict, model: FEModel, journal: Journal, *args, **kwargs):
+    kwargs = CaseInsensitiveDict(kwargs)
 
-    loc = np.fromstring(options["location"], sep=",", dtype=float)
+    loc = np.fromstring(kwargs["location"], sep=",", dtype=float)
 
     if len(loc) != model.domainSize:
         raise WrongDomain("Spatial dimension of specified location does not match model dimension")
@@ -65,9 +74,10 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal: Journa
 
     closestNode = list(model.nodes.values())[indexClosest]
 
-    if options["storeIn"] in model.nodeSets:
-        raise Exception("Nodeset {options['storeIn']} already exists")
+    storeIn = kwargs["storeIn"]
+    if storeIn in model.nodeSets:
+        raise Exception(f"Nodeset {storeIn} already exists")
 
-    model.nodeSets[options["storeIn"]] = NodeSet(options["storeIn"], [closestNode])
+    model.nodeSets[storeIn] = NodeSet(storeIn, [closestNode])
 
     return model

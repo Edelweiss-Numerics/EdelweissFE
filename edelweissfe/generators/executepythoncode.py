@@ -32,11 +32,19 @@
 Directly execute Python code to create the model tree.
 """
 
-documentation = {}
+from edelweissfe.utils.inputlanguage import InputLanguage
+
+inputLanguage = InputLanguage()
+module = inputLanguage["modelGenerator"].addModule(
+    "executePythoncode", "Directly execute Python code to create the model tree."
+)
+module.addRequiredDatalines("Python code to run", str)
+
+documentation = [module]
 
 
-def generateModelData(generatorDefinition, model, journal):
-    codeLines = "\n".join(generatorDefinition["data"])
+def generateModelData(generatorDefinition, model, journal, *args, **kwargs):
+    codeLines = "\n".join(args)
 
     exec(codeLines, {"model": model})
 

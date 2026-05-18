@@ -30,13 +30,24 @@
 # @author: Matthias Neuner
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.utils.math import execModelAccessibleExpression
 
 """This step action may be used for updating something in the model at the beginning
 of a step.
 """
 
-documentation = {"update": "Model accessible, executable expression"}
+
+inputLanguage = InputLanguage()
+module = inputLanguage["step"].getModule("adaptive")
+
+kw = module.addOptionalKeyword(
+    "modelupdate", "This step action may be used for updating the model at the beginning of a step."
+)
+# kw.addRequiredArg("name", "Name of the step action.", str)
+kw.addRequiredArg("update", "Model accessible, executable expression", str)
+
+documentation = [kw]
 
 
 class StepAction(StepActionBase):
@@ -59,7 +70,7 @@ class StepAction(StepActionBase):
         """Update the model based on an executable provided Python expression."""
 
         if not self.active:
-            return
+            return model
 
         journal.message("Updating model: {:}".format(self.updateExpression), self.name)
         execModelAccessibleExpression(

@@ -15,20 +15,20 @@ nX=10
 nY=10
 
 *fieldOutput
-create=perNode, nSet=gen_bottom, result=P, field=displacement, name=RF
-create=perNode, elSet=all, field=displacement, result=U, name=displacement
+>>perNode, nSet=gen_bottom, result=P, field=displacement, name=RF
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
 
 *output, type=monitor
 fieldOutput=RF, f(x)='mean(x[:,1])'
 
 *output, type=ensight, name=esExport
-create=perNode, fieldOutput=displacement
-configuration, overwrite=yes
+>>perNode, fieldOutput=displacement
+>>configuration, overwrite=yes
 
 *step, maxInc=1e-1, minInc=1e-8, maxNumInc=50, maxIter=25, stepLength=100, solver=theSolver
-dirichlet, name=bottom, nSet=gen_bottom,  field=displacement, 2=0, 1=0
-nodeforces, name=cloadTop, nSet=gen_top, field=displacement, 2=-50
+>>dirichlet, name=bottom, nSet=gen_bottom,  field=displacement, 2=0, 1=0
+>>nodeforces, name=cloadTop, nSet=gen_top, field=displacement, 2=-50
 *step, maxInc=1e-1, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100, solver=theSolver
-nodeforces, name=cloadTop, nSet=gen_top, 2=-10, f(t)=sin(t*2*pi)
+>>nodeforces, name=cloadTop, 2=-10, f(t)=sin(t*2*pi)
 *step, maxInc=1e-1, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100, solver=theSolver
-nodeforces, name=cloadTop, nSet=gen_top, 2=+50, f(t)=t
+>>nodeforces, name=cloadTop, 2=+50, f(t)=t

@@ -33,6 +33,7 @@ import numpy as np
 import sympy as sp
 
 from edelweissfe.stepactions.base.bodyloadbase import BodyLoadBase
+from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
 
 """
@@ -40,11 +41,18 @@ Simple body force load.
 If not modified in subsequent steps, the load held constant.
 """
 
-documentation = {
-    "forceVector": "The force vector",
-    "delta": "In subsequent steps only: define the updated force vector incrementally",
-    "f(t)": "(Optional) define an amplitude in the step progress interval [0...1]",
-}
+
+inputLanguage = InputLanguage()
+module = inputLanguage["step"].getModule("adaptive")
+
+kw = module.addOptionalKeyword("bodyforce", "Apply body forces on element sets.")
+kw.addRequiredArg("name", "Name of the step action.", str)
+kw.addRequiredArg("elSet", "The element set for application of the boundary condition.", str)
+kw.addRequiredArg("forceVector", "The force vector.", str)
+kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+kw.addOptionalArg("delta", "In subsequent steps only: define the updated force vector incrementally", str, 0)
+
+documentation = [kw]
 
 
 class StepAction(BodyLoadBase):
@@ -58,7 +66,7 @@ class StepAction(BodyLoadBase):
             raise Exception("BodyForce {:}: force vector has wrong dimension!".format(self._name))
 
         self._delta = load
-        if "f(t)" in action:
+        if action["f(t)"] is not None:
             t = sp.symbols("t")
             self._amplitude = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
         else:
@@ -79,12 +87,12 @@ class StepAction(BodyLoadBase):
             self._idle = True
 
     def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
-        if "forceVector" in action:
+        if action["forceVector"] is not None:
             self._delta = np.fromstring(action["forceVector"], sep=",", dtype=np.double) - self._forceAtStepStart
-        elif "delta" in action:
+        elif action["delta"] is not None:
             self._delta = np.fromstring(action["delta"], sep=",", dtype=np.double)
 
-        if "f(t)" in action:
+        if action["f(t)"] is not None:
             t = sp.symbols("t")
             self._amplitude = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
         else:

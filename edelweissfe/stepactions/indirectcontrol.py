@@ -32,7 +32,9 @@
 import numpy as np
 
 from edelweissfe.numerics.dofmanager import DofManager
+from edelweissfe.solvers.nonlinearimplicitstaticparallelarclength import NISTPArcLength
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.math import evalModelAccessibleExpression
 
@@ -40,11 +42,24 @@ from edelweissfe.utils.math import evalModelAccessibleExpression
 Indirect (displacement) controller for the NISTArcLength solver
 """
 
-documentation = {
-    "dof1": "Degree of freedom for the constraint ( model access expression )",
-    "dof2": "Degree of freedom for the constraint ( model access expression )",
-    "L": "Final distance (e.g. crack opening)",
-}
+
+inputLanguage = InputLanguage()
+module = inputLanguage["step"].getModule("adaptive")
+
+kw = module.addOptionalKeyword(
+    "indirectcontrol",
+    "Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.",
+)
+# kw.addRequiredArg("name", "Name of the step action.", str)
+kw.addRequiredArg("dof1", "Degree of freedom for the constraint (model access expression).", str)
+kw.addRequiredArg("dof2", "Degree of freedom for the constraint (model access expression).", str)
+kw.addRequiredArg("cVector1", "c vector.", str)
+kw.addRequiredArg("cVector2", "c vector.", str)
+kw.addRequiredArg("L", "Final distance (e.g. crack opening)", float)
+kw.addOptionalArg("exportCVector", "File to export the computed c vector", str, "")
+kw.addOptionalArg("absolute", "Use absolute formulation", bool, True)
+
+documentation = [kw]
 
 
 class StepAction(StepActionBase):
@@ -55,6 +70,8 @@ class StepAction(StepActionBase):
         self.journal = journal
         self.model = model
         self.currentL0 = 0.0
+
+        self.absolute = action["absolute"]
 
         self.updateStepAction(action, jobInfo, model, fieldOutputController, journal)
 
@@ -82,12 +99,10 @@ class StepAction(StepActionBase):
         self.currentL0 = self.L
 
     def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
-        self.definition = str(action.get("definition", "absolute"))
-
-        if self.definition == "absolute":
-            self.L = float(action["L"]) - self.currentL0
+        if self.absolute:
+            self.L = action["L"] - self.currentL0
         else:
-            self.L = float(action["L"])
+            self.L = action["L"]
 
         self.dof1 = evalModelAccessibleExpression(action["dof1"], model)
         self.dof2 = evalModelAccessibleExpression(action["dof2"], model)
@@ -96,3 +111,6 @@ class StepAction(StepActionBase):
         self.c2 = np.asarray(eval(action["cVector2"].replace("x", "0")), dtype=float)
 
         self.c = np.hstack([self.c1, self.c2])
+
+        arcLengthController = NISTPArcLength(jobInfo, journal)
+        self.arcLengthController = arcLengthController

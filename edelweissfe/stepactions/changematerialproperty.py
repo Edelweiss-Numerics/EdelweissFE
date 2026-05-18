@@ -29,6 +29,7 @@
 import sympy as sp
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 
@@ -37,11 +38,17 @@ Stepaction to change material properties.
 
 """
 
-documentation = {
-    "material": "The id of the material to be changed",
-    "index": "The index of the property in the material properties vector",
-    "f(t)": "(Optional) define an amplitude in the step progress interval [0...1]",
-}
+
+inputLanguage = InputLanguage()
+module = inputLanguage["step"].getModule("adaptive")
+
+kw = module.addOptionalKeyword("changematerialproperty", "Stepaction to change material properties.")
+kw.addRequiredArg("name", "Name of the step action.", str)
+kw.addRequiredArg("material", "The id of the material to be changed", str)
+kw.addRequiredArg("index", "The index of the property in the material properties vector", int)
+kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+
+documentation = [kw]
 
 
 class StepAction(StepActionBase):
@@ -60,7 +67,7 @@ class StepAction(StepActionBase):
         """Update the function describing the material property"""
         self.active = True
 
-        if "f(t)" in action:
+        if action["f(t)"] is not None:
             t = sp.symbols("t")
             self.f_t = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
 

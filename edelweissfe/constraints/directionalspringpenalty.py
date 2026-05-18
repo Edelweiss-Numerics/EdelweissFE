@@ -35,31 +35,44 @@ from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.misc import convertLinesToStringDictionary
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
 """
 A penalty based constraint used for assigning a specific stiffness to the nodes of a defined node set.
 """
 
-documentation = {
-    "field": "The field this constraint acts on.",
-    "component": "The component of the field.",
-    "penalty": "The numerical penalty value.",
-    "nSet": "The node set to be constrained.",
-}
+inputLanguage = InputLanguage()
+module = inputLanguage["constraint"].addModule(
+    "directionalSpringPenalty",
+    "A penalty based constraint used for assigning a specific stiffness to the nodes of a defined node set.",
+)
+
+module.addRequiredArg("field", "The field this constraint acts on.", str)
+module.addRequiredArg("component", "The component of the field.", int)
+module.addRequiredArg("penalty", "The numerical penalty value.", float)
+module.addRequiredArg("nSet", "The node set to be constrained.", str)
+
+documentation = [module]
 
 
 class Constraint(ConstraintBase):
-    def __init__(self, name: str, definitionLines: list, model: FEModel):
-        super().__init__(name, definitionLines, model)
+    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+    @castKwargsValuesAndAddDefaults(module)
+    def __init__(self, name: str, model: FEModel, *args, **kwargs):
+        super().__init__(name, model, *args, **kwargs)
 
-        definition = convertLinesToStringDictionary(definitionLines)
+        kwargs = CaseInsensitiveDict(kwargs)
 
-        theField = definition["field"]
+        theField = kwargs["field"]
         self.sizeField = getFieldSize(theField, model.domainSize)
-        self.component = int(definition["component"])
-        self.penalty = float(definition["penalty"])
-        self._nodes = model.nodeSets[definition["nSet"]]
+        self.component = kwargs["component"]
+        self.penalty = kwargs["penalty"]
+        self._nodes = model.nodeSets[kwargs["nset"]]
         self._nNodes = len(self._nodes)
         self._nDof = self.sizeField * self._nNodes
 

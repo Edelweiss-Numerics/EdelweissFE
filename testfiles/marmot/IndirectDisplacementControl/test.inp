@@ -31,49 +31,49 @@ location='60, 0, 0'
 storeIn=IDC2
 
 *step, maxInc=1, minInc=1, maxNumInc=100000, maxIter=25, stepLength=1, solver=NISTPArcLen
-setfield,   name=omegaIni,  fieldOutput=alphaDWeak, value=1e-2, type=uniform
+>>setfield,   name=omegaIni,  fieldOutput=alphaDWeak, value=1e-2, type=uniform
 
 *step, maxInc=1e-2, startInc=1e-2, minInc=1e-6, maxNumInc=100000, maxIter=25, stepLength=1, solver=NISTPArcLen
-options, category=Ensight, intermediateSaveInterval=1, minDTForOutput=0
-options, category=NISTArcLength, arcLengthController=indirectcontrol, stopCondition='fieldOutputs["I1pMax"] > 0.01'
+>>options, category=Ensight, intermediateSaveInterval=1, minDTForOutput=0
+>>options, category=NISTArcLength, arcLengthController=indirectcontrol, stopCondition='fieldOutputs["I1pMax"] > 0.01'
 
-indirectcontrol, dof1='model.nodeSets["IDC1"][0].fields["displacement"]', cVector1='[-1,0,0]', dof2='model.nodeSets["IDC2"][0].fields["displacement"]', cVector2='[1,0,0]', L=1.,
+>>indirectcontrol, dof1='model.nodeSets["IDC1"][0].fields["displacement"]', cVector1='[-1,0,0]', dof2='model.nodeSets["IDC2"][0].fields["displacement"]', cVector2='[1,0,0]', L=1.,
 
-dirichlet, name=leftX, nSet=gen_left,  field=displacement, 1=0.
-dirichlet, name=leftY, nSet=gen_left,  field=displacement, 2=0.
-dirichlet, name=leftZ, nSet=gen_left,  field=displacement, 3=0.
-dirichlet, name=right, nSet=gen_right, field=displacement, 1=1.
+>>dirichlet, name=leftX, nSet=gen_left,  field=displacement, 1=0.
+>>dirichlet, name=leftY, nSet=gen_left,  field=displacement, 2=0.
+>>dirichlet, name=leftZ, nSet=gen_left,  field=displacement, 3=0.
+>>dirichlet, name=right, nSet=gen_right, field=displacement, 1=1.
 
 *fieldOutput
-name=displacement,    create=perNode, elSet=all, field=displacement, result=U
-name=nonlocal_damage, create=perNode, elSet=all, field=nonlocal damage, result=U
+>>perNode, name=displacement,    elSet=all, field=displacement, result=U
+>>perNode, name=nonlocal_damage, elSet=all, field=nonlocal damage, result=U
 
-name=strain, create=perElement, elSet=all, result=strain, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
-name=stress, create=perElement, elSet=all, result=stress, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
-name=omega,  create=perElement, elSet=all, result=omega,  quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
-name=alphaP, create=perElement, elSet=all, result=alphaP, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
-name=alphaD, create=perElement, elSet=all, result=alphaD, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
-name=I1p,    create=perElement, elSet=all, result=I1p,    quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perElement, name=strain, elSet=all, result=strain, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perElement, name=stress, elSet=all, result=stress, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perElement, name=omega,  elSet=all, result=omega,  quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perElement, name=alphaP, elSet=all, result=alphaP, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perElement, name=alphaD, elSet=all, result=alphaD, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perElement, name=I1p,    elSet=all, result=I1p,    quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
 
-name=I1pMax,    create=perElement, elSet=all, result=I1p,    quadraturePoint=0:8, f(x)='np.max(x)', saveHistory=true
-name=alphaDMax, create=perElement, elSet=all, result=alphaD, quadraturePoint=0:8, f(x)='np.max(x)', saveHistory=true
-name=omegaMax,  create=perElement, elSet=all, result=omega,  quadraturePoint=0:8, f(x)='np.max(x)', saveHistory=true
+>>perElement, name=I1pMax,    elSet=all, result=I1p,    quadraturePoint=0:8, f(x)='np.max(x)', saveHistory=true
+>>perElement, name=alphaDMax, elSet=all, result=alphaD, quadraturePoint=0:8, f(x)='np.max(x)', saveHistory=true
+>>perElement, name=omegaMax,  elSet=all, result=omega,  quadraturePoint=0:8, f(x)='np.max(x)', saveHistory=true
 
-name=alphaDWeak, create=perElement, elSet=gen_centerSliceX, result=alphaD, quadraturePoint=0:8
+>>perElement, name=alphaDWeak, elSet=gen_centerSliceX, result=alphaD, quadraturePoint=0:8
 
-name=U1,  create=perNode, nSet=gen_right, field=displacement, result=U, f(x)='mean(x[:,0])', saveHistory=true, export=U
-name=RF1, create=perNode, nSet=gen_right, field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=true, export=RF
+>>perNode, name=U1,  nSet=gen_right, field=displacement, result=U, f(x)='mean(x[:,0])', saveHistory=true, export=U
+>>perNode, name=RF1, nSet=gen_right, field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=true, export=RF
 
 *output, type=ensight, name=test
-create=perNode, fieldOutput=displacement
-create=perNode, fieldOutput=nonlocal_damage
-create=perElement, fieldOutput=omega
-create=perElement, fieldOutput=I1p
-create=perElement, fieldOutput=alphaP
-create=perElement, fieldOutput=alphaD
-create=perElement, fieldOutput=stress
-create=perElement, fieldOutput=strain
-configuration, overwrite=yes
+>>perNode, fieldOutput=displacement
+>>perNode, fieldOutput=nonlocal_damage
+>>perElement, fieldOutput=omega
+>>perElement, fieldOutput=I1p
+>>perElement, fieldOutput=alphaP
+>>perElement, fieldOutput=alphaD
+>>perElement, fieldOutput=stress
+>>perElement, fieldOutput=strain
+>>configuration, overwrite=yes
 
 *output, type=meshPlot
 figure=1, axSpec=111, create=xyData, x=U1, y=RF1

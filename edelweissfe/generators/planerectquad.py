@@ -59,37 +59,57 @@ from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.misc import convertLinesToStringDictionary
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
-documentation = {
-    "x0": "(optional) origin at x axis",
-    "y0": "(optional) origin at y axis",
-    "h": "(optional) height of the body",
-    "l": "(optional) length of the body",
-    "nX": "(optional) number of elements along x",
-    "nY": "(optional) number of elements along y",
-    "elType": "type of element",
-}
+inputLanguage = InputLanguage()
+module = inputLanguage["modelGenerator"].addModule(
+    "planeRectQuad", "A mesh generator for cuboid geometries and structured hex meshes."
+)
+
+module.addOptionalArg("x0", "Origin along the x axis.", float, 0.0)
+module.addOptionalArg("y0", "Origin along the y axis.", float, 0.0)
+module.addOptionalArg("z0", "Origin along the z axis.", float, 0.0)
+
+module.addOptionalArg("l", "Height of the body.", float, 1.0)
+module.addOptionalArg("h", "Length of the body.", float, 1.0)
+
+module.addOptionalArg("nX", "Number of elements along the x axis.", int, 1)
+module.addOptionalArg("nY", "Number of elements along the y axis.", int, 1)
+module.addOptionalArg("nZ", "Number of elements along the z axis.", int, 1)
+
+module.addRequiredArg("elType", "Element type.", str)
+module.addOptionalArg("elProvider", "Element provider.", str, None)
+
+documentation = [module]
 
 
-def generateModelData(generatorDefinition, model, journal):
-    options = generatorDefinition["data"]
-    options = convertLinesToStringDictionary(options)
+@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
+def generateModelData(generatorDefinition, model, journal, *args, **kwargs):
+    kwargs = CaseInsensitiveDict(kwargs)
 
-    name = generatorDefinition.get("name", "planeRect")
+    name = generatorDefinition.get("name", "planeRectQuad")
 
-    x0 = float(options.get("x0", 0.0))
-    y0 = float(options.get("y0", 0.0))
-    h = float(options.get("h", 1.0))
-    l = float(options.get("l", 1.0))  # noqa: E741
-    nX = int(options.get("nX", 10))
-    nY = int(options.get("nY", 10))
-    elType = getElementClass(options["elType"], options.get("elProvider", None))
+    x0 = kwargs["x0"]
+    y0 = kwargs["y0"]
 
-    testEl = elType(
-        options["elType"],
-        0,
-    )
+    l = kwargs["l"]  # noqa: E741
+    h = kwargs["h"]
+
+    nX = kwargs["nX"]
+    nY = kwargs["nY"]
+
+    elTypeName = kwargs["elType"]
+    elProvider = kwargs["elProvider"]
+
+    elType = getElementClass(elTypeName, elProvider)
+
+    testEl = elType(elTypeName, 0)
     if testEl.nNodes == 4:
         nNodesX = nX + 1
         nNodesY = nY + 1
@@ -121,12 +141,12 @@ def generateModelData(generatorDefinition, model, journal):
     for x in range(nX):
         for y in range(nY):
             if testEl.nNodes == 4:
-                newEl = elType(options["elType"], currentElementLabel)
+                newEl = elType(elTypeName, currentElementLabel)
                 newEl.setNodes([nG[x, y], nG[x + 1, y], nG[x + 1, y + 1], nG[x, y + 1]])
 
             elif testEl.nNodes == 8:
                 newEl = elType(
-                    options["elType"],
+                    elTypeName,
                     currentElementLabel,
                 )
                 newEl.setNodes(

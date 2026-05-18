@@ -24,24 +24,24 @@ all
 *solver, solver=NISTParallel, name=theSolver
 
 *fieldOutput
-create=perNode, name=Displacement,      elSet=all,           field=displacement, result=U,
-create=perNode, name=DisplacementN,      nSet=all,           field=displacement, result=U,
-create=perNode, name=DisplacementTop,   elSet=gen_top,       field=displacement, result=U, saveHistory=True
-create=perNode, name=LoadTop,           nSet=gen_bottom,    field=displacement, result=P, saveHistory=True
-create=perElement, name=E,                 elSet=all,          result=EStatic,  quadraturePoint=1, f(x)= 'x[0]', saveHistory=True
+>>perNode, name=Displacement,      elSet=all,           field=displacement, result=U,
+>>perNode, name=DisplacementN,      nSet=all,           field=displacement, result=U,
+>>perNode, name=DisplacementTop,   elSet=gen_top,       field=displacement, result=U, saveHistory=True
+>>perNode, name=LoadTop,           nSet=gen_bottom,    field=displacement, result=P, saveHistory=True
+>>perElement, name=E,                 elSet=all,          result=EStatic,  quadraturePoint=1, f(x)= 'x[0]', saveHistory=True
 
 *output, type=monitor
 name='displacement,top,vertical,mean',  fieldOutput=DisplacementTop, f(x)='mean(x[:,1])'
 name='applied load',                    fieldOutput=LoadTop, f(x)='sum(x[:,1]) / (100*1)'
 
 *output, type=ensight,
-create=perNode, fieldOutput=Displacement
-configuration, overwrite=yes
-**create=perNode, fieldOutput=Nonlocal Damage
+>>perNode, fieldOutput=Displacement
+>>configuration, overwrite=yes
+**>>perNode, fieldOutput=Nonlocal Damage
 
 *output, type=meshPlot
 figure=1, axSpec=121, create=xyData,  y=DisplacementTop, x=time, f(y)='mean(y[:,:,1], axis=1) / 200', label=Neuner et al. (24h),
-figure=1, axSpec=122, create=perNode, fieldOutput=DisplacementN, f(x)='x[:,1]', label=U
+figure=1, axSpec=122, >>perNode, fieldOutput=DisplacementN, f(x)='x[:,1]', label=U
 figure=2, axSpec=111, create=xyData,  y=E, x=time,  label=E,
 
 *configurePlots
@@ -49,10 +49,10 @@ figure=1, axSpec=121, flipY=True, yLabel=$\\varepsilon\\thinspace$(-), xLabel=$t
 figure=1, axSpec=122, aspect=equal
 
 *step, solver=theSolver, maxInc=1e-1, minInc=1e-6, maxNumInc=1000, maxIter=25, stepLength=24
-dirichlet, name=bottom,  nSet=gen_bottom, field=displacement, 2=0.0
-dirichlet, name=corner,  nSet=gen_leftBottom, field=displacement, 2=0.0, 1=0
+>>dirichlet, name=bottom,  nSet=gen_bottom, field=displacement, 2=0.0
+>>dirichlet, name=corner,  nSet=gen_leftBottom, field=displacement, 2=0.0, 1=0
 
 *step, solver=theSolver, maxInc=2e-2, minInc=1e-1, maxNumInc=1000, maxIter=25, stepLength=0.01
-distributedload, name=dload, surface=gen_top, magnitude=3.9, type=pressure, f(t)=t
+>>distributedload, name=dload, surface=gen_top, magnitude=3.9, type=pressure, f(t)=t
 
 *step, solver=theSolver, maxInc=5e-3, minInc=1e-6, maxNumInc=1000, maxIter=25, stepLength=1344

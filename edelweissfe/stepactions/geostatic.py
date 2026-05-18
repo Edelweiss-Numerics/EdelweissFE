@@ -37,15 +37,22 @@ Initialize materials to an geostatic stress state
 import numpy as np
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.steps.adaptivestep import InputLanguage
 
-documentation = {
-    "p1": "sig_x=sig_y=sig_z in first point",
-    "h1": "y coordinate of first point, default=1.0",
-    "p2": "s11=s22=s33 in second point, default=p1",
-    "h2": "y coordinate of second point, default=-1.0",
-    "xLateral": "ratio of sig_x/sig_y, default=1.0",
-    "zLateral": "ratio of sig_z/sig_y, default=1.0",
-}
+inputLanguage = InputLanguage()
+module = inputLanguage["step"].getModule("adaptive")
+
+kw = module.addOptionalKeyword("geostatic", "Initialize materials to an geostatic stress state.")
+kw.addRequiredArg("name", "Name of the step action.", str)
+kw.addRequiredArg("p1", "sig_x=sig_y=sig_z in first point.", float)
+kw.addOptionalArg("p2", "sig_x=sig_y=sig_z in second point.", float, None)
+kw.addOptionalArg("h1", "y coordinate of first point", float, 1.0)
+kw.addOptionalArg("h2", "y coordinate of second point", float, -1.0)
+kw.addOptionalArg("xLateral", "ratio of sig_x/sig_y, default=1.0", float, 1.0)
+kw.addOptionalArg("zLateral", "ratio of sig_z/sig_y, default=1.0", float, 1.0)
+kw.addOptionalArg("elSet", "The element set for which the initaliziation is performed", str, "all")
+
+documentation = [kw]
 
 
 class StepAction(StepActionBase):
@@ -55,13 +62,16 @@ class StepAction(StepActionBase):
     def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
         self.name = name
 
-        self.geostaticElements = model.elementSets[action.get("elSet", "all")]
-        self.p1 = float(action["p1"])
-        self.p2 = float(action.get("p2", self.p1))
-        self.level1 = float(action.get("h1", 1.0))
-        self.level2 = float(action.get("h2", -1.0))
-        self.xLateral = float(action.get("xLateral", 1.0))
-        self.zLateral = float(action.get("zLateral", 1.0))
+        self.geostaticElements = model.elementSets[action["elSet"]]
+        self.p1 = action["p1"]
+        if action["p2"] is not None:
+            self.p2 = action["p2"]
+        else:
+            self.p2 = action["p1"]
+        self.level1 = action["h1"]
+        self.level2 = action["h2"]
+        self.xLateral = action["xLateral"]
+        self.zLateral = action["zLateral"]
 
         self.geostaticDefinition = np.array(
             [

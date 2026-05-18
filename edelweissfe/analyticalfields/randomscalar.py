@@ -25,7 +25,9 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Define a random field using the GSTools library."""
+"""Define a random field using the GSTools library.
+"Müller, S., Schüler, L., Zech, A., and Heße, F.: GSTools v1.3: a toolbox for geostatistical modelling in Python, Geosci. Model Dev., 15, 3161–3182, https://doi.org/10.5194/gmd-15-3161-2022, 2022."
+"""
 
 import gstools
 import numpy as np
@@ -34,32 +36,59 @@ from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.misc import convertLinesToStringDictionary, strCaseCmp
+from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+    strCaseCmp,
+)
 
-documentation = {
-    "model": "(Optional) default = Gaussian",
-    "mean": "(Optional) default = 0.",
-    "variance": "(Optional) default = 1.",
-    "lengthScale": "(Optional) default = 10.",
-    "seed": "(Optional) default = 0",
-}
+inputLanguage = InputLanguage()
+module = inputLanguage["analyticalField"].addModule("randomScalar", "Define a random field using the GSTools library.")
+
+module.addOptionalArg("model", "Covariance Model of the spatial random field", str, "Gaussian")
+module.addOptionalArg("mean", "Mean of the spatial random field", float, 0.0)
+module.addOptionalArg("variance", "Variance of the model", float, 1.0)
+module.addOptionalArg("lengthScale", "Length scale of the model", float, 10.0)
+module.addOptionalArg("nu", "Smoothness parameter for Matern covariance function", float, 1.0)
+module.addOptionalArg("seed", "Seed of the random number generator", int, 0)
+
+documentation = [module]
+
+
+@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
+def analyticalFieldFactory(name, FEModel, **kwargs):
+    kwargs = CaseInsensitiveDict(kwargs)
+
+    modelType = kwargs["model"]
+    mean = kwargs["mean"]
+    variance = kwargs["variance"]
+    lengthScale = kwargs["lengthScale"]
+    nu = kwargs["nu"]
+    seed = kwargs["seed"]
+
+    return AnalyticalField(name, FEModel, modelType, mean, variance, lengthScale, nu, seed)
 
 
 class AnalyticalField(AnalyticalFieldBase):
-    def __init__(self, name, data, model):
+    def __init__(
+        self,
+        name: str,
+        FEModel,
+        modelType=module["model"].default,
+        mean: float = module["mean"].default,
+        variance: float = module["variance"].default,
+        lengthScale: float = module["lengthScale"].default,
+        nu: float = module["nu"].default,
+        seed: int = module["seed"].default,
+    ):
         self.name = name
         self.type = "randomScalar"
 
-        options = CaseInsensitiveDict(convertLinesToStringDictionary(data))
-
-        self.domainSize = model.domainSize
-
-        modelType = options.get("model", "Gaussian")
+        self.domainSize = FEModel.domainSize
 
         if strCaseCmp(modelType, "Gaussian"):
-            variance = float(options.get("variance", 1.0))
-            lengthScale = float(options.get("lengthScale", 10.0))
-
             # modelMethod = getattr(gstools, modelType)
             model = gstools.Gaussian(
                 dim=self.domainSize,
@@ -67,11 +96,6 @@ class AnalyticalField(AnalyticalFieldBase):
                 len_scale=lengthScale,
             )
         elif strCaseCmp(modelType, "Matern"):
-            mean = float(options.get("mean", 0.0))
-            variance = float(options.get("variance", 1.0))
-            lengthScale = float(options.get("lengthScale", 10.0))
-            nu = float(options.get("nu", 1.0))
-
             # modelMethod = getattr(gstools, modelType)
             model = gstools.covmodel.Matern(
                 dim=self.domainSize,
@@ -82,8 +106,6 @@ class AnalyticalField(AnalyticalFieldBase):
         else:
             raise NotImplementedError(f"Model type {modelType} not implemented.")
 
-        mean = float(options.get("mean", 0.0))
-        seed = int(options.get("seed", 0))
         self.srf = gstools.SRF(model, seed=seed, mean=mean)
 
         return

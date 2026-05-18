@@ -11,15 +11,15 @@ weak
 *job, name=cpe4job, domain=2d
 *solver, solver=NISTParallel, name=theSolver
 *fieldOutput
-create=perNode, elSet=all, field=displacement, result=U, name=displacement
-create=perElement, elSet=all, result=stress, quadraturePoint=0:4, name=stress, f(x)='mean(x, axis=1)'
-create=perElement, elSet=all, result=strain, quadraturePoint=0:4, name=strain, f(x)='mean(x, axis=1)'
-create=perElement, elSet=all, result=alphaP, quadraturePoint=0:4, name=alphaP, f(x)='mean( x[:,:], axis=1) '
-create=perElement, elSet=all, result=alphaD, quadraturePoint=0:4, name=alphaD, f(x)='mean( x[:,:], axis=1) '
-create=perElement, elSet=all, result=omega,  quadraturePoint=0:4, name=omega,  f(x)='mean( x[:,:], axis=1) '
-create=perElement, elSet=all, result=enhancedstrainparameters, quadraturePoint=0:4, name=eas0, f(x)='mean(x[:,:,0], axis=1)'
-create=perElement, elSet=all, result=enhancedstrainparameters, quadraturePoint=0:4, name=eas1, f(x)='mean(x[:,:,1], axis=1)'
-create=perNode, nSet=gen_top, field=displacement, result=P, f(x)='( sum(x[:, 1]) ) ', name=RFTop, saveHistory=true
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
+>>perElement, elSet=all, result=stress, quadraturePoint=0:4, name=stress, f(x)='mean(x, axis=1)'
+>>perElement, elSet=all, result=strain, quadraturePoint=0:4, name=strain, f(x)='mean(x, axis=1)'
+>>perElement, elSet=all, result=alphaP, quadraturePoint=0:4, name=alphaP, f(x)='mean( x[:,:], axis=1) '
+>>perElement, elSet=all, result=alphaD, quadraturePoint=0:4, name=alphaD, f(x)='mean( x[:,:], axis=1) '
+>>perElement, elSet=all, result=omega,  quadraturePoint=0:4, name=omega,  f(x)='mean( x[:,:], axis=1) '
+>>perElement, elSet=all, result=enhancedstrainparameters, quadraturePoint=0:4, name=eas0, f(x)='mean(x[:,:,0], axis=1)'
+>>perElement, elSet=all, result=enhancedstrainparameters, quadraturePoint=0:4, name=eas1, f(x)='mean(x[:,:,1], axis=1)'
+>>perNode, nSet=gen_top, field=displacement, result=P, f(x)='( sum(x[:, 1]) ) ', name=RFTop, saveHistory=true
 
 
 *modelGenerator, generator=planeRectQuad, name=gen
@@ -30,21 +30,21 @@ nX=10
 nY=40
 
 *output, type=ensight, name=esExport
-create=perNode,    fieldOutput=displacement
-create=perElement, fieldOutput=stress
-create=perElement, fieldOutput=strain
-create=perElement, fieldOutput=alphaP
-create=perElement, fieldOutput=alphaD
-create=perElement, fieldOutput=omega
-create=perElement, fieldOutput=eas0
-create=perElement, fieldOutput=eas1
-configuration, overwrite=yes
+>>perNode,    fieldOutput=displacement
+>>perElement, fieldOutput=stress
+>>perElement, fieldOutput=strain
+>>perElement, fieldOutput=alphaP
+>>perElement, fieldOutput=alphaD
+>>perElement, fieldOutput=omega
+>>perElement, fieldOutput=eas0
+>>perElement, fieldOutput=eas1
+>>configuration, overwrite=yes
 
 *output, type=meshplot, name=RFPlot
 create=xyData, x=time, y=RFTop, legend=RF
 
 *step, solver=theSolver, maxInc=1e-1, minInc=1e-8, maxNumInc=10000, maxIter=25, stepLength=100
-options, category=NISTSolver, extrapolation=linear
-dirichlet, name=bottom, nSet=gen_bottom,  field=displacement, 2=0,
-dirichlet, name=bc, nSet=gen_leftBottom,  field=displacement, 2=0, 1=0
-dirichlet, name=top, nSet=gen_top, field=displacement, 2=-1
+>>options, category=NISTSolver, extrapolation=linear
+>>dirichlet, name=bottom, nSet=gen_bottom,  field=displacement, 2=0,
+>>dirichlet, name=bc, nSet=gen_leftBottom,  field=displacement, 2=0, 1=0
+>>dirichlet, name=top, nSet=gen_top, field=displacement, 2=-1

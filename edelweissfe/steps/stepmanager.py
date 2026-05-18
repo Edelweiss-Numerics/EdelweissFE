@@ -28,7 +28,6 @@
 
 import textwrap
 from collections import defaultdict
-from warnings import warn
 
 from edelweissfe.config.stepactions import stepActionFactory
 from edelweissfe.journal.journal import Journal
@@ -168,16 +167,7 @@ class StepManager:
                         journal,
                     )
 
-            try:
-                solverName = stepDefinition.stepOptions.pop("solver")
-            except KeyError:
-                # raise KeyError("Step definition missing solver option.")
-                warn(
-                    "Step definition missing solver option.",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
-                solverName = "default"
+            solverName = stepDefinition.stepOptions.pop("solver")
 
             try:
                 solver = solvers[solverName]

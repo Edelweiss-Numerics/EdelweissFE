@@ -25,17 +25,17 @@ block2
 *solver, solver=NISTParallel, name=theSolver
 
 *fieldOutput
-create=perNode, elSet=all,  name=displacement,  field=displacement, result=U
-create=perElement, elSet=all,  name=stress,        result=stress,      quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
-create=perElement, elSet=all,  name=strain,        result=strain,      quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perNode, elSet=all,  name=displacement,  field=displacement, result=U
+>>perElement, elSet=all,  name=stress,        result=stress,      quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perElement, elSet=all,  name=strain,        result=strain,      quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
 
 *output, type=ensight, name=esExport
-create=perNode,     fieldOutput=displacement
-create=perElement,  fieldOutput=stress
-create=perElement,  fieldOutput=strain
-configuration, overwrite=yes
+>>perNode,     fieldOutput=displacement
+>>perElement,  fieldOutput=stress
+>>perElement,  fieldOutput=strain
+>>configuration, overwrite=yes
 
 *step, solver=theSolver, maxInc=5e-1, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=1
-dirichlet, name=bot, nSet=n_bot, field=displacement, 1=0., 2=0., 3=0.
-dirichlet, name=top, nSet=n_top, field=displacement, 1=0., 2=-1., 3=0.
+>>dirichlet, name=bot, nSet=n_bot, field=displacement, 1=0., 2=0., 3=0.
+>>dirichlet, name=top, nSet=n_top, field=displacement, 1=0., 2=-1., 3=0.
 

@@ -8,9 +8,9 @@ all
 *solver, solver=NIST, name=theSolver
 
 *fieldOutput
-create=perNode, nSet=gen_bottom, result=P, field=displacement, name=RF
-create=perNode, elSet=all, field=displacement, result=U, name=displacement
-create=perElement, elSet=all, result=energy, name=energyQP1, quadraturePoint=0
+>>perNode, nSet=gen_bottom, result=P, field=displacement, name=RF
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
+>>perElement, elSet=all, result=energy, name=energyQP1, quadraturePoint=0
 
 *modelGenerator, generator=planeRectQuad, name=gen
 x0=0, l=1000
@@ -24,10 +24,10 @@ nY=2
 fieldOutput=RF, f(x)='mean(x[:,1])'
 
 *output, type=ensight, name=testWC
-configuration, overwrite=yes
-create=perNode,    fieldOutput=displacement
-create=perElement, fieldOutput=energyQP1
+>>configuration, overwrite=yes
+>>perNode,    fieldOutput=displacement
+>>perElement, fieldOutput=energyQP1
 
 *step, solver=theSolver, maxInc=1e-0, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100
-dirichlet, name=left, nSet=gen_left,  field=displacement, 2=0, 1=0
-nodeforces, name=cloadTop, nSet=gen_rightTop, components='0,-100000', field=displacement
+>>dirichlet, name=left, nSet=gen_left,  field=displacement, 2=0, 1=0
+>>nodeforces, name=cloadTop, nSet=gen_rightTop, components='0,-100000', field=displacement

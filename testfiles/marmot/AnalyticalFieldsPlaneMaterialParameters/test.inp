@@ -17,25 +17,25 @@ elType  =CPE4
 ** materialParameterFromField, index=0, field=AnalyticalField-01, type=settovalue
 ** materialParameterFromField, index=0, field=AnalyticalField-01, type=settovalue, "f(p,f)=3*f"
 ** materialParameterFromField, index=0, field=AnalyticalField-02, type=scale
-materialParameterFromField, index=1, field=AnalyticalField-02, type=settovalue, "f(p,f)=max(0.15, min(f, .35))"
+>>materialParameterFromField, index=1, field=AnalyticalField-02, type=settovalue, "f(p,f)=max(0.15, min(f, .35))"
 all
 
 *fieldOutput
-create=perNode, elSet=all, field=displacement, result=U, name=displacement
-create=perElement, elSet=all, result=strain, name=strain, quadraturePoint=0:4, f(x)='np.mean(x,axis=1)'
-create=perElement, elSet=all, result=stress, name=stress, quadraturePoint=0:4, f(x)='np.mean(x,axis=1)'
-create=fromExpression, elSet=all, expression="[el._materialProperties[0] for el in model.elementSets['all']]", name=E
-create=fromExpression, elSet=all, expression="[el._materialProperties[1] for el in model.elementSets['all']]", name=nu
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
+>>perElement, elSet=all, result=strain, name=strain, quadraturePoint=0:4, f(x)='np.mean(x,axis=1)'
+>>perElement, elSet=all, result=stress, name=stress, quadraturePoint=0:4, f(x)='np.mean(x,axis=1)'
+>>fromExpression, elSet=all, expression="[el._materialProperties[0] for el in model.elementSets['all']]", name=E
+>>fromExpression, elSet=all, expression="[el._materialProperties[1] for el in model.elementSets['all']]", name=nu
 
 *output, type=ensight, name=test
-create=perNode, fieldOutput=displacement
-create=perElement, fieldOutput=stress
-create=perElement, fieldOutput=strain
+>>perNode, fieldOutput=displacement
+>>perElement, fieldOutput=stress
+>>perElement, fieldOutput=strain
 
-create=perElement, fieldOutput=E
-create=perElement, fieldOutput=nu
+>>perElement, fieldOutput=E
+>>perElement, fieldOutput=nu
 
-configuration, overwrite=yes
+>>configuration, overwrite=yes
 
 ***output, type=monitor
 
@@ -54,8 +54,8 @@ lengthScale = 5
 seed        = 4
 
 *step, solver=theSolver, stepLength=1
-dirichlet,  name=x0u, nSet=gen_left,      field=displacement, 1=0.
-dirichlet,  name=y0u, nSet=gen_bottom,    field=displacement, 2=0.
+>>dirichlet,  name=x0u, nSet=gen_left,      field=displacement, 1=0.
+>>dirichlet,  name=y0u, nSet=gen_bottom,    field=displacement, 2=0.
 
 *step, solver=theSolver, stepLength=1
-distributedload, name=y1u, surface=gen_top,  field=displacement, magnitude=100, type=pressure
+>>distributedload, name=y1u, surface=gen_top,  field=displacement, magnitude=100, type=pressure

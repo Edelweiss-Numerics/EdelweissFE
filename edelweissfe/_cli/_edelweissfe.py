@@ -40,10 +40,11 @@ import numpy as np
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.utils.inputfileparser import (
+    inputLanguage,
     parseInputFile,
     printKeywords,
-    printKeywordsRST,
 )
+from edelweissfe.utils.inputlanguage import keywordIdentifier
 from edelweissfe.utils.printdocumentation import printDocumentation
 
 warnings.simplefilter("always", DeprecationWarning)
@@ -74,12 +75,6 @@ def main():
         help="write the final solution to a file",
     )
     parser.add_argument("--keywords", dest="kw", action="store_true", help="print keywords")
-    parser.add_argument(
-        "--keywordsRST",
-        dest="kwRST",
-        action="store_true",
-        help="print keywords in RST format",
-    )
     parser.add_argument("--doc=module", dest="doc", help="print keywords")
     args = parser.parse_args()
 
@@ -93,10 +88,6 @@ def main():
         printKeywords()
         exit(0)
 
-    if args.kwRST:
-        printKeywordsRST()
-        exit(0)
-
     if args.doc:
         printDocumentation(args.doc)
         exit(0)
@@ -108,7 +99,16 @@ def main():
     inputFiles = []
 
     for file in fileList:
-        inputFiles.append(parseInputFile(file))
+        inputFile = parseInputFile(file)
+        for keyword, definitions in inputFile.items():  # check if datalines are given where required
+            kw = inputLanguage[keyword]
+            for definition in definitions:
+                if kw.expectsRequiredDatalines:
+                    if not definition["datalines"]:
+                        raise ValueError(
+                            f"Error during parsing of keyword {keywordIdentifier}{keyword}: No datalines given. {keywordIdentifier}{keyword} expects data lines."
+                        )
+        inputFiles.append(inputFile)
 
     for inputFile in inputFiles:
         model, fieldOutputController = finiteElementSimulation(

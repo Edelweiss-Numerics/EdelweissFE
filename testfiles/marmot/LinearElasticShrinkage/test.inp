@@ -16,29 +16,29 @@ all
 *solver, solver=NISTParallel, name=theSolver
 
 *fieldOutput
-create=perNode, name=Displacement,      elSet=all,           field=displacement, result=U,
-create=perNode, name=DisplacementN,     nSet=all,           field=displacement, result=U,
-create=perNode, name=DisplacementTop,   elSet=gen_top,       field=displacement, result=U, saveHistory=True
-create=perNode, name=LoadTop,           nSet=gen_bottom,    field=displacement, result=P, saveHistory=True
+>>perNode, name=Displacement,      elSet=all,           field=displacement, result=U,
+>>perNode, name=DisplacementN,     nSet=all,           field=displacement, result=U,
+>>perNode, name=DisplacementTop,   elSet=gen_top,       field=displacement, result=U, saveHistory=True
+>>perNode, name=LoadTop,           nSet=gen_bottom,    field=displacement, result=P, saveHistory=True
 
 *output, type=monitor
 name='displacement,top,vertical,mean',  fieldOutput=DisplacementTop, f(x)='mean(x[:,1])'
 name='applied load',                    fieldOutput=LoadTop, f(x)='sum(x[:,1]) / (100*1)'
 
 *output, type=ensight,
-create=perNode, fieldOutput=Displacement
-configuration, overwrite=yes
+>>perNode, fieldOutput=Displacement
+>>configuration, overwrite=yes
 
 *output, type=meshPlot
 figure=1, axSpec=121, create=xyData,  y=DisplacementTop, x=time, f(y)='mean(y[:,:,1], axis=1) / 200',
-figure=1, axSpec=122, create=perNode, fieldOutput=Displacement, f(x)='x[:,1]', label=U
+figure=1, axSpec=122, >>perNode, fieldOutput=Displacement, f(x)='x[:,1]', label=U
 
 *configurePlots
 figure=1, axSpec=121, flipY=True, yLabel=$\\varepsilon\\thinspace$(-), xLabel=$t\\thinspace$(h)
 figure=1, axSpec=122, aspect=equal
 
 *step, solver=theSolver, maxInc=1e-1, minInc=1e-6, maxNumInc=1000, maxIter=25, stepLength=24
-dirichlet, name=bottom,  nSet=gen_bottom, field=displacement, 2=0.0
-dirichlet, name=corner,  nSet=gen_leftBottom, field=displacement, 2=0.0, 1=0
+>>dirichlet, name=bottom,  nSet=gen_bottom, field=displacement, 2=0.0
+>>dirichlet, name=corner,  nSet=gen_leftBottom, field=displacement, 2=0.0, 1=0
 
 *step, solver=theSolver, maxInc=5e-3, minInc=1e-6, maxNumInc=1000, maxIter=25, stepLength=1344

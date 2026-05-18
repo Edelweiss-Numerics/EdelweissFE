@@ -867,20 +867,20 @@ all
 *Elset, elset=nSetLoad, generate=True
   1,  13,   4
 *fieldOutput
-create=perNode, elSet=all, field=displacement, result=U, name=displacement
-create=perNode, nSet=nSetLoad, field=displacement, result=P, name=RF, f(x)=' sum ( x[:,1]) ', saveHistory=True
-create=perElement, elSet=all, result=stress, name=stress, quadraturePoint=0:8, f(x)=' max (x, axis=1) '
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
+>>perNode, nSet=nSetLoad, field=displacement, result=P, name=RF, f(x)=' sum ( x[:,1]) ', saveHistory=True
+>>perElement, elSet=all, result=stress, name=stress, quadraturePoint=0:8, f(x)=' max (x, axis=1) '
 
 *output, type=ensight, name=esExport
-create=perNode, fieldOutput=displacement
-create=perElement, fieldOutput=stress
-configuration, overwrite=yes
+>>perNode, fieldOutput=displacement
+>>perElement, fieldOutput=stress
+>>configuration, overwrite=yes
 
 *output, type=meshPlot,
 figure=1, axSpec=111, c=red, ls=dashed, create=xyData, x=time, y=RF
 
 *step, solver=theSolver, maxInc=2e-2, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100
-options, category=NISTSolver, extrapolation=off
-dirichlet, name=bc, nSet=nSetEdge, field=displacement, 1=0, 2=0, 3=0
-dirichlet, name=sym, nSet=nSetSym, field=displacement, 1=0
-dirichlet, name=load, nSet=nSetLoad,  field=displacement, 2=-20
+>>options, category=NISTSolver, extrapolation=off
+>>dirichlet, name=bc, nSet=nSetEdge, field=displacement, 1=0, 2=0, 3=0
+>>dirichlet, name=sym, nSet=nSetSym, field=displacement, 1=0
+>>dirichlet, name=load, nSet=nSetLoad,  field=displacement, 2=-20
