@@ -40,7 +40,6 @@ from edelweissfe.utils.misc import (
 
 inputLanguage = InputLanguage()
 module = inputLanguage["section"].addModule("solid", "This section represents a classical solid materal section.")
-module.addOptionalArg("density", "the density to be assigned", float, 1.0)
 module.addRequiredDatalines("elementSets as comma separated list of element sets for this section", str)
 
 kw = module.addOptionalKeyword("materialParameterFromField", "use material properties given by an analytical field")
@@ -66,8 +65,6 @@ documentation = [module]
 def sectionFactory(name, FEModel, materialName: str, datalines: list[str], moduleOptions, **kwargs):
     kwargs = CaseInsensitiveDict(kwargs)
 
-    density = kwargs["density"]
-
     elementSetNames = splitLinesAtCommas(datalines)
 
     materialParameterFromFieldDefs = moduleOptions.get("materialParameterFromField", [])
@@ -76,7 +73,6 @@ def sectionFactory(name, FEModel, materialName: str, datalines: list[str], modul
     return Section(
         name,
         FEModel,
-        density,
         FEModel.materials[materialName],
         [FEModel.elementSets[name] for name in elementSetNames],
         materialParameterFromFieldDefs,
@@ -89,7 +85,6 @@ class Section(SectionBase):
         self,
         name,
         model,
-        density,
         material: dict,
         elementSets: list[ElementSet],
         materialParameterFromFieldDefs: list[dict],
@@ -99,7 +94,6 @@ class Section(SectionBase):
         super().__init__(
             name, model, material, elementSets, materialParameterFromFieldDefs, writeMaterialPropertiesToFileDefs
         )
-        self.density = density
 
     def assignSectionPropertiesToElement(self, element, material=None):
         if not material:

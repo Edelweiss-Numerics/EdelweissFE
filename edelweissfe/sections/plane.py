@@ -45,7 +45,6 @@ from edelweissfe.utils.misc import (
 inputLanguage = InputLanguage()
 module = inputLanguage["section"].addModule("plane", "This section represents a classical plane solid materal section.")
 module.addRequiredArg("thickness", "thickness", float)
-module.addOptionalArg("density", "the density to be assigned", float, 1.0)
 module.addRequiredDatalines("elementSets as comma separated list of element sets for this section", str)
 
 kw = module.addOptionalKeyword("materialParameterFromField", "use material properties given by an analytical field")
@@ -72,7 +71,6 @@ def sectionFactory(name, FEModel, materialName: str, datalines: list[str], modul
     kwargs = CaseInsensitiveDict(kwargs)
 
     thickness = kwargs["thickness"]
-    density = kwargs["density"]
 
     elementSetNames = splitLinesAtCommas(datalines)
 
@@ -83,7 +81,6 @@ def sectionFactory(name, FEModel, materialName: str, datalines: list[str], modul
         name,
         FEModel,
         thickness,
-        density,
         FEModel.materials[materialName],
         [FEModel.elementSets[name] for name in elementSetNames],
         materialParameterFromFieldDefs,
@@ -97,7 +94,6 @@ class Section(SectionBase):
         name,
         model,
         thickness,
-        density,
         material: dict,
         elementSets: list[ElementSet],
         materialParameterFromFieldDefs: list[dict],
@@ -108,7 +104,6 @@ class Section(SectionBase):
             name, model, material, elementSets, materialParameterFromFieldDefs, writeMaterialPropertiesToFileDefs
         )
         self.thickness = thickness
-        self.density = density
 
     def assignSectionPropertiesToElement(self, element, **kwargs):
         material = kwargs.get("material", self.material)
@@ -118,9 +113,8 @@ class Section(SectionBase):
             raise Exception(f"Plane section is incompatible with {nSpatialDimensions}-dimensional finite elements.")
 
         thickness = self.thickness
-        density = self.density
 
-        elProperties = np.array([thickness, density], dtype=float)
+        elProperties = np.array([thickness], dtype=float)
 
         element.setProperties(elProperties)
         element.initializeElement()
