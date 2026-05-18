@@ -13,7 +13,7 @@ all
 *section, name=section2, thickness=.95, material=GMCDPFiniteStrain, type=plane
 gen_shearBandCenter
 
-*job, name=cpe4job, domain=2d, solver=NISTParallelForMarmotElements
+*job, name=cpe4job, domain=2d, solver=NISTParallel
 *fieldOutput
 create=perNode, elSet=all, field=displacement, result=U, name=displacement
 create=perNode, elSet=all, field=micro rotation, result=U, name=micro rotation

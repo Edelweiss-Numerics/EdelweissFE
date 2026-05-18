@@ -5,8 +5,9 @@ linting:
   stage: linting
   image: condaforge/mambaforge:22.9.0-2
   script:
-    - mamba install autoflake black isort flake8
+    - mamba install autoflake black isort flake8 cython-lint
     - autoflake --remove-all-unused-imports --check-diff --recursive .
     - isort --check-only --profile black .
     - black --check --line-length 120 .
     - flake8 --ignore=E203,E501 --extend-ignore=W503 --max-line-length=120  .
+    - cython-lint --max-line-length=120 .

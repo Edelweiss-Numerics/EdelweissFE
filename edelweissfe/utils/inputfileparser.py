@@ -248,7 +248,8 @@ kw.addRequiredArg("material", "associated id of defined material", str)
 kw.addRequiredArg("type", "type of the section", str)
 kw.addRequiredDatalines("list of associated element sets", "")
 
-# kw.addOptionalArg("thickness", "associated element set", float, 1.0)
+# kw.addOptionalArg("thickness", "associated element thickness", float, 1.0)
+# kw.addOptionalArg("density", "associated element density", float, 1.0)
 
 # isort: off
 from edelweissfe.sections.solid import inputLanguage  # noqa: F811,E402
@@ -395,6 +396,7 @@ from edelweissfe.generators.executepythoncode import inputLanguage  # noqa: F811
 from edelweissfe.generators.findclosestnode import inputLanguage  # noqa: F811,E402
 from edelweissfe.generators.pipegen import inputLanguage  # noqa: F811,E402
 from edelweissfe.generators.planerectquad import inputLanguage  # noqa: F811,E402
+from edelweissfe.generators.cuboidlatticegenerator import inputLanguage  # noqa: F811,E402
 
 # isort: on
 

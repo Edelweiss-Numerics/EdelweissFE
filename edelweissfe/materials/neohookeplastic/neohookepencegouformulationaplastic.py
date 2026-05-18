@@ -178,6 +178,18 @@ class NeoHookeanWaPlasticMaterial(BaseHyperElasticMaterial):
 
         return self._materialProperties
 
+    def getDensity(self) -> float:
+        """Returns the density of the material.
+
+        Returns
+        -------
+        float
+            The density of the material."""
+
+        if not hasattr(self, "_density"):
+            raise Exception("Density is not defined for this material.")
+        return self._density
+
     def getNumberOfRequiredStateVars(self) -> int:
         """Returns number of needed material state Variables per integration point in the material.
 
@@ -208,6 +220,9 @@ class NeoHookeanWaPlasticMaterial(BaseHyperElasticMaterial):
         self._f = lambda devNorm, kappa_: devNorm - np.sqrt(2 / 3) * self._fy(kappa_)
         # derivative of fy dKappa
         self._dfy_ddKappa = lambda kappa_: self.HLin + self.deltaYieldStress * self.delta * np.exp(-self.delta * kappa_)
+
+        if len(materialProperties) > 6:
+            self._density = materialProperties[6]
 
     def assignCurrentStateVars(self, currentStateVars: np.ndarray):
         """Assign new current state vars.

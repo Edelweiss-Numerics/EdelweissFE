@@ -120,6 +120,18 @@ class HyperelasticAdvancedI2ExtendedMaterial(BaseHyperElasticMaterial):
 
         return self._materialProperties
 
+    def getDensity(self) -> float:
+        """Returns the density of the material.
+
+        Returns
+        -------
+        float
+            The density of the material."""
+
+        if not hasattr(self, "_density"):
+            raise Exception("Density is not defined for this material.")
+        return self._density
+
     def getNumberOfRequiredStateVars(self) -> int:
         """Returns number of needed material state Variables per integration point in the material.
 
@@ -137,6 +149,8 @@ class HyperelasticAdvancedI2ExtendedMaterial(BaseHyperElasticMaterial):
         self._K = materialProperties["K"]
         self.setEnergyFunction(materialProperties["psi_e"])
         self._params = np.asarray(materialProperties.get("a", ""))  # extra optional parameters
+        if "density" in materialProperties:
+            self._density = materialProperties["density"]
 
     def setEnergyFunction(self, materialEnergy: str):
         """Sets the energy density function for the custom material.

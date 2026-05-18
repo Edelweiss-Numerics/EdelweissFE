@@ -64,8 +64,7 @@ class OrderedSet(UserDict):
 
     def checkObjectType(self, obj):
         """Checks if the object type is allowed in the OrderedSet"""
-
-        return type(obj) in self.allowedObjectTypes
+        return isinstance(obj, tuple(self.allowedObjectTypes))
 
     def forceIter(self, item_s):
         """Return an iterator object for item_s even if item_s itself is not iterable"""
@@ -153,7 +152,11 @@ class ImmutableOrderedSet(OrderedSet):
             if self.checkObjectType(item):
                 filteredItems.update({item: None})
             else:
-                raise TypeError(f"You tried to add an item with wrong type: {item} of type {type(item)}")
+                raise TypeError(
+                    f"You tried to add an item with wrong type: {item} of type {type(item)}"
+                    + "Allowed types are:\n"
+                    + ", ".join([t.__name__ for t in self.allowedObjectTypes])
+                )
 
         self.data = MappingProxyType(filteredItems)
         self.items = self.data.keys()

@@ -32,10 +32,15 @@ from edelweissfe.sections.base.sectionbase import Section as SectionBase
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker, splitLinesAtCommas
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+    splitLinesAtCommas,
+)
 
 inputLanguage = InputLanguage()
 module = inputLanguage["section"].addModule("solid", "This section represents a classical solid materal section.")
+module.addOptionalArg("density", "the density to be assigned", float, 1.0)
 module.addRequiredDatalines("elementSets as comma separated list of element sets for this section", str)
 
 kw = module.addOptionalKeyword("materialParameterFromField", "use material properties given by an analytical field")
@@ -57,8 +62,11 @@ documentation = [module]
 
 
 @caseInsensitiveKwargsChecker(required, optional)
+@castKwargsValuesAndAddDefaults(module)
 def sectionFactory(name, FEModel, materialName: str, datalines: list[str], moduleOptions, **kwargs):
     kwargs = CaseInsensitiveDict(kwargs)
+
+    density = kwargs["density"]
 
     elementSetNames = splitLinesAtCommas(datalines)
 
@@ -68,6 +76,7 @@ def sectionFactory(name, FEModel, materialName: str, datalines: list[str], modul
     return Section(
         name,
         FEModel,
+        density,
         FEModel.materials[materialName],
         [FEModel.elementSets[name] for name in elementSetNames],
         materialParameterFromFieldDefs,
@@ -80,6 +89,7 @@ class Section(SectionBase):
         self,
         name,
         model,
+        density,
         material: dict,
         elementSets: list[ElementSet],
         materialParameterFromFieldDefs: list[dict],
@@ -89,6 +99,7 @@ class Section(SectionBase):
         super().__init__(
             name, model, material, elementSets, materialParameterFromFieldDefs, writeMaterialPropertiesToFileDefs
         )
+        self.density = density
 
     def assignSectionPropertiesToElement(self, element, material=None):
         if not material:
@@ -99,6 +110,7 @@ class Section(SectionBase):
             raise Exception(f"Solid section is incompatible with {nSpatialDimensions}-dimensional finite elements.")
 
         element.initializeElement()
+
         # to make sure all elProviders work
         if not isinstance(material, dict):
             element.setMaterial(material)

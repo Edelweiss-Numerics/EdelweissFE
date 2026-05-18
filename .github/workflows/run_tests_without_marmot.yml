@@ -20,7 +20,12 @@ jobs:
       - name: Install conda packages
         shell: bash -l {0}
         run: |
-          mamba install --file requirements.txt
+          mamba install --file conda_requirements.txt
+
+      - name: Install pip packages
+        shell: bash -l {0}
+        run: |
+          pip install -r pip_requirements.txt
 
       - name: Build EdelweissFE
         shell: bash -l {0}

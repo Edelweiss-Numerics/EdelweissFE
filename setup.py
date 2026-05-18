@@ -30,6 +30,8 @@ Created on Thu May 21 14:23:14 2015
 @author: c8441141
 """
 import os
+import pathlib
+import shutil
 import sys
 from os.path import expanduser, join
 
@@ -75,6 +77,7 @@ extensions = [
     )
 ]
 
+print("Gather the extension for wrapping a hypoelastic Marmot material")
 extensions += [
     Extension(
         "*",
@@ -136,27 +139,12 @@ extensions += [
     )
 ]
 
-print("Gather the extension for the NISTParallel solver")
+print("Gather the extensions for fast dirichlet application")
 extensions += [
     Extension(
         "*",
-        sources=["edelweissfe/solvers/nonlinearimplicitstaticparallelmk2.pyx"],
+        sources=["edelweissfe/solvers/base/dirichlet.pyx"],
         include_dirs=[numpy.get_include()],
-        language="c++",
-        extra_compile_args=[
-            "-fopenmp",
-            "-Wno-maybe-uninitialized",
-        ],
-        extra_link_args=["-fopenmp"],
-    )
-]
-
-print("Gather the extension for the NISTParallel (MarmotElements only) solver")
-extensions += [
-    Extension(
-        "*",
-        sources=["edelweissfe/solvers/nonlinearimplicitstaticparallel.pyx"],
-        include_dirs=[numpy.get_include()] + [join(marmot_dir, "include")],
         language="c++",
         extra_compile_args=[
             "-fopenmp",
@@ -208,6 +196,18 @@ extensions += [
     )
 ]
 
+print("Gather the AMGCL interface")
+extensions += [
+    Extension(
+        "*",
+        sources=["edelweissfe/linsolve/amgcl/amgcl.pyx"],
+        include_dirs=[numpy.get_include(), join(default_install_prefix, "include"), "."],
+        language="c++",
+        extra_compile_args=["-std=c++11", "-fopenmp", "-O3"],
+        extra_link_args=["-fopenmp"],
+    )
+]
+
 print("Gather the KLU interface")
 extensions += [
     Extension(
@@ -243,19 +243,48 @@ extensions += [
 print("Now compile!")
 
 
-# overwrite build_ext to make all extensions optional
 class optional_build_ext(build_ext):
-    def build_extension(self, ext):
-        try:
-            super().build_extension(ext)
-        except Exception as e:
-            print(f"Extension {ext.name} could not be built:")
-            print(e)
+    def build_extensions(self):
+        self.successful_extensions = []
+
+        for ext in self.extensions:
+            try:
+                self.build_extension(ext)
+                self.successful_extensions.append(ext.name)
+                print(f"[OK] Built extension: {ext.name}")
+            except Exception as e:
+                print(f"[FAIL] Could not build {ext.name}: {e}")
+
+        self.write_build_log()
+
+    def write_build_log(self):
+        log_file = pathlib.Path("edelweissfe") / "built_extensions.log"
+
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+
+        log_file.write_text(
+            "\n".join(self.successful_extensions) + "\n",
+            encoding="utf-8",
+        )
+
+        print(f"Wrote build log to {log_file}")
+
+        # also copy into build/lib package dir
+        build_lib = pathlib.Path(self.build_lib) / "edelweissfe"
+        build_lib.mkdir(parents=True, exist_ok=True)
+
+        shutil.copy2(log_file, build_lib / "built_extensions.log")
+
+        print(f"Wrote build log to {build_lib / 'built_extensions.log'}")
 
 
 setup(
     cmdclass={"build_ext": optional_build_ext},
     ext_modules=cythonize(extensions, compiler_directives=directives, annotate=True, language_level=3),
+    include_package_data=True,
+    package_data={
+        "edelweissfe": ["built_extensions.log"],
+    },
 )
 
 print("Finish!")

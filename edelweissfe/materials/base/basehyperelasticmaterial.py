@@ -56,6 +56,15 @@ class BaseHyperElasticMaterial(ABC):
             Number of needed material state Vars."""
 
     @abstractmethod
+    def getDensity(self) -> float:
+        """Determines the density of the material.
+
+        Returns
+        -------
+        float
+            The density of the material."""
+
+    @abstractmethod
     def __init__(self, materialProperties: np.ndarray):
         """Initialize."""
 

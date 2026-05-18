@@ -35,7 +35,6 @@ You can get the binaries from https://panua.ch/. A license is required to use th
 import os
 
 import numpy as np
-
 cimport numpy as np
 
 from edelweissfe.linsolve.pardiso.pardiso import setParameter

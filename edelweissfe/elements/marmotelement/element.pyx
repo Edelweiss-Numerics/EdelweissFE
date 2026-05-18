@@ -39,11 +39,6 @@ cimport edelweissfe.elements.marmotelement.element
 
 from edelweissfe.utils.exceptions import CutbackRequest
 
-from libc.stdlib cimport free, malloc
-from libcpp.memory cimport allocator, make_unique, unique_ptr
-
-from edelweissfe.elements.base.baseelement import BaseElement
-
 mapLoadTypes={
         "pressure" : DistributedLoadTypes.Pressure,
         "surface torsion" : DistributedLoadTypes.SurfaceTorsion,
@@ -83,7 +78,7 @@ cdef class MarmotElementWrapper:
         self._nDof = self.marmotElement.getNDofPerElement()
 
         cdef vector[vector[string]] fields = self.marmotElement.getNodeFields()
-        self._fields = [[s.decode("utf-8")  for s in n] for n in fields]
+        self._fields = [[s.decode("utf-8") for s in n] for n in fields]
 
         cdef vector[int] permutationPattern = self.marmotElement.getDofIndicesPermutationPattern()
         self._dofIndicesPermutation = np.asarray(permutationPattern)
@@ -198,7 +193,7 @@ cdef class MarmotElementWrapper:
 
         self._hasMaterial = True
 
-    cpdef void _initializeStateVarsTemp(self, ) nogil:
+    cpdef void _initializeStateVarsTemp(self, ) noexcept nogil:
         self._stateVarsTemp[:] = self._stateVars
 
     def setInitialCondition(self,
@@ -219,7 +214,7 @@ cdef class MarmotElementWrapper:
                                const double[::1] U,
                                const double[::1] dU,
                                const double[::1] time,
-                               double dTime, ) nogil except *:
+                               double dTime) except * nogil:
         """Evaluate residual and stiffness for given time, field, and field increment."""
 
         if not self._hasMaterial:
@@ -231,12 +226,39 @@ cdef class MarmotElementWrapper:
 
             pNewDT = 1e36
 
-            self.marmotElement.computeYourself(&U[0], &dU[0],
+            self.marmotElement.computeYourself(&U[0],
+                                               &dU[0],
                                                &Pe[0],
                                                &Ke[0],
                                                &time[0],
                                                dTime,
                                                pNewDT)
+            if pNewDT < 1.0:
+                raise CutbackRequest("Element {:} requests for a cutback!".format(self.elNumber), pNewDT)
+
+    cpdef void computeYourselfExplicit(self,
+                                       double[::1] Pe,
+                                       const double[::1] U,
+                                       const double[::1] dU,
+                                       const double[::1] time,
+                                       double dTime) except * nogil:
+        """Evaluate residual and stiffness for given time, field, and field increment."""
+
+        if not self._hasMaterial:
+            raise Exception("Element {:} has no material assigned!".format(self._elNumber))
+
+        cdef double pNewDT
+        with nogil:
+            self._initializeStateVarsTemp()
+
+            pNewDT = 1e36
+
+            self.marmotElement.computeYourselfExplicit(&U[0],
+                                                       &dU[0],
+                                                       &Pe[0],
+                                                       &time[0],
+                                                       dTime,
+                                                       pNewDT)
             if pNewDT < 1.0:
                 raise CutbackRequest("Element {:} requests for a cutback!".format(self.elNumber), pNewDT)
 
@@ -276,6 +298,11 @@ cdef class MarmotElementWrapper:
                                     &U[0],
                                     &time[0],
                                     dTime)
+
+    def computeLumpedInertia(self, double[::1] M):
+        """Compute the lumped mass matrix of the underlying MarmotElement"""
+
+        self.marmotElement.computeLumpedInertia(&M[0])
 
     def acceptLastState(self, ):
         """Accept the computed state (in nonlinear iteration schemes)."""

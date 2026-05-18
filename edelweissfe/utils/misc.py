@@ -33,10 +33,24 @@ Created on Mon Apr 18 17:36:07 2016
 import difflib
 import shlex
 from collections import Counter
+from importlib.resources import files
 
 import numpy as np
 
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+
+
+def getSuccessfulExtensions():
+    log_file = files("edelweissfe") / "built_extensions.log"
+
+    if not log_file.is_file():
+        return set()
+
+    return {line.strip() for line in log_file.read_text(encoding="utf-8").splitlines() if line.strip()}
+
+
+def checkSuccessfulExtension(name):
+    return name in getSuccessfulExtensions()
 
 
 def flagDict(configLine):

@@ -95,7 +95,7 @@ class OutputManager(OutputManagerBase):
     def finalizeIncrement(self, statusInfoDict: dict = {}, **kwargs):
         pass
 
-    def finalizeFailedIncrement(self, statusInfoDict: dict = {}):
+    def finalizeFailedIncrement(self, statusInfoDict: dict = {}, **kwargs):
         pass
 
     def finalizeStep(self):
