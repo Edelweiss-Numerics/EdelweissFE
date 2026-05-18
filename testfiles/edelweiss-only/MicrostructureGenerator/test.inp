@@ -29,12 +29,12 @@ filename=5x5mesh_quadratic.inp
 ** create=perElement, name=strain,       elSet=all, result=strain, quadraturePoint=0:3, f(x)='np.mean(x,axis=1)'
 >>perElement, name=stress, elSet=all, result=stress, quadraturePoint=0:3, f(x)='np.mean(x,axis=1)'
 >>perNode, name=displacement, elSet=all, field=displacement, result=U, f(x)='np.sum(x[:,1])'
->>perNode, name=reactionForces, nSet=gen_bottom, field=displacement, result=P, f(x)='np.sum(x[:,1])', export=RF
+>>perNode, name=reactionForces, nSet=gen_bottom, field=displacement, result=P, f(x)='np.sum(x[:,1])', saveHistory=True, export=RF
 
-*output, type=ensight, name=myEnsightOutput
-** For visualization in Paraview etc.
->>perNode, fieldOutput=displacement
->>perElement, fieldOutput=stress
-** create=perElement, fieldOutput=strain
->>configuration, overwrite=yes
+** *output, type=ensight, name=myEnsightOutput
+** ** For visualization in Paraview etc.
+** >>perNode, fieldOutput=displacement
+** >>perElement, fieldOutput=stress
+** ** create=perElement, fieldOutput=strain
+** >>configuration, overwrite=yes
 
