@@ -79,65 +79,94 @@ from edelweissfe.generators.microstructuregenerator import replicateMesh
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.misc import convertLinesToStringDictionary
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
-documentation = {
-    "lX": "Length of the unit cell in X direction.",
-    "lY": "Length of the unit cell in Y direction.",
-    "lZ": "Length of the unit cell in Z direction.",
-    "nEleX": "Number of elements in X direction of the unit cell.",
-    "nEleY": "Number of elements in Y direction of the unit cell.",
-    "nEleZ": "Number of elements in Z direction of the unit cell.",
-    "nEleStrutX": "Number of elements in the struts in X direction of the unit cell.",
-    "nEleStrutY": "Number of elements in the struts in Y direction of the unit cell.",
-    "nEleStrutZ": "Number of elements in the of struts in Z direction of the unit cell.",
-    "nX": "Number of replications in X direction.",
-    "nY": "Number of replications in Y direction.",
-    "nZ": "Number of replications in Z direction.",
-}
+inputLanguage = InputLanguage()
+module = inputLanguage["modelGenerator"].addModule(
+    "cuboidlatticegenerator", "A mesh generator for generating cuboid lattice structure."
+)
+
+# module.addOptionalArg("x0", "Origin along the x axis.", float, 0.0)
+# module.addOptionalArg("y0", "Origin along the y axis.", float, 0.0)
+# module.addOptionalArg("z0", "Origin along the z axis.", float, 0.0)
+
+module.addOptionalArg("lX", "Length of the body along the x axis.", float, 1.0)
+module.addOptionalArg("lY", "Length of the body along the y axis.", float, 1.0)
+module.addOptionalArg("lZ", "Length of the body along the z axis.", float, 1.0)
+
+module.addOptionalArg("nEleX", "Number of elements along the x axis.", int, 1)
+module.addOptionalArg("nEleY", "Number of elements along the y axis.", int, 1)
+module.addOptionalArg("nEleZ", "Number of elements along the z axis.", int, 1)
+
+module.addOptionalArg("nEleStrutX", "Number of in struts along the x axis.", int, 1)
+module.addOptionalArg("nEleStrutY", "Number of in struts along the y axis.", int, 1)
+module.addOptionalArg("nEleStrutZ", "Number of in struts along the z axis.", int, 1)
+
+module.addOptionalArg("nX", "Number of replications along the x axis.", int, 1)
+module.addOptionalArg("nY", "Number of replications along the y axis.", int, 1)
+module.addOptionalArg("nZ", "Number of replications along the z axis.", int, 1)
+
+module.addRequiredArg("elType", "Element type.", str)
+module.addOptionalArg("elProvider", "Element provider.", str, None)
+
+documentation = [module]
 
 
-def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dict:
+@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
+def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args, **kwargs) -> dict:
+    kwargs = CaseInsensitiveDict(kwargs)
 
-    name = generatorDefinition.get("name", "cuboidlatticegenerator")
+    name = generatorDefinition.get("name", "boxGen")
 
-    options = generatorDefinition["data"]
-    options = convertLinesToStringDictionary(options)
+    # x0 = kwargs["x0"]
+    # y0 = kwargs["y0"]
+    # z0 = kwargs["z0"]
+
+    lX = kwargs["lX"]
+    lY = kwargs["lY"]
+    lZ = kwargs["lZ"]
+
+    nEleX = kwargs["nEleX"]
+    nEleY = kwargs["nEleY"]
+    nEleZ = kwargs["nEleZ"]
+
+    nEleStrutX = kwargs["nEleStrutX"]
+    nEleStrutY = kwargs["nEleStrutY"]
+    nEleStrutZ = kwargs["nEleStrutZ"]
+
+    nX = kwargs["nX"]
+    nY = kwargs["nY"]
+    nZ = kwargs["nZ"]
+
+    elementType = getElementClass(kwargs["elType"], kwargs["elProvider"])
 
     boxgeneratorDefinition = generatorDefinition.copy()
-    boxgeneratorDefinition["data"] = (
-        f"lX={options['lX']}",
-        f"lY={options['lY']}",
-        f"lZ={options['lZ']}",
-        f"nX={options['nEleX']}",
-        f"nY={options['nEleY']}",
-        f"nZ={options['nEleZ']}",
-        f"elType={options['elType']}",
-        f"elProvider={options.get('elProvider', 'marmot')}",
+    boxgenKwargs = dict(
+        lX=lX,
+        lY=lY,
+        lZ=lZ,
+        nX=nEleX,
+        nY=nEleY,
+        nZ=nEleZ,
+        elType=kwargs["elType"],
     )
+    if kwargs["elProvider"] is not None:
+        boxgenKwargs.update(dict(elProvider=kwargs["elProvider"]))
 
     boxmodel = copy.deepcopy(model)
-
-    boxmodel = generateBoxMesh(boxgeneratorDefinition, boxmodel, journal)
-
-    # now remove elements and nodes to create the lattice structure
-    nEleStrutX = int(options["nEleStrutX"])
-    nEleStrutY = int(options["nEleStrutY"])
-    nEleStrutZ = int(options["nEleStrutZ"])
-
-    nEleX = int(options["nEleX"])
-    nEleY = int(options["nEleY"])
-    nEleZ = int(options["nEleZ"])
-
-    # compute coordinates of nodes to keep
-    lX = float(options["lX"])
-    lY = float(options["lY"])
-    lZ = float(options["lZ"])
+    boxmodel = generateBoxMesh(boxgeneratorDefinition, boxmodel, journal, **boxgenKwargs)
 
     lStrutX = nEleStrutX * lX / nEleX
     lStrutY = nEleStrutY / (nEleY) * lY
     lStrutZ = nEleStrutZ / (nEleZ) * lZ
 
+    # compute coordinates of nodes to keep
     xToDelete = (lStrutX, lX - lStrutX)
     yToDelete = (lStrutY, lY - lStrutY)
     zToDelete = (lStrutZ, lZ - lStrutZ)
@@ -145,7 +174,6 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dic
     elements = {}
     nodes = {}
 
-    elementType = getElementClass(options.get("elType", None), options.get("elProvider", None))
     idx = 1
     for el in boxmodel.elements.values():
         nodeCoords = np.array([el.nodes[i].coordinates for i in range(len(el.nodes))])
@@ -166,7 +194,7 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dic
                 deleteElement = True
 
         if not deleteElement:
-            new = elementType(options["elType"], idx)
+            new = elementType(kwargs["elType"], idx)
             new.setNodes([node for node in el.nodes])
             elements[idx] = new
             idx += 1
@@ -194,10 +222,6 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dic
     z_min = 0
     z_max = lZ
 
-    nX = int(options.get("nX", 1))
-    nY = int(options.get("nY", 1))
-    nZ = int(options.get("nZ", 1))
-
     elementSets = []
     elementSets.append(ElementSet("{:}_all".format(name), elements.values()))
 
@@ -209,13 +233,13 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dic
 
     # replicate the mesh of the unit cell in x direction
     model = replicateMesh(
-        model, direction=0, nReplications=nX, elementType=elementType, options=options, journal=journal
+        model, direction=0, nReplications=nX, elementType=elementType, options=kwargs, journal=journal
     )
     model = replicateMesh(
-        model, direction=1, nReplications=nY, elementType=elementType, options=options, journal=journal
+        model, direction=1, nReplications=nY, elementType=elementType, options=kwargs, journal=journal
     )
     model = replicateMesh(
-        model, direction=2, nReplications=nZ, elementType=elementType, options=options, journal=journal
+        model, direction=2, nReplications=nZ, elementType=elementType, options=kwargs, journal=journal
     )
 
     model._populateNodeFieldVariablesFromElements()

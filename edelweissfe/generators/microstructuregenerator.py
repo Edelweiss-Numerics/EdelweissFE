@@ -52,30 +52,47 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.misc import convertLinesToStringDictionary
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
-documentation = {
-    "unitCellMeshFile": "path to the unit cell mesh file",
-    "nX": "number of unit cells along x",
-    "nY": "number of unit cells along y",
-    "nZ": "number of unit cells along z",
-}
+inputLanguage = InputLanguage()
+module = inputLanguage["modelGenerator"].addModule(
+    "microstructuregenerator", "A mesh generator for generating a structure from a single unit cell mesh."
+)
+
+module.addOptionalArg("unitCellMeshFile", "Path to the unit cell mesh file.", str, None)
+
+module.addOptionalArg("nX", "Number of cells along the x axis.", int, 1)
+module.addOptionalArg("nY", "Number of cells along the y axis.", int, 1)
+module.addOptionalArg("nZ", "Number of cells along the z axis.", int, 1)
+
+module.addRequiredArg("elType", "Element type.", str)
+module.addOptionalArg("elProvider", "Element provider.", str, None)
+
+documentation = [module]
 
 identification = "microgen"
 
 
-def generateModelData(generatorDefinition: dict, model: FEModel, journal: Journal) -> dict:
-    options = generatorDefinition["data"]
-    options = convertLinesToStringDictionary(options)
+@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
+def generateModelData(generatorDefinition: dict, model: FEModel, journal: Journal, *args, **kwargs) -> dict:
+    kwargs = CaseInsensitiveDict(kwargs)
 
     journal.message("Generating microstructure mesh from unit cell mesh...", identification)
     name = generatorDefinition.get("name", "microgen")
 
-    unitCellMeshFile = options.get("unitCellMeshFile", None)
-    nX = int(options.get("nX", 1))
-    nY = int(options.get("nY", 1))
-    nZ = int(options.get("nZ", 1))
-    elementType = getElementClass(options.get("elType", None), options.get("elProvider", None))
+    unitCellMeshFile = kwargs["unitCellMeshFile"]
+
+    nX = kwargs["nX"]
+    nY = kwargs["nY"]
+    nZ = kwargs["nZ"]
+
+    elementType = getElementClass(kwargs["elType"], kwargs["elProvider"])
 
     unitCellMesh = meshio.read(unitCellMeshFile)
 
@@ -121,7 +138,7 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal: Journa
     for block_id, el_ids in block_elements_assignments.items():
         elements_per_block = []
         for local_el_id in el_ids:
-            newEl = elementType(options["elType"], idx + 1)
+            newEl = elementType(kwargs["elType"], idx + 1)
             nodeList = [_nodes[nid] for nid in all_elements[local_el_id]]
             newEl.setNodes(nodeList)
 
@@ -136,18 +153,18 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal: Journa
 
     # replicate the mesh of the unit cell in x direction
     model = replicateMesh(
-        model, direction=0, nReplications=nX, elementType=elementType, options=options, journal=journal
+        model, direction=0, nReplications=nX, elementType=elementType, options=kwargs, journal=journal
     )
 
     # replicate the already replicated mesh in y direction
     model = replicateMesh(
-        model, direction=1, nReplications=nY, elementType=elementType, options=options, journal=journal
+        model, direction=1, nReplications=nY, elementType=elementType, options=kwargs, journal=journal
     )
 
     if model.domainSize == 3:
         # replicate the already replicated mesh in z direction
         model = replicateMesh(
-            model, direction=2, nReplications=nZ, elementType=elementType, options=options, journal=journal
+            model, direction=2, nReplications=nZ, elementType=elementType, options=kwargs, journal=journal
         )
 
     model._populateNodeFieldVariablesFromElements()

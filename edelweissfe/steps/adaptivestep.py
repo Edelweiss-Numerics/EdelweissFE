@@ -67,20 +67,7 @@ optional += [kw.name for kw in module.optionalKeywords]
 
 class AdaptiveStep(StepBase):
     """
-    A standard adaptive incremental step to be used in nonlinear simulations.
-
-    Parameters
-    ----------
-    number
-        The number of this step. For information purposes only.
-    starTime
-        The start time of the step.
-    definition
-        A dictionary holding key/value pairs for defintion
-    stepActions
-        The collection of actions for this step.
-    journal
-        The journal object for logging.
+    An adaptive incremental step to be used in nonlinear simulations with implicit time integration.
     """
 
     @caseInsensitiveKwargsChecker(required, optional)
