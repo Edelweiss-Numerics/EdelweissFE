@@ -17,6 +17,3 @@ esExport
 ensightExport
 build
 EdelweissFE.egg-info
-doc/_build/
-edelweissfe/built_extensions.log
-edelweissfe/linsolve/klu/klu.c
