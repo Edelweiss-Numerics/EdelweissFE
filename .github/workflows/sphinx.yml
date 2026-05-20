@@ -3,6 +3,7 @@ name: Documentation
 on:
   push:
     branches: [ master ]
+  pull_request:
 
 jobs:
   build:
@@ -81,7 +82,14 @@ jobs:
         run: |
           sphinx-build ./doc/source/ ./docs -b html
 
+      - name: Upload documentation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: ./docs
+
       - name: Deploy
+        if: github.ref == 'refs/heads/master'
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN}}
