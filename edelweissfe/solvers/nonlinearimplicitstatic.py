@@ -616,8 +616,13 @@ class NIST(NonlinearSolverBase):
         """
 
         for constraint in constraints.values():
-            Kc = K[constraint].reshape(constraint.nDof, constraint.nDof, order="F")
+            K_flat = K[constraint]
             Pc = np.zeros(constraint.nDof)
+
+            if constraint.getVIJContributionSize() == constraint.nDof**2:
+                Kc = K_flat.reshape(constraint.nDof, constraint.nDof, order="F")
+            else:
+                Kc = K_flat
 
             constraint.applyConstraint(U_np[constraint], dU[constraint], Pc, Kc, timeStep)
 

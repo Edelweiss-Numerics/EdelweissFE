@@ -74,8 +74,7 @@ class VIJSystemMatrix(np.ndarray):
         try:
             # Entity Lookup
             idxInVIJ = self.entitiesInVIJ[key]
-            # Use local entity size (key.nDof) for the slice, not global nDof
-            size = key.nDof**2
+            size = key.getVIJContributionSize()
             return super().__getitem__(slice(idxInVIJ, idxInVIJ + size))
         except (KeyError, TypeError, AttributeError):
             # Fallback for any other weird key types

@@ -385,7 +385,31 @@ class DofManager:
                 - largest occuring number of dofs on any element.
         """
 
-        return self._gatherElementsInformation(entities)
+        accumulatedEntityNDof = 0
+        accumulatedEntityVIJSize = 0
+        largestNumberOfAnyEntitityDof = 0
+
+        nAccumulatedFluxesFieldwise = dict.fromkeys(phenomena.keys(), 0)
+
+        for e in entities:
+            accumulatedEntityNDof += e.nDof
+            # Use the constraint-declared VIJ size (may be sparse, i.e. < nDof**2).
+            accumulatedEntityVIJSize += e.getVIJContributionSize()
+
+            for node in e.nodes:
+                for field, fv in node.fields.items():
+                    indices = self.idcsOfFieldVariablesInDofVector.get(fv)
+                    if indices is not None:
+                        nAccumulatedFluxesFieldwise[field] += len(indices)
+
+            largestNumberOfAnyEntitityDof = max(e.nDof, largestNumberOfAnyEntitityDof)
+
+        return (
+            accumulatedEntityNDof,
+            accumulatedEntityVIJSize,
+            nAccumulatedFluxesFieldwise,
+            largestNumberOfAnyEntitityDof,
+        )
 
     def _locateNodeCouplingEntitiesInDofVector(self, entities: list) -> dict:
         """Creates a dictionary containing the location (indices) of each entity (elements, ...)
@@ -567,13 +591,10 @@ class DofManager:
         ) in self.idcsOfHigherOrderEntitiesInDofVector.items():
             entitiesInVIJ[entity] = idxInVIJ
 
-            nDofEntity = len(entityIdcsInDofVector)
-            block_size = nDofEntity**2
+            entity.initializeVIJContribution(entityIdcsInDofVector, I, J, idxInVIJ)
+            nVIJEntity = entity.getVIJContributionSize()
 
-            VIJLocations = np.tile(entityIdcsInDofVector, (nDofEntity, 1))
-            I[idxInVIJ : idxInVIJ + block_size] = VIJLocations.flatten()
-            J[idxInVIJ : idxInVIJ + block_size] = VIJLocations.flatten("F")
-            idxInVIJ += block_size
+            idxInVIJ += nVIJEntity
 
         return I, J, entitiesInVIJ
 

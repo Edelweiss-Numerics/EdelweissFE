@@ -31,11 +31,12 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.numerics.vijentitybase import VIJEntityBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
-class ConstraintBase(ABC):
+class ConstraintBase(ABC, VIJEntityBase):
     @abstractmethod
     def __init__(self, name: str, model: FEModel, *args, **kwargs):
         """The constraint base class.
