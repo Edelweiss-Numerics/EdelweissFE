@@ -56,6 +56,7 @@ solverLibrary = {
     "NESTParallel": "nonlinearexplicitstaticparallel",
     "NEDParallel": "nonlinearexplicitdynamicparallel",
     "NISTPArcLength": "nonlinearimplicitstaticparallelarclength",
+    "NISTMPI": "nonlinearimplicitstaticmpi",
 }
 
 
