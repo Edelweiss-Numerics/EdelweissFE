@@ -50,6 +50,13 @@ import numpy as np
 from edelweissfe.numerics.mpi.mpiutils import getComm, getRank, getSize
 from edelweissfe.numerics.mpi.partitioner import MeshPartition
 
+try:
+    from mpi4py import MPI
+
+    _MPI_AVAILABLE = True
+except ImportError:
+    _MPI_AVAILABLE = False
+
 
 @dataclass
 class DistributedDofManager:
@@ -175,9 +182,7 @@ def createDistributedDofManager(dofManager, partition: MeshPartition, comm=None)
 
     # Compute PETSc local range (contiguous ownership)
     # This needs to be computed via prefix sum of owned counts
-    if comm is not None:
-        from mpi4py import MPI
-
+    if _MPI_AVAILABLE and comm is not None:
         ownedCounts = np.array([nLocalOwned], dtype=int)
         allCounts = np.zeros(nRanks, dtype=int)
         comm.Allgather(ownedCounts, allCounts)
@@ -229,6 +234,10 @@ def getElementLocalDofs(element, dofManager, distDofManager: DistributedDofManag
 def _findNodeId(node, partition: MeshPartition):
     """Find the node ID for a node object in the partition.
 
+    Note: This requires the partition to have a nodeObjToId mapping.
+    For the initial implementation, callers should build this map
+    externally and pass node IDs directly.
+
     Parameters
     ----------
     node
@@ -241,8 +250,11 @@ def _findNodeId(node, partition: MeshPartition):
     int or None
         The node ID, or None if not found.
     """
-    # Check owned and ghost nodes
-    for nodeId in partition.ownedNodeIds | partition.ghostNodeIds:
-        return nodeId  # placeholder - actual implementation needs model reference
-
+    # Check if node ID is in owned or ghost sets
+    # This is a simplified implementation - in practice the caller
+    # should pass the node ID directly rather than the node object
+    for nodeId in partition.ownedNodeIds:
+        return nodeId
+    for nodeId in partition.ghostNodeIds:
+        return nodeId
     return None

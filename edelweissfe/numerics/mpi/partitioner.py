@@ -136,20 +136,23 @@ def partitionMesh(model, comm=None) -> MeshPartition:
     ownedNodeIds = set()
     ghostNodeIds = set()
 
-    # All nodes referenced by our elements
+    # Build reverse mapping from node object to node ID
+    nodeObjToId = {id(nodeObj): nodeId for nodeId, nodeObj in model.nodes.items()}
+
+    # All node IDs referenced by our elements
     localNodeIds = set()
     for eid in ownedElementIds:
         el = model.elements[eid]
         for node in el.nodes:
-            localNodeIds.add(id(node))
+            nodeId = nodeObjToId.get(id(node))
+            if nodeId is not None:
+                localNodeIds.add(nodeId)
 
-    for nodeId, nodeObj in model.nodes.items():
-        nid = id(nodeObj)
-        if nid in localNodeIds:
-            if nodeOwnerMap.get(nodeId, rank) == rank:
-                ownedNodeIds.add(nodeId)
-            else:
-                ghostNodeIds.add(nodeId)
+    for nodeId in localNodeIds:
+        if nodeOwnerMap.get(nodeId, rank) == rank:
+            ownedNodeIds.add(nodeId)
+        else:
+            ghostNodeIds.add(nodeId)
 
     return MeshPartition(
         rank=rank,
@@ -310,16 +313,17 @@ def _computeNodeOwnership(model, elementPartitionMap: dict) -> dict:
     """
     nodeOwnerMap = {}
 
+    # Build reverse mapping from node object identity to node ID
+    nodeObjToId = {id(nodeObj): nodeId for nodeId, nodeObj in model.nodes.items()}
+
     for eid, ownerRank in elementPartitionMap.items():
         el = model.elements[eid]
         for node in el.nodes:
-            # Use the node's key in model.nodes
-            for nodeId, nodeObj in model.nodes.items():
-                if nodeObj is node:
-                    if nodeId not in nodeOwnerMap:
-                        nodeOwnerMap[nodeId] = ownerRank
-                    else:
-                        nodeOwnerMap[nodeId] = min(nodeOwnerMap[nodeId], ownerRank)
-                    break
+            nodeId = nodeObjToId.get(id(node))
+            if nodeId is not None:
+                if nodeId not in nodeOwnerMap:
+                    nodeOwnerMap[nodeId] = ownerRank
+                else:
+                    nodeOwnerMap[nodeId] = min(nodeOwnerMap[nodeId], ownerRank)
 
     return nodeOwnerMap

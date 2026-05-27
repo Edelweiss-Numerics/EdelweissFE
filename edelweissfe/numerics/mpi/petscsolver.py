@@ -142,11 +142,13 @@ class DistributedPETScSolver:
         """
         self.A.zeroEntries()
 
-        # Map global DOFs to PETSc global numbering
-        # For now, assume global DOF indices map directly to PETSc indices
-        # (contiguous ownership is handled by PETSc internally)
-        for i, j, v in zip(I, J, V):
-            self.A.setValue(int(i), int(j), float(v), addv=PETSc.InsertMode.ADD_VALUES)
+        # Group entries by row for efficient batch insertion
+        unique_rows = np.unique(I)
+        for row in unique_rows:
+            mask = I == row
+            cols = J[mask].astype(np.int32)
+            vals = V[mask]
+            self.A.setValues(int(row), cols, vals, addv=PETSc.InsertMode.ADD_VALUES)
 
         self.A.assemblyBegin()
         self.A.assemblyEnd()
@@ -193,8 +195,7 @@ class DistributedPETScSolver:
         ownedDofs = self.distDofManager.ownedGlobalDofs
 
         self.b.zeroEntries()
-        for localIdx in range(len(ownedDofs)):
-            self.b.setValue(int(ownedDofs[localIdx]), float(rhs[localIdx]), addv=PETSc.InsertMode.ADD_VALUES)
+        self.b.setValues(ownedDofs.astype(np.int32), rhs, addv=PETSc.InsertMode.ADD_VALUES)
 
         self.b.assemblyBegin()
         self.b.assemblyEnd()
