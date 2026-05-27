@@ -1,0 +1,42 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "EdelweissFE: A light-weight, platform-independent, parallel finite element framework"
+version: "26.05"
+date-released: "2026-05-27"
+url: "https://github.com/Edelweiss-Numerics/EdelweissFE"
+repository-code: "https://github.com/Edelweiss-Numerics/EdelweissFE"
+license: LGPL-2.1
+doi: "10.5281/zenodo.17603044"
+keywords:
+  - finite-elements
+  - finite-element-method
+  - nonlinear-mechanics
+  - constitutive-models
+  - geomechanics
+  - plasticity
+  - damage
+  - parallel-computing
+  - cython
+  - python
+authors:
+  - family-names: Neuner
+    given-names: Matthias
+    orcid: "https://orcid.org/0000-0003-2221-8089"
+    affiliation: "University of Innsbruck; Stanford University; BOKU University"
+  - family-names: Dummer
+    given-names: Alexander
+    orcid: "https://orcid.org/0000-0002-1998-1705"
+    affiliation: "University of Innsbruck; University of Colorado Boulder"
+  - family-names: Reitmair
+    given-names: Daniel
+    orcid: "https://orcid.org/0009-0002-2748-5442"
+    affiliation: "University of Innsbruck"
+  - family-names: Schreter-Fleischhacker
+    given-names: Magdalena
+    orcid: "https://orcid.org/0000-0003-3888-4086"
+    affiliation: "University of Innsbruck; Technical University Munich"
+  - family-names: Hofer
+    given-names: Paul
+    orcid: "https://orcid.org/0009-0001-6589-7993"
+    affiliation: "University of Innsbruck"
