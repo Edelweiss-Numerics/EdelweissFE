@@ -73,16 +73,19 @@ from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
 )
 
+module = Module("boxgen", "A mesh generator for cuboid geometries and structured hex meshes.")
+
 inputLanguage = InputLanguage()
-module = inputLanguage["modelGenerator"].addModule(
-    "boxgen", "A mesh generator for cuboid geometries and structured hex meshes."
-)
+
+keyword = "modelGenerator"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addOptionalArg("x0", "Origin along the x axis.", float, 0.0)
 module.addOptionalArg("y0", "Origin along the y axis.", float, 0.0)

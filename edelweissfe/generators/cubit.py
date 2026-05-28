@@ -36,14 +36,19 @@ import os
 import shlex
 
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
 )
 
+module = Module("cubit", "Interface to Cubit. Generate mesh using Cubit .jou files.")
+
 inputLanguage = InputLanguage()
-module = inputLanguage["modelGenerator"].addModule("cubit", "Interface to Cubit. Generate mesh using Cubit .jou files.")
+
+keyword = "modelGenerator"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addOptionalArg("cubitCmd", "Cubit executable.", str, "cubit")
 module.addRequiredArg("jouFile", "Path to Cubit journal (.jou) file.", str)

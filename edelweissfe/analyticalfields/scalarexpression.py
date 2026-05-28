@@ -34,17 +34,21 @@ import numpy as np
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.math import createModelAccessibleFunction
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
 )
 
+module = Module("scalarExpression", "Define an analytical field using a scalar expression.")
+
 inputLanguage = InputLanguage()
-module = inputLanguage["analyticalField"].addModule(
-    "scalarExpression", "Define an analytical field using a scalar expression."
-)
+
+keyword = "analyticalField"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
+
 module.addRequiredArg(
     "f(x,y,z)",
     "Python expression using variables x, y, z (coordinates); dictionaries contained in model can be accessed",

@@ -53,16 +53,19 @@ from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
 )
 
+module = Module("microstructuregenerator", "A mesh generator for generating a structure from a single unit cell mesh.")
+
 inputLanguage = InputLanguage()
-module = inputLanguage["modelGenerator"].addModule(
-    "microstructuregenerator", "A mesh generator for generating a structure from a single unit cell mesh."
-)
+
+keyword = "modelGenerator"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addOptionalArg("unitCellMeshFile", "Path to the unit cell mesh file.", str, None)
 

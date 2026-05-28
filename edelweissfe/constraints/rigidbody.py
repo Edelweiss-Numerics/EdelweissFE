@@ -33,19 +33,19 @@ import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
 )
 
-# documentation = {
-#     "nSet": "(slave) node set, which is constrained to the reference point",
-#     "referencePoint": "(master) reference point",
-# }
+module = Module("rigidbody", "A rigid body constraint tying nodes to a reference point.")
 
 inputLanguage = InputLanguage()
-module = inputLanguage["constraint"].addModule("rigidbody", "A rigid body constraint tying nodes to a reference point.")
+
+keyword = "constraint"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addRequiredArg("nSet", "Node set to tie.", str)
 module.addRequiredArg("referencePoint", "Node set containing only the reference point.", str)

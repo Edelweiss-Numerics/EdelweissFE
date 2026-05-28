@@ -31,7 +31,7 @@
 
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.math import createMathExpression
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
@@ -48,11 +48,16 @@ A simple monitor to observe results (fieldOutputs) in the console during analysi
         fieldOutput=omega, f(x)='max(x)'
 """
 
-inputLanguage = InputLanguage()
-module = inputLanguage["output"].addModule(
+module = Module(
     "monitor",
     "A simple monitor to observe results (fieldOutputs) in the console during analysis.",
 )
+
+inputLanguage = InputLanguage()
+
+keyword = "output"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addRequiredArg("fieldOutput", "Name of the field output to monitor.", str)
 module.addOptionalArg("label", "Name of the output manager.", str, "Monitor")

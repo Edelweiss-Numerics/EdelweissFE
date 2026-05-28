@@ -32,7 +32,7 @@
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.exceptions import ConditionalStop
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.math import createModelAccessibleFunction
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
@@ -51,10 +51,13 @@ Useful, e.g., for indirect displacement control.
         stop='fieldOutputs["displacement"]  < -5'
 """
 
+module = Module("ConditionalStop", "A simple monitor to observe results (fieldOutputs) in the console during analysis.")
+
 inputLanguage = InputLanguage()
-module = inputLanguage["output"].addModule(
-    "ConditionalStop", "A simple monitor to observe results (fieldOutputs) in the console during analysis."
-)
+
+keyword = "output"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addRequiredArg("stop", "Model accessible function describing the stop condition.", str)
 

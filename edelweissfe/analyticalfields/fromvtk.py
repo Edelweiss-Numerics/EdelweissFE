@@ -34,14 +34,19 @@ from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
 )
 
+module = Module("fromVtk", "Use PyVista to interpolate from vtk data.")
+
 inputLanguage = InputLanguage()
-module = inputLanguage["analyticalField"].addModule("fromVtk", "Use PyVista to interpolate from vtk data.")
+
+keyword = "analyticalField"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addRequiredArg("file", "path to database file", str)
 module.addRequiredArg("result", "result name in database", str)

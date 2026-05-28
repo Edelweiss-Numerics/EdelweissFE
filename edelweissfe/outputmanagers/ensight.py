@@ -47,7 +47,7 @@ from edelweissfe.utils.fieldoutput import (
     NodeFieldOutput,
     _FieldOutputBase,
 )
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.meshtools import disassembleElsetToEnsightShapes
 from edelweissfe.utils.misc import caseInsensitiveKwargsChecker
 
@@ -58,9 +58,13 @@ For each part, perNode and perElement results can be exported, which are importe
 
 """
 
+module = Module("ensight", "Ensight export.")
+
 inputLanguage = InputLanguage()
-module = inputLanguage["output"].addModule("ensight", "Ensight export.")
-# module.addOptionalArg("name", "", str, "esExport")
+
+keyword = "output"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 kw = module.addOptionalKeyword("perNode", "Node-based Ensight export.")
 kw.addRequiredArg(
@@ -721,9 +725,9 @@ class OutputManager(OutputManagerBase):
         fieldOutputController,
         journal,
         plotter,
-        perNodeDefs: list[dict],
-        perElementDefs: list[dict],
-        configurations: list[dict],
+        perNodeDefs: list[dict] = [],
+        perElementDefs: list[dict] = [],
+        configurations: list[dict] = [],
         **kwargs,
     ):
         self.name = name
