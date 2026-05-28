@@ -65,6 +65,9 @@ class InputLanguage:
 
         return
 
+    def __contains__(self, item) -> bool:
+        return item.casefold() in [kw.name.casefold() for kw in self.keywords]
+
     def __repr__(self) -> str:
         return str(self.keywords)
 

@@ -51,7 +51,13 @@ from edelweissfe.utils.elementresultcollector import ElementResultCollector
 from edelweissfe.utils.inputlanguage import InputLanguage
 
 inputLanguage = InputLanguage()
-module = inputLanguage["fieldOutput"].addModule("fieldOutput", "Manage field outputs.")
+keyword = "fieldOutput"
+
+# if inputLanguage singleton has not been filled before, keyword is added here so that module can be instantiated
+if keyword not in inputLanguage:
+    inputLanguage.addKeyword(keyword, "")
+
+module = inputLanguage[keyword].addModule("fieldOutput", "Manage field outputs.")
 
 kw = module.addOptionalKeyword("perNode", "Create node-based field output.")
 kw.addRequiredArg("name", "Name of the field output.", str)
