@@ -159,7 +159,9 @@ class PrettyPrintDirective(CodeBlock):
         result = []
         for item in member_data:
             # Each item is a Module or InputFileKeyword
-            item_caption = caption if len(member_data) == 1 else f"{caption} [{item.name}]" if caption else f"[{item.name}]"
+            item_caption = (
+                caption if len(member_data) == 1 else f"{caption} [{item.name}]" if caption else f"[{item.name}]"
+            )
             table, head, body = self._make_table(item_caption, ncols=3)
             row = nodes.row()
             row += nodes.entry("", nodes.paragraph("", nodes.Text("Option")))
@@ -190,7 +192,9 @@ class PrettyPrintDirective(CodeBlock):
                     self._add_literal_row(kw_body, arg.name, f"{arg.dtype.__name__} (required)", arg.description)
                 for arg in getattr(kw, "optionalArgs", []):
                     default = getattr(arg, "default", None)
-                    self._add_literal_row(kw_body, arg.name, f"{arg.dtype.__name__}, default={default!r}", arg.description)
+                    self._add_literal_row(
+                        kw_body, arg.name, f"{arg.dtype.__name__}, default={default!r}", arg.description
+                    )
                 result.append(kw_table)
 
         return result
