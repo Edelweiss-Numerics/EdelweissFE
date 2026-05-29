@@ -17,3 +17,5 @@ esExport
 ensightExport
 build
 EdelweissFE.egg-info
+docs
+edelweissfe/built_extensions.log

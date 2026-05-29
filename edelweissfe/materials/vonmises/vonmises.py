@@ -72,23 +72,19 @@ class VonMisesMaterial(BaseHypoElasticMaterial):
     materialProperties
         The numpy array containing the material properties.
 
-    Material properties
-    -------------------
-    E
-        Elasticity module (Young's modulus).
-    v
-        Poisson's ratio.
-    fy0
-        Yield stress.
-    HLin
-        Linear plastic hardening parameter.
-    dfy
-        Multiplicator for nonlinear isotropic hardening.
-    delta
-        Exponent for nonlinear isotropic hardening.
+    Notes
+    ----
+    **Material Properties**
 
-    Hardening law
-    -------------
+    - E: Elasticity module (Young's modulus).
+    - v: Poisson's ratio.
+    - fy0: Yield stress.
+    - HLin: Linear plastic hardening parameter.
+    - dfy: Multiplicator for nonlinear isotropic hardening.
+    - delta: Exponent for nonlinear isotropic hardening.
+
+    **Hardening Law**
+
     fy(kappa) = fy0 + HLin * kappa + dfy * (1 - exp(-delta * kappa))
     """
 

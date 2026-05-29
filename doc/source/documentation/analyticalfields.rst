@@ -15,9 +15,9 @@ Relevant module ``edelweissfe.analyticalfields.scalarexpression``
 .. pprint:: edelweissfe.analyticalfields.scalarexpression.documentation
     :caption: Options
 
-.. literalinclude:: ../../../testfiles/AnalyticalFieldsScalarExpression/test.inp
+.. literalinclude:: ../../../testfiles/marmot/AnalyticalFieldsScalarExpression/test.inp
     :language: edelweiss
-    :caption: Example: ``testfiles/AnalyticalFieldsScalarExpression/test.inp``
+    :caption: Example: ``testfiles/marmot/AnalyticalFieldsScalarExpression/test.inp``
 
 ``randomscalar`` - A random field
 ---------------------------------
@@ -30,9 +30,9 @@ Relevant module ``edelweissfe.analyticalfields.randomscalar``
 .. pprint:: edelweissfe.analyticalfields.randomscalar.documentation
      :caption: Options
 
-.. literalinclude:: ../../../testfiles/AnalyticalFieldsRandomScalar/test.inp
+.. literalinclude:: ../../../testfiles/marmot/AnalyticalFieldsRandomScalar/test.inp
      :language: edelweiss
-     :caption: Example: ``testfiles/AnalyticalFieldsRandomScalar/test.inp``
+     :caption: Example: ``testfiles/marmot/AnalyticalFieldsRandomScalar/test.inp``
 
 ``fromvtk`` - Field interpolated from VTK data
 -----------------------------------------------

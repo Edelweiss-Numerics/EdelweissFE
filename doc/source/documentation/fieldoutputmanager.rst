@@ -9,9 +9,9 @@ Relevant module: ``edelweissfe.utils.fieldoutput``
 .. pprint:: edelweissfe.utils.fieldoutput.documentation
    :caption: Options:
 
-.. literalinclude:: ../../../testfiles/FieldOutput/fieldOutput.inp
+.. literalinclude:: ../../../testfiles/marmot/FieldOutput/fieldOutput.inp
    :language: edelweiss
-   :caption: Example file: ``../../../testfiles/FieldOutput/fieldOutput.inp``
+   :caption: Example file: ``../../../testfiles/marmot/FieldOutput/fieldOutput.inp``
 
 Module documentation:
 

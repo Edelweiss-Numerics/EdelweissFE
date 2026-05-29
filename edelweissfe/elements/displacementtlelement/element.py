@@ -102,32 +102,26 @@ class DisplacementTLElement(BaseElement):
     elNumber
         A unique integer label used for all kinds of purposes.
 
+    Notes
+    -----
     The following types of elements and attributes are currently possible (elementType):
 
-    Elements
-    --------
-        CPE4
-            quadrilateral element with 4 nodes and plane strain.
-        CPE8
-            quadrilateral element with 8 nodes and plane strain.
-        CPS4
-            quadrilateral element with 4 nodes and plane stress.
-        CPS8
-            quadrilateral element with 8 nodes and plane stress.
-        C3D8
-            hexahedron element with 8 nodes.
-        C3D20
-            hexahedron element with 20 nodes.
+    **Elements**
 
-    optional Parameters
-    -------------------
+    - CPE4: quadrilateral element with 4 nodes and plane strain.
+    - CPE8: quadrilateral element with 8 nodes and plane strain.
+    - CPS4: quadrilateral element with 4 nodes and plane stress.
+    - CPS8: quadrilateral element with 8 nodes and plane stress.
+    - C3D8: hexahedron element with 8 nodes.
+    - C3D20: hexahedron element with 20 nodes.
+
+    **Optional Parameters**
+
     The following attributes are also included in the elType definition:
 
-        R
-            reduced integration for element, at the end of elType.
-        E
-            extended integration for element, at the end of elType.
-        N
+    - R: reduced integration for element, at the end of elType.
+    - E: extended integration for element, at the end of elType.
+    - N
             (optional) regular integration for element, at the end of elType.
 
     If R or E is not given by the user, we assume regular increment."""
