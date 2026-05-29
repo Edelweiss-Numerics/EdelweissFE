@@ -236,6 +236,33 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         """
 
     @abstractmethod
+    def computeCriticalTimeStepForExplicitDynamics(
+        self,
+        Q: np.ndarray,
+    ) -> float:
+        """Evaluate the critical time step for explicit dynamics.
+        Parameters
+        ----------
+        Q
+            The current solution vector, which might be needed to compute the critical time step due to nonlinearities.
+
+        Returns
+        -------
+        float
+            The critical time step.
+        """
+
+    @abstractmethod
+    def computeInternalEnergy(self) -> float:
+        """Evaluate the internal energy of the element.
+
+        Returns
+        -------
+        float
+            The internal energy.
+        """
+
+    @abstractmethod
     def computeBodyForce(
         self,
         P: np.ndarray,

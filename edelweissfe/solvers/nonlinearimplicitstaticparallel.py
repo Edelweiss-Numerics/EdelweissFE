@@ -30,7 +30,7 @@
 Parallel implementation of the NIST solver.
 """
 
-
+import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.numerics.parallelizationutilities import getNumberOfThreads
 from edelweissfe.solvers.base.parallelelementcomputation import (
     computeElementsInParallel,
@@ -47,5 +47,6 @@ class NISTParallel(NIST):
         self.journal.message("Using {:} threads".format(getNumberOfThreads()), self.identification)
         return super().solveStep(step, model, fieldOutputController, outputmanagers)
 
+    @performancetiming.timeit("elements")
     def computeElements(self, elements, Un1, dU, P, K, F, timeStep):
         return computeElementsInParallel(elements, Un1, dU, P, K, F, timeStep)

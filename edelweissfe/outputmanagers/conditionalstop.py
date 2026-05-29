@@ -98,7 +98,7 @@ class OutputManager(OutputManagerBase):
 
     def finalizeIncrement(self, **kwargs):
         for nJob in self.monitorJobs:
-            if nJob["stop"]():
+            if nJob():
                 raise ConditionalStop()
 
     def finalizeFailedIncrement(self, **kwargs):

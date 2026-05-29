@@ -90,9 +90,13 @@ class OutputManager(OutputManagerBase):
         pass
 
     def finalizeIncrement(self, statusInfoDict: dict = {}, **kwargs):
+        if statusInfoDict is None:
+            raise ValueError("Status info dictionary is None. Statusfile cannot be used with this solver.")
         self.writeStatusFile(statusInfoDict)
 
     def finalizeFailedIncrement(self, statusInfoDict: dict = {}, **kwargs):
+        if statusInfoDict is None:
+            raise ValueError("Status info dictionary is None. Statusfile cannot be used with this solver.")
         self.writeStatusFile(statusInfoDict)
 
     def finalizeStep(self):
