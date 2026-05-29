@@ -1,0 +1,47 @@
+*material, name=AT2PHASEFIELD, id=myMaterial
+20000, 0.2, 0.1, 5
+
+*material, name=AT2PHASEFIELD, id=myMaterialWeak
+20000, 0.2, 0.09, 5
+
+*section, name=section1, material=myMaterial, type=plane, thickness=1
+all
+
+*section, name=section2, material=myMaterialWeak, type=plane, thickness=1
+gen_central
+
+*job, name=myjob, domain=2d
+*solver, solver=NISTPArcLength, name=theSolver
+
+*modelgenerator, generator=findclosestnode, executeaftermanualgeneration=True, name=gen1
+location='23,0'
+storeIn=IDC1
+
+*modelgenerator, generator=findclosestnode, executeaftermanualgeneration=True, name=gen2
+location='27,0'
+storeIn=IDC2
+
+*modelGenerator, generator=planeRectQuad, name=gen
+l=50
+h=10
+nX=11
+nY=1
+elType=GCPS8R
+
+
+*step, maxInc=5e-3, minInc=1e-8, maxNumInc=10000, maxIter=25, stepLength=1, solver=theSolver
+>>options, category=NISTArcLength, arcLengthController=indirectcontrol
+>>indirectcontrol, dof1='model.nodeSets["IDC1"][0].fields["displacement"]', cVector1='[-1,0]', dof2='model.nodeSets["IDC2"][0].fields["displacement"]', cVector2='[1,0]', L=1e-2,
+>>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0
+>>dirichlet, name=bottom, nSet=gen_bottom, field=displacement, 2=0
+>>dirichlet, name=right, nSet=gen_right, field=displacement, 1=.5
+*fieldoutput
+>>perNode, name=RF, field=displacement, result=P, nSet=gen_right, export=RF, f(x)="np.sum(x[:,0])", saveHistory=True
+>>perNode, name=U, field=displacement, result=U, nSet=gen_right, export=U, f(x)="np.mean(x[:,0])", saveHistory=True
+>>perNode, name=Displacement, field=displacement, result=U, elSet=all
+>>perNode, name=PhaseField, field=nonlocal damage, result=U, elSet=all
+*output, type=ensight,
+>>perNode, fieldOutput=Displacement
+>>perNode, fieldOutput=PhaseField
+>>configuration, overwrite=yes
+
