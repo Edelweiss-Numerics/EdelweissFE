@@ -178,7 +178,34 @@ class PrettyPrintDirective(CodeBlock):
                 default = getattr(arg, "default", None)
                 self._add_literal_row(body, arg.name, f"{arg.dtype.__name__}, default={default!r}", arg.description)
 
+            # Required datalines
+            dl = getattr(item, "requiredDatalines", None)
+            if dl is not None:
+                self._add_literal_row(body, dl.name, f"{dl.dtype} (required)", dl.description)
+
+            # Optional datalines
+            dl = getattr(item, "optionalDatalines", None)
+            if dl is not None:
+                self._add_literal_row(body, dl.name, f"{dl.dtype}, optional", dl.description)
+
             result.append(table)
+
+            # Nested required keywords
+            for kw in getattr(item, "requiredKeywords", []):
+                kw_table, kw_head, kw_body = self._make_table(f"Keyword: {kw.name} (required)", ncols=3)
+                kw_row = nodes.row()
+                kw_row += nodes.entry("", nodes.paragraph("", nodes.Text("Option")))
+                kw_row += nodes.entry("", nodes.paragraph("", nodes.Text("Type / Default")))
+                kw_row += nodes.entry("", nodes.paragraph("", nodes.Text("Description")))
+                kw_head += kw_row
+                for arg in getattr(kw, "requiredArgs", []):
+                    self._add_literal_row(kw_body, arg.name, f"{arg.dtype.__name__} (required)", arg.description)
+                for arg in getattr(kw, "optionalArgs", []):
+                    default = getattr(arg, "default", None)
+                    self._add_literal_row(
+                        kw_body, arg.name, f"{arg.dtype.__name__}, default={default!r}", arg.description
+                    )
+                result.append(kw_table)
 
             # Nested optional keywords (e.g. step actions inside a step module)
             for kw in getattr(item, "optionalKeywords", []):
