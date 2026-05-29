@@ -228,10 +228,7 @@ class PrettyPrintDirective(CodeBlock):
 
     def run(self):
         module_path, member_name = self.arguments[0].rsplit(".", 1)
-        try:
-            member_data = getattr(import_module(module_path), member_name)
-        except Exception:
-            return []
+        member_data = getattr(import_module(module_path), member_name)
         caption = self.options.get("caption", "")
 
         if isinstance(member_data, dict):
