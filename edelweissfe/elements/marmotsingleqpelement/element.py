@@ -217,7 +217,17 @@ class MarmotMaterialWrappingElement(BaseElement):
 
         raise ValueError("This should not be called for this wrapper.")
 
+    def computeCriticalTimeStepForExplicitDynamics(self, Q):
+        """Not implemented for this wrapper."""
+
+        raise ValueError("This should not be called for this wrapper.")
+
     def computeDistributedLoad(self, loadType, P, K, faceID, load, U, time, dTime):
+        """Not implemented for this wrapper."""
+
+        raise ValueError("This should not be called for this wrapper.")
+
+    def computeInternalEnergy(self):
         """Not implemented for this wrapper."""
 
         raise ValueError("This should not be called for this wrapper.")

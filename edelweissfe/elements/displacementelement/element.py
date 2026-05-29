@@ -208,6 +208,7 @@ class DisplacementElement(BaseElement):
         self.J = computeJacobian(
             self._xi, self._eta, self._zeta, self._nodesCoordinates, self._nInt, self.nNodes, self.nSpatialDimensions
         )
+        self.detJ = np.array([lin.det(self.J[i]) for i in range(self._nInt)])
         self.B = computeBOperator(
             self._xi, self._eta, self._zeta, self._nodesCoordinates, self._nInt, self.nNodes, self.nSpatialDimensions
         )
@@ -458,6 +459,74 @@ class DisplacementElement(BaseElement):
 
         # compute lumped mass matrix by summing up the rows
         M[:] = np.sum(cmm, axis=1)
+
+    def computeCriticalTimeStepForExplicitDynamics(self, Q: np.ndarray):
+
+        dt = np.inf
+
+        rho = self.material.getDensity()
+
+        dEps = np.zeros(6)
+        dEps += 1e-6  # small strain increment to compute the tangent stiffness
+        _stateVarsTemp = [self._stateVarsRef[i].copy() for i in range(self._nInt)].copy()
+
+        for i in range(self._nInt):
+            # get characteristic element length
+            l_ = self.getCharacteristicElementLength(i)
+
+            tangent = np.zeros((6, 6))
+            self.material.assignCurrentStateVars(_stateVarsTemp[i][12:])
+            self.material.computeStress(_stateVarsTemp[i][0:6], tangent, dEps, np.array([0, 0]), 1)
+
+            # get the maximum diagonal element
+            maxCii = max(np.diag(tangent))
+            # compute wave speed
+            c = np.sqrt(maxCii / rho)
+
+            dt = min(dt, l_ / c)
+
+        return dt
+
+    def computeInternalEnergy(self) -> float:
+        """Evaluate the internal energy of the element.
+
+        Returns
+        -------
+        float
+            The internal energy.
+        """
+        energy = 0
+        for i in range(self._nInt):
+            stress = self._stateVarsTemp[i][0:6]
+            strain = self._stateVarsTemp[i][6:12]
+            energy += (
+                0.5
+                * np.dot(stress[self._activeVoigtIndices], strain[self._activeVoigtIndices])
+                * lin.det(self.J[i])
+                * self._t
+                * self._weight[i]
+            )
+
+        return energy
+
+    def getCharacteristicElementLength(self, qp: int = 0):
+        """Compute the characteristic element length.
+        Parameters
+        ----------
+        qp
+            The number of the quadrature point for which the characteristic element length should be computed. If not given, it is computed for the first quadrature point.
+
+        Returns
+        -------
+        l
+            The characteristic element length.
+        """
+        if self.nSpatialDimensions == 1:
+            return self._nodesCoordinates[0, 1] - self._nodesCoordinates[0, 0]
+        elif self.nSpatialDimensions == 2:
+            return np.sqrt(4 * self.detJ[qp])
+        elif self.nSpatialDimensions == 3:
+            return np.qbrt(8 * self.detJ[qp])
 
     def acceptLastState(
         self,

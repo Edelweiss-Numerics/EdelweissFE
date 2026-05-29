@@ -180,7 +180,7 @@ class StepManager:
                     mssg += " Define solver using *solver keyword."
                 raise KeyError(mssg)
 
-            if solver.identification in ["NESTSolver", "NESTPSolver"]:
+            if solver.identification in ["NESTSolver", "NESTPSolver", "NEDSolver", "NEDPSolver"]:
                 yield AdaptiveStepForExplicitSimulations(
                     stepNumber,
                     model,

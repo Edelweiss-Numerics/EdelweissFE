@@ -563,6 +563,47 @@ class DisplacementTLElement(BaseElement):
         # compute lumped mass matrix by summing up the rows
         M[:] = np.sum(cmm, axis=1)
 
+    def computeCriticalTimeStepForExplicitDynamics(self, Q: np.ndarray):
+        raise NotImplementedError(
+            "Critical time step computation for explicit dynamics is not implemented "
+            "for this total-Lagrangian displacement element."
+        )
+
+    def getCharacteristicElementLength(self, qp: int = 0):
+        """Compute the characteristic element length for the critical time step calculation in explicit dynamics.
+        Parameters
+        ----------
+        qp
+            The number of the quadrature point for which the characteristic element length should be computed. If not given, it is computed for the first quadrature point.
+
+        Returns
+        -------
+        l
+            The characteristic element length.
+        """
+        if self._nSpatialDimensions == 1:
+            return self._nodesCoordinates[0, 1] - self._nodesCoordinates[0, 0]
+        elif self._nSpatialDimensions == 2:
+            return np.sqrt(4 * self.detJ[qp])
+        elif self._nSpatialDimensions == 3:
+            return np.qbrt(8 * self.detJ[qp])
+
+    def computeInternalEnergy(self) -> float:
+        """Compute the internal energy of the element.
+
+        Returns
+        -------
+        energy
+            The internal energy of the element.
+        """
+
+        energy = 0.0
+        for i in range(self._nInt):
+            detJ = lin.det(self.J[i])
+            energy += self._stateVarsTemp[i][0:6] @ self._stateVarsTemp[i][6:12] * detJ * self._t * self._weight[i]
+
+        return energy
+
     def acceptLastState(
         self,
     ):
