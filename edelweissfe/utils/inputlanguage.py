@@ -417,24 +417,6 @@ class Module:
 
         return moduleKw.name, options
 
-    # def parseDatalines(self, datalines):
-    #     args, kwargs = self.inputFileKeyword.parseDatalines(datalines)
-    #
-    #     # @caseInsensitiveKwargsChecker(
-    #     #     [kw.name for kw in self.requiredDatalineKwArgs], [kw.name for kw in self.optionalDatalineKwArgs]
-    #     # )
-    #     # def checkKeywordInput(*args, **kwargs):
-    #     #     """this is a dummy function needed to apply kwargsChecker"""
-    #     #     return
-    #     #
-    #     # try:
-    #     #     checkKeywordInput(**kwargs)
-    #     # except ValueError as e:
-    #     #     e.args = (f"Error during parsing of keyword {keywordIdentifier}{self.inputFileKeyword.name}: " + e.args[0],)
-    #     #     raise e
-    #
-    #     return args, kwargs
-
     def parseDatalines(self, datalines):
         args = []
         kwargs = CaseInsensitiveDict()
