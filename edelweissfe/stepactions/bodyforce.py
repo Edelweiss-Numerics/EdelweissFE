@@ -33,7 +33,7 @@ import numpy as np
 import sympy as sp
 
 from edelweissfe.stepactions.base.bodyloadbase import BodyLoadBase
-from edelweissfe.steps.adaptivestep import InputLanguage, Module
+from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
 
 """
@@ -43,12 +43,7 @@ If not modified in subsequent steps, the load held constant.
 
 
 inputLanguage = InputLanguage()
-
-keyword = "step"
-if keyword in inputLanguage:
-    module = inputLanguage["step"].getModule("adaptive")
-else:
-    module = Module("", "")
+module = inputLanguage["step"].getModule("adaptive")
 
 kw = module.addOptionalKeyword("bodyforce", "Apply body forces on element sets.")
 kw.addRequiredArg("name", "Name of the step action.", str)
