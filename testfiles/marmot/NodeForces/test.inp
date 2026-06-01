@@ -25,10 +25,13 @@ fieldOutput=RF, f(x)='mean(x[:,1])'
 >>perNode, fieldOutput=displacement
 >>configuration, overwrite=yes
 
-*step, maxInc=1e-1, minInc=1e-8, maxNumInc=50, maxIter=25, stepLength=100, solver=theSolver
+*step, solver=theSolver
+maxInc=1e-1, minInc=1e-8, maxNumInc=50, maxIter=25, stepLength=100
 >>dirichlet, name=bottom, nSet=gen_bottom,  field=displacement, 2=0, 1=0
 >>nodeforces, name=cloadTop, nSet=gen_top, field=displacement, 2=-50
-*step, maxInc=1e-1, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100, solver=theSolver
+*step, solver=theSolver
+maxInc=1e-1, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100
 >>nodeforces, name=cloadTop, 2=-10, f(t)=sin(t*2*pi)
-*step, maxInc=1e-1, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100, solver=theSolver
+*step, solver=theSolver
+maxInc=1e-1, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100
 >>nodeforces, name=cloadTop, 2=+50, f(t)=t

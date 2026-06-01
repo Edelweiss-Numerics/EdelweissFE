@@ -42,35 +42,43 @@ If not modified in subsequent steps, the load held constant.
 """
 
 inputLanguage = InputLanguage()
-module = inputLanguage["step"].getModule("adaptive")
 
-kw = module.addOptionalKeyword("distributedload", "Standard distributed load, applied on a surface set.")
-kw.addRequiredArg("name", "Name of the step action.", str)
-kw.addRequiredArg("surface", "Surface for application of the distributed load", str)
-# kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
-kw.addOptionalArg("field", "Field for which the boundary condition is active.", str, "displacement")
-kw.addRequiredArg("magnitude", "Magnitude of the distributed load", str)
-# kw.addOptionalArg("delta", "In subsequent steps only: define the new magnitude incrementally", str, 0)
-kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
-kw.addRequiredArg(
-    "type", "The load type, e.g., pressure or surface traction; Must be supported by the element type", str
-)
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
 
-documentation = [kw]
 
-kw = module.addOptionalKeyword("updatedistributedload", "Update a previously defined distributedload definition.")
-kw.addRequiredArg("name", "Name of the step action to update.", str)
-# kw.addRequiredArg("surface", "Surface for application of the distributed load", str)
-# kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
-# kw.addOptionalArg("field", "Field for which the boundary condition is active.", str, "displacement")
-kw.addOptionalArg("magnitude", "Magnitude of the distributed load", str, None)
-kw.addOptionalArg("delta", "In subsequent steps only: define the new magnitude incrementally", str, None)
-kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
-# kw.addRequiredArg(
-#     "type", "The load type, e.g., pressure or surface traction; Must be supported by the element type", str
-# )
+documentation = []
 
-documentation.append(kw)
+for module in modules:
+    kw = module.addOptionalKeyword("distributedload", "Standard distributed load, applied on a surface set.")
+    kw.addRequiredArg("name", "Name of the step action.", str)
+    kw.addRequiredArg("surface", "Surface for application of the distributed load", str)
+    # kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
+    kw.addOptionalArg("field", "Field for which the boundary condition is active.", str, "displacement")
+    kw.addRequiredArg("magnitude", "Magnitude of the distributed load", str)
+    # kw.addOptionalArg("delta", "In subsequent steps only: define the new magnitude incrementally", str, 0)
+    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+    kw.addRequiredArg(
+        "type", "The load type, e.g., pressure or surface traction; Must be supported by the element type", str
+    )
+
+    documentation.append(kw)
+
+    kw = module.addOptionalKeyword("updatedistributedload", "Update a previously defined distributedload definition.")
+    kw.addRequiredArg("name", "Name of the step action to update.", str)
+    # kw.addRequiredArg("surface", "Surface for application of the distributed load", str)
+    # kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
+    # kw.addOptionalArg("field", "Field for which the boundary condition is active.", str, "displacement")
+    kw.addOptionalArg("magnitude", "Magnitude of the distributed load", str, None)
+    kw.addOptionalArg("delta", "In subsequent steps only: define the new magnitude incrementally", str, None)
+    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+    # kw.addRequiredArg(
+    #     "type", "The load type, e.g., pressure or surface traction; Must be supported by the element type", str
+    # )
+
+    documentation.append(kw)
 
 
 class StepAction(DistributedLoadBase):

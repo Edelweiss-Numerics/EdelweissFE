@@ -44,22 +44,29 @@ Indirect (displacement) controller for the NISTArcLength solver
 
 
 inputLanguage = InputLanguage()
-module = inputLanguage["step"].getModule("adaptive")
 
-kw = module.addOptionalKeyword(
-    "indirectcontrol",
-    "Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.",
-)
-# kw.addRequiredArg("name", "Name of the step action.", str)
-kw.addRequiredArg("dof1", "Degree of freedom for the constraint (model access expression).", str)
-kw.addRequiredArg("dof2", "Degree of freedom for the constraint (model access expression).", str)
-kw.addRequiredArg("cVector1", "c vector.", str)
-kw.addRequiredArg("cVector2", "c vector.", str)
-kw.addRequiredArg("L", "Final distance (e.g. crack opening)", float)
-kw.addOptionalArg("exportCVector", "File to export the computed c vector", str, "")
-kw.addOptionalArg("absolute", "Use absolute formulation", bool, True)
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
 
-documentation = [kw]
+documentation = []
+
+for module in modules:
+    kw = module.addOptionalKeyword(
+        "indirectcontrol",
+        "Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.",
+    )
+    # kw.addRequiredArg("name", "Name of the step action.", str)
+    kw.addRequiredArg("dof1", "Degree of freedom for the constraint (model access expression).", str)
+    kw.addRequiredArg("dof2", "Degree of freedom for the constraint (model access expression).", str)
+    kw.addRequiredArg("cVector1", "c vector.", str)
+    kw.addRequiredArg("cVector2", "c vector.", str)
+    kw.addRequiredArg("L", "Final distance (e.g. crack opening)", float)
+    kw.addOptionalArg("exportCVector", "File to export the computed c vector", str, "")
+    kw.addOptionalArg("absolute", "Use absolute formulation", bool, True)
+
+    documentation.append(kw)
 
 
 class StepAction(StepActionBase):

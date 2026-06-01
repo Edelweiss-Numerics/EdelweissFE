@@ -39,11 +39,13 @@ all
 *AnalyticalField, name=AnalyticalField-01, type=scalarExpression
 "f(x,y,z)" = "x/30"
 
-*step, maxInc=1e0, minInc=1e0, maxNumInc=100, maxIter=25, stepLength=1, solver=theSolver
+*step, solver=theSolver
+maxInc=1e0, minInc=1e0, maxNumInc=100, maxIter=25, stepLength=1
 >>setfield,   name=sf,  fieldOutput=kappa, type=analyticalField, value=AnalyticalField-01
 >>dirichlet,  name=x0u, nSet=gen_left,      field=displacement, 1=0.
 >>dirichlet,  name=y0u, nSet=gen_bottom,    field=displacement, 2=0.
 >>dirichlet,  name=z0u, nSet=gen_back,      field=displacement, 3=0.
 
-*step, maxInc=1e-1, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1, solver=theSolver
+*step, solver=theSolver
+maxInc=1e-1, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
 >>dirichlet,  name=y1u, nSet=gen_top,    field=displacement, 2=-1.

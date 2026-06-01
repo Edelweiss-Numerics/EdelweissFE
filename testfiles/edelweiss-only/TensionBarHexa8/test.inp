@@ -26,7 +26,8 @@ all
 >>perNode, fieldOutput=displacement
 >>configuration, overwrite=yes
 
-*step, solver=theSolver, maxInc=1, minInc=1e-9, maxNumInc=1000, maxIter=25, stepLength=1
+*step, solver=theSolver
+maxInc=1, minInc=1e-9, maxNumInc=1000, maxIter=25, stepLength=1
 >>options, category=NISTSolver, extrapolation=off
 >>dirichlet, name=front,  nSet=gen_front, field=displacement, 1=0.0, 2=0.0, 3=.0
 >>nodeforces, name=back, nSet=gen_back, components='0, 0, -4.0', field=displacement

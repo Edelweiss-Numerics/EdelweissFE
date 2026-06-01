@@ -40,15 +40,22 @@ Stepaction to change material properties.
 
 
 inputLanguage = InputLanguage()
-module = inputLanguage["step"].getModule("adaptive")
 
-kw = module.addOptionalKeyword("changematerialproperty", "Stepaction to change material properties.")
-kw.addRequiredArg("name", "Name of the step action.", str)
-kw.addRequiredArg("material", "The id of the material to be changed", str)
-kw.addRequiredArg("index", "The index of the property in the material properties vector", int)
-kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
 
-documentation = [kw]
+documentation = []
+
+for module in modules:
+    kw = module.addOptionalKeyword("changematerialproperty", "Stepaction to change material properties.")
+    kw.addRequiredArg("name", "Name of the step action.", str)
+    kw.addRequiredArg("material", "The id of the material to be changed", str)
+    kw.addRequiredArg("index", "The index of the property in the material properties vector", int)
+    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+
+    documentation.append(kw)
 
 
 class StepAction(StepActionBase):
