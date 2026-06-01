@@ -83,10 +83,6 @@ def parseKeywordLine(line, fileName):
             if strCaseCmp(kw.name, "section") and strCaseCmp(options.get("type", ""), "plane"):
                 module = kw.getModule("plane")
 
-            elif strCaseCmp(kw.name, "step") and strCaseCmp(options.get("type", ""), "adaptive"):
-                # kwArgs arguments for adaptive step module must be given in the keyword line
-                module = kw.getModule("adaptive")
-
             if module is not None:
                 addRequired = [kw.name for kw in module.requiredArgs]
                 addOptional = [kw.name for kw in module.optionalArgs]
@@ -326,6 +322,9 @@ kw.addRequiredArg("solver", "solver to be used", str)
 kw.addOptionalArg("type", "step type", str, "adaptive")
 
 # isort: off
+from edelweissfe.steps.adaptivestep import inputLanguage  # noqa: F811,E402
+from edelweissfe.steps.adaptivestepforexplicitsimulations import inputLanguage  # noqa: F811,E402
+
 from edelweissfe.stepactions.bodyforce import inputLanguage  # noqa: F811,E402
 from edelweissfe.stepactions.changematerialproperty import inputLanguage  # noqa: F811,E402
 from edelweissfe.stepactions.dirichlet import inputLanguage  # noqa: F811,E402

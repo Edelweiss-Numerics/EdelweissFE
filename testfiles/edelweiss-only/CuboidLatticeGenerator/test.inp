@@ -27,7 +27,8 @@ all
 location='5, 15, 5'
 storeIn=topRP
 
-*step, solver=theSolver, maxInc=1, minInc=1e-3, maxNumInc=100, maxIter=25, stepLength=180
+*step, solver=theSolver
+maxInc=1, minInc=1e-3, maxNumInc=100, maxIter=25, stepLength=180
 ** initializematerial, name=init, elSet=all
 >>dirichlet, name=1, nSet=gen_bottom,       field=displacement, 1=0, 2=0, 3=0
 >>dirichlet, name=4, nSet=gen_top,       field=displacement, 3=0.1, 2=0, 1=0

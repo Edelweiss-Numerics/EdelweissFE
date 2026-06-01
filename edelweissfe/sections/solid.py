@@ -31,15 +31,21 @@
 from edelweissfe.sections.base.sectionbase import Section as SectionBase
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
     splitLinesAtCommas,
 )
 
+module = Module("solid", "This section represents a classical solid materal section.")
+
 inputLanguage = InputLanguage()
-module = inputLanguage["section"].addModule("solid", "This section represents a classical solid materal section.")
+
+keyword = "section"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
+
 module.addRequiredDatalines("elementSets as comma separated list of element sets for this section", str)
 
 kw = module.addOptionalKeyword("materialParameterFromField", "use material properties given by an analytical field")

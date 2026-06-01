@@ -29,17 +29,20 @@ nY=1
 elType=GCPS8R
 
 
-*step, maxInc=5e-3, minInc=1e-8, maxNumInc=10000, maxIter=25, stepLength=1, solver=theSolver
+*step, solver=theSolver
+maxInc=5e-3, minInc=1e-8, maxNumInc=10000, maxIter=25, stepLength=1
 >>options, category=NISTArcLength, arcLengthController=indirectcontrol
 >>indirectcontrol, dof1='model.nodeSets["IDC1"][0].fields["displacement"]', cVector1='[-1,0]', dof2='model.nodeSets["IDC2"][0].fields["displacement"]', cVector2='[1,0]', L=1e-2,
 >>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0
 >>dirichlet, name=bottom, nSet=gen_bottom, field=displacement, 2=0
 >>dirichlet, name=right, nSet=gen_right, field=displacement, 1=.5
+
 *fieldoutput
 >>perNode, name=RF, field=displacement, result=P, nSet=gen_right, export=RF, f(x)="np.sum(x[:,0])", saveHistory=True
 >>perNode, name=U, field=displacement, result=U, nSet=gen_right, export=U, f(x)="np.mean(x[:,0])", saveHistory=True
 >>perNode, name=Displacement, field=displacement, result=U, elSet=all
 >>perNode, name=PhaseField, field=nonlocal damage, result=U, elSet=all
+
 *output, type=ensight,
 >>perNode, fieldOutput=Displacement
 >>perNode, fieldOutput=PhaseField

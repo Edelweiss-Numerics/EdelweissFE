@@ -28,7 +28,7 @@
 
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
@@ -44,8 +44,13 @@ Writes a status file during the analysis.
         filename=myStatus.sta
 """
 
+module = Module("statusfile", "Writes a status file during the analysis.")
+
 inputLanguage = InputLanguage()
-module = inputLanguage["output"].addModule("statusfile", "Writes a status file during the analysis.")
+
+keyword = "output"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 # module.addOptionalArg("filename", "Name of the output manager.", str, "<jobname>.sta")
 module.addOptionalArg("filename", "Name of the output manager.", str, "job.sta")

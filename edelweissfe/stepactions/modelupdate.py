@@ -39,15 +39,22 @@ of a step.
 
 
 inputLanguage = InputLanguage()
-module = inputLanguage["step"].getModule("adaptive")
 
-kw = module.addOptionalKeyword(
-    "modelupdate", "This step action may be used for updating the model at the beginning of a step."
-)
-# kw.addRequiredArg("name", "Name of the step action.", str)
-kw.addRequiredArg("update", "Model accessible, executable expression", str)
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
 
-documentation = [kw]
+documentation = []
+
+for module in modules:
+    kw = module.addOptionalKeyword(
+        "modelupdate", "This step action may be used for updating the model at the beginning of a step."
+    )
+    # kw.addRequiredArg("name", "Name of the step action.", str)
+    kw.addRequiredArg("update", "Model accessible, executable expression", str)
+
+    documentation.append(kw)
 
 
 class StepAction(StepActionBase):

@@ -50,10 +50,13 @@ fieldOutput=LoadTop, f(x)='sum(x[:,1]) / (100*1)'
 >>perNode, fieldOutput=Displacement
 >>configuration, overwrite=yes
 
-*step, maxInc=1e-1, minInc=1e-1, maxNumInc=1000, maxIter=25, stepLength=24, solver=theSolver
+*step, solver=theSolver
+maxInc=1e-1, minInc=1e-1, maxNumInc=1000, maxIter=25, stepLength=24
 >>dirichlet, name=bottom, nSet=gen_bottom, 2=0, field=displacement
 >>dirichlet, name=left, nSet=gen_left, 1=0, field=displacement
-*step, maxInc=2e-2, minInc=1e-2, maxNumInc=1000, maxIter=25, stepLength=0.01, solver=theSolver
+*step, solver=theSolver
+maxInc=2e-2, minInc=1e-2, maxNumInc=1000, maxIter=25, stepLength=0.01
 >>distributedload, name=dload, surface=gen_top, magnitude=3.9, type=pressure, f(t)=t
 
-*step, maxInc=5e-3, minInc=1e-6, maxNumInc=1000, maxIter=25, stepLength=1344, solver=theSolver
+*step, solver=theSolver
+maxInc=5e-3, minInc=1e-6, maxNumInc=1000, maxIter=25, stepLength=1344

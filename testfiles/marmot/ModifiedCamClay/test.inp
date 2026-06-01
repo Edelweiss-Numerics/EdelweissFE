@@ -77,7 +77,8 @@ fieldOutput=lnp
 ** pre-consolidation
 ** ----------------
 
-*step, solver=theSolver, maxInc=1e0, minInc=1e-5, maxNumInc=100000, maxIter=25, stepLength=1
+*step, solver=theSolver
+maxInc=1e0, minInc=1e-5, maxNumInc=100000, maxIter=25, stepLength=1
 >>setfield, fieldOutput=sdv, type=uniform, value="1.45, 0, 90., 0, 0"
 >>options, category=NISTSolver, extrapolation=linear
 >>dirichlet, name=bottom, nSet=bottom,field=displacement, 3=0.0
@@ -91,7 +92,8 @@ fieldOutput=lnp
 ** ----------------
 ** shearing
 ** ----------------
-*step, solver=theSolver, maxInc=1e-2, minInc=1e-9, maxNumInc=100000, maxIter=25, stepLength=1
+*step, solver=theSolver
+maxInc=1e-2, minInc=1e-9, maxNumInc=100000, maxIter=25, stepLength=1
 >>dirichlet, name=top, nSet=top,field=displacement, 3=-0.05
 
 *output, type=meshPlot,

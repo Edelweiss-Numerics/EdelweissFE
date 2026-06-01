@@ -32,12 +32,16 @@
 Directly execute Python code to create the model tree.
 """
 
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
+
+module = Module("executePythoncode", "Directly execute Python code to create the model tree.")
 
 inputLanguage = InputLanguage()
-module = inputLanguage["modelGenerator"].addModule(
-    "executePythoncode", "Directly execute Python code to create the model tree."
-)
+
+keyword = "modelGenerator"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
+
 module.addRequiredDatalines("Python code to run", str)
 
 documentation = [module]

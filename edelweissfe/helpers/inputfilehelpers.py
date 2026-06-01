@@ -273,14 +273,12 @@ def createStepManagerFromInputFile(inputfile: dict):
         inputFile = stepDefinition.pop("inputfile")  # noqa F841
         data = stepDefinition.pop("datalines")  # noqa F841
 
-        # special treatment of *step/adaptive step module
-        # arguments for adaptive step module must be provided in keyword line
-        if not len(data) == 0:
-            raise ValueError(
-                f"Error during parsing of keyword {keywordIdentifier}step: {inputLanguage['step'].modules[0]} expects no data lines.\nProvide arguments to {inputLanguage['step'].modules[0]} in keyword line!\nUse the module-level keyword identifier {moduleLevelKeywordIdentifier} to define step actions."
-            )
-
         stepActionDefinitions = []
+
+        module = inputLanguage["step"].getModule(stepType)
+        args, kwargs = module.parseDatalines(data)
+
+        stepDefinition.update(kwargs)
 
         for module, definitions in stepActionLines.items():
             for definition in definitions:

@@ -43,16 +43,22 @@ If not modified in subsequent steps, the load held constant.
 
 
 inputLanguage = InputLanguage()
-module = inputLanguage["step"].getModule("adaptive")
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
 
-kw = module.addOptionalKeyword("bodyforce", "Apply body forces on element sets.")
-kw.addRequiredArg("name", "Name of the step action.", str)
-kw.addRequiredArg("elSet", "The element set for application of the boundary condition.", str)
-kw.addRequiredArg("forceVector", "The force vector.", str)
-kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
-kw.addOptionalArg("delta", "In subsequent steps only: define the updated force vector incrementally", str, 0)
+documentation = []
 
-documentation = [kw]
+for module in modules:
+    kw = module.addOptionalKeyword("bodyforce", "Apply body forces on element sets.")
+    kw.addRequiredArg("name", "Name of the step action.", str)
+    kw.addRequiredArg("elSet", "The element set for application of the boundary condition.", str)
+    kw.addRequiredArg("forceVector", "The force vector.", str)
+    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+    kw.addOptionalArg("delta", "In subsequent steps only: define the updated force vector incrementally", str, 0)
+
+    documentation.append(kw)
 
 
 class StepAction(BodyLoadBase):

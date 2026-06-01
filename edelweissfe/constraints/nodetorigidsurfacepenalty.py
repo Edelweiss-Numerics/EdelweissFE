@@ -36,7 +36,7 @@ from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
@@ -46,11 +46,16 @@ from edelweissfe.utils.misc import (
 A penalty based unilateral constraint used for preventing the nodes of a node set from penetrating a defined rigid boundary.
 """
 
-inputLanguage = InputLanguage()
-module = inputLanguage["constraint"].addModule(
+module = Module(
     "nodeToRigidSurfacePenalty",
     "A penalty based unilateral constraint used for preventing the nodes of a node set from penetrating a defined rigid boundary.",
 )
+
+inputLanguage = InputLanguage()
+
+keyword = "constraint"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addRequiredArg("field", "The field this constraint acts on.", str)
 module.addRequiredArg("component", "The component of the field.", int)

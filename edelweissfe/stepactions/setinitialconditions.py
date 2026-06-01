@@ -38,16 +38,22 @@ from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.steps.adaptivestep import InputLanguage
 
 inputLanguage = InputLanguage()
-module = inputLanguage["step"].getModule("adaptive")
 
-kw = module.addOptionalKeyword("setinitialconditions", "Pass initial conditions to elements.")
-# kw.addRequiredArg("name", "Name of the step action.", str)
-kw.addRequiredArg("property", "The name of the property to be initialized", str)
-kw.addRequiredArg("values", "Comma separated property values.", str)
-kw.addOptionalArg("elSet", "The element set for which the initaliziation is performed", str, "all")
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
 
+documentation = []
 
-documentation = [kw]
+for module in modules:
+    kw = module.addOptionalKeyword("setinitialconditions", "Pass initial conditions to elements.")
+    # kw.addRequiredArg("name", "Name of the step action.", str)
+    kw.addRequiredArg("property", "The name of the property to be initialized", str)
+    kw.addRequiredArg("values", "Comma separated property values.", str)
+    kw.addOptionalArg("elSet", "The element set for which the initaliziation is performed", str, "all")
+
+    documentation.append(kw)
 
 
 class StepAction(StepActionBase):

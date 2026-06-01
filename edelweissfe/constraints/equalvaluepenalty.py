@@ -36,7 +36,7 @@ from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
@@ -47,18 +47,16 @@ A penalty based constraint used for constraining nodal values
 of a node set to be equal.
 """
 
-# documentation = {
-#     "field": "The field this constraint acts on.",
-#     "component": "The component of the field.",
-#     "penalty": "The numerical penalty value.",
-#     "nSet": "The node set to be constrained.",
-# }
-
-inputLanguage = InputLanguage()
-module = inputLanguage["constraint"].addModule(
+module = Module(
     "equalvaluepenalty",
     "A lagrangian multiplier based constraint used for constraining nodal values of a node set to be equal.",
 )
+
+inputLanguage = InputLanguage()
+
+keyword = "constraint"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addRequiredArg("field", "The field this constraint acts on.", str)
 module.addRequiredArg("component", "The component of the field.", int)

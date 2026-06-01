@@ -40,19 +40,26 @@ from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.steps.adaptivestep import InputLanguage
 
 inputLanguage = InputLanguage()
-module = inputLanguage["step"].getModule("adaptive")
 
-kw = module.addOptionalKeyword("geostatic", "Initialize materials to an geostatic stress state.")
-kw.addRequiredArg("name", "Name of the step action.", str)
-kw.addRequiredArg("p1", "sig_x=sig_y=sig_z in first point.", float)
-kw.addOptionalArg("p2", "sig_x=sig_y=sig_z in second point.", float, None)
-kw.addOptionalArg("h1", "y coordinate of first point", float, 1.0)
-kw.addOptionalArg("h2", "y coordinate of second point", float, -1.0)
-kw.addOptionalArg("xLateral", "ratio of sig_x/sig_y, default=1.0", float, 1.0)
-kw.addOptionalArg("zLateral", "ratio of sig_z/sig_y, default=1.0", float, 1.0)
-kw.addOptionalArg("elSet", "The element set for which the initaliziation is performed", str, "all")
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
 
-documentation = [kw]
+documentation = []
+
+for module in modules:
+    kw = module.addOptionalKeyword("geostatic", "Initialize materials to an geostatic stress state.")
+    kw.addRequiredArg("name", "Name of the step action.", str)
+    kw.addRequiredArg("p1", "sig_x=sig_y=sig_z in first point.", float)
+    kw.addOptionalArg("p2", "sig_x=sig_y=sig_z in second point.", float, None)
+    kw.addOptionalArg("h1", "y coordinate of first point", float, 1.0)
+    kw.addOptionalArg("h2", "y coordinate of second point", float, -1.0)
+    kw.addOptionalArg("xLateral", "ratio of sig_x/sig_y, default=1.0", float, 1.0)
+    kw.addOptionalArg("zLateral", "ratio of sig_z/sig_y, default=1.0", float, 1.0)
+    kw.addOptionalArg("elSet", "The element set for which the initaliziation is performed", str, "all")
+
+    documentation.append(kw)
 
 
 class StepAction(StepActionBase):

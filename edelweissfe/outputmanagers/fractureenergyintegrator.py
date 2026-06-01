@@ -33,7 +33,7 @@ import numpy as np
 
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.math import createMathExpression
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
@@ -50,11 +50,16 @@ A simple integrator to compute the fracture energy by integrating a load-displac
         forceFieldOutput=RF, displacementFieldOutput=U, fractureArea='100.0*1.0'
 """
 
-inputLanguage = InputLanguage()
-module = inputLanguage["output"].addModule(
+module = Module(
     "fractureEnergyIntegrator",
     "A simple integrator to compute the fracture energy by integrating a load-displacement curve.",
 )
+
+inputLanguage = InputLanguage()
+
+keyword = "output"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addRequiredArg("forceFieldOutput", "fieldOutput for force (with time history).", str)
 module.addRequiredArg("displacementFieldOutput", "fieldOutput for displacement (with time history).", str)

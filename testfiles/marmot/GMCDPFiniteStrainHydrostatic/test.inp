@@ -43,7 +43,8 @@ fieldOutput=RF
 *output, type=meshplot, name=RFPlot
 figure=1, axSpec=111, c=k, ls=solid, create=xyData, x=time, y=RF
 
-*step, maxInc=1e-2, minInc=1e-5, maxNumInc=10000, maxIter=25, stepLength=100, solver=theSolver
+*step, solver=theSolver
+maxInc=1e-2, minInc=1e-5, maxNumInc=10000, maxIter=25, stepLength=100
 >>options, category=NISTSolver, extrapolation=linear
 >>initializematerial, name=init, elSet=all
 >>dirichlet, name=bottom, nSet=bottom,    field=displacement,         2=0,

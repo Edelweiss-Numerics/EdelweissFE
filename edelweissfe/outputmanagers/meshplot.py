@@ -44,7 +44,7 @@ from matplotlib import colors
 
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.sets.elementset import ElementSet
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.math import createMathExpression
 from edelweissfe.utils.meshtools import (
     extractNodeCoordinatesFromElset,
@@ -61,8 +61,13 @@ documentation = {
     "create=xyData": "2D Plot of results",
 }
 
+module = Module("meshplot", "Create plots using Matplotlib.")
+
 inputLanguage = InputLanguage()
-module = inputLanguage["output"].addModule("meshplot", "Create plots using Matplotlib.")
+
+keyword = "output"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addOptionalArg("dummyArg", "Mesh plot uses old input file parsing.", str, None)
 

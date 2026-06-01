@@ -35,7 +35,7 @@ import sympy as sp
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
@@ -45,22 +45,13 @@ from edelweissfe.utils.misc import (
 A penalty based constraint used for indirect (displacement) control.
 """
 
-# documentation = {
-#     "field": "The field this constraint acts on",
-#     "cVector": "The projection vector for the constrained nodes (e.g., CMOD)",
-#     "constrainedNSet": "The node set for determining the constraint (e.g., CMOD)",
-#     "loadNSet": "The node set for application of the controlled load",
-#     "loadVector": "The vector (in correct) dimensions and tensorial order  determining the load",
-#     "length": "The value of the constraint (e.g., CMOD)",
-#     "penaltyStiffness": "The stiffness for formulating the constraint",
-#     "offset": "(Optional) a correction value for the computation of the constraint (e.g, initial displacement)",
-#     "normalizeLoad": "(Optional) normalize the applied force per node wrt. the number of nodes, i.e., apply a load irrespective of the total number of nodes in ``loadNSet``",  # noqa: E501
-# }
+module = Module("penaltyindirectcontrol", "A penalty based constraint used for indirect (displacement) control.")
 
 inputLanguage = InputLanguage()
-module = inputLanguage["constraint"].addModule(
-    "penaltyindirectcontrol", "A penalty based constraint used for indirect (displacement) control."
-)
+
+keyword = "constraint"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addOptionalArg("field", "The field this constraint acts on.", str, "displacement")
 module.addRequiredArg("cVector", "The projection vector for the constrained nodes (e.g., CMOD).", str)

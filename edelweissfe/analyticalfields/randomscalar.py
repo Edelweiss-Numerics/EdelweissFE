@@ -36,15 +36,20 @@ from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
     strCaseCmp,
 )
 
+module = Module("randomScalar", "Define a random field using the GSTools library.")
+
 inputLanguage = InputLanguage()
-module = inputLanguage["analyticalField"].addModule("randomScalar", "Define a random field using the GSTools library.")
+
+keyword = "analyticalField"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addOptionalArg("model", "Covariance Model of the spatial random field", str, "Gaussian")
 module.addOptionalArg("mean", "Mean of the spatial random field", float, 0.0)
