@@ -16,7 +16,7 @@ Both supported installation paths start with the same package installation steps
     pip install -r pip_requirements.txt
 
 Working installation without Marmot
-**********************************
+***********************************
 
 Build a working EdelweissFE installation without Marmot support as follows:
 

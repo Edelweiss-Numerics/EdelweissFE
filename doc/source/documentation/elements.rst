@@ -22,9 +22,11 @@ Relevant module: ``edelweissfe.elements.marmotsingleqpelement.element``
 .. autoclass:: edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement
    :members:
 
-.. literalinclude:: ../../../testfiles/QPMarmotMaterialHypoElastic/test.inp
+.. literalinclude:: ../../../testfiles/marmot/QPMarmotMaterialHypoElastic/test.inp
     :language: edelweiss
-    :caption: Example: ``testfiles/QPMarmotMaterialHypoElastic/test.inp``
+    :caption: Example: ``testfiles/marmot/QPMarmotMaterialHypoElastic/test.inp``
+
+.. _provider_edelweiss_elements:
 
 Provider ``edelweiss``
 ----------------------

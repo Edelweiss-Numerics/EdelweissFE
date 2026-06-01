@@ -75,8 +75,10 @@ Provider ``marmotmaterial``
 
 Relevant module: `Marmot <https://github.com/MAteRialMOdelingToolbox/Marmot/>`_.
 
-Provider ``edelweiss``
-----------------------
+.. _provider_edelweiss_materials:
+
+Provider ``edelweiss`` (Materials)
+----------------------------------
 
 Relevant module: ``edelweissfe.materials``
 

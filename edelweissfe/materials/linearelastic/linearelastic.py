@@ -39,12 +39,12 @@ class LinearElasticMaterial(BaseHypoElasticMaterial):
     materialProperties
         The numpy array containing the material properties.
 
-    Material properties
-    -------------------
-    E
-        Elasticity module (Young's modulus).
-    v
-        Poisson's ratio."""
+    Notes
+    ----
+    **Material Properties**
+
+    - E: Elasticity module (Young's modulus).
+    - v: Poisson's ratio."""
 
     def getNumberOfRequiredStateVars(self) -> int:
         """Returns number of needed material state Variables per integration point in the material.

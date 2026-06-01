@@ -16,5 +16,5 @@ prettytable
 scipy
 suitesparse
 sphinx
-sphinx_rtd_theme
+sphinx_rtd_theme>=3.1.0
 sympy

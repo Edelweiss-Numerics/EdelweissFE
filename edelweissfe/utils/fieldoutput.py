@@ -386,7 +386,7 @@ class ElementFieldOutput(_FieldOutputBase):
     elSet
         The ElementSet on which this FieldOutput operates.
     resultName
-        The name of the result entry in the :class:`ElementBase.
+        The name of the result entry in the :class:`ElementBase`.
     model
         The model tree instance.
     journal
@@ -598,11 +598,11 @@ class FieldOutputController:
         name
             The name of this FieldOutput.
         nodeField
-            The :class:`NodeField, on which this FieldOutput should operate.
+            The :class:`NodeField` on which this FieldOutput should operate.
         result
-            The name of the result entry in the :class:`NodeField
+            The name of the result entry in the :class:`NodeField`.
         journal
-            The :class:`Journal instance for logging purposes.
+            The :class:`Journal` instance for logging purposes.
         saveHistory
             Save the complete history or only the last result.
         f_x
@@ -649,11 +649,11 @@ class FieldOutputController:
         name
             The name of this FieldOutput.
         elSet
-            The :class:`ElementSet on which this FieldOutput should operate.
+            The :class:`ElementSet` on which this FieldOutput should operate.
         result
-            The name of the result, which is provided by the Elements in the :class:`ElementSet.
+            The name of the result, which is provided by the Elements in the :class:`ElementSet`.
         journal
-            The :class:`Journal instance for logging purposes.
+            The :class:`Journal` instance for logging purposes.
         saveHistory
             Save the complete history or only the last result.
         f_x

@@ -15,9 +15,9 @@ Module ``edelweissfe.constraints.equalvaluelagrangian``
 .. pprint:: edelweissfe.constraints.equalvaluelagrangian.documentation
     :caption: Options:
 
-.. literalinclude:: ../../../testfiles/EqualValueLagrangianConstraint/test.inp
+.. literalinclude:: ../../../testfiles/marmot/EqualValueLagrangianConstraint/test.inp
     :language: edelweiss
-    :caption: Example: ``testfiles/EqualValueLagrangianConstraint/test.inp``
+    :caption: Example: ``testfiles/marmot/EqualValueLagrangianConstraint/test.inp``
 
 
 ``equalvaluepenalty`` - Constrain nodal values to equal values
@@ -31,9 +31,9 @@ Module ``edelweissfe.constraints.equalvaluepenalty``
 .. pprint:: edelweissfe.constraints.equalvaluepenalty.documentation
     :caption: Options:
 
-.. literalinclude:: ../../../testfiles/EqualValuePenaltyConstraint/test.inp
+.. literalinclude:: ../../../testfiles/marmot/EqualValuePenaltyConstraint/test.inp
     :language: edelweiss
-    :caption: Example: ``testfiles/EqualValuePenaltyConstraint/test.inp``
+    :caption: Example: ``testfiles/marmot/EqualValuePenaltyConstraint/test.inp``
 
 
 ``linearizedrigidbody`` - Linearized rigid body constraints
@@ -47,17 +47,17 @@ Module ``edelweissfe.constraints.linearizedrigidbody``
 .. pprint:: edelweissfe.constraints.linearizedrigidbody.documentation
     :caption: Options:
 
-.. literalinclude:: ../../../testfiles/LinearizedRigidBodyConstraint/test.inp
+.. literalinclude:: ../../../testfiles/marmot/LinearizedRigidBodyConstraint/test.inp
     :language: edelweiss
-    :caption: Example 2D: ``testfiles/LinearizedRigidBodyConstraint/test.inp``
+    :caption: Example 2D: ``testfiles/marmot/LinearizedRigidBodyConstraint/test.inp``
 
-.. literalinclude:: ../../../testfiles/LinearizedRigidBodyConstraint2D/test.inp
+.. literalinclude:: ../../../testfiles/marmot/LinearizedRigidBodyConstraint2D/test.inp
     :language: edelweiss
-    :caption: Example 2D: ``testfiles/LinearizedRigidBodyConstraint2D/test.inp``
+    :caption: Example 2D: ``testfiles/marmot/LinearizedRigidBodyConstraint2D/test.inp``
 
-.. literalinclude:: ../../../testfiles/LinearizedRigidBodyConstraint3D/test.inp
+.. literalinclude:: ../../../testfiles/marmot/LinearizedRigidBodyConstraint3D/test.inp
     :language: edelweiss
-    :caption: Example 3D: ``testfiles/LinearizedRigidBodyConstraint3D/test.inp``
+    :caption: Example 3D: ``testfiles/marmot/LinearizedRigidBodyConstraint3D/test.inp``
 
 
 ``rigidbody`` - Geometrically exact rigid body constraints in 3D
@@ -71,9 +71,9 @@ Module ``edelweissfe.constraints.rigidbody``
 .. pprint:: edelweissfe.constraints.rigidbody.documentation
     :caption: Options
 
-.. literalinclude:: ../../../testfiles/RigidBodyConstraintLargeDeformations3D/test.inp
+.. literalinclude:: ../../../testfiles/marmot/RigidBodyConstraintLargeDeformations3D/test.inp
     :language: edelweiss
-    :caption: Example: ``testfiles/RigidBodyConstraintLargeDeformations3D/test.inp``
+    :caption: Example: ``testfiles/marmot/RigidBodyConstraintLargeDeformations3D/test.inp``
 
 ``penaltyindirectcontrol`` - Penalty based indirect control
 -----------------------------------------------------------
@@ -86,9 +86,9 @@ Module ``edelweissfe.constraints.penaltyindirectcontrol``
 .. pprint:: edelweissfe.constraints.penaltyindirectcontrol.documentation
     :caption: Options
 
-.. literalinclude:: ../../../testfiles/PenaltyBasedIndirectControl/test.inp
+.. literalinclude:: ../../../testfiles/marmot/PenaltyBasedIndirectControl/test.inp
     :language: edelweiss
-    :caption: Example: ``testfiles/PenaltyBasedIndirectControl/test.inp``
+    :caption: Example: ``testfiles/marmot/PenaltyBasedIndirectControl/test.inp``
 
 
 ``directionalspringpenalty`` - Assigning a stiffness to specific degrees of freedom
@@ -102,9 +102,9 @@ Module ``edelweissfe.constraints.directionalspringpenalty``
 .. pprint:: edelweissfe.constraints.directionalspringpenalty.documentation
     :caption: Options:
 
-.. literalinclude:: ../../../testfiles/DirectionalSpringPenaltyConstraint/test.inp
+.. literalinclude:: ../../../testfiles/marmot/DirectionalSpringPenaltyConstraint/test.inp
     :language: edelweiss
-    :caption: Example: ``testfiles/DirectionalSpringPenaltyConstraint/test.inp``
+    :caption: Example: ``testfiles/marmot/DirectionalSpringPenaltyConstraint/test.inp``
 
 ``nodetorigidsurfacepenalty`` - Preventing nodes from penetrating a defined rigid boundary
 -----------------------------------------------------------------------------------------------
@@ -117,9 +117,9 @@ Module ``edelweissfe.constraints.nodetorigidsurfacepenalty``
 .. pprint:: edelweissfe.constraints.nodetorigidsurfacepenalty.documentation
     :caption: Options:
 
-.. literalinclude:: ../../../testfiles/NodeToRigidSurfacePenaltyConstraintLinear/test.inp
+.. literalinclude:: ../../../testfiles/marmot/NodeToRigidSurfacePenaltyConstraintLinear/test.inp
     :language: edelweiss
-    :caption: Example: ``testfiles/NodeToRigidSurfacePenaltyConstraintLinear/test.inp``
+    :caption: Example: ``testfiles/marmot/NodeToRigidSurfacePenaltyConstraintLinear/test.inp``
 
 Implementing your own constraints
 ---------------------------------

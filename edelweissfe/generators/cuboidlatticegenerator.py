@@ -29,6 +29,8 @@
 A mesh generator for generating cuboid lattice structure.
 The following unit cell is generted and then replicated in x, y, and z direction:
 
+.. code-block:: console
+
                +---------------+
               /  +---------+  /|
              /  /         /  / |
@@ -48,8 +50,12 @@ The following unit cell is generted and then replicated in x, y, and z direction
 After generating the unit cell mesh the microstructure generator is used
 to replicate the unit cell mesh in x, y, and z direction.
 
+Example
+-------
+
+Generate meshes on the fly using the following syntax:
+
 .. code-block:: edelweiss
-    :caption: Generate meshes on the fly. Example:
 
     *job, name=job, domain=2d, solver=NIST
 

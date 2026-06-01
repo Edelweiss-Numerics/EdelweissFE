@@ -10,3 +10,9 @@ Steps
 
 .. automodule:: edelweissfe.steps.adaptivestep
    :members:
+
+``AdaptiveStepForExplicitSimulations`` - An adaptive step for explicit simulations
+-----------------------------------------------------------------------------------
+
+.. automodule:: edelweissfe.steps.adaptivestepforexplicitsimulations
+   :members:
