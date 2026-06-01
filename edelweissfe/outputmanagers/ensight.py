@@ -728,9 +728,9 @@ class OutputManager(OutputManagerBase):
         fieldOutputController,
         journal,
         plotter,
-        perNodeDefs: list[dict] = [],
-        perElementDefs: list[dict] = [],
-        configurations: list[dict] = [],
+        perNodeDefs: list[dict] = None,
+        perElementDefs: list[dict] = None,
+        configurations: list[dict] = None,
         **kwargs,
     ):
         self.name = name
@@ -761,6 +761,15 @@ class OutputManager(OutputManagerBase):
         self.overwrite = module.getKeyword("configuration")["overwrite"].default
         transient = module.getKeyword("configuration")["transient"].default
         part = None
+
+        if perNodeDefs is None:
+            perNodeDefs = []
+
+        if perElementDefs is None:
+            perElementDefs = []
+
+        if configurations is None:
+            configurations = []
 
         # configuration keyword should only be allowed once
         for configuration in configurations:
