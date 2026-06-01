@@ -811,9 +811,6 @@ class OutputManager(OutputManagerBase):
             self.createPerElementOutput(fieldOutput, part, fieldOutputName, transient=transient, varSize=varSize)
 
     def updateDefinition(self, **kwargs: dict):
-        self.model
-        # standard, transient jobs accessing the fieldoutput:
-
         # Determine the type
         if "create" in kwargs:
             create = kwargs.pop("create")
