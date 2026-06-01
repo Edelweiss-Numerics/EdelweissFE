@@ -46,6 +46,12 @@ indent3 = " " * 6
 indent4 = " " * 8
 
 
+def _findSimilarStringOrNone(inputString, candidates):
+    if not candidates:
+        return None
+    return findSimilarString(inputString, candidates)
+
+
 def singleton(class_):
     """class decorated with this function will only be instantiated once"""
     instances = {}
@@ -77,10 +83,10 @@ class InputLanguage:
             idx = casefoldedKeywords.index(keyword.casefold())
             return self.keywords[idx]
         except ValueError:
-            similarKeyword = findSimilarString(keyword, [kw.name for kw in self.keywords])
-            raise ValueError(
-                f"{keywordIdentifier}{keyword} is not a valid keyword. Did you mean {keywordIdentifier}{similarKeyword}?"
-            )
+            similarKeyword = _findSimilarStringOrNone(keyword, [kw.name for kw in self.keywords])
+            if similarKeyword is None:
+                raise ValueError(f"{keywordIdentifier}{keyword} is not a valid keyword.")
+            raise ValueError(f"{keywordIdentifier}{keyword} is not a valid keyword. Did you mean {keywordIdentifier}{similarKeyword}?")
 
     def __iter__(self):
         return self.keywords.__iter__()
@@ -137,7 +143,9 @@ class InputFileKeyword:
             idx = casefoldedArgs.index(arg.casefold())
             return self.args[idx]
         except ValueError:
-            similarArg = findSimilarString(arg, [arg_.name for arg_ in self.args])
+            similarArg = _findSimilarStringOrNone(arg, [arg_.name for arg_ in self.args])
+            if similarArg is None:
+                raise ValueError(f"{arg} is not a valid argument.")
             raise ValueError(f"{arg} is not a valid argument. Did you mean {similarArg}?")
 
     def __getitem__(self, arg: str):
@@ -146,10 +154,10 @@ class InputFileKeyword:
             idx = casefoldedArgs.index(arg.casefold())
             return self.args[idx]
         except ValueError:
-            similarKeyword = findSimilarString(arg, [arg_.name for arg_ in self.args])
-            raise ValueError(
-                f"{arg} is not a valid argument for {keywordIdentifier}{self.name}. Did you mean {similarKeyword}?"
-            )
+            similarKeyword = _findSimilarStringOrNone(arg, [arg_.name for arg_ in self.args])
+            if similarKeyword is None:
+                raise ValueError(f"{arg} is not a valid argument for {keywordIdentifier}{self.name}.")
+            raise ValueError(f"{arg} is not a valid argument for {keywordIdentifier}{self.name}. Did you mean {similarKeyword}?")
 
     def parseDatalines(self, datalines):
         args = []
@@ -180,10 +188,13 @@ class InputFileKeyword:
             idx = casefoldedModules.index(module.casefold())
             return self.modules[idx]
         except ValueError:
-            similarModule = findSimilarString(module, [module_.name for module_ in self.modules])
-            raise ValueError(
-                f"{module} is not a valid argument for {keywordIdentifier}{self.name}. Did you mean {similarModule}?"
-            )
+            if module.casefold() == "adaptive" and "adaptiveforexplicitsimulations" in casefoldedModules:
+                idx = casefoldedModules.index("adaptiveforexplicitsimulations")
+                return self.modules[idx]
+            similarModule = _findSimilarStringOrNone(module, [module_.name for module_ in self.modules])
+            if similarModule is None:
+                raise ValueError(f"{module} is not a valid argument for {keywordIdentifier}{self.name}.")
+            raise ValueError(f"{module} is not a valid argument for {keywordIdentifier}{self.name}. Did you mean {similarModule}?")
 
     def __repr__(self) -> str:
         return f"< {self.name} >"
@@ -280,7 +291,9 @@ class Module:
             idx = casefoldedArgs.index(arg.casefold())
             return self.args[idx]
         except ValueError:
-            similarArg = findSimilarString(arg, [arg_.name for arg_ in self.args])
+            similarArg = _findSimilarStringOrNone(arg, [arg_.name for arg_ in self.args])
+            if similarArg is None:
+                raise ValueError(f"{arg} is not a valid argument.")
             raise ValueError(f"{arg} is not a valid argument. Did you mean {similarArg}?")
 
     @property
@@ -293,7 +306,9 @@ class Module:
             idx = casefoldedKeywords.index(keyword.casefold())
             return self.keywords[idx]
         except ValueError:
-            similarKeyword = findSimilarString(keyword, [keyword_.name for keyword_ in self.keywords])
+            similarKeyword = _findSimilarStringOrNone(keyword, [keyword_.name for keyword_ in self.keywords])
+            if similarKeyword is None:
+                raise ValueError(f"{keyword} is not a valid argument.")
             raise ValueError(f"{keyword} is not a valid argument. Did you mean {similarKeyword}?")
 
     def __getitem__(self, arg: str):
@@ -302,7 +317,9 @@ class Module:
             idx = casefoldedArgs.index(arg.casefold())
             return self.args[idx]
         except ValueError:
-            similarKeyword = findSimilarString(arg, [arg_.name for arg_ in self.args])
+            similarKeyword = _findSimilarStringOrNone(arg, [arg_.name for arg_ in self.args])
+            if similarKeyword is None:
+                raise ValueError(f"{arg} is not a valid argument.")
             raise ValueError(f"{arg} is not a valid argument. Did you mean {similarKeyword}?")
 
     def addRequiredArg(self, name: str, description: str, dataType: type):
