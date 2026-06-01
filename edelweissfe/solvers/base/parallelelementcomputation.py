@@ -28,6 +28,7 @@
 #  ---------------------------------------------------------------------
 
 import concurrent.futures
+import itertools
 
 import numpy as np
 
@@ -98,49 +99,49 @@ def computeElementsInParallel(
     return P, K, F
 
 
+def chunked_iterable(iterable, size):
+    """Yield successive n-sized chunks from an iterable."""
+    it = iter(iterable)
+    while True:
+        chunk = tuple(itertools.islice(it, size))
+        if not chunk:
+            break
+        yield chunk
+
+
 def computeElementsInParallelForExplicit(
     elements: dict, Un1: DofVector, dU: DofVector, P: DofVector, timeStep: TimeStep
-) -> DofVector:
-    """
-    Compute the elements in parallel for explicit analysis.
+) -> tuple[DofVector, float]:
 
-    Parameters
-    ----------
-    elements : dict
-        The elements to compute.
-    Un1 : DofVector
-        The displacement vector.
-    dU : DofVector
-        The displacement increment vector.
-    P : DofVector
-        The internal force vector.
-    timeStep : TimeStep
-        The time step.
-
-    Returns
-    -------
-    P : DofVector
-        The internal force vector.
-    """
-
-    scatter_P = (
-        P.createScatterVector()
-    )  # make a scatter vector; which gives 1) contiguous memory access and 2) thread safety
-
+    scatter_P = P.createScatterVector()
     time = np.array([timeStep.stepTime, timeStep.totalTime])
     dT = timeStep.timeIncrement
 
-    def computeElementsWorker(element: BaseElement):
-        Pe = scatter_P[element]
-        Ue = Un1[element]
-        dUe = dU[element]
-        element.computeYourselfExplicit(Pe, Ue, dUe, time, dT)
+    # Define the worker to process a CHUNK of elements, not just one.
+    def compute_chunk(element_chunk) -> float:
+        chunk_psi = 0.0
+        for element in element_chunk:
+            Pe = scatter_P[element]
+            Ue = Un1[element]
+            dUe = dU[element]
+
+            element.computeYourselfExplicit(Pe, Ue, dUe, time, dT)
+            chunk_psi += element.computeInternalEnergy()
+
+        return chunk_psi
 
     numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
 
+    # Target ~1000 to 5000 elements per chunk depending on mesh size
+    chunk_size = max(1, len(elements) // (numThreads * 4))
+    chunks = chunked_iterable(elements.values(), chunk_size)
+
+    psi_total = 0.0
     with concurrent.futures.ThreadPoolExecutor(max_workers=numThreads) as executor:
-        list(executor.map(computeElementsWorker, elements.values()))
+        # map returns the chunk_psi from each worker
+        results = executor.map(compute_chunk, chunks)
+        psi_total = sum(results)
 
     scatter_P.assembleInto(P)
 
-    return P
+    return P, psi_total

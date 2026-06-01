@@ -72,7 +72,8 @@ cdef extern from "Marmot/MarmotMaterialHypoElastic.h":
 
         struct state3D:
             Vector6d stress
-            double strainEnergyDensity
+            double elasticEnergyDensity
+            double dissipation
             double* stateVars
 
         struct timeInfo:

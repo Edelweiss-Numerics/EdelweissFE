@@ -181,8 +181,6 @@ class StepManager:
                     mssg += " Define solver using *solver keyword."
                 raise KeyError(mssg)
 
-            # solver.identification in ["NESTSolver", "NESTPSolver"]:
-
             if strCaseCmp(stepDefinition.type, "adaptive"):
                 yield AdaptiveStep(
                     stepNumber,

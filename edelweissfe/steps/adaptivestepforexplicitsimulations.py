@@ -143,10 +143,8 @@ class AdaptiveStepForExplicitSimulations(StepBase):
             for manager in outputManagers:
                 manager.finalizeStep()
 
-    def getTimeStep(
-        self,
-    ) -> TimeStep:
-        return self.incrementGenerator.generateTimeStep()
+    def getTimeStep(self, enforcedTimeIncrement=None) -> TimeStep:
+        return self.incrementGenerator.generateTimeStep(enforcedTimeIncrement=enforcedTimeIncrement)
 
     def discardAndChangeIncrement(self, cutbackFactor: float):
         return self.incrementGenerator.discardAndChangeIncrement(cutbackFactor)
