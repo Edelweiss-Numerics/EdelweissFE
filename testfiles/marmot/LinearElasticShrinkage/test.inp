@@ -37,8 +37,10 @@ figure=1, axSpec=122, >>perNode, fieldOutput=Displacement, f(x)='x[:,1]', label=
 figure=1, axSpec=121, flipY=True, yLabel=$\\varepsilon\\thinspace$(-), xLabel=$t\\thinspace$(h)
 figure=1, axSpec=122, aspect=equal
 
-*step, solver=theSolver, maxInc=1e-1, minInc=1e-6, maxNumInc=1000, maxIter=25, stepLength=24
+*step, solver=theSolver
+maxInc=1e-1, minInc=1e-6, maxNumInc=1000, maxIter=25, stepLength=24
 >>dirichlet, name=bottom,  nSet=gen_bottom, field=displacement, 2=0.0
 >>dirichlet, name=corner,  nSet=gen_leftBottom, field=displacement, 2=0.0, 1=0
 
-*step, solver=theSolver, maxInc=5e-3, minInc=1e-6, maxNumInc=1000, maxIter=25, stepLength=1344
+*step, solver=theSolver
+maxInc=5e-3, minInc=1e-6, maxNumInc=1000, maxIter=25, stepLength=1344

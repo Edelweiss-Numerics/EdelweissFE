@@ -29,7 +29,7 @@
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
@@ -45,8 +45,13 @@ Writes the (generated) mesh data to a file.
         filename=myMesh.inc
 """
 
+module = Module("meshdatatofile", "Writes the (generated) mesh data to a file.")
+
 inputLanguage = InputLanguage()
-module = inputLanguage["output"].addModule("meshdatatofile", "Writes the (generated) mesh data to a file.")
+
+keyword = "output"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addOptionalArg("filename", "Name of file for writing output.", str, None)
 

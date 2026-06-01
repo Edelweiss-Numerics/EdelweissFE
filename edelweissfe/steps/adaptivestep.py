@@ -33,16 +33,20 @@ from edelweissfe.timesteppers.adaptivetimestepper import AdaptiveTimeStepper
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.fieldoutput import FieldOutputController
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
 )
 
+module = Module("adaptive", "A standard adaptive incremental step to be used in nonlinear simulations.")
+
 inputLanguage = InputLanguage()
-module = inputLanguage["step"].addModule(
-    "adaptive", "A standard adaptive incremental step to be used in nonlinear simulations."
-)
+
+keyword = "step"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
+
 
 kw = module.addOptionalArg("stepLength", "The durcation of the step.", float, 1.0)
 kw = module.addOptionalArg("startInc", "The initial fraction of the step to be computed.", float, 1.0)

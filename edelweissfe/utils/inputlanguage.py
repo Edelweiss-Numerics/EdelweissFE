@@ -65,6 +65,9 @@ class InputLanguage:
 
         return
 
+    def __contains__(self, item) -> bool:
+        return item.casefold() in [kw.name.casefold() for kw in self.keywords]
+
     def __repr__(self) -> str:
         return str(self.keywords)
 
@@ -109,9 +112,14 @@ class InputFileKeyword:
 
         return
 
-    def addModule(self, name: str, description: str):
-        module = Module(self, name, description)
+    def addModule(self, module):
         self.modules.append(module)
+
+        return
+
+    def addModuleHelper(self, name: str, description: str):
+        module = Module(name, description)
+        self.addModule(module)
 
         return module
 
@@ -235,8 +243,8 @@ class InputFileKeyword:
 
 
 class Module:
-    def __init__(self, inputFileKeyword: InputFileKeyword, name: str, description: str):
-        self.inputFileKeyword = inputFileKeyword
+    def __init__(self, name: str, description: str):
+        # self.inputFileKeyword = inputFileKeyword
 
         self.name = name
         self.description = description
@@ -410,20 +418,21 @@ class Module:
         return moduleKw.name, options
 
     def parseDatalines(self, datalines):
-        args, kwargs = self.inputFileKeyword.parseDatalines(datalines)
+        args = []
+        kwargs = CaseInsensitiveDict()
 
-        # @caseInsensitiveKwargsChecker(
-        #     [kw.name for kw in self.requiredDatalineKwArgs], [kw.name for kw in self.optionalDatalineKwArgs]
-        # )
-        # def checkKeywordInput(*args, **kwargs):
-        #     """this is a dummy function needed to apply kwargsChecker"""
-        #     return
-        #
-        # try:
-        #     checkKeywordInput(**kwargs)
-        # except ValueError as e:
-        #     e.args = (f"Error during parsing of keyword {keywordIdentifier}{self.inputFileKeyword.name}: " + e.args[0],)
-        #     raise e
+        if not isinstance(datalines, list):
+            datalines = [datalines]
+
+        datalineOptions = []
+        for line in datalines:
+            datalineOptions += splitLineAtCommas(line)
+
+        for option in datalineOptions:
+            if "=" in option:
+                kwargs.update(convertAssignmentsToStringDictionary([option]))
+            else:
+                args.append(option)
 
         return args, kwargs
 

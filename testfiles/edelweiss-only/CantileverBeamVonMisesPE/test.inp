@@ -49,7 +49,8 @@ fieldOutput=RF, f(x)='mean(x[:,1])'
 >>perElement, fieldOutput=stress7
 >>perElement, fieldOutput=stress8
 
-*step, solver=theSolver, maxInc=2e-1, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100
+*step, solver=theSolver
+maxInc=2e-1, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100
 >>dirichlet, name=left, nSet=gen_left,  field=displacement, 2=0, 1=0
 >>nodeforces, name=cloadTop, nSet=gen_rightTop, components='0,-4000', field=displacement
 >>bodyforce, name=bforce, elSet=all, forceVector='0.0, -0.000077'

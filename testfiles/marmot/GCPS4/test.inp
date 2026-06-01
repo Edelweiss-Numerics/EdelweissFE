@@ -26,7 +26,8 @@ weakAll
 >>perNode, fieldOutput=displacement
 >>configuration, overwrite=yes
 
-*step, solver=theSolver, maxInc=1e-1, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100
+*step, solver=theSolver
+maxInc=1e-1, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100
 >>options, category=Ensight, intermediateSaveInterval=10,
 >>options, category=NISTSolver, extrapolation=linear
 >>dirichlet, name=1,      nSet=1,         field=displacement, 1=0.0,  2=0.0

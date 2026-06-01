@@ -39,16 +39,22 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.exceptions import WrongDomain
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
 )
 
 inputLanguage = InputLanguage()
-module = inputLanguage["modelGenerator"].addModule(
+module = Module(
     "findclosestnode", "Find the node closest to a given spatial position, and store it in an existing or new node set."
 )
+
+inputLanguage = InputLanguage()
+
+keyword = "modelGenerator"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addRequiredArg("location", "Query point.", str)
 module.addRequiredArg("storeIn", "Node set to store closest node in.", str)

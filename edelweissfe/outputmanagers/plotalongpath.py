@@ -35,7 +35,7 @@ from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.math import createMathExpression
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
@@ -47,11 +47,16 @@ Plot result for a nodeSet or an elementSet along the true geometrical distance.
 Corresponds to the plot along path functionality in Abaqus.
 """
 
-inputLanguage = InputLanguage()
-module = inputLanguage["output"].addModule(
+module = Module(
     "plotAlongPath",
     "Plot result for a nodeSet or an elementSet along the true geometrical distance.",
 )
+
+inputLanguage = InputLanguage()
+
+keyword = "output"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addRequiredArg("fieldOutput", "Name of the field output.", str)
 

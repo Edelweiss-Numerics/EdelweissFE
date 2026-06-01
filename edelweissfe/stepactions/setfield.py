@@ -41,15 +41,22 @@ Set a field (via fieldOutput) to a predefined value.
 """
 
 inputLanguage = InputLanguage()
-module = inputLanguage["step"].getModule("adaptive")
 
-kw = module.addOptionalKeyword("setfield", "Set a field (via fieldOutput) to a predefined value.")
-kw.addOptionalArg("name", "Name of the step action.", str, "setfield")
-kw.addRequiredArg("fieldOutput", "Field output to be set.", str)
-kw.addRequiredArg("type", "Either 'uniform' or 'analyticalField'.", str)
-kw.addRequiredArg("value", "Scalar value if type 'const'; name of analyticalField if type 'analyticalField'", str)
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
 
-documentation = [kw]
+documentation = []
+
+for module in modules:
+    kw = module.addOptionalKeyword("setfield", "Set a field (via fieldOutput) to a predefined value.")
+    kw.addOptionalArg("name", "Name of the step action.", str, "setfield")
+    kw.addRequiredArg("fieldOutput", "Field output to be set.", str)
+    kw.addRequiredArg("type", "Either 'uniform' or 'analyticalField'.", str)
+    kw.addRequiredArg("value", "Scalar value if type 'const'; name of analyticalField if type 'analyticalField'", str)
+
+    documentation.append(kw)
 
 
 class StepAction(StepActionBase):

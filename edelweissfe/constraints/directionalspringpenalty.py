@@ -36,7 +36,7 @@ from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
@@ -46,11 +46,16 @@ from edelweissfe.utils.misc import (
 A penalty based constraint used for assigning a specific stiffness to the nodes of a defined node set.
 """
 
-inputLanguage = InputLanguage()
-module = inputLanguage["constraint"].addModule(
+module = Module(
     "directionalSpringPenalty",
     "A penalty based constraint used for assigning a specific stiffness to the nodes of a defined node set.",
 )
+
+inputLanguage = InputLanguage()
+
+keyword = "constraint"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 module.addRequiredArg("field", "The field this constraint acts on.", str)
 module.addRequiredArg("component", "The component of the field.", int)

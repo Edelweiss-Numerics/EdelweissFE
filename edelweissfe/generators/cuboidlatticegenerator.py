@@ -80,16 +80,19 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
 )
 
+module = Module("cuboidlatticegenerator", "A mesh generator for generating cuboid lattice structure.")
+
 inputLanguage = InputLanguage()
-module = inputLanguage["modelGenerator"].addModule(
-    "cuboidlatticegenerator", "A mesh generator for generating cuboid lattice structure."
-)
+
+keyword = "modelGenerator"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
 
 # module.addOptionalArg("x0", "Origin along the x axis.", float, 0.0)
 # module.addOptionalArg("y0", "Origin along the y axis.", float, 0.0)

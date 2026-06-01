@@ -38,6 +38,7 @@ from edelweissfe.steps.adaptivestepforexplicitsimulations import (
 )
 from edelweissfe.steps.base.stepbase import StepBase
 from edelweissfe.utils.fieldoutput import FieldOutputController
+from edelweissfe.utils.misc import strCaseCmp
 
 
 class StepActionDefinition:
@@ -180,8 +181,8 @@ class StepManager:
                     mssg += " Define solver using *solver keyword."
                 raise KeyError(mssg)
 
-            if solver.identification in ["NESTSolver", "NESTPSolver", "NEDSolver", "NEDPSolver"]:
-                yield AdaptiveStepForExplicitSimulations(
+            if strCaseCmp(stepDefinition.type, "adaptive"):
+                yield AdaptiveStep(
                     stepNumber,
                     model,
                     fieldOutputController,
@@ -192,8 +193,8 @@ class StepManager:
                     self.stepActions,
                     **stepDefinition.stepOptions,
                 )
-            else:
-                yield AdaptiveStep(
+            elif strCaseCmp(stepDefinition.type, "adaptiveForExplicitSimulations"):
+                yield AdaptiveStepForExplicitSimulations(
                     stepNumber,
                     model,
                     fieldOutputController,

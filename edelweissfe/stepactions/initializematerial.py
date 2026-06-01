@@ -38,13 +38,20 @@ from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.steps.adaptivestep import InputLanguage
 
 inputLanguage = InputLanguage()
-module = inputLanguage["step"].getModule("adaptive")
 
-kw = module.addOptionalKeyword("initializematerial", "Standard distributed load, applied on a surface set.")
-kw.addRequiredArg("name", "Name of the step action.", str)
-kw.addOptionalArg("elSet", "The element set for application of the boundary condition.", str, "all")
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
 
-documentation = [kw]
+documentation = []
+
+for module in modules:
+    kw = module.addOptionalKeyword("initializematerial", "Standard distributed load, applied on a surface set.")
+    kw.addRequiredArg("name", "Name of the step action.", str)
+    kw.addOptionalArg("elSet", "The element set for application of the boundary condition.", str, "all")
+
+    documentation.append(kw)
 
 
 class StepAction(StepActionBase):

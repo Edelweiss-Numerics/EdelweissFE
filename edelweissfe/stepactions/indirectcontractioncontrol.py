@@ -46,19 +46,26 @@ The center is autotically computed from the bounding node coordinates.
 
 
 inputLanguage = InputLanguage()
-module = inputLanguage["step"].getModule("adaptive")
 
-kw = module.addOptionalKeyword(
-    "indirectcontractioncontrol",
-    "Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.",
-)
-kw.addRequiredArg("name", "Name of the step action.", str)
-kw.addRequiredArg("contractionNSet", "The node set defining the contraction ring", str)
-kw.addRequiredArg("L", "Final distance (e.g. crack opening)", float)
-kw.addOptionalArg("exportCVector", "File to export the computed c vector", str, None)
-kw.addOptionalArg("absolute", "Use absolute formulation", bool, True)
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
 
-documentation = [kw]
+documentation = []
+
+for module in modules:
+    kw = module.addOptionalKeyword(
+        "indirectcontractioncontrol",
+        "Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.",
+    )
+    kw.addRequiredArg("name", "Name of the step action.", str)
+    kw.addRequiredArg("contractionNSet", "The node set defining the contraction ring", str)
+    kw.addRequiredArg("L", "Final distance (e.g. crack opening)", float)
+    kw.addOptionalArg("exportCVector", "File to export the computed c vector", str, None)
+    kw.addOptionalArg("absolute", "Use absolute formulation", bool, True)
+
+    documentation.append(kw)
 
 
 class StepAction(StepActionBase):
