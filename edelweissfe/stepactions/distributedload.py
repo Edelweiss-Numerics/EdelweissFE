@@ -33,6 +33,7 @@ import numpy as np
 import sympy as sp
 
 from edelweissfe.stepactions.base.distributedloadbase import DistributedLoadBase
+from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
 
 """
@@ -40,13 +41,44 @@ Standard distributed load, applied on a surface set.
 If not modified in subsequent steps, the load held constant.
 """
 
-documentation = {
-    "surface": "Surface for application of the distributed load",
-    "magnitude": "Magnitude of the distributed load",
-    "delta": "In subsequent steps only: define the new magnitude incrementally",
-    "f(t)": "(Optional) define an amplitude in the step progress interval [0...1]",
-    "type": "The load type, e.g., pressure or surface traction; Must be supported by the element type",
-}
+inputLanguage = InputLanguage()
+
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
+
+
+documentation = []
+
+for module in modules:
+    kw = module.addOptionalKeyword("distributedload", "Standard distributed load, applied on a surface set.")
+    kw.addRequiredArg("name", "Name of the step action.", str)
+    kw.addRequiredArg("surface", "Surface for application of the distributed load", str)
+    # kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
+    kw.addOptionalArg("field", "Field for which the boundary condition is active.", str, "displacement")
+    kw.addRequiredArg("magnitude", "Magnitude of the distributed load", str)
+    # kw.addOptionalArg("delta", "In subsequent steps only: define the new magnitude incrementally", str, 0)
+    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+    kw.addRequiredArg(
+        "type", "The load type, e.g., pressure or surface traction; Must be supported by the element type", str
+    )
+
+    documentation.append(kw)
+
+    kw = module.addOptionalKeyword("updatedistributedload", "Update a previously defined distributedload definition.")
+    kw.addRequiredArg("name", "Name of the step action to update.", str)
+    # kw.addRequiredArg("surface", "Surface for application of the distributed load", str)
+    # kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
+    # kw.addOptionalArg("field", "Field for which the boundary condition is active.", str, "displacement")
+    kw.addOptionalArg("magnitude", "Magnitude of the distributed load", str, None)
+    kw.addOptionalArg("delta", "In subsequent steps only: define the new magnitude incrementally", str, None)
+    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+    # kw.addRequiredArg(
+    #     "type", "The load type, e.g., pressure or surface traction; Must be supported by the element type", str
+    # )
+
+    documentation.append(kw)
 
 
 class StepAction(DistributedLoadBase):
@@ -60,7 +92,7 @@ class StepAction(DistributedLoadBase):
         magnitude = np.fromstring(action["magnitude"], sep=",")
 
         self.delta = magnitude
-        if "f(t)" in action:
+        if action["f(t)"] is not None:
             t = sp.symbols("t")
             self.amplitude = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
         else:
@@ -97,12 +129,12 @@ class StepAction(DistributedLoadBase):
             self.idle = True
 
     def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
-        if "magnitude" in action:
+        if action["magnitude"] is not None:
             self.delta = np.fromstring(action["magnitude"], sep=",") - self._magnitudeAtStepStart
-        elif "delta" in action:
+        elif action["delta"] is not None:
             self.delta = np.fromstring(action["delta"], sep=",")
 
-        if "f(t)" in action:
+        if action["f(t)"] is not None:
             t = sp.symbols("t")
             self.amplitude = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
         else:

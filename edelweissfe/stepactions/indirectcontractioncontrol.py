@@ -32,6 +32,7 @@
 import numpy as np
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
 
 """
@@ -43,11 +44,28 @@ Currently 2D only!
 The center is autotically computed from the bounding node coordinates.
 """
 
-documentation = {
-    "contractionNSet": "The node set defining the contraction ring",
-    "L": "Final distance (e.g. crack opening)",
-    "exportCVector": "(Optional) file to export the computed c vector",
-}
+
+inputLanguage = InputLanguage()
+
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
+
+documentation = []
+
+for module in modules:
+    kw = module.addOptionalKeyword(
+        "indirectcontractioncontrol",
+        "Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.",
+    )
+    kw.addRequiredArg("name", "Name of the step action.", str)
+    kw.addRequiredArg("contractionNSet", "The node set defining the contraction ring", str)
+    kw.addRequiredArg("L", "Final distance (e.g. crack opening)", float)
+    kw.addOptionalArg("exportCVector", "File to export the computed c vector", str, None)
+    kw.addOptionalArg("absolute", "Use absolute formulation", bool, True)
+
+    documentation.append(kw)
 
 
 class StepAction(StepActionBase):
@@ -59,14 +77,14 @@ class StepAction(StepActionBase):
 
         self.currentL0 = 0.0
 
-        self.L = float(action["L"])
+        self.L = action["L"]
 
-        self.generateCVectorAndIndices(name, action, jobInfo, model, fieldOutputController, journal)
+        self.generateCVectorAndIndices(action, jobInfo, model, fieldOutputController, journal)
 
-        if "exportCVector" in action:
+        if action["exportCVector"] is not None:
             np.savetxt(action["exportCVector"] + ".csv", self.cVector)
 
-        self.definition = str(action.get("definition", "absolute"))
+        self.absolute = action["absolute"]
 
     def computeDDLambda(self, dU, ddU_0, ddU_f, timeStep: TimeStep):
         dL = timeStep.stepProgressIncrement * self.L
@@ -81,10 +99,10 @@ class StepAction(StepActionBase):
         self.currentL0 = self.cVector.dot(U[self.idcs])
 
     def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
-        if self.definition == "absolute":
-            self.L = float(action["L"]) - self.currentL0
+        if self.absolute:
+            self.L = action["L"] - self.currentL0
         else:
-            self.L = float(action["L"])
+            self.L = action["L"]
 
         self.generateCVectorAndIndices(action, jobInfo, model, fieldOutputController, journal)
 

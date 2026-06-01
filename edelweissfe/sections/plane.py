@@ -33,25 +33,83 @@
 import numpy as np
 
 from edelweissfe.sections.base.sectionbase import Section as SectionBase
+from edelweissfe.sets.elementset import ElementSet
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+    splitLinesAtCommas,
+)
 
-"""This section represents a classical plane solid materal section.
-"""
+module = Module("plane", "This section represents a classical plane solid materal section.")
 
-documentation = {
-    "elementSets": "comma separated list of element sets for this section",
-    "material": "the material to be assigned",
-    "materialParameterFromField, index=[index of material parameter], value=[name of analytical field], type=[either 'setToValue' or 'scale']": "(optional) set or scale a material parameter using the value of the given analytical field; modify the field value using the optional keyword f(p,f)=[...] (p...value of parameter from material definition; f...value of analytical field)",
-    "thickness": "the thickness to be assigned",
-}
+inputLanguage = InputLanguage()
+
+keyword = "section"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
+
+module.addRequiredArg("thickness", "thickness", float)
+module.addRequiredDatalines("elementSets as comma separated list of element sets for this section", str)
+
+kw = module.addOptionalKeyword("materialParameterFromField", "use material properties given by an analytical field")
+kw.addRequiredArg("index", "index of material parameter", int)
+kw.addRequiredArg("field", "name of analytical field", str)
+kw.addRequiredArg("type", "either 'setToValue' or 'scale'", str)
+kw.addOptionalArg("f(p,f)", "p...value of parameter from material definition; f...value of analytical field", str, "f")
+
+kw = module.addOptionalKeyword("writeMaterialPropertiesToFile", "export material properties to file")
+kw.addRequiredArg("filename", "file name for material property export", str)
+
+required = [kw.name for kw in module.requiredArgs]
+required += [kw.name for kw in module.requiredKeywords]
+
+optional = [kw.name for kw in module.optionalArgs]
+optional += [kw.name for kw in module.optionalKeywords]
+
+documentation = [module]
+
+
+@caseInsensitiveKwargsChecker(required, optional)
+@castKwargsValuesAndAddDefaults(module)
+def sectionFactory(name, FEModel, materialName: str, datalines: list[str], moduleOptions, **kwargs):
+    kwargs = CaseInsensitiveDict(kwargs)
+
+    thickness = kwargs["thickness"]
+
+    elementSetNames = splitLinesAtCommas(datalines)
+
+    materialParameterFromFieldDefs = moduleOptions.get("materialParameterFromField", [])
+    writeMaterialPropertiesToFileDefs = moduleOptions.get("writeMaterialPropertiesToFile", [])
+
+    return Section(
+        name,
+        FEModel,
+        thickness,
+        FEModel.materials[materialName],
+        [FEModel.elementSets[name] for name in elementSetNames],
+        materialParameterFromFieldDefs,
+        writeMaterialPropertiesToFileDefs,
+    )
 
 
 class Section(SectionBase):
-    def __init__(self, name, options, materialName, model, **kwargs):
-        super().__init__(name, options, materialName, model, **kwargs)
-        try:
-            self.thickness = kwargs["thickness"]
-        except KeyError:
-            raise KeyError(f"Thickness must be specified for section {name}")
+    def __init__(
+        self,
+        name,
+        model,
+        thickness,
+        material: dict,
+        elementSets: list[ElementSet],
+        materialParameterFromFieldDefs: list[dict],
+        writeMaterialPropertiesToFileDefs: list[dict],
+        # expression: Callable = None,
+    ):
+        super().__init__(
+            name, model, material, elementSets, materialParameterFromFieldDefs, writeMaterialPropertiesToFileDefs
+        )
+        self.thickness = thickness
 
     def assignSectionPropertiesToElement(self, element, **kwargs):
         material = kwargs.get("material", self.material)
@@ -61,6 +119,7 @@ class Section(SectionBase):
             raise Exception(f"Plane section is incompatible with {nSpatialDimensions}-dimensional finite elements.")
 
         thickness = self.thickness
+
         elProperties = np.array([thickness], dtype=float)
 
         element.setProperties(elProperties)

@@ -1,0 +1,39 @@
+name: Run tests without Marmot
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup Mambaforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          use-mamba: true
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
+          activate-environment: anaconda-client-env
+
+      - name: Install conda packages
+        shell: bash -l {0}
+        run: |
+          mamba install --file conda_requirements.txt
+
+      - name: Install pip packages
+        shell: bash -l {0}
+        run: |
+          pip install -r pip_requirements.txt
+
+      - name: Build EdelweissFE
+        shell: bash -l {0}
+        run: |
+          pip install .
+
+      - name: Run tests without Marmot
+        shell: bash -l {0}
+        run: |
+          run_tests_edelweissfe ./testfiles/edelweiss-only/
+

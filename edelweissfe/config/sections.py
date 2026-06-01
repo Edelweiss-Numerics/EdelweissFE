@@ -59,3 +59,8 @@ def getSectionClass(name: str) -> type:
 
     module = importlib.import_module("edelweissfe.sections." + name.lower())
     return module.Section
+
+
+def getSectionFactoryByName(name):
+    module = importlib.import_module("edelweissfe.sections." + name.lower())
+    return module.sectionFactory

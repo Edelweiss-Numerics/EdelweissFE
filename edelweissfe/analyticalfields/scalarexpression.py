@@ -25,32 +25,55 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Define a field using a sclar expression."""
+"""Define a field using a scalar expression."""
+
+from typing import Callable
 
 import numpy as np
 
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.math import createModelAccessibleFunction
-from edelweissfe.utils.misc import convertLinesToStringDictionary
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
-documentation = {
-    "f(x,y,z)": "Python expression using variables x, y, z (coordinates); dictionaries contained in model can be accessed",
-}
+module = Module("scalarExpression", "Define an analytical field using a scalar expression.")
+
+inputLanguage = InputLanguage()
+
+keyword = "analyticalField"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
+
+module.addRequiredArg(
+    "f(x,y,z)",
+    "Python expression using variables x, y, z (coordinates); dictionaries contained in model can be accessed",
+    str,
+)
+
+documentation = [module]
+
+
+@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
+def analyticalFieldFactory(name, FEModel, **kwargs):
+    expression = createModelAccessibleFunction(kwargs["f(x,y,z)"], FEModel, *"xyz")
+
+    return AnalyticalField(name, FEModel, expression)
 
 
 class AnalyticalField(AnalyticalFieldBase):
-    def __init__(self, name, data, model):
+    def __init__(self, name: str, FEModel, expression: Callable):
         self.name = name
         self.type = "scalarExpression"
 
-        self.domainSize = model.domainSize
-        self.options = convertLinesToStringDictionary(data)
+        self.domainSize = FEModel.domainSize
 
-        expressionString = self.options["f(x,y,z)"]
-
-        self.expression = createModelAccessibleFunction(expressionString, model, *"xyz")  # [: self.domainSize])
+        self.expression = expression
 
         return
 

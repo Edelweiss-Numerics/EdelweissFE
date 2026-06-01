@@ -3,6 +3,7 @@ name: Documentation
 on:
   push:
     branches: [ master ]
+  pull_request:
 
 jobs:
   build:
@@ -22,7 +23,12 @@ jobs:
       - name: Install conda packages
         shell: bash -l {0}
         run: |
-          mamba install --file requirements.txt
+          mamba install --file conda_requirements.txt
+
+      - name: Install pip packages
+        shell: bash -l {0}
+        run: |
+          pip install -r pip_requirements.txt
 
       - name: Install Eigen
         shell: bash -l {0}
@@ -63,8 +69,23 @@ jobs:
       - name: Install Marmot
         shell: bash -l {0}
         run: |
+          # Use github.base_ref (target of PR).
+          # If not a PR (like a push to master), fall back to github.ref_name.
+          TARGET_BRANCH="${{ github.base_ref || github.ref_name }}"
+
+          echo "Pull Request Target/Current Branch is: $TARGET_BRANCH"
+
           git clone --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/
           cd Marmot
+
+          # Attempt to switch to the branch matching the target branch
+          if git show-ref --verify --quiet refs/remotes/origin/$TARGET_BRANCH; then
+            echo "Matching branch found. Checking out $TARGET_BRANCH..."
+            git checkout $TARGET_BRANCH
+          else
+            echo "Branch $TARGET_BRANCH not found in Marmot, staying on default branch."
+          fi
+
           mkdir build
           cd build
           cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
@@ -74,14 +95,21 @@ jobs:
       - name: Build EdelweissFE
         shell: bash -l {0}
         run: |
-          pip install .
+          pip install -v .
 
       - name: Building EdelweissFE documentation
         shell: bash -l {0}
         run: |
           sphinx-build ./doc/source/ ./docs -b html
 
+      - name: Upload documentation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: ./docs
+
       - name: Deploy
+        if: github.ref == 'refs/heads/master'
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN}}

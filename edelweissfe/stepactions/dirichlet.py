@@ -34,20 +34,69 @@ import sympy as sp
 
 from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.stepactions.base.dirichletbase import DirichletBase
+from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
 
 """
 Standard Dirichlet boundary condition.
 If not modified in subsequent steps, the BC is held constant.
 """
-documentation = {
-    "nSet": "The node set for application of the BC",
-    "1,2,3,...": "Prescribed values for components of the physical field",
-    "components": "Prescribed values using a np.ndarray for representation; use 'x' for ignored values",
-    "field": "Field for which the boundary condition is active",
-    "analyticalField": "(Optional) scales the defined boundary condition",
-    "f(t)": "(Optional) define an amplitude in the step progress interval [0...1]",
-}
+
+inputLanguage = InputLanguage()
+
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
+
+documentation = []
+
+for module in modules:
+    kw = module.addOptionalKeyword("dirichlet", "Standard Dirichlet boundary condition.")
+    kw.addRequiredArg("name", "Name of the step action.", str)
+    kw.addRequiredArg("nSet", "The node set for application of the boundary condition.", str)
+    kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
+
+    kw.addOptionalArg("1", "Prescribe first component of field.", float, None)
+    kw.addOptionalArg("2", "Prescribe second component of field.", float, None)
+    kw.addOptionalArg("3", "Prescribe third component of field.", float, None)
+    kw.addOptionalArg("4", "Prescribe fourth component of field.", float, None)
+    kw.addOptionalArg("5", "Prescribe fifth component of field.", float, None)
+    kw.addOptionalArg("6", "Prescribe sixth component of field.", float, None)
+
+    kw.addOptionalArg(
+        "components",
+        "Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
+        str,
+        None,
+    )
+    kw.addOptionalArg("analyticalField", "Scales the defined boundary condition", str, None)
+    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+
+    documentation.append(kw)
+
+    kw = module.addOptionalKeyword("updateDirichlet", "Update a previously defined dirichlet definition.")
+    kw.addRequiredArg("name", "Name of the step action to update.", str)
+    # kw.addRequiredArg("nSet", "The node set for application of the boundary condition.", str)
+    # kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
+
+    kw.addOptionalArg("1", "Prescribe first component of field.", float, None)
+    kw.addOptionalArg("2", "Prescribe second component of field.", float, None)
+    kw.addOptionalArg("3", "Prescribe third component of field.", float, None)
+    kw.addOptionalArg("4", "Prescribe fourth component of field.", float, None)
+    kw.addOptionalArg("5", "Prescribe fifth component of field.", float, None)
+    kw.addOptionalArg("6", "Prescribe sixth component of field.", float, None)
+
+    kw.addOptionalArg(
+        "components",
+        "Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
+        str,
+        None,
+    )
+    kw.addOptionalArg("analyticalField", "Scales the defined boundary condition", str, None)
+    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+
+    documentation.append(kw)
 
 
 class StepAction(DirichletBase):
@@ -81,19 +130,21 @@ class StepAction(DirichletBase):
 
         self.action = action
 
-        if "components" in action:
+        if action["components"] is not None:
             action = self._getDirectionsFromComponents(action)
 
-        components = [i for i, direction in enumerate(self.possibleComponents) if direction in action]
+        components = [i for i, direction in enumerate(self.possibleComponents) if action[direction] is not None]
 
         values = {
-            i: float(action[direction]) for i, direction in enumerate(self.possibleComponents) if direction in action
+            i: float(action[direction])
+            for i, direction in enumerate(self.possibleComponents)
+            if action[direction] is not None
         }
 
         self.delta = np.tile(list(values.values()), (len(self.nSet), 1))
 
         # for i, node in enumerate(self.nSet):
-        if "analyticalField" in action:
+        if action["analyticalField"] is not None:
             self.analyticalField = model.analyticalFields[action["analyticalField"]]
             for i, node in enumerate(self.nSet):
                 self.delta[i, :] *= self.analyticalField.evaluateAtCoordinates(node.coordinates)[0][0]
@@ -147,7 +198,7 @@ class StepAction(DirichletBase):
             The function defining the amplitude depending on the step propress.
         """
 
-        if "f(t)" in action:
+        if action["f(t)"] is not None:
             t = sp.symbols("t")
             amplitude = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
         else:

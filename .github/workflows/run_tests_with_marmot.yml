@@ -1,0 +1,116 @@
+name: Run tests
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup Mambaforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          use-mamba: true
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
+          activate-environment: anaconda-client-env
+
+      - name: Install conda packages
+        shell: bash -l {0}
+        run: |
+          mamba install --file conda_requirements.txt
+
+      - name: Install pip packages
+        shell: bash -l {0}
+        run: |
+          pip install -r pip_requirements.txt
+
+      - name: Install Eigen
+        shell: bash -l {0}
+        run: |
+          cd ..
+          git clone --branch 3.4.0 https://gitlab.com/libeigen/eigen.git
+          cd eigen
+          mkdir build
+          cd build
+          cmake -DBUILD_TESTING=OFF  -DINCLUDE_INSTALL_DIR=$CONDA_PREFIX/include -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
+          make install
+          cd ../..
+
+      - name: Install Autodiff
+        shell: bash -l {0}
+        run: |
+          git clone --branch v1.1.0 https://github.com/autodiff/autodiff.git
+          cd autodiff
+          mkdir build
+          cd build
+          cmake -DAUTODIFF_BUILD_TESTS=OFF \
+            -DAUTODIFF_BUILD_PYTHON=OFF \
+            -DAUTODIFF_BUILD_EXAMPLES=OFF \
+            -DAUTODIFF_BUILD_DOCS=OFF \
+            -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \
+            ..
+          make install
+          cd ../..
+
+      - name: Install Fastor
+        shell: bash -l {0}
+        run: |
+          git clone https://github.com/romeric/Fastor.git
+          cd Fastor
+          mkdir build
+          cd build
+          cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
+          make install
+          cd ../..
+
+      - name: Install AMGCL
+        shell: bash -l {0}
+        run: |
+          git clone --branch 1.4.7 --depth 1 https://github.com/ddemidov/amgcl.git
+          cd amgcl
+          mkdir build
+          cd build
+          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
+          make install
+          cd ../..
+
+      - name: Install Marmot
+        shell: bash -l {0}
+        run: |
+          # Use github.base_ref (target of PR).
+          # If not a PR (like a push to master), fall back to github.ref_name.
+          TARGET_BRANCH="${{ github.base_ref || github.ref_name }}"
+
+          echo "Pull Request Target/Current Branch is: $TARGET_BRANCH"
+
+          git clone --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/
+          cd Marmot
+
+          # Attempt to switch to the branch matching the target branch
+          if git show-ref --verify --quiet refs/remotes/origin/$TARGET_BRANCH; then
+            echo "Matching branch found. Checking out $TARGET_BRANCH..."
+            git checkout $TARGET_BRANCH
+          else
+            echo "Branch $TARGET_BRANCH not found in Marmot, staying on default branch."
+          fi
+
+          mkdir build
+          cd build
+          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
+          make install
+          cd ../../
+
+      - name: Build EdelweissFE
+        shell: bash -l {0}
+        run: |
+          pip install -v .
+
+      - name: Run tests
+        shell: bash -l {0}
+        run: |
+          run_tests_edelweissfe ./testfiles/marmot/
+          run_tests_edelweissfe ./testfiles/edelweiss-only/
+

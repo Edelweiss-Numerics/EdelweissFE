@@ -15,7 +15,7 @@ Relevant module: ``edelweissfe.stepactions.bodyforce``
 .. pprint:: edelweissfe.stepactions.bodyforce.documentation
    :caption: Options:
 
-.. literalinclude:: ../../../testfiles/BodyForce3D/test.inp
+.. literalinclude:: ../../../testfiles/marmot/BodyForce3D/test.inp
    :language: edelweiss
    :caption: Example: ``testfiles/BodyForce3D/test.inp``
 
@@ -42,9 +42,9 @@ Relevant module: ``edelweissfe.stepactions.distributedload``
    :caption: Options:
 
 
-.. literalinclude:: ../../../testfiles/DLoad/test.inp
+.. literalinclude:: ../../../testfiles/marmot/DLoad/test.inp
    :language: edelweiss
-   :caption: Example: ``testfiles/DLoad/test.inp``
+   :caption: Example: ``testfiles/marmot/DLoad/test.inp``
 
 ``geostatic`` - Geostatic stress states
 ---------------------------------------
@@ -58,9 +58,9 @@ Relevant module: ``edelweissfe.stepactions.geostatic``
    :caption: Options:
 
 
-.. literalinclude:: ../../../testfiles/GeoStatic/test.inp
+.. literalinclude:: ../../../testfiles/marmot/GeoStatic/test.inp
    :language: edelweiss
-   :caption: Example: ``testfiles/GeoStatic/test.inp``
+   :caption: Example: ``testfiles/marmot/GeoStatic/test.inp``
 
 ``indirectcontrol`` - Indirect displacement control
 ---------------------------------------------------
@@ -74,9 +74,9 @@ Relevant module: ``edelweissfe.stepactions.indirectcontrol``
    :caption: Options:
 
 
-.. literalinclude:: ../../../testfiles/IndirectDisplacementControl//test.inp
+.. literalinclude:: ../../../testfiles/marmot/IndirectDisplacementControl/test.inp
    :language: edelweiss
-   :caption: Example: ``testfiles/IndirectDisplacementControl/test.inp``
+   :caption: Example: ``testfiles/marmot/IndirectDisplacementControl/test.inp``
 
 ``indirectcontractioncontrol`` - Indirect displacement -- contraction ring control
 ----------------------------------------------------------------------------------
@@ -120,9 +120,9 @@ Relevant module: ``edelweissfe.stepactions.nodeforces``
    :caption: Options:
 
 
-.. literalinclude:: ../../../testfiles/NodeForces/test.inp
+.. literalinclude:: ../../../testfiles/marmot/NodeForces/test.inp
    :language: edelweiss
-   :caption: Example: ``testfiles/NodeForces/test.inp``
+   :caption: Example: ``testfiles/marmot/NodeForces/test.inp``
 
 ``setfield`` - Set a field to a prescribed value
 ------------------------------------------------
@@ -145,6 +145,21 @@ Relevant module: ``edelweissfe.stepactions.setinitialconditions``
 
 .. pprint:: edelweissfe.stepactions.setinitialconditions.documentation
    :caption: Options:
+
+``changematerialproperty`` - Change a material property during a step
+----------------------------------------------------------------------
+
+Relevant module: ``edelweissfe.stepactions.changematerialproperty``
+
+.. automodule:: edelweissfe.stepactions.changematerialproperty
+    :members: __doc__
+
+.. pprint:: edelweissfe.stepactions.changematerialproperty.documentation
+   :caption: Options:
+
+.. literalinclude:: ../../../testfiles/marmot/ChangeMaterialProperties/test.inp
+   :language: edelweiss
+   :caption: Example: ``testfiles/marmot/ChangeMaterialProperties/test.inp``
 
 Implementing your own step actions
 ----------------------------------

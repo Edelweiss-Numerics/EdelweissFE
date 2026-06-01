@@ -29,18 +29,33 @@
 import sympy as sp
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 
 """
 Stepaction to change material properties.
 
 """
 
-documentation = {
-    "material": "The id of the material to be changed",
-    "index": "The index of the property in the material properties vector",
-    "f(t)": "(Optional) define an amplitude in the step progress interval [0...1]",
-}
+
+inputLanguage = InputLanguage()
+
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
+
+documentation = []
+
+for module in modules:
+    kw = module.addOptionalKeyword("changematerialproperty", "Stepaction to change material properties.")
+    kw.addRequiredArg("name", "Name of the step action.", str)
+    kw.addRequiredArg("material", "The id of the material to be changed", str)
+    kw.addRequiredArg("index", "The index of the property in the material properties vector", int)
+    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+
+    documentation.append(kw)
 
 
 class StepAction(StepActionBase):
@@ -49,7 +64,7 @@ class StepAction(StepActionBase):
     def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
         self.name = name
         self.theIndex = int(action["index"])
-        self.theMaterial = model.materials[action["material"]]
+        self.theMaterial = CaseInsensitiveDict(model.materials)[action["material"]]
 
         self.updateStepAction(action, jobInfo, model, fieldOutputController, journal)
 
@@ -59,7 +74,7 @@ class StepAction(StepActionBase):
         """Update the function describing the material property"""
         self.active = True
 
-        if "f(t)" in action:
+        if action["f(t)"] is not None:
             t = sp.symbols("t")
             self.f_t = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
 
@@ -81,3 +96,17 @@ class StepAction(StepActionBase):
         )
 
         self.theMaterial["properties"][self.theIndex] = theCurrentProperty
+        for secname, section in model.sections.items():
+            if section.material["name"] == self.theMaterial["name"]:
+                for elSet in section.elSets:
+                    for el in elSet:
+                        if isinstance(section.material, dict):  # for marmotmaterial provider
+                            modifiedMaterial = section.material.copy()
+                            modifiedMaterial["properties"] = self.theMaterial["properties"]
+                        else:  # for edelweissmaterial provider
+                            materialType = type(section.material)
+                            modifiedProperties = self.theMaterial["properties"]
+                            modifiedMaterial = materialType(modifiedProperties)
+                            if hasattr(self.material, "_materialEnergy"):  # for autodiff materials
+                                modifiedMaterial.setEnergyFunction(self.material._materialEnergy)
+                        section.assignSectionPropertiesToElement(el, material=modifiedMaterial)

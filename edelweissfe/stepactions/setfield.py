@@ -33,15 +33,30 @@ import numpy as np
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 
+# from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.steps.adaptivestep import InputLanguage
+
 """
 Set a field (via fieldOutput) to a predefined value.
 """
 
-documentation = {
-    "fieldOutput": "Field output to be set",
-    "type": "'Const' or 'analyticalField'",
-    "value": "Scalar value if type 'const'; name of analyticalField if type 'analyticalField'",
-}
+inputLanguage = InputLanguage()
+
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
+
+documentation = []
+
+for module in modules:
+    kw = module.addOptionalKeyword("setfield", "Set a field (via fieldOutput) to a predefined value.")
+    kw.addOptionalArg("name", "Name of the step action.", str, "setfield")
+    kw.addRequiredArg("fieldOutput", "Field output to be set.", str)
+    kw.addRequiredArg("type", "Either 'uniform' or 'analyticalField'.", str)
+    kw.addRequiredArg("value", "Scalar value if type 'const'; name of analyticalField if type 'analyticalField'", str)
+
+    documentation.append(kw)
 
 
 class StepAction(StepActionBase):

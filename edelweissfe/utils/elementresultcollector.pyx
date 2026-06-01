@@ -26,7 +26,6 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-
 cimport numpy as np
 
 import numpy as np

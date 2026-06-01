@@ -39,11 +39,6 @@ cimport edelweissfe.elements.marmotelement.element
 
 from edelweissfe.utils.exceptions import CutbackRequest
 
-from libc.stdlib cimport free, malloc
-from libcpp.memory cimport allocator, make_unique, unique_ptr
-
-from edelweissfe.elements.base.baseelement import BaseElement
-
 mapLoadTypes={
         "pressure" : DistributedLoadTypes.Pressure,
         "surface torsion" : DistributedLoadTypes.SurfaceTorsion,
@@ -83,7 +78,7 @@ cdef class MarmotElementWrapper:
         self._nDof = self.marmotElement.getNDofPerElement()
 
         cdef vector[vector[string]] fields = self.marmotElement.getNodeFields()
-        self._fields = [[s.decode("utf-8")  for s in n] for n in fields]
+        self._fields = [[s.decode("utf-8") for s in n] for n in fields]
 
         cdef vector[int] permutationPattern = self.marmotElement.getDofIndicesPermutationPattern()
         self._dofIndicesPermutation = np.asarray(permutationPattern)
@@ -103,10 +98,8 @@ cdef class MarmotElementWrapper:
             The number of the element."""
 
         try:
-            self.marmotElement = MarmotElementFactory.createElement(
-                    MarmotElementFactory.getElementCodeFromName(
-                        elementType.upper().encode("utf-8")), self._elNumber)
-        except IndexError:
+            self.marmotElement = MarmotElementFactory.createElement(elementType.upper().encode("utf-8"), self._elNumber)
+        except ValueError:
             raise NotImplementedError("Marmot element {:} not found in library.".format(elementType))
 
     @property
@@ -185,12 +178,11 @@ cdef class MarmotElementWrapper:
         try:
             self.marmotElement.assignProperty(
                     MarmotMaterialSection(
-                            MarmotMaterialFactory.getMaterialCodeFromName(
-                                    materialName.upper().encode("UTF-8")),
+                            materialName.upper().encode("UTF-8"),
                             &self._materialProperties[0],
                             self._materialProperties.shape[0]))
-        except IndexError:
-            raise NotImplementedError("Marmot material {:} not found in library.".format(materialName))
+        except ValueError:
+            raise NotImplementedError("Marmot material {:} not found in library.".format(materialName.upper()))
 
         self.nStateVars = self.marmotElement.getNumberOfRequiredStateVars()
 
@@ -201,7 +193,7 @@ cdef class MarmotElementWrapper:
 
         self._hasMaterial = True
 
-    cpdef void _initializeStateVarsTemp(self, ) nogil:
+    cpdef void _initializeStateVarsTemp(self, ) noexcept nogil:
         self._stateVarsTemp[:] = self._stateVars
 
     def setInitialCondition(self,
@@ -222,7 +214,7 @@ cdef class MarmotElementWrapper:
                                const double[::1] U,
                                const double[::1] dU,
                                const double[::1] time,
-                               double dTime, ) nogil except *:
+                               double dTime) except * nogil:
         """Evaluate residual and stiffness for given time, field, and field increment."""
 
         if not self._hasMaterial:
@@ -234,12 +226,39 @@ cdef class MarmotElementWrapper:
 
             pNewDT = 1e36
 
-            self.marmotElement.computeYourself(&U[0], &dU[0],
+            self.marmotElement.computeYourself(&U[0],
+                                               &dU[0],
                                                &Pe[0],
                                                &Ke[0],
                                                &time[0],
                                                dTime,
                                                pNewDT)
+            if pNewDT < 1.0:
+                raise CutbackRequest("Element {:} requests for a cutback!".format(self.elNumber), pNewDT)
+
+    cpdef void computeYourselfExplicit(self,
+                                       double[::1] Pe,
+                                       const double[::1] U,
+                                       const double[::1] dU,
+                                       const double[::1] time,
+                                       double dTime) except * nogil:
+        """Evaluate residual and stiffness for given time, field, and field increment."""
+
+        if not self._hasMaterial:
+            raise Exception("Element {:} has no material assigned!".format(self._elNumber))
+
+        cdef double pNewDT
+        with nogil:
+            self._initializeStateVarsTemp()
+
+            pNewDT = 1e36
+
+            self.marmotElement.computeYourselfExplicit(&U[0],
+                                                       &dU[0],
+                                                       &Pe[0],
+                                                       &time[0],
+                                                       dTime,
+                                                       pNewDT)
             if pNewDT < 1.0:
                 raise CutbackRequest("Element {:} requests for a cutback!".format(self.elNumber), pNewDT)
 
@@ -279,6 +298,23 @@ cdef class MarmotElementWrapper:
                                     &U[0],
                                     &time[0],
                                     dTime)
+
+    def computeLumpedInertia(self, double[::1] M):
+        """Compute the lumped mass matrix of the underlying MarmotElement"""
+
+        self.marmotElement.computeLumpedInertia(&M[0])
+
+    def computeCriticalTimeStepForExplicitDynamics(self, double[::1] Q):
+        """Compute the critical time step for explicit dynamics of the underlying MarmotElement"""
+        cdef double criticalTimeStep = 1e36
+        self.marmotElement.computeCriticalTimeStepForExplicitDynamics(criticalTimeStep, &Q[0])
+        return criticalTimeStep
+
+    def computeInternalEnergy(self):
+        """Compute the internal energy of the underlying MarmotElement"""
+        cdef double internalEnergy = 0.0
+        self.marmotElement.computeInternalEnergy(internalEnergy)
+        return internalEnergy
 
     def acceptLastState(self, ):
         """Accept the computed state (in nonlinear iteration schemes)."""
@@ -325,3 +361,15 @@ cdef class MarmotElementWrapper:
 
     def __dealloc__(self):
         del self.marmotElement
+
+    def getVIJContributionSize(self) -> int:
+        """Return the number of entries this entity contributes to the VIJ (COO) system matrix."""
+        return self.nDof**2
+
+    def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
+        """Initialize the I and J arrays for the VIJ (COO) system matrix assembly. """
+
+        n = len(idcs)
+        VIJLocations = np.tile(idcs, (n, 1))
+        I_[offset : offset + n**2] = VIJLocations.flatten()
+        J_[offset : offset + n**2] = VIJLocations.flatten("F")

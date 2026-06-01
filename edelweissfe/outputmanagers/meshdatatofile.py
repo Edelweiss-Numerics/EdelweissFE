@@ -28,6 +28,12 @@
 
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
 """
 Writes the (generated) mesh data to a file.
@@ -39,9 +45,33 @@ Writes the (generated) mesh data to a file.
         filename=myMesh.inc
 """
 
-documentation = {
-    "filename": "(optional), name of the file to write to; default: 'jobname'_mesh.inc",
-}
+module = Module("meshdatatofile", "Writes the (generated) mesh data to a file.")
+
+inputLanguage = InputLanguage()
+
+keyword = "output"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
+
+module.addOptionalArg("filename", "Name of file for writing output.", str, None)
+
+documentation = [module]
+
+required = [kw.name for kw in module.requiredArgs]
+required += [kw.name for kw in module.requiredKeywords]
+
+optional = [kw.name for kw in module.optionalArgs]
+optional += [kw.name for kw in module.optionalKeywords]
+
+
+@caseInsensitiveKwargsChecker(required, optional)
+@castKwargsValuesAndAddDefaults(module)
+def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
+    kwargs = CaseInsensitiveDict(kwargs)
+
+    filename = kwargs["filename"]
+
+    return OutputManager(name, FEModel, fieldOutputController, journal, plotter, filename)
 
 
 class OutputManager(OutputManagerBase):
@@ -50,14 +80,14 @@ class OutputManager(OutputManagerBase):
     identification = "Meshdatatofile"
     printTemplate = "{:}, {:}: {:}"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter):
+    def __init__(self, name, model, fieldOutputController, journal, plotter, filename):
         self.journal = journal
-        self.filename = "{:}_mesh.inc".format(name)
         self.model = model
 
-    def updateDefinition(self, **kwargs: dict):
-        if "filename" in kwargs:
-            self.filename = kwargs.get("filename")
+        if filename is not None:
+            self.filename = filename
+        else:
+            self.filename = f"{name}_mesh.inc"
 
         self.writeMeshDataToFile(self.model)
 
@@ -70,7 +100,7 @@ class OutputManager(OutputManagerBase):
     def finalizeIncrement(self, statusInfoDict: dict = {}, **kwargs):
         pass
 
-    def finalizeFailedIncrement(self, statusInfoDict: dict = {}):
+    def finalizeFailedIncrement(self, statusInfoDict: dict = {}, **kwargs):
         pass
 
     def finalizeStep(self):

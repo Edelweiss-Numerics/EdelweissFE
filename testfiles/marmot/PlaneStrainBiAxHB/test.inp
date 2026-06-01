@@ -1,0 +1,53 @@
+*modelGenerator, generator=planeRectQuad, name=gen
+l=30
+h=30
+nX=3
+nY=3
+elType=CPE4
+
+*material, name=HoekBrown, id=RockMat
+** E |  nu  |  fcu  |  m0  |   e   |  GSI  |   D   | psiDeg | viscosity
+30000, 0.21,  36.0,   10.0,  0.51,    40.0,   0.0,    3.26,    0.0001
+
+*section, name=section1, thickness=1.0, material=RockMat, type=plane
+all
+
+*job, name=cpe4job, domain=2d
+*solver, solver=NIST, name=theSolver
+*fieldOutput
+>>perNode, name=dispTop, nSet=gen_top,       field=displacement, result=U, f(x)='mean(x[:,1])', saveHistory=True
+>>perNode, name=dispRight, nSet=gen_right,       field=displacement, result=U, f(x)='mean(x[:,0])', saveHistory=True
+>>perNode, name=RFBottom, nSet=gen_bottom,    field=displacement, result=P, f(x)='sum(x[:,1])', saveHistory=True
+>>perNode, name=RFLeft, nSet=gen_left,    field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=True
+>>perNode, elSet=all,  field=displacement, result=U, name=displacement
+>>perElement, elSet=all,  result=stress,  quadraturePoint=0:3, f(x)='np.mean(x,axis=1)', name=stress
+>>perElement, elSet=all,  result=strain,  quadraturePoint=0:3, f(x)='np.mean(x,axis=1)', name=strain
+
+***output, type=monitor
+**fieldOutput=dispTop
+**fieldOutput=dispRight
+**fieldOutput=RFBottom
+**fieldOutput=RFLeft
+
+*output, type=ensight, name=ensightExport
+>>perNode, fieldOutput=displacement
+>>perElement, fieldOutput=stress
+>>perElement, fieldOutput=strain
+>>configuration, overwrite=yes
+
+*output, type=meshplot
+figure=1, axSpec=111, c=red, create=xyData, x=dispRight, y=RFLeft
+figure=2, axSpec=111, c=red, create=xyData, x=dispTop, y=RFBottom
+
+*step, solver=theSolver
+maxInc=0.5
+>>dirichlet, name=left,   nSet=gen_left,   field=displacement,	1=0.0
+>>dirichlet, name=bottom, nSet=gen_bottom, field=displacement, 	2=0.0
+>>geostatic, name=geo, elSet=all, p1=-10, h1=0, p2=-10, h2=30, xLateral=1.0, zLateral=1.0
+>>distributedload, name=dlRight, surface=gen_right, magnitude=10, f(t)=1, type=pressure
+>>distributedload, name=dlTop, surface=gen_top, magnitude=10, f(t)=1, type=pressure
+
+*step, solver=theSolver
+maxInc=1e-2,
+>>dirichlet, name=top,  nSet=gen_top,   field=displacement, 2=-1
+

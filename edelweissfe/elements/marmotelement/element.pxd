@@ -52,24 +52,17 @@ cdef extern from "Marmot/MarmotElement.h" namespace "MarmotElement":
         SurfaceTraction
         SurfaceTorsion
 
-cdef extern from "Marmot/Marmot.h" namespace "MarmotLibrary" nogil:
-    cdef cppclass MarmotMaterialFactory:
-        @staticmethod
-        int getMaterialCodeFromName(const string& materialName) except +IndexError
-
+cdef extern from "Marmot/MarmotElementFactory.h" namespace "MarmotLibrary" nogil:
     cdef cppclass MarmotElementFactory:
         @staticmethod
-        int getElementCodeFromName(const string& elementName) except +IndexError
-
-        @staticmethod
-        MarmotElement* createElement(int elementCode, int noEl, ) except +ValueError
+        MarmotElement* createElement(const string& elementName, int noEl, ) except +ValueError
 
 cdef extern from "Marmot/MarmotElementProperty.h":
     cdef cppclass MarmotElementProperty nogil:
         pass
 
     cdef cppclass MarmotMaterialSection(MarmotElementProperty) nogil:
-        MarmotMaterialSection(int materialCode, const double* _materialProperties, int nMaterialProperties)
+        MarmotMaterialSection(const string& materialName, const double* _materialProperties, int nMaterialProperties)
 
     cdef cppclass ElementProperties(MarmotElementProperty) nogil:
         ElementProperties(const double* _elementProperties, int nElementProperties)
@@ -101,7 +94,14 @@ cdef extern from "Marmot/MarmotElement.h":
                              double* Ke,
                              const double* time,
                              double dT,
-                             double& pNewdT, ) except +ValueError
+                             double& pNewdT) except +ValueError
+
+        void computeYourselfExplicit(const double* QTotal,
+                                     const double* dQ,
+                                     double* Pe,
+                                     const double* time,
+                                     double dT,
+                                     double& pNewdT) except +ValueError
 
         void setInitialConditions(StateTypes state,
                                   const double* values)
@@ -123,6 +123,12 @@ cdef extern from "Marmot/MarmotElement.h":
                         const double* QTotal,
                         const double* time,
                         double dT)
+
+        void computeLumpedInertia(double* M)
+
+        void computeCriticalTimeStepForExplicitDynamics(double& criticalTimeStep, const double* QTotal)
+
+        void computeInternalEnergy(double& internalEnergy)
 
         StateView getStateView(const string& stateName, int gaussPt)
 
@@ -164,7 +170,7 @@ cdef class MarmotElementWrapper:
 
     # nogil methods are already declared here:
 
-    cpdef void _initializeStateVarsTemp(self, ) nogil
+    cpdef void _initializeStateVarsTemp(self, ) noexcept  nogil
 
     cpdef void computeYourself(self,
                                double[::1] Ke,
@@ -172,4 +178,11 @@ cdef class MarmotElementWrapper:
                                const double[::1] U,
                                const double[::1] dU,
                                const double[::1] time,
-                               double dTime, ) nogil except *
+                               double dTime) except * nogil
+
+    cpdef void computeYourselfExplicit(self,
+                                       double[::1] Pe,
+                                       const double[::1] U,
+                                       const double[::1] dU,
+                                       const double[::1] time,
+                                       double dTime) except * nogil

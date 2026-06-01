@@ -1,0 +1,43 @@
+*modelGenerator, generator=cuboidlatticegenerator, name=gen
+lX=5
+lY=5
+lZ=5
+nEleX=5
+nEleY=5
+nEleZ=5
+nEleStrutX=2
+nEleStrutY=2
+nEleStrutZ=2
+nX=1
+nY=2
+nZ=1
+elType=C3D8TL
+elProvider=edelweiss
+
+*material, name=neohookewb, id=myMaterial, provider=edelweiss
+10, 0.47
+
+*section, name=section1, material=myMaterial, type=solid
+all
+
+*job, name=myJob, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=findClosestNode, name=gen3
+location='5, 15, 5'
+storeIn=topRP
+
+*step, solver=theSolver
+maxInc=1, minInc=1e-3, maxNumInc=100, maxIter=25, stepLength=180
+** initializematerial, name=init, elSet=all
+>>dirichlet, name=1, nSet=gen_bottom,       field=displacement, 1=0, 2=0, 3=0
+>>dirichlet, name=4, nSet=gen_top,       field=displacement, 3=0.1, 2=0, 1=0
+
+*fieldOutput
+>>perNode, name=displacement, elSet=all, field=displacement, result=U
+>>perElement, name=stress,       elSet=all, result=stress, quadraturePoint=0:3, f(x)='np.mean(x,axis=1)'
+
+*output, type=ensight, name=myEnsightOutput
+>>perNode, fieldOutput=displacement
+>>configuration, overwrite=yes
+

@@ -39,8 +39,10 @@ cdef extern from "Marmot/Marmot.h" namespace "MarmotLibrary" nogil:
         int getMaterialCodeFromName(const string& materialName) except +IndexError
 
         @staticmethod
-        MarmotMaterial* createMaterial(int materialCode, const double* materialProperties, int
-                                       nMaterialProperties, int materialNumber) except +IndexError
+        MarmotMaterial* createMaterial(int materialCode,
+                                       const double* materialProperties,
+                                       int nMaterialProperties,
+                                       int materialNumber) except +IndexError
 
 cdef extern from "Marmot/MarmotUtils.h":
     cdef struct StateView:
@@ -99,8 +101,8 @@ cdef extern from "Marmot/MarmotMaterialGradientEnhancedHypoElastic.h":
                            double* dK_localDDStrain,
                            double* dStressDK,
                            const double* dStrain,
-                           double        KOld,
-                           double        dK,
+                           double KOld,
+                           double dK,
                            const double* timeOld,
                            const double  dT,
                            double& pNewDT) except +ValueError

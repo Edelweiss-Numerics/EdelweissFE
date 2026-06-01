@@ -35,19 +35,67 @@ import sympy as sp
 from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.stepactions.base.nodalloadbase import NodalLoadBase
+from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
 
 """
-Apply simple node forces on a nSet.
+Apply node forces on a nSet.
 """
 
-documentation = {
-    "nSet": "Node set for application of the boundary condition",
-    "1,2,3,...": "Prescribed values for components of the physical field",
-    "components": "Prescribed values using a np.ndarray for representation; use 'x' for ignored values",
-    "field": "Field for which the boundary condition is active",
-    "f(t)": "(Optional) define an amplitude in the step progress interval [0...1]",
-}
+
+inputLanguage = InputLanguage()
+
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
+
+documentation = []
+
+for module in modules:
+    kw = module.addOptionalKeyword("nodeforces", "Apply node forces on node sets.")
+    kw.addRequiredArg("name", "Name of the step action.", str)
+    kw.addRequiredArg("nSet", "The node set for application of the boundary condition.", str)
+    kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
+
+    kw.addOptionalArg("1", "Prescribe first component of field.", float, None)
+    kw.addOptionalArg("2", "Prescribe second component of field.", float, None)
+    kw.addOptionalArg("3", "Prescribe third component of field.", float, None)
+    kw.addOptionalArg("4", "Prescribe fourth component of field.", float, None)
+    kw.addOptionalArg("5", "Prescribe fifth component of field.", float, None)
+    kw.addOptionalArg("6", "Prescribe sixth component of field.", float, None)
+
+    kw.addOptionalArg(
+        "components",
+        "Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
+        str,
+        None,
+    )
+    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+
+    documentation.append(kw)
+
+    kw = module.addOptionalKeyword("updateNodeforces", "Update a previously defined nodeforces definition.")
+    kw.addRequiredArg("name", "Name of the step action to update.", str)
+    # kw.addRequiredArg("nSet", "The node set for application of the boundary condition.", str)
+    # kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
+
+    kw.addOptionalArg("1", "Prescribe first component of field.", float, None)
+    kw.addOptionalArg("2", "Prescribe second component of field.", float, None)
+    kw.addOptionalArg("3", "Prescribe third component of field.", float, None)
+    kw.addOptionalArg("4", "Prescribe fourth component of field.", float, None)
+    kw.addOptionalArg("5", "Prescribe fifth component of field.", float, None)
+    kw.addOptionalArg("6", "Prescribe sixth component of field.", float, None)
+
+    kw.addOptionalArg(
+        "components",
+        "Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
+        str,
+        None,
+    )
+    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+
+    documentation.append(kw)
 
 
 class StepAction(NodalLoadBase):
@@ -79,7 +127,7 @@ class StepAction(NodalLoadBase):
 
         self._idle = False
 
-        if "components" in action:
+        if action["components"] is not None:
             nodeLoad = np.asarray(eval(action["components"].replace("x", "0")), dtype=float)
         else:
             nodeLoad = self._getComponentsFromDirection(action)
@@ -111,7 +159,7 @@ class StepAction(NodalLoadBase):
             The function defining the amplitude depending on the step propress.
         """
 
-        if "f(t)" in action:
+        if action["f(t)"] is not None:
             t = sp.symbols("t")
             amplitude = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
         else:
@@ -146,7 +194,7 @@ class StepAction(NodalLoadBase):
         nodeLoad = np.zeros(self._fieldSize)
 
         for i, comp in enumerate(self.possibleComponents):
-            if comp in action:
+            if action[comp] is not None:
                 nodeLoad[i] = float(action[comp])
 
         return nodeLoad

@@ -91,7 +91,7 @@ def finiteElementSimulation(
 
     journal = Journal(verbose=verbose)
 
-    job = inputfile["*job"][0]
+    job = inputfile["job"][0]
     jobName = job["name"]
 
     domainSize = domainMapping[job["domain"]]
@@ -129,7 +129,7 @@ def finiteElementSimulation(
 
     jobInfo.update(job)
     jobInfo = loadConfiguration(jobInfo)
-    for updateConfig in inputfile["*updateConfiguration"]:
+    for updateConfig in inputfile["updateConfiguration"]:
         updateConfiguration(updateConfig, jobInfo, journal)
 
     # Create the default entries 'U' (flux) and 'P' (effort)
@@ -161,7 +161,7 @@ def finiteElementSimulation(
             stacklevel=2,
         )
 
-    defaultSolver = getSolverByName(job.get("solver", "NIST"))
+    defaultSolver = getSolverByName(job["solver"])
     solvers["default"] = defaultSolver(jobInfo, journal)
 
     try:

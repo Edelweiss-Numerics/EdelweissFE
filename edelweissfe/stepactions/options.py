@@ -32,7 +32,26 @@ storing step options for various modules.
 """
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+
+inputLanguage = InputLanguage()
+
+modules = [
+    inputLanguage["step"].getModule("adaptive"),
+    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
+]
+
+documentation = []
+
+for module in modules:
+    kw = module.addOptionalKeyword(
+        "options",
+        "This stepaction serves as a case insensitive container for storing step options for various modules.",
+    )
+    kw.addRequiredArg("category", "Option category.", str)
+
+    documentation.append(kw)
 
 
 class StepAction(StepActionBase):

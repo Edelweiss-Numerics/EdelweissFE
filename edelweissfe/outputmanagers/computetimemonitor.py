@@ -26,11 +26,15 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-from collections import defaultdict
-from typing import Union
 
-from edelweissfe.config.timing import createTimingDict, timingTypes
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
+from edelweissfe.utils.performancetiming import extractIncrementTimes
 
 """
 Prints the compute times per increment to the screen and writes them into a file (optional).
@@ -42,62 +46,64 @@ Prints the compute times per increment to the screen and writes them into a file
         export=myComputeTimes
 """
 
-documentation = {
-    "export": "(optional), filename if compute time should be written in a file",
-}
+module = Module(
+    "computetimemonitor", "A simple monitor to observe results (fieldOutputs) in the console during analysis."
+)
+
+inputLanguage = InputLanguage()
+
+keyword = "output"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
+
+module.addOptionalArg("export", "Provide a filename to export the results.", str, None)
+
+documentation = [module]
+
+required = [kw.name for kw in module.requiredArgs]
+required += [kw.name for kw in module.requiredKeywords]
+
+optional = [kw.name for kw in module.optionalArgs]
+optional += [kw.name for kw in module.optionalKeywords]
+
+
+@caseInsensitiveKwargsChecker(required, optional)
+@castKwargsValuesAndAddDefaults(module)
+def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
+    kwargs = CaseInsensitiveDict(kwargs)
+
+    filename = kwargs["export"]
+
+    return OutputManager(name, FEModel, fieldOutputController, journal, plotter, filename)
 
 
 class OutputManager(OutputManagerBase):
     identification = "ComputeTimeMonitor"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter):
+    def __init__(self, name, model, fieldOutputController, journal, plotter, filename):
         self.journal = journal
-        self.computingTimesOld = defaultdict(lambda: 0.0)
         self.stepcounter = 0
-        self.exportFile = None
 
-    def updateDefinition(self, **kwargs: dict):
-        self.exportFile = kwargs.get("export")
+        self.exportFile = filename
 
-        if self.exportFile is not None:
+        if self.exportFile:
             with open(self.exportFile, "w+") as f:
                 f.write("# \n# EdelweissFE: computing times per increment\n#\n")
+
+    def updateDefinition(self, **kwargs: dict):
+        pass
 
     def initializeJob(self):
         pass
 
     def initializeStep(self, step):
-        self.computingTimesOld = createTimingDict()
         self.stepcounter += 1
 
-        if self.exportFile is not None:
-            with open(self.exportFile, "a") as f:
-                f.write("#\n# simulation step {:}\n#\n#".format(self.stepcounter))
+    def finalizeIncrement(self, **kwargs):
+        self.journal.printPrettyTable(extractIncrementTimes(), self.identification)
 
-                f.write(" {:<20} {:<20} {:<20}".format("increment", "simulation time", "inc compute time"))
-                for timingType in timingTypes:
-                    f.write(" {:<20}".format(timingType))
-                f.write("\n#\n")
-
-    def finalizeIncrement(
-        self, statusInfoDict=defaultdict(lambda: 0.0), currentComputingTimes=createTimingDict(), **kwargs
-    ):
-        compTimeTotal, compTimeIndividual = self.computeIncrementComputingTimes(currentComputingTimes)
-
-        self.printIncrementComputingTimes(compTimeTotal, compTimeIndividual)
-        if self.exportFile is not None:
-            self.writeIncrementComputingTimesToFile(compTimeTotal, compTimeIndividual, statusInfoDict)
-        self.computingTimesOld = currentComputingTimes.copy()
-
-    def finalizeFailedIncrement(
-        self, statusInfoDict=defaultdict(lambda: 0.0), currentComputingTimes=defaultdict(lambda: 0.0), **kwargs
-    ):
-        compTimeTotal, compTimeIndividual = self.computeIncrementComputingTimes(currentComputingTimes)
-
-        self.printIncrementComputingTimes(compTimeTotal, compTimeIndividual)
-        if self.exportFile is not None:
-            self.writeIncrementComputingTimesToFile(compTimeTotal, compTimeIndividual, statusInfoDict)
-        self.computingTimesOld = currentComputingTimes.copy()
+    def finalizeFailedIncrement(self, **kwargs):
+        self.journal.printPrettyTable(extractIncrementTimes(), self.identification)
 
     def finalizeStep(
         self,
@@ -108,33 +114,3 @@ class OutputManager(OutputManagerBase):
         self,
     ):
         pass
-
-    def computeIncrementComputingTimes(self, currentComputingTimes: dict) -> Union[float, dict]:
-        incrementComputingTimes = createTimingDict()
-        incrementComputingTimeTotal = 0.0
-        for key, val in currentComputingTimes.items():
-            incrementComputingTimes[key] = val - self.computingTimesOld[key]
-            incrementComputingTimeTotal += incrementComputingTimes[key]
-
-        return incrementComputingTimeTotal, incrementComputingTimes
-
-    def printIncrementComputingTimes(self, incCompTimeTotal, incCompTimesIndividual):
-        self.journal.printTable(
-            [
-                (
-                    "Time in {:}".format(k),
-                    " {:.5e}s ({:>4.1f}%)".format(v, v / incCompTimeTotal * 100),
-                )
-                for k, v in incCompTimesIndividual.items()
-            ],
-            self.identification,
-        )
-
-    def writeIncrementComputingTimesToFile(self, incCompTimeTotal, incCompTimesIndividual, statusInfoDict):
-        with open(self.exportFile, "a") as f:
-            f.write("  {:<20}".format(int(statusInfoDict["inc"])))
-            f.write(" {:<20.5e}".format(statusInfoDict["time end"]))
-            f.write(" {:<20.5e}".format(incCompTimeTotal))
-            for val in incCompTimesIndividual.values():
-                f.write(" {:<20.5e}".format(val))
-            f.write("\n")

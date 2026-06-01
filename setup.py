@@ -30,6 +30,8 @@ Created on Thu May 21 14:23:14 2015
 @author: c8441141
 """
 import os
+import pathlib
+import shutil
 import sys
 from os.path import expanduser, join
 
@@ -53,12 +55,13 @@ print("*" * 80)
 
 marmot_dir = expanduser(os.environ.get("MARMOT_INSTALL_DIR", default_install_prefix))
 mkl_include = expanduser(os.environ.get("MKL_INCLUDE_DIR", join(default_install_prefix, "include")))
-buildPanuaPardiso = True if expanduser(os.environ.get("BUILD_PANUA_PARDISO", "0")) == "1" else False
-
+eigen_include = expanduser(os.environ.get("EIGEN_INCLUDE_DIR", join(default_install_prefix, "include/eigen3")))
 print("Marmot install directory (overwrite via environment var. MARMOT_INSTALL_DIR):")
 print(marmot_dir)
 print("MKL include directory (overwrite via environment var. MKL_INCLUDE_DIR):")
 print(mkl_include)
+print("Eigen include directory (overwrite via environment var. EIGEN_INCLUDE_DIR):")
+print(eigen_include)
 print("*" * 80)
 
 print("Gather the extension for the MarmotElement base element, linked to the Marmot library")
@@ -74,50 +77,35 @@ extensions = [
     )
 ]
 
-print(
-    "Gather the extension for the single quadrature point element using MarmotMaterials, linked to the Marmot library"
-)
-extensions += [
-    Extension(
-        "*",
-        sources=[
-            "edelweissfe/elements/marmotsingleqpelement/marmot.pyx",
-        ],
-        include_dirs=[join(marmot_dir, "include"), numpy.get_include()],
-        libraries=["Marmot"],
-        library_dirs=[join(marmot_dir, "lib")],
-        runtime_library_dirs=[join(marmot_dir, "lib")],
-        language="c++",
-    )
-]
-
+print("Gather the extension for wrapping a hypoelastic Marmot material")
 extensions += [
     Extension(
         "*",
         sources=[
             "edelweissfe/elements/marmotsingleqpelement/marmotmaterialhypoelasticwrapper.pyx",
         ],
-        include_dirs=[join(marmot_dir, "include"), numpy.get_include()],
+        include_dirs=[join(marmot_dir, "include"), numpy.get_include(), eigen_include],
         libraries=["Marmot"],
         library_dirs=[join(marmot_dir, "lib")],
         runtime_library_dirs=[join(marmot_dir, "lib")],
         language="c++",
+        extra_compile_args=["-O3", "-std=c++20"],
     )
 ]
 
-extensions += [
-    Extension(
-        "*",
-        sources=[
-            "edelweissfe/elements/marmotsingleqpelement/marmotmaterialgradientenhancedhypoelasticwrapper.pyx",
-        ],
-        include_dirs=[join(marmot_dir, "include"), numpy.get_include()],
-        libraries=["Marmot"],
-        library_dirs=[join(marmot_dir, "lib")],
-        runtime_library_dirs=[join(marmot_dir, "lib")],
-        language="c++",
-    )
-]
+# extensions += [
+#     Extension(
+#         "*",
+#         sources=[
+#             "edelweissfe/elements/marmotsingleqpelement/marmotmaterialgradientenhancedhypoelasticwrapper.pyx",
+#         ],
+#         include_dirs=[join(marmot_dir, "include"), numpy.get_include()],
+#         libraries=["Marmot"],
+#         library_dirs=[join(marmot_dir, "lib")],
+#         runtime_library_dirs=[join(marmot_dir, "lib")],
+#         language="c++",
+#     )
+# ]
 
 print("Gather the extension for the fast element result collector")
 extensions += [
@@ -151,27 +139,12 @@ extensions += [
     )
 ]
 
-print("Gather the extension for the NISTParallel solver")
+print("Gather the extensions for fast dirichlet application")
 extensions += [
     Extension(
         "*",
-        sources=["edelweissfe/solvers/nonlinearimplicitstaticparallelmk2.pyx"],
+        sources=["edelweissfe/solvers/base/dirichlet.pyx"],
         include_dirs=[numpy.get_include()],
-        language="c++",
-        extra_compile_args=[
-            "-fopenmp",
-            "-Wno-maybe-uninitialized",
-        ],
-        extra_link_args=["-fopenmp"],
-    )
-]
-
-print("Gather the extension for the NISTParallel (MarmotElements only) solver")
-extensions += [
-    Extension(
-        "*",
-        sources=["edelweissfe/solvers/nonlinearimplicitstaticparallel.pyx"],
-        include_dirs=[numpy.get_include()] + [join(marmot_dir, "include")],
         language="c++",
         extra_compile_args=[
             "-fopenmp",
@@ -204,63 +177,114 @@ extensions += [
 ]
 
 
-if buildPanuaPardiso:
-    print("Gather the Panua pardiso interface")
-    extensions += [
-        Extension(
-            "*",
-            sources=[
-                "edelweissfe/linsolve/panuapardiso/panuapardiso.pyx",
-            ],
-            include_dirs=[
-                numpy.get_include(),
-            ],
-            libraries=[
-                "pardiso",
-            ],
-            language="c++",
-            extra_link_args=["-fopenmp", "-lgfortran", "-lpthread", "-lm"],
-            optional=True,
-        )
-    ]
+print("Gather the Panua pardiso interface")
+extensions += [
+    Extension(
+        "*",
+        sources=[
+            "edelweissfe/linsolve/panuapardiso/panuapardiso.pyx",
+        ],
+        include_dirs=[
+            numpy.get_include(),
+        ],
+        libraries=[
+            "pardiso",
+        ],
+        language="c++",
+        extra_link_args=["-fopenmp", "-lgfortran", "-lpthread", "-lm"],
+        optional=True,
+    )
+]
 
-# print("Gather the KLU interface")
-# extensions += [
-#     Extension(
-#         "*",
-#         sources=[
-#             "edelweissfe/linsolve/klu/klu.pyx",
-#             "edelweissfe/linsolve/klu/kluInterface.c",
-#         ],
-#         include_dirs=[
-#             numpy.get_include(),
-#         ],
-#         libraries=[
-#             "klu",
-#             "btf",
-#             "amd",
-#             "colamd",
-#             "metis",
-#             "cholmod",
-#             "camd",
-#             "ccolamd",
-#             "iomp5",
-#             "suitesparseconfig",
-#         ],
-#         language="c",
-#         extra_compile_args=[
-#             "-fopenmp",
-#             "-Wno-maybe-uninitialized",
-#         ],
-#         extra_link_args=["-fopenmp"],
-#     )
-# ]
+print("Gather the AMGCL interface")
+extensions += [
+    Extension(
+        "*",
+        sources=["edelweissfe/linsolve/amgcl/amgcl.pyx"],
+        include_dirs=[numpy.get_include(), join(default_install_prefix, "include"), "."],
+        language="c++",
+        extra_compile_args=["-std=c++11", "-fopenmp", "-O3"],
+        extra_link_args=["-fopenmp"],
+    )
+]
+
+print("Gather the KLU interface")
+extensions += [
+    Extension(
+        "*",
+        sources=[
+            "edelweissfe/linsolve/klu/klu.pyx",
+            "edelweissfe/linsolve/klu/kluInterface.c",
+        ],
+        include_dirs=[
+            numpy.get_include(),
+        ],
+        libraries=[
+            "klu",
+            "btf",
+            "amd",
+            "colamd",
+            "metis",
+            "cholmod",
+            "camd",
+            "ccolamd",
+            "iomp5",
+            "suitesparseconfig",
+        ],
+        language="c",
+        extra_compile_args=[
+            "-fopenmp",
+            "-Wno-maybe-uninitialized",
+        ],
+        extra_link_args=["-fopenmp"],
+    )
+]
 
 print("Now compile!")
 
+
+class optional_build_ext(build_ext):
+    def build_extensions(self):
+        self.successful_extensions = []
+
+        for ext in self.extensions:
+            try:
+                self.build_extension(ext)
+                self.successful_extensions.append(ext.name)
+                print(f"[OK] Built extension: {ext.name}")
+            except Exception as e:
+                print(f"[FAIL] Could not build {ext.name}: {e}")
+
+        self.write_build_log()
+
+    def write_build_log(self):
+        log_file = pathlib.Path("edelweissfe") / "built_extensions.log"
+
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+
+        log_file.write_text(
+            "\n".join(self.successful_extensions) + "\n",
+            encoding="utf-8",
+        )
+
+        print(f"Wrote build log to {log_file}")
+
+        # also copy into build/lib package dir
+        build_lib = pathlib.Path(self.build_lib) / "edelweissfe"
+        build_lib.mkdir(parents=True, exist_ok=True)
+
+        shutil.copy2(log_file, build_lib / "built_extensions.log")
+
+        print(f"Wrote build log to {build_lib / 'built_extensions.log'}")
+
+
 setup(
-    cmdclass={"build_ext": build_ext},
+    cmdclass={"build_ext": optional_build_ext},
     ext_modules=cythonize(extensions, compiler_directives=directives, annotate=True, language_level=3),
+    include_package_data=True,
+    package_data={
+        "edelweissfe": ["built_extensions.log"],
+    },
 )
 
 print("Finish!")

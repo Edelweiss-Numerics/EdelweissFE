@@ -41,14 +41,18 @@ import numpy as np
 from edelweissfe.nodecouplingentity.base.nodecouplingentity import (
     BaseNodeCouplingEntity,
 )
+from edelweissfe.numerics.vijentitybase import VIJEntityBase
 from edelweissfe.points.node import Node
 
 
-class BaseElement(BaseNodeCouplingEntity):
+class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
     @property
     @abstractmethod
     def elNumber(self) -> int:
         """The unique number of this element"""
+
+    def elType(self) -> str:
+        """The type of this element."""
 
     @property
     @abstractmethod
@@ -175,12 +179,12 @@ class BaseElement(BaseNodeCouplingEntity):
         time: np.ndarray,
         dT: float,
     ):
-        """Evaluate the residual and stiffness for given time, field, and field increment due to a surface load.
+        """Evaluate the internal forces and stiffness for given time, field, and field increment.
 
         Parameters
         ----------
         P
-            The external load vector to be defined.
+            The internal load vector to be defined.
         K
             The stiffness matrix to be defined.
         U
@@ -191,6 +195,71 @@ class BaseElement(BaseNodeCouplingEntity):
             Array of step time and total time.
         dTime
             The time increment.
+        """
+
+    @abstractmethod
+    def computeYourselfExplicit(
+        self,
+        P: np.ndarray,
+        U: np.ndarray,
+        dU: np.ndarray,
+        time: np.ndarray,
+        dT: float,
+    ):
+        """Evaluate the internal forces for given time, field, and field increment.
+
+        Parameters
+        ----------
+        P
+            The internal load vector to be defined.
+        U
+            The current solution vector.
+        dU
+            The current solution vector increment.
+        time
+            Array of step time and total time.
+        dTime
+            The time increment.
+        """
+
+    @abstractmethod
+    def computeLumpedInertia(
+        self,
+        M: np.ndarray,
+    ):
+        """Evaluate the internal forces for given time, field, and field increment.
+
+        Parameters
+        ----------
+        M
+            The diagonal of the lumped mass matrix to be defined.
+        """
+
+    @abstractmethod
+    def computeCriticalTimeStepForExplicitDynamics(
+        self,
+        Q: np.ndarray,
+    ) -> float:
+        """Evaluate the critical time step for explicit dynamics.
+        Parameters
+        ----------
+        Q
+            The current solution vector, which might be needed to compute the critical time step due to nonlinearities.
+
+        Returns
+        -------
+        float
+            The critical time step.
+        """
+
+    @abstractmethod
+    def computeInternalEnergy(self) -> float:
+        """Evaluate the internal energy of the element.
+
+        Returns
+        -------
+        float
+            The internal energy.
         """
 
     @abstractmethod

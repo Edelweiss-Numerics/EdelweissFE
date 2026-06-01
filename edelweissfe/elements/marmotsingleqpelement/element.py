@@ -31,9 +31,10 @@
 import numpy as np
 
 from edelweissfe.elements.base.baseelement import BaseElement
-from edelweissfe.elements.marmotsingleqpelement.marmotmaterialgradientenhancedhypoelasticwrapper import (
-    MarmotMaterialGradientEnhancedHypoElasticWrapper,
-)
+
+# from edelweissfe.elements.marmotsingleqpelement.marmotmaterialgradientenhancedhypoelasticwrapper import (
+#     MarmotMaterialGradientEnhancedHypoElasticWrapper,
+# )
 from edelweissfe.elements.marmotsingleqpelement.marmotmaterialhypoelasticwrapper import (
     MarmotMaterialHypoElasticWrapper,
 )
@@ -41,7 +42,7 @@ from edelweissfe.points.node import Node
 
 marmotMaterialWrappers = {
     "MarmotMaterialHypoElastic": MarmotMaterialHypoElasticWrapper,
-    "MarmotMaterialGradientEnhancedHypoElastic": MarmotMaterialGradientEnhancedHypoElasticWrapper,
+    # "MarmotMaterialGradientEnhancedHypoElastic": MarmotMaterialGradientEnhancedHypoElasticWrapper,
 }
 
 
@@ -72,9 +73,7 @@ class MarmotMaterialWrappingElement(BaseElement):
         self._hasMaterial = False
 
         self._marmotMaterialWrapper = marmotMaterialWrappers[self._materialType]()
-        self._fields = [
-            self._marmotMaterialWrapper.fields,
-        ]
+        self._fields = (self._marmotMaterialWrapper.fields,)
         self._nDof = self._marmotMaterialWrapper.nU
         self._dofIndicesPermutation = np.arange(0, self._nDof, 1, dtype=int)
 
@@ -157,7 +156,7 @@ class MarmotMaterialWrappingElement(BaseElement):
         """
 
         self._materialProperties = materialProperties
-        self._marmotMaterialWrapper.createMaterial(materialName, materialProperties)
+        self._marmotMaterialWrapper.createMaterial(materialName.upper(), materialProperties)
 
         self._nStateVars = self._marmotMaterialWrapper.getNumberOfRequiredStateVars()
 
@@ -199,7 +198,36 @@ class MarmotMaterialWrappingElement(BaseElement):
 
         Pe *= -1
 
+    def computeYourselfExplicit(
+        self,
+        Pe,
+        U,
+        dU,
+        time,
+        dTime,
+    ):
+        self._initializeStateVarsTemp()
+
+        self._marmotMaterialWrapper.computeYourselfExplicit(Pe, U, dU, time, dTime)
+
+        Pe *= -1
+
+    def computeLumpedInertia(self, Me):
+        """Not implemented for this wrapper."""
+
+        raise ValueError("This should not be called for this wrapper.")
+
+    def computeCriticalTimeStepForExplicitDynamics(self, Q):
+        """Not implemented for this wrapper."""
+
+        raise ValueError("This should not be called for this wrapper.")
+
     def computeDistributedLoad(self, loadType, P, K, faceID, load, U, time, dTime):
+        """Not implemented for this wrapper."""
+
+        raise ValueError("This should not be called for this wrapper.")
+
+    def computeInternalEnergy(self):
         """Not implemented for this wrapper."""
 
         raise ValueError("This should not be called for this wrapper.")

@@ -27,12 +27,21 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-from edelweissfe.elements.displacementelement.element import DisplacementElement
-from edelweissfe.elements.displacementtlelement.element import DisplacementTLElement
-from edelweissfe.elements.marmotelement.element import MarmotElementWrapper
-from edelweissfe.elements.marmotsingleqpelement.element import (
-    MarmotMaterialWrappingElement,
-)
+from edelweissfe.elements.base.baseelement import BaseElement
+from edelweissfe.utils.misc import checkSuccessfulExtension
+
+if checkSuccessfulExtension("edelweissfe.elements.marmotelement.element"):
+    from edelweissfe.elements.marmotelement.element import MarmotElementWrapper
+else:
+    MarmotElementWrapper = None
+
+if checkSuccessfulExtension("edelweissfe.elements.marmotsingleqpelement.marmotmaterialhypoelasticwrapper"):
+    from edelweissfe.elements.marmotsingleqpelement.element import (
+        MarmotMaterialWrappingElement,
+    )
+else:
+    MarmotMaterialWrappingElement = None
+
 from edelweissfe.sets.orderedset import ImmutableOrderedSet
 from edelweissfe.utils.meshtools import extractNodesFromElementSet
 
@@ -54,12 +63,13 @@ class ElementSet(ImmutableOrderedSet):
         label: str,
         elements,
     ):
-        self.allowedObjectTypes = [
-            MarmotElementWrapper,
-            MarmotMaterialWrappingElement,
-            DisplacementElement,
-            DisplacementTLElement,
-        ]
+        self.allowedObjectTypes = [BaseElement]
+        self.allowedObjectTypes.append(MarmotElementWrapper) if MarmotElementWrapper is not None else None
+        (
+            self.allowedObjectTypes.append(MarmotMaterialWrappingElement)
+            if MarmotMaterialWrappingElement is not None
+            else None
+        )
 
         super().__init__(label, elements)
         self._nodes = None

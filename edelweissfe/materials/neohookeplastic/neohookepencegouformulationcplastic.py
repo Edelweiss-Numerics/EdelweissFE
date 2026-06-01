@@ -99,7 +99,7 @@ def energyAndStressAndElasticTangent(Btr, dF, invFold, Bold, K, mu):
         The elastic tangent dKirchhoff/dDeformationGradient."""
 
     J = np.sqrt(lin.det(Btr))
-    I1 = np.trace(Btr)
+    I1 = Btr.trace()
     invB = lin.inv(Btr)
     muBar = mu * J ** (2 / 3 - K / mu)
     lambdaBar = (K / mu - 2 / 3) * muBar / 2
@@ -130,7 +130,7 @@ def kirchhoffStress(e, K, mu):
         The Kirchhoff stress."""
 
     B, _ = tensorExp(2 * e)
-    muBar = np.exp((2 / 3 - K / mu) * lin.trace(e))
+    muBar = np.exp((2 / 3 - K / mu) * e.trace())
     T = mu * (B - muBar * Ieye)
     return T
 
@@ -177,6 +177,18 @@ class NeoHookeanWcPlasticMaterial(BaseHyperElasticMaterial):
 
         return self._materialProperties
 
+    def getDensity(self) -> float:
+        """Returns the density of the material.
+
+        Returns
+        -------
+        float
+            The density of the material."""
+
+        if not hasattr(self, "_density"):
+            raise Exception("Density is not defined for this material.")
+        return self._density
+
     def getNumberOfRequiredStateVars(self) -> int:
         """Returns number of needed material state Variables per integration point in the material.
 
@@ -207,6 +219,9 @@ class NeoHookeanWcPlasticMaterial(BaseHyperElasticMaterial):
         self._f = lambda devNorm, kappa_: devNorm - np.sqrt(2 / 3) * self._fy(kappa_)
         # derivative of fy dKappa
         self._dfy_ddKappa = lambda kappa_: self.HLin + self.deltaYieldStress * self.delta * np.exp(-self.delta * kappa_)
+
+        if len(materialProperties) > 6:
+            self._density = materialProperties[6]
 
     def assignCurrentStateVars(self, currentStateVars: np.ndarray):
         """Assign new current state vars.

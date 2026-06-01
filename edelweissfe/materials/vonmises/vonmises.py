@@ -72,23 +72,19 @@ class VonMisesMaterial(BaseHypoElasticMaterial):
     materialProperties
         The numpy array containing the material properties.
 
-    Material properties
-    -------------------
-    E
-        Elasticity module (Young's modulus).
-    v
-        Poisson's ratio.
-    fy0
-        Yield stress.
-    HLin
-        Linear plastic hardening parameter.
-    dfy
-        Multiplicator for nonlinear isotropic hardening.
-    delta
-        Exponent for nonlinear isotropic hardening.
+    Notes
+    ----
+    **Material Properties**
 
-    Hardening law
-    -------------
+    - E: Elasticity module (Young's modulus).
+    - v: Poisson's ratio.
+    - fy0: Yield stress.
+    - HLin: Linear plastic hardening parameter.
+    - dfy: Multiplicator for nonlinear isotropic hardening.
+    - delta: Exponent for nonlinear isotropic hardening.
+
+    **Hardening Law**
+
     fy(kappa) = fy0 + HLin * kappa + dfy * (1 - exp(-delta * kappa))
     """
 
@@ -111,6 +107,8 @@ class VonMisesMaterial(BaseHypoElasticMaterial):
         self.HLin = materialProperties[3]
         self.deltaYieldStress = materialProperties[4]
         self.delta = materialProperties[5]
+        if len(materialProperties) > 6:
+            self._density = materialProperties[6]
         # isotropic hardening
         self._fy = (
             lambda kappa_: self.yieldStress
@@ -277,6 +275,17 @@ class VonMisesMaterial(BaseHypoElasticMaterial):
             Current time step size."""
 
         raise Exception("Computing uniaxial stress is not possible with this material.")
+
+    def getDensity(self) -> float:
+        """Get the density of the material.
+
+        Returns
+        -------
+        float
+            The density of the material."""
+        if not hasattr(self, "_density"):
+            raise Exception("Density is not defined for this material.")
+        return self._density
 
     def getResult(self, result: str) -> float:
         """Get the result, as a persistent view which is continiously

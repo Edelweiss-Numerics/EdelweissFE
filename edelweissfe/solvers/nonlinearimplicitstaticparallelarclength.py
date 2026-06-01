@@ -25,9 +25,7 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-# Created on Thu Nov  2 13:43:01 2017
 
-# @author: Matthias Neuner
 """
 (Parallel) Arc Length Solver, based on the proposed approach in Jirásek/Bažant 2001.
 Replaces the NewtonRaphson scheme of the NISTParallel Solver.
@@ -40,6 +38,7 @@ from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstaticparallel import NISTParallel
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.stepactions.options import inputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -48,6 +47,10 @@ from edelweissfe.utils.exceptions import (
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.math import createModelAccessibleFunction
+
+kw = inputLanguage["step"].getModule("adaptive").getKeyword("options")
+kw.addOptionalArg("arcLengthController", "", str, None)
+kw.addOptionalArg("stopCondition", "", str, None)
 
 
 class NISTPArcLength(NISTParallel):
@@ -73,12 +76,22 @@ class NISTPArcLength(NISTParallel):
         if "arc length parameter" in model.additionalParameters:
             self.Lambda = model.additionalParameters["arc length parameter"]
 
-        arcLengthControllerOptions = step.actions["options"].get("NISTArcLength")
+        arcLengthControllerOptions = [
+            stepAction
+            for stepAction in step.actions["options"].values()
+            if stepAction.options["category"] == "NISTArcLength"
+        ]
+        if not len(arcLengthControllerOptions) < 2:
+            raise Exception("Too many option definitions.")
+
+        # arcLengthControllerOptions = step.actions["options"].get("NISTArcLength")
         if arcLengthControllerOptions:
+            arcLengthControllerOptions = arcLengthControllerOptions[0].options
             arcLengthController = arcLengthControllerOptions.get("arcLengthController")
             if arcLengthController:
                 try:
-                    self.arcLengthController = step.actions[arcLengthController][arcLengthController]
+                    arcLengthControllerStepAction = [action for action in step.actions["indirectcontrol"].values()][0]
+                    self.arcLengthController = arcLengthControllerStepAction
                     self.dLambda = 0.0
                 except KeyError:
                     self.journal.errorMessage(

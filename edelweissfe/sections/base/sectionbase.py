@@ -33,55 +33,46 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
+from edelweissfe.sets.elementset import ElementSet
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.math import createFunction
-from edelweissfe.utils.misc import (
-    convertAssignmentsToStringDictionary,
-    splitLineAtCommas,
-    strCaseCmp,
-)
+from edelweissfe.utils.misc import strCaseCmp
 
 
 class Section(ABC):
-    def __init__(self, name, datalines, materialName, model, **kwargs):
-        self.materialParameterFromFieldDefs = []
+    def __init__(
+        self,
+        name,
+        model,
+        material: dict,
+        elementSets: list[ElementSet],
+        materialParameterFromFieldDefs: list[CaseInsensitiveDict],
+        writeMaterialPropertiesToFileDefs: list[CaseInsensitiveDict],
+        # expression: Callable = None,
+    ):
+        self.material = material
+        self.elSets = elementSets
+
+        self.materialParameterFromFieldDefs = materialParameterFromFieldDefs
+        self.writeMaterialPropertiesToFileDefs = writeMaterialPropertiesToFileDefs
+
+        for definition in materialParameterFromFieldDefs:
+            if not any(
+                [strCaseCmp(definition["type"], implementedType) for implementedType in ["setToValue", "scale"]]
+            ):
+                raise ValueError(
+                    f"{name}: {definition['type']} is not a known type; currently available types: 'setToValue', 'scale'"
+                )
+
+            definition["expression"] = createFunction(definition["f(p,f)"], "p", "f", model=model)
+
+        if len(self.writeMaterialPropertiesToFileDefs) > 1:
+            raise ValueError("Too many definitions for writeMaterialPropertiesToFile")
+
         self.writeMaterialPropertiesToFile = False
-        elSetNames = []
-
-        for line in datalines:
-            line = splitLineAtCommas(line)
-
-            if strCaseCmp(line[0], "materialParameterFromField"):
-                definition = convertAssignmentsToStringDictionary(line[1:])
-
-                if "type" in definition.keys():
-                    if not any(
-                        [strCaseCmp(definition["type"], implementedType) for implementedType in ["setToValue", "scale"]]
-                    ):
-                        raise KeyError(
-                            "{}: {} is not a known type; currently available types: 'setToValue', 'scale'".format(
-                                name, definition["type"]
-                            )
-                        )
-                else:
-                    raise KeyError(
-                        "{}: Type option must be set; currently available types: 'setToValue', 'scale'".format(name)
-                    )
-
-                if "f(p,f)" in definition.keys():
-                    definition["expression"] = createFunction(definition["f(p,f)"], "p", "f", model=model)
-                else:
-                    definition["expression"] = createFunction("f", "p", "f", model=model)
-
-                self.materialParameterFromFieldDefs.append(definition)
-            elif strCaseCmp(line[0], "writeMaterialPropertiesToFile"):
-                self.writeMaterialPropertiesToFile = True
-                definition = convertAssignmentsToStringDictionary(line[1:])
-                self.materialPropertiesFileName = definition.get("filename")
-            else:
-                elSetNames.extend(line)
-
-        self.elSets = [model.elementSets[setName] for setName in elSetNames]
-        self.material = model.materials[materialName]
+        for definition in self.writeMaterialPropertiesToFileDefs:
+            self.writeMaterialPropertiesToFile = True
+            self.materialPropertiesFileName = definition["filename"]
 
     def assignSectionPropertiesToModel(self, model):
         if any(self.materialParameterFromFieldDefs):
@@ -108,7 +99,7 @@ class Section(ABC):
         return model
 
     @abstractmethod
-    def assignSectionPropertiesToElement(self, element, **kwargs):
+    def assignSectionPropertiesToElement(self, element, material):
         pass
 
     def propertiesFromField(self, el, material, model, isMarmotMaterial):

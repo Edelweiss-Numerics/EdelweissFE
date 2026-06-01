@@ -32,6 +32,7 @@ import numpy as np
 
 cimport libcpp.cast
 cimport numpy as np
+from libcpp.string cimport string
 
 from edelweissfe.elements.marmotsingleqpelement.marmot cimport (
     MarmotMaterial,
@@ -42,8 +43,6 @@ from edelweissfe.elements.marmotsingleqpelement.marmot cimport (
 
 from edelweissfe.utils.exceptions import CutbackRequest
 
-from libcpp.string cimport string
-
 
 cdef class MarmotMaterialGradientEnhancedHypoElasticWrapper:
 
@@ -53,8 +52,8 @@ cdef class MarmotMaterialGradientEnhancedHypoElasticWrapper:
 
     cdef readonly int nU
 
-    cdef double[::1] stateVars, stressLikeInStateVars, strainLikeInStateVars, stateVarsMaterial
-    cdef double[::1] materialProperties, algorithmicTangentInStateVars
+    cdef double[::1] stateVars, stressLikeInStateVars, strainLikeInStateVars
+    cdef double[::1] stateVarsMaterial, materialProperties, algorithmicTangentInStateVars
 
     def __init__(self, ):
 

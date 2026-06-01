@@ -72,43 +72,58 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.misc import convertLinesToStringDictionary
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
-documentation = {
-    "x0": "(optional) origin at x axis",
-    "y0": "(optional) origin at y axis",
-    "z0": "(optional) origin at z axis",
-    "lX": "(optional) length of the body along x axis",
-    "lY": "(optional) length of the body along y axis",
-    "lZ": "(optional) length of the body along z axis",
-    "nX": "(optional) number of elements along x",
-    "nY": "(optional) number of elements along y",
-    "nZ": "(optional) number of elements along z",
-    "elType": "type of element",
-}
+module = Module("boxgen", "A mesh generator for cuboid geometries and structured hex meshes.")
+
+inputLanguage = InputLanguage()
+
+keyword = "modelGenerator"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
+
+module.addOptionalArg("x0", "Origin along the x axis.", float, 0.0)
+module.addOptionalArg("y0", "Origin along the y axis.", float, 0.0)
+module.addOptionalArg("z0", "Origin along the z axis.", float, 0.0)
+
+module.addOptionalArg("lX", "Length of the body along the x axis.", float, 1.0)
+module.addOptionalArg("lY", "Length of the body along the y axis.", float, 1.0)
+module.addOptionalArg("lZ", "Length of the body along the z axis.", float, 1.0)
+
+module.addOptionalArg("nX", "Number of elements along the x axis.", int, 1)
+module.addOptionalArg("nY", "Number of elements along the y axis.", int, 1)
+module.addOptionalArg("nZ", "Number of elements along the z axis.", int, 1)
+
+module.addRequiredArg("elType", "Element type.", str)
+module.addOptionalArg("elProvider", "Element provider.", str, None)
+
+documentation = [module]
 
 
-def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dict:
-    options = generatorDefinition["data"]
-    options = convertLinesToStringDictionary(options)
+@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
+def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args, **kwargs) -> dict:
+    kwargs = CaseInsensitiveDict(kwargs)
 
     name = generatorDefinition.get("name", "boxGen")
 
-    x0 = float(options.get("x0", 0.0))
-    y0 = float(options.get("y0", 0.0))
-    z0 = float(options.get("z0", 0.0))
-    lX = float(options.get("lX", 1.0))
-    lY = float(options.get("lY", 1.0))
-    lZ = float(options.get("lZ", 1.0))
-    nX = int(options.get("nX", 1))
-    nY = int(options.get("nY", 1))
-    nZ = int(options.get("nZ", 1))
-    elType = getElementClass(options["elType"], options.get("elProvider", None))
+    x0 = kwargs["x0"]
+    y0 = kwargs["y0"]
+    z0 = kwargs["z0"]
+    lX = kwargs["lX"]
+    lY = kwargs["lY"]
+    lZ = kwargs["lZ"]
+    nX = kwargs["nX"]
+    nY = kwargs["nY"]
+    nZ = kwargs["nZ"]
+    elType = getElementClass(kwargs["elType"], kwargs["elProvider"])
 
-    testEl = elType(
-        options["elType"],
-        0,
-    )
+    testEl = elType(kwargs["elType"], 0)
 
     if testEl.nNodes == 8:
         nNodesX = nX + 1
@@ -303,7 +318,7 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dic
                 # plotNodeList( nodeList )
 
                 # newEl = elType(options["elType"], nodeList, currentElementLabel)
-                newEl = elType(options["elType"], currentElementLabel)
+                newEl = elType(kwargs["elType"], currentElementLabel)
                 newEl.setNodes(nodeList)
 
                 elements.append(newEl)

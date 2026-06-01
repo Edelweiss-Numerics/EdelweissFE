@@ -1,0 +1,55 @@
+
+*material, name=linearelastic, id=linearelastic, provider=edelweiss
+210000.0, 0.15
+
+*section, name=section1, thickness=40.0, material=linearelastic, type=plane
+all
+
+*job, name=cps4job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, nSet=gen_bottom, result=P, field=displacement, name=RF
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
+>>perElement, elSet=all, result=strain, name=strain, quadraturePoint=0:9, f(x)='np.mean(x,axis=1)'
+>>perElement, elSet=all, result=stress, name=stress, quadraturePoint=0:9, f(x)='np.mean(x,axis=1)'
+>>perElement, elSet=all, result=stress, name=stress0, quadraturePoint=0
+>>perElement, elSet=all, result=stress, name=stress1, quadraturePoint=1
+>>perElement, elSet=all, result=stress, name=stress2, quadraturePoint=2
+>>perElement, elSet=all, result=stress, name=stress3, quadraturePoint=3
+>>perElement, elSet=all, result=stress, name=stress4, quadraturePoint=4
+>>perElement, elSet=all, result=stress, name=stress5, quadraturePoint=5
+>>perElement, elSet=all, result=stress, name=stress6, quadraturePoint=6
+>>perElement, elSet=all, result=stress, name=stress7, quadraturePoint=7
+>>perElement, elSet=all, result=stress, name=stress8, quadraturePoint=8
+
+*modelGenerator, generator=planeRectQuad, name=gen
+x0=0, l=10000
+y0=0, h=100
+elType=CPE8
+elProvider=edelweiss
+nX=75
+nY=1
+
+*output, type=monitor
+fieldOutput=RF, f(x)='mean(x[:,1])'
+
+*output, type=ensight, name=test
+>>configuration, overwrite=yes
+>>perNode,    fieldOutput=displacement
+>>perElement, fieldOutput=stress
+>>perElement, fieldOutput=strain
+>>perElement, fieldOutput=stress0
+>>perElement, fieldOutput=stress1
+>>perElement, fieldOutput=stress2
+>>perElement, fieldOutput=stress3
+>>perElement, fieldOutput=stress4
+>>perElement, fieldOutput=stress5
+>>perElement, fieldOutput=stress6
+>>perElement, fieldOutput=stress7
+>>perElement, fieldOutput=stress8
+
+*step, solver=theSolver
+maxInc=1e-0, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100
+>>dirichlet, name=left, nSet=gen_left,  field=displacement, 2=0, 1=0
+>>nodeforces, name=cloadTop, nSet=gen_rightTop, components='0,-1000', field=displacement

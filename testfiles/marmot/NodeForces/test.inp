@@ -1,0 +1,37 @@
+*material, name=VonMises, id=mat
+210000, 0.3, 550, 1000, 200, 1400
+
+*section, name=section1, thickness=1.0, material=mat, type=plane
+all
+
+*job, name=cps4job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=planeRectQuad, name=gen
+x0=0, l=50
+y0=0, h=100
+elType=CPS4
+nX=10
+nY=10
+
+*fieldOutput
+>>perNode, nSet=gen_bottom, result=P, field=displacement, name=RF
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
+
+*output, type=monitor
+fieldOutput=RF, f(x)='mean(x[:,1])'
+
+*output, type=ensight, name=esExport
+>>perNode, fieldOutput=displacement
+>>configuration, overwrite=yes
+
+*step, solver=theSolver
+maxInc=1e-1, minInc=1e-8, maxNumInc=50, maxIter=25, stepLength=100
+>>dirichlet, name=bottom, nSet=gen_bottom,  field=displacement, 2=0, 1=0
+>>nodeforces, name=cloadTop, nSet=gen_top, field=displacement, 2=-50
+*step, solver=theSolver
+maxInc=1e-1, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100
+>>nodeforces, name=cloadTop, 2=-10, f(t)=sin(t*2*pi)
+*step, solver=theSolver
+maxInc=1e-1, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100
+>>nodeforces, name=cloadTop, 2=+50, f(t)=t

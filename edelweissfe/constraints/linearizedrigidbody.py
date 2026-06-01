@@ -29,13 +29,26 @@
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.exceptions import WrongDomain
-from edelweissfe.utils.misc import convertLinesToStringDictionary
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
-documentation = {
-    "nSet": "(Slave) node set, which is constrained to the reference point",
-    "referencePoint": "(Master) reference point",
-}
+module = Module("linearizedrigidbody", "A rigid body constraint tying nodes to a reference point.")
+
+inputLanguage = InputLanguage()
+
+keyword = "constraint"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
+
+module.addRequiredArg("nSet", "Node set to tie.", str)
+module.addRequiredArg("referencePoint", "Node set containing only the reference point.", str)
+
+documentation = [module]
 
 
 class Constraint(ConstraintBase):
@@ -116,22 +129,26 @@ class Constraint(ConstraintBase):
 
     """
 
-    def __init__(self, name, options, model):
+    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+    @castKwargsValuesAndAddDefaults(module)
+    def __init__(self, name, model, *args, **kwargs):
+        super().__init__(name, model, *args, **kwargs)
+
         if model.domainSize not in [2, 3]:
             raise WrongDomain("Wrong domain size!")
 
         # self.name = name
-        definition = convertLinesToStringDictionary(options)
 
-        rbNset = definition["nSet"]
+        kwargs = CaseInsensitiveDict(kwargs)
+
+        rbNset = kwargs["nSet"]
 
         nodeSets = model.nodeSets
-        rpNodeSet = nodeSets[definition["referencePoint"]]
+        rpSetName = kwargs["referencePoint"]
+        rpNodeSet = nodeSets[rpSetName]
 
         if len(rpNodeSet) > 1:
-            raise Exception(
-                "node set for reference point '{:}' contains more than one node".format(definition["referencePoint"])
-            )
+            raise Exception(f"node set for reference point '{rpSetName}' contains more than one node")
 
         self.rp = rpNodeSet[0]
 

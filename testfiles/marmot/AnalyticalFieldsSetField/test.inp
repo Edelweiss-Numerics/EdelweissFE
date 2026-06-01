@@ -1,0 +1,51 @@
+*material, name=VonMises, id=mat
+210000, 0.3, 550, 1000, 200, 1400
+
+*job, name=job, domain=3d
+*solver, solver=NISTParallel, name=theSolver
+
+*modelGenerator, generator=boxGen, name=gen
+x0      =0
+y0      =0
+z0      =0
+nX      =6
+nY      =10
+nZ      =1
+lX      =30
+lY      =50
+lZ      =10
+elType  =C3D8
+
+*section, name=section1, material=mat, type=solid
+all
+
+*fieldOutput
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
+>>perElement, elSet=all, result=strain, name=strain, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+>>perElement, elSet=all, result=stress, name=stress, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
+
+>>perElement, elSet=all, result=kappa, name=kappa, quadraturePoint=0:8
+>>perElement, elSet=all, result=kappa, name=kappaMax, quadraturePoint=0:8, f(x)='np.max(x, axis=1)'
+
+*output, type=ensight, name=test
+>>perNode, fieldOutput=displacement
+>>perElement, fieldOutput=stress
+>>perElement, fieldOutput=strain
+>>perElement, fieldOutput=kappaMax
+>>configuration, overwrite=yes
+
+***output, type=monitor
+
+*AnalyticalField, name=AnalyticalField-01, type=scalarExpression
+"f(x,y,z)" = "x/30"
+
+*step, solver=theSolver
+maxInc=1e0, minInc=1e0, maxNumInc=100, maxIter=25, stepLength=1
+>>setfield,   name=sf,  fieldOutput=kappa, type=analyticalField, value=AnalyticalField-01
+>>dirichlet,  name=x0u, nSet=gen_left,      field=displacement, 1=0.
+>>dirichlet,  name=y0u, nSet=gen_bottom,    field=displacement, 2=0.
+>>dirichlet,  name=z0u, nSet=gen_back,      field=displacement, 3=0.
+
+*step, solver=theSolver
+maxInc=1e-1, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>dirichlet,  name=y1u, nSet=gen_top,    field=displacement, 2=-1.

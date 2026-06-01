@@ -36,53 +36,86 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.misc import convertLinesToStringDictionary
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
-documentation = {
-    "x0": "(optional) origin at x axis",
-    "y0": "(optional) origin at y axis",
-    "z0": "(optional) origin at z axis",
-    "Ro(y)": "(optional) outer radius of the pipe as a function of height",
-    "Ri(y)": "(optional) inner radius of the pipe as a function of height",
-    "lT": "(optional) thickness of the pipe",
-    "lY": "(optional) height of the pipe",
-    "phi": "(optional) total angle for the pipe",
-    "nT": "(optional) number of elements along thickness",
-    "nC": "(optional) number of elements along circumference",
-    "nY": "(optional) number of elements along height",
-    "exG": "(optional) flag to place nodes on exact geometry (default = True)",
-    "elType": "type of element",
-}
+module = Module("pipegen", "A structured hex mesh generator for pipe geometries.")
+
+inputLanguage = InputLanguage()
+
+keyword = "modelGenerator"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
+
+module.addOptionalArg("x0", "Origin along the x axis.", float, 0.0)
+module.addOptionalArg("y0", "Origin along the y axis.", float, 0.0)
+module.addOptionalArg("z0", "Origin along the z axis.", float, 0.0)
+
+module.addOptionalArg("Ro(y)", "Outer radius of the pipe as a function of height.", str, "1.0")
+module.addOptionalArg("Ri(y)", "Inner radius of the pipe as a function of height.", str, "1.0")
+
+module.addOptionalArg("lT", "Thickness of the pipe.", float, 0.5)
+module.addOptionalArg("lY", "Height of the pipe.", float, 1.0)
+
+module.addOptionalArg("phi", "Total angle for the pipe sector.", float, 360.0)
+
+module.addOptionalArg("nT", "Number of elements along radial direction.", int, 1)
+module.addOptionalArg("nC", "Number of elements along circumferential direction.", int, 4)
+module.addOptionalArg("nY", "Number of elements along longitudinal direction.", int, 4)
+
+module.addOptionalArg("exG", "Flag to place nodes on exact geometry.", bool, True)
+
+module.addRequiredArg("elType", "Element type.", str)
+module.addOptionalArg("elProvider", "Element provider.", str, None)
+
+documentation = [module]
 
 
-def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dict:
-    options = generatorDefinition["data"]
-    options = convertLinesToStringDictionary(options)
+@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
+def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args, **kwargs) -> dict:
+    name = generatorDefinition.get("name", "pipeGen")
 
-    name = generatorDefinition.get("name", "cylBoxGen")
+    kwargs = CaseInsensitiveDict(kwargs)
 
-    x0 = float(options.get("x0", 0.0))
-    y0 = float(options.get("y0", 0.0))
-    z0 = float(options.get("z0", 0.0))
-    Roy = str(options.get("Ro(y)", "1.0"))
-    Riy = str(options.get("Ri(y)", "1.0"))
-    lT = float(options.get("lT", 0.5))
-    lY = float(options.get("lY", 1.0))
-    phi = float(options.get("phi", 360))
-    nT = int(options.get("nT", 1))
-    nY = int(options.get("nY", 4))
-    nC = int(options.get("nC", 4))
-    exG = options.get("exG", True)
+    x0 = kwargs["x0"]
+    y0 = kwargs["y0"]
+    z0 = kwargs["z0"]
+
+    Roy = kwargs["Ro(y)"]
+    Riy = kwargs["Ri(y)"]
+
+    lT = kwargs["lT"]
+    lY = kwargs["lY"]
+
+    phi = kwargs["phi"]
+
+    nT = kwargs["nT"]
+    nC = kwargs["nC"]
+    nY = kwargs["nY"]
+
+    exG = kwargs["exG"]
+
     if np.abs(phi) > 360:
         raise Exception("The angle can't be higher than 360° or lower than -360°.")
-    elType = getElementClass(options["elType"], options.get("elProvider", None))
 
-    testEl = elType(options["elType"], 0)
+    elTypeName = kwargs["elType"]
+    elProvider = kwargs["elProvider"]
+
+    elType = getElementClass(elTypeName, elProvider)
+
+    testEl = elType(elTypeName, 0)
+
     if nY < 4 and testEl.nNodes == 20:
         print(
             "Information: Using a hexahedral element with 20 nodes and a non constant function"
             + " for the radius with low element count over height can lead to display errors in paraview."
         )
+
     extraNode = 0 if phi != 360 else 1
     if testEl.nNodes == 8:
         nNodesT = nT + 1
@@ -235,7 +268,7 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal) -> dic
                 # plotNodeList( nodeList )
 
                 # newEl = elType(options["elType"], nodeList, currentElementLabel)
-                newEl = elType(options["elType"], currentElementLabel)
+                newEl = elType(elTypeName, currentElementLabel)
                 newEl.setNodes(nodeList)
 
                 elements.append(newEl)

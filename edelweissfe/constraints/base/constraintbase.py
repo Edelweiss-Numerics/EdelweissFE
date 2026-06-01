@@ -31,13 +31,14 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.numerics.vijentitybase import VIJEntityBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
-class ConstraintBase(ABC):
+class ConstraintBase(ABC, VIJEntityBase):
     @abstractmethod
-    def __init__(self, name: str, options: dict, model: FEModel):
+    def __init__(self, name: str, model: FEModel, *args, **kwargs):
         """The constraint base class.
 
         Constraints can act on nodal variables, and scalar variables.
@@ -67,10 +68,10 @@ class ConstraintBase(ABC):
         ----------
         name
             The name of the constraint.
-        options
-            A dictionary containing the options for the constraint.
         model
             A dictionary containing the model tree.
+        kwargs
+            Key value pairs.
         """
 
         self.scalarVariables = []

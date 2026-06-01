@@ -39,12 +39,12 @@ class LinearElasticMaterial(BaseHypoElasticMaterial):
     materialProperties
         The numpy array containing the material properties.
 
-    Material properties
-    -------------------
-    E
-        Elasticity module (Young's modulus).
-    v
-        Poisson's ratio."""
+    Notes
+    ----
+    **Material Properties**
+
+    - E: Elasticity module (Young's modulus).
+    - v: Poisson's ratio."""
 
     def getNumberOfRequiredStateVars(self) -> int:
         """Returns number of needed material state Variables per integration point in the material.
@@ -59,6 +59,8 @@ class LinearElasticMaterial(BaseHypoElasticMaterial):
     def __init__(self, materialProperties: np.ndarray):
         self._E = materialProperties[0]  # set E
         self._v = materialProperties[1]  # set v
+        if len(materialProperties) > 2:
+            self._density = materialProperties[2]
 
     def elasticityMatrixPlaneStress(self) -> np.ndarray:
         """Initalize a 2D plane stress material elasticity matrix.
@@ -233,6 +235,17 @@ class LinearElasticMaterial(BaseHypoElasticMaterial):
             Current time step size."""
 
         raise Exception("Computing uniaxial stress is not possible with this material.")
+
+    def getDensity(self) -> float:
+        """Get the density of the material.
+
+        Returns
+        -------
+        float
+            The density of the material."""
+        if not hasattr(self, "_density"):
+            raise Exception("Density is not defined for this material.")
+        return self._density
 
     def getResult(self, result: str) -> float:
         """Get the result, as a persistent view which is continiously

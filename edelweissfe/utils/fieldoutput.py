@@ -48,17 +48,52 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.orderedset import OrderedSet
 from edelweissfe.utils.elementresultcollector import ElementResultCollector
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 
-documentation = {
-    "name": "name of the fieldOutput",
-    "nSet|elSet|node|element": "entity, for which the fieldOutput is defined",
-    "result": "e.g., U, P, stress, strain ...",
-    "quadraturePoint": "for element based fieldOutputs only, integers or slices",
-    "f(x)": "(optional), apply math (in each increment)",
-    "saveHistory": "(optional), save complete History or only last (increment) result. Default: True (node, element) and False (nSet, elSet)",  # noqa: E501
-    "export": "(optional), export the fieldOutput to a file at the end of the job",
-    "f_export(x)": "(optional), apply math on the final result (table)",
-}
+inputLanguage = InputLanguage()
+
+module = Module("fieldOutput", "Manage field outputs.")
+
+keyword = "fieldOutput"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
+
+kw = module.addOptionalKeyword("perNode", "Create node-based field output.")
+kw.addRequiredArg("name", "Name of the field output.", str)
+kw.addRequiredArg("field", "Field of the result.", str)
+kw.addRequiredArg("result", "Result name.", str)
+kw.addOptionalArg("elSet", "Element set.", str, None)
+kw.addOptionalArg("nSet", "Node set.", str, None)
+kw.addOptionalArg("saveHistory", "Save complete History or only last (increment) result", bool, False)
+kw.addOptionalArg("f(x)", "Function to apply in each increment.", str, None)
+kw.addOptionalArg("f_export(x)", "Function to apply on final result (table).", str, None)
+kw.addOptionalArg("export", "Export the field output to a file at the end of the job.", str, None)
+
+documentation = [kw]
+
+kw = module.addOptionalKeyword("perElement", "Create element-based field output.")
+kw.addRequiredArg("name", "Name of the field output.", str)
+kw.addRequiredArg("elSet", "Element set.", str)
+kw.addRequiredArg("result", "Result name.", str)
+kw.addRequiredArg("quadraturePoint", "Integer or slice.", str)
+kw.addOptionalArg("saveHistory", "Save complete History or only last (increment) result", bool, False)
+kw.addOptionalArg("f(x)", "Function to apply in each increment.", str, None)
+kw.addOptionalArg("f_export(x)", "Function to apply on final result (table).", str, None)
+kw.addOptionalArg("export", "Export the field output to a file at the end of the job.", str, None)
+
+documentation.append(kw)
+
+kw = module.addOptionalKeyword("fromExpression", "Create field output from expression.")
+kw.addRequiredArg("name", "Name of the field output.", str)
+kw.addOptionalArg("elSet", "Element set.", str, None)
+kw.addOptionalArg("nSet", "Node set.", str, None)
+kw.addRequiredArg("expression", "Expression for retrieving field output.", str)
+kw.addOptionalArg("saveHistory", "Save complete History or only last (increment) result", bool, False)
+kw.addOptionalArg("f(x)", "Function to apply in each increment.", str, None)
+kw.addOptionalArg("f_export(x)", "Function to apply on final result (table).", str, None)
+kw.addOptionalArg("export", "Export the field output to a file at the end of the job.", str, None)
+
+documentation.append(kw)
 
 
 class _FieldOutputBase:
@@ -136,7 +171,7 @@ class _FieldOutputBase:
 
         if not self.appendResults:
             raise Exception(
-                "fieldOuput {:} does not save any history; please define it with saveHistory=True!".format(self.name)
+                "fieldOutput {:} does not save any history; please define it with saveHistory=True!".format(self.name)
             )
         return np.asarray(self.result)
 
@@ -351,7 +386,7 @@ class ElementFieldOutput(_FieldOutputBase):
     elSet
         The ElementSet on which this FieldOutput operates.
     resultName
-        The name of the result entry in the :class:`ElementBase.
+        The name of the result entry in the :class:`ElementBase`.
     model
         The model tree instance.
     journal
@@ -563,11 +598,11 @@ class FieldOutputController:
         name
             The name of this FieldOutput.
         nodeField
-            The :class:`NodeField, on which this FieldOutput should operate.
+            The :class:`NodeField` on which this FieldOutput should operate.
         result
-            The name of the result entry in the :class:`NodeField
+            The name of the result entry in the :class:`NodeField`.
         journal
-            The :class:`Journal instance for logging purposes.
+            The :class:`Journal` instance for logging purposes.
         saveHistory
             Save the complete history or only the last result.
         f_x
@@ -585,7 +620,15 @@ class FieldOutputController:
             raise Exception("FieldOutput {:} already exists!".format(name))
 
         self.fieldOutputs[name] = NodeFieldOutput(
-            name, nodeField, result, self.model, self.journal, saveHistory, f_x, export, fExport_x
+            name,
+            nodeField,
+            result,
+            self.model,
+            self.journal,
+            saveHistory,
+            f_x,
+            export,
+            fExport_x,
         )
 
     def addPerElementFieldOutput(
@@ -606,11 +649,11 @@ class FieldOutputController:
         name
             The name of this FieldOutput.
         elSet
-            The :class:`ElementSet on which this FieldOutput should operate.
+            The :class:`ElementSet` on which this FieldOutput should operate.
         result
-            The name of the result, which is provided by the Elements in the :class:`ElementSet.
+            The name of the result, which is provided by the Elements in the :class:`ElementSet`.
         journal
-            The :class:`Journal instance for logging purposes.
+            The :class:`Journal` instance for logging purposes.
         saveHistory
             Save the complete history or only the last result.
         f_x
@@ -630,7 +673,16 @@ class FieldOutputController:
             raise Exception("FieldOutput {:} already exists!".format(name))
 
         self.fieldOutputs[name] = ElementFieldOutput(
-            name, elSet, result, self.model, self.journal, saveHistory, f_x, export, fExport_x, quadraturePoints
+            name,
+            elSet,
+            result,
+            self.model,
+            self.journal,
+            saveHistory,
+            f_x,
+            export,
+            fExport_x,
+            quadraturePoints,
         )
 
     def initializeJob(self):

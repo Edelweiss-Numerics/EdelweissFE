@@ -57,6 +57,10 @@ class _PerformanceTimerBranch(defaultdict):
         """
         self.time += time() - self._tic
 
+    def get_snapshot(self) -> dict:
+        """Returns a nested dictionary of the current accumulated times."""
+        return {"time": self.time, "calls": self.calls, "children": {k: v.get_snapshot() for k, v in self.items()}}
+
 
 times = _PerformanceTimerBranch()
 """The global dictionary of measured computations times."""
@@ -148,9 +152,63 @@ def makePrettyTable(maxLevels: int = 4) -> PrettyTable:
         prettytable.add_row(
             (
                 "{:}{:}".format(" " * level, cat),
-                "{:}{:10.4f}s".format(" " * level, t),
+                "{:}{:10.4E}s".format(" " * level, t),
                 calls,
             )
         )
 
     return prettytable
+
+
+def extractIncrementTimes(maxLevels: int = 4) -> PrettyTable:
+    """
+    Returns a PrettyTable of the time elapsed since the last time
+    this function was called, while keeping global 'times' intact.
+    """
+
+    if not hasattr(extractIncrementTimes, "_last_snapshot") or extractIncrementTimes._last_snapshot is None:
+        extractIncrementTimes._last_snapshot = None
+
+    current_state = times.get_snapshot()
+
+    def compute_delta(curr, last):
+        last_t = last["time"] if last else 0.0
+        last_c = last["calls"] if last else 0
+
+        delta_t = curr["time"] - last_t
+        delta_c = curr["calls"] - last_c
+
+        children_deltas = []
+        for name, child_curr in curr["children"].items():
+            child_last = last["children"].get(name) if last else None
+            children_deltas.append((name, compute_delta(child_curr, child_last)))
+
+        return {"time": delta_t, "calls": delta_c, "children": children_deltas}
+
+    delta_tree = compute_delta(current_state, extractIncrementTimes._last_snapshot)
+    extractIncrementTimes._last_snapshot = current_state
+
+    def flatten_delta(node, level):
+        rows = []
+        for name, data in node["children"]:
+            rows.append((level, name, data["time"], data["calls"]))
+            if level < maxLevels and data["children"]:
+                rows += flatten_delta(data, level + 1)
+        return rows
+
+    delta_rows = flatten_delta(delta_tree, 0)
+
+    prettytable = PrettyTable()
+    prettytable.field_names = ["function", "inc. runtime", "calls"]
+    prettytable.align = "l"
+    for level, cat, t, calls in delta_rows:
+        prettytable.add_row([" " * level + cat, "{:}{:10.4E}s".format(" " * level, t), calls])
+
+    return prettytable
+
+
+def reset():
+    """Reset all measured times."""
+    global times
+    times.clear()
+    extractIncrementTimes._last_snapshot = None

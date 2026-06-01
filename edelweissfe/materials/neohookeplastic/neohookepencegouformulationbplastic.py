@@ -135,7 +135,7 @@ def kirchhoffStress(e, K, mu):
         The Kirchhoff stress."""
 
     B, _ = tensorExp(2 * e)
-    I1 = lin.trace(B)
+    I1 = B.trace()
     J = np.sqrt(lin.det(B))
     muBar = K / 4 * (J**2 - 1 / J**2) - mu * I1 / (3 * J ** (2 / 3))
     T = mu / J ** (2 / 3) * B + muBar * Ieye
@@ -162,7 +162,7 @@ def dKirchhoff_dE(e, K, mu):
     B, n = tensorExp(2 * e)
     J = np.sqrt(lin.det(B))
     dExpE = np.einsum("ijmn,mnkl->ijkl", dTensorExp_dA(2 * e, n), Ieye4D)
-    I1 = lin.trace(B)
+    I1 = B.trace()
     p = 2 * mu / J ** (2 / 3)
     lambdaBar = K / 2 * (J**2 + 1 / J**2) + p * I1 / 9
     dT_de = (
@@ -192,6 +192,18 @@ class NeoHookeanWbPlasticMaterial(BaseHyperElasticMaterial):
         """The properties the material has."""
 
         return self._materialProperties
+
+    def getDensity(self) -> float:
+        """Returns the density of the material.
+
+        Returns
+        -------
+        float
+            The density of the material."""
+
+        if not hasattr(self, "_density"):
+            raise Exception("Density is not defined for this material.")
+        return self._density
 
     def getNumberOfRequiredStateVars(self) -> int:
         """Returns number of needed material state Variables per integration point in the material.
@@ -223,6 +235,9 @@ class NeoHookeanWbPlasticMaterial(BaseHyperElasticMaterial):
         self._f = lambda devNorm, kappa_: devNorm - np.sqrt(2 / 3) * self._fy(kappa_)
         # derivative of fy dKappa
         self._dfy_ddKappa = lambda kappa_: self.HLin + self.deltaYieldStress * self.delta * np.exp(-self.delta * kappa_)
+
+        if len(materialProperties) > 6:
+            self._density = materialProperties[6]
 
     def assignCurrentStateVars(self, currentStateVars: np.ndarray):
         """Assign new current state vars.

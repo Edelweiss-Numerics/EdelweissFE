@@ -34,41 +34,118 @@ import numpy as np
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.math import createMathExpression
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 
 """
 Plot result for a nodeSet or an elementSet along the true geometrical distance.
 Corresponds to the plot along path functionality in Abaqus.
 """
-documentation = {
-    "fieldOutput": "Name of the field output to be plotted (defined on a nodeSet/elementSet)",
-    "figure": "(Optional), figure of the Plotter",
-    "axSpec": "(Optional), axSpec (MATLAB syntax) in the figure",
-    "label": "(Optional), label, standard=fieldOutputs name",
-    "f(x)": "(Optional), apply math",
-    "normalize": "(Optional), normalize peak to 1.0",
-}
+
+module = Module(
+    "plotAlongPath",
+    "Plot result for a nodeSet or an elementSet along the true geometrical distance.",
+)
+
+inputLanguage = InputLanguage()
+
+keyword = "output"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
+
+module.addRequiredArg("fieldOutput", "Name of the field output.", str)
+
+module.addOptionalArg("figure", "Figure of the plotter.", int, 1)
+module.addOptionalArg("axSpec", "AxSpec (MATLAB syntax) in the figure.", int, 111)
+module.addOptionalArg("normalize", "Normalize results.", int, 111)
+module.addOptionalArg("label", "Label.", str, None)
+
+module.addOptionalArg("f(x)", "Function to apply in each increment.", str, None)
+module.addOptionalArg("nStages", "", int, 1)
+module.addOptionalArg("export", "Export the field output to a file at the end of the job.", str, None)
+
+documentation = [module]
+
+required = [kw.name for kw in module.requiredArgs]
+required += [kw.name for kw in module.requiredKeywords]
+
+optional = [kw.name for kw in module.optionalArgs]
+optional += [kw.name for kw in module.optionalKeywords]
+
+
+@caseInsensitiveKwargsChecker(required, optional)
+@castKwargsValuesAndAddDefaults(module)
+def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
+    kwargs = CaseInsensitiveDict(kwargs)
+
+    fieldOutputName = kwargs["fieldOutput"]
+    figure = kwargs["figure"]
+    axSpec = kwargs["axSpec"]
+    normalize = kwargs["normalize"]
+    label = kwargs["label"]
+    fx = kwargs["f(x)"]
+    if not fx:
+        fx = "x"
+    nStages = kwargs["nStages"]
+    export = kwargs["export"]
+
+    return OutputManager(
+        name,
+        FEModel,
+        fieldOutputController,
+        journal,
+        plotter,
+        fieldOutputName,
+        figure,
+        axSpec,
+        normalize,
+        label,
+        fx,
+        nStages,
+        export,
+    )
 
 
 class OutputManager(OutputManagerBase):
     identification = "PathPlotter"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter):
+    def __init__(
+        self,
+        name,
+        model,
+        fieldOutputController,
+        journal,
+        plotter,
+        fieldOutputName,
+        figure,
+        axSpec,
+        normalize,
+        label,
+        # nSet,
+        # elSet,
+        fx,
+        nStages,
+        export,
+    ):
         self.journal = journal
         self.monitorJobs = []
         self.plotter = plotter
         self.fieldOutputController = fieldOutputController
         self.model = model
 
-    def updateDefinition(self, **kwargs: dict):
         entry = dict()
-
-        entry["fieldOutput"] = kwargs["fieldOutput"]
+        entry["fieldOutput"] = fieldOutputController.fieldOutputs[fieldOutputName]
+        entry["f(x)"] = createMathExpression(fx)
 
         # compute distance(s), entity 0 is the reference entity in the 'origin'
         entry["pathDistances"] = [0.0]
-        entry["nStages"] = int(kwargs.get("nStages", 1))
-        entry["export"] = bool(kwargs.get("export", False))
+        entry["nStages"] = nStages
+        entry["export"] = export
 
         theSet = entry["fieldOutput"].associatedSet
 
@@ -92,20 +169,16 @@ class OutputManager(OutputManagerBase):
         for dist in distances:
             entry["pathDistances"].append(entry["pathDistances"][-1] + dist)
 
-        entry["f(x)"] = createMathExpression(kwargs.get("f(x)", "x"))
-        entry["label"] = kwargs.get("label", entry["fieldOutput"].name)
+        entry["label"] = label
 
-        entry["figure"] = kwargs.get("figure", 1)
-        entry["axSpec"] = kwargs.get("axSpec", 111)
+        entry["figure"] = figure
+        entry["axSpec"] = axSpec
 
-        entry["normalize"] = kwargs.get("normalize", False)
+        entry["normalize"] = normalize
         self.monitorJobs.append(entry)
 
-        if "exportPath" in kwargs:
-            np.savetxt(
-                kwargs["exportPath"],
-                np.asarray(entry["pathDistances"]),
-            )
+        if export:
+            np.savetxt(export, np.asarray(entry["pathDistances"]))
 
     def initializeJob(self):
         pass

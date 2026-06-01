@@ -28,14 +28,17 @@
 
 import textwrap
 from collections import defaultdict
-from warnings import warn
 
 from edelweissfe.config.stepactions import stepActionFactory
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.steps.adaptivestep import AdaptiveStep
+from edelweissfe.steps.adaptivestepforexplicitsimulations import (
+    AdaptiveStepForExplicitSimulations,
+)
 from edelweissfe.steps.base.stepbase import StepBase
 from edelweissfe.utils.fieldoutput import FieldOutputController
+from edelweissfe.utils.misc import strCaseCmp
 
 
 class StepActionDefinition:
@@ -165,16 +168,7 @@ class StepManager:
                         journal,
                     )
 
-            try:
-                solverName = stepDefinition.stepOptions.pop("solver")
-            except KeyError:
-                # raise KeyError("Step definition missing solver option.")
-                warn(
-                    "Step definition missing solver option.",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
-                solverName = "default"
+            solverName = stepDefinition.stepOptions.pop("solver")
 
             try:
                 solver = solvers[solverName]
@@ -187,14 +181,27 @@ class StepManager:
                     mssg += " Define solver using *solver keyword."
                 raise KeyError(mssg)
 
-            yield AdaptiveStep(
-                stepNumber,
-                model,
-                fieldOutputController,
-                journal,
-                jobInfo,
-                solver,
-                outputManagers,
-                self.stepActions,
-                **stepDefinition.stepOptions,
-            )
+            if strCaseCmp(stepDefinition.type, "adaptive"):
+                yield AdaptiveStep(
+                    stepNumber,
+                    model,
+                    fieldOutputController,
+                    journal,
+                    jobInfo,
+                    solver,
+                    outputManagers,
+                    self.stepActions,
+                    **stepDefinition.stepOptions,
+                )
+            elif strCaseCmp(stepDefinition.type, "adaptiveForExplicitSimulations"):
+                yield AdaptiveStepForExplicitSimulations(
+                    stepNumber,
+                    model,
+                    fieldOutputController,
+                    journal,
+                    jobInfo,
+                    solver,
+                    outputManagers,
+                    self.stepActions,
+                    **stepDefinition.stepOptions,
+                )

@@ -35,18 +35,53 @@ Created on Thu Apr 13 14:08:32 2017
 import numpy as np
 
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
+
+module = Module(
+    "computetimemonitor", "A simple monitor to observe results (fieldOutputs) in the console during analysis."
+)
+
+inputLanguage = InputLanguage()
+
+keyword = "output"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
+
+module.addRequiredArg("export", "Provide a filename to export the results.", str)
+
+documentation = [module]
+
+required = [kw.name for kw in module.requiredArgs]
+required += [kw.name for kw in module.requiredKeywords]
+
+optional = [kw.name for kw in module.optionalArgs]
+optional += [kw.name for kw in module.optionalKeywords]
+
+
+@caseInsensitiveKwargsChecker(required, optional)
+@castKwargsValuesAndAddDefaults(module)
+def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
+    kwargs = CaseInsensitiveDict(kwargs)
+
+    filename = kwargs["export"]
+
+    return OutputManager(name, FEModel, fieldOutputController, journal, plotter, filename)
 
 
 class OutputManager(OutputManagerBase):
     identification = "TimeMonitor"
 
-    def __init__(self, name, definitionLines, model, fieldOutputController, journal, plotter):
+    def __init__(self, name, model, fieldOutputController, journal, plotter, filename):
         self.journal = journal
         self.monitorJobs = []
         self.model = model
 
-    def updateDefinition(self, **kwargs: dict):
-        self.exportFile = kwargs["export"]
+        self.exportFile = filename
         self.timeVals = []
 
     def initializeJob(self):
