@@ -47,6 +47,7 @@ indent4 = " " * 8
 
 
 def _findSimilarStringOrNone(inputString, candidates):
+    """Return a similar candidate string or ``None`` when no candidates are available."""
     if not candidates:
         return None
     return findSimilarString(inputString, candidates)
@@ -188,6 +189,7 @@ class InputFileKeyword:
             idx = casefoldedModules.index(module.casefold())
             return self.modules[idx]
         except ValueError:
+            # Backward compatibility: keep accepting legacy ``adaptive`` step type strings.
             if module.casefold() == "adaptive" and "adaptiveforexplicitsimulations" in casefoldedModules:
                 idx = casefoldedModules.index("adaptiveforexplicitsimulations")
                 return self.modules[idx]
