@@ -189,7 +189,7 @@ class InputFileKeyword:
             idx = casefoldedModules.index(module.casefold())
             return self.modules[idx]
         except ValueError:
-            # Backward compatibility: keep accepting legacy ``adaptive`` step type strings.
+            # Backward compatibility for *step: keep accepting legacy ``adaptive`` module names.
             if module.casefold() == "adaptive" and "adaptiveforexplicitsimulations" in casefoldedModules:
                 idx = casefoldedModules.index("adaptiveforexplicitsimulations")
                 return self.modules[idx]
