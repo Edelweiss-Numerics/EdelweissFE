@@ -1,0 +1,33 @@
+*include, input=cooks_membrane.inp
+
+*material, name=VonMises, id=myMaterial
+78000, 0.3, 550e10, 1000, 200, 1400, 1e-4
+
+*section, name=section1, material=myMaterial, type=solid
+all
+
+*job, name=c3d8job, domain=3d
+*solver, solver=NEDParallel, name=theSolver
+second-order-fields="displacement"
+output-frequency=100
+
+*step, type=adaptiveForExplicitSimulations, solver=theSolver
+maxInc=1e-4, minInc=1e-4, maxNumInc=10000, maxIter=25, stepLength=1
+>>dirichlet, name=left_clamped_nodes, nSet=left_clamped_nodes, field=displacement, 1=0, 2=0, 3=0
+>>dirichlet, name=front, nSet=front_nodes, field=displacement, 3=0
+>>dirichlet, name=back, nSet=back_nodes, field=displacement, 3=0
+>>distributedload, name=traction, surface=right_shear_surface, type=surface traction, magnitude='0, 100, 0', f(t)=t
+
+*fieldOutput
+>>perNode, name=Displacement, elSet=all, field=displacement, result=U,
+>>perElement, name=Stress, elSet=all, result=stress, quadraturePoint=0
+>>perElement, name=Strain, elSet=all, result=strain, quadraturePoint=0
+>>perNode, name=disp_right_top, nSet=top_right_front_node, field=displacement, result=U, export=RF, saveHistory=True, f_export(x)='np.mean(x, axis=1)'
+
+*output, type=monitor, name=myNodeSetMonitor
+fieldOutput=disp_right_top
+
+*output, type=ensight, name=myEnsightExport
+>>perNode,    fieldOutput=Displacement
+>>perElement, fieldOutput=Stress
+>>perElement, fieldOutput=Strain
