@@ -1,0 +1,41 @@
+*include, input=rilem_tpb.inp
+
+*material, name=VonMises, id=myMaterial
+78000, 0.3, 200, 0000, 0, 1.3e1, 1e-4
+
+*section, name=section1, material=myMaterial, type=solid
+all
+
+*job, name=c3d8job, domain=3d
+*solver, solver=NEDParallel, name=theSolver
+second-order-fields="displacement"
+output-frequency=100
+courant-number=0.25
+
+*step, type=adaptiveForExplicitSimulations, solver=theSolver
+maxInc=1e-4, minInc=1e-4, maxNumInc=60000, maxIter=25, stepLength=1
+>>dirichlet, name=left_support, nSet=left_support, field=displacement, 1=0, 2=0, 
+>>dirichlet, name=right_support, nSet=right_support, field=displacement,  2=0, 
+>>dirichlet, name=front, nSet=front_nodes, field=displacement, 3=0
+** >>dirichlet, name=back, nSet=back_nodes, field=displacement, 3=0
+>>dirichlet, name=top_center_load_line, nSet=top_center_load_line, field=displacement, 2=-10, f(t)='t**3*(10-15*t+6*t**2)'
+** >>distributedload, name=traction, surface=right_shear_surface, type=surface traction, magnitude='0, 1000, 0', f(t)='t**3*(10-15*t+6*t**2)'
+
+*fieldOutput
+>>perNode, name=Displacement, elSet=all, field=displacement, result=U,
+>>perNode, name=ReactionTop, nSet=top_center_load_line, field=displacement, result=P,
+>>perNode, name=DispTop, nSet=top_center_load_line, field=displacement, result=U,
+>>perElement, name=Stress, elSet=all, result=stress, quadraturePoint=0
+>>perElement, name=Strain, elSet=all, result=strain, quadraturePoint=0
+** >>perNode, name=disp_right_top, nSet=top_right_front_node, field=displacement, result=U, export=RF, saveHistory=True, f_export(x)='np.mean(x, axis=1)'
+>>perNode, name=RF, nSet=top_center_load_line, field=displacement, result=P, export=RF, saveHistory=True, f_export(x)='np.sum(x, axis=1)'
+
+*output, type=monitor, name=myNodeSetMonitor
+fieldOutput=RF
+
+*output, type=ensight, name=myEnsightExport
+>>perNode,    fieldOutput=ReactionTop
+>>perNode,    fieldOutput=DispTop
+>>perNode,    fieldOutput=Displacement
+>>perElement, fieldOutput=Stress
+>>perElement, fieldOutput=Strain
