@@ -288,7 +288,11 @@ class NIST(NonlinearSolverBase):
                             statusInfoDict=statusInfoDict,
                         )
 
-        except (ReachedMaxIncrements, ReachedMinIncrementSize):
+        except ReachedMaxIncrements:
+            self.journal.message("Reached maximum number of increments", self.identification)
+            self.applyStepActionsAtStepEnd(model, step.actions)
+
+        except ReachedMinIncrementSize:
             self.journal.errorMessage("Incrementation failed", self.identification)
             raise StepFailed()
 
