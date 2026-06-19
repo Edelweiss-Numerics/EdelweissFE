@@ -8,7 +8,7 @@ def build_cooks_membrane():
     H1 = 44.0       # Height of the left clamped edge
     H2 = 16.0       # Height of the right shear edge
     Y_off = 44.0    # Vertical Y-offset of the right edge
-    T = 1.0         # Thickness (Z-direction)
+    T = 10.0         # Thickness (Z-direction)
     
     Nx = 10         # Number of elements along the longitudinal edges
     Ny = 10         # Number of elements along the vertical edges

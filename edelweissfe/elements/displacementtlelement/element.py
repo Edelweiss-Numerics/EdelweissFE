@@ -247,6 +247,22 @@ class DisplacementTLElement(BaseElement):
         if self.nSpatialDimensions == 2:
             self._t = elementProperties[0]  # thickness
 
+    def assignProperty(self, propertyName: str, properties: np.ndarray):
+        """Assign a property of the element by name."""
+        if propertyName.lower() == "thickness":
+            if self.nSpatialDimensions == 2:
+                self._t = float(properties[0])
+            else:
+                raise Exception("Thickness property is only supported for 2D elements.")
+        else:
+            raise NotImplementedError(f"Property '{propertyName}' is not supported by this element.")
+
+    def getPropertyNames(self) -> list[str]:
+        """Get the names of all the valid properties of the element."""
+        if self.nSpatialDimensions == 2:
+            return ["thickness"]
+        return []
+
     def initializeElement(
         self,
     ):

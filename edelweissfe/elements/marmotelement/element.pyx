@@ -163,6 +163,25 @@ cdef class MarmotElementWrapper:
                         &self._elementProperties[0],
                         self._elementProperties.shape[0]))
 
+    def assignProperty(self, str propertyName, properties):
+        """Assign a single property of the element by name."""
+
+        cdef double[::1] _properties = np.atleast_1d(np.asarray(properties, dtype=np.float64))
+        self.marmotElement.assignProperty(
+                propertyName.encode("UTF-8"),
+                &_properties[0])
+
+    def getPropertyNames(self):
+        """Get the names of all the valid properties of the element."""
+
+        cdef vector[string] names = self.marmotElement.getPropertyNames()
+        return [name.decode("utf-8") for name in names]
+
+    @property
+    def propertyNames(self):
+        """Get the names of all the valid properties of the element."""
+        return self.getPropertyNames()
+
     def initializeElement(self, ):
         """Let the underlying MarmotElement initialize itself"""
         self.marmotElement.initializeYourself()

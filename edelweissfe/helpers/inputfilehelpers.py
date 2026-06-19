@@ -228,6 +228,7 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
     model = abqModelConstructor.createAdvancedMaterialsFromInputFile(model, inputfile)
     model = abqModelConstructor.createAnalyticalFieldsFromInputFile(model, inputfile)
     model = abqModelConstructor.createSectionsFromInputFile(model, inputfile)
+    model = abqModelConstructor.createElementPropertiesFromInputFile(model, inputfile)
 
     # call individual optional model generators with executeAfterManualGeneration == False
     for definition in inputfile["modelGenerator"]:

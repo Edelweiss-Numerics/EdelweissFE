@@ -19,7 +19,7 @@ lZ      =1
 elType  =C3D8R-2S
 
 *step, type=adaptiveForExplicitSimulations, solver=theSolver
-maxInc=1e-4, minInc=1e-4, maxNumInc=10000, maxIter=25, stepLength=1
+maxInc=1e-4, minInc=1e-4, maxNumInc=400, maxIter=25, stepLength=1
 >>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0, 2=0, 3=0
 >>dirichlet, name=right, nSet=gen_right, field=displacement, 2=20, f(t)='t'
 
