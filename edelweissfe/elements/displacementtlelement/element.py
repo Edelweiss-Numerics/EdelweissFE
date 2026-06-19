@@ -412,7 +412,7 @@ class DisplacementTLElement(BaseElement):
                     dim,
                 )
                 # compute inner forces
-                P -= (self.nablaN[i].T @ PK1[:dim, :dim]).flatten() * detJ * self._t * self._weight[i]
+                P += (self.nablaN[i].T @ PK1[:dim, :dim]).flatten() * detJ * self._t * self._weight[i]
             else:  # for non-hyperelastic materials
                 self._dStrain[i, self._activeVoigtIndices] = doVoigtStrain(dim, self._E[i] - self._Eold[i])
                 if not self.planeStrain and dim == 2:
@@ -423,7 +423,7 @@ class DisplacementTLElement(BaseElement):
                 Cm = self._dStress_dStrain[i][self._matrixVoigtIndices][:, self._matrixVoigtIndices]
                 Hk = B[i].T @ Cm @ B[i] + Hgeo(self.nablaN[i], stress, dim)
                 # compute inner forces
-                P -= B[i].T @ stress[self._matrixVoigtIndices] * detJ * self._weight[i] * self._t
+                P += B[i].T @ stress[self._matrixVoigtIndices] * detJ * self._weight[i] * self._t
             # calculate complete stiffness matrix
             K += Hk * detJ * self._t * self._weight[i]
 
@@ -485,7 +485,7 @@ class DisplacementTLElement(BaseElement):
                 # update strain in stateVars
                 self._stateVarsTemp[i][6:12] = self._strain[i]
                 # compute inner forces
-                P -= (self.nablaN[i].T @ PK1[:dim, :dim]).flatten() * detJ * self._t * self._weight[i]
+                P += (self.nablaN[i].T @ PK1[:dim, :dim]).flatten() * detJ * self._t * self._weight[i]
             else:  # for non-hyperelastic materials
                 self._dStrain[i, self._activeVoigtIndices] = doVoigtStrain(dim, self._E[i] - self._Eold[i])
                 if not self.planeStrain and dim == 2:
@@ -494,7 +494,7 @@ class DisplacementTLElement(BaseElement):
                     self.material.computeStress(stress, self._dStress_dStrain[i], self._dStrain[i], time, dTime)
                 self._stateVarsTemp[i][6:12] += self._dStrain[i]
                 # compute inner forces
-                P -= B[i].T @ stress[self._matrixVoigtIndices] * detJ * self._weight[i] * self._t
+                P += B[i].T @ stress[self._matrixVoigtIndices] * detJ * self._weight[i] * self._t
 
     def computeBodyForce(
         self, P: np.ndarray, K: np.ndarray, load: np.ndarray, U: np.ndarray, time: np.ndarray, dTime: float

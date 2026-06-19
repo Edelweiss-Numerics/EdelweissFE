@@ -252,9 +252,10 @@ class NED(NonlinearSolverBase):
                         prevTimeStep,
                     )
 
-                except CutbackRequest as e:
+                except (CutbackRequest, RuntimeError) as e:
                     self.journal.message(str(e), self.identification, 1)
-                    step.discardAndChangeIncrement(max(e.cutbackSize, 0.25))
+                    cutback = getattr(e, "cutbackSize", 0.25)
+                    step.discardAndChangeIncrement(max(cutback, 0.25))
                     prevTimeStep = None
 
                     for man in outputmanagers:
@@ -389,6 +390,7 @@ class NED(NonlinearSolverBase):
 
         P[:] = 0.0
         P, psi = self.computeElements(elements, U_n, dU, P, timeStep)
+        P[:] = -P[:]
         P = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_n, P, timeStep)
 
         if timeStep.number % self.options["output-frequency"] == 0:

@@ -300,9 +300,10 @@ class NEST(NIST):
 
                     step.changeIncrementSize(incScaleFactor)
 
-                except CutbackRequest as e:
+                except (CutbackRequest, RuntimeError) as e:
                     self.journal.message(str(e), self.identification, 1)
-                    step.discardAndChangeIncrement(max(e.cutbackSize, 0.25))
+                    cutback = getattr(e, "cutbackSize", 0.25)
+                    step.discardAndChangeIncrement(max(cutback, 0.25))
                     prevTimeStep = None
 
                     statusInfoDict["notes"] = str(e)
@@ -435,7 +436,7 @@ class NEST(NIST):
             PExt, K = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_np, PExt, K, timeStep)
             PExt, K = self.assembleConstraints(constraints, U_np, dU_[k], PExt, K, timeStep)
 
-            R[:] = P
+            R[:] = -P
             R += PExt
 
             R = self.applyDirichlet(timeStep, R, dirichlets)

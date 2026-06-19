@@ -196,8 +196,6 @@ class MarmotMaterialWrappingElement(BaseElement):
 
         self._marmotMaterialWrapper.computeYourself(Ke, Pe, U, dU, time, dTime)
 
-        Pe *= -1
-
     def computeYourselfExplicit(
         self,
         Pe,
@@ -209,8 +207,6 @@ class MarmotMaterialWrappingElement(BaseElement):
         self._initializeStateVarsTemp()
 
         self._marmotMaterialWrapper.computeYourselfExplicit(Pe, U, dU, time, dTime)
-
-        Pe *= -1
 
     def computeLumpedInertia(self, Me):
         """Not implemented for this wrapper."""

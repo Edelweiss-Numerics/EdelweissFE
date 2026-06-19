@@ -229,9 +229,10 @@ class NIST(NonlinearSolverBase):
                         maxGrowingIter,
                     )
 
-                except CutbackRequest as e:
+                except (CutbackRequest, RuntimeError) as e:
                     self.journal.message(str(e), self.identification, 1)
-                    step.discardAndChangeIncrement(max(e.cutbackSize, cutbackFactor))
+                    cutback = getattr(e, "cutbackSize", cutbackFactor)
+                    step.discardAndChangeIncrement(max(cutback, cutbackFactor))
                     prevTimeStep = None
 
                     statusInfoDict["iters"] = np.inf
@@ -393,7 +394,7 @@ class NIST(NonlinearSolverBase):
             PExt, K = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_np, PExt, K, timeStep)
             PExt, K = self.assembleConstraints(constraints, U_np, dU, PExt, K, timeStep)
 
-            R[:] = P
+            R[:] = -P
             R += PExt
 
             if iterationCounter == 0 and not isExtrapolatedIncrement and dirichlets:

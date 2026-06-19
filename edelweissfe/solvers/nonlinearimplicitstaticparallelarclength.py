@@ -260,7 +260,7 @@ class NISTPArcLength(NISTParallel):
             K_f -= K_0
 
             # Dead and Reference load ..
-            R_0[:] = P_0 + (Lambda + dLambda) * P_f + P
+            R_0[:] = P_0 + (Lambda + dLambda) * P_f - P
             R_f[:] = P_f
 
             # add stiffness contribution

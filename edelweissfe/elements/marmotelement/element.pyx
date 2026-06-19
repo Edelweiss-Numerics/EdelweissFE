@@ -37,8 +37,6 @@ cimport numpy as np
 
 cimport edelweissfe.elements.marmotelement.element
 
-from edelweissfe.utils.exceptions import CutbackRequest
-
 mapLoadTypes={
         "pressure" : DistributedLoadTypes.Pressure,
         "surface torsion" : DistributedLoadTypes.SurfaceTorsion,
@@ -220,21 +218,15 @@ cdef class MarmotElementWrapper:
         if not self._hasMaterial:
             raise Exception("Element {:} has no material assigned!".format(self._elNumber))
 
-        cdef double pNewDT
         with nogil:
             self._initializeStateVarsTemp()
-
-            pNewDT = 1e36
 
             self.marmotElement.computeYourself(&U[0],
                                                &dU[0],
                                                &Pe[0],
                                                &Ke[0],
                                                &time[0],
-                                               dTime,
-                                               pNewDT)
-            if pNewDT < 1.0:
-                raise CutbackRequest("Element {:} requests for a cutback!".format(self.elNumber), pNewDT)
+                                               dTime)
 
     cpdef void computeYourselfExplicit(self,
                                        double[::1] Pe,
@@ -247,20 +239,14 @@ cdef class MarmotElementWrapper:
         if not self._hasMaterial:
             raise Exception("Element {:} has no material assigned!".format(self._elNumber))
 
-        cdef double pNewDT
         with nogil:
             self._initializeStateVarsTemp()
-
-            pNewDT = 1e36
 
             self.marmotElement.computeYourselfExplicit(&U[0],
                                                        &dU[0],
                                                        &Pe[0],
                                                        &time[0],
-                                                       dTime,
-                                                       pNewDT)
-            if pNewDT < 1.0:
-                raise CutbackRequest("Element {:} requests for a cutback!".format(self.elNumber), pNewDT)
+                                                       dTime)
 
     def computeDistributedLoad(self,
                                str loadType,

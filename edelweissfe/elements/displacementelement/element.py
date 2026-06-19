@@ -343,7 +343,7 @@ class DisplacementElement(BaseElement):
             # get stiffness matrix for element j in point i
             K += B.T @ C @ B * detJ * self._t * self._weight[i]
             # calculate P
-            P -= B.T @ stress[self._activeVoigtIndices] * detJ * self._weight[i] * self._t
+            P += B.T @ stress[self._activeVoigtIndices] * detJ * self._weight[i] * self._t
             # update strain in stateVars
             self._stateVarsTemp[i][6:12] += self._dStrain[i]
 
@@ -388,7 +388,7 @@ class DisplacementElement(BaseElement):
             # Jacobi determinant
             detJ = lin.det(self.J[i])
             # calculate P
-            P -= B.T @ stress[self._activeVoigtIndices] * detJ * self._weight[i] * self._t
+            P += B.T @ stress[self._activeVoigtIndices] * detJ * self._weight[i] * self._t
             # update strain in stateVars
             self._stateVarsTemp[i][6:12] += self._dStrain[i]
 

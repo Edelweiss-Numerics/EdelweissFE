@@ -93,15 +93,13 @@ cdef extern from "Marmot/MarmotElement.h":
                              double* Pe,
                              double* Ke,
                              const double* time,
-                             double dT,
-                             double& pNewdT) except +ValueError
+                             double dT) except +
 
         void computeYourselfExplicit(const double* QTotal,
                                      const double* dQ,
                                      double* Pe,
                                      const double* time,
-                                     double dT,
-                                     double& pNewdT) except +ValueError
+                                     double dT) except +
 
         void setInitialConditions(StateTypes state,
                                   const double* values)
