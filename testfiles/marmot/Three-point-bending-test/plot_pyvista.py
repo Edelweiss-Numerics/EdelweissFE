@@ -1,4 +1,5 @@
 import argparse
+
 import numpy as np
 import pyvista as pv
 
@@ -40,7 +41,8 @@ chart_disp_var = "DispTop"
 force_var = "ReactionTop"
 
 disp_set_name = "NSET_top_center_load_line"
-force_set_name = "NSET_top_center_load_line" 
+force_set_name = "NSET_top_center_load_line"
+
 
 # ==========================================
 # HELPER FUNCTIONS
@@ -51,7 +53,7 @@ def initialize_reader(filepath):
     try:
         best_set = 0
         max_steps = 0
-        for i in range(5): 
+        for i in range(5):
             try:
                 reader.set_active_time_set(i)
                 current_steps = len(reader.time_values)
@@ -60,13 +62,14 @@ def initialize_reader(filepath):
                     best_set = i
             except Exception:
                 break
-                
+
         reader.set_active_time_set(best_set)
         print(f"Loaded '{filepath}': Selected Time Set {best_set} with {max_steps} timesteps.")
     except AttributeError:
         pass
-        
+
     return reader
+
 
 def find_block_by_substring(multiblock, substring):
     """Recursively search for a block containing a specific substring name."""
@@ -80,6 +83,7 @@ def find_block_by_substring(multiblock, substring):
                 return res
     return None
 
+
 def extract_block(multiblock, name):
     """Recursively find a block by its exact name."""
     for i in range(multiblock.n_blocks):
@@ -90,6 +94,7 @@ def extract_block(multiblock, name):
             if res is not None:
                 return res
     raise ValueError(f"Block '{name}' not found in the dataset.")
+
 
 def pre_calculate_curves(reader):
     """Loops through all times to extract force/displacement histories for a single model."""
@@ -130,10 +135,11 @@ def pre_calculate_curves(reader):
 
     return times, np.array(displacements), np.array(forces)
 
+
 def get_interpolated_state(reader, times, disp_hist, force_hist, t_target):
     """Calculates the interpolated mesh and tracking variables for a specific time."""
     t = min(t_target, times[-1])
-    
+
     idx_after = np.searchsorted(times, t)
     idx_before = max(0, idx_after - 1)
     if idx_after >= len(times):
@@ -167,6 +173,7 @@ def get_interpolated_state(reader, times, disp_hist, force_hist, t_target):
 
     return current_mesh, current_disp_line, current_force_line
 
+
 # ==========================================
 # INITIALIZATION & PRE-PROCESSING
 # ==========================================
@@ -180,7 +187,7 @@ times2, plot_disp2, plot_forces2 = pre_calculate_curves(reader2)
 
 # Global plot limits
 max_disp = max(np.max(plot_disp1), np.max(plot_disp2)) * 1.1
-min_force = 0.0  
+min_force = 0.0
 max_force = max(np.max(plot_forces1), np.max(plot_forces2)) * 1.1
 
 if max_disp <= 1e-9 and max_force <= 1e-9:
@@ -221,7 +228,7 @@ first_frame = True
 eval_times = np.linspace(global_min_time, global_max_time, 120)
 
 for t in eval_times:
-    
+
     mesh1, disp_line1, force_line1 = get_interpolated_state(reader1, times1, plot_disp1, plot_forces1, t)
     mesh2, disp_line2, force_line2 = get_interpolated_state(reader2, times2, plot_disp2, plot_forces2, t)
 
@@ -260,7 +267,7 @@ for t in eval_times:
             plotter.subplot(0, i)
             plotter.view_xy()
             plotter.reset_camera()
-            
+
         plotter.show(auto_close=False, interactive_update=True)
         first_frame = False
     else:
