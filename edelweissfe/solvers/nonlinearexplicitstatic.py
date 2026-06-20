@@ -300,7 +300,7 @@ class NEST(NIST):
 
                     step.changeIncrementSize(incScaleFactor)
 
-                except (CutbackRequest, RuntimeError) as e:
+                except CutbackRequest as e:
                     self.journal.message(str(e), self.identification, 1)
                     cutback = getattr(e, "cutbackSize", 0.25)
                     step.discardAndChangeIncrement(max(cutback, 0.25))

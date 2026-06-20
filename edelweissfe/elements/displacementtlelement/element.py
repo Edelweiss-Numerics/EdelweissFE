@@ -317,7 +317,7 @@ class DisplacementTLElement(BaseElement):
         faceID: int,
         load: np.ndarray,
         U: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dTime: float,
     ):
         """Evaluate residual and stiffness for given time, field, and field increment due to a surface load.
@@ -337,20 +337,20 @@ class DisplacementTLElement(BaseElement):
         U
             The current solution vector.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
 
         raise Exception("Applying a distributed load is currently not possible with this element provider.")
 
-    def computeYourself(
+    def computeKernels(
         self,
         K_: np.ndarray,
         P: np.ndarray,
         U: np.ndarray,
         dU: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dTime: float,
     ):
         """Evaluate the residual and stiffness matrix for given time, field, and field increment due to a displacement or load.
@@ -366,7 +366,7 @@ class DisplacementTLElement(BaseElement):
         dU
             The current solution vector increment.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
@@ -427,12 +427,12 @@ class DisplacementTLElement(BaseElement):
             # calculate complete stiffness matrix
             K += Hk * detJ * self._t * self._weight[i]
 
-    def computeYourselfExplicit(
+    def computeKernelsExplicit(
         self,
         P: np.ndarray,
         U: np.ndarray,
         dU: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dTime: float,
     ):
         """Evaluate the residual for given time, field, and field increment due to a displacement or load.
@@ -446,7 +446,7 @@ class DisplacementTLElement(BaseElement):
         dU
             The current solution vector increment.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
@@ -497,7 +497,7 @@ class DisplacementTLElement(BaseElement):
                 P += B[i].T @ stress[self._matrixVoigtIndices] * detJ * self._weight[i] * self._t
 
     def computeBodyForce(
-        self, P: np.ndarray, K: np.ndarray, load: np.ndarray, U: np.ndarray, time: np.ndarray, dTime: float
+        self, P: np.ndarray, K: np.ndarray, load: np.ndarray, U: np.ndarray, time: float, dTime: float
     ):
         """Evaluate residual and stiffness for given time, field, and field increment due to a body force load.
 
@@ -512,7 +512,7 @@ class DisplacementTLElement(BaseElement):
         U
             The current solution vector.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """

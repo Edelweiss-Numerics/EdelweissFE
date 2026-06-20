@@ -35,6 +35,8 @@ cimport cython
 cimport libcpp.cast
 cimport numpy as np
 
+from edelweissfe.utils.exceptions import CutbackRequest
+
 cimport edelweissfe.elements.marmotelement.element
 
 mapLoadTypes={
@@ -206,47 +208,53 @@ cdef class MarmotElementWrapper:
         self.marmotElement.setInitialConditions(mapStateTypes[stateType], &values[0])
         self.acceptLastState()
 
-    cpdef void computeYourself(self,
-                               double[::1] Ke,
-                               double[::1] Pe,
-                               const double[::1] U,
-                               const double[::1] dU,
-                               const double[::1] time,
-                               double dTime) except * nogil:
+    cpdef void computeKernels(self,
+                              double[::1] Ke,
+                              double[::1] Pe,
+                              const double[::1] U,
+                              const double[::1] dU,
+                              double time,
+                              double dTime) except *:
         """Evaluate residual and stiffness for given time, field, and field increment."""
 
         if not self._hasMaterial:
             raise Exception("Element {:} has no material assigned!".format(self._elNumber))
 
-        with nogil:
-            self._initializeStateVarsTemp()
+        try:
+            with nogil:
+                self._initializeStateVarsTemp()
 
-            self.marmotElement.computeYourself(&U[0],
-                                               &dU[0],
-                                               &Pe[0],
-                                               &Ke[0],
-                                               &time[0],
-                                               dTime)
+                self.marmotElement.computeKernels(&U[0],
+                                                  &dU[0],
+                                                  &Pe[0],
+                                                  &Ke[0],
+                                                  time,
+                                                  dTime)
+        except (RuntimeError, ValueError) as e:
+            raise CutbackRequest(str(e), 0.5)
 
-    cpdef void computeYourselfExplicit(self,
-                                       double[::1] Pe,
-                                       const double[::1] U,
-                                       const double[::1] dU,
-                                       const double[::1] time,
-                                       double dTime) except * nogil:
+    cpdef void computeKernelsExplicit(self,
+                                      double[::1] Pe,
+                                      const double[::1] U,
+                                      const double[::1] dU,
+                                      double time,
+                                      double dTime) except *:
         """Evaluate residual and stiffness for given time, field, and field increment."""
 
         if not self._hasMaterial:
             raise Exception("Element {:} has no material assigned!".format(self._elNumber))
 
-        with nogil:
-            self._initializeStateVarsTemp()
+        try:
+            with nogil:
+                self._initializeStateVarsTemp()
 
-            self.marmotElement.computeYourselfExplicit(&U[0],
-                                                       &dU[0],
-                                                       &Pe[0],
-                                                       &time[0],
-                                                       dTime)
+                self.marmotElement.computeKernelsExplicit(&U[0],
+                                                          &dU[0],
+                                                          &Pe[0],
+                                                          time,
+                                                          dTime)
+        except (RuntimeError, ValueError) as e:
+            raise CutbackRequest(str(e), 0.5)
 
     def computeDistributedLoad(self,
                                str loadType,
@@ -255,7 +263,7 @@ cdef class MarmotElementWrapper:
                                int faceID,
                                const double[::1] load,
                                const double[::1] U,
-                               const double[::1] time,
+                               double time,
                                double dTime):
         """Evaluate residual and stiffness for given time, field, and field increment due to a surface load."""
 
@@ -265,7 +273,7 @@ cdef class MarmotElementWrapper:
                                                   faceID,
                                                   &load[0],
                                                   &U[0],
-                                                  &time[0],
+                                                  time,
                                                   dTime)
 
     def computeBodyForce(self,
@@ -273,7 +281,7 @@ cdef class MarmotElementWrapper:
                          double[::1] K,
                          const double[::1] load,
                          const double[::1] U,
-                         const double[::1] time,
+                         double time,
                          double dTime):
         """Evaluate residual and stiffness for given time, field, and field increment due to a volume load."""
 
@@ -282,7 +290,7 @@ cdef class MarmotElementWrapper:
                                     &K[0],
                                     &load[0],
                                     &U[0],
-                                    &time[0],
+                                    time,
                                     dTime)
 
     def computeLumpedInertia(self, double[::1] M):

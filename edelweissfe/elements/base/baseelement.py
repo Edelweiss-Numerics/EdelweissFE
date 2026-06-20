@@ -144,7 +144,7 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         faceID: int,
         load: np.ndarray,
         U: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dT: float,
     ):
         """Evaluate residual and stiffness for given time, field, and field increment due to a surface load.
@@ -164,19 +164,19 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         U
             The current solution vector.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
 
     @abstractmethod
-    def computeYourself(
+    def computeKernels(
         self,
         P: np.ndarray,
         K: np.ndarray,
         U: np.ndarray,
         dU: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dT: float,
     ):
         """Evaluate the internal forces and stiffness for given time, field, and field increment.
@@ -192,18 +192,18 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         dU
             The current solution vector increment.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
 
     @abstractmethod
-    def computeYourselfExplicit(
+    def computeKernelsExplicit(
         self,
         P: np.ndarray,
         U: np.ndarray,
         dU: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dT: float,
     ):
         """Evaluate the internal forces for given time, field, and field increment.
@@ -217,7 +217,7 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         dU
             The current solution vector increment.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
@@ -269,7 +269,7 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         K: np.ndarray,
         load: np.ndarray,
         U: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dTime: float,
     ):
         """Evaluate residual and stiffness for given time, field, and field increment due to a body force load.
@@ -285,7 +285,7 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         U
             The current solution vector.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """

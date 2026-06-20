@@ -252,7 +252,7 @@ class NED(NonlinearSolverBase):
                         prevTimeStep,
                     )
 
-                except (CutbackRequest, RuntimeError) as e:
+                except CutbackRequest as e:
                     self.journal.message(str(e), self.identification, 1)
                     cutback = getattr(e, "cutbackSize", 0.25)
                     step.discardAndChangeIncrement(max(cutback, 0.25))
@@ -434,7 +434,7 @@ class NED(NonlinearSolverBase):
             The augmented load vector.
         """
 
-        time = np.array([timeStep.stepTime, timeStep.totalTime])
+        time = timeStep.totalTime
         dT = timeStep.timeIncrement
 
         for dLoad in distributedLoads:
@@ -477,7 +477,7 @@ class NED(NonlinearSolverBase):
             The augmented load vector and system matrix.
         """
 
-        time = np.array([timeStep.stepTime, timeStep.totalTime])
+        time = timeStep.totalTime
         dT = timeStep.timeIncrement
 
         for bForce in bodyForces:
@@ -525,13 +525,13 @@ class NED(NonlinearSolverBase):
             - The modified accumulated flux vector.
         """
 
-        time = np.array([timeStep.stepTime, timeStep.totalTime])
+        time = timeStep.totalTime
         dT = timeStep.timeIncrement
         P[:] = 0.0
         psi = 0.0
         for el in elements.values():
             Pe = np.zeros(el.nDof)
-            el.computeYourselfExplicit(Pe, U_np[el], dU[el], time, dT)
+            el.computeKernelsExplicit(Pe, U_np[el], dU[el], time, dT)
             psi += el.computeInternalEnergy()
             P[el] += Pe
 
