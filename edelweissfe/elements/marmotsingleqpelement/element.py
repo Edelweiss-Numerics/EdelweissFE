@@ -183,56 +183,70 @@ class MarmotMaterialWrappingElement(BaseElement):
 
         self.acceptLastState()
 
-    def computeYourself(
+    def computeKernels(
         self,
-        Ke,
-        Pe,
-        U,
-        dU,
-        time,
-        dTime,
+        Ke: np.ndarray,
+        Pe: np.ndarray,
+        U: np.ndarray,
+        dU: np.ndarray,
+        time: float,
+        dTime: float,
     ):
         self._initializeStateVarsTemp()
 
-        self._marmotMaterialWrapper.computeYourself(Ke, Pe, U, dU, time, dTime)
+        self._marmotMaterialWrapper.computeKernels(Ke, Pe, U, dU, time, dTime)
 
-        Pe *= -1
-
-    def computeYourselfExplicit(
+    def computeKernelsExplicit(
         self,
-        Pe,
-        U,
-        dU,
-        time,
-        dTime,
+        Pe: np.ndarray,
+        U: np.ndarray,
+        dU: np.ndarray,
+        time: float,
+        dTime: float,
     ):
         self._initializeStateVarsTemp()
 
-        self._marmotMaterialWrapper.computeYourselfExplicit(Pe, U, dU, time, dTime)
+        self._marmotMaterialWrapper.computeKernelsExplicit(Pe, U, dU, time, dTime)
 
-        Pe *= -1
-
-    def computeLumpedInertia(self, Me):
+    def computeLumpedInertia(self, Me: np.ndarray):
         """Not implemented for this wrapper."""
 
         raise ValueError("This should not be called for this wrapper.")
 
-    def computeCriticalTimeStepForExplicitDynamics(self, Q):
+    def computeCriticalTimeStepForExplicitDynamics(self, Q: np.ndarray):
         """Not implemented for this wrapper."""
 
         raise ValueError("This should not be called for this wrapper.")
 
-    def computeDistributedLoad(self, loadType, P, K, faceID, load, U, time, dTime):
+    def computeDistributedLoad(
+        self,
+        loadType: str,
+        P: np.ndarray,
+        K: np.ndarray,
+        faceID: int,
+        load: np.ndarray,
+        U: np.ndarray,
+        time: float,
+        dTime: float,
+    ):
         """Not implemented for this wrapper."""
 
         raise ValueError("This should not be called for this wrapper.")
 
-    def computeInternalEnergy(self):
+    def computeInternalEnergy(self) -> float:
         """Not implemented for this wrapper."""
 
         raise ValueError("This should not be called for this wrapper.")
 
-    def computeBodyForce(self, P, K, load, U, time, dTime):
+    def computeBodyForce(
+        self,
+        P: np.ndarray,
+        K: np.ndarray,
+        load: np.ndarray,
+        U: np.ndarray,
+        time: float,
+        dTime: float,
+    ):
         """Not implemented for this wrapper."""
 
         raise ValueError("This should not be called for this wrapper.")

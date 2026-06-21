@@ -317,7 +317,7 @@ class DisplacementTLElement(BaseElement):
         faceID: int,
         load: np.ndarray,
         U: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dTime: float,
     ):
         """Evaluate residual and stiffness for given time, field, and field increment due to a surface load.
@@ -337,20 +337,20 @@ class DisplacementTLElement(BaseElement):
         U
             The current solution vector.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
 
         raise Exception("Applying a distributed load is currently not possible with this element provider.")
 
-    def computeYourself(
+    def computeKernels(
         self,
         K_: np.ndarray,
         P: np.ndarray,
         U: np.ndarray,
         dU: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dTime: float,
     ):
         """Evaluate the residual and stiffness matrix for given time, field, and field increment due to a displacement or load.
@@ -366,7 +366,7 @@ class DisplacementTLElement(BaseElement):
         dU
             The current solution vector increment.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
@@ -412,7 +412,7 @@ class DisplacementTLElement(BaseElement):
                     dim,
                 )
                 # compute inner forces
-                P -= (self.nablaN[i].T @ PK1[:dim, :dim]).flatten() * detJ * self._t * self._weight[i]
+                P += (self.nablaN[i].T @ PK1[:dim, :dim]).flatten() * detJ * self._t * self._weight[i]
             else:  # for non-hyperelastic materials
                 self._dStrain[i, self._activeVoigtIndices] = doVoigtStrain(dim, self._E[i] - self._Eold[i])
                 if not self.planeStrain and dim == 2:
@@ -423,16 +423,16 @@ class DisplacementTLElement(BaseElement):
                 Cm = self._dStress_dStrain[i][self._matrixVoigtIndices][:, self._matrixVoigtIndices]
                 Hk = B[i].T @ Cm @ B[i] + Hgeo(self.nablaN[i], stress, dim)
                 # compute inner forces
-                P -= B[i].T @ stress[self._matrixVoigtIndices] * detJ * self._weight[i] * self._t
+                P += B[i].T @ stress[self._matrixVoigtIndices] * detJ * self._weight[i] * self._t
             # calculate complete stiffness matrix
             K += Hk * detJ * self._t * self._weight[i]
 
-    def computeYourselfExplicit(
+    def computeKernelsExplicit(
         self,
         P: np.ndarray,
         U: np.ndarray,
         dU: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dTime: float,
     ):
         """Evaluate the residual for given time, field, and field increment due to a displacement or load.
@@ -446,7 +446,7 @@ class DisplacementTLElement(BaseElement):
         dU
             The current solution vector increment.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
@@ -485,7 +485,7 @@ class DisplacementTLElement(BaseElement):
                 # update strain in stateVars
                 self._stateVarsTemp[i][6:12] = self._strain[i]
                 # compute inner forces
-                P -= (self.nablaN[i].T @ PK1[:dim, :dim]).flatten() * detJ * self._t * self._weight[i]
+                P += (self.nablaN[i].T @ PK1[:dim, :dim]).flatten() * detJ * self._t * self._weight[i]
             else:  # for non-hyperelastic materials
                 self._dStrain[i, self._activeVoigtIndices] = doVoigtStrain(dim, self._E[i] - self._Eold[i])
                 if not self.planeStrain and dim == 2:
@@ -494,10 +494,10 @@ class DisplacementTLElement(BaseElement):
                     self.material.computeStress(stress, self._dStress_dStrain[i], self._dStrain[i], time, dTime)
                 self._stateVarsTemp[i][6:12] += self._dStrain[i]
                 # compute inner forces
-                P -= B[i].T @ stress[self._matrixVoigtIndices] * detJ * self._weight[i] * self._t
+                P += B[i].T @ stress[self._matrixVoigtIndices] * detJ * self._weight[i] * self._t
 
     def computeBodyForce(
-        self, P: np.ndarray, K: np.ndarray, load: np.ndarray, U: np.ndarray, time: np.ndarray, dTime: float
+        self, P: np.ndarray, K: np.ndarray, load: np.ndarray, U: np.ndarray, time: float, dTime: float
     ):
         """Evaluate residual and stiffness for given time, field, and field increment due to a body force load.
 
@@ -512,7 +512,7 @@ class DisplacementTLElement(BaseElement):
         U
             The current solution vector.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """

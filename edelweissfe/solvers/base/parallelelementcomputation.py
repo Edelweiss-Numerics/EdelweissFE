@@ -30,8 +30,6 @@
 import concurrent.futures
 import itertools
 
-import numpy as np
-
 from edelweissfe.elements.base.baseelement import BaseElement
 from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.numerics.parallelizationutilities import (
@@ -78,7 +76,7 @@ def computeElementsInParallel(
         P.createScatterVector()
     )  # make a scatter vector; which gives 1) contiguous memory access and 2) thread safety
 
-    time = np.array([timeStep.stepTime, timeStep.totalTime])
+    time = timeStep.totalTime
     dT = timeStep.timeIncrement
 
     def computeElementsWorker(element: BaseElement):
@@ -86,7 +84,7 @@ def computeElementsInParallel(
         Ue = Un1[element]
         dUe = dU[element]
         Ke = K[element]
-        element.computeYourself(Ke, Pe, Ue, dUe, time, dT)
+        element.computeKernels(Ke, Pe, Ue, dUe, time, dT)
 
     numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
 
@@ -114,7 +112,7 @@ def computeElementsInParallelForExplicit(
 ) -> tuple[DofVector, float]:
 
     scatter_P = P.createScatterVector()
-    time = np.array([timeStep.stepTime, timeStep.totalTime])
+    time = timeStep.totalTime
     dT = timeStep.timeIncrement
 
     # Define the worker to process a CHUNK of elements, not just one.
@@ -125,7 +123,7 @@ def computeElementsInParallelForExplicit(
             Ue = Un1[element]
             dUe = dU[element]
 
-            element.computeYourselfExplicit(Pe, Ue, dUe, time, dT)
+            element.computeKernelsExplicit(Pe, Ue, dUe, time, dT)
             chunk_psi += element.computeInternalEnergy()
 
         return chunk_psi

@@ -88,20 +88,18 @@ cdef extern from "Marmot/MarmotElement.h":
 
         void initializeYourself()
 
-        void computeYourself(const double* QTotal,
-                             const double* dQ,
-                             double* Pe,
-                             double* Ke,
-                             const double* time,
-                             double dT,
-                             double& pNewdT) except +ValueError
+        void computeKernels(const double* QTotal,
+                            const double* dQ,
+                            double* Pe,
+                            double* Ke,
+                            double time,
+                            double dT) except +
 
-        void computeYourselfExplicit(const double* QTotal,
-                                     const double* dQ,
-                                     double* Pe,
-                                     const double* time,
-                                     double dT,
-                                     double& pNewdT) except +ValueError
+        void computeKernelsExplicit(const double* QTotal,
+                                    const double* dQ,
+                                    double* Pe,
+                                    double time,
+                                    double dT) except +
 
         void setInitialConditions(StateTypes state,
                                   const double* values)
@@ -113,7 +111,7 @@ cdef extern from "Marmot/MarmotElement.h":
                                 int faceID,
                                 const double* load,
                                 const double* QTotal,
-                                const double* time,
+                                double time,
                                 double dT)
 
         void computeBodyForce(
@@ -121,7 +119,7 @@ cdef extern from "Marmot/MarmotElement.h":
                         double* K,
                         const double* load,
                         const double* QTotal,
-                        const double* time,
+                        double time,
                         double dT)
 
         void computeLumpedInertia(double* M)
@@ -172,17 +170,17 @@ cdef class MarmotElementWrapper:
 
     cpdef void _initializeStateVarsTemp(self, ) noexcept  nogil
 
-    cpdef void computeYourself(self,
-                               double[::1] Ke,
-                               double[::1] Pe,
-                               const double[::1] U,
-                               const double[::1] dU,
-                               const double[::1] time,
-                               double dTime) except * nogil
+    cpdef void computeKernels(self,
+                              double[::1] Ke,
+                              double[::1] Pe,
+                              const double[::1] U,
+                              const double[::1] dU,
+                              double time,
+                              double dTime) except *
 
-    cpdef void computeYourselfExplicit(self,
-                                       double[::1] Pe,
-                                       const double[::1] U,
-                                       const double[::1] dU,
-                                       const double[::1] time,
-                                       double dTime) except * nogil
+    cpdef void computeKernelsExplicit(self,
+                                      double[::1] Pe,
+                                      const double[::1] U,
+                                      const double[::1] dU,
+                                      double time,
+                                      double dTime) except *

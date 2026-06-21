@@ -262,7 +262,7 @@ class DisplacementElement(BaseElement):
         faceID: int,
         load: np.ndarray,
         U: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dTime: float,
     ):
         """Evaluate residual and stiffness for given time, field, and field increment due to a surface load.
@@ -282,20 +282,20 @@ class DisplacementElement(BaseElement):
         U
             The current solution vector.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
 
         raise Exception("Applying a distributed load is currently not possible with this element provider.")
 
-    def computeYourself(
+    def computeKernels(
         self,
         K_: np.ndarray,
         P: np.ndarray,
         U: np.ndarray,
         dU: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dTime: float,
     ):
         """Evaluate the residual and stiffness matrix for given time, field, and field increment due to a displacement or load.
@@ -311,7 +311,7 @@ class DisplacementElement(BaseElement):
         dU
             The current solution vector increment.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
@@ -343,16 +343,16 @@ class DisplacementElement(BaseElement):
             # get stiffness matrix for element j in point i
             K += B.T @ C @ B * detJ * self._t * self._weight[i]
             # calculate P
-            P -= B.T @ stress[self._activeVoigtIndices] * detJ * self._weight[i] * self._t
+            P += B.T @ stress[self._activeVoigtIndices] * detJ * self._weight[i] * self._t
             # update strain in stateVars
             self._stateVarsTemp[i][6:12] += self._dStrain[i]
 
-    def computeYourselfExplicit(
+    def computeKernelsExplicit(
         self,
         P: np.ndarray,
         U: np.ndarray,
         dU: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dTime: float,
     ):
         """Evaluate the residual for given time, field, and field increment due to a displacement or load.
@@ -366,7 +366,7 @@ class DisplacementElement(BaseElement):
         dU
             The current solution vector increment.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
@@ -388,12 +388,12 @@ class DisplacementElement(BaseElement):
             # Jacobi determinant
             detJ = lin.det(self.J[i])
             # calculate P
-            P -= B.T @ stress[self._activeVoigtIndices] * detJ * self._weight[i] * self._t
+            P += B.T @ stress[self._activeVoigtIndices] * detJ * self._weight[i] * self._t
             # update strain in stateVars
             self._stateVarsTemp[i][6:12] += self._dStrain[i]
 
     def computeBodyForce(
-        self, P: np.ndarray, K: np.ndarray, load: np.ndarray, U: np.ndarray, time: np.ndarray, dTime: float
+        self, P: np.ndarray, K: np.ndarray, load: np.ndarray, U: np.ndarray, time: float, dTime: float
     ):
         """Evaluate residual and stiffness for given time, field, and field increment due to a body force load.
 
@@ -408,7 +408,7 @@ class DisplacementElement(BaseElement):
         U
             The current solution vector.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """

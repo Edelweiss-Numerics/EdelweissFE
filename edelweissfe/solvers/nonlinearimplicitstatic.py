@@ -231,7 +231,8 @@ class NIST(NonlinearSolverBase):
 
                 except CutbackRequest as e:
                     self.journal.message(str(e), self.identification, 1)
-                    step.discardAndChangeIncrement(max(e.cutbackSize, cutbackFactor))
+                    cutback = getattr(e, "cutbackSize", cutbackFactor)
+                    step.discardAndChangeIncrement(max(cutback, cutbackFactor))
                     prevTimeStep = None
 
                     statusInfoDict["iters"] = np.inf
@@ -393,7 +394,7 @@ class NIST(NonlinearSolverBase):
             PExt, K = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_np, PExt, K, timeStep)
             PExt, K = self.assembleConstraints(constraints, U_np, dU, PExt, K, timeStep)
 
-            R[:] = P
+            R[:] = -P
             R += PExt
 
             if iterationCounter == 0 and not isExtrapolatedIncrement and dirichlets:
@@ -459,7 +460,7 @@ class NIST(NonlinearSolverBase):
             The augmented load vector and system matrix.
         """
 
-        time = np.array([timeStep.stepTime, timeStep.totalTime])
+        time = timeStep.totalTime
         dT = timeStep.timeIncrement
 
         for dLoad in distributedLoads:
@@ -506,7 +507,7 @@ class NIST(NonlinearSolverBase):
             The augmented load vector and system matrix.
         """
 
-        time = np.array([timeStep.stepTime, timeStep.totalTime])
+        time = timeStep.totalTime
         dT = timeStep.timeIncrement
 
         for bForce in bodyForces:
@@ -564,14 +565,14 @@ class NIST(NonlinearSolverBase):
             - The modified accumulated flux vector.
         """
 
-        time = np.array([timeStep.stepTime, timeStep.totalTime])
+        time = timeStep.totalTime
         dT = timeStep.timeIncrement
 
         for el in elements.values():
             Ke = K[el]
             Pe = np.zeros(el.nDof)
 
-            el.computeYourself(Ke, Pe, U_np[el], dU[el], time, dT)
+            el.computeKernels(Ke, Pe, U_np[el], dU[el], time, dT)
 
             P[el] += Pe
             F[el] += abs(Pe)
