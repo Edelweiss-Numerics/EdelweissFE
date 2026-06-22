@@ -68,21 +68,28 @@ def deviatoricNorm(devStress):
 
 
 def tensorLogarithmEig(A):
-    """Computes the logarithm of a tensor using eigenvalues and eigenvectors.
+    """Computes the logarithm of a symmetric positive-definite tensor using eigenvalues and eigenvectors.
+
+    Uses ``numpy.linalg.eigh`` (symmetric eigendecomposition) to guarantee
+    real eigenvalues and orthogonal eigenvectors. This avoids spurious
+    imaginary parts that ``numpy.linalg.eig`` can introduce due to
+    floating-point rounding for symmetric matrices such as the left
+    Cauchy-Green tensor.
 
     Parameters
     ----------
     A
-        The tensor, the logarithm should be computed of.
+        The symmetric positive-definite tensor whose logarithm should be
+        computed.
 
     Returns
     -------
     np.ndarray
         The tensor logarithm of A."""
 
-    (x, V) = lin.eig(A)
+    (x, V) = lin.eigh(A)
     A_ = np.diag(np.log(x))
-    return V @ A_ @ lin.inv(V)
+    return V @ A_ @ V.T
 
 
 def tensorExp(A):
