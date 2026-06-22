@@ -1,24 +1,22 @@
+
+
 <!DOCTYPE html>
-<html class="writer-html5" lang="en">
+<html class="writer-html5" lang="en" data-content_root="../">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sets &mdash; EdelweissFE v22.07 documentation</title>
-      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
-      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css" />
-      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=37fbe429" />
 
   
-  <!--[if lt IE 9]>
-    <script src="../_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
-        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
-        <script src="../_static/jquery.js"></script>
-        <script src="../_static/underscore.js"></script>
-        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
-        <script src="../_static/doctools.js"></script>
-        <script src="../_static/sphinx_highlight.js"></script>
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -123,8 +121,8 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <div class="section" id="sets">
-<h1>Sets<a class="headerlink" href="#sets" title="Permalink to this heading"></a></h1>
+  <section id="sets">
+<h1>Sets<a class="headerlink" href="#sets" title="Link to this heading"></a></h1>
 <p>Currently, EdelweissFE supports nodesets and elementsets.
 Since for the usage of nodesets or elementsets
 in the outputmanagers or constraints
@@ -140,10 +138,10 @@ they are based on a custom ordered set object.</p>
 </div></blockquote>
 <span class="target" id="module-edelweissfe.sets.orderedset"></span><dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.sets.orderedset.ImmutableOrderedSet">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.sets.orderedset.</span></span><span class="sig-name descname"><span class="pre">ImmutableOrderedSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_s</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#ImmutableOrderedSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.ImmutableOrderedSet" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.sets.orderedset.</span></span><span class="sig-name descname"><span class="pre">ImmutableOrderedSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_s</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#ImmutableOrderedSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.ImmutableOrderedSet" title="Link to this definition"></a></dt>
 <dd><p>An immutable ordered set.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>name</strong> (<em>str</em>) – A name for the object.</p></li>
 <li><p><strong>items</strong> – A list of items.</p></li>
@@ -152,10 +150,6 @@ they are based on a custom ordered set object.</p>
 </dl>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
-<colgroup>
-<col style="width: 10%" />
-<col style="width: 90%" />
-</colgroup>
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.sets.orderedset.ImmutableOrderedSet.add" title="edelweissfe.sets.orderedset.ImmutableOrderedSet.add"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add</span></code></a>(item_s)</p></td>
 <td><p>Add an item or an iterable of items to the OrderedSet</p></td>
@@ -179,7 +173,7 @@ they are based on a custom ordered set object.</p>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">pop</span></code>(k[,d])</p></td>
-<td><p>If key is not found, d is returned if given, otherwise KeyError is raised.</p></td>
+<td><p>value.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">popitem</span></code>()</p></td>
 <td><p>as a 2-tuple; but raise KeyError if D is empty.</p></td>
@@ -188,7 +182,7 @@ they are based on a custom ordered set object.</p>
 <td><p></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">update</span></code>([E, ]**F)</p></td>
-<td><p>If E present and has a .keys() method, does:     for k in E.keys(): D[k] = E[k] If E present and lacks .keys() method, does:     for (k, v) in E: D[k] = v In either case, this is followed by: for k, v in F.items(): D[k] = v</p></td>
+<td><p>If E present and has a .keys() method, does:</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">values</span></code>()</p></td>
 <td><p></p></td>
@@ -196,10 +190,6 @@ they are based on a custom ordered set object.</p>
 </tbody>
 </table>
 <table class="docutils align-default">
-<colgroup>
-<col style="width: 55%" />
-<col style="width: 45%" />
-</colgroup>
 <tbody>
 <tr class="row-odd"><td><p><strong>copy</strong></p></td>
 <td></td>
@@ -211,7 +201,7 @@ they are based on a custom ordered set object.</p>
 </table>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.sets.orderedset.ImmutableOrderedSet.add">
-<span class="sig-name descname"><span class="pre">add</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_s</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#ImmutableOrderedSet.add"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.ImmutableOrderedSet.add" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">add</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_s</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#ImmutableOrderedSet.add"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.ImmutableOrderedSet.add" title="Link to this definition"></a></dt>
 <dd><p>Add an item or an iterable of items to the OrderedSet</p>
 </dd></dl>
 
@@ -219,10 +209,10 @@ they are based on a custom ordered set object.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.sets.orderedset.OrderedSet">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.sets.orderedset.</span></span><span class="sig-name descname"><span class="pre">OrderedSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_s</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#OrderedSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.OrderedSet" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.sets.orderedset.</span></span><span class="sig-name descname"><span class="pre">OrderedSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_s</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#OrderedSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.OrderedSet" title="Link to this definition"></a></dt>
 <dd><p>An ordered set.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>name</strong> (<em>str</em>) – A name for the object.</p></li>
 <li><p><strong>items</strong> – A list of items.</p></li>
@@ -231,10 +221,6 @@ they are based on a custom ordered set object.</p>
 </dl>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
-<colgroup>
-<col style="width: 10%" />
-<col style="width: 90%" />
-</colgroup>
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.sets.orderedset.OrderedSet.add" title="edelweissfe.sets.orderedset.OrderedSet.add"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add</span></code></a>(item_s)</p></td>
 <td><p>Add an item or an iterable of items to the OrderedSet</p></td>
@@ -258,7 +244,7 @@ they are based on a custom ordered set object.</p>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">pop</span></code>(k[,d])</p></td>
-<td><p>If key is not found, d is returned if given, otherwise KeyError is raised.</p></td>
+<td><p>value.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">popitem</span></code>()</p></td>
 <td><p>as a 2-tuple; but raise KeyError if D is empty.</p></td>
@@ -267,7 +253,7 @@ they are based on a custom ordered set object.</p>
 <td><p></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">update</span></code>([E, ]**F)</p></td>
-<td><p>If E present and has a .keys() method, does:     for k in E.keys(): D[k] = E[k] If E present and lacks .keys() method, does:     for (k, v) in E: D[k] = v In either case, this is followed by: for k, v in F.items(): D[k] = v</p></td>
+<td><p>If E present and has a .keys() method, does:</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">values</span></code>()</p></td>
 <td><p></p></td>
@@ -275,10 +261,6 @@ they are based on a custom ordered set object.</p>
 </tbody>
 </table>
 <table class="docutils align-default">
-<colgroup>
-<col style="width: 55%" />
-<col style="width: 45%" />
-</colgroup>
 <tbody>
 <tr class="row-odd"><td><p><strong>copy</strong></p></td>
 <td></td>
@@ -290,19 +272,19 @@ they are based on a custom ordered set object.</p>
 </table>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.sets.orderedset.OrderedSet.add">
-<span class="sig-name descname"><span class="pre">add</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_s</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#OrderedSet.add"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.OrderedSet.add" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">add</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_s</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#OrderedSet.add"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.OrderedSet.add" title="Link to this definition"></a></dt>
 <dd><p>Add an item or an iterable of items to the OrderedSet</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.sets.orderedset.OrderedSet.checkObjectType">
-<span class="sig-name descname"><span class="pre">checkObjectType</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obj</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#OrderedSet.checkObjectType"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.OrderedSet.checkObjectType" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">checkObjectType</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obj</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#OrderedSet.checkObjectType"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.OrderedSet.checkObjectType" title="Link to this definition"></a></dt>
 <dd><p>Checks if the object type is allowed in the OrderedSet</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.sets.orderedset.OrderedSet.forceIter">
-<span class="sig-name descname"><span class="pre">forceIter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_s</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#OrderedSet.forceIter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.OrderedSet.forceIter" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">forceIter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_s</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#OrderedSet.forceIter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.OrderedSet.forceIter" title="Link to this definition"></a></dt>
 <dd><p>Return an iterator object for item_s even if item_s itself is not iterable</p>
 </dd></dl>
 
@@ -310,11 +292,11 @@ they are based on a custom ordered set object.</p>
 
 <span class="target" id="module-edelweissfe.sets.nodeset"></span><dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.sets.nodeset.NodeSet">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.sets.nodeset.</span></span><span class="sig-name descname"><span class="pre">NodeSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodes</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/nodeset.html#NodeSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.nodeset.NodeSet" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.sets.nodeset.</span></span><span class="sig-name descname"><span class="pre">NodeSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodes</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/nodeset.html#NodeSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.nodeset.NodeSet" title="Link to this definition"></a></dt>
 <dd><p>A basic node set.
 It has a label, and a list containing the unique nodes.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>label</strong> (<em>str</em>) – The unique label for this element set.</p></li>
 <li><p><strong>nodes</strong> – A list of nodes.</p></li>
@@ -323,10 +305,6 @@ It has a label, and a list containing the unique nodes.</p>
 </dl>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
-<colgroup>
-<col style="width: 10%" />
-<col style="width: 90%" />
-</colgroup>
 <tbody>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">add</span></code>(item_s)</p></td>
 <td><p>Add an item or an iterable of items to the OrderedSet</p></td>
@@ -350,7 +328,7 @@ It has a label, and a list containing the unique nodes.</p>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">pop</span></code>(k[,d])</p></td>
-<td><p>If key is not found, d is returned if given, otherwise KeyError is raised.</p></td>
+<td><p>value.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">popitem</span></code>()</p></td>
 <td><p>as a 2-tuple; but raise KeyError if D is empty.</p></td>
@@ -359,7 +337,7 @@ It has a label, and a list containing the unique nodes.</p>
 <td><p></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">update</span></code>([E, ]**F)</p></td>
-<td><p>If E present and has a .keys() method, does:     for k in E.keys(): D[k] = E[k] If E present and lacks .keys() method, does:     for (k, v) in E: D[k] = v In either case, this is followed by: for k, v in F.items(): D[k] = v</p></td>
+<td><p>If E present and has a .keys() method, does:</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">values</span></code>()</p></td>
 <td><p></p></td>
@@ -367,10 +345,6 @@ It has a label, and a list containing the unique nodes.</p>
 </tbody>
 </table>
 <table class="docutils align-default">
-<colgroup>
-<col style="width: 55%" />
-<col style="width: 45%" />
-</colgroup>
 <tbody>
 <tr class="row-odd"><td><p><strong>copy</strong></p></td>
 <td></td>
@@ -384,24 +358,20 @@ It has a label, and a list containing the unique nodes.</p>
 
 <span class="target" id="module-edelweissfe.sets.elementset"></span><dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.sets.elementset.ElementSet">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.sets.elementset.</span></span><span class="sig-name descname"><span class="pre">ElementSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elements</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/elementset.html#ElementSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.elementset.ElementSet" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.sets.elementset.</span></span><span class="sig-name descname"><span class="pre">ElementSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elements</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/elementset.html#ElementSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.elementset.ElementSet" title="Link to this definition"></a></dt>
 <dd><p>A basic element set.
 It has a label, and a list containing unique elements.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>name</strong> – The unique label for this element set.</p></li>
 <li><p><strong>elements</strong> – A list of elements.</p></li>
-<li><p><strong>label</strong> (<em>str</em>) – </p></li>
+<li><p><strong>label</strong> (<em>str</em>)</p></li>
 </ul>
 </dd>
 </dl>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
-<colgroup>
-<col style="width: 10%" />
-<col style="width: 90%" />
-</colgroup>
 <tbody>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">add</span></code>(item_s)</p></td>
 <td><p>Add an item or an iterable of items to the OrderedSet</p></td>
@@ -425,7 +395,7 @@ It has a label, and a list containing unique elements.</p>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">pop</span></code>(k[,d])</p></td>
-<td><p>If key is not found, d is returned if given, otherwise KeyError is raised.</p></td>
+<td><p>value.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">popitem</span></code>()</p></td>
 <td><p>as a 2-tuple; but raise KeyError if D is empty.</p></td>
@@ -434,7 +404,7 @@ It has a label, and a list containing unique elements.</p>
 <td><p></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">update</span></code>([E, ]**F)</p></td>
-<td><p>If E present and has a .keys() method, does:     for k in E.keys(): D[k] = E[k] If E present and lacks .keys() method, does:     for (k, v) in E: D[k] = v In either case, this is followed by: for k, v in F.items(): D[k] = v</p></td>
+<td><p>If E present and has a .keys() method, does:</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">values</span></code>()</p></td>
 <td><p></p></td>
@@ -442,10 +412,6 @@ It has a label, and a list containing unique elements.</p>
 </tbody>
 </table>
 <table class="docutils align-default">
-<colgroup>
-<col style="width: 64%" />
-<col style="width: 36%" />
-</colgroup>
 <tbody>
 <tr class="row-odd"><td><p><strong>copy</strong></p></td>
 <td></td>
@@ -460,7 +426,7 @@ It has a label, and a list containing unique elements.</p>
 </table>
 </dd></dl>
 
-</div>
+</section>
 
 
            </div>

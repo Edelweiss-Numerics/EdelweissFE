@@ -15,14 +15,38 @@ Solvers
    :members:
 
 
-``NISTParallelForMarmotElements`` - Nonlinear Implicit Static (parallel)
-------------------------------------------------------------------------
+``NISTParallel`` - Nonlinear Implicit Static (parallel)
+-------------------------------------------------------
 
-.. automodule:: edelweissfe.solvers.nonlinearimplicitstaticparallelmk2
+.. automodule:: edelweissfe.solvers.nonlinearimplicitstaticparallel
    :members:
 
 ``NISTPArcLength`` - Nonlinear Implicit Static - Arc length
 -----------------------------------------------------------
 
 .. automodule:: edelweissfe.solvers.nonlinearimplicitstaticparallelarclength
+   :members:
+
+``NEST`` - Nonlinear Explicit Static
+-------------------------------------
+
+.. automodule:: edelweissfe.solvers.nonlinearexplicitstatic
+   :members:
+
+``NESTParallel`` - Nonlinear Explicit Static (parallel)
+--------------------------------------------------------
+
+.. automodule:: edelweissfe.solvers.nonlinearexplicitstaticparallel
+   :members:
+
+``NED`` - Nonlinear Explicit Dynamic
+-------------------------------------
+
+.. automodule:: edelweissfe.solvers.nonlinearexplicitdynamic
+   :members:
+
+``NEDParallel`` - Nonlinear Explicit Dynamic (parallel)
+--------------------------------------------------------
+
+.. automodule:: edelweissfe.solvers.nonlinearexplicitdynamicparallel
    :members:

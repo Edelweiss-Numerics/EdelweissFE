@@ -1,24 +1,21 @@
+
+
 <!DOCTYPE html>
-<html class="writer-html5" lang="en">
+<html class="writer-html5" lang="en" data-content_root="../../../">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>edelweissfe.steps.adaptivestep &mdash; EdelweissFE v22.07 documentation</title>
-      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css" />
-      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css" />
-      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
 
   
-  <!--[if lt IE 9]>
-    <script src="../../../_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
-        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
-        <script src="../../../_static/jquery.js"></script>
-        <script src="../../../_static/underscore.js"></script>
-        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
-        <script src="../../../_static/doctools.js"></script>
-        <script src="../../../_static/sphinx_highlight.js"></script>
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" /> 
@@ -113,35 +110,51 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.caseinsensitivedict</span><span class="w"> </span><span class="kn">import</span> <span class="n">CaseInsensitiveDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.fieldoutput</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldOutputController</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.inputlanguage</span><span class="w"> </span><span class="kn">import</span> <span class="n">InputLanguage</span><span class="p">,</span> <span class="n">Module</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.misc</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">caseInsensitiveKwargsChecker</span><span class="p">,</span>
+    <span class="n">castKwargsValuesAndAddDefaults</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">module</span> <span class="o">=</span> <span class="n">Module</span><span class="p">(</span><span class="s2">&quot;adaptive&quot;</span><span class="p">,</span> <span class="s2">&quot;A standard adaptive incremental step to be used in nonlinear simulations.&quot;</span><span class="p">)</span>
+
+<span class="n">inputLanguage</span> <span class="o">=</span> <span class="n">InputLanguage</span><span class="p">()</span>
+
+<span class="n">keyword</span> <span class="o">=</span> <span class="s2">&quot;step&quot;</span>
+<span class="k">if</span> <span class="n">keyword</span> <span class="ow">in</span> <span class="n">inputLanguage</span><span class="p">:</span>
+    <span class="n">inputLanguage</span><span class="p">[</span><span class="n">keyword</span><span class="p">]</span><span class="o">.</span><span class="n">addModule</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="AdaptiveStep"><a class="viewcode-back" href="../../../documentation/steps.html#edelweissfe.steps.adaptivestep.AdaptiveStep">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">AdaptiveStep</span><span class="p">(</span><span class="n">StepBase</span><span class="p">):</span>
+<span class="n">kw</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;stepLength&quot;</span><span class="p">,</span> <span class="s2">&quot;The durcation of the step.&quot;</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+<span class="n">kw</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;startInc&quot;</span><span class="p">,</span> <span class="s2">&quot;The initial fraction of the step to be computed.&quot;</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+<span class="n">kw</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;maxInc&quot;</span><span class="p">,</span> <span class="s2">&quot;The maximal fraction of the step to be computed.&quot;</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+<span class="n">kw</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;minInc&quot;</span><span class="p">,</span> <span class="s2">&quot;The minimal fraction of the step to be computed.&quot;</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="mf">1e-4</span><span class="p">)</span>
+<span class="n">kw</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;maxNumInc&quot;</span><span class="p">,</span> <span class="s2">&quot;The maximal number of increments allowed.&quot;</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)</span>
+<span class="n">kw</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;maxIter&quot;</span><span class="p">,</span> <span class="s2">&quot;The maximal number of iterations allowed.&quot;</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+<span class="n">kw</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span>
+    <span class="s2">&quot;criticalIter&quot;</span><span class="p">,</span> <span class="s2">&quot;The number of critical iterations after which the next increment is reduced.&quot;</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="mi">5</span>
+<span class="p">)</span>
+<span class="n">kw</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;maxGrowIter&quot;</span><span class="p">,</span> <span class="s2">&quot;The number of residual growths before the increment is discarded.&quot;</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+<span class="n">kw</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span>
+    <span class="s2">&quot;cutbackFactor&quot;</span><span class="p">,</span> <span class="s2">&quot;Factor by which the increment size is reduced if no convergence was achieved.&quot;</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="mf">0.25</span>
+<span class="p">)</span>
+
+<span class="n">required</span> <span class="o">=</span> <span class="p">[</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">requiredArgs</span><span class="p">]</span>
+<span class="n">required</span> <span class="o">+=</span> <span class="p">[</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">requiredKeywords</span><span class="p">]</span>
+
+<span class="n">optional</span> <span class="o">=</span> <span class="p">[</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">optionalArgs</span><span class="p">]</span>
+<span class="n">optional</span> <span class="o">+=</span> <span class="p">[</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">optionalKeywords</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="AdaptiveStep">
+<a class="viewcode-back" href="../../../documentation/steps.html#edelweissfe.steps.adaptivestep.AdaptiveStep">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">AdaptiveStep</span><span class="p">(</span><span class="n">StepBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    A standard adaptive incremental step to be used in nonlinear simulations.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    number</span>
-<span class="sd">        The number of this step. For information purposes only.</span>
-<span class="sd">    starTime</span>
-<span class="sd">        The start time of the step.</span>
-<span class="sd">    definition</span>
-<span class="sd">        A dictionary holding key/value pairs for defintion</span>
-<span class="sd">    stepActions</span>
-<span class="sd">        The collection of actions for this step.</span>
-<span class="sd">    journal</span>
-<span class="sd">        The journal object for logging.</span>
+<span class="sd">    An adaptive incremental step to be used in nonlinear simulations with implicit time integration.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">defaultStartInc</span> <span class="o">=</span> <span class="mf">1.0</span>
-    <span class="n">defaultMaxInc</span> <span class="o">=</span> <span class="mf">1.0</span>
-    <span class="n">defaultMinInc</span> <span class="o">=</span> <span class="mf">1e-4</span>
-    <span class="n">defaultMaxNumInc</span> <span class="o">=</span> <span class="mi">1000</span>
-    <span class="n">defaultMaxIter</span> <span class="o">=</span> <span class="mi">10</span>
-    <span class="n">defaultCriticalIter</span> <span class="o">=</span> <span class="mi">5</span>
-    <span class="n">defaultMaxGrowingIter</span> <span class="o">=</span> <span class="mi">10</span>
-    <span class="n">defaultCutbackFactor</span> <span class="o">=</span> <span class="mf">0.25</span>
-
+    <span class="nd">@caseInsensitiveKwargsChecker</span><span class="p">(</span><span class="n">required</span><span class="p">,</span> <span class="n">optional</span><span class="p">)</span>
+    <span class="nd">@castKwargsValuesAndAddDefaults</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">number</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
@@ -164,28 +177,14 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">outputManagers</span> <span class="o">=</span> <span class="n">outputManagers</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">length</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stepLength&quot;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>  <span class="c1">#: The durcation of the step.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">startIncrementSize</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="s2">&quot;startInc&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">defaultStartInc</span>
-        <span class="p">)</span>  <span class="c1">#: The initial fraction of the step to be computed.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">maxIncrementSize</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="s2">&quot;maxInc&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">defaultMaxInc</span>
-        <span class="p">)</span>  <span class="c1">#: The maximal fraction of the step to be computed.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">minIncrementSize</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="s2">&quot;minInc&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">defaultMinInc</span>
-        <span class="p">)</span>  <span class="c1">#: The minimal fraction of the step to be computed.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">maxNumberIncrements</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="s2">&quot;maxNumInc&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">defaultMaxNumInc</span>
-        <span class="p">)</span>  <span class="c1">#: The maximal number of increments allowed.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">maxIter</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;maxIter&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">defaultMaxIter</span><span class="p">)</span>  <span class="c1">#: The maximal number of iterations allowed.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">criticalIter</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="s2">&quot;criticalIter&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">defaultCriticalIter</span>
-        <span class="p">)</span>  <span class="c1">#: The number of critical iterations after which the next increment is reduced.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">maxGrowIter</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="s2">&quot;maxGrowIter&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">defaultMaxGrowingIter</span>
-        <span class="p">)</span>  <span class="c1">#: The number of residual growths before the increment is discarded.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">cutbackFactor</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="s2">&quot;cutbackFactor&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">defaultCutbackFactor</span>
-        <span class="p">)</span>  <span class="c1">#: Factor by which the increment size is reduced if no convergence was achieved.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">startIncrementSize</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;startInc&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maxIncrementSize</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;maxInc&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">minIncrementSize</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;minInc&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maxNumberIncrements</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;maxNumInc&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maxIter</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;maxIter&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">criticalIter</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;criticalIter&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maxGrowIter</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;maxGrowIter&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cutbackFactor</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;cutbackFactor&quot;</span><span class="p">]</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">incrementGenerator</span> <span class="o">=</span> <span class="n">AdaptiveTimeStepper</span><span class="p">(</span>
             <span class="n">model</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
@@ -199,7 +198,9 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">actions</span> <span class="o">=</span> <span class="n">stepActions</span>
 
-<div class="viewcode-block" id="AdaptiveStep.solve"><a class="viewcode-back" href="../../../documentation/steps.html#edelweissfe.steps.adaptivestep.AdaptiveStep.solve">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">solve</span><span class="p">(</span>
+<div class="viewcode-block" id="AdaptiveStep.solve">
+<a class="viewcode-back" href="../../../documentation/steps.html#edelweissfe.steps.adaptivestep.AdaptiveStep.solve">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">solve</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
@@ -222,6 +223,7 @@
             <span class="k">for</span> <span class="n">manager</span> <span class="ow">in</span> <span class="n">outputManagers</span><span class="p">:</span>
                 <span class="n">manager</span><span class="o">.</span><span class="n">finalizeStep</span><span class="p">()</span></div>
 
+
     <span class="k">def</span><span class="w"> </span><span class="nf">getTimeStep</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TimeStep</span><span class="p">:</span>
@@ -234,6 +236,7 @@
         <span class="bp">self</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">incrementGenerator</span><span class="o">.</span><span class="n">preventIncrementIncrease</span><span class="p">()</span></div>
+
 </pre></div>
 
            </div>

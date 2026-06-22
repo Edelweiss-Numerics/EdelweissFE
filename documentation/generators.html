@@ -1,24 +1,22 @@
+
+
 <!DOCTYPE html>
-<html class="writer-html5" lang="en">
+<html class="writer-html5" lang="en" data-content_root="../">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Generators &mdash; EdelweissFE v22.07 documentation</title>
-      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
-      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css" />
-      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=37fbe429" />
 
   
-  <!--[if lt IE 9]>
-    <script src="../_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
-        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
-        <script src="../_static/jquery.js"></script>
-        <script src="../_static/underscore.js"></script>
-        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
-        <script src="../_static/doctools.js"></script>
-        <script src="../_static/sphinx_highlight.js"></script>
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -70,6 +68,8 @@
 <li class="toctree-l3"><a class="reference internal" href="#pipegen-a-3d-pipe-mesh-generator"><code class="docutils literal notranslate"><span class="pre">pipegen</span></code> - A 3D pipe mesh generator</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#cubit-a-cubit-mesh-generator"><code class="docutils literal notranslate"><span class="pre">cubit</span></code> - A cubit mesh generator</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#findclosestnode-find-the-closest-node"><code class="docutils literal notranslate"><span class="pre">findclosestnode</span></code> - Find the closest node</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cuboidlatticegenerator-a-cuboid-lattice-mesh-generator"><code class="docutils literal notranslate"><span class="pre">cuboidlatticegenerator</span></code> - A cuboid lattice mesh generator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#microstructuregenerator-a-unit-cell-based-microstructure-mesh-generator"><code class="docutils literal notranslate"><span class="pre">microstructuregenerator</span></code> - A unit-cell-based microstructure mesh generator</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#executepythoncode-script-model-generation-using-python"><code class="docutils literal notranslate"><span class="pre">executepythoncode</span></code> - Script model generation using Python</a></li>
 </ul>
 </li>
@@ -117,14 +117,14 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <div class="section" id="generators">
-<h1>Generators<a class="headerlink" href="#generators" title="Permalink to this heading"></a></h1>
+  <section id="generators">
+<h1>Generators<a class="headerlink" href="#generators" title="Link to this heading"></a></h1>
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.config.generators</span></code></p>
-<span class="target" id="module-edelweissfe.config.generators"></span><p>Mesh generators are used to create meshes,
+<p id="module-edelweissfe.config.generators">Mesh generators are used to create meshes,
 using different methods.</p>
 <p>Keyword: <code class="docutils literal notranslate"><span class="pre">*generator</span></code></p>
 <div class="literal-block-wrapper docutils container" id="id1">
-<div class="code-block-caption"><span class="caption-text">Example:</span><a class="headerlink" href="#id1" title="Permalink to this code"></a></div>
+<div class="code-block-caption"><span class="caption-text">Example:</span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*modelGenerator</span>,<span class="nv"> generator</span><span class="ow">=</span><span class="m">theGeneratorType</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">myGeneratorName</span>
     multiple lines of defintion ...
     multiple lines of defintion ...
@@ -132,10 +132,10 @@ using different methods.</p>
 </pre></div>
 </div>
 </div>
-<div class="section" id="boxgen-a-3d-box-mesh-generator">
-<h2><code class="docutils literal notranslate"><span class="pre">boxgen</span></code> - A 3D box mesh generator<a class="headerlink" href="#boxgen-a-3d-box-mesh-generator" title="Permalink to this heading"></a></h2>
+<section id="boxgen-a-3d-box-mesh-generator">
+<h2><code class="docutils literal notranslate"><span class="pre">boxgen</span></code> - A 3D box mesh generator<a class="headerlink" href="#boxgen-a-3d-box-mesh-generator" title="Link to this heading"></a></h2>
 <p>Relevant module <code class="docutils literal notranslate"><span class="pre">edelweissfe.generators.boxgen</span></code></p>
-<span class="target" id="module-edelweissfe.generators.boxgen"></span><p>A mesh generator for cuboid geometries and structured hex meshes:</p>
+<p id="module-edelweissfe.generators.boxgen">A mesh generator for cuboid geometries and structured hex meshes:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">                 __ __ __ __</span>
 <span class="go">               /__/__/__/__/|    A                               back</span>
 <span class="go">              /__/__/__/__/ |    |                           top /</span>
@@ -155,7 +155,7 @@ using different methods.</p>
 elSets : ‘name’_centralFrontToBack, _shearBandFrontToBack, _shearBandCenterFrontToBack
 are automatically generated</p>
 <div class="literal-block-wrapper docutils container" id="id2">
-<div class="code-block-caption"><span class="caption-text">Generate meshes on the fly. Example:</span><a class="headerlink" href="#id2" title="Permalink to this code"></a></div>
+<div class="code-block-caption"><span class="caption-text">Generate meshes on the fly. Example:</span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*job</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">job</span>,<span class="nv"> domain</span><span class="ow">=</span><span class="m">3d</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NIST</span>
 
 <span class="k">*modelGenerator</span>,<span class="nv"> generator</span><span class="ow">=</span><span class="m">boxGen</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">gen</span>
@@ -170,51 +170,62 @@ are automatically generated</p>
 </div>
 </div>
 <table class="docutils align-default" id="id3">
-<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id3" title="Permalink to this table"></a></caption>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id3" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type / Default</p></th>
 <th class="head"><p>Description</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">x0</span></code></td>
-<td><p>(optional) origin at x axis</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">elType</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>Element type.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">y0</span></code></td>
-<td><p>(optional) origin at y axis</p></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">x0</span></code></td>
+<td><p>float, default=0.0</p></td>
+<td><p>Origin along the x axis.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">z0</span></code></td>
-<td><p>(optional) origin at z axis</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">y0</span></code></td>
+<td><p>float, default=0.0</p></td>
+<td><p>Origin along the y axis.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">lX</span></code></td>
-<td><p>(optional) length of the body along x axis</p></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">z0</span></code></td>
+<td><p>float, default=0.0</p></td>
+<td><p>Origin along the z axis.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">lY</span></code></td>
-<td><p>(optional) length of the body along y axis</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">lX</span></code></td>
+<td><p>float, default=1.0</p></td>
+<td><p>Length of the body along the x axis.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">lZ</span></code></td>
-<td><p>(optional) length of the body along z axis</p></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">lY</span></code></td>
+<td><p>float, default=1.0</p></td>
+<td><p>Length of the body along the y axis.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">nX</span></code></td>
-<td><p>(optional) number of elements along x</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">lZ</span></code></td>
+<td><p>float, default=1.0</p></td>
+<td><p>Length of the body along the z axis.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">nY</span></code></td>
-<td><p>(optional) number of elements along y</p></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">nX</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of elements along the x axis.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">nZ</span></code></td>
-<td><p>(optional) number of elements along z</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">nY</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of elements along the y axis.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">elType</span></code></td>
-<td><p>type of element</p></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">nZ</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of elements along the z axis.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">elProvider</span></code></td>
+<td><p>str, default=None</p></td>
+<td><p>Element provider.</p></td>
 </tr>
 </tbody>
 </table>
 <div class="literal-block-wrapper docutils container" id="id4">
-<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/BoxGen/test.inp</span></code></span><a class="headerlink" href="#id4" title="Permalink to this code"></a></div>
+<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/BoxGen/test.inp</span></code></span><a class="headerlink" href="#id4" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">LinearElastic</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">myMaterial</span>
 <span class="c c-Singleline">**Isotropic</span>
 <span class="c c-Singleline">**E    nu</span>
@@ -243,32 +254,31 @@ are automatically generated</p>
 all
 
 <span class="k">*fieldOutput</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
+&gt;&gt;perNode,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>
+&gt;&gt;perElement,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
+&gt;&gt;perElement,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">ensight</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">test</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">stress</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">strain</span>
-configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
+&gt;&gt;perNode,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
+&gt;&gt;perElement,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">stress</span>
+&gt;&gt;perElement,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">strain</span>
+&gt;&gt;configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
 
-<span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">monitor</span>
+<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
+<span class="nv">maxInc</span><span class="ow">=</span><span class="m">1e0</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e0</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">100</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
+&gt;&gt;dirichlet,<span class="nv">  name</span><span class="ow">=</span><span class="m">x0u</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_left</span>,<span class="nv">      field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.</span>
+&gt;&gt;dirichlet,<span class="nv">  name</span><span class="ow">=</span><span class="m">y0u</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv">    field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0.</span>
+&gt;&gt;dirichlet,<span class="nv">  name</span><span class="ow">=</span><span class="m">z0u</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_back</span>,<span class="nv">      field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 3</span><span class="ow">=</span><span class="m">0.</span>
 
-<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>,<span class="nv"> maxInc</span><span class="ow">=</span><span class="m">1e0</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e0</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">100</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
-dirichlet,<span class="nv">  name</span><span class="ow">=</span><span class="m">x0u</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_left</span>,<span class="nv">      field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.</span>
-dirichlet,<span class="nv">  name</span><span class="ow">=</span><span class="m">y0u</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv">    field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0.</span>
-dirichlet,<span class="nv">  name</span><span class="ow">=</span><span class="m">z0u</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_back</span>,<span class="nv">      field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 3</span><span class="ow">=</span><span class="m">0.</span>
-
-dirichlet,<span class="nv">  name</span><span class="ow">=</span><span class="m">y1u</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_top</span>,<span class="nv">       field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">-5.</span>
+&gt;&gt;dirichlet,<span class="nv">  name</span><span class="ow">=</span><span class="m">y1u</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_top</span>,<span class="nv">       field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">-5.</span>
 </pre></div>
 </div>
 </div>
-</div>
-<div class="section" id="planerectquad-a-2d-plane-rectangular-mesh-generator">
-<h2><code class="docutils literal notranslate"><span class="pre">planerectquad</span></code> - A 2D plane rectangular mesh generator<a class="headerlink" href="#planerectquad-a-2d-plane-rectangular-mesh-generator" title="Permalink to this heading"></a></h2>
+</section>
+<section id="planerectquad-a-2d-plane-rectangular-mesh-generator">
+<h2><code class="docutils literal notranslate"><span class="pre">planerectquad</span></code> - A 2D plane rectangular mesh generator<a class="headerlink" href="#planerectquad-a-2d-plane-rectangular-mesh-generator" title="Link to this heading"></a></h2>
 <p>Relevant module <code class="docutils literal notranslate"><span class="pre">edelweissfe.generators.planerectquad</span></code></p>
-<span class="target" id="module-edelweissfe.generators.planerectquad"></span><p>A mesh generator, for rectangular geometries and structured quad meshes:</p>
+<p id="module-edelweissfe.generators.planerectquad">A mesh generator, for rectangular geometries and structured quad meshes:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">    &lt;-----l-----&gt;</span>
 <span class="go">     nX elements</span>
 <span class="go">     __ __ __ __</span>
@@ -286,42 +296,58 @@ dirichlet,<span class="nv">  name</span><span class="ow">=</span><span class="m"
 are automatically generated</p>
 <p>Datalines:</p>
 <table class="docutils align-default" id="id5">
-<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id5" title="Permalink to this table"></a></caption>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id5" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type / Default</p></th>
 <th class="head"><p>Description</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">x0</span></code></td>
-<td><p>(optional) origin at x axis</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">elType</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>Element type.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">y0</span></code></td>
-<td><p>(optional) origin at y axis</p></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">x0</span></code></td>
+<td><p>float, default=0.0</p></td>
+<td><p>Origin along the x axis.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">h</span></code></td>
-<td><p>(optional) height of the body</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">y0</span></code></td>
+<td><p>float, default=0.0</p></td>
+<td><p>Origin along the y axis.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">l</span></code></td>
-<td><p>(optional) length of the body</p></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">z0</span></code></td>
+<td><p>float, default=0.0</p></td>
+<td><p>Origin along the z axis.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">l</span></code></td>
+<td><p>float, default=1.0</p></td>
+<td><p>Height of the body.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">h</span></code></td>
+<td><p>float, default=1.0</p></td>
+<td><p>Length of the body.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">nX</span></code></td>
-<td><p>(optional) number of elements along x</p></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of elements along the x axis.</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">nY</span></code></td>
-<td><p>(optional) number of elements along y</p></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of elements along the y axis.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">elType</span></code></td>
-<td><p>type of element</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">nZ</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of elements along the z axis.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">elProvider</span></code></td>
+<td><p>str, default=None</p></td>
+<td><p>Element provider.</p></td>
 </tr>
 </tbody>
 </table>
 <div class="literal-block-wrapper docutils container" id="id6">
-<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/NodeForces/test.inp</span></code></span><a class="headerlink" href="#id6" title="Permalink to this code"></a></div>
+<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/NodeForces/test.inp</span></code></span><a class="headerlink" href="#id6" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">VonMises</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">mat</span>
 210000, 0.3, 550, 1000, 200, 1400
 
@@ -339,76 +365,102 @@ all
 <span class="nv">nY</span><span class="ow">=</span><span class="m">10</span>
 
 <span class="k">*fieldOutput</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">P</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">RF</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>
+&gt;&gt;perNode,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">P</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">RF</span>
+&gt;&gt;perNode,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">monitor</span>
 <span class="nv">fieldOutput</span><span class="ow">=</span><span class="m">RF</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;mean(x[:,1])&#39;</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">ensight</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">esExport</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
-configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
+&gt;&gt;perNode,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
+&gt;&gt;configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
 
-<span class="k">*step</span>,<span class="nv"> maxInc</span><span class="ow">=</span><span class="m">1e-1</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-8</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">50</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">100</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
-dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">bottom</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv">  field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0</span>
-nodeforces,<span class="nv"> name</span><span class="ow">=</span><span class="m">cloadTop</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_top</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">-50</span>
-<span class="k">*step</span>,<span class="nv"> maxInc</span><span class="ow">=</span><span class="m">1e-1</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-8</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">100</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
-nodeforces,<span class="nv"> name</span><span class="ow">=</span><span class="m">cloadTop</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_top</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">-10</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="m">sin(t*2*pi)</span>
-<span class="k">*step</span>,<span class="nv"> maxInc</span><span class="ow">=</span><span class="m">1e-1</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-8</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">100</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
-nodeforces,<span class="nv"> name</span><span class="ow">=</span><span class="m">cloadTop</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_top</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">+50</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="m">t</span>
+<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
+<span class="nv">maxInc</span><span class="ow">=</span><span class="m">1e-1</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-8</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">50</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">100</span>
+&gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">bottom</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv">  field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0</span>
+&gt;&gt;nodeforces,<span class="nv"> name</span><span class="ow">=</span><span class="m">cloadTop</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_top</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">-50</span>
+<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
+<span class="nv">maxInc</span><span class="ow">=</span><span class="m">1e-1</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-8</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">100</span>
+&gt;&gt;nodeforces,<span class="nv"> name</span><span class="ow">=</span><span class="m">cloadTop</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">-10</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="m">sin(t*2*pi)</span>
+<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
+<span class="nv">maxInc</span><span class="ow">=</span><span class="m">1e-1</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-8</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">100</span>
+&gt;&gt;nodeforces,<span class="nv"> name</span><span class="ow">=</span><span class="m">cloadTop</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">+50</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="m">t</span>
 </pre></div>
 </div>
 </div>
-</div>
-<div class="section" id="pipegen-a-3d-pipe-mesh-generator">
-<h2><code class="docutils literal notranslate"><span class="pre">pipegen</span></code> - A 3D pipe mesh generator<a class="headerlink" href="#pipegen-a-3d-pipe-mesh-generator" title="Permalink to this heading"></a></h2>
+</section>
+<section id="pipegen-a-3d-pipe-mesh-generator">
+<h2><code class="docutils literal notranslate"><span class="pre">pipegen</span></code> - A 3D pipe mesh generator<a class="headerlink" href="#pipegen-a-3d-pipe-mesh-generator" title="Link to this heading"></a></h2>
 <p>Relevant module <code class="docutils literal notranslate"><span class="pre">edelweissfe.generators.pipegen</span></code></p>
-<table class="docutils align-default" id="id7">
-<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id7" title="Permalink to this table"></a></caption>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
+<span class="target" id="module-edelweissfe.generators.pipegen"></span><table class="docutils align-default" id="id7">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id7" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type / Default</p></th>
 <th class="head"><p>Description</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">x0</span></code></td>
-<td><p>(optional) origin at x axis</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">elType</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>Element type.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">y0</span></code></td>
-<td><p>(optional) origin at y axis</p></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">x0</span></code></td>
+<td><p>float, default=0.0</p></td>
+<td><p>Origin along the x axis.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">z0</span></code></td>
-<td><p>(optional) origin at z axis</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">y0</span></code></td>
+<td><p>float, default=0.0</p></td>
+<td><p>Origin along the y axis.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">lX</span></code></td>
-<td><p>(optional) length of the body along x axis</p></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">z0</span></code></td>
+<td><p>float, default=0.0</p></td>
+<td><p>Origin along the z axis.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">lY</span></code></td>
-<td><p>(optional) length of the body along y axis</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">Ro(y)</span></code></td>
+<td><p>str, default=’1.0’</p></td>
+<td><p>Outer radius of the pipe as a function of height.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">lZ</span></code></td>
-<td><p>(optional) length of the body along z axis</p></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">Ri(y)</span></code></td>
+<td><p>str, default=’1.0’</p></td>
+<td><p>Inner radius of the pipe as a function of height.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">nX</span></code></td>
-<td><p>(optional) number of elements along x</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">lT</span></code></td>
+<td><p>float, default=0.5</p></td>
+<td><p>Thickness of the pipe.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">lY</span></code></td>
+<td><p>float, default=1.0</p></td>
+<td><p>Height of the pipe.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">phi</span></code></td>
+<td><p>float, default=360.0</p></td>
+<td><p>Total angle for the pipe sector.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">nT</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of elements along radial direction.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">nC</span></code></td>
+<td><p>int, default=4</p></td>
+<td><p>Number of elements along circumferential direction.</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">nY</span></code></td>
-<td><p>(optional) number of elements along y</p></td>
+<td><p>int, default=4</p></td>
+<td><p>Number of elements along longitudinal direction.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">nZ</span></code></td>
-<td><p>(optional) number of elements along z</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">exG</span></code></td>
+<td><p>bool, default=True</p></td>
+<td><p>Flag to place nodes on exact geometry.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">elType</span></code></td>
-<td><p>type of element</p></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">elProvider</span></code></td>
+<td><p>str, default=None</p></td>
+<td><p>Element provider.</p></td>
 </tr>
 </tbody>
 </table>
 <div class="literal-block-wrapper docutils container" id="id8">
-<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/PipeGen/test.inp</span></code></span><a class="headerlink" href="#id8" title="Permalink to this code"></a></div>
+<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/PipeGen/test.inp</span></code></span><a class="headerlink" href="#id8" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">LinearElastic</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">linearelastic</span>
 2.1e4, 0.22
 
@@ -433,69 +485,78 @@ nodeforces,<span class="nv"> name</span><span class="ow">=</span><span class="m"
 all
 
 <span class="k">*fieldOutput</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>
+&gt;&gt;perNode,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">ensight</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">test</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
-configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
+&gt;&gt;perNode,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
+&gt;&gt;configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
 
-<span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">monitor</span>
-
-<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>,<span class="nv"> maxInc</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-9</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
-options,<span class="nv"> category</span><span class="ow">=</span><span class="m">NISTSolver</span>,<span class="nv"> extrapolation</span><span class="ow">=</span><span class="m">off</span>
-dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">Bottom</span>,<span class="nv">  nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.0</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0.0</span>,<span class="nv"> 3</span><span class="ow">=</span><span class="m">.0</span>
-nodeforces,<span class="nv"> name</span><span class="ow">=</span><span class="m">cloadTop</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_inner</span>,<span class="nv"> components</span><span class="ow">=</span><span class="s">&#39;0.3, 0, 0.3&#39;</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>
+<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
+<span class="nv">maxInc</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-9</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
+&gt;&gt;options,<span class="nv"> category</span><span class="ow">=</span><span class="m">NISTSolver</span>,<span class="nv"> extrapolation</span><span class="ow">=</span><span class="m">off</span>
+&gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">Bottom</span>,<span class="nv">  nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.0</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0.0</span>,<span class="nv"> 3</span><span class="ow">=</span><span class="m">.0</span>
+&gt;&gt;nodeforces,<span class="nv"> name</span><span class="ow">=</span><span class="m">cloadTop</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_inner</span>,<span class="nv"> components</span><span class="ow">=</span><span class="s">&#39;0.3, 0, 0.3&#39;</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>
 </pre></div>
 </div>
 </div>
-</div>
-<div class="section" id="cubit-a-cubit-mesh-generator">
-<h2><code class="docutils literal notranslate"><span class="pre">cubit</span></code> - A cubit mesh generator<a class="headerlink" href="#cubit-a-cubit-mesh-generator" title="Permalink to this heading"></a></h2>
+</section>
+<section id="cubit-a-cubit-mesh-generator">
+<h2><code class="docutils literal notranslate"><span class="pre">cubit</span></code> - A cubit mesh generator<a class="headerlink" href="#cubit-a-cubit-mesh-generator" title="Link to this heading"></a></h2>
 <p>Relevant module <code class="docutils literal notranslate"><span class="pre">edelweissfe.generators.cubit</span></code></p>
-<span class="target" id="module-edelweissfe.generators.cubit"></span><p>Interface to Cubit. Generate mesh using Cubit .jou files.</p>
+<p id="module-edelweissfe.generators.cubit">Interface to Cubit. Generate mesh using Cubit .jou files.</p>
 <table class="docutils align-default" id="id9">
-<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id9" title="Permalink to this table"></a></caption>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id9" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type / Default</p></th>
 <th class="head"><p>Description</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">cubitCmd</span></code></td>
-<td><p>(Optional) Cubit executable; default=cubit</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">jouFile</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>Path to Cubit journal (.jou) file.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">jouFile</span></code></td>
-<td><p>Path to Cubit journal (.jou) file</p></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">cubitCmd</span></code></td>
+<td><p>str, default=’cubit’</p></td>
+<td><p>Cubit executable.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">outFile</span></code></td>
-<td><p>(Optional) path to output file; default=mesh.inc</p></td>
+<td><p>str, default=’mesh.inc’</p></td>
+<td><p>Path to output mesh file.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">vars</span></code></td>
-<td><p>(Optional) APREPRO variables as string ‘…’ of comma-separated &lt;key&gt;=&lt;value&gt; pairs</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">elType</span></code></td>
-<td><p>Specify element type for all sections</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">elTypePerBlock</span></code></td>
-<td><p>Specify element type for each section as string ‘…’ of comma-separated &lt;key&gt;=&lt;value&gt; pairs</p></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">APREPROVars</span></code></td>
+<td><p>str, default=None</p></td>
+<td><p>APREPRO variables as comma-separated &lt;key&gt;=&lt;value&gt; pairs.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">overwrite</span></code></td>
-<td><p>(Optional) overwrite existing outFiles; default=False</p></td>
+<td><p>bool, default=True</p></td>
+<td><p>Overwrite existing output files.</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">runCubit</span></code></td>
-<td><p>(Optional) run Cubit GUI for debugging purposes; default=False</p></td>
+<td><p>bool, default=False</p></td>
+<td><p>Run Cubit GUI for debugging purposes.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">silent</span></code></td>
-<td><p>(Optional) hide Cubit output; default=False</p></td>
+<td><p>bool, default=False</p></td>
+<td><p>Hide Cubit output.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">elType</span></code></td>
+<td><p>str, default=None</p></td>
+<td><p>Specify element type for all sections.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">elTypePerBlock</span></code></td>
+<td><p>str, default=None</p></td>
+<td><p>Specify element type per block as comma-separated &lt;key&gt;=&lt;value&gt; pairs.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">elProvider</span></code></td>
+<td><p>str, default=None</p></td>
+<td><p>Element provider.</p></td>
 </tr>
 </tbody>
 </table>
 <div class="literal-block-wrapper docutils container" id="id10">
-<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/CubitGen/test.inp</span></code></span><a class="headerlink" href="#id10" title="Permalink to this code"></a></div>
+<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/CubitGen/test.inp</span></code></span><a class="headerlink" href="#id10" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">LINEARELASTIC</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">mat1</span>
  35000, 0.2
 
@@ -523,68 +584,323 @@ block2
 <span class="k">*solver</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NISTParallel</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">theSolver</span>
 
 <span class="k">*fieldOutput</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv">  name</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv">  field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv">  name</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv">        result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv">      quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv">  name</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv">        result</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv">      quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
+&gt;&gt;perNode,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv">  name</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv">  field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>
+&gt;&gt;perElement,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv">  name</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv">        result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv">      quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
+&gt;&gt;perElement,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv">  name</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv">        result</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv">      quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">ensight</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">esExport</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv">     fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv">  fieldOutput</span><span class="ow">=</span><span class="m">stress</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv">  fieldOutput</span><span class="ow">=</span><span class="m">strain</span>
-configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
+&gt;&gt;perNode,<span class="nv">     fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
+&gt;&gt;perElement,<span class="nv">  fieldOutput</span><span class="ow">=</span><span class="m">stress</span>
+&gt;&gt;perElement,<span class="nv">  fieldOutput</span><span class="ow">=</span><span class="m">strain</span>
+&gt;&gt;configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
 
-<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>,<span class="nv"> maxInc</span><span class="ow">=</span><span class="m">5e-1</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-8</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
-dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">bot</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">n_bot</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0.</span>,<span class="nv"> 3</span><span class="ow">=</span><span class="m">0.</span>
-dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">top</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">n_top</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">-1.</span>,<span class="nv"> 3</span><span class="ow">=</span><span class="m">0.</span>
+<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
+<span class="nv">maxInc</span><span class="ow">=</span><span class="m">5e-1</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-8</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
+&gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">bot</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">n_bot</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0.</span>,<span class="nv"> 3</span><span class="ow">=</span><span class="m">0.</span>
+&gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">top</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">n_top</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">-1.</span>,<span class="nv"> 3</span><span class="ow">=</span><span class="m">0.</span>
 </pre></div>
 </div>
 </div>
-</div>
-<div class="section" id="findclosestnode-find-the-closest-node">
-<h2><code class="docutils literal notranslate"><span class="pre">findclosestnode</span></code> - Find the closest node<a class="headerlink" href="#findclosestnode-find-the-closest-node" title="Permalink to this heading"></a></h2>
+</section>
+<section id="findclosestnode-find-the-closest-node">
+<h2><code class="docutils literal notranslate"><span class="pre">findclosestnode</span></code> - Find the closest node<a class="headerlink" href="#findclosestnode-find-the-closest-node" title="Link to this heading"></a></h2>
 <p>Relevant module <code class="docutils literal notranslate"><span class="pre">edelweissfe.generators.findclosestnode</span></code></p>
-<span class="target" id="module-edelweissfe.generators.findclosestnode"></span><p>Find the node closest to a given spatial position, and store it in an existing or new node set.</p>
+<p id="module-edelweissfe.generators.findclosestnode">Find the node closest to a given spatial position, and store it in an existing or new node set.</p>
 <table class="docutils align-default" id="id11">
-<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id11" title="Permalink to this table"></a></caption>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id11" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type / Default</p></th>
 <th class="head"><p>Description</p></th>
 </tr>
 </thead>
 <tbody>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">location</span></code></td>
-<td><p>The location of the node</p></td>
+<td><p>str (required)</p></td>
+<td><p>Query point.</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">storeIn</span></code></td>
-<td><p>Store in this node set</p></td>
+<td><p>str (required)</p></td>
+<td><p>Node set to store closest node in.</p></td>
 </tr>
 </tbody>
 </table>
+</section>
+<section id="cuboidlatticegenerator-a-cuboid-lattice-mesh-generator">
+<h2><code class="docutils literal notranslate"><span class="pre">cuboidlatticegenerator</span></code> - A cuboid lattice mesh generator<a class="headerlink" href="#cuboidlatticegenerator-a-cuboid-lattice-mesh-generator" title="Link to this heading"></a></h2>
+<p>Relevant module <code class="docutils literal notranslate"><span class="pre">edelweissfe.generators.cuboidlatticegenerator</span></code></p>
+<p id="module-edelweissfe.generators.cuboidlatticegenerator">A mesh generator for generating cuboid lattice structure.
+The following unit cell is generted and then replicated in x, y, and z direction:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">     +---------------+</span>
+<span class="go">    /  +---------+  /|</span>
+<span class="go">   /  /         /  / |</span>
+<span class="go">  /  /         /  /  |</span>
+<span class="go"> /  +---------+  /  +|</span>
+<span class="go">+---------------+  /||</span>
+<span class="go">|               | + ||</span>
+<span class="go">|  +---------+  | | ||</span>
+<span class="go">|  |         |  | | +|</span>
+<span class="go">|  |         |  | |/ +</span>
+<span class="go">|  |         |  | + /</span>
+<span class="go">|  |         |  |  /</span>
+<span class="go">|  +---------+  | /</span>
+<span class="go">|               |/</span>
+<span class="go">+---------------+</span>
+</pre></div>
 </div>
-<div class="section" id="executepythoncode-script-model-generation-using-python">
-<h2><code class="docutils literal notranslate"><span class="pre">executepythoncode</span></code> - Script model generation using Python<a class="headerlink" href="#executepythoncode-script-model-generation-using-python" title="Permalink to this heading"></a></h2>
-<p>Relevant module <code class="docutils literal notranslate"><span class="pre">edelweissfe.generators.executepythoncode</span></code></p>
-<span class="target" id="module-edelweissfe.generators.executepythoncode"></span><p>Directly execute Python code to create the model tree.</p>
+<p>After generating the unit cell mesh the microstructure generator is used
+to replicate the unit cell mesh in x, y, and z direction.</p>
+<p class="rubric">Example</p>
+<p>Generate meshes on the fly using the following syntax:</p>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*job</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">job</span>,<span class="nv"> domain</span><span class="ow">=</span><span class="m">2d</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NIST</span>
+
+<span class="k">*modelGenerator</span>,<span class="nv"> generator</span><span class="ow">=</span><span class="m">cuboidlatticegenerator</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">gen</span>
+<span class="nv">    lX</span><span class="ow">=</span><span class="m">4</span>
+<span class="nv">    lY</span><span class="ow">=</span><span class="m">8</span>
+<span class="nv">    lZ</span><span class="ow">=</span><span class="m">2</span>
+<span class="nv">    nEleX</span><span class="ow">=</span><span class="m">8</span>
+<span class="nv">    nEleY</span><span class="ow">=</span><span class="m">16</span>
+<span class="nv">    nEleZ</span><span class="ow">=</span><span class="m">4</span>
+<span class="nv">    nEleStrutX</span><span class="ow">=</span><span class="m">2</span>
+<span class="nv">    nEleStrutY</span><span class="ow">=</span><span class="m">4</span>
+<span class="nv">    nEleStrutZ</span><span class="ow">=</span><span class="m">1</span>
+<span class="nv">    nX</span><span class="ow">=</span><span class="m">3</span>
+<span class="nv">    nY</span><span class="ow">=</span><span class="m">4</span>
+<span class="nv">    nZ</span><span class="ow">=</span><span class="m">2</span>
+</pre></div>
+</div>
 <table class="docutils align-default" id="id12">
-<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id12" title="Permalink to this table"></a></caption>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id12" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type / Default</p></th>
 <th class="head"><p>Description</p></th>
 </tr>
 </thead>
 <tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">elType</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>Element type.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">lX</span></code></td>
+<td><p>float, default=1.0</p></td>
+<td><p>Length of the body along the x axis.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">lY</span></code></td>
+<td><p>float, default=1.0</p></td>
+<td><p>Length of the body along the y axis.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">lZ</span></code></td>
+<td><p>float, default=1.0</p></td>
+<td><p>Length of the body along the z axis.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">nEleX</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of elements along the x axis.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">nEleY</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of elements along the y axis.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">nEleZ</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of elements along the z axis.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">nEleStrutX</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of in struts along the x axis.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">nEleStrutY</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of in struts along the y axis.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">nEleStrutZ</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of in struts along the z axis.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">nX</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of replications along the x axis.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">nY</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of replications along the y axis.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">nZ</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of replications along the z axis.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">elProvider</span></code></td>
+<td><p>str, default=None</p></td>
+<td><p>Element provider.</p></td>
+</tr>
 </tbody>
 </table>
 <div class="literal-block-wrapper docutils container" id="id13">
-<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/PythonCodeModelGeneration/test.inp</span></code></span><a class="headerlink" href="#id13" title="Permalink to this code"></a></div>
+<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/edelweiss-only/CuboidLatticeGenerator/test.inp</span></code></span><a class="headerlink" href="#id13" title="Link to this code"></a></div>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*modelGenerator</span>,<span class="nv"> generator</span><span class="ow">=</span><span class="m">cuboidlatticegenerator</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">gen</span>
+<span class="nv">lX</span><span class="ow">=</span><span class="m">5</span>
+<span class="nv">lY</span><span class="ow">=</span><span class="m">5</span>
+<span class="nv">lZ</span><span class="ow">=</span><span class="m">5</span>
+<span class="nv">nEleX</span><span class="ow">=</span><span class="m">5</span>
+<span class="nv">nEleY</span><span class="ow">=</span><span class="m">5</span>
+<span class="nv">nEleZ</span><span class="ow">=</span><span class="m">5</span>
+<span class="nv">nEleStrutX</span><span class="ow">=</span><span class="m">2</span>
+<span class="nv">nEleStrutY</span><span class="ow">=</span><span class="m">2</span>
+<span class="nv">nEleStrutZ</span><span class="ow">=</span><span class="m">2</span>
+<span class="nv">nX</span><span class="ow">=</span><span class="m">1</span>
+<span class="nv">nY</span><span class="ow">=</span><span class="m">2</span>
+<span class="nv">nZ</span><span class="ow">=</span><span class="m">1</span>
+<span class="nv">elType</span><span class="ow">=</span><span class="m">C3D8TL</span>
+<span class="nv">elProvider</span><span class="ow">=</span><span class="m">edelweiss</span>
+
+<span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">neohookewb</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">myMaterial</span>,<span class="nv"> provider</span><span class="ow">=</span><span class="m">edelweiss</span>
+10, 0.47
+
+<span class="k">*section</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">section1</span>,<span class="nv"> material</span><span class="ow">=</span><span class="m">myMaterial</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">solid</span>
+all
+
+<span class="k">*job</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">myJob</span>,<span class="nv"> domain</span><span class="ow">=</span><span class="m">3d</span>
+<span class="k">*solver</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NIST</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">theSolver</span>
+
+<span class="k">*modelGenerator</span>,<span class="nv"> generator</span><span class="ow">=</span><span class="m">findClosestNode</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">gen3</span>
+<span class="nv">location</span><span class="ow">=</span><span class="s">&#39;5, 15, 5&#39;</span>
+<span class="nv">storeIn</span><span class="ow">=</span><span class="m">topRP</span>
+
+<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
+<span class="nv">maxInc</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-3</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">100</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">180</span>
+<span class="c c-Singleline">** initializematerial, name=init, elSet=all</span>
+&gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv">       field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0</span>,<span class="nv"> 3</span><span class="ow">=</span><span class="m">0</span>
+&gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">4</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_top</span>,<span class="nv">       field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 3</span><span class="ow">=</span><span class="m">0.1</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0</span>
+
+<span class="k">*fieldOutput</span>
+&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv">       elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:3</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
+
+<span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">ensight</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">myEnsightOutput</span>
+&gt;&gt;perNode,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
+&gt;&gt;configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="microstructuregenerator-a-unit-cell-based-microstructure-mesh-generator">
+<h2><code class="docutils literal notranslate"><span class="pre">microstructuregenerator</span></code> - A unit-cell-based microstructure mesh generator<a class="headerlink" href="#microstructuregenerator-a-unit-cell-based-microstructure-mesh-generator" title="Link to this heading"></a></h2>
+<p>Relevant module <code class="docutils literal notranslate"><span class="pre">edelweissfe.generators.microstructuregenerator</span></code></p>
+<p id="module-edelweissfe.generators.microstructuregenerator">A mesh generator for generating a structure from a single unit cell mesh:
+The unit cell mesh must be readable by meshio (e.g., in .inp format).</p>
+<div class="literal-block-wrapper docutils container" id="id14">
+<div class="code-block-caption"><span class="caption-text">Generate meshes on the fly. Example:</span><a class="headerlink" href="#id14" title="Link to this code"></a></div>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*job</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">job</span>,<span class="nv"> domain</span><span class="ow">=</span><span class="m">2d</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NIST</span>
+
+<span class="k">*modelGenerator</span>,<span class="nv"> generator</span><span class="ow">=</span><span class="m">microstructuregenerator</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">gen</span>
+<span class="nv">    unitCellMeshFile </span><span class="ow">=</span><span class="m"> myUnitCellMesh.inp</span>
+<span class="nv">    nX      </span><span class="ow">=</span><span class="m">4</span>
+<span class="nv">    nY      </span><span class="ow">=</span><span class="m">8</span>
+<span class="nv">    nZ      </span><span class="ow">=</span><span class="m">2</span>
+</pre></div>
+</div>
+</div>
+<table class="docutils align-default" id="id15">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id15" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type / Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">elType</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>Element type.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">unitCellMeshFile</span></code></td>
+<td><p>str, default=None</p></td>
+<td><p>Path to the unit cell mesh file.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">nX</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of cells along the x axis.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">nY</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of cells along the y axis.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">nZ</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>Number of cells along the z axis.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">elProvider</span></code></td>
+<td><p>str, default=None</p></td>
+<td><p>Element provider.</p></td>
+</tr>
+</tbody>
+</table>
+<div class="literal-block-wrapper docutils container" id="id16">
+<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/edelweiss-only/MicrostructureGenerator/test.inp</span></code></span><a class="headerlink" href="#id16" title="Link to this code"></a></div>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*modelGenerator</span>,<span class="nv"> generator</span><span class="ow">=</span><span class="m">microstructuregenerator</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">gen</span>
+<span class="nv">unitCellMeshFile</span><span class="ow">=</span><span class="m">mesh_quadratic.inp</span>,
+<span class="nv">nX</span><span class="ow">=</span><span class="m">2</span>,
+<span class="nv">nY</span><span class="ow">=</span><span class="m">2</span>,
+<span class="nv">nZ</span><span class="ow">=</span><span class="m">1</span>,
+<span class="nv">elType</span><span class="ow">=</span><span class="m">CPE8R</span>,
+<span class="nv">elProvider</span><span class="ow">=</span><span class="m">edelweiss</span>
+
+<span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">LINEARELASTIC</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">myMaterial</span>,<span class="nv"> provider</span><span class="ow">=</span><span class="m">edelweiss</span>
+100, 3
+
+<span class="k">*section</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">section1</span>,<span class="nv"> material</span><span class="ow">=</span><span class="m">myMaterial</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">plane</span>,<span class="nv"> thickness</span><span class="ow">=</span><span class="m">1.0</span>
+<span class="c c-Singleline">** element set &#39;all&#39; is automatically created</span>
+<span class="c c-Singleline">** we could also use the set &#39;theOnlyElement&#39;</span>
+all
+
+<span class="k">*job</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">mySingleElementJob</span>,<span class="nv"> domain</span><span class="ow">=</span><span class="m">2d</span>
+<span class="k">*solver</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NIST</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">theSolver</span>
+
+<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
+<span class="nv">maxInc</span><span class="ow">=</span><span class="m">1e0</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-1</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">100</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
+&gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_top</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0</span>
+&gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">2</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0</span>
+
+<span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">meshdatatofile</span>
+<span class="nv">filename</span><span class="ow">=</span><span class="m">5x5mesh_quadratic.inp</span>
+
+<span class="k">*fieldOutput</span>
+<span class="c c-Singleline">** The results we are interested in</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:3</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
+&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>
+&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">reactionForces</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">P</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.sum(x[:,1])&#39;</span>,<span class="nv"> saveHistory</span><span class="ow">=</span><span class="m">True</span>,<span class="nv"> export</span><span class="ow">=</span><span class="m">RF</span>
+
+<span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">ensight</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">myEnsightOutput</span>
+<span class="c c-Singleline">** For visualization in Paraview etc.</span>
+&gt;&gt;perNode,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
+&gt;&gt;perElement,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">stress</span>
+&gt;&gt;configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="executepythoncode-script-model-generation-using-python">
+<h2><code class="docutils literal notranslate"><span class="pre">executepythoncode</span></code> - Script model generation using Python<a class="headerlink" href="#executepythoncode-script-model-generation-using-python" title="Link to this heading"></a></h2>
+<p>Relevant module <code class="docutils literal notranslate"><span class="pre">edelweissfe.generators.executepythoncode</span></code></p>
+<p id="module-edelweissfe.generators.executepythoncode">Directly execute Python code to create the model tree.</p>
+<table class="docutils align-default" id="id17">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id17" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type / Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">datalines</span></code></td>
+<td><p>&lt;class ‘str’&gt; (required)</p></td>
+<td><p>Python code to run</p></td>
+</tr>
+</tbody>
+</table>
+<div class="literal-block-wrapper docutils container" id="id18">
+<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/PythonCodeModelGeneration/test.inp</span></code></span><a class="headerlink" href="#id18" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*modelGenerator</span>,<span class="nv"> generator</span><span class="ow">=</span><span class="m">planeRectQuad</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">gen</span>
 <span class="nv">elType</span><span class="ow">=</span><span class="m">CPS8R</span>
 <span class="nv">nX</span><span class="ow">=</span><span class="m">20</span>
@@ -608,29 +924,30 @@ all
 <span class="k">*solver</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NIST</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">theSolver</span>
 
 <span class="k">*fieldOutput</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,
-<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">RF</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">P</span>,
-<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:4</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;mean(x, axis=1)&#39;</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:4</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;mean(x, axis=1)&#39;</span>
+&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,
+&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">RF</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">P</span>,
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:4</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;mean(x, axis=1)&#39;</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:4</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;mean(x, axis=1)&#39;</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">monitor</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">theMonitor</span>
 <span class="nv">fieldOutput </span><span class="ow">=</span><span class="m"> RF</span>,<span class="nv"> f(x) </span><span class="ow">=</span><span class="s"> &#39;sum ( x, axis=0 )&#39;</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">ensight</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">ensightExport</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">stress</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perElement</span>,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">strain</span>
-configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
+&gt;&gt;perNode,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
+&gt;&gt;perElement,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">stress</span>
+&gt;&gt;perElement,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">strain</span>
+&gt;&gt;configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
 
-<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>,<span class="nv"> maxInc</span><span class="ow">=</span><span class="m">1e-1</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-5</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
-options,<span class="nv"> category</span><span class="ow">=</span><span class="m">NISTSolver</span>,<span class="nv"> extrapolation</span><span class="ow">=</span><span class="m">linear</span>
-dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">bottom</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.0</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0.0</span>
-dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">load</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">center_horizontal</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">5.0</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">5.0</span>
+<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
+<span class="nv">maxInc</span><span class="ow">=</span><span class="m">1e-1</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-5</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
+&gt;&gt;options,<span class="nv"> category</span><span class="ow">=</span><span class="m">NISTSolver</span>,<span class="nv"> extrapolation</span><span class="ow">=</span><span class="m">linear</span>
+&gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">bottom</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.0</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0.0</span>
+&gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">load</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">center_horizontal</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">5.0</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">5.0</span>
 </pre></div>
 </div>
 </div>
-</div>
-</div>
+</section>
+</section>
 
 
            </div>

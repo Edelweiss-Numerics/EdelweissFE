@@ -1,24 +1,21 @@
+
+
 <!DOCTYPE html>
-<html class="writer-html5" lang="en">
+<html class="writer-html5" lang="en" data-content_root="../../../../">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>edelweissfe.materials.linearelastic.linearelastic &mdash; EdelweissFE v22.07 documentation</title>
-      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css" />
-      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css" />
-      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
 
   
-  <!--[if lt IE 9]>
-    <script src="../../../../_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
-        <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
-        <script src="../../../../_static/jquery.js"></script>
-        <script src="../../../../_static/underscore.js"></script>
-        <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
-        <script src="../../../../_static/doctools.js"></script>
-        <script src="../../../../_static/sphinx_highlight.js"></script>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" /> 
@@ -111,7 +108,9 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.materials.base.basehypoelasticmaterial</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseHypoElasticMaterial</span>
 
 
-<div class="viewcode-block" id="LinearElasticMaterial"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">LinearElasticMaterial</span><span class="p">(</span><span class="n">BaseHypoElasticMaterial</span><span class="p">):</span>
+<div class="viewcode-block" id="LinearElasticMaterial">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LinearElasticMaterial</span><span class="p">(</span><span class="n">BaseHypoElasticMaterial</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Linear elastic material for 2D and 3D cases.</span>
 
 <span class="sd">    Parameters</span>
@@ -119,14 +118,16 @@
 <span class="sd">    materialProperties</span>
 <span class="sd">        The numpy array containing the material properties.</span>
 
-<span class="sd">    Material properties</span>
-<span class="sd">    -------------------</span>
-<span class="sd">    E</span>
-<span class="sd">        Elasticity module (Young&#39;s modulus).</span>
-<span class="sd">    v</span>
-<span class="sd">        Poisson&#39;s ratio.&quot;&quot;&quot;</span>
+<span class="sd">    Notes</span>
+<span class="sd">    ----</span>
+<span class="sd">    **Material Properties**</span>
 
-<div class="viewcode-block" id="LinearElasticMaterial.getNumberOfRequiredStateVars"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.getNumberOfRequiredStateVars">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">getNumberOfRequiredStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="sd">    - E: Elasticity module (Young&#39;s modulus).</span>
+<span class="sd">    - v: Poisson&#39;s ratio.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="LinearElasticMaterial.getNumberOfRequiredStateVars">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.getNumberOfRequiredStateVars">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getNumberOfRequiredStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns number of needed material state Variables per integration point in the material.</span>
 
 <span class="sd">        Returns</span>
@@ -136,11 +137,16 @@
 
         <span class="k">return</span> <span class="mi">0</span></div>
 
+
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">materialProperties</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_E</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># set E</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_v</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># set v</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">materialProperties</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_density</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
 
-<div class="viewcode-block" id="LinearElasticMaterial.elasticityMatrixPlaneStress"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrixPlaneStress">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">elasticityMatrixPlaneStress</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<div class="viewcode-block" id="LinearElasticMaterial.elasticityMatrixPlaneStress">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrixPlaneStress">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">elasticityMatrixPlaneStress</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initalize a 2D plane stress material elasticity matrix.</span>
 
 <span class="sd">        Returns</span>
@@ -151,7 +157,10 @@
         <span class="n">Ei</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_E</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_v</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_v</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_v</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_v</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span><span class="p">]])</span>
         <span class="k">return</span> <span class="n">Ei</span></div>
 
-<div class="viewcode-block" id="LinearElasticMaterial.elasticityMatrix2D"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrix2D">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">elasticityMatrix2D</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+
+<div class="viewcode-block" id="LinearElasticMaterial.elasticityMatrix2D">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrix2D">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">elasticityMatrix2D</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initalize a 2D plane strain material elasticity matrix.</span>
 
 <span class="sd">        Returns</span>
@@ -172,7 +181,10 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">Ei</span></div>
 
-<div class="viewcode-block" id="LinearElasticMaterial.elasticityMatrix"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrix">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">elasticityMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+
+<div class="viewcode-block" id="LinearElasticMaterial.elasticityMatrix">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrix">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">elasticityMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initalize a 3D material elasticity matrix.</span>
 
 <span class="sd">        Returns</span>
@@ -196,7 +208,10 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">Ei</span></div>
 
-<div class="viewcode-block" id="LinearElasticMaterial.assignCurrentStateVars"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.assignCurrentStateVars">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">assignCurrentStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">currentStateVars</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+
+<div class="viewcode-block" id="LinearElasticMaterial.assignCurrentStateVars">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.assignCurrentStateVars">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">assignCurrentStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">currentStateVars</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Assign new current state vars.</span>
 
 <span class="sd">        Parameters</span>
@@ -204,7 +219,10 @@
 <span class="sd">        currentStateVars</span>
 <span class="sd">            Array containing the material state vars.&quot;&quot;&quot;</span></div>
 
-<div class="viewcode-block" id="LinearElasticMaterial.computePlaneStress"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computePlaneStress">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">computePlaneStress</span><span class="p">(</span>
+
+<div class="viewcode-block" id="LinearElasticMaterial.computePlaneStress">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computePlaneStress">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computePlaneStress</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">stress</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">dStress_dStrain</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -233,7 +251,10 @@
         <span class="n">stress</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">+=</span> <span class="n">Ei</span> <span class="o">@</span> <span class="n">dStrain</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
         <span class="n">dStrain</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">_v</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_v</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">dStrain</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">dStrain</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>  <span class="c1"># dStrain33 for plane stress</span></div>
 
-<div class="viewcode-block" id="LinearElasticMaterial.computeStress2D"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computeStress2D">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">computeStress2D</span><span class="p">(</span>
+
+<div class="viewcode-block" id="LinearElasticMaterial.computeStress2D">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computeStress2D">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeStress2D</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">stress</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">dStress_dStrain</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -262,7 +283,10 @@
         <span class="n">stress</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">+=</span> <span class="n">Ei</span> <span class="o">@</span> <span class="n">dStrain</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
         <span class="n">stress</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_v</span> <span class="o">*</span> <span class="p">(</span><span class="n">stress</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">stress</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>  <span class="c1"># stress33 for plane strain</span></div>
 
-<div class="viewcode-block" id="LinearElasticMaterial.computeStress"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computeStress">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">computeStress</span><span class="p">(</span>
+
+<div class="viewcode-block" id="LinearElasticMaterial.computeStress">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computeStress">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeStress</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">stress</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">dStress_dStrain</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -289,7 +313,10 @@
         <span class="n">dStress_dStrain</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">Ei</span>
         <span class="n">stress</span> <span class="o">+=</span> <span class="n">Ei</span> <span class="o">@</span> <span class="n">dStrain</span></div>
 
-<div class="viewcode-block" id="LinearElasticMaterial.computeUniaxialStress"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computeUniaxialStress">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">computeUniaxialStress</span><span class="p">(</span>
+
+<div class="viewcode-block" id="LinearElasticMaterial.computeUniaxialStress">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computeUniaxialStress">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeUniaxialStress</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">stress</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">dStress_dStrain</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -314,7 +341,24 @@
 
         <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Computing uniaxial stress is not possible with this material.&quot;</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="LinearElasticMaterial.getResult"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.getResult">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">getResult</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+
+<div class="viewcode-block" id="LinearElasticMaterial.getDensity">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.getDensity">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getDensity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the density of the material.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        float</span>
+<span class="sd">            The density of the material.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_density&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Density is not defined for this material.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_density</span></div>
+
+
+<div class="viewcode-block" id="LinearElasticMaterial.getResult">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.getResult">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getResult</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the result, as a persistent view which is continiously</span>
 <span class="sd">        updated by the material.</span>
 
@@ -327,7 +371,9 @@
 <span class="sd">        -------</span>
 <span class="sd">        float</span>
 <span class="sd">            The result.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div></div>
+<span class="sd">        &quot;&quot;&quot;</span></div>
+</div>
+
 </pre></div>
 
            </div>

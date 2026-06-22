@@ -1,24 +1,22 @@
+
+
 <!DOCTYPE html>
-<html class="writer-html5" lang="en">
+<html class="writer-html5" lang="en" data-content_root="../">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Utilities &mdash; EdelweissFE v22.07 documentation</title>
-      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
-      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css" />
-      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=37fbe429" />
 
   
-  <!--[if lt IE 9]>
-    <script src="../_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
-        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
-        <script src="../_static/jquery.js"></script>
-        <script src="../_static/underscore.js"></script>
-        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
-        <script src="../_static/doctools.js"></script>
-        <script src="../_static/sphinx_highlight.js"></script>
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -123,32 +121,28 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <div class="section" id="utilities">
-<h1>Utilities<a class="headerlink" href="#utilities" title="Permalink to this heading"></a></h1>
+  <section id="utilities">
+<h1>Utilities<a class="headerlink" href="#utilities" title="Link to this heading"></a></h1>
 <p>EdelweissFE contains several classes and modules,
 which are not directly employed by the user,
 but very handy if fundamental new functionalities should be added.</p>
-<div class="section" id="matrix-conversion-from-coo-sparse-format-to-csr-format">
-<h2>Matrix conversion from COO sparse format to CSR format<a class="headerlink" href="#matrix-conversion-from-coo-sparse-format-to-csr-format" title="Permalink to this heading"></a></h2>
+<section id="matrix-conversion-from-coo-sparse-format-to-csr-format">
+<h2>Matrix conversion from COO sparse format to CSR format<a class="headerlink" href="#matrix-conversion-from-coo-sparse-format-to-csr-format" title="Link to this heading"></a></h2>
 <p>Module <code class="docutils literal notranslate"><span class="pre">edelweissfe.numerics.csrgenerator</span></code></p>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.numerics.csrgenerator.CSRGenerator">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.csrgenerator.</span></span><span class="sig-name descname"><span class="pre">CSRGenerator</span></span><a class="headerlink" href="#edelweissfe.numerics.csrgenerator.CSRGenerator" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.csrgenerator.</span></span><span class="sig-name descname"><span class="pre">CSRGenerator</span></span><a class="headerlink" href="#edelweissfe.numerics.csrgenerator.CSRGenerator" title="Link to this definition"></a></dt>
 <dd><p>This cdef class generates Compressed Sparse Row Matrices from the COO format,
 and offers the possibility to update the matrix without reanalyzing the
 pattern (in contrast to SciPy).
 Very fast and convenient!</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>systemMatrix</strong> – The system matrix in COO format, for the first initialization V can be a dummy (empty) vector.</p>
 </dd>
 </dl>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
-<colgroup>
-<col style="width: 10%" />
-<col style="width: 90%" />
-</colgroup>
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.csrgenerator.CSRGenerator.updateCSR" title="edelweissfe.numerics.csrgenerator.CSRGenerator.updateCSR"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateCSR</span></code></a>(V)</p></td>
 <td><p>Get updated copies of the CSR matrix.</p></td>
@@ -157,13 +151,13 @@ Very fast and convenient!</p>
 </table>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.numerics.csrgenerator.CSRGenerator.updateCSR">
-<span class="sig-name descname"><span class="pre">updateCSR</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">V</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.numerics.csrgenerator.CSRGenerator.updateCSR" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">updateCSR</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">V</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.numerics.csrgenerator.CSRGenerator.updateCSR" title="Link to this definition"></a></dt>
 <dd><p>Get updated copies of the CSR matrix.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns</dt>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>The system matrix in CSR format.</p>
 </dd>
-<dt class="field-even">Return type</dt>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>csr_matrix</p>
 </dd>
 </dl>
@@ -171,13 +165,13 @@ Very fast and convenient!</p>
 
 </dd></dl>
 
-</div>
-<div class="section" id="gathering-efficiently-of-element-results">
-<h2>Gathering efficiently of element results<a class="headerlink" href="#gathering-efficiently-of-element-results" title="Permalink to this heading"></a></h2>
+</section>
+<section id="gathering-efficiently-of-element-results">
+<h2>Gathering efficiently of element results<a class="headerlink" href="#gathering-efficiently-of-element-results" title="Link to this heading"></a></h2>
 <p>Module <code class="docutils literal notranslate"><span class="pre">edelweissfe.utils.elementresultcollector</span></code></p>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.utils.elementresultcollector.ElementResultCollector">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.elementresultcollector.</span></span><span class="sig-name descname"><span class="pre">ElementResultCollector</span></span><a class="headerlink" href="#edelweissfe.utils.elementresultcollector.ElementResultCollector" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.elementresultcollector.</span></span><span class="sig-name descname"><span class="pre">ElementResultCollector</span></span><a class="headerlink" href="#edelweissfe.utils.elementresultcollector.ElementResultCollector" title="Link to this definition"></a></dt>
 <dd><p>A cdef class for collecting element results (by using the permanent results pointer (i.e., a numpy array)
 in large array of all elements and all quadrature points.</p>
 <p>Collecting elemental results may be a performance critical part.
@@ -189,14 +183,14 @@ or a 2D array for one quadrature point (shape <code class="docutils literal notr
 updates the assembly array and passes it back.</p>
 <p>The caller is responsible to make a copy of it, if persistent results are needed!</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>elements</strong> – The list of elements for which the results should be collected.</p></li>
 <li><p><strong>quadraturePoints</strong> – The slice defining the desired quadrature points.</p></li>
 <li><p><strong>result</strong> – The name of the requested result.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Attributes</dt>
+<dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
 <dt><strong>resultsTable</strong></dt><dd></dd>
 </dl>
@@ -204,10 +198,6 @@ updates the assembly array and passes it back.</p>
 </dl>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
-<colgroup>
-<col style="width: 10%" />
-<col style="width: 90%" />
-</colgroup>
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.utils.elementresultcollector.ElementResultCollector.getCurrentResults" title="edelweissfe.utils.elementresultcollector.ElementResultCollector.getCurrentResults"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getCurrentResults</span></code></a>()</p></td>
 <td><p>Update and get current results.</p></td>
@@ -219,13 +209,13 @@ updates the assembly array and passes it back.</p>
 </table>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.utils.elementresultcollector.ElementResultCollector.getCurrentResults">
-<span class="sig-name descname"><span class="pre">getCurrentResults</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.utils.elementresultcollector.ElementResultCollector.getCurrentResults" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">getCurrentResults</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.utils.elementresultcollector.ElementResultCollector.getCurrentResults" title="Link to this definition"></a></dt>
 <dd><p>Update and get current results.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns</dt>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>The results array.</p>
 </dd>
-<dt class="field-even">Return type</dt>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>np.ndarray</p>
 </dd>
 </dl>
@@ -233,23 +223,23 @@ updates the assembly array and passes it back.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.utils.elementresultcollector.ElementResultCollector.update">
-<span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.utils.elementresultcollector.ElementResultCollector.update" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.utils.elementresultcollector.ElementResultCollector.update" title="Link to this definition"></a></dt>
 <dd><p>Update all results.</p>
 </dd></dl>
 
 </dd></dl>
 
-</div>
-<div class="section" id="adaptive-time-stepping">
-<h2>Adaptive time stepping<a class="headerlink" href="#adaptive-time-stepping" title="Permalink to this heading"></a></h2>
+</section>
+<section id="adaptive-time-stepping">
+<h2>Adaptive time stepping<a class="headerlink" href="#adaptive-time-stepping" title="Link to this heading"></a></h2>
 <p>Module <code class="docutils literal notranslate"><span class="pre">edelweissfe.timesteppers.adaptivetimestepper</span></code></p>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.timesteppers.adaptivetimestepper.</span></span><span class="sig-name descname"><span class="pre">AdaptiveTimeStepper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">currentTime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stepLength</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">startIncrement</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxIncrement</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minIncrement</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxNumberIncrements</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">increaseFactor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/adaptivetimestepper.html#AdaptiveTimeStepper"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.timesteppers.adaptivetimestepper.</span></span><span class="sig-name descname"><span class="pre">AdaptiveTimeStepper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">currentTime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stepLength</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">startIncrement</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxIncrement</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minIncrement</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxNumberIncrements</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">increaseFactor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">makeZeroIncrementFirst</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/adaptivetimestepper.html#AdaptiveTimeStepper"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper" title="Link to this definition"></a></dt>
 <dd><p>An increment generator for incremental-iterative simulations.</p>
 <p>Implementation as generator class.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>currentTime</strong> (<em>float</em>) – The current (start) time.</p></li>
 <li><p><strong>stepLength</strong> (<em>float</em>) – The total length of the step.</p></li>
@@ -258,16 +248,13 @@ updates the assembly array and passes it back.</p>
 <li><p><strong>minIncrement</strong> (<em>float</em>) – The minimum size of an increment.</p></li>
 <li><p><strong>maxNumberIncrements</strong> (<em>int</em>) – The maximum number of allowed increments.</p></li>
 <li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>) – The journal instance for logging purposes.</p></li>
-<li><p><strong>increaseFactor</strong> – The ratio to increase the increments in case of good convergence.</p></li>
+<li><p><strong>increaseFactor</strong> (<em>float</em>) – The ratio to increase the increments in case of good convergence.</p></li>
+<li><p><strong>makeZeroIncrementFirst</strong> (<em>bool</em>) – If True, the first increment will be zero.</p></li>
 </ul>
 </dd>
 </dl>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
-<colgroup>
-<col style="width: 10%" />
-<col style="width: 90%" />
-</colgroup>
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.discardAndChangeIncrement" title="edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.discardAndChangeIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">discardAndChangeIncrement</span></code></a>(scaleFactor)</p></td>
 <td><p>Change increment size between minIncrement and maxIncrement by a given scale factor.</p></td>
@@ -276,7 +263,7 @@ updates the assembly array and passes it back.</p>
 <td><p>Generate the next increment.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.preventIncrementIncrease" title="edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.preventIncrementIncrease"><code class="xref py py-obj docutils literal notranslate"><span class="pre">preventIncrementIncrease</span></code></a>()</p></td>
-<td><p>May be called before an increment is requested, to prevent from automatically increasing, e.g.</p></td>
+<td><p>May be called before an increment is requested, to prevent from automatically increasing, e.g. in case of bad convergency.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.readRestart" title="edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.readRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readRestart</span></code></a>(restartFile)</p></td>
 <td><p>Read restart information from a file.</p></td>
@@ -289,13 +276,20 @@ updates the assembly array and passes it back.</p>
 </tr>
 </tbody>
 </table>
+<table class="docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><strong>doesZeroIncrement</strong></p></td>
+<td></td>
+</tr>
+</tbody>
+</table>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.discardAndChangeIncrement">
-<span class="sig-name descname"><span class="pre">discardAndChangeIncrement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scaleFactor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/adaptivetimestepper.html#AdaptiveTimeStepper.discardAndChangeIncrement"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.discardAndChangeIncrement" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">discardAndChangeIncrement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scaleFactor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/adaptivetimestepper.html#AdaptiveTimeStepper.discardAndChangeIncrement"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.discardAndChangeIncrement" title="Link to this definition"></a></dt>
 <dd><p>Change increment size between minIncrement and
 maxIncrement by a given scale factor.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>scaleFactor</strong> (<em>float</em>) – The factor for scaling based on the previous increment.</p>
 </dd>
 </dl>
@@ -303,13 +297,13 @@ maxIncrement by a given scale factor.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.generateTimeStep">
-<span class="sig-name descname"><span class="pre">generateTimeStep</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/adaptivetimestepper.html#AdaptiveTimeStepper.generateTimeStep"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.generateTimeStep" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">generateTimeStep</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/adaptivetimestepper.html#AdaptiveTimeStepper.generateTimeStep"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.generateTimeStep" title="Link to this definition"></a></dt>
 <dd><p>Generate the next increment.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns</dt>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>The current time step.</p>
 </dd>
-<dt class="field-even">Return type</dt>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>TimeStep</p>
 </dd>
 </dl>
@@ -317,17 +311,17 @@ maxIncrement by a given scale factor.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.preventIncrementIncrease">
-<span class="sig-name descname"><span class="pre">preventIncrementIncrease</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/adaptivetimestepper.html#AdaptiveTimeStepper.preventIncrementIncrease"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.preventIncrementIncrease" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">preventIncrementIncrease</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/adaptivetimestepper.html#AdaptiveTimeStepper.preventIncrementIncrease"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.preventIncrementIncrease" title="Link to this definition"></a></dt>
 <dd><p>May be called before an increment is requested, to prevent from
 automatically increasing, e.g. in case of bad convergency.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.readRestart">
-<span class="sig-name descname"><span class="pre">readRestart</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">restartFile</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/adaptivetimestepper.html#AdaptiveTimeStepper.readRestart"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.readRestart" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">readRestart</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">restartFile</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/adaptivetimestepper.html#AdaptiveTimeStepper.readRestart"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.readRestart" title="Link to this definition"></a></dt>
 <dd><p>Read restart information from a file.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>restartFile</strong> – The file to read the restart information from.</p>
 </dd>
 </dl>
@@ -335,21 +329,21 @@ automatically increasing, e.g. in case of bad convergency.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.reduceNextIncrement">
-<span class="sig-name descname"><span class="pre">reduceNextIncrement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scaleFactor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/adaptivetimestepper.html#AdaptiveTimeStepper.reduceNextIncrement"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.reduceNextIncrement" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">reduceNextIncrement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scaleFactor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/adaptivetimestepper.html#AdaptiveTimeStepper.reduceNextIncrement"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.reduceNextIncrement" title="Link to this definition"></a></dt>
 <dd><p>Reduce the increment size for the next increment.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>scaleFactor</strong> (<em>float</em>) – </p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>scaleFactor</strong> (<em>float</em>)</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.writeRestart">
-<span class="sig-name descname"><span class="pre">writeRestart</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">restartFile</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/adaptivetimestepper.html#AdaptiveTimeStepper.writeRestart"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.writeRestart" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">writeRestart</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">restartFile</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/adaptivetimestepper.html#AdaptiveTimeStepper.writeRestart"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.writeRestart" title="Link to this definition"></a></dt>
 <dd><p>Write restart information to a file.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>restartFile</strong> – The file to write the restart information to.</p>
 </dd>
 </dl>
@@ -357,8 +351,8 @@ automatically increasing, e.g. in case of bad convergency.</p>
 
 </dd></dl>
 
-</div>
-</div>
+</section>
+</section>
 
 
            </div>

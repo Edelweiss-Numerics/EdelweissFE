@@ -1,24 +1,21 @@
+
+
 <!DOCTYPE html>
-<html class="writer-html5" lang="en">
+<html class="writer-html5" lang="en" data-content_root="../../../../">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>edelweissfe.constraints.base.constraintbase &mdash; EdelweissFE v22.07 documentation</title>
-      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css" />
-      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css" />
-      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
 
   
-  <!--[if lt IE 9]>
-    <script src="../../../../_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
-        <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
-        <script src="../../../../_static/jquery.js"></script>
-        <script src="../../../../_static/underscore.js"></script>
-        <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
-        <script src="../../../../_static/doctools.js"></script>
-        <script src="../../../../_static/sphinx_highlight.js"></script>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" /> 
@@ -111,13 +108,16 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.vijentitybase</span><span class="w"> </span><span class="kn">import</span> <span class="n">VIJEntityBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.variables.scalarvariable</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScalarVariable</span>
 
 
-<div class="viewcode-block" id="ConstraintBase"><a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">ConstraintBase</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<div class="viewcode-block" id="ConstraintBase">
+<a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ConstraintBase</span><span class="p">(</span><span class="n">ABC</span><span class="p">,</span> <span class="n">VIJEntityBase</span><span class="p">):</span>
     <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The constraint base class.</span>
 
 <span class="sd">        Constraints can act on nodal variables, and scalar variables.</span>
@@ -147,10 +147,10 @@
 <span class="sd">        ----------</span>
 <span class="sd">        name</span>
 <span class="sd">            The name of the constraint.</span>
-<span class="sd">        options</span>
-<span class="sd">            A dictionary containing the options for the constraint.</span>
 <span class="sd">        model</span>
 <span class="sd">            A dictionary containing the model tree.</span>
+<span class="sd">        kwargs</span>
+<span class="sd">            Key value pairs.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">scalarVariables</span> <span class="o">=</span> <span class="p">[]</span>
@@ -170,7 +170,9 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">nDof</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The total number of degrees of freedom this constraint is associated with.&quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="ConstraintBase.getNumberOfAdditionalNeededScalarVariables"><a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.getNumberOfAdditionalNeededScalarVariables">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">getNumberOfAdditionalNeededScalarVariables</span><span class="p">(</span>
+<div class="viewcode-block" id="ConstraintBase.getNumberOfAdditionalNeededScalarVariables">
+<a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.getNumberOfAdditionalNeededScalarVariables">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getNumberOfAdditionalNeededScalarVariables</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;This method is called to determine the additional number of scalar variables</span>
@@ -185,7 +187,10 @@
 
         <span class="k">return</span> <span class="mi">0</span></div>
 
-<div class="viewcode-block" id="ConstraintBase.assignAdditionalScalarVariables"><a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.assignAdditionalScalarVariables">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">assignAdditionalScalarVariables</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scalarVariables</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ScalarVariable</span><span class="p">]):</span>
+
+<div class="viewcode-block" id="ConstraintBase.assignAdditionalScalarVariables">
+<a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.assignAdditionalScalarVariables">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">assignAdditionalScalarVariables</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scalarVariables</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ScalarVariable</span><span class="p">]):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Assign a list of scalar variables associated with this constraint.</span>
 
 <span class="sd">        Parameters</span>
@@ -197,7 +202,10 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">scalarVariables</span> <span class="o">=</span> <span class="n">scalarVariables</span></div>
 
-<div class="viewcode-block" id="ConstraintBase.applyConstraint"><a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraint">[docs]</a>    <span class="nd">@abstractmethod</span>
+
+<div class="viewcode-block" id="ConstraintBase.applyConstraint">
+<a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraint">[docs]</a>
+    <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">applyConstraint</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">U_np</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -222,7 +230,9 @@
 <span class="sd">            The time increment.</span>
 <span class="sd">        time</span>
 <span class="sd">            The current step and total time.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div></div>
+<span class="sd">        &quot;&quot;&quot;</span></div>
+</div>
+
 </pre></div>
 
            </div>

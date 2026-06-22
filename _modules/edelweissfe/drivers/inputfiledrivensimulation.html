@@ -1,24 +1,21 @@
+
+
 <!DOCTYPE html>
-<html class="writer-html5" lang="en">
+<html class="writer-html5" lang="en" data-content_root="../../../">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>edelweissfe.drivers.inputfiledrivensimulation &mdash; EdelweissFE v22.07 documentation</title>
-      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css" />
-      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css" />
-      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
 
   
-  <!--[if lt IE 9]>
-    <script src="../../../_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
-        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
-        <script src="../../../_static/jquery.js"></script>
-        <script src="../../../_static/underscore.js"></script>
-        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
-        <script src="../../../_static/doctools.js"></script>
-        <script src="../../../_static/sphinx_highlight.js"></script>
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" /> 
@@ -133,7 +130,9 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.fieldoutput</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldOutputController</span>
 
 
-<div class="viewcode-block" id="finiteElementSimulation"><a class="viewcode-back" href="../../../documentation/jobs.html#edelweissfe.drivers.inputfiledrivensimulation.finiteElementSimulation">[docs]</a><span class="k">def</span><span class="w"> </span><span class="nf">finiteElementSimulation</span><span class="p">(</span>
+<div class="viewcode-block" id="finiteElementSimulation">
+<a class="viewcode-back" href="../../../documentation/jobs.html#edelweissfe.drivers.inputfiledrivensimulation.finiteElementSimulation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">finiteElementSimulation</span><span class="p">(</span>
     <span class="n">inputfile</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">suppressPlots</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">FEModel</span><span class="p">,</span> <span class="n">FieldOutputController</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;This is core function of the finite element analysis.</span>
@@ -171,7 +170,7 @@
 
     <span class="n">journal</span> <span class="o">=</span> <span class="n">Journal</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="n">verbose</span><span class="p">)</span>
 
-    <span class="n">job</span> <span class="o">=</span> <span class="n">inputfile</span><span class="p">[</span><span class="s2">&quot;*job&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">job</span> <span class="o">=</span> <span class="n">inputfile</span><span class="p">[</span><span class="s2">&quot;job&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
     <span class="n">jobName</span> <span class="o">=</span> <span class="n">job</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
 
     <span class="n">domainSize</span> <span class="o">=</span> <span class="n">domainMapping</span><span class="p">[</span><span class="n">job</span><span class="p">[</span><span class="s2">&quot;domain&quot;</span><span class="p">]]</span>
@@ -209,7 +208,7 @@
 
     <span class="n">jobInfo</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
     <span class="n">jobInfo</span> <span class="o">=</span> <span class="n">loadConfiguration</span><span class="p">(</span><span class="n">jobInfo</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">updateConfig</span> <span class="ow">in</span> <span class="n">inputfile</span><span class="p">[</span><span class="s2">&quot;*updateConfiguration&quot;</span><span class="p">]:</span>
+    <span class="k">for</span> <span class="n">updateConfig</span> <span class="ow">in</span> <span class="n">inputfile</span><span class="p">[</span><span class="s2">&quot;updateConfiguration&quot;</span><span class="p">]:</span>
         <span class="n">updateConfiguration</span><span class="p">(</span><span class="n">updateConfig</span><span class="p">,</span> <span class="n">jobInfo</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
 
     <span class="c1"># Create the default entries &#39;U&#39; (flux) and &#39;P&#39; (effort)</span>
@@ -241,7 +240,7 @@
             <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="n">defaultSolver</span> <span class="o">=</span> <span class="n">getSolverByName</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;solver&quot;</span><span class="p">,</span> <span class="s2">&quot;NIST&quot;</span><span class="p">))</span>
+    <span class="n">defaultSolver</span> <span class="o">=</span> <span class="n">getSolverByName</span><span class="p">(</span><span class="n">job</span><span class="p">[</span><span class="s2">&quot;solver&quot;</span><span class="p">])</span>
     <span class="n">solvers</span><span class="p">[</span><span class="s2">&quot;default&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">defaultSolver</span><span class="p">(</span><span class="n">jobInfo</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
 
     <span class="k">try</span><span class="p">:</span>
@@ -295,6 +294,7 @@
             <span class="n">plotter</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 
     <span class="k">return</span> <span class="n">model</span><span class="p">,</span> <span class="n">fieldOutputController</span></div>
+
 </pre></div>
 
            </div>

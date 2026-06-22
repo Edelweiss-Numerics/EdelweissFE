@@ -4,9 +4,9 @@ Outputmanagers
 .. automodule:: edelweissfe.config.outputmanagers
    :members: __doc__
 
-.. literalinclude:: ../../../testfiles/OutputManagers/test.inp
+.. literalinclude:: ../../../testfiles/marmot/OutputManagers/test.inp
    :language: edelweiss
-   :caption: Full example: ``testfiles/OutputManagers/test.inp``
+   :caption: Full example: ``testfiles/marmot/OutputManagers/test.inp``
 
 ``ensight`` - Export to Ensight Gold format
 -------------------------------------------

@@ -1,24 +1,22 @@
+
+
 <!DOCTYPE html>
-<html class="writer-html5" lang="en">
+<html class="writer-html5" lang="en" data-content_root="./">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Installation &mdash; EdelweissFE v22.07 documentation</title>
-      <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
-      <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
-      <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/css/custom.css?v=37fbe429" />
 
   
-  <!--[if lt IE 9]>
-    <script src="_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
-        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
-        <script src="_static/jquery.js"></script>
-        <script src="_static/underscore.js"></script>
-        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
-        <script src="_static/doctools.js"></script>
-        <script src="_static/sphinx_highlight.js"></script>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -50,13 +48,15 @@
 <li class="toctree-l1"><a class="reference internal" href="features.html">Features</a></li>
 <li class="toctree-l1"><a class="reference internal" href="prerequisites.html">Prerequisites</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Installation</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#marmot">Marmot</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#configuration">Configuration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#building-edelweissfe">Building EdelweissFE</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#common-base-setup">Common base setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#working-installation-without-marmot">Working installation without Marmot</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#working-installation-with-marmot">Working installation with Marmot</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#tldr">TLDR</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#installation-steps">Installation steps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#installation-steps-without-marmot">Installation steps without Marmot</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#installation-steps-with-marmot">Installation steps with Marmot</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="#build-the-documentation">Build the documentation</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="documentation/index.html">Documentation</a></li>
@@ -88,61 +88,118 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <div class="section" id="installation">
-<h1>Installation<a class="headerlink" href="#installation" title="Permalink to this heading"></a></h1>
-<div class="section" id="marmot">
-<h2>Marmot<a class="headerlink" href="#marmot" title="Permalink to this heading"></a></h2>
-<p>By default, a working instance of <a class="reference external" href="https://github.com/MAteRialMOdelingToolbox/Marmot/">Marmot</a>,
-containing specific implementations of finite elements and constitutive models,
-is required.
-Marmot itself requires the <a class="reference external" href="https://eigen.tuxfamily.org/">Eigen</a> library,
-and potentially <a class="reference external" href="https://github.com/romeric/Fastor">Fastor</a>, depending on the requested modules.</p>
-<p>Please build Marmot before you build EdelweissFE.</p>
+  <section id="installation">
+<h1>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h1>
+<p>The currently maintained installation recipes reflect the supported installation paths for EdelweissFE.
+They assume that you are in the EdelweissFE repository root and that a conda environment is active,
+so that <code class="docutils literal notranslate"><span class="pre">$CONDA_PREFIX</span></code> points to the installation prefix used by the build steps.</p>
+<section id="common-base-setup">
+<h2>Common base setup<a class="headerlink" href="#common-base-setup" title="Link to this heading"></a></h2>
+<p>Both supported installation paths start with the same package installation steps:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">mamba install --file conda_requirements.txt</span>
+<span class="go">pip install -r pip_requirements.txt</span>
+</pre></div>
 </div>
-<div class="section" id="configuration">
-<h2>Configuration<a class="headerlink" href="#configuration" title="Permalink to this heading"></a></h2>
-<p>Customize <code class="docutils literal notranslate"><span class="pre">setup.py</span></code> by defining all paths pointing to the respective libraries.
-Default paths are already defined, and usually only minor modifications should be required.</p>
-</div>
-<div class="section" id="building-edelweissfe">
-<h2>Building EdelweissFE<a class="headerlink" href="#building-edelweissfe" title="Permalink to this heading"></a></h2>
-<p>EdelweissFE depends on several Cython modules, which must be compiled prior to running the EdelweissFE.</p>
-<p>To build EdelweissFE and install it using pip, simply run from within the main folder:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">cd ./EdelweissFE</span>
+</section>
+<section id="working-installation-without-marmot">
+<h2>Working installation without Marmot<a class="headerlink" href="#working-installation-without-marmot" title="Link to this heading"></a></h2>
+<p>Build a working EdelweissFE installation without Marmot support as follows:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">mamba install --file conda_requirements.txt</span>
+<span class="go">pip install -r pip_requirements.txt</span>
 <span class="go">pip install .</span>
 </pre></div>
 </div>
-<p>Run a simulation with an inputfile using</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">edelweissfe your_input_file.inp</span>
+<p>Validate that installation with the same command used in CI:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">run_tests_edelweissfe ./testfiles/edelweiss-only/</span>
 </pre></div>
 </div>
-<p>Run all the validation examples</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">run_tests_edelweissfe ./testfiles/</span>
+<p>This installation path is sufficient for the EdelweissFE-only examples and tests. Marmot-backed elements and material models
+require the additional dependencies described below.</p>
+</section>
+<section id="working-installation-with-marmot">
+<h2>Working installation with Marmot<a class="headerlink" href="#working-installation-with-marmot" title="Link to this heading"></a></h2>
+<p>Extend the base setup with the external libraries needed for Marmot-enabled builds.</p>
+<p>Install Eigen:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">cd ..</span>
+<span class="go">git clone --branch 3.4.0 https://gitlab.com/libeigen/eigen.git</span>
+<span class="go">cd eigen</span>
+<span class="go">mkdir build</span>
+<span class="go">cd build</span>
+<span class="go">cmake -DBUILD_TESTING=OFF -DINCLUDE_INSTALL_DIR=$CONDA_PREFIX/include -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..</span>
+<span class="go">make install</span>
+<span class="go">cd ../..</span>
 </pre></div>
 </div>
-<p>Recreate the validation reference solutions (only if you know what you are doing)</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">run_tests_edelweissfe --create</span>
+<p>Install autodiff:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">git clone --branch v1.1.0 https://github.com/autodiff/autodiff.git</span>
+<span class="go">cd autodiff</span>
+<span class="go">mkdir build</span>
+<span class="go">cd build</span>
+<span class="go">cmake -DAUTODIFF_BUILD_TESTS=OFF \</span>
+<span class="go">  -DAUTODIFF_BUILD_PYTHON=OFF \</span>
+<span class="go">  -DAUTODIFF_BUILD_EXAMPLES=OFF \</span>
+<span class="go">  -DAUTODIFF_BUILD_DOCS=OFF \</span>
+<span class="go">  -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \</span>
+<span class="go">  ..</span>
+<span class="go">make install</span>
+<span class="go">cd ../..</span>
 </pre></div>
 </div>
-<p>Alternatively, to build the modules (inplace) and not install them using pip, simply run</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">python setup.py build_ext -i</span>
+<p>Install Fastor:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">git clone https://github.com/romeric/Fastor.git</span>
+<span class="go">cd Fastor</span>
+<span class="go">mkdir build</span>
+<span class="go">cd build</span>
+<span class="go">cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..</span>
+<span class="go">make install</span>
+<span class="go">cd ../..</span>
 </pre></div>
 </div>
-<p>Enforce a recompilation with</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">python setup.py build_ext -i --force</span>
+<p>Install AMGCL:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">git clone --branch 1.4.7 --depth 1 https://github.com/ddemidov/amgcl.git</span>
+<span class="go">cd amgcl</span>
+<span class="go">mkdir build</span>
+<span class="go">cd build</span>
+<span class="go">cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..</span>
+<span class="go">make install</span>
+<span class="go">cd ../..</span>
 </pre></div>
 </div>
+<p>Install Marmot:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">git clone --branch master --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/</span>
+<span class="go">cd Marmot</span>
+</pre></div>
 </div>
-<div class="section" id="tldr">
-<h2>TLDR<a class="headerlink" href="#tldr" title="Permalink to this heading"></a></h2>
+<p>Then build and install Marmot:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">mkdir build</span>
+<span class="go">cd build</span>
+<span class="go">cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..</span>
+<span class="go">make install</span>
+<span class="go">cd ../../EdelweissFE</span>
+</pre></div>
+</div>
+<p>Build EdelweissFE with Marmot available:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">pip install -v .</span>
+</pre></div>
+</div>
+<p>Validate that installation with the same CI commands:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">run_tests_edelweissfe ./testfiles/marmot/</span>
+<span class="go">run_tests_edelweissfe ./testfiles/edelweiss-only/</span>
+</pre></div>
+</div>
+</section>
+<section id="tldr">
+<h2>TLDR<a class="headerlink" href="#tldr" title="Link to this heading"></a></h2>
 <p>Assuming that you are in an empty directory,
 you can quickly get a working version of EdelweissFE in a Linux based
 environment:</p>
-<div class="section" id="installation-steps">
-<h3>Installation steps<a class="headerlink" href="#installation-steps" title="Permalink to this heading"></a></h3>
+<section id="installation-steps-without-marmot">
+<h3>Installation steps without Marmot<a class="headerlink" href="#installation-steps-without-marmot" title="Link to this heading"></a></h3>
 <p>If necessary, get <a class="reference external" href="https://www.anaconda.com/">Anaconda</a></p>
-<div class="literal-block-wrapper docutils container" id="id2">
-<div class="code-block-caption"><span class="caption-text">Step 1</span><a class="headerlink" href="#id2" title="Permalink to this code"></a></div>
+<p>The example below uses the Linux <code class="docutils literal notranslate"><span class="pre">aarch64</span></code> Miniforge installer. If you are on a different platform,
+choose the matching installer from the Miniforge releases page.</p>
+<div class="literal-block-wrapper docutils container" id="id1">
+<div class="code-block-caption"><span class="caption-text">Step 1</span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> curl -L -O \</span>
 <span class="go">     https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-aarch64.sh</span>
 <span class="go"> bash Miniforge3-Linux-aarch64.sh -b -p ./miniforge3</span>
@@ -150,47 +207,66 @@ environment:</p>
 </div>
 </div>
 <p>Add mamba to your environment:</p>
-<div class="literal-block-wrapper docutils container" id="id3">
-<div class="code-block-caption"><span class="caption-text">Step 2</span><a class="headerlink" href="#id3" title="Permalink to this code"></a></div>
+<div class="literal-block-wrapper docutils container" id="id2">
+<div class="code-block-caption"><span class="caption-text">Step 2</span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> export EWROOT=$PWD</span>
-<span class="go"> export PATH=$EWROOT/mambaforge3/bin:$PATH</span>
+<span class="go"> export PATH=$EWROOT/miniforge3/bin:$PATH</span>
 <span class="go"> conda init --all</span>
 <span class="go"> exit</span>
 </pre></div>
 </div>
 </div>
 <p>Restart shell and activate mamba</p>
-<div class="literal-block-wrapper docutils container" id="id4">
-<div class="code-block-caption"><span class="caption-text">Step 3</span><a class="headerlink" href="#id4" title="Permalink to this code"></a></div>
+<div class="literal-block-wrapper docutils container" id="id3">
+<div class="code-block-caption"><span class="caption-text">Step 3</span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> export EWROOT=$PWD</span>
 <span class="go"> conda activate</span>
 </pre></div>
 </div>
 </div>
 <p>Get EdelweissFE:</p>
-<div class="literal-block-wrapper docutils container" id="id5">
-<div class="code-block-caption"><span class="caption-text">Step 4</span><a class="headerlink" href="#id5" title="Permalink to this code"></a></div>
+<div class="literal-block-wrapper docutils container" id="id4">
+<div class="code-block-caption"><span class="caption-text">Step 4</span><a class="headerlink" href="#id4" title="Link to this code"></a></div>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> git clone https://github.com/EdelweissFE/EdelweissFE.git</span>
 </pre></div>
 </div>
 </div>
-<p>Install necessary mamba packages:</p>
-<div class="literal-block-wrapper docutils container" id="id6">
-<div class="code-block-caption"><span class="caption-text">Step 5</span><a class="headerlink" href="#id6" title="Permalink to this code"></a></div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> mamba install --file EdelweissFE/requirements.txt</span>
+<p>Install the required conda packages:</p>
+<div class="literal-block-wrapper docutils container" id="id5">
+<div class="code-block-caption"><span class="caption-text">Step 5</span><a class="headerlink" href="#id5" title="Link to this code"></a></div>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> mamba install --file EdelweissFE/conda_requirements.txt</span>
 </pre></div>
 </div>
 </div>
-<p>Get Eigen (for EdelweissFE and Marmot):</p>
+<p>Install the additional pip packages:</p>
+<div class="literal-block-wrapper docutils container" id="id6">
+<div class="code-block-caption"><span class="caption-text">Step 6</span><a class="headerlink" href="#id6" title="Link to this code"></a></div>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> pip install -r EdelweissFE/pip_requirements.txt</span>
+</pre></div>
+</div>
+</div>
+<p>Build and test EdelweissFE without Marmot:</p>
 <div class="literal-block-wrapper docutils container" id="id7">
-<div class="code-block-caption"><span class="caption-text">Step 6</span><a class="headerlink" href="#id7" title="Permalink to this code"></a></div>
+<div class="code-block-caption"><span class="caption-text">Step 7</span><a class="headerlink" href="#id7" title="Link to this code"></a></div>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> cd $EWROOT/EdelweissFE</span>
+<span class="go"> pip install .</span>
+<span class="go"> run_tests_edelweissfe ./testfiles/edelweiss-only/</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="installation-steps-with-marmot">
+<h3>Installation steps with Marmot<a class="headerlink" href="#installation-steps-with-marmot" title="Link to this heading"></a></h3>
+<p>Install Eigen:</p>
+<div class="literal-block-wrapper docutils container" id="id8">
+<div class="code-block-caption"><span class="caption-text">Step 8</span><a class="headerlink" href="#id8" title="Link to this code"></a></div>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> cd $EWROOT</span>
-<span class="go"> git clone --branch 3.4.0  https://gitlab.com/libeigen/eigen.git</span>
+<span class="go"> git clone --branch 3.4.0 https://gitlab.com/libeigen/eigen.git</span>
 <span class="go"> cd eigen</span>
 <span class="go"> mkdir build</span>
 <span class="go"> cd build</span>
 <span class="go"> cmake \</span>
-<span class="go">     -DBUILD_TESTING=OFF  \</span>
+<span class="go">     -DBUILD_TESTING=OFF \</span>
 <span class="go">     -DINCLUDE_INSTALL_DIR=$CONDA_PREFIX/include \</span>
 <span class="go">     -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \</span>
 <span class="go">     ..</span>
@@ -198,9 +274,9 @@ environment:</p>
 </pre></div>
 </div>
 </div>
-<p>Get autodiff (for Marmot):</p>
-<div class="literal-block-wrapper docutils container" id="id8">
-<div class="code-block-caption"><span class="caption-text">Step 7</span><a class="headerlink" href="#id8" title="Permalink to this code"></a></div>
+<p>Install autodiff:</p>
+<div class="literal-block-wrapper docutils container" id="id9">
+<div class="code-block-caption"><span class="caption-text">Step 9</span><a class="headerlink" href="#id9" title="Link to this code"></a></div>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> cd $EWROOT</span>
 <span class="go"> git clone --branch v1.1.0 https://github.com/autodiff/autodiff.git</span>
 <span class="go"> cd autodiff</span>
@@ -217,53 +293,65 @@ environment:</p>
 </pre></div>
 </div>
 </div>
-<p>Get Fastor:</p>
-<div class="literal-block-wrapper docutils container" id="id9">
-<div class="code-block-caption"><span class="caption-text">Step 8</span><a class="headerlink" href="#id9" title="Permalink to this code"></a></div>
+<p>Install Fastor:</p>
+<div class="literal-block-wrapper docutils container" id="id10">
+<div class="code-block-caption"><span class="caption-text">Step 10</span><a class="headerlink" href="#id10" title="Link to this code"></a></div>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> cd $EWROOT</span>
 <span class="go"> git clone https://github.com/romeric/Fastor.git</span>
 <span class="go"> cd Fastor</span>
-<span class="go"> cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX .</span>
+<span class="go"> mkdir build</span>
+<span class="go"> cd build</span>
+<span class="go"> cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..</span>
 <span class="go"> make install</span>
-<span class="go"> cd ../</span>
 </pre></div>
 </div>
 </div>
-<p>Get Marmot:</p>
-<div class="literal-block-wrapper docutils container" id="id10">
-<div class="code-block-caption"><span class="caption-text">Step 9</span><a class="headerlink" href="#id10" title="Permalink to this code"></a></div>
+<p>Install AMGCL:</p>
+<div class="literal-block-wrapper docutils container" id="id11">
+<div class="code-block-caption"><span class="caption-text">Step 11</span><a class="headerlink" href="#id11" title="Link to this code"></a></div>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> cd $EWROOT</span>
-<span class="go"> git clone --recurse https://github.com/MAteRialMOdelingToolbox/Marmot.git</span>
+<span class="go"> git clone --branch 1.4.7 --depth 1 https://github.com/ddemidov/amgcl.git</span>
+<span class="go"> cd amgcl</span>
+<span class="go"> mkdir build</span>
+<span class="go"> cd build</span>
+<span class="go"> cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..</span>
+<span class="go"> make install</span>
+</pre></div>
+</div>
+</div>
+<p>Install Marmot from the master branch:</p>
+<div class="literal-block-wrapper docutils container" id="id12">
+<div class="code-block-caption"><span class="caption-text">Step 12</span><a class="headerlink" href="#id12" title="Link to this code"></a></div>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> cd $EWROOT</span>
+<span class="go"> git clone --branch master --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/</span>
 <span class="go"> cd Marmot</span>
 <span class="go"> mkdir build</span>
 <span class="go"> cd build</span>
-<span class="go"> cmake \</span>
-<span class="go">     -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \</span>
-<span class="go">     ..</span>
+<span class="go"> cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..</span>
 <span class="go"> make install</span>
 </pre></div>
 </div>
 </div>
-<p>Build and test EdelweissFE:</p>
-<div class="literal-block-wrapper docutils container" id="id11">
-<div class="code-block-caption"><span class="caption-text">Step 10</span><a class="headerlink" href="#id11" title="Permalink to this code"></a></div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> cd $EWROOT</span>
-<span class="go"> cd EdelweissFE</span>
-<span class="go"> pip install .</span>
-<span class="go"> run_tests_edelweissfe ./testfiles/</span>
+<p>Build and test EdelweissFE with Marmot:</p>
+<div class="literal-block-wrapper docutils container" id="id13">
+<div class="code-block-caption"><span class="caption-text">Step 13</span><a class="headerlink" href="#id13" title="Link to this code"></a></div>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> cd $EWROOT/EdelweissFE</span>
+<span class="go"> pip install -v .</span>
+<span class="go"> run_tests_edelweissfe ./testfiles/marmot/</span>
+<span class="go"> run_tests_edelweissfe ./testfiles/edelweiss-only/</span>
 </pre></div>
 </div>
 </div>
-<p>Build this documentation:</p>
-<div class="literal-block-wrapper docutils container" id="id12">
-<div class="code-block-caption"><span class="caption-text">Step 11</span><a class="headerlink" href="#id12" title="Permalink to this code"></a></div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> sphinx-build ./doc/source/ ./docs -b html</span>
+</section>
+</section>
+<section id="build-the-documentation">
+<h2>Build the documentation<a class="headerlink" href="#build-the-documentation" title="Link to this heading"></a></h2>
+<p>The documentation workflow builds the HTML output with:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sphinx-build ./doc/source/ ./docs -b html</span>
 </pre></div>
 </div>
-</div>
-</div>
-</div>
-</div>
+</section>
+</section>
 
 
            </div>

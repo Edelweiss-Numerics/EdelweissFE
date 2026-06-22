@@ -1,24 +1,21 @@
+
+
 <!DOCTYPE html>
-<html class="writer-html5" lang="en">
+<html class="writer-html5" lang="en" data-content_root="../../../../">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>edelweissfe.materials.base.basehyperelasticmaterial &mdash; EdelweissFE v22.07 documentation</title>
-      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css" />
-      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css" />
-      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
 
   
-  <!--[if lt IE 9]>
-    <script src="../../../../_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
-        <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
-        <script src="../../../../_static/jquery.js"></script>
-        <script src="../../../../_static/underscore.js"></script>
-        <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
-        <script src="../../../../_static/doctools.js"></script>
-        <script src="../../../../_static/sphinx_highlight.js"></script>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" /> 
@@ -114,7 +111,9 @@
 <span class="c1"># from edelweissfe.utils.voigtnotation import doVoigtStrain</span>
 
 
-<div class="viewcode-block" id="BaseHyperElasticMaterial"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">BaseHyperElasticMaterial</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<div class="viewcode-block" id="BaseHyperElasticMaterial">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">BaseHyperElasticMaterial</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Base material class for a hyper elastic material.</span>
 
 <span class="sd">    Parameters</span>
@@ -126,7 +125,9 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">materialProperties</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;The properties the material has.&quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="BaseHyperElasticMaterial.getNumberOfRequiredStateVars"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.getNumberOfRequiredStateVars">[docs]</a>    <span class="nd">@abstractmethod</span>
+<div class="viewcode-block" id="BaseHyperElasticMaterial.getNumberOfRequiredStateVars">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.getNumberOfRequiredStateVars">[docs]</a>
+    <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">getNumberOfRequiredStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns number of needed material state Variables per integration point in the material.</span>
 
@@ -135,11 +136,26 @@
 <span class="sd">        int</span>
 <span class="sd">            Number of needed material state Vars.&quot;&quot;&quot;</span></div>
 
+
+<div class="viewcode-block" id="BaseHyperElasticMaterial.getDensity">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.getDensity">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getDensity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Determines the density of the material.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        float</span>
+<span class="sd">            The density of the material.&quot;&quot;&quot;</span></div>
+
+
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">materialProperties</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize.&quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="BaseHyperElasticMaterial.assignCurrentStateVars"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.assignCurrentStateVars">[docs]</a>    <span class="nd">@abstractmethod</span>
+<div class="viewcode-block" id="BaseHyperElasticMaterial.assignCurrentStateVars">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.assignCurrentStateVars">[docs]</a>
+    <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">assignCurrentStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">currentStateVars</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Assign new current state vars.</span>
 
@@ -148,7 +164,10 @@
 <span class="sd">        currentStateVars</span>
 <span class="sd">            Array containing the material state vars.&quot;&quot;&quot;</span></div>
 
-<div class="viewcode-block" id="BaseHyperElasticMaterial.computePlaneKirchhoff"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.computePlaneKirchhoff">[docs]</a>    <span class="nd">@abstractmethod</span>
+
+<div class="viewcode-block" id="BaseHyperElasticMaterial.computePlaneKirchhoff">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.computePlaneKirchhoff">[docs]</a>
+    <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">computePlaneKirchhoff</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">stress</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -174,7 +193,10 @@
 
         <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Plane stress for hyperelastic materials is currently not possible.&quot;</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="BaseHyperElasticMaterial.computeKirchhoff"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.computeKirchhoff">[docs]</a>    <span class="nd">@abstractmethod</span>
+
+<div class="viewcode-block" id="BaseHyperElasticMaterial.computeKirchhoff">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.computeKirchhoff">[docs]</a>
+    <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">computeKirchhoff</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">stress</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -198,7 +220,10 @@
 <span class="sd">        dTime</span>
 <span class="sd">            Current time step size.&quot;&quot;&quot;</span></div>
 
-<div class="viewcode-block" id="BaseHyperElasticMaterial.computeUniaxialKirchhoff"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.computeUniaxialKirchhoff">[docs]</a>    <span class="nd">@abstractmethod</span>
+
+<div class="viewcode-block" id="BaseHyperElasticMaterial.computeUniaxialKirchhoff">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.computeUniaxialKirchhoff">[docs]</a>
+    <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">computeUniaxialKirchhoff</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">stress</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -222,7 +247,10 @@
 <span class="sd">        dTime</span>
 <span class="sd">            Current time step size.&quot;&quot;&quot;</span></div>
 
-<div class="viewcode-block" id="BaseHyperElasticMaterial.getResult"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.getResult">[docs]</a>    <span class="nd">@abstractmethod</span>
+
+<div class="viewcode-block" id="BaseHyperElasticMaterial.getResult">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.getResult">[docs]</a>
+    <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">getResult</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the result, as a persistent view which is continiously</span>
 <span class="sd">        updated by the material.</span>
@@ -236,7 +264,9 @@
 <span class="sd">        -------</span>
 <span class="sd">        float</span>
 <span class="sd">            The result.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div></div>
+<span class="sd">        &quot;&quot;&quot;</span></div>
+</div>
+
 </pre></div>
 
            </div>

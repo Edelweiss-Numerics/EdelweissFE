@@ -1,24 +1,21 @@
+
+
 <!DOCTYPE html>
-<html class="writer-html5" lang="en">
+<html class="writer-html5" lang="en" data-content_root="../../../../">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended &mdash; EdelweissFE v22.07 documentation</title>
-      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css" />
-      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css" />
-      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
 
   
-  <!--[if lt IE 9]>
-    <script src="../../../../_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
-        <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
-        <script src="../../../../_static/jquery.js"></script>
-        <script src="../../../../_static/underscore.js"></script>
-        <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
-        <script src="../../../../_static/doctools.js"></script>
-        <script src="../../../../_static/sphinx_highlight.js"></script>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" /> 
@@ -186,7 +183,9 @@
     <span class="p">)</span>
 
 
-<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial">[docs]</a><span class="k">class</span><span class="w"> </span><span class="nc">HyperelasticAdvancedI2ExtendedMaterial</span><span class="p">(</span><span class="n">BaseHyperElasticMaterial</span><span class="p">):</span>
+<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">HyperelasticAdvancedI2ExtendedMaterial</span><span class="p">(</span><span class="n">BaseHyperElasticMaterial</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Hyperelastic material with automatic differentiation for automatic calculation of the Kirchhoff stress and the tangent moduli.</span>
 
 <span class="sd">    Parameters</span>
@@ -200,7 +199,24 @@
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_materialProperties</span>
 
-<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.getNumberOfRequiredStateVars"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.getNumberOfRequiredStateVars">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">getNumberOfRequiredStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.getDensity">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.getDensity">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getDensity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the density of the material.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        float</span>
+<span class="sd">            The density of the material.&quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_density&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Density is not defined for this material.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_density</span></div>
+
+
+<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.getNumberOfRequiredStateVars">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.getNumberOfRequiredStateVars">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getNumberOfRequiredStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns number of needed material state Variables per integration point in the material.</span>
 
 <span class="sd">        Returns</span>
@@ -210,6 +226,7 @@
 
         <span class="k">return</span> <span class="mi">1</span></div>
 
+
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">materialProperties</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_materialProperties</span> <span class="o">=</span> <span class="n">materialProperties</span>
         <span class="c1"># elastic parameters</span>
@@ -217,8 +234,12 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="s2">&quot;K&quot;</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">setEnergyFunction</span><span class="p">(</span><span class="n">materialProperties</span><span class="p">[</span><span class="s2">&quot;psi_e&quot;</span><span class="p">])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">materialProperties</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span>  <span class="c1"># extra optional parameters</span>
+        <span class="k">if</span> <span class="s2">&quot;density&quot;</span> <span class="ow">in</span> <span class="n">materialProperties</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_density</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="s2">&quot;density&quot;</span><span class="p">]</span>
 
-<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.setEnergyFunction"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.setEnergyFunction">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">setEnergyFunction</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">materialEnergy</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.setEnergyFunction">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.setEnergyFunction">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setEnergyFunction</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">materialEnergy</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Sets the energy density function for the custom material.</span>
 
 <span class="sd">        Parameters</span>
@@ -330,7 +351,10 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_getHessian</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">C</span><span class="p">:</span> <span class="n">getEnergyAndStressAndTangent</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">energyDensity</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.assignCurrentStateVars"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.assignCurrentStateVars">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">assignCurrentStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">currentStateVars</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+
+<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.assignCurrentStateVars">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.assignCurrentStateVars">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">assignCurrentStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">currentStateVars</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Assign new current state vars.</span>
 
 <span class="sd">        Parameters</span>
@@ -340,7 +364,10 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_energy</span> <span class="o">=</span> <span class="n">currentStateVars</span></div>
 
-<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.computePlaneKirchhoff"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.computePlaneKirchhoff">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">computePlaneKirchhoff</span><span class="p">(</span>
+
+<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.computePlaneKirchhoff">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.computePlaneKirchhoff">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computePlaneKirchhoff</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">stress</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">dStress_dDeformationGradient</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -365,7 +392,10 @@
 
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">computePlaneKirchhoff</span><span class="p">(</span><span class="n">stress</span><span class="p">,</span> <span class="n">dStress_dDeformationGradient</span><span class="p">,</span> <span class="n">deformationGradient</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">dTime</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.computeKirchhoff"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.computeKirchhoff">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">computeKirchhoff</span><span class="p">(</span>
+
+<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.computeKirchhoff">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.computeKirchhoff">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeKirchhoff</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">stress</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">dStress_dDeformationGradient</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -398,7 +428,10 @@
         <span class="n">CTauF3</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;im,ml,jk-&gt;ijkl&quot;</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
         <span class="n">dStress_dDeformationGradient</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">CTauF1</span> <span class="o">+</span> <span class="n">CTauF2</span> <span class="o">+</span> <span class="n">CTauF3</span></div>
 
-<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.computeUniaxialKirchhoff"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.computeUniaxialKirchhoff">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">computeUniaxialKirchhoff</span><span class="p">(</span>
+
+<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.computeUniaxialKirchhoff">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.computeUniaxialKirchhoff">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeUniaxialKirchhoff</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">stress</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">dStress_dDeformationGradient</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -423,7 +456,10 @@
 
         <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Computing uniaxial stress is not possible with this material.&quot;</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.getResult"><a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.getResult">[docs]</a>    <span class="k">def</span><span class="w"> </span><span class="nf">getResult</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+
+<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.getResult">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.getResult">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getResult</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the result, as a persistent view which is continiously</span>
 <span class="sd">        updated by the material.</span>
 
@@ -441,7 +477,9 @@
         <span class="k">if</span> <span class="n">result</span> <span class="o">==</span> <span class="s2">&quot;energy&quot;</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_energy</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;This result doesn&#39;t exist for the current material.&quot;</span><span class="p">)</span></div></div>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;This result doesn&#39;t exist for the current material.&quot;</span><span class="p">)</span></div>
+</div>
+
 </pre></div>
 
            </div>
