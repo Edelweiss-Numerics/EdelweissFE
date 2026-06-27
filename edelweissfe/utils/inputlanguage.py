@@ -65,13 +65,24 @@ class InputLanguage:
 
         return
 
+    def _ensure_parser_loaded(self):
+        if not self.keywords:
+            try:
+                import importlib
+
+                importlib.import_module("edelweissfe.utils.inputfileparser")
+            except ImportError:
+                pass
+
     def __contains__(self, item) -> bool:
+        self._ensure_parser_loaded()
         return item.casefold() in [kw.name.casefold() for kw in self.keywords]
 
     def __repr__(self) -> str:
         return str(self.keywords)
 
     def __getitem__(self, keyword: str):
+        self._ensure_parser_loaded()
         casefoldedKeywords = [kw.name.casefold() for kw in self.keywords]
         try:
             idx = casefoldedKeywords.index(keyword.casefold())
@@ -83,6 +94,7 @@ class InputLanguage:
             )
 
     def __iter__(self):
+        self._ensure_parser_loaded()
         return self.keywords.__iter__()
 
     def addKeyword(self, name: str, description: str):
