@@ -183,6 +183,10 @@ class MarmotMaterialWrappingElement(BaseElement):
 
         self.acceptLastState()
 
+    def shapeVIJContribution(self, flat_view: np.ndarray) -> np.ndarray:
+        """Keep the view flat for Cython 1-D memoryview compatibility."""
+        return flat_view
+
     def computeKernels(
         self,
         Ke: np.ndarray,

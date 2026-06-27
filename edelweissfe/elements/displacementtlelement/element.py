@@ -373,7 +373,8 @@ class DisplacementTLElement(BaseElement):
 
         dim = self.nSpatialDimensions
         # assume it's plain strain if it's not given by user
-        K = np.reshape(K_, (self._nDof, self._nDof))
+        K = K_ if K_.ndim == 2 else np.reshape(K_, (self._nDof, self._nDof))
+
         # get current state Vars
         self._stateVarsTemp = [self._stateVarsRef[i].copy() for i in range(self._nInt)].copy()
         # compute the deformation gradient

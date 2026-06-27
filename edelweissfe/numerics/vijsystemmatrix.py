@@ -75,7 +75,8 @@ class VIJSystemMatrix(np.ndarray):
             # Entity Lookup
             idxInVIJ = self.entitiesInVIJ[key]
             size = key.getVIJContributionSize()
-            return super().__getitem__(slice(idxInVIJ, idxInVIJ + size))
+            flat_view = super().__getitem__(slice(idxInVIJ, idxInVIJ + size))
+            return key.shapeVIJContribution(flat_view)
         except (KeyError, TypeError, AttributeError):
             # Fallback for any other weird key types
             return super().__getitem__(key)
