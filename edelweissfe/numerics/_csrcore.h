@@ -32,6 +32,8 @@ public:
   CSRCore( const int* I, const int* J, int64_t n_pairs, int n_dof ) : nDof( n_dof )
   {
     if ( n_pairs == 0 ) {
+      // Empty pattern: indptr is all-zeros, indices/gather_sources/assembly_ptr
+      // remain empty. update() is guarded by nnz==0 and is a no-op in that case.
       indptr.assign( nDof + 1, 0 );
       return;
     }
@@ -53,7 +55,9 @@ public:
     // Count how many edges fall into each partition.
     // We use thread-local counters to avoid atomic contention.
 
-    std::vector< int64_t >                partition_counts( num_partitions, 0 );
+    std::vector< int64_t > partition_counts( num_partitions, 0 );
+    // Thread-local counts avoid atomic contention: each thread accumulates
+    // into its own private row, then the results are reduced serially.
     std::vector< std::vector< int64_t > > thread_local_counts( num_threads,
                                                                std::vector< int64_t >( num_partitions, 0 ) );
 
@@ -75,14 +79,16 @@ public:
     // Reduce thread counts to global partition counts & calculate offsets
     // This matrix transposition (thread x part -> part x thread) allows us
     // to calculate exactly where each thread should write its data.
-    std::vector< std::vector< int64_t > > write_offsets( num_partitions, std::vector< int64_t >( num_threads ) );
+    // Thread-major layout [thread][partition]: each thread's counters reside on
+    // their own cache lines, eliminating false sharing during the parallel scatter.
+    std::vector< std::vector< int64_t > > write_offsets( num_threads, std::vector< int64_t >( num_partitions ) );
     std::vector< int64_t >                partition_starts( num_partitions + 1, 0 );
 
     int64_t current_global_offset = 0;
     for ( int p = 0; p < num_partitions; ++p ) {
       partition_starts[p] = current_global_offset;
       for ( int t = 0; t < num_threads; ++t ) {
-        write_offsets[p][t] = current_global_offset;
+        write_offsets[t][p] = current_global_offset;
         current_global_offset += thread_local_counts[t][p];
       }
     }
@@ -108,8 +114,9 @@ public:
         if ( p_id >= num_partitions )
           p_id = num_partitions - 1;
 
-        // Determine write position (no atomics needed now)
-        int64_t pos = write_offsets[p_id][tid]++;
+        // Determine write position (no atomics needed — thread-major layout
+        // means only this thread writes to write_offsets[tid][*]).
+        int64_t pos = write_offsets[tid][p_id]++;
 
         edges[pos] = { key, (int32_t)k };
       }
@@ -139,6 +146,11 @@ public:
       // 3b. Symbolic Counting (Local CSR generation)
       // We iterate the sorted edges to count unique (r,c) pairs
       // and fill the indptr counts for rows in this partition.
+      //
+      // INVARIANT: the partition assignment p_id = r / rows_per_partition maps
+      // every COO entry with the same row r to exactly one partition. Therefore
+      // the indptr[r+1]++ increments below touch disjoint array positions across
+      // different partitions — no synchronization is required.
 
       int32_t local_nnz = 0;
       if ( end > start ) {
@@ -147,7 +159,7 @@ public:
         // Determine Row range for this partition
         // We must be careful: indptr is size nDof+1.
         // We extract row from the key.
-        int prev_row = (int)( edges[start].key >> 32 );
+        int prev_row = static_cast< int32_t >( edges[start].key >> 32 );
 
         // Mark first row count
         indptr[prev_row + 1]++;
@@ -156,7 +168,7 @@ public:
           uint64_t curr_key = edges[k].key;
           uint64_t prev_key = edges[k - 1].key;
 
-          int curr_row = (int)( curr_key >> 32 );
+          int curr_row = static_cast< int32_t >( curr_key >> 32 );
 
           // If key is different, it's a new matrix entry
           if ( curr_key != prev_key ) {
@@ -189,7 +201,7 @@ public:
     indices.resize( nnz );
     gather_sources.resize( n_pairs );
     assembly_ptr.resize( nnz + 1 );
-    assembly_ptr[nnz] = n_pairs; // Sentinel
+    assembly_ptr[nnz] = static_cast< int32_t >( n_pairs ); // Sentinel; safe: guarded by INT32_MAX check above
 
 #pragma omp parallel for schedule( dynamic, 1 )
     for ( int p = 0; p < num_partitions; ++p ) {
@@ -201,7 +213,7 @@ public:
       int32_t write_idx = global_nnz_offsets[p];
 
       // Fill first entry of the partition
-      indices[write_idx]      = (int)( edges[start].key & 0xFFFFFFFF );
+      indices[write_idx]      = static_cast< int32_t >( edges[start].key & 0xFFFFFFFFu );
       assembly_ptr[write_idx] = start;
       gather_sources[start]   = edges[start].orig;
 
@@ -220,7 +232,7 @@ public:
           assembly_ptr[write_idx + internal_count] = k;
 
           // Write new column index
-          indices[write_idx + internal_count] = (int)( curr_key & 0xFFFFFFFF );
+          indices[write_idx + internal_count] = static_cast< int32_t >( curr_key & 0xFFFFFFFFu );
         }
       }
     }

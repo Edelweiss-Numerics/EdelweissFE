@@ -64,8 +64,11 @@ cdef class CSRGenerator:
             del self.core
 
     def __init__(self, systemMatrix):
-        cdef int[::1] I = systemMatrix.I  # noqa
-        cdef int[::1] J = systemMatrix.J
+        # Ensure int32 dtype regardless of the source array's dtype.
+        # dofmanager.py already produces np.intc arrays, but we guard here
+        # in case CSRGenerator is called from outside the standard path.
+        cdef int[::1] I = np.asarray(systemMatrix.I, dtype=np.intc)  # noqa
+        cdef int[::1] J = np.asarray(systemMatrix.J, dtype=np.intc)
 
         self.nCooPairs = len(I)  # Length is still 64-bit capable
 
@@ -89,13 +92,21 @@ cdef class CSRGenerator:
         cdef np.ndarray[double, ndim=1] data = np.zeros(nnz, dtype=np.double)
         self.csrMatrix = csr_matrix((data, nd_indices, nd_indptr), shape=(nDof, nDof))
 
+        # Keep this CSRGenerator object alive as long as csrMatrix is referenced.
+        # _parent is a SciPy-internal attribute — it exists in all supported
+        # versions but is undocumented; callers should not hold csrMatrix
+        # independently of its CSRGenerator.
         self.csrMatrix._parent = self
 
         self.data_view = self.csrMatrix.data
 
-    def updateCSR(self, double[:] V):
+    def updateInPlace(self, double[:] V):
         """
-        Update the values of the CSR matrix based on the input vector V.
+        Update the values of the CSR matrix in-place based on the input vector V.
+
+        Returns the internal CSR matrix directly (no copy). The caller must not
+        retain the returned object across subsequent calls to ``updateInPlace``
+        or ``updateCSR``, as the underlying data will be overwritten.
 
         Parameters
         ----------
@@ -105,7 +116,7 @@ cdef class CSRGenerator:
         Returns
         -------
         csr_matrix
-            The updated CSR matrix.
+            A live view of the internal CSR matrix (not a copy).
         """
 
         cdef double* d_ptr = &self.data_view[0]
@@ -114,4 +125,26 @@ cdef class CSRGenerator:
         with nogil:
             self.core.update(v_ptr, d_ptr)
 
+        return self.csrMatrix
+
+    def updateCSR(self, double[:] V):
+        """
+        Update the values of the CSR matrix and return an independent copy.
+
+        Use ``updateInPlace`` instead when the caller does not need to retain
+        the matrix across subsequent assembly steps, to avoid the allocation
+        cost of copying.
+
+        Parameters
+        ----------
+        V : double[:]
+            Input vector used to update the CSR matrix values.
+
+        Returns
+        -------
+        csr_matrix
+            An independent copy of the updated CSR matrix.
+        """
+
+        self.updateInPlace(V)
         return self.csrMatrix.copy()

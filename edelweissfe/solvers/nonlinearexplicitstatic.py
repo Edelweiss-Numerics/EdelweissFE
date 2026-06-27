@@ -34,7 +34,7 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.linsolve import getLinSolverByName
 from edelweissfe.config.timing import createTimingDict
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.csrgenerator import CSRGenerator
+from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
