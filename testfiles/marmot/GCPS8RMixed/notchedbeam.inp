@@ -2,38 +2,40 @@
 *material, name=modleonNonLocal, id=modleon
 30000.0, 0.15 ,13 , 47.4 ,  55   , 4.74 , 0.85 , 0.12 , 0.003, 2.0, 0.000001, 15.0, 5, 1.05, 0.0017, 1
 
-*section, name=section1, thickness=1.0, material=modleon, type=plane
+*section, name=section1, material=modleon, type=plane
 all
 
 *job, name=myjob, domain=2d, solver=NISTParallel
-*fieldOutput
-create=perNode, name=load, nSet=topNodes,  field=displacement, result=P
-create=perNode, name=displacement, elSet=all, field=displacement, result=U, name=displacement
+*solver, solver=NISTParallel, name=theSolver
+*fieldOutput,
+>>perNode, name=load, nSet=topNodes,  field=displacement, result=P
+>>perNode, name=displacement, elSet=all, field=displacement, result=U
 **name=nonlocalDamage, elSet=all, field=nonlocal damage, result=U, <-- this option is currently not supported by fieldoutput in Edelweiss
 **name=stress, elSet=all, result=stress, quadraturePoint=0:4, f(x)='mean(x, axis=1)'
 **name=strain, elSet=all, result=strain, quadraturePoint=0:4, f(x)='mean(x, axis=1)'
 **name=alphaP, elSet=all, result=alphaP, quadraturePoint=0:4, f(x)='mean(x[:,:], axis=1)'
 **name=alphaD, elSet=all, result=alphaD,quadraturePoint=0:4, f(x)='mean(x[:,:], axis=1)'
-create=perElement, name=omega, elSet=all, result=omega, quadraturePoint=0:4, f(x)='mean(x[:,:], axis=1)'
-create=perElement, elSet=all, result=stress, quadraturePoint=0:4, name=stress, f(x)='mean(x, axis=1)'
-create=perElement, elSet=all, result=strain, quadraturePoint=0:4, name=strain, f(x)='mean(x, axis=1)'
+>>perElement, name=omega, elSet=all, result=omega, quadraturePoint=0:4, f(x)='mean(x[:,:], axis=1)'
+>>perElement, elSet=all, result=stress, quadraturePoint=0:4, name=stress, f(x)='mean(x, axis=1)'
+>>perElement, elSet=all, result=strain, quadraturePoint=0:4, name=strain, f(x)='mean(x, axis=1)'
 
 
-*output, type=monitor, jobName=myjob
+*output, type=monitor
 fieldOutput=load, f(x)='sum(x[:,1])'
 
 *output, type=ensight, name=notchedBeam
-configuration, overwrite=yes
-create=perNode,    fieldOutput=displacement
+>>configuration, overwrite=yes
+>>perNode, fieldOutput=displacement
 **create=perNode,    fieldOutput=nonlocalDamage
-create=perElement, fieldOutput=stress
-create=perElement, fieldOutput=strain
+>>perElement, fieldOutput=stress
+>>perElement, fieldOutput=strain
 **create=perElement, fieldOutput=alphaP
 **create=perElement, fieldOutput=alphaD
-create=perElement, fieldOutput=omega
+>>perElement, fieldOutput=omega
 
-*step, maxInc=1e-1, minInc=1e-6, maxNumInc=1000, maxIter=25,
-options, category=NISTSolver, extrapolation=linear
-dirichlet, name=left,  nSet=left,   field=displacement, 1=0.0, 2=0.0
-dirichlet, name=right, nSet=right,  field=displacement, 2=0
-dirichlet, name=top, nSet=topNodes, field=displacement, 2=-.5
+*step, solver=theSolver
+maxInc=1e-1, minInc=1e-6, maxNumInc=1000, maxIter=25
+>>options, category=NISTSolver, extrapolation=linear
+>>dirichlet, name=left,  nSet=left,   field=displacement, 1=0.0, 2=0.0
+>>dirichlet, name=right, nSet=right,  field=displacement, 2=0
+>>dirichlet, name=top, nSet=topNodes, field=displacement, 2=-.5
