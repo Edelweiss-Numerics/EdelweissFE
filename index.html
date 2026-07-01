@@ -117,7 +117,7 @@ Usually, EdelweissFE is used for developing and debugging constitutive models un
 <h2>Example input file<a class="headerlink" href="#example-input-file" title="Link to this heading"></a></h2>
 <div class="literal-block-wrapper docutils container" id="id2">
 <div class="code-block-caption"><span class="caption-text">File: <code class="docutils literal notranslate"><span class="pre">examples/CantileverBeam/test3D.inp</span></code></span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
-<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">LinearElastic</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">linearelastic</span>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">LinearElastic</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">linearelastic</span>,<span class="nv"> provider</span><span class="ow">=</span><span class="m">edelweiss</span>
 <span class="c c-Singleline">**Isotropic material</span>
 <span class="c c-Singleline">**E    nu -&gt; elasticity module and poisson&#39;s ratio</span>
 1.8e4, 0.22
@@ -136,10 +136,10 @@ Usually, EdelweissFE is used for developing and debugging constitutive models un
 <span class="nv">lX      </span><span class="ow">=</span><span class="m">500</span>
 <span class="nv">lY      </span><span class="ow">=</span><span class="m">5</span>
 <span class="nv">lZ      </span><span class="ow">=</span><span class="m">5</span>
-<span class="c c-Singleline">** use provider: displacementelement</span>
-<span class="nv">elProvider </span><span class="ow">=</span><span class="m">displacementelement</span>
+<span class="c c-Singleline">** use provider: edelweiss</span>
+<span class="nv">elProvider </span><span class="ow">=</span><span class="m">edelweiss</span>
 <span class="c c-Singleline">** use hexahedron element with 8 nodes and normal integration</span>
-<span class="nv">elType  </span><span class="ow">=</span><span class="m">Hexa8</span>
+<span class="nv">elType  </span><span class="ow">=</span><span class="m">C3D8</span>
 
 <span class="k">*section</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">section1</span>,<span class="nv"> material</span><span class="ow">=</span><span class="m">linearelastic</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">solid</span>
 <span class="c c-Singleline">** assign linear elastic section to all elements</span>
@@ -147,22 +147,21 @@ all
 
 <span class="c c-Singleline">** displacement output for all elements</span>
 <span class="k">*fieldOutput</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>
+&gt;&gt;perNode,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>
 
 <span class="c c-Singleline">** create output data to open with paraview</span>
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">ensight</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">test</span>
-<span class="nv">create</span><span class="ow">=</span><span class="m">perNode</span>,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
-configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
-
-<span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">monitor</span>
+&gt;&gt;perNode,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
+&gt;&gt;configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
 
 <span class="c c-Singleline">** set step size between 1 and 1e-9, 1000 iterations, 25 max iterations and step length 1</span>
-<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>,<span class="nv"> maxInc</span><span class="ow">=</span><span class="m">1e0</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-9</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
-options,<span class="nv"> category</span><span class="ow">=</span><span class="m">NISTSolver</span>,<span class="nv"> extrapolation</span><span class="ow">=</span><span class="m">off</span>
+<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
+<span class="nv">maxInc</span><span class="ow">=</span><span class="m">1e0</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-9</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
+&gt;&gt;options,<span class="nv"> category</span><span class="ow">=</span><span class="m">NISTSolver</span>,<span class="nv"> extrapolation</span><span class="ow">=</span><span class="m">off</span>
 <span class="c c-Singleline">** fix one side (fixed support)</span>
-dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">Left</span>,<span class="nv">  nSet</span><span class="ow">=</span><span class="m">gen_left</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.0</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0.0</span>,<span class="nv"> 3</span><span class="ow">=</span><span class="m">.0</span>
+&gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">Left</span>,<span class="nv">  nSet</span><span class="ow">=</span><span class="m">gen_left</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.0</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0.0</span>,<span class="nv"> 3</span><span class="ow">=</span><span class="m">.0</span>
 <span class="c c-Singleline">** set load in z to 0.012N for all the points on right back</span>
-nodeforces,<span class="nv"> name</span><span class="ow">=</span><span class="m">cloadTop</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_rightBack</span>,<span class="nv"> components</span><span class="ow">=</span><span class="s">&#39;0, 0, .012&#39;</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>
+&gt;&gt;nodeforces,<span class="nv"> name</span><span class="ow">=</span><span class="m">cloadTop</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_rightBack</span>,<span class="nv"> components</span><span class="ow">=</span><span class="s">&#39;0, 0, .012&#39;</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>
 </pre></div>
 </div>
 </div>
