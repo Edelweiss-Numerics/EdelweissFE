@@ -90,15 +90,15 @@ kw.addOptionalArg("transient", "Set transient ensight output.", bool, True)
 documentation = [module]
 
 
-keyword = "step"
-if keyword in inputLanguage:
-    modules = [
-        inputLanguage["step"].getModule("adaptive").getKeyword("options"),
-        inputLanguage["step"].getModule("adaptiveForExplicitSimulations").getKeyword("options"),
-    ]
-    for optionsModule in modules:
-        optionsModule.addOptionalArg("intermediateSaveInterval", "", float, None)
-        optionsModule.addOptionalArg("minDTForOutput", "", float, None)
+# keyword = "step"
+# if keyword in inputLanguage:
+#     modules = [
+#         inputLanguage["step"].getModule("adaptive").getKeyword("options"),
+#         inputLanguage["step"].getModule("adaptiveForExplicitSimulations").getKeyword("options"),
+#     ]
+#     for optionsModule in modules:
+#         optionsModule.addOptionalArg("intermediateSaveInterval", "", float, None)
+#         optionsModule.addOptionalArg("minDTForOutput", "", float, None)
 
 
 def writeCFloat(f, ndarray):
@@ -761,7 +761,11 @@ class OutputManager(OutputManagerBase):
 
         self.geometryParts = self._createGeometryParts(1)
 
-        self.intermediateSaveInterval = module.getKeyword("configuration")["overwrite"].default
+        self.intermediateSaveInterval = int(
+            kwargs.get(
+                "intermediateSaveInterval", module.getKeyword("configuration")["intermediateSaveInterval"].default
+            )
+        )
         self.overwrite = module.getKeyword("configuration")["overwrite"].default
         transient = module.getKeyword("configuration")["transient"].default
         part = None
@@ -1033,10 +1037,10 @@ class OutputManager(OutputManagerBase):
 
         # intermediate save of the case
         if self.intermediateSaveInterval:
+            self.intermediateSaveIntervalCounter += 1
             if self.intermediateSaveIntervalCounter >= self.intermediateSaveInterval:
                 self.ensightCase.finalize(replaceTimeValuesByEnumeration=False, closeFileHandes=False)
                 self.intermediateSaveIntervalCounter = 0
-            self.intermediateSaveIntervalCounter += 1
 
     def finalizeStep(
         self,
