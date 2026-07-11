@@ -467,7 +467,7 @@ class DofManager:
                         for f_name in fields_on_ent[iNode]
                         for idx in fv_lookup[node.fields[f_name]]
                     ]
-                except (KeyError, AttributeError):
+                except (KeyError, AttributeError, IndexError, TypeError):
                     continue
 
                 # 5. Use np.int32 for better cache performance
