@@ -90,25 +90,6 @@ kw.addOptionalArg("transient", "Set transient ensight output.", bool, True)
 documentation = [module]
 
 
-keyword = "step"
-if keyword in inputLanguage:
-    try:
-        import edelweissfe.stepactions.options as _opt
-        import edelweissfe.steps.adaptivestep as _ad
-        import edelweissfe.steps.adaptivestepforexplicitsimulations as _ad_exp
-
-        _ = (_ad, _ad_exp, _opt)
-    except ImportError:
-        pass
-    modules = [
-        inputLanguage["step"].getModule("adaptive").getKeyword("options"),
-        inputLanguage["step"].getModule("adaptiveForExplicitSimulations").getKeyword("options"),
-    ]
-    for optionsModule in modules:
-        optionsModule.addOptionalArg("intermediateSaveInterval", "", float, None)
-        optionsModule.addOptionalArg("minDTForOutput", "", float, None)
-
-
 def writeCFloat(f, ndarray):
     np.asarray(ndarray, dtype=np.float32).tofile(f)
 
