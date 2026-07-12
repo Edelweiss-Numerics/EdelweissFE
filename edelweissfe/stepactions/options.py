@@ -50,6 +50,8 @@ for module in modules:
         "This stepaction serves as a case insensitive container for storing step options for various modules.",
     )
     kw.addRequiredArg("category", "Option category.", str)
+    kw.addOptionalArg("intermediateSaveInterval", "Set intermediate save interval.", float, None)
+    kw.addOptionalArg("minDTForOutput", "Minimum DT for output.", float, None)
 
     documentation.append(kw)
 
