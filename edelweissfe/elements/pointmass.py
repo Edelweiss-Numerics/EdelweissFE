@@ -137,7 +137,8 @@ class PointMass(BaseElement):
         P[: self.domainSize] += self.mass * load[: self.domainSize]
 
     def computeCriticalTimeStepForExplicitDynamics(self, Q=None, *args, **kwargs) -> float:
-        return np.inf
+        return 1e99
+
 
     def computeDistributedLoad(
         self,

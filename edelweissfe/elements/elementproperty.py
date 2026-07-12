@@ -40,4 +40,7 @@ class ElementProperty:
 
         elSet = model.elementSets[self.elSetName]
         for el in elSet:
-            el.assignProperty(self.propertyName, self.values)
+            if hasattr(el, "assignProperty"):
+                el.assignProperty(self.propertyName, self.values)
+            elif hasattr(el, "setProperties"):
+                el.setProperties(self.values)
