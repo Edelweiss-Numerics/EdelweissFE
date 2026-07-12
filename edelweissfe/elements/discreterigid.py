@@ -82,6 +82,12 @@ class DiscreteRigidElement(BaseElement):
     ):
         pass
 
+    def computeYourself(self, *args, **kwargs):
+        pass
+
+    def computeYourselfExplicit(self, *args, **kwargs):
+        pass
+
     def computeLumpedInertia(self, M: np.ndarray):
         pass
 
