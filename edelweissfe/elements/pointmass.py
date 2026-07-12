@@ -143,10 +143,14 @@ class PointMass(BaseElement):
     def computeInternalEnergy(self) -> float:
         return 0.0
 
-    def computeYourself(self, Ke: np.ndarray, Pe: np.ndarray, *args, **kwargs):
+    def computeKernels(
+        self, P: np.ndarray, K: np.ndarray, U: np.ndarray, dU: np.ndarray, time: float, dT: float, *args, **kwargs
+    ):
         pass
 
-    def computeYourselfExplicit(self, Pe: np.ndarray, *args, **kwargs):
+    def computeKernelsExplicit(
+        self, P: np.ndarray, U: np.ndarray, dU: np.ndarray, time: float, dT: float, *args, **kwargs
+    ):
         pass
 
     def getCoordinatesAtCenter(self) -> np.ndarray:

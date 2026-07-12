@@ -71,6 +71,7 @@ class FEModel:
         self.analyticalFields = {}  #: AnalyticalFields in the model.
         self.scalarVariables = {}  #: ScalarVariables in the model.
         self.additionalParameters = {}  #: Additional information.
+        self.rigidBodies = {}  #: RigidBodies in the model.
         self.domainSize = dimension  #: Spatial dimension of the model
 
     def _populateNodeFieldVariablesFromElements(
