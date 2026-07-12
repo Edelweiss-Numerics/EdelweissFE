@@ -102,7 +102,7 @@ class DiscreteRigidElement(BaseElement):
 
     @property
     def fields(self) -> list:
-        return [["displacement"] for _ in self.nodes]
+        return [[] for _ in self.nodes]
 
     @property
     def nDof(self) -> int:

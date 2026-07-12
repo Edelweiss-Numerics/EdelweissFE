@@ -130,13 +130,23 @@ class PointMass(BaseElement):
 
     @property
     def fields(self) -> list:
-        return [["displacement", "rotation"]]
+        node = self.nodes[0]
+        active_fields = []
+        if "displacement" in node.fields:
+            active_fields.append("displacement")
+        if "rotation" in node.fields:
+            active_fields.append("rotation")
+        return [active_fields]
 
     @property
     def nDof(self) -> int:
-        n_disp = self.domainSize
-        n_rot = 1 if self.domainSize == 2 else 3
-        return n_disp + n_rot
+        node = self.nodes[0]
+        ndof = 0
+        if "displacement" in node.fields:
+            ndof += self.domainSize
+        if "rotation" in node.fields:
+            ndof += 1 if self.domainSize == 2 else 3
+        return ndof
 
     @property
     def nNodes(self) -> int:
@@ -235,7 +245,7 @@ class PointMass(BaseElement):
     def setInitialCondition(self, prop: str, value: float):
         pass
 
-    def setMaterial(self, material):
+    def setMaterial(self, materialName: str, materialProperties: np.ndarray):
         pass
 
     def setProperties(self, properties: list):
