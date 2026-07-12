@@ -92,6 +92,10 @@ documentation = [module]
 
 keyword = "step"
 if keyword in inputLanguage:
+    try:
+        pass
+    except ImportError:
+        pass
     modules = [
         inputLanguage["step"].getModule("adaptive").getKeyword("options"),
         inputLanguage["step"].getModule("adaptiveForExplicitSimulations").getKeyword("options"),
