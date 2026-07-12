@@ -37,14 +37,11 @@ class PointMass(BaseElement):
         Me[:] = 0.0
 
         offset = 0
-        node = self.nodes[0]
+        n_disp = self.domainSize
+        Me[offset : offset + n_disp] = self.mass
+        offset += n_disp
 
-        if "displacement" in node.fields:
-            n_disp = self.domainSize
-            Me[offset : offset + n_disp] = self.mass
-            offset += n_disp
-
-        if self._use_rotation and "rotation" in node.fields:
+        if self._use_rotation:
             if self.domainSize == 2:
                 if isinstance(self.inertia, (list, np.ndarray)):
                     val = self.inertia[2] if len(self.inertia) == 3 else self.inertia[0]
@@ -78,12 +75,11 @@ class PointMass(BaseElement):
         else:
             vel = self.velocity
 
-        if "displacement" in node.fields:
-            n_disp = self.domainSize
-            Mv_e[offset : offset + n_disp] = self.mass * vel[:n_disp]
-            offset += n_disp
+        n_disp = self.domainSize
+        Mv_e[offset : offset + n_disp] = self.mass * vel[:n_disp]
+        offset += n_disp
 
-        if self._use_rotation and "rotation" in node.fields:
+        if self._use_rotation:
             if not hasattr(self, "_first_ang_momentum_call_done"):
                 ang_vel = self.angular_velocity
                 self._first_ang_momentum_call_done = True
@@ -113,13 +109,11 @@ class PointMass(BaseElement):
         Return the structure of the element. (Required by some parts of the framework).
         """
         offset = 0
-        node = self.nodes[0]
         structure = {}
-        if "displacement" in node.fields:
-            n_disp = self.domainSize
-            structure["displacement"] = (offset, offset + n_disp)
-            offset += n_disp
-        if self._use_rotation and "rotation" in node.fields:
+        n_disp = self.domainSize
+        structure["displacement"] = (offset, offset + n_disp)
+        offset += n_disp
+        if self._use_rotation:
             n_rot = 1 if self.domainSize == 2 else 3
             structure["rotation"] = (offset, offset + n_rot)
         return structure
@@ -135,21 +129,15 @@ class PointMass(BaseElement):
 
     @property
     def fields(self) -> list:
-        node = self.nodes[0]
-        active_fields = []
-        if "displacement" in node.fields:
-            active_fields.append("displacement")
-        if self._use_rotation and "rotation" in node.fields:
+        active_fields = ["displacement"]
+        if self._use_rotation:
             active_fields.append("rotation")
         return [active_fields]
 
     @property
     def nDof(self) -> int:
-        node = self.nodes[0]
-        ndof = 0
-        if "displacement" in node.fields:
-            ndof += self.domainSize
-        if self._use_rotation and "rotation" in node.fields:
+        ndof = self.domainSize
+        if self._use_rotation:
             ndof += 1 if self.domainSize == 2 else 3
         return ndof
 
