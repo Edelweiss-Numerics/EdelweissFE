@@ -61,23 +61,23 @@ class DiscreteRigidElement(BaseElement):
     ):
         pass
 
-    def computeYourself(
+    def computeKernels(
         self,
         P: np.ndarray,
         K: np.ndarray,
         U: np.ndarray,
         dU: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dT: float,
     ):
         pass
 
-    def computeYourselfExplicit(
+    def computeKernelsExplicit(
         self,
         P: np.ndarray,
         U: np.ndarray,
         dU: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dT: float,
     ):
         pass
