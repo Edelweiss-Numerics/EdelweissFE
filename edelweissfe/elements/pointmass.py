@@ -14,6 +14,8 @@ class PointMass(BaseElement):
         super().__init__("PointMass", elNumber)
         self._elNumber = elNumber
         self._nodes = nodes
+        self.model = model
+        self.domainSize = model.domainSize
         self.mass = mass
         self.inertia = inertia if inertia is not None else [0.0, 0.0, 0.0]
 
@@ -23,8 +25,8 @@ class PointMass(BaseElement):
             if "displacement" in node.fields:
                 pass
 
-        self.velocity = np.array(initial_velocity) if initial_velocity is not None else np.zeros(3)
-        self.angular_velocity = np.zeros(3)
+        self.velocity = np.array(initial_velocity) if initial_velocity is not None else np.zeros(self.domainSize)
+        self.angular_velocity = np.zeros(1 if self.domainSize == 2 else 3)
 
     def computeLumpedInertia(self, Me: np.ndarray):
         """
@@ -37,13 +39,21 @@ class PointMass(BaseElement):
         node = self.nodes[0]
 
         if "displacement" in node.fields:
-            Me[offset : offset + 3] = self.mass
-            offset += 3
+            n_disp = self.domainSize
+            Me[offset : offset + n_disp] = self.mass
+            offset += n_disp
 
         if "rotation" in node.fields:
-            Me[offset] = self.inertia[0]
-            Me[offset + 1] = self.inertia[1]
-            Me[offset + 2] = self.inertia[2]
+            if self.domainSize == 2:
+                if isinstance(self.inertia, (list, np.ndarray)):
+                    val = self.inertia[2] if len(self.inertia) == 3 else self.inertia[0]
+                else:
+                    val = self.inertia
+                Me[offset] = val
+            else:
+                Me[offset] = self.inertia[0]
+                Me[offset + 1] = self.inertia[1]
+                Me[offset + 2] = self.inertia[2]
 
     def computeMomentum(self, Mv_e: np.ndarray):
         """
@@ -59,14 +69,18 @@ class PointMass(BaseElement):
             self._first_momentum_call_done = True
         elif hasattr(node, "current_velocity") and getattr(node, "_velocity_initialized", False):
             vel = node.current_velocity
-        elif "velocity" in node.fields:
-            vel = node.fields["velocity"]
+        elif "velocity" in self.model.nodeFields and "U" in self.model.nodeFields["velocity"]:
+            try:
+                vel = self.model.nodeFields["velocity"].subset(node)["U"][0]
+            except Exception:
+                vel = self.velocity
         else:
             vel = self.velocity
 
         if "displacement" in node.fields:
-            Mv_e[offset : offset + 3] = self.mass * vel
-            offset += 3
+            n_disp = self.domainSize
+            Mv_e[offset : offset + n_disp] = self.mass * vel[:n_disp]
+            offset += n_disp
 
         if "rotation" in node.fields:
             if not hasattr(self, "_first_ang_momentum_call_done"):
@@ -74,13 +88,24 @@ class PointMass(BaseElement):
                 self._first_ang_momentum_call_done = True
             elif hasattr(node, "current_angular_velocity") and getattr(node, "_velocity_initialized", False):
                 ang_vel = node.current_angular_velocity
-            elif "angular_velocity" in node.fields:
-                ang_vel = node.fields["angular_velocity"]
+            elif "angular_velocity" in self.model.nodeFields and "U" in self.model.nodeFields["angular_velocity"]:
+                try:
+                    ang_vel = self.model.nodeFields["angular_velocity"].subset(node)["U"][0]
+                except Exception:
+                    ang_vel = self.angular_velocity
             else:
                 ang_vel = self.angular_velocity
-            Mv_e[offset] = self.inertia[0] * ang_vel[0]
-            Mv_e[offset + 1] = self.inertia[1] * ang_vel[1]
-            Mv_e[offset + 2] = self.inertia[2] * ang_vel[2]
+
+            if self.domainSize == 2:
+                if isinstance(self.inertia, (list, np.ndarray)):
+                    val = self.inertia[2] if len(self.inertia) == 3 else self.inertia[0]
+                else:
+                    val = self.inertia
+                Mv_e[offset] = val * ang_vel[0]
+            else:
+                Mv_e[offset] = self.inertia[0] * ang_vel[0]
+                Mv_e[offset + 1] = self.inertia[1] * ang_vel[1]
+                Mv_e[offset + 2] = self.inertia[2] * ang_vel[2]
 
     def getStructure(self):
         """
@@ -90,10 +115,12 @@ class PointMass(BaseElement):
         node = self.nodes[0]
         structure = {}
         if "displacement" in node.fields:
-            structure["displacement"] = (offset, offset + 3)
-            offset += 3
+            n_disp = self.domainSize
+            structure["displacement"] = (offset, offset + n_disp)
+            offset += n_disp
         if "rotation" in node.fields:
-            structure["rotation"] = (offset, offset + 3)
+            n_rot = 1 if self.domainSize == 2 else 3
+            structure["rotation"] = (offset, offset + n_rot)
         return structure
 
     # Dummy implementations for abstract methods of BaseElement
@@ -107,7 +134,9 @@ class PointMass(BaseElement):
 
     @property
     def nDof(self) -> int:
-        return 6
+        n_disp = self.domainSize
+        n_rot = 1 if self.domainSize == 2 else 3
+        return n_disp + n_rot
 
     @property
     def nNodes(self) -> int:
@@ -195,7 +224,7 @@ class PointMass(BaseElement):
 
     @property
     def hasMaterial(self) -> bool:
-        return False
+        return True
 
     def initializeElement(self):
         pass
