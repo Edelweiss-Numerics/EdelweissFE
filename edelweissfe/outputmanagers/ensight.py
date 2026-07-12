@@ -93,7 +93,11 @@ documentation = [module]
 keyword = "step"
 if keyword in inputLanguage:
     try:
-        pass
+        import edelweissfe.stepactions.options as _opt
+        import edelweissfe.steps.adaptivestep as _ad
+        import edelweissfe.steps.adaptivestepforexplicitsimulations as _ad_exp
+
+        _ = (_ad, _ad_exp, _opt)
     except ImportError:
         pass
     modules = [
