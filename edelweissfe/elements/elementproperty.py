@@ -44,3 +44,7 @@ class ElementProperty:
                 el.assignProperty(self.propertyName, self.values)
             elif hasattr(el, "setProperties"):
                 el.setProperties(self.values)
+            else:
+                raise TypeError(
+                    f"Element of type '{type(el).__name__}' supports neither 'assignProperty' nor 'setProperties'."
+                )
