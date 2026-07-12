@@ -21,6 +21,7 @@ class DiscreteRigidElement(BaseElement):
     def elNumber(self) -> int:
         return self._elNumber
 
+    @property
     def elType(self) -> str:
         return "DiscreteRigidElement"
 

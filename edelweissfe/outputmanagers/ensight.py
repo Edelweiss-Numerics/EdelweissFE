@@ -761,11 +761,10 @@ class OutputManager(OutputManagerBase):
 
         self.geometryParts = self._createGeometryParts(1)
 
-        self.intermediateSaveInterval = int(
-            kwargs.get(
-                "intermediateSaveInterval", module.getKeyword("configuration")["intermediateSaveInterval"].default
-            )
+        val = kwargs.get(
+            "intermediateSaveInterval", module.getKeyword("configuration")["intermediateSaveInterval"].default
         )
+        self.intermediateSaveInterval = int(val) if val is not None else None
         self.overwrite = module.getKeyword("configuration")["overwrite"].default
         transient = module.getKeyword("configuration")["transient"].default
         part = None

@@ -18,6 +18,7 @@ class PointMass(BaseElement):
         self.domainSize = model.domainSize
         self.mass = mass
         self.inertia = inertia if inertia is not None else [0.0, 0.0, 0.0]
+        self._use_rotation = inertia is not None
 
         # We need to initialize the velocity fields on the node if they don't exist
         node = self.nodes[0]
@@ -43,7 +44,7 @@ class PointMass(BaseElement):
             Me[offset : offset + n_disp] = self.mass
             offset += n_disp
 
-        if "rotation" in node.fields:
+        if self._use_rotation and "rotation" in node.fields:
             if self.domainSize == 2:
                 if isinstance(self.inertia, (list, np.ndarray)):
                     val = self.inertia[2] if len(self.inertia) == 3 else self.inertia[0]
@@ -82,7 +83,7 @@ class PointMass(BaseElement):
             Mv_e[offset : offset + n_disp] = self.mass * vel[:n_disp]
             offset += n_disp
 
-        if "rotation" in node.fields:
+        if self._use_rotation and "rotation" in node.fields:
             if not hasattr(self, "_first_ang_momentum_call_done"):
                 ang_vel = self.angular_velocity
                 self._first_ang_momentum_call_done = True
@@ -118,7 +119,7 @@ class PointMass(BaseElement):
             n_disp = self.domainSize
             structure["displacement"] = (offset, offset + n_disp)
             offset += n_disp
-        if "rotation" in node.fields:
+        if self._use_rotation and "rotation" in node.fields:
             n_rot = 1 if self.domainSize == 2 else 3
             structure["rotation"] = (offset, offset + n_rot)
         return structure
@@ -129,12 +130,16 @@ class PointMass(BaseElement):
         return "point"
 
     @property
+    def elType(self) -> str:
+        return "PointMass"
+
+    @property
     def fields(self) -> list:
         node = self.nodes[0]
         active_fields = []
         if "displacement" in node.fields:
             active_fields.append("displacement")
-        if "rotation" in node.fields:
+        if self._use_rotation and "rotation" in node.fields:
             active_fields.append("rotation")
         return [active_fields]
 
@@ -144,7 +149,7 @@ class PointMass(BaseElement):
         ndof = 0
         if "displacement" in node.fields:
             ndof += self.domainSize
-        if "rotation" in node.fields:
+        if self._use_rotation and "rotation" in node.fields:
             ndof += 1 if self.domainSize == 2 else 3
         return ndof
 
@@ -246,7 +251,7 @@ class PointMass(BaseElement):
         pass
 
     def setMaterial(self, materialName: str, materialProperties: np.ndarray):
-        pass
+        raise TypeError("PointMass elements cannot have materials assigned to them.")
 
     def setProperties(self, properties: list):
         pass
