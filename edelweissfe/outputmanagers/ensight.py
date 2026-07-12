@@ -972,8 +972,10 @@ class OutputManager(OutputManagerBase):
     def initializeStep(self, step):
         if self.name in step.actions["options"] or "Ensight" in step.actions["options"]:
             options = step.actions["options"].get(self.name, False) or step.actions["options"]["Ensight"].options
-            self.intermediateSaveInterval = int(options.get("intermediateSaveInterval", self.intermediateSaveInterval))
-            self.minDTForOutput = float(options.get("minDTForOutput", self.minDTForOutput))
+            val = options.get("intermediateSaveInterval", self.intermediateSaveInterval)
+            self.intermediateSaveInterval = int(val) if val is not None else None
+            val_dt = options.get("minDTForOutput", self.minDTForOutput)
+            self.minDTForOutput = float(val_dt) if val_dt is not None else 0.0
 
     def finalizeIncrement(self, **kwargs):
         time = self.model.time
