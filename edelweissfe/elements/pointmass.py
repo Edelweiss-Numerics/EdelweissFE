@@ -153,6 +153,12 @@ class PointMass(BaseElement):
     ):
         pass
 
+    def computeYourself(self, *args, **kwargs):
+        pass
+
+    def computeYourselfExplicit(self, *args, **kwargs):
+        pass
+
     def getCoordinatesAtCenter(self) -> np.ndarray:
         return self.nodes[0].coordinates
 
