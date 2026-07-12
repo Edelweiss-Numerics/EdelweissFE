@@ -90,15 +90,15 @@ kw.addOptionalArg("transient", "Set transient ensight output.", bool, True)
 documentation = [module]
 
 
-# keyword = "step"
-# if keyword in inputLanguage:
-#     modules = [
-#         inputLanguage["step"].getModule("adaptive").getKeyword("options"),
-#         inputLanguage["step"].getModule("adaptiveForExplicitSimulations").getKeyword("options"),
-#     ]
-#     for optionsModule in modules:
-#         optionsModule.addOptionalArg("intermediateSaveInterval", "", float, None)
-#         optionsModule.addOptionalArg("minDTForOutput", "", float, None)
+keyword = "step"
+if keyword in inputLanguage:
+    modules = [
+        inputLanguage["step"].getModule("adaptive").getKeyword("options"),
+        inputLanguage["step"].getModule("adaptiveForExplicitSimulations").getKeyword("options"),
+    ]
+    for optionsModule in modules:
+        optionsModule.addOptionalArg("intermediateSaveInterval", "", float, None)
+        optionsModule.addOptionalArg("minDTForOutput", "", float, None)
 
 
 def writeCFloat(f, ndarray):

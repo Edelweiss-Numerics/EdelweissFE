@@ -131,13 +131,35 @@ class PointMass(BaseElement):
     def acceptLastState(self):
         pass
 
-    def computeBodyForce(self, Fe: np.ndarray, bodyForceNodes: list):
+    def computeBodyForce(
+        self,
+        P: np.ndarray,
+        K: np.ndarray,
+        load: np.ndarray,
+        U: np.ndarray,
+        time: float,
+        dTime: float,
+        *args,
+        **kwargs,
+    ):
         pass
 
-    def computeCriticalTimeStepForExplicitDynamics(self) -> float:
+    def computeCriticalTimeStepForExplicitDynamics(self, Q=None, *args, **kwargs) -> float:
         return 1e99
 
-    def computeDistributedLoad(self, Pe: np.ndarray, distributedLoad: list, timeStep):
+    def computeDistributedLoad(
+        self,
+        loadType: str,
+        P: np.ndarray,
+        K: np.ndarray,
+        faceID: int,
+        load: np.ndarray,
+        U: np.ndarray,
+        time: float,
+        dT: float,
+        *args,
+        **kwargs,
+    ):
         pass
 
     def computeInternalEnergy(self) -> float:
@@ -168,9 +190,10 @@ class PointMass(BaseElement):
     def getNumberOfQuadraturePoints(self) -> int:
         return 1
 
-    def getResultArray(self, varName: str) -> np.ndarray:
+    def getResultArray(self, result: str, quadraturePoint: int, getPersistentView: bool = True) -> np.ndarray:
         return np.zeros(1)
 
+    @property
     def hasMaterial(self) -> bool:
         return False
 
