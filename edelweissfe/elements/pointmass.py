@@ -88,7 +88,7 @@ class PointMass(BaseElement):
     def nDof(self) -> int:
         ndof = self.domainSize
         if self._use_rotation:
-            ndof += 3
+            ndof += 1 if self.domainSize == 2 else 3
         return ndof
 
     @property
