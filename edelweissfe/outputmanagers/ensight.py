@@ -682,6 +682,44 @@ def createUnstructuredPartFromNodeSet(setName, nodeSet: list, partID: int):
     return EnsightUnstructuredPart("NSET_" + setName, partID, list(nodeSet), elementDict)
 
 
+def createUnstructuredPartFromRigidBody(bodyName, rigidBody, partID: int):
+    """Determines the element and node list for an Ensightpart from a
+    RigidBody. The reduced, unique node set is generated, as well as
+    the element to node index mapping for the ensight part.
+
+    Parameters
+    ----------
+    bodyName
+        The name of the rigid body.
+    rigidBody
+        The rigid body object.
+    partID
+        The id of this part.
+    """
+
+    nodeCounter = 0
+    partNodes = dict()
+    elementDict = dict()
+
+    facets = rigidBody.getVisualizationElements()
+
+    facetID = 1
+    for facet in facets:
+        elShape = facet["type"]
+        if elShape not in elementDict:
+            elementDict[elShape] = dict()
+        elNodeIndices = []
+        for node in facet["nodes"]:
+            idx = partNodes.setdefault(node, nodeCounter)
+            elNodeIndices.append(idx)
+            if idx == nodeCounter:
+                nodeCounter += 1
+        elementDict[elShape][facetID] = elNodeIndices
+        facetID += 1
+
+    return EnsightUnstructuredPart(bodyName, partID, list(partNodes.keys()), elementDict)
+
+
 required = [kw.name for kw in module.requiredArgs]
 required += [kw.name for kw in module.requiredKeywords]
 
@@ -742,6 +780,7 @@ class OutputManager(OutputManagerBase):
 
         self.elSetToEnsightPartMappings = {}
         self.nSetToEnsightPartMappings = {}
+        self.rigidBodyToEnsightPartMappings = {}
 
         self._transientPerNodeVariableJobs = defaultdict(list)
         self._transientPerElementVariableJobs = defaultdict(list)
@@ -1066,7 +1105,15 @@ class OutputManager(OutputManagerBase):
             nodeSetParts.append(nodeSetPart)
             partCounter += 1
 
-        return elSetParts + nodeSetParts
+        rigidBodyParts = []
+        if hasattr(model, "rigidBodies"):
+            for bodyName, body in model.rigidBodies.items():
+                bodyPart = createUnstructuredPartFromRigidBody(bodyName, body, partCounter)
+                self.rigidBodyToEnsightPartMappings[bodyName] = bodyPart
+                rigidBodyParts.append(bodyPart)
+                partCounter += 1
+
+        return elSetParts + nodeSetParts + rigidBodyParts
 
     def _getTargetPartForFieldOutput(self, fieldOutput: _FieldOutputBase) -> EnsightUnstructuredPart:
         """
@@ -1084,6 +1131,7 @@ class OutputManager(OutputManagerBase):
         EnsightStructuredPart
             The identified part.
         """
+        from edelweissfe.rigidbodies.rigidbody import RigidBody
 
         theSetName = fieldOutput.associatedSet.name
 
@@ -1093,9 +1141,12 @@ class OutputManager(OutputManagerBase):
         elif isinstance(fieldOutput.associatedSet, ElementSet):
             return self.elSetToEnsightPartMappings[theSetName]
 
+        elif isinstance(fieldOutput.associatedSet, RigidBody):
+            return self.rigidBodyToEnsightPartMappings[theSetName]
+
         else:
             raise Exception(
-                "Ensight Variables need to be excplicity associated with a part, our implicitly through a FieldOutput defined on ElementSets or NodeSets!"
+                "Ensight Variables need to be explicitly associated with a part, or implicitly through a FieldOutput defined on ElementSets, NodeSets, or RigidBodies!"
             )
 
     def _ensureArrayIs2D(self, result: np.ndarray) -> np.ndarray:
