@@ -238,14 +238,18 @@ class NodeFieldSubset(NodeField):
         list[Node]
             The list of subset nodes.
         """
-        if type(subset) is Node:
+        from edelweissfe.rigidbodies.rigidbody import RigidBody
+
+        if isinstance(subset, Node):
             nodeCandidates = [
                 subset,
             ]
-        elif type(subset) is ElementSet:
+        elif isinstance(subset, ElementSet):
             nodeCandidates = subset.extractNodeSet()
-        elif type(subset) is NodeSet:
+        elif isinstance(subset, NodeSet):
             nodeCandidates = subset
+        elif isinstance(subset, RigidBody):
+            nodeCandidates = subset.getVisualizationNodes()
         else:
             raise Exception("Invalid subset")
 
