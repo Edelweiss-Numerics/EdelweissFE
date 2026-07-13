@@ -235,22 +235,23 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
             The diagonal of the lumped mass matrix to be defined.
         """
 
-    def computeMomentum(
-        self,
-        Mv: np.ndarray,
-    ):
-        """Evaluate the momentum carried by this element.
+    @property
+    def initialVelocity(self) -> np.ndarray:
+        """The element's initial velocity, in DOF order, applied once as an
+        initial condition at the start of an explicit simulation.
 
-        The default implementation contributes nothing; elements which carry
-        their own momentum state (e.g., :class:`~edelweissfe.elements.pointmass.PointMass`)
-        override this method.
+        Elements do not take part in the per-step momentum remap (that is a
+        particle/cell concern); a mass-bearing element such as
+        :class:`~edelweissfe.elements.pointmass.PointMass` instead declares its
+        initial velocity here, which the explicit solver seeds into the grid
+        velocity vector once. The default is rest.
 
-        Parameters
-        ----------
-        Mv
-            The momentum vector to be defined.
+        Returns
+        -------
+        np.ndarray
+            The initial velocity of the element's DOFs (size ``nDof``).
         """
-        Mv[:] = 0.0
+        return np.zeros(self.nDof)
 
     @abstractmethod
     def computeCriticalTimeStepForExplicitDynamics(
