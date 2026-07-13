@@ -17,17 +17,31 @@ class PointMass(BaseElement):
         self.model = model
         self.domainSize = model.domainSize
         self.mass = mass
-        self.inertia = inertia if inertia is not None else [0.0, 0.0, 0.0]
         self._use_rotation = inertia is not None
 
-        # We need to initialize the velocity fields on the node if they don't exist
-        node = self.nodes[0]
-        if "velocity" not in node.fields:
-            if "displacement" in node.fields:
-                pass
+        # Normalize the rotary inertia to one value per rotational DOF.
+        nRot = 1 if self.domainSize == 2 else 3
+        if inertia is None:
+            self.inertia = np.zeros(nRot)
+        else:
+            inertia = np.atleast_1d(np.asarray(inertia, dtype=float))
+            if self.domainSize == 2:
+                # A 3-component (diagonal) inertia refers to the out-of-plane axis.
+                self.inertia = inertia[[2]] if inertia.shape[0] == 3 else inertia[[0]]
+            else:
+                if inertia.shape[0] != 3:
+                    raise ValueError("PointMass in 3D requires a diagonal inertia [Ixx, Iyy, Izz].")
+                self.inertia = inertia
 
-        self.velocity = np.array(initial_velocity) if initial_velocity is not None else np.zeros(self.domainSize)
-        self.angular_velocity = np.zeros(1 if self.domainSize == 2 else 3)
+        # The node's velocity attributes are the single source of truth for
+        # the momentum computation; they are updated by the explicit solvers.
+        node = self.nodes[0]
+        node.current_velocity = (
+            np.array(initial_velocity, dtype=float)[: self.domainSize]
+            if initial_velocity is not None
+            else np.zeros(self.domainSize)
+        )
+        node.current_angular_velocity = np.zeros(nRot)
 
     def computeLumpedInertia(self, Me: np.ndarray):
         """
@@ -36,22 +50,11 @@ class PointMass(BaseElement):
         """
         Me[:] = 0.0
 
-        offset = 0
         n_disp = self.domainSize
-        Me[offset : offset + n_disp] = self.mass
-        offset += n_disp
+        Me[:n_disp] = self.mass
 
         if self._use_rotation:
-            if self.domainSize == 2:
-                if isinstance(self.inertia, (list, np.ndarray)):
-                    val = self.inertia[2] if len(self.inertia) == 3 else self.inertia[0]
-                else:
-                    val = self.inertia
-                Me[offset] = val
-            else:
-                Me[offset] = self.inertia[0]
-                Me[offset + 1] = self.inertia[1]
-                Me[offset + 2] = self.inertia[2]
+            Me[n_disp : n_disp + self.inertia.shape[0]] = self.inertia
 
     def computeMomentum(self, Mv_e: np.ndarray):
         """
@@ -59,64 +62,14 @@ class PointMass(BaseElement):
         Mv_e is a 1D array of size self.nDof.
         """
         Mv_e[:] = 0.0
-        offset = 0
         node = self.nodes[0]
 
-        if not hasattr(self, "_first_momentum_call_done"):
-            vel = self.velocity
-            self._first_momentum_call_done = True
-        elif hasattr(node, "current_velocity") and getattr(node, "_velocity_initialized", False):
-            vel = node.current_velocity
-        elif "velocity" in self.model.nodeFields and "U" in self.model.nodeFields["velocity"]:
-            try:
-                vel = self.model.nodeFields["velocity"].subset(node)["U"][0]
-            except Exception:
-                vel = self.velocity
-        else:
-            vel = self.velocity
-
         n_disp = self.domainSize
-        Mv_e[offset : offset + n_disp] = self.mass * vel[:n_disp]
-        offset += n_disp
+        Mv_e[:n_disp] = self.mass * node.current_velocity[:n_disp]
 
         if self._use_rotation:
-            if not hasattr(self, "_first_ang_momentum_call_done"):
-                ang_vel = self.angular_velocity
-                self._first_ang_momentum_call_done = True
-            elif hasattr(node, "current_angular_velocity") and getattr(node, "_velocity_initialized", False):
-                ang_vel = node.current_angular_velocity
-            elif "angular_velocity" in self.model.nodeFields and "U" in self.model.nodeFields["angular_velocity"]:
-                try:
-                    ang_vel = self.model.nodeFields["angular_velocity"].subset(node)["U"][0]
-                except Exception:
-                    ang_vel = self.angular_velocity
-            else:
-                ang_vel = self.angular_velocity
-
-            if self.domainSize == 2:
-                if isinstance(self.inertia, (list, np.ndarray)):
-                    val = self.inertia[2] if len(self.inertia) == 3 else self.inertia[0]
-                else:
-                    val = self.inertia
-                Mv_e[offset] = val * ang_vel[0]
-            else:
-                Mv_e[offset] = self.inertia[0] * ang_vel[0]
-                Mv_e[offset + 1] = self.inertia[1] * ang_vel[1]
-                Mv_e[offset + 2] = self.inertia[2] * ang_vel[2]
-
-    def getStructure(self):
-        """
-        Return the structure of the element. (Required by some parts of the framework).
-        """
-        offset = 0
-        structure = {}
-        n_disp = self.domainSize
-        structure["displacement"] = (offset, offset + n_disp)
-        offset += n_disp
-        if self._use_rotation:
-            n_rot = 1 if self.domainSize == 2 else 3
-            structure["rotation"] = (offset, offset + n_rot)
-        return structure
+            nRot = self.inertia.shape[0]
+            Mv_e[n_disp : n_disp + nRot] = self.inertia * node.current_angular_velocity[:nRot]
 
     # Dummy implementations for abstract methods of BaseElement
     @property

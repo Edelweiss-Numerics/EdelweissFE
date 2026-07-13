@@ -1106,12 +1106,11 @@ class OutputManager(OutputManagerBase):
             partCounter += 1
 
         rigidBodyParts = []
-        if hasattr(model, "rigidBodies"):
-            for bodyName, body in model.rigidBodies.items():
-                bodyPart = createUnstructuredPartFromRigidBody(bodyName, body, partCounter)
-                self.rigidBodyToEnsightPartMappings[bodyName] = bodyPart
-                rigidBodyParts.append(bodyPart)
-                partCounter += 1
+        for bodyName, body in model.rigidBodies.items():
+            bodyPart = createUnstructuredPartFromRigidBody(bodyName, body, partCounter)
+            self.rigidBodyToEnsightPartMappings[bodyName] = bodyPart
+            rigidBodyParts.append(bodyPart)
+            partCounter += 1
 
         return elSetParts + nodeSetParts + rigidBodyParts
 

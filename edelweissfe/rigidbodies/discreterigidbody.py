@@ -32,7 +32,8 @@ class DiscreteRigidBody(RigidBody):
         self.rpNode = list(rpNodeSet)[0]
         self.domainSize = model.domainSize
 
-        # Initialize default explicit velocities to avoid hasattr/getattr on RP node
+        # Initialize explicit velocities on the RP node; inertia (PointMass)
+        # and explicit solvers keep them up to date.
         self.rpNode.current_velocity = np.zeros(self.domainSize)
         if self.domainSize == 3:
             self.rpNode.current_angular_velocity = np.zeros(3)
@@ -62,20 +63,16 @@ class DiscreteRigidBody(RigidBody):
             )
             model.elements[el_num] = self.point_mass_element
 
-    def _getFieldU(self, fieldName, node):
-        if fieldName not in node.fields:
-            # Depending on if it's displacement (size domainSize) or rotation (size varies)
-            from edelweissfe.config.phenomena import getFieldSize
-
-            return np.zeros(getFieldSize(fieldName, self.domainSize))
-        node_field = self.model.nodeFields.get(fieldName)
-        if node_field is None or "U" not in node_field:
-            from edelweissfe.config.phenomena import getFieldSize
-
-            return np.zeros(getFieldSize(fieldName, self.domainSize))
-        return node_field.subset(node)["U"][0].copy()
-
     def getCurrentKinematics(self):
+        """Return the current rigid body motion.
+
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]
+            The total RP displacement, the 3x3 rotation matrix, and the
+            *reference* (initial) RP coordinates. The current RP position is
+            the sum of the first and third entries.
+        """
         disp_field = self.model.nodeFields.get("displacement")
         if disp_field is not None and "U" in disp_field and self.rpNode in disp_field.nodes:
             idx = disp_field._indicesOfNodesInArray[self.rpNode]
@@ -91,7 +88,7 @@ class DiscreteRigidBody(RigidBody):
                 theta = rot_field["U"][idx]
                 R = self._getRotationMatrix3D(theta)
 
-        # In EdelweissFE, node.coordinates are the *reference* (initial) coordinates.
+        # In EdelweissFE, the RP node's coordinates are the *reference* (initial) coordinates.
         return u_rp, R, self.rpNode.coordinates
 
     def updateKinematics(self, timeStep=None):
@@ -101,10 +98,17 @@ class DiscreteRigidBody(RigidBody):
         disp_field = self.model.nodeFields.get("displacement")
         has_disp = disp_field is not None and "U" in disp_field
 
-        new_coords = rp_current + self.initialRelativePositions.dot(R.T)
+        d = self.domainSize
+        new_coords = rp_current + self.initialRelativePositions.dot(R[:d, :d].T)
         if has_disp:
             disp_u = disp_field["U"]
 
+        # Deviating from the usual EdelweissFE convention, the surface nodes'
+        # coordinates hold the *current* configuration: the output managers
+        # write the transient geometry of the moving body from them, and the
+        # AABB proximity checks of the contact constraints rely on them. The
+        # reference configuration is retained via the RP node's coordinates
+        # and initialRelativePositions.
         for i, node in enumerate(self.surfaceNodes):
             node.coordinates[:] = new_coords[i]
             if has_disp:
@@ -114,6 +118,58 @@ class DiscreteRigidBody(RigidBody):
     def getAABB(self):
         coords = np.array([n.coordinates for n in self.surfaceNodes])
         return np.min(coords, axis=0), np.max(coords, axis=0)
+
+    def querySurface(self, coords: np.ndarray, proximityDistance: float = None):
+        """Compute signed distances and outward face normals of the rigid
+        surface, in its current configuration, for an array of query points.
+
+        Parameters
+        ----------
+        coords : numpy.ndarray, shape (nPoints, 3)
+            The query coordinates.
+        proximityDistance : float, optional
+            If given, a broadphase AABB check (the current AABB inflated by
+            this distance) is performed first; points outside are assigned a
+            distance of ``inf`` and a zero normal without querying the surface.
+
+        Returns
+        -------
+        dists : numpy.ndarray, shape (nPoints,)
+            The signed distances (negative = penetration).
+        normals : numpy.ndarray, shape (nPoints, 3)
+            The outward unit normals of the closest faces.
+        """
+        if self._query_engine is None:
+            if self.surface_mesh is None:
+                raise RuntimeError(f"Discrete rigid body '{self.name}' has no surface_mesh to query.")
+            from edelweissfe.utils.discretesurfacequery import DiscreteSurfaceQuery
+
+            self._query_engine = DiscreteSurfaceQuery(mesh=self.surface_mesh)
+
+        n_points = coords.shape[0]
+        if proximityDistance is not None:
+            curr_min, curr_max = self.getAABB()
+            aabb_min = curr_min - proximityDistance
+            aabb_max = curr_max + proximityDistance
+            in_aabb = np.all((coords >= aabb_min) & (coords <= aabb_max), axis=1)
+            active_indices = np.where(in_aabb)[0]
+            if len(active_indices) == 0:
+                return np.full(n_points, np.inf), np.zeros((n_points, 3))
+            coords_to_query = coords[active_indices]
+        else:
+            coords_to_query = coords
+            active_indices = np.arange(n_points)
+
+        u_rp, R, rp_initial = self.getCurrentKinematics()
+        active_dists, active_normals = self._query_engine.query(
+            coords_to_query, translation=u_rp, rotation_matrix=R, rotation_center=rp_initial
+        )
+
+        dists = np.full(n_points, np.inf)
+        dists[active_indices] = active_dists
+        normals = np.zeros((n_points, 3))
+        normals[active_indices] = active_normals
+        return dists, normals
 
     def _getRotationMatrix3D(self, theta):
         angle = np.linalg.norm(theta)
@@ -131,7 +187,14 @@ class DiscreteRigidBody(RigidBody):
         return self.facets
 
     def getVisualizationField(self, fieldName: str) -> np.ndarray:
-        # Generic query to the model's nodeFields
-        if fieldName not in self.model.nodeFields:
+        nodeField = self.model.nodeFields.get(fieldName)
+        if nodeField is None or "U" not in nodeField:
             return np.zeros((len(self.surfaceNodes), self.model.domainSize))
-        return np.zeros((len(self.surfaceNodes), self.model.domainSize))
+
+        values = nodeField["U"]
+        indices = nodeField._indicesOfNodesInArray
+        result = np.zeros((len(self.surfaceNodes), values.shape[1]))
+        for i, node in enumerate(self.surfaceNodes):
+            if node in indices:
+                result[i] = values[indices[node]]
+        return result
