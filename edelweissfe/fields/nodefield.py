@@ -262,6 +262,8 @@ class NodeFieldSubset(NodeField):
             nodeCandidates = subset.extractNodeSet()
         elif isinstance(subset, NodeSet):
             nodeCandidates = subset
+        elif isinstance(subset, RigidBody):
+            nodeCandidates = subset.getVisualizationNodes()
         else:
             raise Exception("Invalid subset")
 

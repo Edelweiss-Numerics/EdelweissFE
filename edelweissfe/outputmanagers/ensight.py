@@ -39,7 +39,6 @@ import numpy as np
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.points.node import Node
-from edelweissfe.rigidbodies.rigidbody import RigidBody
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
@@ -1133,6 +1132,8 @@ class OutputManager(OutputManagerBase):
         EnsightStructuredPart
             The identified part.
         """
+        from edelweissfe.rigidbodies.rigidbody import RigidBody
+
         theSetName = fieldOutput.associatedSet.name
 
         if isinstance(fieldOutput.associatedSet, NodeSet):
