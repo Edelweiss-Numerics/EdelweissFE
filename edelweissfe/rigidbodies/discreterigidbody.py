@@ -32,12 +32,8 @@ class DiscreteRigidBody(RigidBody):
         self.rpNode = list(rpNodeSet)[0]
         self.domainSize = model.domainSize
 
-        # Initialize explicit velocities on the RP node; inertia (PointMass)
-        # and explicit solvers keep them up to date.
-        self.rpNode.current_velocity = np.zeros(self.domainSize)
-        if self.domainSize == 3:
-            self.rpNode.current_angular_velocity = np.zeros(3)
-
+        # The RP velocity state is owned by the PointMass mass carrier (created
+        # below), not by the node -- the explicit solver keeps it in sync.
         self.surface_mesh = None
         self._query_engine = None
 

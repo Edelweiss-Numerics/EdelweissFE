@@ -33,15 +33,16 @@ class PointMass(BaseElement):
                     raise ValueError("PointMass in 3D requires a diagonal inertia [Ixx, Iyy, Izz].")
                 self.inertia = inertia
 
-        # The node's velocity attributes are the single source of truth for
-        # the momentum computation; they are updated by the explicit solvers.
-        node = self.nodes[0]
-        node.current_velocity = (
+        # Initial velocity of the reference point, applied once as an initial
+        # condition by the explicit solver (see :attr:`initialVelocity`). Only
+        # a translational initial velocity is supported; the rotational part
+        # starts at rest.
+        self._initialVelocity = (
             np.array(initial_velocity, dtype=float)[: self.domainSize]
             if initial_velocity is not None
             else np.zeros(self.domainSize)
         )
-        node.current_angular_velocity = np.zeros(nRot)
+        self._initialAngularVelocity = np.zeros(nRot)
 
     def computeLumpedInertia(self, Me: np.ndarray):
         """
@@ -56,20 +57,16 @@ class PointMass(BaseElement):
         if self._use_rotation:
             Me[n_disp : n_disp + self.inertia.shape[0]] = self.inertia
 
-    def computeMomentum(self, Mv_e: np.ndarray):
+    @property
+    def initialVelocity(self) -> np.ndarray:
         """
-        Populate the momentum vector for this element.
-        Mv_e is a 1D array of size self.nDof.
+        The initial velocity in DOF order (translational DOFs first, then the
+        rotational DOFs), seeded once by the explicit solver. See
+        :attr:`~edelweissfe.elements.base.baseelement.BaseElement.initialVelocity`.
         """
-        Mv_e[:] = 0.0
-        node = self.nodes[0]
-
-        n_disp = self.domainSize
-        Mv_e[:n_disp] = self.mass * node.current_velocity[:n_disp]
-
         if self._use_rotation:
-            nRot = self.inertia.shape[0]
-            Mv_e[n_disp : n_disp + nRot] = self.inertia * node.current_angular_velocity[:nRot]
+            return np.concatenate([self._initialVelocity, self._initialAngularVelocity])
+        return self._initialVelocity.copy()
 
     # Dummy implementations for abstract methods of BaseElement
     @property
