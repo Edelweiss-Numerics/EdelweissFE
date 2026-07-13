@@ -52,3 +52,9 @@ class Node:
         self.label = label
         self.coordinates = coordinates
         self.fields = dict()
+        #: Current translational velocity, maintained by explicit dynamic solvers
+        #: (and initialized by inertia-carrying entities such as PointMass);
+        #: None until a velocity has been assigned.
+        self.current_velocity = None
+        #: Current angular velocity, maintained analogously to :attr:`current_velocity`.
+        self.current_angular_velocity = None

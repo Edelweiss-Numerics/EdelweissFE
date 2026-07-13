@@ -157,7 +157,7 @@ class DofManager:
 
         if initializeVIJPattern:
             self._sizeVIJ = self._accumulatedElementVIJSize + self._accumulatedConstraintVIJSize
-            (self.I, self.J, self.idcsOfHigherOrderEntitiesInVIJ) = self._initializeVIJPattern()
+            self.I, self.J, self.idcsOfHigherOrderEntitiesInVIJ = self._initializeVIJPattern()
 
         if determiningIndexToHostObjectMappping:
             self.indexToHostObjectMapping |= self._determineIndexToNodeMap()
@@ -467,7 +467,7 @@ class DofManager:
                         for f_name in fields_on_ent[iNode]
                         for idx in fv_lookup[node.fields[f_name]]
                     ]
-                except (KeyError, AttributeError, IndexError, TypeError):
+                except (KeyError, AttributeError):
                     continue
 
                 # 5. Use np.int32 for better cache performance

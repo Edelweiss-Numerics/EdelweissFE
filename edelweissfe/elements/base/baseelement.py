@@ -235,6 +235,23 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
             The diagonal of the lumped mass matrix to be defined.
         """
 
+    def computeMomentum(
+        self,
+        Mv: np.ndarray,
+    ):
+        """Evaluate the momentum carried by this element.
+
+        The default implementation contributes nothing; elements which carry
+        their own momentum state (e.g., :class:`~edelweissfe.elements.pointmass.PointMass`)
+        override this method.
+
+        Parameters
+        ----------
+        Mv
+            The momentum vector to be defined.
+        """
+        Mv[:] = 0.0
+
     @abstractmethod
     def computeCriticalTimeStepForExplicitDynamics(
         self,

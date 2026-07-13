@@ -36,7 +36,9 @@ class PointMass(BaseElement):
     A 1-node element that adds lumped mass and rotary inertia to a node.
     """
 
-    def __init__(self, elNumber: int, nodes: list, model, mass: float, inertia: list = None):
+    def __init__(
+        self, elNumber: int, nodes: list, model, mass: float, inertia: list = None, initial_velocity: list = None
+    ):
         super().__init__("PointMass", elNumber)
         self._elNumber = elNumber
         self._nodes = nodes
@@ -45,15 +47,30 @@ class PointMass(BaseElement):
         self.mass = mass
         self._use_rotation = inertia is not None
 
-        # Normalize the rotary inertia to one value per rotational DOF. PointMass is only ever
-        # used by DiscreteRigidBody, which is 3D-only (enforced by the generator and constraint).
+        # Normalize the rotary inertia to one value per rotational DOF.
+        nRot = 1 if self.domainSize == 2 else 3
         if inertia is None:
-            self.inertia = np.zeros(3)
+            self.inertia = np.zeros(nRot)
         else:
             inertia = np.atleast_1d(np.asarray(inertia, dtype=float))
-            if inertia.shape[0] != 3:
-                raise ValueError("PointMass in 3D requires a diagonal inertia [Ixx, Iyy, Izz].")
-            self.inertia = inertia
+            if self.domainSize == 2:
+                # A 3-component (diagonal) inertia refers to the out-of-plane axis.
+                self.inertia = inertia[[2]] if inertia.shape[0] == 3 else inertia[[0]]
+            else:
+                if inertia.shape[0] != 3:
+                    raise ValueError("PointMass in 3D requires a diagonal inertia [Ixx, Iyy, Izz].")
+                self.inertia = inertia
+
+        # Initial velocity of the reference point, applied once as an initial
+        # condition by the explicit solver (see :attr:`initialVelocity`). Only
+        # a translational initial velocity is supported; the rotational part
+        # starts at rest.
+        self._initialVelocity = (
+            np.array(initial_velocity, dtype=float)[: self.domainSize]
+            if initial_velocity is not None
+            else np.zeros(self.domainSize)
+        )
+        self._initialAngularVelocity = np.zeros(nRot)
 
     def computeLumpedInertia(self, Me: np.ndarray):
         """
@@ -67,6 +84,17 @@ class PointMass(BaseElement):
 
         if self._use_rotation:
             Me[n_disp : n_disp + self.inertia.shape[0]] = self.inertia
+
+    @property
+    def initialVelocity(self) -> np.ndarray:
+        """
+        The initial velocity in DOF order (translational DOFs first, then the
+        rotational DOFs), seeded once by the explicit solver. See
+        :attr:`~edelweissfe.elements.base.baseelement.BaseElement.initialVelocity`.
+        """
+        if self._use_rotation:
+            return np.concatenate([self._initialVelocity, self._initialAngularVelocity])
+        return self._initialVelocity.copy()
 
     # Dummy implementations for abstract methods of BaseElement
     @property
@@ -139,7 +167,6 @@ class PointMass(BaseElement):
     def computeCriticalTimeStepForExplicitDynamics(self, Q=None, *args, **kwargs) -> float:
         return 1e99
 
-
     def computeDistributedLoad(
         self,
         loadType: str,
@@ -188,9 +215,6 @@ class PointMass(BaseElement):
 
     @property
     def hasMaterial(self) -> bool:
-        # Deliberately True, not an oversight: this bypasses FEModel._prepareElements' blanket
-        # materialAssigned check (which would otherwise reject any model containing a PointMass),
-        # while setMaterial below still raises loudly if a section is ever actually assigned to one.
         return True
 
     def initializeElement(self):
