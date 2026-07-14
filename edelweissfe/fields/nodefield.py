@@ -100,22 +100,6 @@ class NodeField:
     def __contains__(self, key):
         return key in self._values
 
-    def indexOfNode(self, node) -> int:
-        """
-        The row index of a node's entries within this field's value arrays.
-
-        Parameters
-        ----------
-        node
-            The node.
-
-        Returns
-        -------
-        int
-            The row index.
-        """
-        return self._indicesOfNodesInArray[node]
-
     def createFieldValueEntry(self, name: str) -> np.ndarray:
         """
         Add an empty entry with given name for the field, e.g, 'U' or 'P' for flux or effort entries.
@@ -196,7 +180,7 @@ class NodeField:
             idcsOther = [other._indicesOfNodesInArray[n] for n in commonNodes]
             self[fieldValueEntry][idcsHere] = other[fieldValueEntry][idcsOther]
 
-    def addEntriesFromOther(self, other, fieldValueEntries: list[str] = None):
+    def addEntriesFromOther(self, other, fieldValueEntries: list[str] | dict[str, str] = None):
         """
         Add values from another NodeField.
         If the fields differ, the intersection is considered.
@@ -206,18 +190,23 @@ class NodeField:
         subset
             The sub NodeField.
         fieldValueEntries
-            The list of entries which should be copied. Default: all entries are copied.
+            The entries which should be added. Default: all common entries are added.
+            May be a list of entry names shared by both fields, or a dict mapping an
+            entry name on ``other`` to the (possibly differently named) entry name on
+            ``self`` it should be accumulated into.
         """
 
         if not fieldValueEntries:
             fieldValueEntries = self._values.keys() & other._values.keys()
+        if not isinstance(fieldValueEntries, dict):
+            fieldValueEntries = {entry: entry for entry in fieldValueEntries}
 
         commonNodes = self._indicesOfNodesInArray.keys() & other._indicesOfNodesInArray.keys()
+        idcsHere = [self._indicesOfNodesInArray[n] for n in commonNodes]
+        idcsOther = [other._indicesOfNodesInArray[n] for n in commonNodes]
 
-        for fieldValueEntry in fieldValueEntries:
-            idcsHere = [self._indicesOfNodesInArray[n] for n in commonNodes]
-            idcsOther = [other._indicesOfNodesInArray[n] for n in commonNodes]
-            self[fieldValueEntry][idcsHere] += other[fieldValueEntry][idcsOther]
+        for otherEntry, selfEntry in fieldValueEntries.items():
+            self[selfEntry][idcsHere] += other[otherEntry][idcsOther]
 
 
 class NodeFieldSubset(NodeField):
@@ -262,8 +251,6 @@ class NodeFieldSubset(NodeField):
             nodeCandidates = subset.extractNodeSet()
         elif isinstance(subset, NodeSet):
             nodeCandidates = subset
-        elif isinstance(subset, RigidBody):
-            nodeCandidates = subset.getVisualizationNodes()
         else:
             raise Exception("Invalid subset")
 
