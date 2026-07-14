@@ -30,6 +30,7 @@ import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.rigidbodies.discreterigidbody import DiscreteRigidBody
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
@@ -266,13 +267,26 @@ class Constraint(ConstraintBase):
         uSlaves = np.array([U_np[idcs] for idcs in self._indicesOfSlaveInLocal])
         coords = self._referenceCoords + uSlaves
 
-        dists, normals = self.rigidBody.querySurface(coords, proximityDistance=self.searchDistance)
+        # The rigid body's own querySurface() would otherwise fall back to
+        # getCurrentKinematics(), which reads the RP's pose from NodeFields --
+        # only refreshed once per *converged* increment. Mid-Newton-iteration,
+        # that pose would be one increment stale relative to U_np (used above for
+        # the slave coordinates), decoupling the RP DOFs from the contact residual.
+        # Compute the current RP kinematics directly from this constraint's own
+        # local U_np slice instead, so slave and RP kinematics are always consistent.
+        u_rp = U_np[self._indicesOfRPDispInLocal]
+        R = DiscreteRigidBody.rotationMatrixFromPseudoVector(U_np[self._indicesOfRPRotInLocal])
+        kinematics = (u_rp, R, self.rpNode.coordinates)
+
+        dists, normals = self.rigidBody.querySurface(
+            coords, proximityDistance=self.searchDistance, kinematics=kinematics
+        )
 
         activeMask = dists < 0.0
         if not np.any(activeMask):
             return
 
-        rpCurrent = self.rpNode.coordinates + U_np[self._indicesOfRPDispInLocal]
+        rpCurrent = self.rpNode.coordinates + u_rp
 
         for s in np.where(activeMask)[0]:
             n_s = normals[s]

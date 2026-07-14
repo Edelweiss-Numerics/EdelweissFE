@@ -114,7 +114,18 @@ def createFieldOutputFromInputFile(inputfile: dict, model: FEModel, journal: Jou
                 # A rigid body's visualization nodes are not independent degrees of
                 # freedom -- they are fully determined by its reference point -- so
                 # this bypasses NodeFields entirely rather than treating them as a
-                # subset of one.
+                # subset of one. There is consequently no "P"/"dU"-like distinction
+                # to select via `result` -- RigidBodyFieldOutput always returns the
+                # field's current value -- so reject anything but the "U" (current
+                # value) convention rather than silently ignoring the user's intent.
+                if definition["result"] not in ("U", "u"):
+                    raise Exception(
+                        f"During parsing of keyword {keywordIdentifier}fieldOutput "
+                        f"({moduleLevelKeywordIdentifier}perNode) '{definition['name']}': rigidBody field outputs "
+                        f"only support result=U (the rigid body's current field value), got "
+                        f"result={definition['result']!r}."
+                    )
+
                 fieldOutputController.addRigidBodyFieldOutput(
                     name=definition["name"],
                     rigidBody=model.rigidBodies[definition["rigidBody"]],

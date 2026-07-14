@@ -61,7 +61,11 @@ class DiscreteSurfaceQuery:
         rotation_center: np.ndarray = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """
-        Vectorized query to compute signed distance and closest face normals for an array of points.
+        Batched query to compute signed distance and closest face normals for an array of points.
+
+        The coordinate transform and result assembly are vectorized, but the actual
+        VTK distance/closest-cell evaluation loops over points one at a time -- this
+        is a potential performance bottleneck for very large point counts.
 
         Parameters
         ----------

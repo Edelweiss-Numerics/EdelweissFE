@@ -82,22 +82,36 @@ class DiscreteRigidBody(RigidBody):
             if rot_field is not None and "U" in rot_field and self.rpNode in rot_field.nodes:
                 idx = rot_field._indicesOfNodesInArray[self.rpNode]
                 theta = rot_field["U"][idx]
-                R = self._getRotationMatrix3D(theta)
+                R = self.rotationMatrixFromPseudoVector(theta)
 
         # In EdelweissFE, the RP node's coordinates are the *reference* (initial) coordinates.
         return u_rp, R, self.rpNode.coordinates
 
-    def _currentAndReferenceSurfaceCoordinates(self):
-        """Compute the current and reference world coordinates of every surface node,
-        purely from the reference point's kinematics -- the surface nodes are not
-        independent degrees of freedom, so this never touches any NodeField.
+    def _currentAndReferenceSurfaceCoordinates(self, kinematics: tuple = None):
+        """Compute the current and reference world coordinates of every surface node.
+
+        The surface nodes are not independent degrees of freedom themselves -- they
+        carry no FieldVariables and this never registers or writes to any NodeField
+        -- but by default the reference point's kinematics *are* read from the
+        NodeFields of its ``displacement``/``rotation`` fields, via
+        :meth:`getCurrentKinematics`.
+
+        Parameters
+        ----------
+        kinematics : tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray], optional
+            An explicit ``(u_rp, R, rp_initial)`` triple (matching the return value of
+            :meth:`getCurrentKinematics`) to use instead of the (possibly stale, since
+            NodeFields only reflect the last *converged* increment) current state. Pass
+            this when the caller already holds a fresher RP kinematic state -- e.g. a
+            contact constraint mid-Newton-iteration, which has direct access to the
+            current trial solution vector.
 
         Returns
         -------
         tuple[numpy.ndarray, numpy.ndarray]
             The current and reference coordinates, both of shape ``(nSurfaceNodes, domainSize)``.
         """
-        u_rp, R, rp_initial = self.getCurrentKinematics()
+        u_rp, R, rp_initial = kinematics if kinematics is not None else self.getCurrentKinematics()
         d = self.domainSize
         currentCoords = (rp_initial + u_rp) + self.initialRelativePositions.dot(R[:d, :d].T)
         referenceCoords = rp_initial + self.initialRelativePositions
@@ -117,11 +131,24 @@ class DiscreteRigidBody(RigidBody):
         for i, node in enumerate(self.surfaceNodes):
             node.coordinates[:] = currentCoords[i]
 
-    def getAABB(self):
-        coords = np.array([n.coordinates for n in self.surfaceNodes])
+    def getAABB(self, kinematics: tuple = None):
+        """Axis-aligned bounding box of the surface nodes' current positions.
+
+        Parameters
+        ----------
+        kinematics : tuple, optional
+            See :meth:`_currentAndReferenceSurfaceCoordinates`. If not given, uses
+            the surface nodes' own (last-updated-by :meth:`updateKinematics`)
+            ``coordinates`` directly rather than recomputing them, as a fast path
+            for the common case.
+        """
+        if kinematics is None:
+            coords = np.array([n.coordinates for n in self.surfaceNodes])
+        else:
+            coords, _ = self._currentAndReferenceSurfaceCoordinates(kinematics)
         return np.min(coords, axis=0), np.max(coords, axis=0)
 
-    def querySurface(self, coords: np.ndarray, proximityDistance: float = None):
+    def querySurface(self, coords: np.ndarray, proximityDistance: float = None, kinematics: tuple = None):
         """Compute signed distances and outward face normals of the rigid
         surface, in its current configuration, for an array of query points.
 
@@ -133,6 +160,15 @@ class DiscreteRigidBody(RigidBody):
             If given, a broadphase AABB check (the current AABB inflated by
             this distance) is performed first; points outside are assigned a
             distance of ``inf`` and a zero normal without querying the surface.
+        kinematics : tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray], optional
+            An explicit ``(u_rp, R, rp_initial)`` triple to use for the rigid body's
+            pose instead of :meth:`getCurrentKinematics`'s (last-*converged*-increment)
+            NodeField state. A caller that already holds a fresher/current RP
+            kinematic state -- e.g. a contact constraint mid-Newton-iteration, which
+            has direct access to the trial solution vector -- should pass it here so
+            the query is evaluated for a pose consistent with the rest of that
+            caller's own current state (both this narrow-phase query and the
+            broadphase AABB check use it consistently).
 
         Returns
         -------
@@ -150,7 +186,7 @@ class DiscreteRigidBody(RigidBody):
 
         n_points = coords.shape[0]
         if proximityDistance is not None:
-            curr_min, curr_max = self.getAABB()
+            curr_min, curr_max = self.getAABB(kinematics)
             aabb_min = curr_min - proximityDistance
             aabb_max = curr_max + proximityDistance
             in_aabb = np.all((coords >= aabb_min) & (coords <= aabb_max), axis=1)
@@ -162,7 +198,7 @@ class DiscreteRigidBody(RigidBody):
             coords_to_query = coords
             active_indices = np.arange(n_points)
 
-        u_rp, R, rp_initial = self.getCurrentKinematics()
+        u_rp, R, rp_initial = kinematics if kinematics is not None else self.getCurrentKinematics()
         active_dists, active_normals = self._query_engine.query(
             coords_to_query, translation=u_rp, rotation_matrix=R, rotation_center=rp_initial
         )
@@ -173,7 +209,10 @@ class DiscreteRigidBody(RigidBody):
         normals[active_indices] = active_normals
         return dists, normals
 
-    def _getRotationMatrix3D(self, theta):
+    @staticmethod
+    def rotationMatrixFromPseudoVector(theta: np.ndarray) -> np.ndarray:
+        """Convert a 3-component rotation pseudo-vector to a 3x3 rotation matrix
+        via the exponential map (Rodrigues' formula)."""
         angle = np.linalg.norm(theta)
         if angle < 1e-12:
             return np.eye(3)
