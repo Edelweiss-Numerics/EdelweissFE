@@ -121,6 +121,21 @@ Module ``edelweissfe.constraints.nodetorigidsurfacepenalty``
     :language: edelweiss
     :caption: Example: ``testfiles/marmot/NodeToRigidSurfacePenaltyConstraintLinear/test.inp``
 
+``nodetodiscreterigidbodypenalty`` - Contact against a discrete rigid body
+-----------------------------------------------------------------------------------------------
+
+Module ``edelweissfe.constraints.nodetodiscreterigidbodypenalty``
+
+.. automodule:: edelweissfe.constraints.nodetodiscreterigidbodypenalty
+    :members: __doc__
+
+.. pprint:: edelweissfe.constraints.nodetodiscreterigidbodypenalty.documentation
+    :caption: Options:
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/NodeToDiscreteRigidBodyContact/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/edelweiss-only/NodeToDiscreteRigidBodyContact/test.inp``
+
 Implementing your own constraints
 ---------------------------------
 

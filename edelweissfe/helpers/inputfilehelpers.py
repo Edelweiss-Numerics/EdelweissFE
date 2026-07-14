@@ -96,12 +96,37 @@ def createFieldOutputFromInputFile(inputfile: dict, model: FEModel, journal: Jou
 
         for definition in perNodeDefs:
             field = definition["field"]
-            nodeField = model.nodeFields[field]
 
-            if bool(definition["nSet"]) and bool(definition["elSet"]):
+            if sum(bool(definition[key]) for key in ("nSet", "elSet", "rigidBody")) > 1:
                 raise Exception(
-                    f"During parsing of keyword {keywordIdentifier}fieldOutput ({moduleLevelKeywordIdentifier}perNode): Specify either nSet OR elSet."
+                    f"During parsing of keyword {keywordIdentifier}fieldOutput ({moduleLevelKeywordIdentifier}perNode): Specify at most one of nSet, elSet, or rigidBody."
                 )
+
+            f_of_x = definition["f(x)"]
+            if f_of_x:
+                f_of_x = createMathExpression(f_of_x)
+
+            f_export_of_x = definition["f_export(x)"]
+            if f_export_of_x:
+                f_export_of_x = createMathExpression(f_export_of_x)
+
+            if definition["rigidBody"]:
+                # A rigid body's visualization nodes are not independent degrees of
+                # freedom -- they are fully determined by its reference point -- so
+                # this bypasses NodeFields entirely rather than treating them as a
+                # subset of one.
+                fieldOutputController.addRigidBodyFieldOutput(
+                    name=definition["name"],
+                    rigidBody=model.rigidBodies[definition["rigidBody"]],
+                    field=field,
+                    saveHistory=definition["saveHistory"],
+                    f_x=f_of_x,
+                    export=definition["export"],
+                    fExport_x=f_export_of_x,
+                )
+                continue
+
+            nodeField = model.nodeFields[field]
 
             subset = None
             if definition["nSet"]:
@@ -111,14 +136,6 @@ def createFieldOutputFromInputFile(inputfile: dict, model: FEModel, journal: Jou
 
             if subset:
                 nodeField = nodeField.subset(subset)
-
-            f_of_x = definition["f(x)"]
-            if f_of_x:
-                f_of_x = createMathExpression(f_of_x)
-
-            f_export_of_x = definition["f_export(x)"]
-            if f_export_of_x:
-                f_export_of_x = createMathExpression(f_export_of_x)
 
             fieldOutputController.addPerNodeFieldOutput(
                 name=definition["name"],

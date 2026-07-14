@@ -14,7 +14,90 @@ import numpy as np
 from edelweissfe.points.node import Node
 from edelweissfe.rigidbodies.discreterigidbody import DiscreteRigidBody
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage, Module
+from edelweissfe.utils.misc import (
+    caseInsensitiveKwargsChecker,
+    castKwargsValuesAndAddDefaults,
+)
 from edelweissfe.utils.polyhedronmassproperties import computePolyhedronMassProperties
+
+module = Module(
+    "discreteRigidBodyGenerator",
+    "Generates a discrete rigid body from a surface mesh file (Exodus, STL, OBJ, or any other format readable by PyVista).",
+)
+
+inputLanguage = InputLanguage()
+
+keyword = "modelGenerator"
+if keyword in inputLanguage:
+    inputLanguage[keyword].addModule(module)
+
+module.addRequiredArg("filename", "The file path to the surface mesh (e.g., Exodus, STL, OBJ).", str)
+
+module.addOptionalArg(
+    "translation",
+    "A comma-separated 3D vector to translate the mesh globally upon initialization.",
+    str,
+    None,
+)
+module.addOptionalArg(
+    "density",
+    "The (uniform) mass density of the rigid body; if given, mass and rotary inertia are computed exactly "
+    "from the mesh geometry.",
+    float,
+    None,
+)
+module.addOptionalArg("mass", "The total mass of the rigid body. Overrides the density-based computation.", float, None)
+module.addOptionalArg(
+    "inertia",
+    "A comma-separated diagonal rotary inertia [Ixx, Iyy, Izz]. Overrides the density-based computation.",
+    str,
+    None,
+)
+module.addOptionalArg("initialVelocity", "A comma-separated initial velocity vector [vx, vy, vz].", str, None)
+module.addOptionalArg(
+    "rpCoordinate",
+    "A comma-separated explicit global coordinate for the reference point. Defaults to the (exact or "
+    "approximate) center of mass.",
+    str,
+    None,
+)
+
+documentation = [module]
+
+
+def _parseVector(value: str):
+    return np.fromstring(value, sep=",", dtype=np.double) if value is not None else None
+
+
+@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
+@castKwargsValuesAndAddDefaults(module)
+def generateModelData(generatorDefinition: dict, model, journal, *args, **kwargs) -> dict:
+    """Entry point for the ``*modelGenerator, generator=discreteRigidBodyGenerator`` input file keyword.
+
+    Thin wrapper around :func:`generateDiscreteRigidBodyFromMeshFile`, translating the ``.inp``
+    keyword arguments (comma-separated vector strings) to the native Python types it expects.
+    """
+
+    kwargs = CaseInsensitiveDict(kwargs)
+
+    name = generatorDefinition.get("name", "discreteRigidBody")
+
+    generateDiscreteRigidBodyFromMeshFile(
+        model,
+        journal,
+        name=name,
+        filename=kwargs["filename"],
+        translation=_parseVector(kwargs["translation"]),
+        density=kwargs["density"],
+        mass=kwargs["mass"],
+        inertia=_parseVector(kwargs["inertia"]),
+        initial_velocity=_parseVector(kwargs["initialVelocity"]),
+        rp_coordinate=_parseVector(kwargs["rpCoordinate"]),
+    )
+
+    return model
 
 
 def generateDiscreteRigidBodyFromMeshFile(
@@ -272,7 +355,8 @@ def _readGenericSurfaceMesh(filename: str, translation: np.ndarray = None):
     surf = mesh.extract_surface()
     surf.compute_normals(cell_normals=True, point_normals=False, inplace=True)
 
-    cells = surf.cells
+    # PyVista renamed PolyData.cells -> PolyData.faces for this flat VTK cell-array representation.
+    cells = surf.faces
     faces = []
     elementTypes = []
 

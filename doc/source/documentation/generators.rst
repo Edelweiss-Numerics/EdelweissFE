@@ -108,6 +108,21 @@ Relevant module ``edelweissfe.generators.microstructuregenerator``
     :language: edelweiss
     :caption: Example: ``testfiles/edelweiss-only/MicrostructureGenerator/test.inp``
 
+``discreterigidbodygenerator`` - A discrete rigid body from a surface mesh file
+--------------------------------------------------------------------------------
+
+Relevant module ``edelweissfe.generators.discreterigidbodygenerator``
+
+.. automodule:: edelweissfe.generators.discreterigidbodygenerator
+    :members: __doc__
+
+.. pprint:: edelweissfe.generators.discreterigidbodygenerator.documentation
+   :caption: Options:
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/NodeToDiscreteRigidBodyContact/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/edelweiss-only/NodeToDiscreteRigidBodyContact/test.inp``
+
 ``executepythoncode`` - Script model generation using Python
 ------------------------------------------------------------
 
