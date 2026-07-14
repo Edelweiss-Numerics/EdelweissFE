@@ -27,6 +27,16 @@ from sphinx.directives.code import (  # noqa: F401
 )
 from sphinx.highlighting import lexers
 
+# Populate the input file language (all keywords and their registered modules) once,
+# eagerly, from this clean import context -- before Sphinx starts reading doc sources
+# and autodoc/automodule directives start importing individual edelweissfe modules
+# directly. Those standalone imports do not trigger registration themselves (see
+# InputLanguage.ensureParserLoaded), so without this upfront call they would run into
+# a half-populated input language and crash at import time.
+from edelweissfe.utils.inputlanguage import InputLanguage
+
+InputLanguage().ensureParserLoaded()
+
 project = "EdelweissFE"
 copyright = "2022, Matthias Neuner"
 author = "Matthias Neuner"
