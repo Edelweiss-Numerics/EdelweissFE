@@ -62,27 +62,36 @@ def singleton(class_):
 class InputLanguage:
     def __init__(self):
         self.keywords = []
+        self._loadingParser = False
 
         return
 
-    def _ensure_parser_loaded(self):
-        if not self.keywords:
+    def ensureParserLoaded(self):
+        """Eagerly populate the input language by importing the input file parser.
+
+        This must only be called from a "clean" import context (i.e. not while an
+        ``edelweissfe`` module that the parser itself imports is still being
+        initialized), otherwise it would provoke a circular import. It is intended
+        for consumers that import individual modules standalone and need the full
+        input language to be available (e.g. the documentation build). During a
+        normal simulation run the parser is imported explicitly and this is a no-op.
+        """
+        if not self.keywords and not self._loadingParser:
+            self._loadingParser = True
             try:
                 import importlib
 
                 importlib.import_module("edelweissfe.utils.inputfileparser")
-            except ImportError:
-                pass
+            finally:
+                self._loadingParser = False
 
     def __contains__(self, item) -> bool:
-        self._ensure_parser_loaded()
         return item.casefold() in [kw.name.casefold() for kw in self.keywords]
 
     def __repr__(self) -> str:
         return str(self.keywords)
 
     def __getitem__(self, keyword: str):
-        self._ensure_parser_loaded()
         casefoldedKeywords = [kw.name.casefold() for kw in self.keywords]
         try:
             idx = casefoldedKeywords.index(keyword.casefold())
@@ -94,7 +103,6 @@ class InputLanguage:
             )
 
     def __iter__(self):
-        self._ensure_parser_loaded()
         return self.keywords.__iter__()
 
     def addKeyword(self, name: str, description: str):

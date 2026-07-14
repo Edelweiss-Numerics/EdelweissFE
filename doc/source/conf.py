@@ -27,6 +27,16 @@ from sphinx.directives.code import (  # noqa: F401
 )
 from sphinx.highlighting import lexers
 
+# Populate the input file language (all keywords and their registered modules) once,
+# eagerly, from this clean import context -- before Sphinx starts reading doc sources
+# and autodoc/automodule directives start importing individual edelweissfe modules
+# directly. Those standalone imports do not trigger registration themselves (see
+# InputLanguage.ensureParserLoaded), so without this upfront call they would run into
+# a half-populated input language and crash at import time.
+from edelweissfe.utils.inputlanguage import InputLanguage
+
+InputLanguage().ensureParserLoaded()
+
 project = "EdelweissFE"
 copyright = "2022, Matthias Neuner"
 author = "Matthias Neuner"
@@ -227,6 +237,14 @@ class PrettyPrintDirective(CodeBlock):
         return result
 
     def run(self):
+        # Ensure the full input file language is populated (all keywords and their
+        # registered modules) before rendering. Individual modules only register
+        # themselves once the input file parser has been imported; this triggers
+        # that import explicitly from a clean context.
+        from edelweissfe.utils.inputlanguage import InputLanguage
+
+        InputLanguage().ensureParserLoaded()
+
         module_path, member_name = self.arguments[0].rsplit(".", 1)
         member_data = getattr(import_module(module_path), member_name)
         caption = self.options.get("caption", "")
