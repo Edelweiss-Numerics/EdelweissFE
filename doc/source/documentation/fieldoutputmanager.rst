@@ -28,5 +28,8 @@ Module documentation:
 .. autoclass:: edelweissfe.utils.fieldoutput.NodeFieldOutput
    :members:
 
+.. autoclass:: edelweissfe.utils.fieldoutput.RigidBodyFieldOutput
+   :members:
+
 .. autoclass:: edelweissfe.utils.fieldoutput.ExpressionFieldOutput
    :members:

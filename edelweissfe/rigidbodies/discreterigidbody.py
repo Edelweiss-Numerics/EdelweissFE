@@ -87,29 +87,35 @@ class DiscreteRigidBody(RigidBody):
         # In EdelweissFE, the RP node's coordinates are the *reference* (initial) coordinates.
         return u_rp, R, self.rpNode.coordinates
 
-    def updateKinematics(self, timeStep=None):
+    def _currentAndReferenceSurfaceCoordinates(self):
+        """Compute the current and reference world coordinates of every surface node,
+        purely from the reference point's kinematics -- the surface nodes are not
+        independent degrees of freedom, so this never touches any NodeField.
+
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray]
+            The current and reference coordinates, both of shape ``(nSurfaceNodes, domainSize)``.
+        """
         u_rp, R, rp_initial = self.getCurrentKinematics()
-        rp_current = rp_initial + u_rp
-
-        disp_field = self.model.nodeFields.get("displacement")
-        has_disp = disp_field is not None and "U" in disp_field
-
         d = self.domainSize
-        new_coords = rp_current + self.initialRelativePositions.dot(R[:d, :d].T)
-        if has_disp:
-            disp_u = disp_field["U"]
+        currentCoords = (rp_initial + u_rp) + self.initialRelativePositions.dot(R[:d, :d].T)
+        referenceCoords = rp_initial + self.initialRelativePositions
+        return currentCoords, referenceCoords
+
+    def updateKinematics(self, timeStep=None):
+        currentCoords, _ = self._currentAndReferenceSurfaceCoordinates()
 
         # Deviating from the usual EdelweissFE convention, the surface nodes'
         # coordinates hold the *current* configuration: the output managers
         # write the transient geometry of the moving body from them, and the
         # AABB proximity checks of the contact constraints rely on them. The
         # reference configuration is retained via the RP node's coordinates
-        # and initialRelativePositions.
+        # and initialRelativePositions. The surface nodes are not degrees of
+        # freedom themselves -- they carry no FieldVariables and are not part
+        # of any NodeField -- so nothing else needs to be updated here.
         for i, node in enumerate(self.surfaceNodes):
-            node.coordinates[:] = new_coords[i]
-            if has_disp:
-                idx = disp_field._indicesOfNodesInArray[node]
-                disp_u[idx] = new_coords[i] - (self.rpNode.coordinates + self.initialRelativePositions[i])
+            node.coordinates[:] = currentCoords[i]
 
     def getAABB(self):
         coords = np.array([n.coordinates for n in self.surfaceNodes])
@@ -183,14 +189,20 @@ class DiscreteRigidBody(RigidBody):
         return self.facets
 
     def getVisualizationField(self, fieldName: str) -> np.ndarray:
-        nodeField = self.model.nodeFields.get(fieldName)
-        if nodeField is None or "U" not in nodeField:
+        """Compute a field's values on the surface (visualization) nodes.
+
+        The surface nodes carry no FieldVariables of their own -- they are fully
+        determined by the reference point's already-solved kinematics -- so this
+        is computed directly rather than looked up from a NodeField.
+
+        Parameters
+        ----------
+        fieldName
+            The name of the field. Currently only ``"displacement"`` is supported;
+            any other field returns zeros.
+        """
+        if fieldName != "displacement":
             return np.zeros((len(self.surfaceNodes), self.model.domainSize))
 
-        values = nodeField["U"]
-        indices = nodeField._indicesOfNodesInArray
-        result = np.zeros((len(self.surfaceNodes), values.shape[1]))
-        for i, node in enumerate(self.surfaceNodes):
-            if node in indices:
-                result[i] = values[indices[node]]
-        return result
+        currentCoords, referenceCoords = self._currentAndReferenceSurfaceCoordinates()
+        return currentCoords - referenceCoords
