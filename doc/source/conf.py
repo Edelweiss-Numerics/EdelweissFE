@@ -227,6 +227,14 @@ class PrettyPrintDirective(CodeBlock):
         return result
 
     def run(self):
+        # Ensure the full input file language is populated (all keywords and their
+        # registered modules) before rendering. Individual modules only register
+        # themselves once the input file parser has been imported; this triggers
+        # that import explicitly from a clean context.
+        from edelweissfe.utils.inputlanguage import InputLanguage
+
+        InputLanguage().ensureParserLoaded()
+
         module_path, member_name = self.arguments[0].rsplit(".", 1)
         member_data = getattr(import_module(module_path), member_name)
         caption = self.options.get("caption", "")
