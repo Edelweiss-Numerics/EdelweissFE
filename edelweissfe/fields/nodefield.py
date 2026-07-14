@@ -180,7 +180,7 @@ class NodeField:
             idcsOther = [other._indicesOfNodesInArray[n] for n in commonNodes]
             self[fieldValueEntry][idcsHere] = other[fieldValueEntry][idcsOther]
 
-    def addEntriesFromOther(self, other, fieldValueEntries: list[str] = None):
+    def addEntriesFromOther(self, other, fieldValueEntries: list[str] | dict[str, str] = None):
         """
         Add values from another NodeField.
         If the fields differ, the intersection is considered.
@@ -190,18 +190,23 @@ class NodeField:
         subset
             The sub NodeField.
         fieldValueEntries
-            The list of entries which should be copied. Default: all entries are copied.
+            The entries which should be added. Default: all common entries are added.
+            May be a list of entry names shared by both fields, or a dict mapping an
+            entry name on ``other`` to the (possibly differently named) entry name on
+            ``self`` it should be accumulated into.
         """
 
         if not fieldValueEntries:
             fieldValueEntries = self._values.keys() & other._values.keys()
+        if not isinstance(fieldValueEntries, dict):
+            fieldValueEntries = {entry: entry for entry in fieldValueEntries}
 
         commonNodes = self._indicesOfNodesInArray.keys() & other._indicesOfNodesInArray.keys()
+        idcsHere = [self._indicesOfNodesInArray[n] for n in commonNodes]
+        idcsOther = [other._indicesOfNodesInArray[n] for n in commonNodes]
 
-        for fieldValueEntry in fieldValueEntries:
-            idcsHere = [self._indicesOfNodesInArray[n] for n in commonNodes]
-            idcsOther = [other._indicesOfNodesInArray[n] for n in commonNodes]
-            self[fieldValueEntry][idcsHere] += other[fieldValueEntry][idcsOther]
+        for otherEntry, selfEntry in fieldValueEntries.items():
+            self[selfEntry][idcsHere] += other[otherEntry][idcsOther]
 
 
 class NodeFieldSubset(NodeField):
