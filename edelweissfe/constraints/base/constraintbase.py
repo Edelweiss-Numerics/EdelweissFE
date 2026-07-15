@@ -91,6 +91,30 @@ class ConstraintBase(ABC, VIJEntityBase):
     def nDof(self) -> int:
         """The total number of degrees of freedom this constraint is associated with."""
 
+    def updateConnectivity(self, model: FEModel) -> bool:
+        """Called once at the start of every increment, before the global equation system is
+        (re)created, so a constraint can refresh a dynamic candidate set (e.g. proximity-based
+        contact pairs) and declare whether its ``nodes``/``fieldsOnNodes``/``nDof`` footprint has
+        changed since the last call.
+
+        The default implementation does nothing and reports no change, which is correct for every
+        constraint whose DOF footprint is fixed at construction (i.e. every constraint that does
+        not override this method).
+
+        Parameters
+        ----------
+        model
+            The current model.
+
+        Returns
+        -------
+        bool
+            True if this constraint's contribution to the global system has changed and the
+            equation system must be rebuilt before the next Newton solve.
+        """
+
+        return False
+
     def getNumberOfAdditionalNeededScalarVariables(
         self,
     ) -> int:
