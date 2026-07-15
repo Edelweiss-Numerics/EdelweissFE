@@ -121,39 +121,6 @@ class NIST(NonlinearSolverBase):
             The field output controller.
         """
 
-        self.journal.message("Creating monolithic equation system", self.identification, 0)
-        self.theDofManager = DofManager(
-            model.nodeFields.values(),
-            model.scalarVariables.values(),
-            model.elements.values(),
-            model.constraints.values(),
-            model.nodeSets.values(),
-        )
-        self.journal.message(
-            "total size of eq. system: {:}".format(self.theDofManager.nDof),
-            self.identification,
-            0,
-        )
-
-        self.journal.printSeperationLine()
-
-        presentVariableNames = list(self.theDofManager.idcsOfFieldsInDofVector.keys())
-
-        if self.theDofManager.idcsOfScalarVariablesInDofVector:
-            presentVariableNames += [
-                "scalar variables",
-            ]
-
-        nVariables = len(presentVariableNames)
-        self.iterationHeader = ("{:^25}" * nVariables).format(*presentVariableNames)
-        self.iterationHeader2 = (" {:<10}  {:<10}  ").format("||R||∞", "||ddU||∞") * nVariables
-        self.iterationMessageTemplate = "{:11.2e}{:1}{:11.2e}{:1} "
-
-        U = self.theDofManager.constructDofVector()
-        K = self.theDofManager.constructVIJSystemMatrix()
-
-        self.csrGenerator = CSRGenerator(K)
-
         try:
             self._updateOptions(step.actions["options"]["NISTSolver"].options, self.journal)
         except KeyError:
@@ -173,15 +140,16 @@ class NIST(NonlinearSolverBase):
         maxGrowingIter = step.maxGrowIter
         cutbackFactor = step.cutbackFactor
 
-        U = self.theDofManager.constructDofVector()
-        P = self.theDofManager.constructDofVector()
-        dU = self.theDofManager.constructDofVector()
-
-        for fieldName, field in model.nodeFields.items():
-            U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
-
-        for variable in model.scalarVariables.values():
-            U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
+        # The equation system (DofManager, VIJ pattern, CSR structure) is (re)built lazily, at the
+        # start of whichever increment first needs it -- either the very first one, or any later
+        # one where a constraint's updateConnectivity() reports that its DOF footprint changed
+        # (e.g. a dynamic contact candidate list). This mirrors EdelweissMeshfree's
+        # NonlinearQuasistaticSolver, which already rebuilds its equation system per-increment on
+        # exactly this kind of signal. For every existing constraint (whose updateConnectivity()
+        # inherits ConstraintBase's no-op default), this is unconditionally built exactly once, on
+        # the first increment -- identical to the previous behavior.
+        self.theDofManager = None
+        U = dU = P = K = None
 
         prevTimeStep = None
 
@@ -189,6 +157,57 @@ class NIST(NonlinearSolverBase):
 
         try:
             for timeStep in step.getTimeStep():
+                connectivityHasChanged = any(
+                    constraint.updateConnectivity(model) for constraint in model.constraints.values()
+                )
+
+                if connectivityHasChanged or self.theDofManager is None:
+                    self.journal.message("Creating monolithic equation system", self.identification, 0)
+                    self.theDofManager = DofManager(
+                        model.nodeFields.values(),
+                        model.scalarVariables.values(),
+                        model.elements.values(),
+                        model.constraints.values(),
+                        model.nodeSets.values(),
+                    )
+                    self.journal.message(
+                        "total size of eq. system: {:}".format(self.theDofManager.nDof),
+                        self.identification,
+                        0,
+                    )
+
+                    self.journal.printSeperationLine()
+
+                    presentVariableNames = list(self.theDofManager.idcsOfFieldsInDofVector.keys())
+
+                    if self.theDofManager.idcsOfScalarVariablesInDofVector:
+                        presentVariableNames += [
+                            "scalar variables",
+                        ]
+
+                    nVariables = len(presentVariableNames)
+                    self.iterationHeader = ("{:^25}" * nVariables).format(*presentVariableNames)
+                    self.iterationHeader2 = (" {:<10}  {:<10}  ").format("||R||∞", "||ddU||∞") * nVariables
+                    self.iterationMessageTemplate = "{:11.2e}{:1}{:11.2e}{:1} "
+
+                    K = self.theDofManager.constructVIJSystemMatrix()
+                    self.csrGenerator = CSRGenerator(K)
+
+                    U = self.theDofManager.constructDofVector()
+                    P = self.theDofManager.constructDofVector()
+                    dU = self.theDofManager.constructDofVector()
+
+                    for fieldName, field in model.nodeFields.items():
+                        U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
+
+                    for variable in model.scalarVariables.values():
+                        U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
+
+                    # The old dU/prevTimeStep no longer match the (possibly new) DOF layout, so
+                    # suppress extrapolation for this one increment -- the same fallback already
+                    # used elsewhere in this method after a failed/discarded increment.
+                    prevTimeStep = None
+
                 statusInfoDict = {
                     "step": step.number,
                     "inc": timeStep.number,
