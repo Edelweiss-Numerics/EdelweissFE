@@ -5,9 +5,9 @@
 *solver, solver=NIST, name=theSolver
 
 *modelGenerator, generator=boxGen, name=lower
-nX      =1
-nY      =1
-nZ      =1
+nX      =3
+nY      =3
+nZ      =3
 x0      =0
 y0      =0
 z0      =0
@@ -18,9 +18,9 @@ elProvider =edelweiss
 elType  =C3D8
 
 *modelGenerator, generator=boxGen, name=upper
-nX      =1
-nY      =1
-nZ      =1
+nX      =3
+nY      =3
+nZ      =3
 x0      =0.3
 y0      =1.1
 z0      =1.05
