@@ -40,8 +40,11 @@ class DiscreteSurfaceQuery:
         if initial_offset is not None:
             self.mesh.points = self.mesh.points + np.asarray(initial_offset, dtype=np.float64)
 
-        # Ensure outward normals are computed for each cell
-        self.mesh.compute_normals(cell_normals=True, point_normals=False, inplace=True)
+        # Ensure outward normals are computed for each cell. auto_orient_normals determines the
+        # true outward direction from the mesh topology itself (requires a closed, manifold
+        # surface -- true for any solid rigid body's contact surface), rather than trusting the
+        # source file's face winding order, which is not otherwise guaranteed to be outward.
+        self.mesh.compute_normals(cell_normals=True, point_normals=False, auto_orient_normals=True, inplace=True)
         self.mesh_cell_normals = np.array(self.mesh.cell_normals)
 
         # Initialize implicit distance evaluator once to avoid memory leaks
@@ -84,6 +87,18 @@ class DiscreteSurfaceQuery:
             Array of shape (N,) containing the signed distance (negative = inside/penetration).
         normals : numpy.ndarray
             Array of shape (N, 3) containing the outward normal vectors on the closest faces.
+
+        Note on the rotation convention
+        --------------------------------
+        Both ``local_coords``/``normals`` here and e.g.
+        :meth:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getCurrentKinematics`
+        use the *same* forward convention: a body-frame vector ``v`` is mapped to the world frame
+        via ``v.dot(R.T)``. Because these are *row* vectors (shape ``(N, 3)``), ``v.dot(M)`` computes
+        ``M.T @ v`` per row, not ``M @ v`` -- so ``v.dot(R.T)`` is ``R @ v`` (forward: body -> world),
+        and ``v.dot(R)`` is ``R.T @ v`` (inverse: world -> body). This is the opposite of what a
+        naive read of ``.dot(rotation_matrix)`` vs. ``.dot(rotation_matrix.T)`` suggests -- verified
+        numerically against a known rotated mesh before relying on it, since it is easy to get backwards
+        (do not "fix" the transpose here without re-deriving/re-checking this convention first).
         """
         # Inverse transform query coordinates to the local (static mesh) frame
         local_coords = coords.copy()
@@ -94,7 +109,8 @@ class DiscreteSurfaceQuery:
             local_coords -= rp_current
 
         if rotation_matrix is not None:
-            # R^T * (P - RP_current)
+            # Inverse rotation R^T * (P - RP_current) -- see "Note on the rotation convention" above;
+            # .dot(rotation_matrix), NOT .dot(rotation_matrix.T), is the correct inverse here.
             local_coords = local_coords.dot(rotation_matrix)
 
         if rotation_center is not None:
@@ -120,7 +136,9 @@ class DiscreteSurfaceQuery:
 
         normals = self.mesh_cell_normals[closest_cells]
 
-        # Forward transform normals to global frame
+        # Forward rotation R * n (body -> world frame); see "Note on the rotation convention" in
+        # this method's docstring for why .dot(rotation_matrix.T), not .dot(rotation_matrix), is
+        # the correct forward transform for these row vectors.
         if rotation_matrix is not None:
             normals = normals.dot(rotation_matrix.T)
 
