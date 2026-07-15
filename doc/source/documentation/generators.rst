@@ -137,3 +137,18 @@ Relevant module ``edelweissfe.generators.executepythoncode``
 .. literalinclude:: ../../../testfiles/marmot/PythonCodeModelGeneration/test.inp
     :language: edelweiss
     :caption: Example: ``testfiles/marmot/PythonCodeModelGeneration/test.inp``
+
+``surfaceElementGenerator`` - Contact facet elements from a *surface
+----------------------------------------------------------------------
+
+Relevant module ``edelweissfe.generators.surfaceelementgenerator``
+
+.. automodule:: edelweissfe.generators.surfaceelementgenerator
+    :members: __doc__
+
+.. pprint:: edelweissfe.generators.surfaceelementgenerator.documentation
+   :caption: Options:
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/NodeToDeformableSurfaceContact/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/edelweiss-only/NodeToDeformableSurfaceContact/test.inp``

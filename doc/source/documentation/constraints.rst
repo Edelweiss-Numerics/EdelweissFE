@@ -136,6 +136,21 @@ Module ``edelweissfe.constraints.nodetodiscreterigidbodypenalty``
     :language: edelweiss
     :caption: Example: ``testfiles/edelweiss-only/NodeToDiscreteRigidBodyContact/test.inp``
 
+``nodetodeformablesurfacepenalty`` - Node-to-deformable-surface contact
+-------------------------------------------------------------------------
+
+Module ``edelweissfe.constraints.nodetodeformablesurfacepenalty``
+
+.. automodule:: edelweissfe.constraints.nodetodeformablesurfacepenalty
+    :members: __doc__
+
+.. pprint:: edelweissfe.constraints.nodetodeformablesurfacepenalty.documentation
+    :caption: Options:
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/NodeToDeformableSurfaceContact/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/edelweiss-only/NodeToDeformableSurfaceContact/test.inp``
+
 Implementing your own constraints
 ---------------------------------
 
