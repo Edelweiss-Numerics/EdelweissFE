@@ -397,6 +397,7 @@ from edelweissfe.generators.pipegen import inputLanguage  # noqa: F811,E402
 from edelweissfe.generators.planerectquad import inputLanguage  # noqa: F811,E402
 from edelweissfe.generators.cuboidlatticegenerator import inputLanguage  # noqa: F811,E402
 from edelweissfe.generators.discreterigidbodygenerator import inputLanguage  # noqa: F811,E402
+from edelweissfe.generators.surfaceelementgenerator import inputLanguage  # noqa: F811,E402
 
 # isort: on
 
