@@ -1,0 +1,52 @@
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+1.8e4, 0.3
+
+*job, name=contactjob, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=boxGen, name=lower
+nX      =2
+nY      =2
+nZ      =2
+x0      =0
+y0      =0
+z0      =0
+lX      =2
+lY      =2
+lZ      =1
+elProvider =edelweiss
+elType  =C3D8
+
+*modelGenerator, generator=boxGen, name=upper
+nX      =2
+nY      =2
+nZ      =2
+x0      =0.1
+y0      =0.1
+z0      =1.05
+lX      =1.8
+lY      =1.8
+lZ      =1
+elProvider =edelweiss
+elType  =C3D8
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen2
+surface = lower_top
+name    = masterSurf
+
+*section, name=section1, material=linearelastic, type=solid
+lower_all
+upper_all
+
+*constraint, name=contact, type=nodeToDeformableSurfacePenalty
+nSet=upper_bottom, surface=masterSurf_facets, penalty=1e6, type=linear, searchDistance=2.0
+
+*fieldOutput
+>>perNode, elSet=lower_all, field=displacement, result=U, name=dispLower
+>>perNode, elSet=upper_all, field=displacement, result=U, name=dispUpper
+
+*step, solver=theSolver
+maxInc=0.2, minInc=1e-6, maxNumInc=20, maxIter=25, stepLength=1
+>>options, category=NISTSolver, extrapolation=off
+>>dirichlet, name=fixLower, nSet=lower_bottom, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=pushDown, nSet=upper_top, field=displacement, 3=-0.2
