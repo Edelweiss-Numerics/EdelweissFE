@@ -157,8 +157,11 @@ class NIST(NonlinearSolverBase):
 
         try:
             for timeStep in step.getTimeStep():
+                # NOTE: materialize the list before any() -- a generator would short-circuit at
+                # the first constraint reporting a change, silently skipping updateConnectivity()
+                # for every remaining constraint (their connectivity would stay stale/empty).
                 connectivityHasChanged = any(
-                    constraint.updateConnectivity(model) for constraint in model.constraints.values()
+                    [constraint.updateConnectivity(model) for constraint in model.constraints.values()]
                 )
 
                 if connectivityHasChanged or self.theDofManager is None:
