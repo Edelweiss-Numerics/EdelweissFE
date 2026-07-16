@@ -214,6 +214,7 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args,
                     f"'{sourceElement.ensightType}' (element {sourceElement.elNumber})."
                 )
 
+            faceFacets = []
             for localIndices in faceNodeGroups:
                 facetNodes = [sourceElement.nodes[i] for i in localIndices]
 
@@ -231,8 +232,25 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args,
                 facetElement.setNodes(facetNodes)
                 facetElement.initializeElement()
 
+                faceFacets.append(facetElement)
                 newElements[nextElNumber] = facetElement
                 nextElNumber += 1
+
+            if len(faceFacets) == 2 and all(len(f.nodes) == 3 for f in faceFacets):
+                # Two Tria3 from a linear quad face (fixed diagonal split): the per-triangle
+                # equal split (measure/3 each) would give diagonal-position-dependent nodal
+                # tributary areas, inconsistent with the unique lumping of a uniform pressure on
+                # a bilinear quad face (face area / 4 per corner) -- the resulting force-vs-area
+                # mismatch shows up as spurious contact pressure oscillation in an otherwise
+                # exact patch test. Override: distribute each corner's area/4 evenly over the
+                # triangles of THIS face containing it.
+                faceArea = sum(f.nodalAreaShares.sum() for f in faceFacets)
+                facetsOfNode = {}
+                for facet in faceFacets:
+                    for node in facet.nodes:
+                        facetsOfNode[node] = facetsOfNode.get(node, 0) + 1
+                for facet in faceFacets:
+                    facet.setNodalAreaShares([faceArea / 4.0 / facetsOfNode[node] for node in facet.nodes])
 
     model.elements.update(newElements)
 
