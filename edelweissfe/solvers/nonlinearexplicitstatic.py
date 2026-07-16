@@ -208,6 +208,11 @@ class NEST(NIST):
                     "contact is not currently supported with this solver."
                 )
 
+        if model.multiPointConstraints:
+            raise NotImplementedError(
+                "Multi-point constraints (e.g. surface ties) are not yet supported by the NEST solver."
+            )
+
         self.journal.message("Creating monolithic equation system", self.identification, 0)
         self.theDofManager = DofManager(
             model.nodeFields.values(),

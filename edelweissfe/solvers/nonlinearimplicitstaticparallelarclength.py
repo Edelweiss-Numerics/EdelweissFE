@@ -70,6 +70,11 @@ class NISTPArcLength(NISTParallel):
         fieldOutputController: FieldOutputController,
         outputmanagers: dict[str, OutputManagerBase],
     ):
+        if model.multiPointConstraints:
+            raise NotImplementedError(
+                "Multi-point constraints (e.g. surface ties) are not yet supported by the arc-length solver."
+            )
+
         self.arcLengthController = None
         self.checkConditionalStop = lambda: False
 
