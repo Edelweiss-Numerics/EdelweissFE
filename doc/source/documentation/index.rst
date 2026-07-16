@@ -13,6 +13,7 @@ Documentation
    analyticalfields
    constraints
    rigidbodies
+   contacttheory
    dofmanager
    fieldoutputmanager
    fields

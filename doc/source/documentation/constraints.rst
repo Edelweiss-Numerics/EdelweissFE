@@ -229,6 +229,11 @@ comments of the ``applyConstraint`` method in the module source.
 ``nodetodeformablesurfacepenalty`` - Node-to-deformable-surface contact
 -------------------------------------------------------------------------
 
+The complete theory of this constraint -- surface discretization and triangulation, tributary
+areas, finite- and small-sliding gap kinematics, penalty and augmented-Lagrange normal laws,
+Coulomb friction with consistent tangents, solver integration, and the verification methodology
+-- is documented in :doc:`contacttheory`.
+
 Module ``edelweissfe.constraints.nodetodeformablesurfacepenalty``
 
 .. automodule:: edelweissfe.constraints.nodetodeformablesurfacepenalty
