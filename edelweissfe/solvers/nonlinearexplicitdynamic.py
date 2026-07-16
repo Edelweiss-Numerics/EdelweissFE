@@ -151,6 +151,9 @@ class NED(NonlinearSolverBase):
         if "NEDSolver" in step.actions["options"].keys():
             self._updateOptions(step.actions["options"]["NEDSolver"].options, self.journal)
 
+        self.mpcTransformation = self.buildMPCTransformation(model)
+        self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
+
         # initialize mass and damping matrices
         M = self.theDofManager.constructDofVector()  # initialize lumped mass matrix
         Minv = self.theDofManager.constructDofVector()  # initialize inverse lumped mass matrix
@@ -175,10 +178,17 @@ class NED(NonlinearSolverBase):
             raise ValueError(
                 "Zero mass found in mass vector. This can be caused by elements with zero density, or by elements with zero volume."
             )
+
+        # Slave DOFs of multi-point constraints carry no own inertia: their mass is folded onto
+        # their masters (row-sum lumping of T^T M T, mass-conserving), their Minv stays zero, and
+        # their kinematics are assigned directly from the masters each increment.
+        if self.mpcTransformation is not None:
+            self.mpcTransformation.foldLumpedMass(M)
+
         Minv[M != 0.0] = 1.0 / M[M != 0.0]
 
-        # delete M to save memory
-        del M
+        # kept (instead of 1/Minv) for the kinetic energy: slave DOFs have Minv = 0
+        self._lumpedMass = M
 
         for fieldName, field in model.nodeFields.items():
             U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
@@ -379,6 +389,13 @@ class NED(NonlinearSolverBase):
             V[self.ids_2nd] += (
                 Minv[self.ids_2nd] * P[self.ids_2nd] * 0.5 * (timeStep.timeIncrement + prevTimeStep.timeIncrement)
             )
+
+        # slave DOFs of multi-point constraints do not integrate their own equations of motion --
+        # they ride along on their masters (Minv is zero there, so the updates above left them
+        # untouched); displacements follow automatically via dU = V * dt
+        if self.mpcTransformation is not None:
+            self.mpcTransformation.applySlaveKinematics(V)
+
         # update displacement increment vector
         np.multiply(V, timeStep.timeIncrement, out=dU)
         np.add(U_n, dU, out=U_n)
@@ -393,9 +410,15 @@ class NED(NonlinearSolverBase):
         P[:] = -P[:]
         P = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_n, P, timeStep)
 
+        # fold the forces acting on slave DOFs onto their masters (action-reaction through the
+        # rigid interpolation link); done here so the Dirichlet handling at the start of the next
+        # increment operates on the already-folded vector
+        if self.mpcTransformation is not None:
+            P[:] = self.mpcTransformation.foldExplicitForce(P)
+
         if timeStep.number % self.options["output-frequency"] == 0:
             Wint = psi
-            Wkin = 0.5 * np.sum(1 / Minv * V**2)
+            Wkin = 0.5 * np.sum(self._lumpedMass * V**2)
             W = Wint + Wkin
             self.journal.message(
                 "Internal energy: {:e} ({:.2f} %)".format(Wint, Wint / W * 100), self.identification, 2

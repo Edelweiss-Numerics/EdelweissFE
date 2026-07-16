@@ -149,6 +149,7 @@ class NIST(NonlinearSolverBase):
         # inherits ConstraintBase's no-op default), this is unconditionally built exactly once, on
         # the first increment -- identical to the previous behavior.
         self.theDofManager = None
+        self.mpcTransformation = None
         U = dU = P = K = None
 
         prevTimeStep = None
@@ -205,6 +206,9 @@ class NIST(NonlinearSolverBase):
 
                     for variable in model.scalarVariables.values():
                         U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
+
+                    self.mpcTransformation = self.buildMPCTransformation(model)
+                    self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
 
                     # The old dU/prevTimeStep no longer match the (possibly new) DOF layout, so
                     # suppress extrapolation for this one increment -- the same fallback already
@@ -422,6 +426,12 @@ class NIST(NonlinearSolverBase):
             R[:] = -P
             R += PExt
 
+            # Condense the residual BEFORE the Dirichlet handling below: T^T folds slave-row
+            # residuals into their master rows, which may themselves carry a prescribed delta --
+            # transforming afterwards would corrupt it.
+            if self.mpcTransformation is not None:
+                R[:] = self.mpcTransformation.transformResidual(R, dU)
+
             if iterationCounter == 0 and not isExtrapolatedIncrement and dirichlets:
                 # first iteration? apply dirichlet bcs and unconditionally solve
                 R = self.applyDirichlet(timeStep, R, dirichlets)
@@ -446,6 +456,10 @@ class NIST(NonlinearSolverBase):
                     raise ReachedMaxIterations("Reached max. iterations in current increment, cutting back")
 
             K_ = self.assembleStiffnessCSR(K)
+
+            if self.mpcTransformation is not None:
+                K_ = self.mpcTransformation.transformSystemMatrix(K_)
+
             K_ = self.applyDirichletK(K_, dirichlets)
 
             ddU = self.linearSolve(K_, R)

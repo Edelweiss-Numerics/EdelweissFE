@@ -35,6 +35,7 @@ from scipy.sparse import csr_matrix
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
+from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import DivergingSolution
@@ -430,3 +431,56 @@ class NonlinearSolverBase(ABC):
             indices = cache[key] = fieldIndices.reshape((len(nSet), -1))[:, components].flatten()
 
         return indices
+
+    def buildMPCTransformation(self, model: FEModel):
+        """Collect the linear dependency records from all multi-point constraints of the model
+        and assemble the master-slave condensation operator for the current equation system.
+        Must be called whenever the DofManager is (re)built.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+
+        Returns
+        -------
+        MultiPointConstraintTransformation | None
+            The assembled transformation, or None if the model has no multi-point constraints.
+        """
+
+        if not model.multiPointConstraints:
+            return None
+
+        records = [
+            record
+            for mpc in model.multiPointConstraints.values()
+            for record in mpc.getMultiPointConstraints(self.theDofManager)
+        ]
+
+        transformation = MultiPointConstraintTransformation(records, self.theDofManager.nDof)
+
+        self.journal.message(
+            "eliminating {:} slave DOF(s) via multi-point constraints".format(transformation.nEliminatedDof),
+            self.identification,
+            0,
+        )
+
+        return transformation
+
+    def checkMPCDirichletConflicts(self, transformation, stepActions):
+        """Raise if any Dirichlet boundary condition of the step prescribes a DOF that is a slave
+        DOF of a multi-point constraint.
+
+        Parameters
+        ----------
+        transformation
+            The assembled MultiPointConstraintTransformation (may be None).
+        stepActions
+            The step's actions dictionary.
+        """
+
+        if transformation is None:
+            return
+
+        for dirichlet in stepActions["dirichlet"].values():
+            transformation.checkDirichletConflicts(self.findDirichletIndices(dirichlet))

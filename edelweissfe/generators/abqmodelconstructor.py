@@ -48,6 +48,9 @@ from edelweissfe.config.constraints import getConstraintClass
 from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.materiallibrary import getMaterialClass
 from edelweissfe.config.sections import getSectionFactoryByName
+from edelweissfe.constraints.base.multipointconstraintbase import (
+    MultiPointConstraintBase,
+)
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
@@ -342,8 +345,15 @@ class AbqModelConstructor:
 
             args, kwargs = module.parseDatalines(data)
 
-            constraint = getConstraintClass(constraintType)(name, model, **kwargs)
-            model.constraints[name] = constraint
+            constraintClass = getConstraintClass(constraintType)
+            constraint = constraintClass(name, model, **kwargs)
+
+            # Multi-point (DOF-elimination) constraints contribute nothing to the load vector or
+            # system matrix and must stay outside the DofManager/assembly machinery.
+            if issubclass(constraintClass, MultiPointConstraintBase):
+                model.multiPointConstraints[name] = constraint
+            else:
+                model.constraints[name] = constraint
 
         return model
 

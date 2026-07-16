@@ -67,6 +67,7 @@ class FEModel:
         self.surfaces = {}  #: Surface definitions in the model.
         self.constraints = {}  #: Constraints in the model.
         self.constraintSets = {}  #: ConstraintsSets in the model.
+        self.multiPointConstraints = {}  #: Multi-point (DOF-elimination) constraints in the model.
         self.materials = {}  #: Materials in the model.
         self.analyticalFields = {}  #: AnalyticalFields in the model.
         self.scalarVariables = {}  #: ScalarVariables in the model.
