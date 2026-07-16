@@ -96,6 +96,33 @@ module.addOptionalArg(
     float,
     None,
 )
+module.addOptionalArg(
+    "sliding",
+    "The kinematic treatment of the contact geometry: 'finite' (gap, gradient and exact Hessian "
+    "recomputed from the current Newton iterate every iteration) or 'small' (Abaqus-style small "
+    "sliding: the closest-point projection -- facet, clamped local coordinates, and normal -- is "
+    "frozen once per increment from the last converged configuration, making the gap linear in "
+    "the displacement DOFs).",
+    str,
+    "finite",
+)
+module.addOptionalArg(
+    "mu",
+    "The Coulomb friction coefficient. Requires sliding=small; mu=0 disables friction. Strongly "
+    "recommended in combination with type=quadratic: the quadratic law's contact stiffness "
+    "vanishes continuously at gap activation, keeping the frictional tangent continuous for "
+    "slave nodes lifting off/touching down -- with type=linear, the activation stiffness jump "
+    "scaled by mu makes Newton prone to limit-cycling at such events.",
+    float,
+    0.0,
+)
+module.addOptionalArg(
+    "tangentPenalty",
+    "The tangential penalty stiffness per unit slave surface area for frictional stick. "
+    "Defaults to the normal penalty.",
+    float,
+    None,
+)
 
 documentation = [module]
 
@@ -179,6 +206,64 @@ def _line2Containment(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> tuple[f
     return t, 0.0 <= t <= 1.0
 
 
+def _tria3ClosestPoint(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray, x3: np.ndarray) -> tuple[np.ndarray, float]:
+    """Closest point on the (closed) triangle (x1, x2, x3) to xs, clamped to the triangle's
+    interior/edge/vertex regions (Ericson's real-time-collision-detection region test), as
+    barycentric weights (w1, w2, w3) with all w >= 0 and sum(w) == 1, plus the distance."""
+
+    e1 = x2 - x1
+    e2 = x3 - x1
+    r1 = xs - x1
+
+    d1 = e1.dot(r1)
+    d2 = e2.dot(r1)
+    if d1 <= 0.0 and d2 <= 0.0:
+        weights = np.array([1.0, 0.0, 0.0])  # vertex x1
+    else:
+        r2 = xs - x2
+        d3 = e1.dot(r2)
+        d4 = e2.dot(r2)
+        if d3 >= 0.0 and d4 <= d3:
+            weights = np.array([0.0, 1.0, 0.0])  # vertex x2
+        else:
+            r3 = xs - x3
+            d5 = e1.dot(r3)
+            d6 = e2.dot(r3)
+            vc = d1 * d4 - d3 * d2
+            va = d3 * d6 - d5 * d4
+            vb = d5 * d2 - d1 * d6
+            if d6 >= 0.0 and d5 <= d6:
+                weights = np.array([0.0, 0.0, 1.0])  # vertex x3
+            elif vc <= 0.0 and d1 >= 0.0 and d3 <= 0.0:
+                t = d1 / (d1 - d3)  # edge x1-x2
+                weights = np.array([1.0 - t, t, 0.0])
+            elif vb <= 0.0 and d2 >= 0.0 and d6 <= 0.0:
+                t = d2 / (d2 - d6)  # edge x1-x3
+                weights = np.array([1.0 - t, 0.0, t])
+            elif va <= 0.0 and (d4 - d3) >= 0.0 and (d5 - d6) >= 0.0:
+                t = (d4 - d3) / ((d4 - d3) + (d5 - d6))  # edge x2-x3
+                weights = np.array([0.0, 1.0 - t, t])
+            else:
+                denom = 1.0 / (va + vb + vc)  # interior
+                beta = vb * denom
+                gamma = vc * denom
+                weights = np.array([1.0 - beta - gamma, beta, gamma])
+
+    closestPoint = weights[0] * x1 + weights[1] * x2 + weights[2] * x3
+    return weights, float(np.linalg.norm(xs - closestPoint))
+
+
+def _line2ClosestPoint(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> tuple[np.ndarray, float]:
+    """Closest point on the (closed) segment (x1, x2) to xs, as parametric weights (1-t, t) with
+    t clamped to [0, 1], plus the distance."""
+
+    e = x2 - x1
+    t = np.clip((xs - x1).dot(e) / e.dot(e), 0.0, 1.0)
+    weights = np.array([1.0 - t, t])
+    closestPoint = weights[0] * x1 + weights[1] * x2
+    return weights, float(np.linalg.norm(xs - closestPoint))
+
+
 class Constraint(ConstraintBase):
     """
     Penalty based unilateral contact between the tributary-area-weighted nodes of a deformable
@@ -221,6 +306,24 @@ class Constraint(ConstraintBase):
     per unit area, the assembled forces approximate a contact *pressure* distribution, and the
     contact response is insensitive to slave surface refinement.
 
+    With ``sliding=small`` (Abaqus-style small sliding), the closest-point projection of each
+    slave onto the master surface -- assigned facet, *clamped* local coordinates (closed-domain
+    closest point: interior, edge, or vertex; no dead zone at facet seams), and unit normal -- is
+    frozen once per increment from the last converged configuration. The gap is then *linear* in
+    the displacement DOFs: the gradient is constant, the geometric Hessian term vanishes, and
+    both non-smoothness sources of the finite-sliding formulation (facet-normal snap at seams,
+    mid-Newton containment loss) disappear; only the gap-sign activation switch remains. This is
+    the appropriate formulation for small-deformation applications, and the required basis for
+    friction.
+
+    Coulomb friction (``mu > 0``, requires ``sliding=small``) uses an elastic-predictor/
+    radial-return corrector in the frozen tangent frame: the tangential force history (promoted
+    on increment acceptance via :meth:`acceptLastState`, rotated into the new tangent plane on
+    reassignment) plus the tangential penalty stiffness times the incremental relative slip forms
+    the stick predictor, capped at ``mu * N`` on the friction cone. The consistent tangent is
+    symmetric in stick and nonsymmetric on slip (normal-tangential coupling). Combine with
+    ``type=quadratic`` (see the ``mu`` option documentation).
+
     Currently only available for spatialdomain = 3D (Tria3 facets) or 2D (Line2 facets), matching
     whichever facet type populates the given surface element sets.
     """
@@ -262,12 +365,37 @@ class Constraint(ConstraintBase):
             raise ValueError(f"Constraint type '{self.type}' is not supported. Use 'linear' or 'quadratic'.")
         self.searchDistance = kwargs["searchDistance"]
 
+        self.sliding = kwargs["sliding"].lower()
+        if self.sliding not in ["finite", "small"]:
+            raise ValueError(f"Constraint sliding '{self.sliding}' is not supported. Use 'finite' or 'small'.")
+
+        self.mu = kwargs["mu"]
+        if self.mu < 0.0:
+            raise ValueError("The friction coefficient mu must be non-negative.")
+        if self.mu > 0.0 and self.sliding != "small":
+            raise ValueError(
+                "Coulomb friction (mu > 0) requires sliding=small: the frictional predictor/"
+                "corrector operates in the frozen tangent frame of the small-sliding formulation."
+            )
+        self.tangentPenalty = kwargs["tangentPenalty"] if kwargs["tangentPenalty"] is not None else self.penalty
+
         self.nDim = model.domainSize
 
         self._referenceCoordsSlaves = np.array([n.coordinates for n in self.slaveNodes])
         self._referenceCoordsFacets = [np.array([n.coordinates for n in el.nodes]) for el in self.facetElements]
 
         self._assignedFacetIdx = [None] * self.nSlaves
+
+        # Small-sliding frozen projection data, refreshed once per increment in updateConnectivity:
+        # clamped closest-point weights on the assigned facet, and the facet's unit normal.
+        self._frozenWeights = [None] * self.nSlaves
+        self._frozenNormals = [None] * self.nSlaves
+
+        # Frictional history: tangential force exerted on each slave node, at the last converged
+        # state and at the current Newton iterate (the latter is only a scratch value, promoted to
+        # converged by acceptLastState()).
+        self._tangentialForceConverged = np.zeros((self.nSlaves, self.nDim))
+        self._tangentialForceCurrent = np.zeros((self.nSlaves, self.nDim))
 
         self._nodes = []
         self._fieldsOnNodes = []
@@ -301,19 +429,48 @@ class Constraint(ConstraintBase):
         (re)built."""
 
         slaveCoords = self._currentCoordinates(self.slaveNodes, model, self._referenceCoordsSlaves)
-        facetCentroids = np.array(
-            [
-                np.mean(self._currentCoordinates(el.nodes, model, self._referenceCoordsFacets[i]), axis=0)
-                for i, el in enumerate(self.facetElements)
-            ]
-        )
+        facetCoords = [
+            self._currentCoordinates(el.nodes, model, self._referenceCoordsFacets[i])
+            for i, el in enumerate(self.facetElements)
+        ]
 
         newAssignment = [None] * self.nSlaves
-        for s in range(self.nSlaves):
-            distances = np.linalg.norm(facetCentroids - slaveCoords[s], axis=1)
-            closest = int(np.argmin(distances))
-            if self.searchDistance is None or distances[closest] <= self.searchDistance:
-                newAssignment[s] = closest
+
+        if self.sliding == "small":
+            # Clamped closest-point search: the assigned facet is the one whose closed domain
+            # (interior/edges/vertices) is truly closest -- no dead zone at facet seams, and the
+            # clamped weights are non-negative by construction. Facet, weights, and normal are
+            # frozen for the whole increment, making the gap linear in the displacement DOFs.
+            closestPointFunction = _tria3ClosestPoint if self.nDim == 3 else _line2ClosestPoint
+            for s in range(self.nSlaves):
+                bestDistance = np.inf
+                bestFacet = None
+                bestWeights = None
+                for i in range(len(self.facetElements)):
+                    weights, distance = closestPointFunction(slaveCoords[s], *facetCoords[i])
+                    if distance < bestDistance:
+                        bestDistance, bestFacet, bestWeights = distance, i, weights
+
+                if bestFacet is not None and (self.searchDistance is None or bestDistance <= self.searchDistance):
+                    newAssignment[s] = bestFacet
+                    self._frozenWeights[s] = bestWeights
+                    normal, _ = facetNormalAndMeasure(facetCoords[bestFacet])
+                    self._frozenNormals[s] = normal
+                    # Rotate the frictional history into the new frozen tangent plane; the frame
+                    # changes only slightly per increment in a small-deformation setting.
+                    projectorOntoTangentPlane = np.eye(self.nDim) - np.outer(normal, normal)
+                    self._tangentialForceConverged[s] = projectorOntoTangentPlane @ self._tangentialForceConverged[s]
+                else:
+                    self._frozenWeights[s] = None
+                    self._frozenNormals[s] = None
+                    self._tangentialForceConverged[s] = 0.0
+        else:
+            facetCentroids = np.array([np.mean(c, axis=0) for c in facetCoords])
+            for s in range(self.nSlaves):
+                distances = np.linalg.norm(facetCentroids - slaveCoords[s], axis=1)
+                closest = int(np.argmin(distances))
+                if self.searchDistance is None or distances[closest] <= self.searchDistance:
+                    newAssignment[s] = closest
 
         hasChanged = newAssignment != self._assignedFacetIdx
         self._assignedFacetIdx = newAssignment
@@ -409,6 +566,8 @@ class Constraint(ConstraintBase):
             pStart = localOffset
             localOffset += self.nDim
 
+            self._tangentialForceCurrent[s] = 0.0
+
             if self._assignedFacetIdx[s] is None:
                 continue
 
@@ -425,18 +584,30 @@ class Constraint(ConstraintBase):
             facetU = U_np[fIdcs].reshape((nFacetNodes, self.nDim))
             facetCoords = self._referenceCoordsFacets[self._assignedFacetIdx[s]] + facetU
 
-            if nFacetNodes == 3:
-                alpha, beta, inside = _tria3Containment(xs, *facetCoords)
-                if not inside:
-                    activeIdx += 1
-                    continue
-                g, w, H = tria3GapGradientHessian(xs, *facetCoords)
+            if self.sliding == "small":
+                # Frozen projection: gap is linear in the DOFs, gradient w is constant, and the
+                # geometric (Hessian) term vanishes identically. The gradient has the same block
+                # structure as the finite case: w = [nBar, -NBar_1 nBar, ..., -NBar_k nBar],
+                # compactly w = kron(c, nBar) with c = [1, -NBar_1, ..., -NBar_k].
+                weights = self._frozenWeights[s]
+                nBar = self._frozenNormals[s]
+                g = nBar.dot(xs - weights @ facetCoords)
+                c = np.concatenate(([1.0], -weights))
+                w = np.kron(c, nBar)
+                H = None
             else:
-                t, inside = _line2Containment(xs, *facetCoords)
-                if not inside:
-                    activeIdx += 1
-                    continue
-                g, w, H = line2GapGradientHessian(xs, *facetCoords)
+                if nFacetNodes == 3:
+                    alpha, beta, inside = _tria3Containment(xs, *facetCoords)
+                    if not inside:
+                        activeIdx += 1
+                        continue
+                    g, w, H = tria3GapGradientHessian(xs, *facetCoords)
+                else:
+                    t, inside = _line2Containment(xs, *facetCoords)
+                    if not inside:
+                        activeIdx += 1
+                        continue
+                    g, w, H = line2GapGradientHessian(xs, *facetCoords)
 
             if g >= 0.0:
                 activeIdx += 1
@@ -454,21 +625,89 @@ class Constraint(ConstraintBase):
                 f_n = -0.5 * penaltyTimesArea * g**2
                 stiffness = -penaltyTimesArea * g
 
-            globalIdcs = pIdcs + fIdcs
-            PExt[globalIdcs] -= f_n * w
+            PLocal = -f_n * w
+            KLocal = stiffness * np.outer(w, w)
+            if H is not None:
+                KLocal += f_n * H
 
-            K.K_pp[activeIdx] += (
-                stiffness * np.outer(w[: self.nDim], w[: self.nDim]) + f_n * H[: self.nDim, : self.nDim]
-            )
-            K.K_ff[activeIdx] += (
-                stiffness * np.outer(w[self.nDim :], w[self.nDim :]) + f_n * H[self.nDim :, self.nDim :]
-            )
-            K.K_pf[activeIdx] += (
-                stiffness * np.outer(w[: self.nDim], w[self.nDim :]) + f_n * H[: self.nDim, self.nDim :]
-            )
-            K.K_fp[activeIdx] += (
-                stiffness * np.outer(w[self.nDim :], w[: self.nDim]) + f_n * H[self.nDim :, : self.nDim]
-            )
+            if self.mu > 0.0:
+                PFriction, KFriction = self._computeFriction(s, c, nBar, f_n, stiffness, w, dU, pIdcs, fIdcs)
+                PLocal += PFriction
+                KLocal += KFriction
+
+            globalIdcs = pIdcs + fIdcs
+            PExt[globalIdcs] += PLocal
+
+            K.K_pp[activeIdx] += KLocal[: self.nDim, : self.nDim]
+            K.K_ff[activeIdx] += KLocal[self.nDim :, self.nDim :]
+            K.K_pf[activeIdx] += KLocal[: self.nDim, self.nDim :]
+            K.K_fp[activeIdx] += KLocal[self.nDim :, : self.nDim]
 
             self.totalNormalForce += f_n
             activeIdx += 1
+
+    def _computeFriction(
+        self,
+        s: int,
+        c: np.ndarray,
+        nBar: np.ndarray,
+        f_n: float,
+        stiffness: float,
+        w: np.ndarray,
+        dU: np.ndarray,
+        pIdcs: list,
+        fIdcs: list,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Coulomb friction in the frozen small-sliding frame: elastic (stick) predictor from the
+        converged tangential force and the incremental tangential relative displacement, radial
+        return onto the friction cone ``|f_T| <= mu * N`` on slip.
+
+        Returns the local external-force contribution and the local stiffness contribution
+        ``K = -dPExt_dU`` (nonsymmetric on slip), in the same ``[slave, facet nodes]`` block
+        layout as the normal contact contribution.
+
+        The incremental relative displacement maps through the constant matrix
+        ``G = kron(c, I)`` (``u_rel = xs - sum_a NBar_a xa``), so ``G.T M G = kron(outer(c, c), M)``
+        and ``G.T v = kron(c, v)`` -- the same structure that gives ``w = kron(c, nBar)``.
+        """
+
+        nDim = self.nDim
+        weights = self._frozenWeights[s]
+
+        projectorOntoTangentPlane = np.eye(nDim) - np.outer(nBar, nBar)
+        kTangent = self.tangentPenalty * self.tributaryAreas[s]
+
+        dURelative = dU[pIdcs] - weights @ dU[fIdcs].reshape((len(weights), nDim))
+        stickForce = self._tangentialForceConverged[s] - kTangent * (projectorOntoTangentPlane @ dURelative)
+
+        normalForceMagnitude = -f_n
+        slipLimit = self.mu * normalForceMagnitude
+        stickForceMagnitude = np.linalg.norm(stickForce)
+
+        if stickForceMagnitude <= slipLimit:
+            tangentialForce = stickForce
+            # d(stickForce)_d(dURelative) = -kTangent * projector; K = -G.T dfT_dU G
+            KFriction = np.kron(np.outer(c, c), kTangent * projectorOntoTangentPlane)
+        else:
+            slipDirection = stickForce / stickForceMagnitude
+            tangentialForce = slipLimit * slipDirection
+            # dfT_dU = slipDirection * mu * dN_dU + slipLimit * dSlipDirection_dU, with
+            # dN_dU = -stiffness * w and dSlipDirection_dU built from the stick predictor;
+            # the first term makes KFriction nonsymmetric (normal-tangential coupling).
+            KFriction = self.mu * stiffness * np.outer(np.kron(c, slipDirection), w)
+            KFriction += np.kron(
+                np.outer(c, c),
+                (slipLimit * kTangent / stickForceMagnitude)
+                * ((np.eye(nDim) - np.outer(slipDirection, slipDirection)) @ projectorOntoTangentPlane),
+            )
+
+        self._tangentialForceCurrent[s] = tangentialForce
+        PFriction = np.kron(c, tangentialForce)
+        return PFriction, KFriction
+
+    def acceptLastState(self):
+        """Promote the tangential forces of the last (converged) Newton iterate to the frictional
+        history. Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` upon
+        increment acceptance."""
+
+        self._tangentialForceConverged[:] = self._tangentialForceCurrent
