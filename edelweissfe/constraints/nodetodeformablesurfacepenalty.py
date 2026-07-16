@@ -41,6 +41,7 @@ from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
+    strtobool,
 )
 
 """
@@ -122,6 +123,16 @@ module.addOptionalArg(
     "Defaults to the normal penalty.",
     float,
     None,
+)
+module.addOptionalArg(
+    "augmentedLagrange",
+    "Augment the penalty force with a per-slave normal traction multiplier, updated once per "
+    "increment on acceptance (incremental Uzawa: lambda <- min(0, lambda + penalty * A * g)). "
+    "The multiplier is constant within an increment (zero tangent contribution), drives the "
+    "penetration toward zero over the increments at a fixed penalty, and sharpens the friction "
+    "cone mu * N. Requires sliding=small.",
+    str,
+    "False",
 )
 
 documentation = [module]
@@ -324,6 +335,15 @@ class Constraint(ConstraintBase):
     symmetric in stick and nonsymmetric on slip (normal-tangential coupling). Combine with
     ``type=quadratic`` (see the ``mu`` option documentation).
 
+    With ``augmentedLagrange=True`` (requires ``sliding=small``), a per-slave normal traction
+    multiplier augments the penalty force. It is constant within an increment (zero tangent
+    contribution -- it cannot destabilize Newton) and is updated on increment acceptance by the
+    converged *penalty force part* (incremental Uzawa; note that the textbook ``penalty * A * g``
+    update is correct for the linear law only and overshoots grossly for the quadratic one),
+    clamped at zero from above, released at open gaps. Penetration is driven toward zero over
+    the increments at a fixed -- hence freely reducible -- penalty, and the friction cone
+    ``mu * N`` uses the sharper multiplier-augmented normal force.
+
     Currently only available for spatialdomain = 3D (Tria3 facets) or 2D (Line2 facets), matching
     whichever facet type populates the given surface element sets.
     """
@@ -379,6 +399,13 @@ class Constraint(ConstraintBase):
             )
         self.tangentPenalty = kwargs["tangentPenalty"] if kwargs["tangentPenalty"] is not None else self.penalty
 
+        self.augmentedLagrange = strtobool(kwargs["augmentedLagrange"])
+        if self.augmentedLagrange and self.sliding != "small":
+            raise ValueError(
+                "augmentedLagrange requires sliding=small: the multiplier force acts along the "
+                "frozen gap gradient of the small-sliding formulation."
+            )
+
         self.nDim = model.domainSize
 
         self._referenceCoordsSlaves = np.array([n.coordinates for n in self.slaveNodes])
@@ -396,6 +423,12 @@ class Constraint(ConstraintBase):
         # converged by acceptLastState()).
         self._tangentialForceConverged = np.zeros((self.nSlaves, self.nDim))
         self._tangentialForceCurrent = np.zeros((self.nSlaves, self.nDim))
+
+        # Augmented-Lagrange state: per-slave normal traction multiplier (a force, <= 0 in
+        # contact), plus the gap of the current Newton iterate as a scratch value for the Uzawa
+        # update on increment acceptance.
+        self._lambdaN = np.zeros(self.nSlaves)
+        self._gapCurrent = np.zeros(self.nSlaves)
 
         self._nodes = []
         self._fieldsOnNodes = []
@@ -464,6 +497,7 @@ class Constraint(ConstraintBase):
                     self._frozenWeights[s] = None
                     self._frozenNormals[s] = None
                     self._tangentialForceConverged[s] = 0.0
+                    self._lambdaN[s] = 0.0
         else:
             facetCentroids = np.array([np.mean(c, axis=0) for c in facetCoords])
             for s in range(self.nSlaves):
@@ -609,20 +643,31 @@ class Constraint(ConstraintBase):
                         continue
                     g, w, H = line2GapGradientHessian(xs, *facetCoords)
 
-            if g >= 0.0:
+            if self.sliding == "small":
+                self._gapCurrent[s] = g
+
+            lambdaForce = self._lambdaN[s] if self.augmentedLagrange else 0.0
+
+            if g >= 0.0 and lambdaForce == 0.0:
                 activeIdx += 1
                 continue
 
             penaltyTimesArea = self.penalty * self.tributaryAreas[s]
 
-            if self.type == "linear":
-                f_n = penaltyTimesArea * g
+            if g >= 0.0:
+                # Open gap, but a not-yet-released multiplier from the last Uzawa update: apply
+                # its constant force only (no penalty part, no tangent contribution). The
+                # multiplier decays to zero within a few increments after separation.
+                f_n = lambdaForce
+                stiffness = 0.0
+            elif self.type == "linear":
+                f_n = lambdaForce + penaltyTimesArea * g
                 stiffness = penaltyTimesArea
             else:
                 # Repulsive force growing quadratically with penetration: f_n must carry the sign
                 # of g (negative in contact) so that PExt -= f_n * w pushes the slave outward,
                 # matching the linear branch; stiffness = df_n/dg is then positive for g < 0.
-                f_n = -0.5 * penaltyTimesArea * g**2
+                f_n = lambdaForce - 0.5 * penaltyTimesArea * g**2
                 stiffness = -penaltyTimesArea * g
 
             PLocal = -f_n * w
@@ -707,7 +752,32 @@ class Constraint(ConstraintBase):
 
     def acceptLastState(self):
         """Promote the tangential forces of the last (converged) Newton iterate to the frictional
-        history. Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` upon
-        increment acceptance."""
+        history, and perform the incremental Uzawa update of the normal traction multipliers.
+        Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` upon increment
+        acceptance."""
 
         self._tangentialForceConverged[:] = self._tangentialForceCurrent
+
+        if self.augmentedLagrange:
+            for s in range(self.nSlaves):
+                if self._assignedFacetIdx[s] is None:
+                    continue
+
+                g = self._gapCurrent[s]
+                penaltyTimesArea = self.penalty * self.tributaryAreas[s]
+
+                # Augment by the converged *penalty force part* (law-dependent), so the multiplier
+                # absorbs exactly the force the penalty spring was carrying -- one-step transfer
+                # for both laws. Augmenting by penalty*A*g irrespective of the law is the textbook
+                # rule for the linear law only; for the quadratic law the converged gap scales as
+                # sqrt(2N/(penalty*A)), so penalty*A*g overshoots the required traction by orders
+                # of magnitude and destabilizes the increments. At an open gap, release toward
+                # zero with the linear measure (there is no penalty force to transfer).
+                if g >= 0.0:
+                    penaltyForcePart = penaltyTimesArea * g
+                elif self.type == "linear":
+                    penaltyForcePart = penaltyTimesArea * g
+                else:
+                    penaltyForcePart = -0.5 * penaltyTimesArea * g**2
+
+                self._lambdaN[s] = min(0.0, self._lambdaN[s] + penaltyForcePart)
