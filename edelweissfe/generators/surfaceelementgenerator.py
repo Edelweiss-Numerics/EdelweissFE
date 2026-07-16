@@ -29,10 +29,14 @@
 """
 Generates flat, geometry-only "contact facet" elements (:class:`~edelweissfe.elements.
 contactsurfaceelement.Tria3ContactFacet` / ``Line2ContactFacet``) from an existing ``*surface``
-definition, for use as the master side of node-to-deformable-surface penalty contact. Quad faces
-of 3D solids are split into two Tria3 facets via a fixed diagonal; higher-order element faces are
-reduced to their linear corner-node subset -- both are standard, accepted contact-mechanics
-simplifications, not approximations specific to this generator.
+definition, for use as the slave or master side of node-to-deformable-surface penalty contact.
+Quad faces of 3D solids are split into two Tria3 facets via a fixed diagonal. Higher-order
+element faces are either reduced to their linear corner-node subset (``triangulation=corner``,
+exact for straight-edged meshes) or triangulated including their midside nodes
+(``triangulation=midside``, strictly more accurate for curved faces). The facets carry
+face-consistent per-node tributary area shares for the pressure-weighted contact formulation.
+See the :doc:`contact theory documentation </documentation/contacttheory>` for the full
+background.
 
 .. code-block:: edelweiss
     :caption: Example

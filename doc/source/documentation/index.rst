@@ -12,6 +12,7 @@ Documentation
    steps
    analyticalfields
    constraints
+   contacttheory
    dofmanager
    fieldoutputmanager
    fields
