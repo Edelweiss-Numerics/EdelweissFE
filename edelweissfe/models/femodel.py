@@ -260,6 +260,9 @@ class FEModel:
         for el in self.elements.values():
             el.acceptLastState()
 
+        for constraint in self.constraints.values():
+            constraint.acceptLastState()
+
     def writeRestart(self, restartFile: h5py.File):
         """Write the current state of the model to a restart file.
 
