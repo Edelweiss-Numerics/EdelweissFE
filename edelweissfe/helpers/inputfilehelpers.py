@@ -247,6 +247,12 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
 
         args, kwargs = module.parseDatalines(data)
 
+        # raw code lines must not be comma-split -- same special case as in the
+        # executeAfterManualGeneration loop below, which previously was the only place with it
+        # (executePythonCode was broken in this phase)
+        if strCaseCmp(module.name, "executePythoncode"):
+            args = data
+
         model = getGeneratorFunction(generatorType)(generatorDefinition, model, journal, *args, **kwargs)
 
     # the standard 'Abaqus like' model generator is invoked unconditionally, and it has direct access to the inputfile
