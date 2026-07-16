@@ -30,6 +30,10 @@ lZ      =1
 elProvider =edelweiss
 elType  =C3D8
 
+*modelGenerator, generator=surfaceElementGenerator, name=gen1
+surface = upper_back
+name    = slaveSurf
+
 *modelGenerator, generator=surfaceElementGenerator, name=gen2
 surface = lower_front
 name    = masterSurf
@@ -39,7 +43,7 @@ lower_all
 upper_all
 
 *constraint, name=contact, type=nodeToDeformableSurfacePenalty
-nSet=upper_back, surface=masterSurf_facets, penalty=1e5, type=linear, searchDistance=2.0
+slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=5e6, type=linear, searchDistance=2.0
 
 *fieldOutput
 >>perNode, elSet=lower_all, field=displacement, result=U, name=dispLower

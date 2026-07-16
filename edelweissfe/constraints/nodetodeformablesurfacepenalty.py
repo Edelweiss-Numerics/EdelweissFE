@@ -29,6 +29,7 @@
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.elements.contactsurfaceelement import facetNormalAndMeasure
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
@@ -43,15 +44,19 @@ from edelweissfe.utils.misc import (
 )
 
 """
-A penalty based unilateral contact constraint between a node set of ordinary FE nodes and a
-deformable master surface represented by flat contact facet elements (:mod:`~edelweissfe.elements.
+A penalty based unilateral contact constraint between a deformable slave surface and a deformable
+master surface, both represented by flat contact facet elements (:mod:`~edelweissfe.elements.
 contactsurfaceelement`, typically created via :mod:`~edelweissfe.generators.surfaceelementgenerator`).
+The slave surface's nodes act as the contact points; each slave node's penalty force is weighted by
+its tributary area (the sum of ``measure / nFacetNodes`` over its incident slave facets, evaluated
+in the reference configuration), so ``penalty`` has the meaning of an interface stiffness modulus
+per unit area, and the contact response converges under slave surface refinement.
 """
 
 module = Module(
     "nodeToDeformableSurfacePenalty",
-    "A penalty based unilateral contact constraint preventing nodes of a node set from penetrating "
-    "a deformable surface represented by contact facet elements.",
+    "A penalty based unilateral contact constraint preventing the nodes of a slave surface from "
+    "penetrating a deformable master surface, both represented by contact facet elements.",
 )
 
 inputLanguage = InputLanguage()
@@ -60,11 +65,22 @@ keyword = "constraint"
 if keyword in inputLanguage:
     inputLanguage[keyword].addModule(module)
 
-module.addRequiredArg("nSet", "The (slave) node set to be protected from penetrating the surface.", str)
 module.addRequiredArg(
-    "surface", "The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet).", str
+    "slaveSurface",
+    "The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) forming the "
+    "slave surface; its nodes act as the contact points, penalty-weighted by their tributary areas.",
+    str,
 )
-module.addRequiredArg("penalty", "The numerical penalty value.", float)
+module.addRequiredArg(
+    "masterSurface",
+    "The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) forming the " "master surface.",
+    str,
+)
+module.addRequiredArg(
+    "penalty",
+    "The numerical penalty value, an interface stiffness modulus per unit slave surface area.",
+    float,
+)
 
 module.addOptionalArg(
     "type",
@@ -197,8 +213,15 @@ class Constraint(ConstraintBase):
     contact contribution is assembled for that slave until the next connectivity update -- the
     same accepted non-smoothness at facet boundaries as the rigid-body case's mesh edges.
 
+    The slave side is itself a contact facet surface: the constraint's contact points are the
+    unique nodes of the ``slaveSurface`` element set, and each node's penalty force is weighted by
+    its tributary area (the sum of ``measure / nFacetNodes`` over its incident slave facets,
+    evaluated in the reference configuration). ``penalty`` is thus an interface stiffness modulus
+    per unit area, the assembled forces approximate a contact *pressure* distribution, and the
+    contact response is insensitive to slave surface refinement.
+
     Currently only available for spatialdomain = 3D (Tria3 facets) or 2D (Line2 facets), matching
-    whichever facet type populates the given ``surface`` element set.
+    whichever facet type populates the given surface element sets.
     """
 
     @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
@@ -208,9 +231,29 @@ class Constraint(ConstraintBase):
 
         kwargs = CaseInsensitiveDict(kwargs)
 
-        self.slaveNodes = list(model.nodeSets[kwargs["nSet"]])
-        self.facetElements = list(model.elementSets[kwargs["surface"]])
+        self.slaveFacetElements = list(model.elementSets[kwargs["slaveSurface"]])
+        self.facetElements = list(model.elementSets[kwargs["masterSurface"]])
+
+        # The contact points are the unique nodes of the slave surface, each weighted by its
+        # tributary area: the sum of measure/nFacetNodes over its incident slave facets, evaluated
+        # in the reference configuration (consistent with the small-deformation setting).
+        tributaryAreaOfSlaveNode = {}
+        for slaveFacet in self.slaveFacetElements:
+            _, measure = facetNormalAndMeasure(np.array([n.coordinates for n in slaveFacet.nodes]))
+            share = measure / len(slaveFacet.nodes)
+            for node in slaveFacet.nodes:
+                tributaryAreaOfSlaveNode[node] = tributaryAreaOfSlaveNode.get(node, 0.0) + share
+
+        self.slaveNodes = list(tributaryAreaOfSlaveNode.keys())
+        self.tributaryAreas = np.array(list(tributaryAreaOfSlaveNode.values()))
         self.nSlaves = len(self.slaveNodes)
+
+        masterNodes = {node for el in self.facetElements for node in el.nodes}
+        if not masterNodes.isdisjoint(self.slaveNodes):
+            raise ValueError(
+                f"Constraint '{name}': slave surface '{kwargs['slaveSurface']}' and master surface "
+                f"'{kwargs['masterSurface']}' share nodes -- self-contact is not supported."
+            )
 
         self.penalty = kwargs["penalty"]
         self.type = kwargs["type"].lower()
@@ -398,15 +441,17 @@ class Constraint(ConstraintBase):
                 activeIdx += 1
                 continue
 
+            penaltyTimesArea = self.penalty * self.tributaryAreas[s]
+
             if self.type == "linear":
-                f_n = self.penalty * g
-                stiffness = self.penalty
+                f_n = penaltyTimesArea * g
+                stiffness = penaltyTimesArea
             else:
                 # Repulsive force growing quadratically with penetration: f_n must carry the sign
                 # of g (negative in contact) so that PExt -= f_n * w pushes the slave outward,
                 # matching the linear branch; stiffness = df_n/dg is then positive for g < 0.
-                f_n = -0.5 * self.penalty * g**2
-                stiffness = -self.penalty * g
+                f_n = -0.5 * penaltyTimesArea * g**2
+                stiffness = -penaltyTimesArea * g
 
             globalIdcs = pIdcs + fIdcs
             PExt[globalIdcs] -= f_n * w
