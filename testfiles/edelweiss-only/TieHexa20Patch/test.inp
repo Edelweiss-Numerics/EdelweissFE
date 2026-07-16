@@ -1,0 +1,75 @@
+** tie patch test: two hexa20 blocks with matching interface meshes (2x2 vs 2x2), bonded by the
+** DOF-elimination tie constraint, under uniform compression with nu = 0. The upper block starts
+** with a 0.02 gap that the tie's adjust (default) closes at construction, so the exact solution
+** is homogeneous uniaxial stress: sigma = E * 0.06 / 2 = 540, and the interface displacement is
+** perfectly planar. On matching meshes every slave node projects exactly onto a master node
+** (weights snap to a facet vertex), so the patch test passes to machine precision: RFBottom =
+** 540 exactly, and the spread of the slave nodes' z-displacement (UzSpread) is ~1e-17. See
+** test_mismatched.inp for the non-matching variant quantifying the intrinsic node-to-surface tie
+** limitation. triangulation=midside on both surfaces is mandatory for hexa20: it puts the
+** midside nodes into the facet node lists (slave side: they must be tied; master side: they
+** carry interpolation weights).
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+1.8e4, 0.0
+
+*job, name=tiejob, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=boxGen, name=lower
+nX      =2
+nY      =2
+nZ      =1
+x0      =0
+y0      =0
+z0      =0
+lX      =1
+lY      =1
+lZ      =1
+elProvider =edelweiss
+elType  =C3D20
+
+*modelGenerator, generator=boxGen, name=upper
+nX      =2
+nY      =2
+nZ      =1
+x0      =0
+y0      =0
+z0      =1.02
+lX      =1
+lY      =1
+lZ      =1
+elProvider =edelweiss
+elType  =C3D20
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen1
+surface = upper_back
+name    = slaveSurf
+triangulation = midside
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen2
+surface = lower_front
+name    = masterSurf
+triangulation = midside
+
+*section, name=section1, material=linearelastic, type=solid
+lower_all
+upper_all
+
+*constraint, name=tie1, type=tie
+slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets
+
+*fieldOutput
+>>perNode, elSet=lower_all, field=displacement, result=U, name=dispLower
+>>perNode, elSet=upper_all, field=displacement, result=U, name=dispUpper
+>>perNode, name=RFBottom, nSet=lower_back, field=displacement, result=P, f(x)='sum(x[:,2])', saveHistory=True
+>>perNode, name=UzSpread, nSet=slaveSurf_nodes, field=displacement, result=U, f(x)='np.max(x[:,2])-np.min(x[:,2])', saveHistory=True
+
+*output, type=monitor, name=monitor
+fieldOutput=RFBottom
+fieldOutput=UzSpread
+
+*step, solver=theSolver
+maxInc=0.5, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>options, category=NISTSolver, extrapolation=off
+>>dirichlet, name=fixBottom, nSet=lower_back, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=pushTop, nSet=upper_front, field=displacement, 3=-0.06

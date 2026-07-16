@@ -427,6 +427,7 @@ from edelweissfe.constraints.directionalspringpenalty import inputLanguage  # no
 from edelweissfe.constraints.nodetorigidsurfacepenalty import inputLanguage  # noqa: F811,E402
 from edelweissfe.constraints.nodetodiscreterigidbodypenalty import inputLanguage  # noqa: F811,E402
 from edelweissfe.constraints.nodetodeformablesurfacepenalty import inputLanguage  # noqa: F811,E402
+from edelweissfe.constraints.tie import inputLanguage  # noqa: F811,E402
 
 # isort: on
 
