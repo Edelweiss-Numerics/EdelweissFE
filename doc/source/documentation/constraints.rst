@@ -251,10 +251,63 @@ Module ``edelweissfe.constraints.nodetodeformablesurfacepenalty``
     :caption: Example (small sliding, Coulomb friction, hexa20 midside triangulation):
               ``testfiles/edelweiss-only/NodeToDeformableSurfaceContactFrictionHexa20/test.inp``
 
+``tie`` - Surface-to-surface tie (DOF elimination)
+--------------------------------------------------
+
+An Abaqus-style tie constraint bonding a slave surface rigidly to a deformable master surface.
+Unlike the penalty- and Lagrange-multiplier-based constraints above, the tie is enforced by
+master-slave DOF elimination (multi-point constraint condensation): each slave node's
+displacement is constrained to the frozen facet-linear interpolation of its closest master facet,
+:math:`u_s = \sum_a N_a \, u_{m_a}`, and the slave DOFs are condensed out of the equation system
+-- exact enforcement, no penalty parameter, no additional DOFs, zero added stiffness. The same
+mechanism serves the implicit solvers (system matrix transformation
+:math:`\tilde{K} = T^T K \, T + C`, see
+:class:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation`) and explicit
+dynamics (mass-conserving row-sum folding of slave masses and forces onto the masters, direct
+kinematic slaving -- the critical time step is untouched).
+
+On matching interface meshes, tying is exactly equivalent to merging the interface nodes: the
+patch test passes to machine precision, and both the implicit and the explicit (central
+difference) solutions reproduce the monolithic mesh identically. On non-matching meshes the
+constraint is still enforced exactly, but the classical node-to-surface limitation applies: the
+slave surface's consistent nodal force pattern, redistributed by the facet-linear weights, does
+not match the master's own consistent pattern, so a uniform stress state exhibits a bounded,
+refinement-convergent interface perturbation (quantified in
+``testfiles/edelweiss-only/TieHexa20Patch/test_mismatched.inp``) -- the same obstruction that
+motivates mortar methods.
+
+For quadratic (hexa20/quad8) faces, generate both facet surfaces with ``triangulation=midside``:
+the corner triangulation excludes the midside nodes from the facet node lists entirely, leaving
+slave midside nodes untied.
+
+Module ``edelweissfe.constraints.tie``
+
+.. automodule:: edelweissfe.constraints.tie
+    :members: __doc__
+
+.. pprint:: edelweissfe.constraints.tie.documentation
+    :caption: Options:
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/TieHexa20Patch/test.inp
+    :language: edelweiss
+    :caption: Example (hexa20, midside triangulation): ``testfiles/edelweiss-only/TieHexa20Patch/test.inp``
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/TieNED/test.inp
+    :language: edelweiss
+    :caption: Example (explicit dynamics): ``testfiles/edelweiss-only/TieNED/test.inp``
+
 Implementing your own constraints
 ---------------------------------
 
 Subclass from the constraint base class in module ``edelweissfe.constraints.base.constraintbase``
 
 .. automodule:: edelweissfe.constraints.base.constraintbase
+    :members:
+
+Multi-point (DOF-elimination) constraints subclass from
+``edelweissfe.constraints.base.multipointconstraintbase`` instead -- they contribute nothing to
+the load vector or system matrix; they only declare linear dependency records, which the solvers
+condense via :class:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation`.
+
+.. automodule:: edelweissfe.constraints.base.multipointconstraintbase
     :members:
