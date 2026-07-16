@@ -156,6 +156,27 @@ _MIDSIDE_FACE_TABLES = {
 }
 
 
+def _assignQuadConsistentShares(quadFacets: list):
+    """Assign the consistent lumping of a uniform pressure on a bilinear quad (quad area / 4 per
+    node) to the two Tria3 facets triangulating it, distributing each node's quarter evenly over
+    the triangles of this quad containing it -- removing the diagonal-position dependence of the
+    equal per-triangle split.
+
+    Parameters
+    ----------
+    quadFacets
+        The two Tria3 facet elements triangulating one quad.
+    """
+
+    quadArea = sum(f.nodalAreaShares.sum() for f in quadFacets)
+    facetsOfNode = {}
+    for facet in quadFacets:
+        for node in facet.nodes:
+            facetsOfNode[node] = facetsOfNode.get(node, 0) + 1
+    for facet in quadFacets:
+        facet.setNodalAreaShares([quadArea / 4.0 / facetsOfNode[node] for node in facet.nodes])
+
+
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
 @castKwargsValuesAndAddDefaults(module)
 def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args, **kwargs) -> FEModel:
@@ -244,13 +265,20 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args,
                 # mismatch shows up as spurious contact pressure oscillation in an otherwise
                 # exact patch test. Override: distribute each corner's area/4 evenly over the
                 # triangles of THIS face containing it.
-                faceArea = sum(f.nodalAreaShares.sum() for f in faceFacets)
-                facetsOfNode = {}
-                for facet in faceFacets:
-                    for node in facet.nodes:
-                        facetsOfNode[node] = facetsOfNode.get(node, 0) + 1
-                for facet in faceFacets:
-                    facet.setNodalAreaShares([faceArea / 4.0 / facetsOfNode[node] for node in facet.nodes])
+                _assignQuadConsistentShares(faceFacets)
+
+            elif len(faceFacets) == 6 and all(len(f.nodes) == 3 for f in faceFacets):
+                # Midside triangulation of a quadratic face: 4 corner triangles followed by the
+                # 2 triangles of the central midside quad (table order). The central quad's fixed
+                # diagonal would give its two diagonal midside nodes more incident triangles than
+                # the other two -- asymmetric tributary areas on a symmetric face. Apply the same
+                # quad-consistent lumping (area/4 per node) to the central quad; the corner
+                # triangles keep their equal per-triangle split. NOTE: exact pointwise pressure
+                # consistency is fundamentally unattainable for serendipity faces regardless of
+                # the weights -- the consistent nodal forces of a uniform pressure on a quad8
+                # face are NEGATIVE at the corners, which no unilateral per-node spring scheme
+                # can reproduce (see the constraint documentation).
+                _assignQuadConsistentShares(faceFacets[4:])
 
     model.elements.update(newElements)
 
