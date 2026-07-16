@@ -181,8 +181,9 @@ def _line2Containment(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> tuple[f
 
 class Constraint(ConstraintBase):
     """
-    Penalty based unilateral contact between a slave node set and a deformable master surface
-    represented by flat (Tria3/Line2) contact facet elements.
+    Penalty based unilateral contact between the tributary-area-weighted nodes of a deformable
+    slave surface and a deformable master surface, both represented by flat (Tria3/Line2) contact
+    facet elements.
 
     Theoretical background
     -----------------------
