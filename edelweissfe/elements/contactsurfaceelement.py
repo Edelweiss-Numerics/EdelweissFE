@@ -145,6 +145,24 @@ class ContactFacetElementBase(BaseElement):
     def initializeElement(self):
         self._referenceCoordinates = np.array([n.coordinates for n in self._nodes])
 
+        # Default per-node tributary area shares: an equal split of the facet's own measure.
+        # The surface element generator overrides these for facets triangulating a linear quad
+        # face, where the unique consistent lumping (face area / 4 per corner) differs from the
+        # per-triangle split (see the generator).
+        _, measure = facetNormalAndMeasure(self._referenceCoordinates)
+        self._nodalAreaShares = np.full(self._nNodes, measure / self._nNodes)
+
+    @property
+    def nodalAreaShares(self) -> np.ndarray:
+        """Per-node tributary area shares of this facet (aligned with ``nodes``); summing them
+        over all facets of a surface yields each node's consistent tributary area for a uniform
+        pressure."""
+
+        return self._nodalAreaShares
+
+    def setNodalAreaShares(self, shares: np.ndarray):
+        self._nodalAreaShares = np.asarray(shares, dtype=float)
+
     def setMaterial(self, materialName: str, materialProperties: np.ndarray):
         raise ValueError(
             f"{self._elType} is a geometry-only contact facet and cannot be assigned a material "

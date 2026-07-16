@@ -344,6 +344,16 @@ class Constraint(ConstraintBase):
     the increments at a fixed -- hence freely reducible -- penalty, and the friction cone
     ``mu * N`` uses the sharper multiplier-augmented normal force.
 
+    Per-slave results (normal pressure, tangential traction, gap) are exposed via
+    :meth:`getNormalPressures`/:meth:`getTangentialTractions`/:meth:`getGaps`, ordered like the
+    ``<prefix>_nodes`` node set created by the surface element generator (both enumerate the
+    unique slave nodes in facet-creation/first-seen order), so they can be requested directly as
+    a ``fromExpression`` field output associated with that node set::
+
+        *fieldOutput
+        >>fromExpression, name=pN, nSet=slaveSurf_nodes,
+        expression='model.constraints["contact"].getNormalPressures()'
+
     Currently only available for spatialdomain = 3D (Tria3 facets) or 2D (Line2 facets), matching
     whichever facet type populates the given surface element sets.
     """
@@ -359,13 +369,13 @@ class Constraint(ConstraintBase):
         self.facetElements = list(model.elementSets[kwargs["masterSurface"]])
 
         # The contact points are the unique nodes of the slave surface, each weighted by its
-        # tributary area: the sum of measure/nFacetNodes over its incident slave facets, evaluated
-        # in the reference configuration (consistent with the small-deformation setting).
+        # tributary area: the sum of its area shares over its incident slave facets (assigned by
+        # the surface element generator; consistent with a uniform pressure on the source faces),
+        # evaluated in the reference configuration (consistent with the small-deformation
+        # setting).
         tributaryAreaOfSlaveNode = {}
         for slaveFacet in self.slaveFacetElements:
-            _, measure = facetNormalAndMeasure(np.array([n.coordinates for n in slaveFacet.nodes]))
-            share = measure / len(slaveFacet.nodes)
-            for node in slaveFacet.nodes:
+            for node, share in zip(slaveFacet.nodes, slaveFacet.nodalAreaShares):
                 tributaryAreaOfSlaveNode[node] = tributaryAreaOfSlaveNode.get(node, 0.0) + share
 
         self.slaveNodes = list(tributaryAreaOfSlaveNode.keys())
@@ -429,6 +439,9 @@ class Constraint(ConstraintBase):
         # update on increment acceptance.
         self._lambdaN = np.zeros(self.nSlaves)
         self._gapCurrent = np.zeros(self.nSlaves)
+
+        # Per-slave normal force of the current Newton iterate, for result output.
+        self._normalForceCurrent = np.zeros(self.nSlaves)
 
         self._nodes = []
         self._fieldsOnNodes = []
@@ -601,6 +614,7 @@ class Constraint(ConstraintBase):
             localOffset += self.nDim
 
             self._tangentialForceCurrent[s] = 0.0
+            self._normalForceCurrent[s] = 0.0
 
             if self._assignedFacetIdx[s] is None:
                 continue
@@ -688,8 +702,28 @@ class Constraint(ConstraintBase):
             K.K_pf[activeIdx] += KLocal[: self.nDim, self.nDim :]
             K.K_fp[activeIdx] += KLocal[self.nDim :, : self.nDim]
 
+            self._normalForceCurrent[s] = f_n
             self.totalNormalForce += f_n
             activeIdx += 1
+
+    def getNormalPressures(self) -> np.ndarray:
+        """The current per-slave normal contact pressures (positive in compression), ordered like
+        the surface element generator's ``<prefix>_nodes`` node set of the slave surface."""
+
+        return -self._normalForceCurrent / self.tributaryAreas
+
+    def getTangentialTractions(self) -> np.ndarray:
+        """The current per-slave tangential (frictional) traction magnitudes, ordered like the
+        surface element generator's ``<prefix>_nodes`` node set of the slave surface."""
+
+        return np.linalg.norm(self._tangentialForceCurrent, axis=1) / self.tributaryAreas
+
+    def getGaps(self) -> np.ndarray:
+        """The current per-slave gaps (negative when penetrating; only meaningful for
+        sliding=small), ordered like the surface element generator's ``<prefix>_nodes`` node set
+        of the slave surface."""
+
+        return self._gapCurrent.copy()
 
     def _computeFriction(
         self,
