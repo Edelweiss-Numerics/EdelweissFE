@@ -70,6 +70,15 @@ if keyword in inputLanguage:
 
 module.addRequiredArg("surface", "The name of an existing *surface definition.", str)
 module.addRequiredArg("name", "The prefix for the generated element/node sets.", str)
+module.addOptionalArg(
+    "triangulation",
+    "The facet triangulation of higher-order element faces: 'corner' (linear corner-node subset "
+    "only; exact for straight-edged meshes) or 'midside' (triangulation of the full face boundary "
+    "including midside nodes; strictly more accurate for curved faces). Linear element faces are "
+    "unaffected by this option.",
+    str,
+    "corner",
+)
 
 documentation = [module]
 
@@ -115,6 +124,37 @@ _FACE_TABLES = {
     },
 }
 
+# Midside-triangulation tables for higher-order element faces: the full 8-node face boundary
+# polygon (c1, m1, c2, m2, c3, m3, c4, m4) is split into 4 corner triangles (m_prev, c_i, m_i)
+# plus the central midside quad (m1, m2, m3, m4) split into 2 triangles -- 6 flat Tria3 facets
+# using only real nodes (2D quad8 edges: split at the midside node into 2 Line2 facets). NOTE: a
+# naive fan from a *corner* would instead contain the boundary triangles (c1, m1, c2)/(c1, c4, m4)
+# which are exactly degenerate (zero area, collinear nodes) for straight-edged meshes -- the
+# midside-quad split has no such degenerate members. Identical coverage to the corner reduction
+# for straight-edged meshes, strictly more accurate for curved faces (offset midside nodes).
+# Corner cycles and outward winding are taken verbatim from the verified corner tables above
+# (every triangle's vertices appear in the boundary polygon's cyclic order, preserving outward
+# orientation); midside local indices follow boxgen's hexa20 numbering and planerectquad's quad8
+# numbering (4-7 on edges 0-1, 1-2, 2-3, 3-0). All verified numerically against the generators'
+# actual node construction (face-plane membership, outward cross-product normals, non-degeneracy,
+# area tiling, midside-between-corners positions) -- see the hexa8 convention notes above.
+_MIDSIDE_FACE_TABLES = {
+    "quad8": {
+        1: ((0, 4), (4, 1)),
+        2: ((1, 5), (5, 2)),
+        3: ((2, 6), (6, 3)),
+        4: ((3, 7), (7, 0)),
+    },
+    "hexa20": {
+        1: ((8, 0, 11), (11, 3, 10), (10, 2, 9), (9, 1, 8), (11, 10, 9), (11, 9, 8)),  # Ymin
+        2: ((15, 4, 12), (12, 5, 13), (13, 6, 14), (14, 7, 15), (12, 13, 14), (12, 14, 15)),  # Ymax
+        3: ((16, 0, 8), (8, 1, 17), (17, 5, 12), (12, 4, 16), (8, 17, 12), (8, 12, 16)),  # Xmin
+        4: ((17, 1, 9), (9, 2, 18), (18, 6, 13), (13, 5, 17), (9, 18, 13), (9, 13, 17)),  # Zmax
+        5: ((10, 3, 19), (19, 7, 14), (14, 6, 18), (18, 2, 10), (19, 14, 18), (19, 18, 10)),  # Xmax
+        6: ((11, 0, 16), (16, 4, 15), (15, 7, 19), (19, 3, 11), (16, 15, 19), (16, 19, 11)),  # Zmin
+    },
+}
+
 
 @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
 @castKwargsValuesAndAddDefaults(module)
@@ -140,6 +180,11 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args,
 
     surfaceName = kwargs["surface"]
     prefix = kwargs["name"]
+    triangulation = kwargs["triangulation"].lower()
+    if triangulation not in ("corner", "midside"):
+        raise ValueError(
+            f"surfaceElementGenerator: triangulation '{triangulation}' is not supported. Use 'corner' or 'midside'."
+        )
 
     if surfaceName not in model.surfaces:
         raise ValueError(f"surfaceElementGenerator: surface '{surfaceName}' is not defined.")
@@ -151,7 +196,11 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args,
 
     for faceNumber, elementSet in surfaceDef.items():
         for sourceElement in elementSet:
-            faceTable = _FACE_TABLES.get(sourceElement.ensightType)
+            faceTable = None
+            if triangulation == "midside":
+                faceTable = _MIDSIDE_FACE_TABLES.get(sourceElement.ensightType)
+            if faceTable is None:
+                faceTable = _FACE_TABLES.get(sourceElement.ensightType)
             if faceTable is None:
                 raise ValueError(
                     f"surfaceElementGenerator: no face-node-ordering table available for element "
