@@ -402,8 +402,11 @@ class Constraint(ConstraintBase):
                 f_n = self.penalty * g
                 stiffness = self.penalty
             else:
-                f_n = 0.5 * self.penalty * g**2
-                stiffness = self.penalty * g
+                # Repulsive force growing quadratically with penetration: f_n must carry the sign
+                # of g (negative in contact) so that PExt -= f_n * w pushes the slave outward,
+                # matching the linear branch; stiffness = df_n/dg is then positive for g < 0.
+                f_n = -0.5 * self.penalty * g**2
+                stiffness = -self.penalty * g
 
             globalIdcs = pIdcs + fIdcs
             PExt[globalIdcs] -= f_n * w
