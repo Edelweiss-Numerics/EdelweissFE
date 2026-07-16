@@ -127,7 +127,11 @@ def generateModelData(generatorDefinition, model, journal, *args, **kwargs):
     ]
 
     nodes = []
+    # continue the numbering of any pre-existing nodes -- a fixed start at 1 would silently
+    # overwrite the entries of a previously run generator in model.nodes
     currentNodeLabel = 1
+    if model.nodes:
+        currentNodeLabel += max(model.nodes.keys())
 
     for x in range(nNodesX):
         for y in range(nNodesY):
@@ -139,6 +143,8 @@ def generateModelData(generatorDefinition, model, journal, *args, **kwargs):
     nG = np.asarray(nodes).reshape(nNodesX, nNodesY)
 
     currentElementLabel = 1
+    if model.elements:
+        currentElementLabel += max(model.elements.keys())
 
     elements = []
     for x in range(nX):
