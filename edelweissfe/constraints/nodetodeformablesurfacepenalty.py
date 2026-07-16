@@ -34,7 +34,9 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.facetcontactgeometry import (
+    line2ClosestPoint,
     line2GapGradientHessian,
+    tria3ClosestPoint,
     tria3GapGradientHessian,
 )
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
@@ -215,64 +217,6 @@ def _line2Containment(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> tuple[f
     e = x2 - x1
     t = (xs - x1).dot(e) / e.dot(e)
     return t, 0.0 <= t <= 1.0
-
-
-def _tria3ClosestPoint(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray, x3: np.ndarray) -> tuple[np.ndarray, float]:
-    """Closest point on the (closed) triangle (x1, x2, x3) to xs, clamped to the triangle's
-    interior/edge/vertex regions (Ericson's real-time-collision-detection region test), as
-    barycentric weights (w1, w2, w3) with all w >= 0 and sum(w) == 1, plus the distance."""
-
-    e1 = x2 - x1
-    e2 = x3 - x1
-    r1 = xs - x1
-
-    d1 = e1.dot(r1)
-    d2 = e2.dot(r1)
-    if d1 <= 0.0 and d2 <= 0.0:
-        weights = np.array([1.0, 0.0, 0.0])  # vertex x1
-    else:
-        r2 = xs - x2
-        d3 = e1.dot(r2)
-        d4 = e2.dot(r2)
-        if d3 >= 0.0 and d4 <= d3:
-            weights = np.array([0.0, 1.0, 0.0])  # vertex x2
-        else:
-            r3 = xs - x3
-            d5 = e1.dot(r3)
-            d6 = e2.dot(r3)
-            vc = d1 * d4 - d3 * d2
-            va = d3 * d6 - d5 * d4
-            vb = d5 * d2 - d1 * d6
-            if d6 >= 0.0 and d5 <= d6:
-                weights = np.array([0.0, 0.0, 1.0])  # vertex x3
-            elif vc <= 0.0 and d1 >= 0.0 and d3 <= 0.0:
-                t = d1 / (d1 - d3)  # edge x1-x2
-                weights = np.array([1.0 - t, t, 0.0])
-            elif vb <= 0.0 and d2 >= 0.0 and d6 <= 0.0:
-                t = d2 / (d2 - d6)  # edge x1-x3
-                weights = np.array([1.0 - t, 0.0, t])
-            elif va <= 0.0 and (d4 - d3) >= 0.0 and (d5 - d6) >= 0.0:
-                t = (d4 - d3) / ((d4 - d3) + (d5 - d6))  # edge x2-x3
-                weights = np.array([0.0, 1.0 - t, t])
-            else:
-                denom = 1.0 / (va + vb + vc)  # interior
-                beta = vb * denom
-                gamma = vc * denom
-                weights = np.array([1.0 - beta - gamma, beta, gamma])
-
-    closestPoint = weights[0] * x1 + weights[1] * x2 + weights[2] * x3
-    return weights, float(np.linalg.norm(xs - closestPoint))
-
-
-def _line2ClosestPoint(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> tuple[np.ndarray, float]:
-    """Closest point on the (closed) segment (x1, x2) to xs, as parametric weights (1-t, t) with
-    t clamped to [0, 1], plus the distance."""
-
-    e = x2 - x1
-    t = np.clip((xs - x1).dot(e) / e.dot(e), 0.0, 1.0)
-    weights = np.array([1.0 - t, t])
-    closestPoint = weights[0] * x1 + weights[1] * x2
-    return weights, float(np.linalg.norm(xs - closestPoint))
 
 
 class Constraint(ConstraintBase):
@@ -487,7 +431,7 @@ class Constraint(ConstraintBase):
             # (interior/edges/vertices) is truly closest -- no dead zone at facet seams, and the
             # clamped weights are non-negative by construction. Facet, weights, and normal are
             # frozen for the whole increment, making the gap linear in the displacement DOFs.
-            closestPointFunction = _tria3ClosestPoint if self.nDim == 3 else _line2ClosestPoint
+            closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
             for s in range(self.nSlaves):
                 bestDistance = np.inf
                 bestFacet = None
