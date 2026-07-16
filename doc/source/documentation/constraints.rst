@@ -151,6 +151,11 @@ Module ``edelweissfe.constraints.nodetodeformablesurfacepenalty``
     :language: edelweiss
     :caption: Example: ``testfiles/edelweiss-only/NodeToDeformableSurfaceContact/test.inp``
 
+.. literalinclude:: ../../../testfiles/edelweiss-only/NodeToDeformableSurfaceContactFrictionHexa20/test.inp
+    :language: edelweiss
+    :caption: Example (small sliding, Coulomb friction, hexa20 midside triangulation):
+              ``testfiles/edelweiss-only/NodeToDeformableSurfaceContactFrictionHexa20/test.inp``
+
 Implementing your own constraints
 ---------------------------------
 
