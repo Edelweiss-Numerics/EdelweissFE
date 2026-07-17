@@ -71,11 +71,21 @@ cdef class PardisoSolver:
     Stateful interface to the MKL PARDISO solver.
 
     The reordering and symbolic factorization (PARDISO phase 11) depend only on the
-    sparsity pattern of the system matrix. Within a step, the pattern is constant across
-    Newton iterations, so the symbolic factorization is computed once and reused for
-    every subsequent solve with the same pattern; each solve then only performs the
-    numerical factorization (phase 22) and back substitution (phase 33). A change of
-    the sparsity pattern is detected automatically and triggers a re-analysis.
+    sparsity pattern of the system matrix, so it is in principle safe to compute it
+    once and reuse it for every subsequent solve with the same pattern (each solve
+    then only performs the numerical factorization, phase 22, and back substitution,
+    phase 33). A change of the sparsity pattern is detected automatically and
+    triggers a re-analysis.
+
+    However, this reuse has been observed to silently produce numerically wrong
+    results (with PARDISO reporting ``error == 0``, so the usual NaN-based failure
+    check does not catch it) for some coupled-DOF problems where the numerically
+    relevant pivot structure shifts substantially between solves even though the
+    sparsity pattern itself does not change. Reuse is therefore **disabled by
+    default**; pass ``reuseSymbolicFactorization=True`` to opt in once this has been
+    verified safe for the problem at hand (e.g. by comparing against one-shot
+    solves on the actual matrix sequence). With reuse disabled, this class behaves
+    like the free function :func:`pardisoSolve`, just as a reusable object.
 
     The number of threads is controlled by MKL via the usual environment variables
     (``OMP_NUM_THREADS`` / ``MKL_NUM_THREADS``).
@@ -90,6 +100,7 @@ cdef class PardisoSolver:
     cdef int rows
     cdef bint ptIsActive  # pt may hold PARDISO-internal allocations (phase -1 required)
     cdef bint hasSymbolicFactorization
+    cdef bint reuseSymbolicFactorization
 
     # the pattern arrays of the currently analyzed matrix (0-based, for change detection)
     cdef object currentIndices
@@ -98,7 +109,7 @@ cdef class PardisoSolver:
     cdef int[::1] indicesFortran
     cdef int[::1] indptrFortran
 
-    def __cinit__(self):
+    def __cinit__(self, reuseSymbolicFactorization=False):
         cdef int i
 
         self.mtype = 11
@@ -107,6 +118,7 @@ cdef class PardisoSolver:
         self.msglvl = 0
         self.ptIsActive = False
         self.hasSymbolicFactorization = False
+        self.reuseSymbolicFactorization = reuseSymbolicFactorization
         self.currentIndices = None
         self.currentIndptr = None
 
@@ -219,7 +231,9 @@ cdef class PardisoSolver:
             The solution vector.
         """
 
-        if not self._hasSamePattern(A):
+        # if reuse is disabled, always re-analyze; _hasSamePattern is not even
+        # evaluated in that case (see the class docstring for why reuse is opt-in)
+        if not self.reuseSymbolicFactorization or not self._hasSamePattern(A):
             self._analyze(A)
 
         cdef double[::1] data = A.data
@@ -252,6 +266,24 @@ cdef class PardisoSolver:
             np.asarray(x).fill(np.nan)
 
         return np.reshape(x, b.shape)
+
+    def invalidate(self):
+        """
+        Force a fresh reordering and symbolic factorization (PARDISO phase 11) on the
+        next solve, regardless of what the array-identity / ``array_equal`` pattern
+        check in :meth:`_hasSamePattern` would otherwise conclude.
+
+        Call this whenever the caller knows the sparsity pattern may have changed
+        through a channel the automatic detection might not reliably catch — e.g. a
+        solver that rebuilds its CSR generator whenever the active domain changes,
+        which can happen more often than once per analysis step (unlike EdelweissFE's
+        own static-mesh usage, where a fresh instance is constructed once per step and
+        the pattern is never actually re-checked against a real change).
+
+        No-op when ``reuseSymbolicFactorization`` is False, since every solve already
+        re-analyzes unconditionally in that case.
+        """
+        self.hasSymbolicFactorization = False
 
 
 def pardisoSolve(A, b):
