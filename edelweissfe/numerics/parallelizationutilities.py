@@ -24,8 +24,11 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+import concurrent.futures
 import os
 import sys
+
+_threadPools = {}
 
 
 def isFreeThreadingSupported() -> bool:
@@ -64,3 +67,28 @@ def getNumberOfThreads() -> int:
         num_workers = 1
 
     return num_workers
+
+
+def getThreadPool(numThreads: int) -> concurrent.futures.ThreadPoolExecutor:
+    """Get a persistent thread pool with the requested number of worker threads.
+
+    Pools are created lazily and reused for the lifetime of the process. This avoids
+    the cost of spawning and joining worker threads for every parallel computation,
+    which the solvers request once per Newton iteration.
+
+    Parameters
+    ----------
+    numThreads
+        The number of worker threads.
+
+    Returns
+    -------
+    concurrent.futures.ThreadPoolExecutor
+        The persistent thread pool.
+    """
+
+    pool = _threadPools.get(numThreads)
+    if pool is None:
+        pool = _threadPools[numThreads] = concurrent.futures.ThreadPoolExecutor(max_workers=numThreads)
+
+    return pool

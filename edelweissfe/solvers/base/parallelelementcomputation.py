@@ -27,13 +27,12 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-import concurrent.futures
 import itertools
 
-from edelweissfe.elements.base.baseelement import BaseElement
 from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.numerics.parallelizationutilities import (
     getNumberOfThreads,
+    getThreadPool,
     isFreeThreadingSupported,
 )
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -79,17 +78,23 @@ def computeElementsInParallel(
     time = timeStep.totalTime
     dT = timeStep.timeIncrement
 
-    def computeElementsWorker(element: BaseElement):
-        Pe = scatter_P[element]
-        Ue = Un1[element]
-        dUe = dU[element]
-        Ke = K[element]
-        element.computeKernels(Ke, Pe, Ue, dUe, time, dT)
+    # Process a CHUNK of elements per task, not just one, to keep the per-task
+    # dispatch overhead negligible compared to the actual element computation.
+    def computeElementsWorker(elementChunk):
+        for element in elementChunk:
+            Pe = scatter_P[element]
+            Ue = Un1[element]
+            dUe = dU[element]
+            Ke = K[element]
+            element.computeKernels(Ke, Pe, Ue, dUe, time, dT)
 
     numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=numThreads) as executor:
-        list(executor.map(computeElementsWorker, elements.values()))
+    chunkSize = max(1, len(elements) // (numThreads * 4))
+    chunks = chunked_iterable(elements.values(), chunkSize)
+
+    executor = getThreadPool(numThreads)
+    list(executor.map(computeElementsWorker, chunks))
 
     scatter_P.assembleInto(P)
     scatter_P.assembleInto(F, absolute=True)
@@ -134,11 +139,9 @@ def computeElementsInParallelForExplicit(
     chunk_size = max(1, len(elements) // (numThreads * 4))
     chunks = chunked_iterable(elements.values(), chunk_size)
 
-    psi_total = 0.0
-    with concurrent.futures.ThreadPoolExecutor(max_workers=numThreads) as executor:
-        # map returns the chunk_psi from each worker
-        results = executor.map(compute_chunk, chunks)
-        psi_total = sum(results)
+    executor = getThreadPool(numThreads)
+    # map returns the chunk_psi from each worker
+    psi_total = sum(executor.map(compute_chunk, chunks))
 
     scatter_P.assembleInto(P)
 

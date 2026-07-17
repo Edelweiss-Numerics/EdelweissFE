@@ -46,27 +46,25 @@ class DofVector(np.ndarray):
     def __new__(cls, nDof: int, entitiesInDofVector: dict):
         obj = np.zeros(nDof, dtype=float).view(cls)
         obj.entitiesInDofVector = entitiesInDofVector
+        obj._scatterTemplate = None
         return obj
 
     def __array_finalize__(self, obj):
         if obj is None:
             return
         self.entitiesInDofVector = getattr(obj, "entitiesInDofVector", None)
+        self._scatterTemplate = getattr(obj, "_scatterTemplate", None)
 
     def __getitem__(self, key):
-        if isinstance(key, (int, slice, np.ndarray, list)):
-            return super().__getitem__(key)
-
+        # try the entity lookup first; it is by far the most common access pattern.
+        # Non-entity keys (ints, slices, arrays, lists) miss the dictionary cheaply
+        # via KeyError/TypeError and fall through to plain ndarray indexing.
         try:
             return super().__getitem__(self.entitiesInDofVector[key])
         except (KeyError, TypeError):
             return super().__getitem__(key)
 
     def __setitem__(self, key, value):
-        if isinstance(key, (int, slice, np.ndarray, list)):
-            super().__setitem__(key, value)
-            return
-
         try:
             super().__setitem__(self.entitiesInDofVector[key], value)
         except (KeyError, TypeError):
@@ -94,9 +92,17 @@ class DofVector(np.ndarray):
         """
         Create a scatter vector for ALL entities in this DofVector.
 
+        The underlying layout (entity lookup map and scatter indices) is computed once
+        and cached, so repeated calls (e.g. once per Newton iteration) only allocate
+        the zero-initialized data buffer.
+
         Returns
         -------
         ScatterDofVector
             The ScatterDofVector.
         """
-        return edelweissfe.numerics.scatterdofvector.ScatterDofVector(self.entitiesInDofVector, self.size)
+        if self._scatterTemplate is None:
+            self._scatterTemplate = edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate(
+                self.entitiesInDofVector, self.size
+            )
+        return edelweissfe.numerics.scatterdofvector.ScatterDofVector(self._scatterTemplate)

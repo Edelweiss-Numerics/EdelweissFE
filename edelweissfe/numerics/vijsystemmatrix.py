@@ -68,9 +68,9 @@ class VIJSystemMatrix(np.ndarray):
         self.entitiesInVIJ = getattr(obj, "entitiesInVIJ", None)
 
     def __getitem__(self, key):
-        if isinstance(key, (int, slice, np.ndarray, list)):
-            return super().__getitem__(key)
-
+        # try the entity lookup first; it is by far the most common access pattern.
+        # Non-entity keys (ints, slices, arrays, lists) miss the dictionary cheaply
+        # via KeyError/TypeError and fall through to plain ndarray indexing.
         try:
             # Entity Lookup
             idxInVIJ = self.entitiesInVIJ[key]
