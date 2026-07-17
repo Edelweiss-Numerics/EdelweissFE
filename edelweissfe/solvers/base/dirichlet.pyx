@@ -85,6 +85,8 @@ def applyDirichletK(nls, K: csr_matrix, dirichlets: Iterable) -> csr_matrix:
             else:
                 data[j] = 0.0  # Off-diagonal
 
-    # clean up the matrix
-    K.eliminate_zeros()
+    # NOTE: the zeroed off-diagonals are deliberately kept as explicitly stored zeros.
+    # This preserves the sparsity pattern, so the assembled CSR matrix can be updated
+    # in place across iterations and direct solvers can reuse their symbolic
+    # factorization. (Direct solvers handle stored zeros without issues.)
     return K
