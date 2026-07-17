@@ -36,9 +36,9 @@ from collections.abc import Mapping
 
 def getDefaultLinSolver():
     try:
-        from edelweissfe.linsolve.pardiso.pardiso import pardisoSolve
+        from edelweissfe.linsolve.pardiso.pardiso import PardisoSolver
 
-        return pardisoSolve
+        return PardisoSolver()
     except ImportError:
         from scipy.sparse.linalg import spsolve
 
@@ -55,9 +55,9 @@ def getLinSolverByName(linsolverName, opts):
 
         return lambda A, b: spsolve(A, b, use_umfpack=True)
     elif linsolverName.lower() == "pardiso":
-        from edelweissfe.linsolve.pardiso.pardiso import pardisoSolve
+        from edelweissfe.linsolve.pardiso.pardiso import PardisoSolver
 
-        return pardisoSolve
+        return PardisoSolver()
     elif linsolverName.lower() == "panuapardiso":
         from edelweissfe.linsolve.panuapardiso.panuapardiso import panuaPardisoSolve
 
