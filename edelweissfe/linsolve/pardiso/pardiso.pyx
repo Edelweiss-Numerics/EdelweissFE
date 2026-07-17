@@ -88,6 +88,7 @@ cdef class PardisoSolver:
     cdef int mnum
     cdef int msglvl
     cdef int rows
+    cdef bint ptIsActive  # pt may hold PARDISO-internal allocations (phase -1 required)
     cdef bint hasSymbolicFactorization
 
     # the pattern arrays of the currently analyzed matrix (0-based, for change detection)
@@ -98,13 +99,21 @@ cdef class PardisoSolver:
     cdef int[::1] indptrFortran
 
     def __cinit__(self):
+        cdef int i
+
         self.mtype = 11
         self.maxfct = 1
         self.mnum = 1
         self.msglvl = 0
+        self.ptIsActive = False
         self.hasSymbolicFactorization = False
         self.currentIndices = None
         self.currentIndptr = None
+
+        # PARDISO requires pt to be all zeros before the first call
+        for i in range(64):
+            self.pt[i] = 0
+            self.iparm[i] = 0
 
     def __dealloc__(self):
         self._releaseMemory()
@@ -117,13 +126,14 @@ cdef class PardisoSolver:
         cdef int idum = 0
         cdef double ddum = 0
 
-        if not self.hasSymbolicFactorization:
+        if not self.ptIsActive:
             return
 
         pardiso(self.pt, &self.maxfct, &self.mnum, &self.mtype, &phase,
                 &self.rows, &ddum, &idum, &idum, &idum, &nRhs,
                 &self.iparm[0], &self.msglvl, &ddum, &ddum, &error)
 
+        self.ptIsActive = False
         self.hasSymbolicFactorization = False
         self.currentIndices = None
         self.currentIndptr = None
@@ -162,11 +172,19 @@ cdef class PardisoSolver:
 
         self._releaseMemory()
 
+        if A.nnz > np.iinfo(np.intc).max:
+            raise ValueError(
+                "matrix has {:} nonzeros, exceeding the 32-bit PARDISO interface".format(A.nnz)
+            )
+
         self.rows = A.shape[0]
-        self.indicesFortran = A.indices + 1  # pardiso uses fortran 1-based indexing
-        self.indptrFortran = A.indptr + 1    # pardiso uses fortran 1-based indexing
+        # pardiso uses fortran 1-based indexing; scipy may use int64 index arrays for
+        # large matrices, so cast explicitly to the 32-bit interface type
+        self.indicesFortran = np.ascontiguousarray(A.indices + 1, dtype=np.intc)
+        self.indptrFortran = np.ascontiguousarray(A.indptr + 1, dtype=np.intc)
 
         pardisoinit(self.pt, &self.mtype, &self.iparm[0])
+        self.ptIsActive = True
 
         cdef double[::1] data = A.data
 
