@@ -1,4 +1,3 @@
-import gstools
 import numpy as np
 
 from edelweissfe.utils.math import createFunction
@@ -7,6 +6,12 @@ from edelweissfe.utils.misc import convertLinesToStringDictionary
 
 class Section:
     def __init__(self, name, options, materialName, t, model):
+        # gstools is imported lazily: its Cython extension does not declare
+        # free-threading support, so importing it re-enables the GIL process-wide
+        # and would disable thread-parallel computations for ALL simulations,
+        # even those not using random fields.
+        import gstools
+
         self.options = convertLinesToStringDictionary(options)
         options = self.options
 
