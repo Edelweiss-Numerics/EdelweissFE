@@ -188,6 +188,10 @@ cdef class PardisoSolver:
             raise ValueError(
                 "matrix has {:} nonzeros, exceeding the 32-bit PARDISO interface".format(A.nnz)
             )
+        if A.shape[0] > np.iinfo(np.intc).max:
+            raise ValueError(
+                "matrix has {:} rows, exceeding the 32-bit PARDISO interface".format(A.shape[0])
+            )
 
         self.rows = A.shape[0]
         # pardiso uses fortran 1-based indexing; scipy may use int64 index arrays for

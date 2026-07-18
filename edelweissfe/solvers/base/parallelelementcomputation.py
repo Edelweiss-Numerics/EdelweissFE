@@ -90,11 +90,15 @@ def computeElementsInParallel(
 
     numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
 
-    chunkSize = max(1, len(elements) // (numThreads * 4))
-    chunks = chunked_iterable(elements.values(), chunkSize)
+    if numThreads == 1:
+        # avoid ThreadPoolExecutor/task dispatch overhead when there is nothing to parallelize
+        computeElementsWorker(elements.values())
+    else:
+        chunkSize = max(1, len(elements) // (numThreads * 4))
+        chunks = chunked_iterable(elements.values(), chunkSize)
 
-    executor = getThreadPool(numThreads)
-    list(executor.map(computeElementsWorker, chunks))
+        executor = getThreadPool(numThreads)
+        list(executor.map(computeElementsWorker, chunks))
 
     scatter_P.assembleInto(P)
     scatter_P.assembleInto(F, absolute=True)
@@ -135,13 +139,17 @@ def computeElementsInParallelForExplicit(
 
     numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
 
-    # Target ~1000 to 5000 elements per chunk depending on mesh size
-    chunk_size = max(1, len(elements) // (numThreads * 4))
-    chunks = chunked_iterable(elements.values(), chunk_size)
+    if numThreads == 1:
+        # avoid ThreadPoolExecutor/task dispatch overhead when there is nothing to parallelize
+        psi_total = compute_chunk(elements.values())
+    else:
+        # Target ~1000 to 5000 elements per chunk depending on mesh size
+        chunk_size = max(1, len(elements) // (numThreads * 4))
+        chunks = chunked_iterable(elements.values(), chunk_size)
 
-    executor = getThreadPool(numThreads)
-    # map returns the chunk_psi from each worker
-    psi_total = sum(executor.map(compute_chunk, chunks))
+        executor = getThreadPool(numThreads)
+        # map returns the chunk_psi from each worker
+        psi_total = sum(executor.map(compute_chunk, chunks))
 
     scatter_P.assembleInto(P)
 

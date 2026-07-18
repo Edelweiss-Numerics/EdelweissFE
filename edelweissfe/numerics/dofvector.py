@@ -101,7 +101,10 @@ class DofVector(np.ndarray):
         ScatterDofVector
             The ScatterDofVector.
         """
-        if self._scatterTemplate is None:
+        # __array_finalize__ inherits _scatterTemplate across views/copies, but a view's
+        # entitiesInDofVector may later be replaced by a different mapping (e.g. copy()
+        # assigns a fresh dict) - guard against reusing a template built for a stale one.
+        if self._scatterTemplate is None or self._scatterTemplate.entitiesInDofVector is not self.entitiesInDofVector:
             self._scatterTemplate = edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate(
                 self.entitiesInDofVector, self.size
             )

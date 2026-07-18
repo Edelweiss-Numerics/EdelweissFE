@@ -91,7 +91,13 @@ class AnalyticalField(AnalyticalFieldBase):
         # free-threading support, so importing it re-enables the GIL process-wide
         # and would disable thread-parallel computations for ALL simulations,
         # even those not using random fields.
-        import gstools
+        try:
+            import gstools
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                "the 'randomScalar' analytical field requires the 'gstools' package "
+                "(install via 'pip install gstools' or 'mamba install -c conda-forge gstools')"
+            ) from e
 
         self.name = name
         self.type = "randomScalar"
