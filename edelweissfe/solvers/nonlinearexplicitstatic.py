@@ -326,8 +326,7 @@ class NEST(NIST):
                     for variable in model.scalarVariables.values():
                         variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
 
-                    for rigidBody in model.rigidBodies.values():
-                        rigidBody.updateKinematics(timeStep)
+                    self.updateRigidBodies(model, timeStep)
 
                     model.advanceToTime(timeStep.totalTime)
 

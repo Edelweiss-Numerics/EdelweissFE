@@ -374,6 +374,31 @@ class NonlinearSolverBase(ABC):
             for action in stepActionType.values():
                 action.applyAtStepStart(model)
 
+    def updateRigidBodies(self, model: FEModel, timeStep: TimeStep):
+        """Refresh the kinematics of all rigid bodies in the model after a converged increment.
+
+        A rigid body's surface (visualization) nodes are not degrees of freedom of their own; they
+        are fully determined by the rigid body's reference point. This propagates the just-converged
+        reference-point pose onto those surface nodes so that output managers write the transient
+        geometry of the moving body and any consumer relying on the surface nodes' ``coordinates``
+        (e.g. the fast-path AABB of :meth:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getAABB`)
+        sees the current configuration.
+
+        Every nonlinear solver must call this once per converged increment. It lives on the base
+        class so that solvers overriding :meth:`solveStep` (e.g. the parallel and arc-length
+        variants) stay consistent with the serial implementation instead of silently omitting it.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        timeStep
+            The converged time step.
+        """
+
+        for rigidBody in model.rigidBodies.values():
+            rigidBody.updateKinematics(timeStep)
+
     def applyStepActionsAtStepEnd(self, model: FEModel, stepActions: dict[str, StepActionBase]):
         """Called when all step actions should finish a step.
 
