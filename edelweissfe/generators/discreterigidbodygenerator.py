@@ -42,6 +42,7 @@ from edelweissfe.points.node import Node
 from edelweissfe.rigidbodies.discreterigidbody import DiscreteRigidBody
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.exceptions import WrongDomain
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
@@ -109,19 +110,40 @@ def generateModelData(generatorDefinition: dict, model, journal, *args, **kwargs
 
     kwargs = CaseInsensitiveDict(kwargs)
 
+    # The rigid body's surface mesh and the node-to-discrete-rigid-body contact are inherently 3D.
+    if model.domainSize != 3:
+        raise WrongDomain("discreteRigidBodyGenerator is only available for 3D models.")
+
     name = generatorDefinition.get("name", "discreteRigidBody")
+
+    translation = _parseVector(kwargs["translation"])
+    inertia = _parseVector(kwargs["inertia"])
+    initial_velocity = _parseVector(kwargs["initialVelocity"])
+    rp_coordinate = _parseVector(kwargs["rpCoordinate"])
+
+    # All of these are 3-component quantities (Cartesian vectors, or the diagonal inertia
+    # [Ixx, Iyy, Izz]). Validate up front so a mistyped option fails clearly here rather than
+    # silently creating wrong-sized coordinate/inertia arrays that break downstream.
+    for argName, vector in (
+        ("translation", translation),
+        ("inertia", inertia),
+        ("initialVelocity", initial_velocity),
+        ("rpCoordinate", rp_coordinate),
+    ):
+        if vector is not None and vector.shape[0] != 3:
+            raise WrongDomain(f"discreteRigidBodyGenerator option '{argName}' must have 3 components.")
 
     generateDiscreteRigidBodyFromMeshFile(
         model,
         journal,
         name=name,
         filename=kwargs["filename"],
-        translation=_parseVector(kwargs["translation"]),
+        translation=translation,
         density=kwargs["density"],
         mass=kwargs["mass"],
-        inertia=_parseVector(kwargs["inertia"]),
-        initial_velocity=_parseVector(kwargs["initialVelocity"]),
-        rp_coordinate=_parseVector(kwargs["rpCoordinate"]),
+        inertia=inertia,
+        initial_velocity=initial_velocity,
+        rp_coordinate=rp_coordinate,
     )
 
     return model

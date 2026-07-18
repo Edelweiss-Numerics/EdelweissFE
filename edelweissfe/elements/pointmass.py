@@ -61,10 +61,12 @@ class PointMass(BaseElement):
                     raise ValueError("PointMass in 3D requires a diagonal inertia [Ixx, Iyy, Izz].")
                 self.inertia = inertia
 
-        # Initial velocity of the reference point, applied once as an initial
-        # condition by the explicit solver (see :attr:`initialVelocity`). Only
-        # a translational initial velocity is supported; the rotational part
-        # starts at rest.
+        # Initial velocity of the reference point, exposed via :attr:`initialVelocity`
+        # as an initial condition for explicit dynamics. Only a translational
+        # initial velocity is supported; the rotational part starts at rest.
+        # NOTE: this is currently declarative only -- no solver reads it yet (see
+        # :attr:`~edelweissfe.elements.base.baseelement.BaseElement.initialVelocity`),
+        # so a non-zero value has no effect until explicit dynamics is wired up.
         self._initialVelocity = (
             np.array(initial_velocity, dtype=float)[: self.domainSize]
             if initial_velocity is not None
@@ -89,7 +91,9 @@ class PointMass(BaseElement):
     def initialVelocity(self) -> np.ndarray:
         """
         The initial velocity in DOF order (translational DOFs first, then the
-        rotational DOFs), seeded once by the explicit solver. See
+        rotational DOFs). Intended as an initial condition for explicit dynamics,
+        but currently declarative only -- no solver reads it yet, so it is stored
+        but unused. See
         :attr:`~edelweissfe.elements.base.baseelement.BaseElement.initialVelocity`.
         """
         if self._use_rotation:
