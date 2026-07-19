@@ -38,7 +38,7 @@ from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstaticparallel import NISTParallel
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.stepactions.options import inputLanguage
+from edelweissfe.stepactions.options import getOptionsOfCategory, registerOptionsArg
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -48,9 +48,8 @@ from edelweissfe.utils.exceptions import (
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.math import createModelAccessibleFunction
 
-kw = inputLanguage["step"].getModule("adaptive").getKeyword("options")
-kw.addOptionalArg("arcLengthController", "", str, None)
-kw.addOptionalArg("stopCondition", "", str, None)
+registerOptionsArg("arcLengthController", "The step action module serving as the arc length controller.", str)
+registerOptionsArg("stopCondition", "A model accessible expression defining a conditional stop.", str)
 
 
 class NISTPArcLength(NISTParallel):
@@ -76,29 +75,21 @@ class NISTPArcLength(NISTParallel):
         if "arc length parameter" in model.additionalParameters:
             self.Lambda = model.additionalParameters["arc length parameter"]
 
-        arcLengthControllerOptions = [
-            stepAction
-            for stepAction in step.actions["options"].values()
-            if stepAction.options["category"] == "NISTArcLength"
-        ]
-        if not len(arcLengthControllerOptions) < 2:
-            raise Exception("Too many option definitions.")
+        arcLengthControllerOptions = getOptionsOfCategory(step.actions, "NISTArcLength")
 
-        # arcLengthControllerOptions = step.actions["options"].get("NISTArcLength")
         if arcLengthControllerOptions:
-            arcLengthControllerOptions = arcLengthControllerOptions[0].options
             arcLengthController = arcLengthControllerOptions.get("arcLengthController")
             if arcLengthController:
                 try:
                     arcLengthControllerStepAction = [action for action in step.actions["indirectcontrol"].values()][0]
                     self.arcLengthController = arcLengthControllerStepAction
                     self.dLambda = 0.0
-                except KeyError:
+                except (KeyError, IndexError):
                     self.journal.errorMessage(
                         f'Arc length controller "{arcLengthController}" not found in current step or not configured correctly',
                         self.identification,
                     )
-                    raise KeyError
+                    raise KeyError(f'Arc length controller "{arcLengthController}" not found in current step')
             else:
                 self.journal.message(
                     "No ArcLengthController specified in current step",
@@ -232,8 +223,8 @@ class NISTPArcLength(NISTParallel):
         zeroTimeStep = TimeStep(timeStep.number, 0.0, 0.0, 0.0, 0.0, 0.0)
 
         while True:
-            for geostatic in stepActions["geostatics"]:
-                geostatic.apply()
+            for geostatic in stepActions["geostatic"].values():
+                geostatic.applyAtIterationStart()
 
             U_np[:] = U_n
             U_np += dU
@@ -405,7 +396,7 @@ class NISTPArcLength(NISTParallel):
                 stepAction.applyAtStepEnd(model, stepMagnitude=self.Lambda)
             for stepAction in stepActions["distributedload"].values():
                 stepAction.applyAtStepEnd(model, stepMagnitude=self.Lambda)
-            for stepAction in stepActions["bodeforce"].values():
+            for stepAction in stepActions["bodyforce"].values():
                 stepAction.applyAtStepEnd(model, stepMagnitude=self.Lambda)
 
         return super().applyStepActionsAtStepEnd(model, stepActions)

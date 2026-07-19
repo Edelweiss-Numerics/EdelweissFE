@@ -41,6 +41,7 @@ from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.stepactions.options import getOptionsOfCategory, registerOptionsArg
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.fieldoutput import (
     ElementFieldOutput,
@@ -90,15 +91,8 @@ kw.addOptionalArg("transient", "Set transient ensight output.", bool, True)
 documentation = [module]
 
 
-keyword = "step"
-if keyword in inputLanguage:
-    modules = [
-        inputLanguage["step"].getModule("adaptive").getKeyword("options"),
-        inputLanguage["step"].getModule("adaptiveForExplicitSimulations").getKeyword("options"),
-    ]
-    for optionsModule in modules:
-        optionsModule.addOptionalArg("intermediateSaveInterval", "", float, None)
-        optionsModule.addOptionalArg("minDTForOutput", "", float, None)
+registerOptionsArg("intermediateSaveInterval", "Set the intermediate save interval for the Ensight export.", float)
+registerOptionsArg("minDTForOutput", "Set the minimum time between two Ensight exports.", float)
 
 
 def writeCFloat(f, ndarray):
@@ -966,8 +960,8 @@ class OutputManager(OutputManagerBase):
         self.ensightCase.writeGeometryTrendChunk(geometry, geometryTimesetNumber)
 
     def initializeStep(self, step):
-        if self.name in step.actions["options"] or "Ensight" in step.actions["options"]:
-            options = step.actions["options"].get(self.name, False) or step.actions["options"]["Ensight"].options
+        options = getOptionsOfCategory(step.actions, self.name) or getOptionsOfCategory(step.actions, "Ensight")
+        if options:
             self.intermediateSaveInterval = int(options.get("intermediateSaveInterval", self.intermediateSaveInterval))
             self.minDTForOutput = float(options.get("minDTForOutput", self.minDTForOutput))
 

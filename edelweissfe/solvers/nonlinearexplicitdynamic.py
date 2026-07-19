@@ -38,6 +38,7 @@ from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatr
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.stepactions.options import getOptionsOfCategory
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -148,8 +149,7 @@ class NED(NonlinearSolverBase):
                 "scalar variables",
             ]
 
-        if "NEDSolver" in step.actions["options"].keys():
-            self._updateOptions(step.actions["options"]["NEDSolver"].options, self.journal)
+        self._updateOptions(getOptionsOfCategory(step.actions, "NEDSolver"), self.journal)
 
         # initialize mass and damping matrices
         M = self.theDofManager.constructDofVector()  # initialize lumped mass matrix

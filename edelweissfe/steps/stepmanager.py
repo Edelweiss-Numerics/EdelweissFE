@@ -26,22 +26,31 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+import importlib.util
 import textwrap
-from collections import defaultdict
 
 from edelweissfe.config.stepactions import stepActionFactory
+from edelweissfe.config.steps import getStepClassByType
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.steps.adaptivestep import AdaptiveStep
-from edelweissfe.steps.adaptivestepforexplicitsimulations import (
-    AdaptiveStepForExplicitSimulations,
-)
 from edelweissfe.steps.base.stepbase import StepBase
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.fieldoutput import FieldOutputController
-from edelweissfe.utils.misc import strCaseCmp
 
 
 class StepActionDefinition:
+    """A step action definition, as parsed from the input file.
+
+    Parameters
+    ----------
+    name
+        The name of the step action.
+    module
+        The step action module (type), e.g., 'dirichlet'.
+    kwargs
+        The options defining the step action.
+    """
+
     def __init__(self, name: str, module: str, kwargs: dict):
         self.name = name
         self.module = module
@@ -49,6 +58,18 @@ class StepActionDefinition:
 
 
 class StepDefinition:
+    """A step definition, as parsed from the input file.
+
+    Parameters
+    ----------
+    stepType
+        The type of the step, e.g., 'adaptive'.
+    stepOptions
+        The options defining the step.
+    stepActionDefinitions
+        The list of StepActionDefinitions for this step.
+    """
+
     def __init__(
         self,
         stepType: str,
@@ -60,15 +81,49 @@ class StepDefinition:
         self.stepActionDefinitions = stepActionDefinitions
 
 
-class StepManager:
-    """This manager for convenience parses all step defintions for the simulation
-    and calls the respective modules, which generate (or update) StepActions based on
-    computed results, model info and job information.
+class StepActionCollection:
+    """A collection of step actions, grouped by step action module (type).
 
-    Parameters
-    ----------
-    inputfile
-        The inputfile containing the step defintions.
+    Accessing a valid step action module without any defined actions yields an
+    empty dictionary, whereas accessing an unknown step action module raises a
+    KeyError. This ensures that typos in step action module names fail loudly
+    instead of being silently treated as empty collections.
+    """
+
+    def __init__(self):
+        self._actionsPerModule = dict()
+
+    def __getitem__(self, module: str) -> dict:
+        module = module.lower()
+
+        if module not in self._actionsPerModule:
+            if importlib.util.find_spec("edelweissfe.stepactions." + module) is None:
+                raise KeyError(f"'{module}' is not a known step action module")
+            self._actionsPerModule[module] = dict()
+
+        return self._actionsPerModule[module]
+
+    def __contains__(self, module: str) -> bool:
+        return module.lower() in self._actionsPerModule
+
+    def __iter__(self):
+        return iter(self._actionsPerModule)
+
+    def keys(self):
+        return self._actionsPerModule.keys()
+
+    def values(self):
+        return self._actionsPerModule.values()
+
+    def items(self):
+        return self._actionsPerModule.items()
+
+
+class StepManager:
+    """This manager holds all step definitions of the simulation,
+    and generates the Steps to be solved. Step actions are created
+    (or updated, if already existing from previous steps) based on
+    computed results, model info and job information.
     """
 
     identification = "StepManager"
@@ -76,7 +131,7 @@ class StepManager:
     def __init__(
         self,
     ):
-        self.stepActions = defaultdict(dict)
+        self.stepActions = StepActionCollection()
         self.stepDefinitions = []
 
     def enqueueStepDefinition(self, stepDefinition: StepDefinition):
@@ -89,7 +144,7 @@ class StepManager:
         """
         self.stepDefinitions.append(stepDefinition)
 
-    def dequeueStep(
+    def generateSteps(
         self,
         jobInfo: dict,
         model: FEModel,
@@ -98,7 +153,11 @@ class StepManager:
         solvers: dict,
         outputManagers: list,
     ) -> StepBase:
-        """Dequeue the next step.
+        """Generate the Steps to be solved from the enqueued step definitions.
+
+        The steps are generated lazily, i.e., every step (and its step actions)
+        is created just when it is requested, such that it is created based on
+        the current state of the model.
 
         Parameters
         ----------
@@ -106,21 +165,19 @@ class StepManager:
             A dictionary containing information on the job.
         model
             The model tree.
-        stepActions
-            A dictionary containing already existing step actions.
         fieldOutputController
             The field output controller.
         journal
             The journal instance for logging.
+        solvers
+            The dictionary of available solver instances.
         outputManagers
             The OutputManagers used.
-        stepActions
-            The collection of actions for this step.
 
-        Returns
-        -------
-        StepActionBase
-            The next Step.
+        Yields
+        ------
+        StepBase
+            The next Step to be solved.
         """
 
         def printActionDefinition(intro, options):
@@ -135,20 +192,21 @@ class StepManager:
                 )
 
         for stepNumber, stepDefinition in enumerate(self.stepDefinitions):
-            actionDefinitionsInThisStep = []
+            actionNamesInThisStep = set()
 
-            journal.message(
-                "StepAction definitions:",
-                self.identification,
-                1,
-            )
+            if stepDefinition.stepActionDefinitions:
+                journal.message(
+                    "StepAction definitions:",
+                    self.identification,
+                    1,
+                )
 
             for action in stepDefinition.stepActionDefinitions:
-                if action.name in actionDefinitionsInThisStep:
-                    raise Exception(
-                        "Warning: StepAction {:} has multiple definitions in step {:}".format(action.name, stepNumber)
+                if action.name in actionNamesInThisStep:
+                    raise ValueError(
+                        "StepAction {:} has multiple definitions in step {:}".format(action.name, stepNumber)
                     )
-                actionDefinitionsInThisStep.append(action.name)
+                actionNamesInThisStep.add(action.name)
 
                 if action.name in self.stepActions[action.module]:
                     self.stepActions[action.module][action.name].updateStepAction(
@@ -168,7 +226,8 @@ class StepManager:
                         journal,
                     )
 
-            solverName = stepDefinition.stepOptions.pop("solver")
+            stepOptions = CaseInsensitiveDict(stepDefinition.stepOptions)
+            solverName = stepOptions.pop("solver")
 
             try:
                 solver = solvers[solverName]
@@ -181,27 +240,16 @@ class StepManager:
                     mssg += " Define solver using *solver keyword."
                 raise KeyError(mssg)
 
-            if strCaseCmp(stepDefinition.type, "adaptive"):
-                yield AdaptiveStep(
-                    stepNumber,
-                    model,
-                    fieldOutputController,
-                    journal,
-                    jobInfo,
-                    solver,
-                    outputManagers,
-                    self.stepActions,
-                    **stepDefinition.stepOptions,
-                )
-            elif strCaseCmp(stepDefinition.type, "adaptiveForExplicitSimulations"):
-                yield AdaptiveStepForExplicitSimulations(
-                    stepNumber,
-                    model,
-                    fieldOutputController,
-                    journal,
-                    jobInfo,
-                    solver,
-                    outputManagers,
-                    self.stepActions,
-                    **stepDefinition.stepOptions,
-                )
+            stepClass = getStepClassByType(stepDefinition.type)
+
+            yield stepClass(
+                stepNumber,
+                model,
+                fieldOutputController,
+                journal,
+                jobInfo,
+                solver,
+                outputManagers,
+                self.stepActions,
+                **stepOptions,
+            )

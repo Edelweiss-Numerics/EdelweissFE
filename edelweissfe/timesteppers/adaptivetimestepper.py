@@ -27,11 +27,12 @@
 # Created on Sat Jan  21 12:18:10 2017
 
 from edelweissfe.journal.journal import Journal
+from edelweissfe.timesteppers.base.timestepperbase import TimeStepperBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import ReachedMaxIncrements, ReachedMinIncrementSize
 
 
-class AdaptiveTimeStepper:
+class AdaptiveTimeStepper(TimeStepperBase):
     identification = "AdaptiveTimeStepper"
 
     def __init__(
@@ -94,15 +95,23 @@ class AdaptiveTimeStepper:
     def doesZeroIncrement(self):
         return True
 
-    def generateTimeStep(self) -> TimeStep:
+    def generateTimeStep(self, enforcedTimeIncrement: float = None) -> TimeStep:
         """
         Generate the next increment.
+
+        Parameters
+        ----------
+        enforcedTimeIncrement
+            Not supported by this time stepper; a ValueError is raised if it is given.
 
         Returns
         -------
         TimeStep
             The current time step.
         """
+
+        if enforcedTimeIncrement is not None:
+            raise ValueError("AdaptiveTimeStepper does not support enforced time increments")
 
         while self.finishedStepProgress < (1.0 - 1e-15):
 
@@ -150,6 +159,25 @@ class AdaptiveTimeStepper:
         automatically increasing, e.g. in case of bad convergency."""
 
         self.allowedToIncreasedNext = False
+
+    def changeIncrementSize(self, scaleFactor: float):
+        """Modify the size of the next increment by a given scale factor
+        within the bounds of the minimum and maximum increment size.
+
+        Parameters
+        ----------
+        scaleFactor
+            The factor for scaling based on the current increment.
+        """
+
+        newIncrement = self.increment * scaleFactor
+        self.increment = min(max(newIncrement, self.minIncrement), self.maxIncrement)
+
+        self.journal.message(
+            "New increment size {:}".format(self.increment),
+            self.identification,
+            2,
+        )
 
     def reduceNextIncrement(self, scaleFactor: float):
         """Reduce the increment size for the next increment."""

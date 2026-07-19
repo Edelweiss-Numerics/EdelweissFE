@@ -44,7 +44,7 @@ from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.dirichlet import applyDirichletK
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.stepactions.options import inputLanguage
+from edelweissfe.stepactions.options import getOptionsOfCategory, registerOptionsArg
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -57,13 +57,12 @@ from edelweissfe.utils.exceptions import (
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
 
-kw = inputLanguage["step"].getModule("adaptive").getKeyword("options")
-kw.addOptionalArg("defaultMaxIter", "", int, 10)
-kw.addOptionalArg("defaultCriticalIter", "", int, 5)
-kw.addOptionalArg("defaultMaxGrowingIter", "", int, 10)
-kw.addOptionalArg("extrapolation", "", str, "linear")
-kw.addOptionalArg("linsolver", "", str, "pardiso")
-kw.addOptionalArg("linsolverConfigFile", "", str, "")
+registerOptionsArg("defaultMaxIter", "The default maximum number of iterations.", int)
+registerOptionsArg("defaultCriticalIter", "The default number of critical iterations.", int)
+registerOptionsArg("defaultMaxGrowingIter", "The default number of allowed residual growths.", int)
+registerOptionsArg("extrapolation", "The extrapolation strategy for new increments (off|linear).", str)
+registerOptionsArg("linsolver", "The linear solver to be used.", str)
+registerOptionsArg("linsolverConfigFile", "A JSON configuration file for the linear solver.", str)
 
 
 class NIST(NonlinearSolverBase):
@@ -154,10 +153,7 @@ class NIST(NonlinearSolverBase):
 
         self.csrGenerator = CSRGenerator(K)
 
-        try:
-            self._updateOptions(step.actions["options"]["NISTSolver"].options, self.journal)
-        except KeyError:
-            pass
+        self._updateOptions(getOptionsOfCategory(step.actions, "NISTSolver"), self.journal)
 
         extrapolation = self.options["extrapolation"]
         linsolverOptions = self.options["linsolverConfigFile"]

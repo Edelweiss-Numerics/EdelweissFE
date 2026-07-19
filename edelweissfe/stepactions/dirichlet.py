@@ -34,8 +34,8 @@ import sympy as sp
 
 from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.stepactions.base.dirichletbase import DirichletBase
-from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.inputlanguage import InputLanguage
 
 """
 Standard Dirichlet boundary condition.
@@ -44,57 +44,46 @@ If not modified in subsequent steps, the BC is held constant.
 
 inputLanguage = InputLanguage()
 
-modules = [
-    inputLanguage["step"].getModule("adaptive"),
-    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
-]
+# Register this step action for all available step types. This requires the step type
+# modules to be imported before the step actions, as done in the input file parser.
+modules = inputLanguage["step"].modules if "step" in inputLanguage else []
 
 documentation = []
+
+
+def _addPrescriptionArgs(kw):
+    """Register the value prescription arguments, which are shared by the
+    'dirichlet' and 'updateDirichlet' keywords."""
+
+    kw.addOptionalArg("1", "Prescribe first component of field.", float, None)
+    kw.addOptionalArg("2", "Prescribe second component of field.", float, None)
+    kw.addOptionalArg("3", "Prescribe third component of field.", float, None)
+    kw.addOptionalArg("4", "Prescribe fourth component of field.", float, None)
+    kw.addOptionalArg("5", "Prescribe fifth component of field.", float, None)
+    kw.addOptionalArg("6", "Prescribe sixth component of field.", float, None)
+
+    kw.addOptionalArg(
+        "components",
+        "Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
+        str,
+        None,
+    )
+    kw.addOptionalArg("analyticalField", "Scales the defined boundary condition", str, None)
+    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+
 
 for module in modules:
     kw = module.addOptionalKeyword("dirichlet", "Standard Dirichlet boundary condition.")
     kw.addRequiredArg("name", "Name of the step action.", str)
     kw.addRequiredArg("nSet", "The node set for application of the boundary condition.", str)
     kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
-
-    kw.addOptionalArg("1", "Prescribe first component of field.", float, None)
-    kw.addOptionalArg("2", "Prescribe second component of field.", float, None)
-    kw.addOptionalArg("3", "Prescribe third component of field.", float, None)
-    kw.addOptionalArg("4", "Prescribe fourth component of field.", float, None)
-    kw.addOptionalArg("5", "Prescribe fifth component of field.", float, None)
-    kw.addOptionalArg("6", "Prescribe sixth component of field.", float, None)
-
-    kw.addOptionalArg(
-        "components",
-        "Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
-        str,
-        None,
-    )
-    kw.addOptionalArg("analyticalField", "Scales the defined boundary condition", str, None)
-    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+    _addPrescriptionArgs(kw)
 
     documentation.append(kw)
 
     kw = module.addOptionalKeyword("updateDirichlet", "Update a previously defined dirichlet definition.")
     kw.addRequiredArg("name", "Name of the step action to update.", str)
-    # kw.addRequiredArg("nSet", "The node set for application of the boundary condition.", str)
-    # kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
-
-    kw.addOptionalArg("1", "Prescribe first component of field.", float, None)
-    kw.addOptionalArg("2", "Prescribe second component of field.", float, None)
-    kw.addOptionalArg("3", "Prescribe third component of field.", float, None)
-    kw.addOptionalArg("4", "Prescribe fourth component of field.", float, None)
-    kw.addOptionalArg("5", "Prescribe fifth component of field.", float, None)
-    kw.addOptionalArg("6", "Prescribe sixth component of field.", float, None)
-
-    kw.addOptionalArg(
-        "components",
-        "Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
-        str,
-        None,
-    )
-    kw.addOptionalArg("analyticalField", "Scales the defined boundary condition", str, None)
-    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+    _addPrescriptionArgs(kw)
 
     documentation.append(kw)
 

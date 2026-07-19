@@ -37,14 +37,13 @@ Initialize materials to an geostatic stress state
 import numpy as np
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.steps.adaptivestep import InputLanguage
+from edelweissfe.utils.inputlanguage import InputLanguage
 
 inputLanguage = InputLanguage()
 
-modules = [
-    inputLanguage["step"].getModule("adaptive"),
-    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
-]
+# Register this step action for all available step types. This requires the step type
+# modules to be imported before the step actions, as done in the input file parser.
+modules = inputLanguage["step"].modules if "step" in inputLanguage else []
 
 documentation = []
 
