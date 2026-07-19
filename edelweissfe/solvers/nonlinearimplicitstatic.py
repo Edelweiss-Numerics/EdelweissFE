@@ -44,7 +44,7 @@ from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.dirichlet import applyDirichletToStiffness
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.stepactions.options import inputLanguage
+from edelweissfe.stepactions.options import getOptionsOfCategory, registerOptionsArg
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -56,36 +56,33 @@ from edelweissfe.utils.exceptions import (
     StepFailed,
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
-from edelweissfe.utils.misc import strCaseCmp
 
-kw = inputLanguage["step"].getModule("adaptive").getKeyword("options")
-kw.addOptionalArg("defaultMaxIter", "", int, 10)
-kw.addOptionalArg("defaultCriticalIter", "", int, 5)
-kw.addOptionalArg("defaultMaxGrowingIter", "", int, 10)
-kw.addOptionalArg("extrapolation", "", str, "linear")
-kw.addOptionalArg(
+registerOptionsArg("defaultMaxIter", "The default maximum number of iterations.", int)
+registerOptionsArg("defaultCriticalIter", "The default number of critical iterations.", int)
+registerOptionsArg("defaultMaxGrowingIter", "The default number of allowed residual growths.", int)
+registerOptionsArg("extrapolation", "The extrapolation strategy for new increments (off|linear).", str)
+registerOptionsArg(
     "extrapolateAfterModelChange",
     "Whether to extrapolate the predictor on the increment FOLLOWING a model change (adaptive mesh "
-    "refinement). Default True keeps the previous behaviour; set False to start that increment from a "
-    "zero predictor, avoiding extrapolation of the one-off warm-start/remesh settling transient.",
+    "refinement). Defaults to True, which keeps the previous behaviour; set False to start that "
+    "increment from a zero predictor, avoiding extrapolation of the one-off warm-start/remesh "
+    "settling transient.",
     bool,
-    True,
 )
-kw.addOptionalArg(
+registerOptionsArg(
     "equilibrateAfterModelChange",
     "Whether to insert one constant-load, zero-time re-equilibration increment immediately after an "
-    "adaptive mesh refinement, before advancing the load. Default False. When True, the warm-started "
-    "refined mesh is first settled to equilibrium at the last converged load level (no load advance, "
-    "no Dirichlet increment, zero time increment) so the subsequent load-advancing increment starts "
-    "from an equilibrated state. Intended for softening problems where remeshing near the process "
-    "zone otherwise couples the load advance with the warm-start settling transient in one solve. "
-    "Note: the equilibration solve integrates materials with dT=0, which suits rate-independent "
-    "models; rate-dependent materials see no time advance during it (by design).",
+    "adaptive mesh refinement, before advancing the load. Defaults to False. When True, the "
+    "warm-started refined mesh is first settled to equilibrium at the last converged load level (no "
+    "load advance, no Dirichlet increment, zero time increment) so the subsequent load-advancing "
+    "increment starts from an equilibrated state. Intended for softening problems where remeshing "
+    "near the process zone otherwise couples the load advance with the warm-start settling transient "
+    "in one solve. Note: the equilibration solve integrates materials with dT=0, which suits "
+    "rate-independent models; rate-dependent materials see no time advance during it (by design).",
     bool,
-    False,
 )
-kw.addOptionalArg("linsolver", "", str, "pardiso")
-kw.addOptionalArg("linsolverConfigFile", "", str, "")
+registerOptionsArg("linsolver", "The linear solver to be used.", str)
+registerOptionsArg("linsolverConfigFile", "A JSON configuration file for the linear solver.", str)
 
 
 class NIST(NonlinearSolverBase):
@@ -154,21 +151,12 @@ class NIST(NonlinearSolverBase):
         """
 
         # Reset to the baseline so each step's options are independent (no leak across steps), then
-        # apply any >>options block routed to this solver. Options actions are auto-named (the
-        # 'options' keyword has no 'name' arg), so they are matched by their 'category' field rather
-        # than by dict key.
+        # apply any >>options block routed to this solver. getOptionsOfCategory matches the block by
+        # its 'category' field (options actions are auto-named, so they cannot be matched by dict key)
+        # and strips unspecified options, so options given in the *solver datalines are not silently
+        # reset by the defaults of foreign modules sharing the 'options' keyword.
         self.options = dict(self._baseOptions)
-        for optionsAction in step.actions.get("options", {}).values():
-            if strCaseCmp(optionsAction.get("category", ""), self.identification):
-                # only those options the user actually wrote down may be applied: the parser fills the
-                # defaults of every module registered on the shared 'options' keyword into the action,
-                # and applying those would silently reset options given in the *solver datalines
-                userDefinedOptions = {
-                    key: value
-                    for key, value in optionsAction.options.items()
-                    if key.casefold() in optionsAction.explicitlySetOptions
-                }
-                self._updateOptions(userDefinedOptions, self.journal)
+        self._updateOptions(getOptionsOfCategory(step.actions, self.identification), self.journal)
 
         extrapolation = self.options["extrapolation"]
         extrapolateAfterModelChange = self.options["extrapolateAfterModelChange"]

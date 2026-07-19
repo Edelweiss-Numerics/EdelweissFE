@@ -35,8 +35,8 @@ from edelweissfe.utils.fieldoutput import FieldOutputController
 
 
 class StepActionBase(ABC):
-    """This is the abase class for all step actions.
-    User defined step actions can override the methods.
+    """This is the base class for all step actions.
+    User defined step actions must implement the methods.
 
     Parameters
     ----------
@@ -47,9 +47,9 @@ class StepActionBase(ABC):
     jobInfo
         A dictionary containing the information about the job.
     model
-        A dictionary containing the model tree.
+        The model tree.
     fieldOutputController
-        The fieldput controlling object.
+        The field output controlling object.
     journal
         The journal object for logging.
     """
@@ -61,7 +61,6 @@ class StepActionBase(ABC):
         jobInfo: dict,
         model: FEModel,
         fieldOutputController: FieldOutputController,
-        dofmanager,
         journal: Journal,
     ):
         pass
@@ -72,60 +71,51 @@ class StepActionBase(ABC):
         jobInfo: dict,
         model: FEModel,
         fieldOutputController: FieldOutputController,
-        dofmanager,
         journal: Journal,
     ):
         """Is called when an updated definition is present for a new step.
 
         Parameters
         ----------
-        name
-            The name of this step action.
         definition
             A dictionary containing the options for this step action.
         jobInfo
             A dictionary containing the information about the job.
         model
-            A dictionary containing the model tree.
+            The model tree.
         fieldOutputController
-            The fieldput controlling object.
+            The field output controlling object.
         journal
             The journal object for logging.
         """
 
-    def applyAtStepStart(self, model):
+    def applyAtStepStart(self, model: FEModel):
         """Is called when a step starts.
 
         Parameters
         ----------
-        U
-            The current solution vector.
-        P
-            The current reaction force vector.
+        model
+            The current state of the model.
         """
 
-    def applyAtStepEnd(self, model):
+    def applyAtStepEnd(self, model: FEModel):
         """Is called when a step successfully finished.
 
         Parameters
         ----------
-        U
-            The current solution vector.
-        P
-            The current reaction force vector.
+        model
+            The current state of the model.
         """
 
-    def applyAtIncrementStart(self, model, timeStep: TimeStep):
+    def applyAtIncrementStart(self, model: FEModel, timeStep: TimeStep):
         """Is called when a step increment starts.
 
         Parameters
         ----------
-        U_n
-            The current converged solution vector at start of the increment.
-        P
-            The current reaction force vector.
-        increment
-            The defintion of the time increment.
+        model
+            The current state of the model.
+        timeStep
+            The definition of the time increment.
         """
 
     def _checkSetChanged(self, theSet) -> bool:

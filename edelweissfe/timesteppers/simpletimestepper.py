@@ -27,11 +27,12 @@
 # Created on Sat Jan  21 12:18:10 2017
 
 from edelweissfe.journal.journal import Journal
+from edelweissfe.timesteppers.base.timestepperbase import TimeStepperBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import ReachedMaxIncrements, ReachedMinIncrementSize
 
 
-class SimpleTimeStepper:
+class SimpleTimeStepper(TimeStepperBase):
     identification = "SimpleTimeStepper"
 
     def __init__(
@@ -218,3 +219,7 @@ class SimpleTimeStepper:
             2,
         )
         self.totalIncrements -= 1
+
+    def preventIncrementIncrease(self):
+        """This time stepper never increases the increment size automatically,
+        hence this is a no-op."""

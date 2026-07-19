@@ -39,6 +39,7 @@ from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
+from edelweissfe.stepactions.options import getOptionsOfCategory, registerOptionsArg
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -48,6 +49,10 @@ from edelweissfe.utils.exceptions import (
     StepFailed,
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
+
+registerOptionsArg("runge-kutta-stages", "The number of Runge-Kutta stages.", int)
+registerOptionsArg("runge-kutta-error-tolerance", "The error tolerance for the Runge-Kutta error control.", float)
+registerOptionsArg("runge-kutta-error-control", "Activate the Runge-Kutta error control (on|off).", str)
 
 
 def getRungeKuttaParameters(rungeKuttaStages: int) -> tuple[dict, dict, dict]:
@@ -245,8 +250,7 @@ class NEST(NIST):
 
         self.computationTimes = createTimingDict()
 
-        _optionsUpdate = step.actions["options"].get("NESTSolver", {})
-        self._updateOptions(_optionsUpdate, self.journal)
+        self._updateOptions(getOptionsOfCategory(step.actions, "NESTSolver"), self.journal)
 
         # get parameters for runge kutta scheme
         self.rkAlpha, self.rkOmega, self.rkLambda = getRungeKuttaParameters(self.options.get("runge-kutta-stages", 2))

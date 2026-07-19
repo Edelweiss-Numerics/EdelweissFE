@@ -33,8 +33,8 @@ import numpy as np
 import sympy as sp
 
 from edelweissfe.stepactions.base.distributedloadbase import DistributedLoadBase
-from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.inputlanguage import InputLanguage
 
 """
 Standard distributed load, applied on a surface set.
@@ -43,10 +43,9 @@ If not modified in subsequent steps, the load held constant.
 
 inputLanguage = InputLanguage()
 
-modules = [
-    inputLanguage["step"].getModule("adaptive"),
-    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
-]
+# Register this step action for all available step types. This requires the step type
+# modules to be imported before the step actions, as done in the input file parser.
+modules = inputLanguage["step"].modules if "step" in inputLanguage else []
 
 
 documentation = []

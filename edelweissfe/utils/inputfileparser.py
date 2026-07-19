@@ -145,17 +145,12 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fil
     try:
         options = checkKeywordInput(**options)
     except ValueError as e:
-        if (  # stepaction update
+        # A step action can be updated in a subsequent step by repeating the module
+        # level keyword with the same name as previously defined. Updates are validated
+        # against the dedicated 'update<keyword>' keyword, if the module provides one.
+        updateKeyword = None
+        if (
             topLevelKeyword == "step"
-            and module.name == "adaptive"
-            and kw.name
-            in [
-                # "bodyforce",
-                "dirichlet",
-                "distributedload",
-                # "geostatic",
-                "nodeforces",
-            ]  # these stepactions can be updated by repeating the module level keyword and using the same name as previously defined
             and "name" in options
             and options["name"].casefold()
             in [  # check if a step action with the same name already exists
@@ -163,9 +158,16 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fil
                 for step in fileDict["step"]
                 if keyword in step["moduleoptions"]
                 for item in step["moduleoptions"][keyword]
+                if "name" in item
             ]
         ):
-            kw = module.getKeyword("update" + keyword)
+            try:
+                updateKeyword = module.getKeyword("update" + keyword)
+            except ValueError:
+                updateKeyword = None
+
+        if updateKeyword is not None:
+            kw = updateKeyword
 
             @caseInsensitiveKwargsChecker([kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs])
             @castKwargsValuesAndAddDefaults(kw)
@@ -358,8 +360,11 @@ from edelweissfe.stepactions.setfield import inputLanguage  # noqa: F811,E402
 from edelweissfe.stepactions.setinitialconditions import inputLanguage  # noqa: F811,E402
 
 from edelweissfe.stepactions.options import inputLanguage  # noqa: F811,E402
-from edelweissfe.solvers.nonlinearimplicitstatic import inputLanguage  # noqa: F811,E402
-from edelweissfe.solvers.nonlinearimplicitstaticparallelarclength import inputLanguage  # noqa: F811,E402
+
+# these modules register their available options on the 'options' keyword of all step types:
+import edelweissfe.solvers.nonlinearimplicitstatic  # noqa: F401,E402
+import edelweissfe.solvers.nonlinearimplicitstaticparallelarclength  # noqa: F401,E402
+import edelweissfe.solvers.nonlinearexplicitstatic  # noqa: F401,E402
 
 # isort: on
 

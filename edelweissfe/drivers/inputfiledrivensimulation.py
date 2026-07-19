@@ -166,7 +166,7 @@ def finiteElementSimulation(
     solvers["default"] = defaultSolver(jobInfo, journal)
 
     try:
-        for step in stepManager.dequeueStep(jobInfo, model, fieldOutputController, journal, solvers, outputManagers):
+        for step in stepManager.generateSteps(jobInfo, model, fieldOutputController, journal, solvers, outputManagers):
             tic = getCurrentTime()
             step.solve()
             toc = getCurrentTime()

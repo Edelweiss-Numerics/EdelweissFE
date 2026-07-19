@@ -42,6 +42,7 @@ from edelweissfe.points.node import Node
 from edelweissfe.rigidbodies.rigidbody import RigidBody
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.stepactions.options import getOptionsOfCategory, registerOptionsArg
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.fieldoutput import (
     ElementFieldOutput,
@@ -91,15 +92,8 @@ kw.addOptionalArg("transient", "Set transient ensight output.", bool, True)
 documentation = [module]
 
 
-keyword = "step"
-if keyword in inputLanguage:
-    modules = [
-        inputLanguage["step"].getModule("adaptive").getKeyword("options"),
-        inputLanguage["step"].getModule("adaptiveForExplicitSimulations").getKeyword("options"),
-    ]
-    for optionsModule in modules:
-        optionsModule.addOptionalArg("intermediateSaveInterval", "", float, None)
-        optionsModule.addOptionalArg("minDTForOutput", "", float, None)
+registerOptionsArg("intermediateSaveInterval", "Set the intermediate save interval for the Ensight export.", float)
+registerOptionsArg("minDTForOutput", "Set the minimum time between two Ensight exports.", float)
 
 
 def writeCFloat(f, ndarray):
@@ -1092,17 +1086,14 @@ class OutputManager(OutputManagerBase):
         # change with adaptive mesh refinement and stay 1:1 aligned with the variable time steps.
 
     def initializeStep(self, step):
-        if self.name in step.actions["options"] or "Ensight" in step.actions["options"]:
-            options = step.actions["options"].get(self.name, False) or step.actions["options"]["Ensight"].options
-            # options always carries these keys (module default None), so a plain options.get(key,
-            # self.attr) never falls back to self.attr -- guard the assignment instead, or any
-            # >>options, category=Ensight block silently wipes a previously configured value.
-            val = options.get("intermediateSaveInterval")
-            if val is not None:
-                self.intermediateSaveInterval = int(val)
-            val_dt = options.get("minDTForOutput")
-            if val_dt is not None:
-                self.minDTForOutput = float(val_dt)
+        options = getOptionsOfCategory(step.actions, self.name) or getOptionsOfCategory(step.actions, "Ensight")
+        if options:
+            # Both fall-backs may legitimately be None (no intermediate saving configured, no minimum
+            # output interval), so guard the casts instead of calling int(None) / float(None).
+            val = options.get("intermediateSaveInterval", self.intermediateSaveInterval)
+            self.intermediateSaveInterval = int(val) if val is not None else None
+            valDTForOutput = options.get("minDTForOutput", self.minDTForOutput)
+            self.minDTForOutput = float(valDTForOutput) if valDTForOutput is not None else 0.0
 
     def finalizeIncrement(self, **kwargs):
         time = self.model.time

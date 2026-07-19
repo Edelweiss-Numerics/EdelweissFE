@@ -34,8 +34,8 @@ import numpy as np
 from edelweissfe.numerics.dofmanager import DofManager
 from edelweissfe.solvers.nonlinearimplicitstaticparallelarclength import NISTPArcLength
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.math import evalModelAccessibleExpression
 
 """
@@ -45,10 +45,9 @@ Indirect (displacement) controller for the NISTArcLength solver
 
 inputLanguage = InputLanguage()
 
-modules = [
-    inputLanguage["step"].getModule("adaptive"),
-    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
-]
+# Register this step action for all available step types. This requires the step type
+# modules to be imported before the step actions, as done in the input file parser.
+modules = inputLanguage["step"].modules if "step" in inputLanguage else []
 
 documentation = []
 

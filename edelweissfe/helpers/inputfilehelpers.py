@@ -35,7 +35,6 @@ from edelweissfe.config.solvers import getSolverByName
 from edelweissfe.generators.abqmodelconstructor import AbqModelConstructor
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.steps.adaptivestep import inputLanguage
 from edelweissfe.steps.stepmanager import (
     StepActionDefinition,
     StepDefinition,
@@ -43,7 +42,7 @@ from edelweissfe.steps.stepmanager import (
 )
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.fieldoutput import FieldOutputController
-from edelweissfe.utils.inputfileparser import inputLanguage  # noqa: F811
+from edelweissfe.utils.inputfileparser import inputLanguage
 from edelweissfe.utils.inputlanguage import (
     keywordIdentifier,
     moduleLevelKeywordIdentifier,
@@ -310,33 +309,42 @@ def createStepManagerFromInputFile(inputfile: dict):
     """
     stepManager = StepManager()
 
-    for stepDefinition in inputfile["step"]:
-        stepType = stepDefinition.pop("type")
-        stepActionLines = stepDefinition.pop("moduleOptions")
+    autoNameCounter = 0
 
-        inputFile = stepDefinition.pop("inputfile")  # noqa F841
-        data = stepDefinition.pop("datalines")  # noqa F841
+    for stepOptions in inputfile["step"]:
+        stepType = stepOptions.pop("type")
+        stepActionLines = stepOptions.pop("moduleOptions")
+
+        stepOptions.pop("inputfile")
+        data = stepOptions.pop("datalines")
 
         stepActionDefinitions = []
 
-        module = inputLanguage["step"].getModule(stepType)
-        args, kwargs = module.parseDatalines(data)
+        stepModule = inputLanguage["step"].getModule(stepType)
+        args, kwargs = stepModule.parseDatalines(data)
 
-        stepDefinition.update(kwargs)
+        if args:
+            raise ValueError(
+                f"Unexpected positional options {args} in the datalines of *step; only key=value options are allowed."
+            )
 
-        for module, definitions in stepActionLines.items():
+        stepOptions.update(kwargs)
+
+        for actionModule, definitions in stepActionLines.items():
             for definition in definitions:
-                try:
-                    name = definition.pop("name")
-                except KeyError:
-                    num = 0
-                    for stepDef in stepManager.stepDefinitions:
-                        num += len(stepDef.stepActionDefinitions)
-                    num += len(stepActionDefinitions)
-                    name = f"StepAction-{num}"
-                stepActionDefinitions.append(StepActionDefinition(name, module, definition))
+                # metadata added by the parser, of no relevance for the step actions:
+                definition.pop("inputfile", None)
 
-        stepDefinition = StepDefinition(stepType, stepDefinition, stepActionDefinitions)
+                # unnamed actions are identified by their category (e.g., 'options'
+                # step actions), or get an auto-generated unique name:
+                name = definition.pop("name", None) or definition.get("category")
+                if name is None:
+                    name = f"{actionModule}-{autoNameCounter}"
+                    autoNameCounter += 1
+
+                stepActionDefinitions.append(StepActionDefinition(name, actionModule, definition))
+
+        stepDefinition = StepDefinition(stepType, stepOptions, stepActionDefinitions)
 
         stepManager.enqueueStepDefinition(stepDefinition)
 

@@ -29,9 +29,9 @@
 import sympy as sp
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.inputlanguage import InputLanguage
 
 """
 Stepaction to change material properties.
@@ -41,10 +41,9 @@ Stepaction to change material properties.
 
 inputLanguage = InputLanguage()
 
-modules = [
-    inputLanguage["step"].getModule("adaptive"),
-    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
-]
+# Register this step action for all available step types. This requires the step type
+# modules to be imported before the step actions, as done in the input file parser.
+modules = inputLanguage["step"].modules if "step" in inputLanguage else []
 
 documentation = []
 

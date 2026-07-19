@@ -32,8 +32,8 @@
 import numpy as np
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.inputlanguage import InputLanguage
 
 """
 Indirect (displacement) controller for the NISTArcLength solver
@@ -47,10 +47,9 @@ The center is autotically computed from the bounding node coordinates.
 
 inputLanguage = InputLanguage()
 
-modules = [
-    inputLanguage["step"].getModule("adaptive"),
-    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
-]
+# Register this step action for all available step types. This requires the step type
+# modules to be imported before the step actions, as done in the input file parser.
+modules = inputLanguage["step"].modules if "step" in inputLanguage else []
 
 documentation = []
 
@@ -76,27 +75,49 @@ class StepAction(StepActionBase):
         self.journal = journal
 
         self.currentL0 = 0.0
+        self._currentL = 0.0
 
         self.L = action["L"]
 
-        self.generateCVectorAndIndices(action, jobInfo, model, fieldOutputController, journal)
+        self.generateCVector(action, jobInfo, model, fieldOutputController, journal)
 
         if action["exportCVector"] is not None:
             np.savetxt(action["exportCVector"] + ".csv", self.cVector)
 
         self.absolute = action["absolute"]
 
-    def computeDDLambda(self, dU, ddU_0, ddU_f, timeStep: TimeStep):
+    def _getIdcsInDofVector(self, dofManager) -> np.ndarray:
+        """Determine the indices of the contraction ring displacements in the dof vector.
+
+        Parameters
+        ----------
+        dofManager
+            The dof manager of the current equation system.
+
+        Returns
+        -------
+        np.ndarray
+            The indices in the dof vector.
+        """
+
+        return np.hstack(
+            [dofManager.idcsOfFieldVariablesInDofVector[n.fields["displacement"]][:2] for n in self.contractionNSet]
+        )
+
+    def computeDDLambda(self, dU, ddU_0, ddU_f, timeStep: TimeStep, dofManager):
+        idcs = self._getIdcsInDofVector(dofManager)
+
         dL = timeStep.stepProgressIncrement * self.L
 
-        ddLambda = (dL - self.cVector.dot(dU[self.idcs] + ddU_0[self.idcs])) / self.cVector.dot(ddU_f[self.idcs])
+        ddLambda = (dL - self.cVector.dot(dU[idcs] + ddU_0[idcs])) / self.cVector.dot(ddU_f[idcs])
         return ddLambda
 
-    def finishIncrement(self, U, dU, dLambda):
-        pass
+    def finishIncrement(self, U, dU, dLambda, timeStep: TimeStep, dofManager):
+        idcs = self._getIdcsInDofVector(dofManager)
+        self._currentL = self.cVector.dot(U[idcs] + dU[idcs])
 
-    def applyAtStepEnd(self, U, P):
-        self.currentL0 = self.cVector.dot(U[self.idcs])
+    def applyAtStepEnd(self, model):
+        self.currentL0 = self._currentL
 
     def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
         if self.absolute:
@@ -104,9 +125,9 @@ class StepAction(StepActionBase):
         else:
             self.L = action["L"]
 
-        self.generateCVectorAndIndices(action, jobInfo, model, fieldOutputController, journal)
+        self.generateCVector(action, jobInfo, model, fieldOutputController, journal)
 
-    def generateCVectorAndIndices(self, action, jobInfo, model, fieldOutputController, journal):
+    def generateCVector(self, action, jobInfo, model, fieldOutputController, journal):
         contractionNSet = model.nodeSets[action["contractionNSet"]]
 
         nNodes = len(contractionNSet)
@@ -122,7 +143,6 @@ class StepAction(StepActionBase):
         y_center = 0.5 * (y_max + y_min)
 
         cVector = []
-        idcsInDofVector = []
 
         for n in contractionNSet:
             vec_n_to_center = np.array([x_center - n.coordinates[0], y_center - n.coordinates[1]])
@@ -132,11 +152,9 @@ class StepAction(StepActionBase):
 
             cVector.append(vec_n_to_center_normalized)
 
-            idcsInDofVector.append([n.fields["displacement"][dim] for dim in range(2)])
-
         self.cVector = np.hstack(cVector)
 
         # dividing c vector to make 'average' contraction of ring:
         self.cVector *= 1.0 / nNodes
 
-        self.idcs = np.hstack(idcsInDofVector)
+        self.contractionNSet = contractionNSet
