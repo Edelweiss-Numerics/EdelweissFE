@@ -72,6 +72,7 @@ class FEModel:
         self.scalarVariables = {}  #: ScalarVariables in the model.
         self.additionalParameters = {}  #: Additional information.
         self.rigidBodies = {}  #: RigidBodies in the model.
+        self.elementProperties = []  #: Element properties.
         self.domainSize = dimension  #: Spatial dimension of the model
 
     def _populateNodeFieldVariablesFromElements(
@@ -223,6 +224,9 @@ class FEModel:
         """
         for section in self.sections.values():
             section.assignSectionPropertiesToModel(self)
+
+        for elementProperty in self.elementProperties:
+            elementProperty.assignElementPropertiesToModel(self)
 
         # check if all elements are assigned a material
         materialAssigned = np.fromiter(map(attrgetter("hasMaterial"), self.elements.values()), dtype=bool)
