@@ -1,10 +1,12 @@
 [build-system]
-requires = ["setuptools", "Cython", "numpy"]
+# Cython >= 3.1 is required for free-threading (cp314t) support and the
+# freethreading_compatible directive used in setup.py.
+requires = ["setuptools>=77", "Cython>=3.1", "numpy>=2"]
 
 
 [project]
 name = "EdelweissFE"
-version = "26.05"
+version = "26.11"
 description = "EdelweissFE: A light-weight, platform-independent, parallel finite element framework."
 readme = "README.md"
 authors = [
@@ -14,6 +16,25 @@ license = "LGPL-2.1"
 license-files = ["LICENSE.md"]
 urls = { Homepage = "https://github.com/EdelweissFE/EdelweissFE" }
 requires-python = ">=3.14"
+dependencies = [
+    "numpy>=2",
+    "scipy",
+    "sympy",
+    "h5py",
+    "matplotlib",
+    "prettytable",
+    "rich",
+]
+
+[project.optional-dependencies]
+# Optional features; the corresponding modules raise an ImportError at usage time
+# if the extra is not installed.
+randomfields = ["gstools"]        # analyticalfields/randomscalar, sections/planerandomthickness
+microstructure = ["meshio"]       # generators/microstructuregenerator
+viz = ["pyvista"]                 # analyticalfields/fromvtk
+gmres = ["pyamg"]                 # linsolve/gmres
+advancedmaterials = ["num_dual"]  # materials/hyperelasticadvanced, hyperplasticadvanced
+full = ["gstools", "meshio", "pyvista", "pyamg", "num_dual"]
 
 [tool.setuptools]
 include-package-data = true
