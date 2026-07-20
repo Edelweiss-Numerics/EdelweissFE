@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Setup Mambaforge
         uses: conda-incubator/setup-miniconda@v3
@@ -26,18 +26,6 @@ jobs:
         shell: bash -l {0}
         run: |
           pip install -r pip_requirements.txt
-
-      - name: Install Eigen
-        shell: bash -l {0}
-        run: |
-          cd ..
-          git clone --branch 3.4.0 https://gitlab.com/libeigen/eigen.git
-          cd eigen
-          mkdir build
-          cd build
-          cmake -DBUILD_TESTING=OFF  -DINCLUDE_INSTALL_DIR=$CONDA_PREFIX/include -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-          make install
-          cd ../..
 
       - name: Install Autodiff
         shell: bash -l {0}
@@ -106,7 +94,19 @@ jobs:
       - name: Build EdelweissFE
         shell: bash -l {0}
         run: |
-          pip install -v .
+          pip install --no-build-isolation -v .
+
+      - name: Verify free-threading
+        shell: bash -l {0}
+        run: |
+          python -c "
+          import sys
+          import edelweissfe.numerics.csrgeneratorv2
+          import edelweissfe.utils.elementresultcollector
+          import edelweissfe.solvers.base.dirichlet
+          assert not sys._is_gil_enabled(), 'GIL was re-enabled by an extension!'
+          print('free-threading OK')
+          "
 
       - name: Run tests
         shell: bash -l {0}
