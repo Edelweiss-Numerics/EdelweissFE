@@ -173,14 +173,16 @@ extensions += [
             numpy.get_include(),
             mkl_include,
         ],
+        # Layered MKL linking with the GNU threading layer. Do not add mkl_rt (the single
+        # dynamic library conflicts with layered linking) or iomp5 (a second OpenMP runtime
+        # next to libgomp, which all other extensions use via -fopenmp).
         libraries=[
+            "mkl_gf_lp64",
             "mkl_gnu_thread",
             "mkl_core",
-            "mkl_rt",
-            "mkl_gf_lp64",
-            "iomp5",
         ],
         language="c++",
+        extra_link_args=["-fopenmp"],
     )
 ]
 
@@ -200,7 +202,6 @@ extensions += [
         ],
         language="c++",
         extra_link_args=["-fopenmp", "-lgfortran", "-lpthread", "-lm"],
-        optional=True,
     )
 ]
 
@@ -250,10 +251,22 @@ extensions += [
 
 print("Now compile!")
 
+# Extensions EdelweissFE cannot run without: the pure-Python code paths of the framework
+# rely on these accelerators unconditionally. A build failure here aborts the installation.
+# All other extensions (Marmot wrappers, linear-solver interfaces) are optional features
+# whose absence is recorded in built_extensions.log and handled at runtime.
+REQUIRED_EXTENSIONS = {
+    "edelweissfe.utils.elementresultcollector",
+    "edelweissfe.numerics.csrgenerator",
+    "edelweissfe.numerics.csrgeneratorv2",
+    "edelweissfe.solvers.base.dirichlet",
+}
+
 
 class optional_build_ext(build_ext):
     def build_extensions(self):
         self.successful_extensions = []
+        self.failed_extensions = []
 
         for ext in self.extensions:
             try:
@@ -261,9 +274,23 @@ class optional_build_ext(build_ext):
                 self.successful_extensions.append(ext.name)
                 print(f"[OK] Built extension: {ext.name}")
             except Exception as e:
+                if ext.name in REQUIRED_EXTENSIONS:
+                    raise RuntimeError(f"Required extension {ext.name} failed to build: {e}") from e
+                self.failed_extensions.append((ext.name, e))
                 print(f"[FAIL] Could not build {ext.name}: {e}")
 
+        self.print_summary()
         self.write_build_log()
+
+    def print_summary(self):
+        total = len(self.successful_extensions) + len(self.failed_extensions)
+        print("*" * 80)
+        print(f"Extension build summary: {len(self.successful_extensions)}/{total} built")
+        for name in self.successful_extensions:
+            print(f"  [OK]   {name}")
+        for name, error in self.failed_extensions:
+            print(f"  [FAIL] {name}: {error}")
+        print("*" * 80)
 
     def write_build_log(self):
         log_file = pathlib.Path("edelweissfe") / "built_extensions.log"
@@ -288,7 +315,15 @@ class optional_build_ext(build_ext):
 
 setup(
     cmdclass={"build_ext": optional_build_ext},
-    ext_modules=cythonize(extensions, compiler_directives=directives, annotate=True, language_level=3),
+    ext_modules=cythonize(
+        extensions,
+        compiler_directives=directives,
+        # Generate the HTML annotation files only on demand; they slow down the build.
+        # Note: cythonize's nthreads option is broken on free-threading CPython builds
+        # (BrokenProcessPool), so the .pyx -> .cpp translation runs serially.
+        annotate=bool(os.environ.get("EDELWEISSFE_ANNOTATE")),
+        language_level=3,
+    ),
     include_package_data=True,
     package_data={
         "edelweissfe": ["built_extensions.log"],
