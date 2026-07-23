@@ -411,6 +411,9 @@ class NEST(NIST):
         distributedLoads = stepActions["distributedload"].values()
         bodyForces = stepActions["bodyforce"].values()
 
+        # Find which global DOFs the Dirichlet BCs constrain, once up front.
+        self.locateConstrainedDofs(dirichlets)
+
         self.applyStepActionsAtIncrementStart(model, timeStep, stepActions)
 
         for geostatic in stepActions["geostatic"].values():
@@ -439,10 +442,10 @@ class NEST(NIST):
             R[:] = -P
             R += PExt
 
-            R = self.applyDirichlet(timeStep, R, dirichlets)
+            R = self.applyDirichletToResidual(timeStep, R, dirichlets)
 
             K_ = self.assembleStiffnessCSR(K)
-            K_ = self.applyDirichletK(K_, dirichlets)
+            K_ = self.applyDirichletToStiffness(K_, dirichlets)  # zero rows, unit diagonal
 
             # solve for increment
             dU_[k] = self.linearSolve(K_, R)
