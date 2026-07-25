@@ -212,6 +212,7 @@ class NodeField:
 class NodeFieldSubset(NodeField):
     def __init__(self, parentNodeField, subset):
         self.parentNodeField = parentNodeField
+        self.name = parentNodeField.name
         self.associatedSet = subset
         self.nodes = self._getSubsetNodes(subset)
         self._indicesOfNodesInParentArray = np.array([parentNodeField._indicesOfNodesInArray[n] for n in self.nodes])

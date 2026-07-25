@@ -371,11 +371,32 @@ class AdaptiveMesh:
         for lab in used:
             nodeGrid[_grid_key(coords[lab], h_cell)].append(lab)
 
+        # A coarse element hosts a hanging node ONLY where a FINER element abuts it: a same-level
+        # conforming neighbour shares the element's own nodes, and a coarser neighbour makes THIS
+        # element the slave, not the master. So the master candidates are exactly the active elements
+        # that have a strictly finer overlapping neighbour -- the thin "interface shell". Restricting
+        # the scan to those makes the per-adaptation cost scale with the refined interface area, not
+        # with the total number of active elements (which grows every adaptation).
+        lev = {eid: self.elements[eid]["level"] for eid in act}
+        box = {eid: self.box(eid) for eid in act}
+        elemGrid = defaultdict(set)
+        for eid in act:
+            for cell in _grid_cells_for_box(box[eid][0], box[eid][1], h_cell, pad=0):
+                elemGrid[cell].add(eid)
+
+        def hasFinerNeighbour(eid):
+            neighbours = set()
+            for cell in _grid_cells_for_box(box[eid][0], box[eid][1], h_cell):
+                neighbours |= elemGrid.get(cell, set())
+            return any(lev[f] > lev[eid] and _boxes_overlap(box[eid], box[f]) for f in neighbours if f != eid)
+
         best = {}  # slave -> (dim, level, masters)
         for eid in act:
+            if not hasFinerNeighbour(eid):
+                continue  # no level jump here -> this element cannot host a hanging node
             E = self.elements[eid]
             Eset = set(E["conn"])
-            bMin, bMax = self.box(eid)
+            bMin, bMax = box[eid]
             cands = set()
             for cell in _grid_cells_for_box(bMin, bMax, h_cell):
                 for lab in nodeGrid.get(cell, ()):

@@ -62,6 +62,14 @@ kw.addOptionalArg("defaultMaxIter", "", int, 10)
 kw.addOptionalArg("defaultCriticalIter", "", int, 5)
 kw.addOptionalArg("defaultMaxGrowingIter", "", int, 10)
 kw.addOptionalArg("extrapolation", "", str, "linear")
+kw.addOptionalArg(
+    "extrapolateAfterModelChange",
+    "Whether to extrapolate the predictor on the increment FOLLOWING a model change (adaptive mesh "
+    "refinement). Default True keeps the previous behaviour; set False to start that increment from a "
+    "zero predictor, avoiding extrapolation of the one-off warm-start/remesh settling transient.",
+    bool,
+    True,
+)
 kw.addOptionalArg("linsolver", "", str, "pardiso")
 kw.addOptionalArg("linsolverConfigFile", "", str, "")
 
@@ -84,6 +92,7 @@ class NIST(NonlinearSolverBase):
         "defaultCriticalIter": 5,
         "defaultMaxGrowingIter": 10,
         "extrapolation": "linear",
+        "extrapolateAfterModelChange": True,
         "linsolver": "pardiso",
         "linsolverConfigFile": "",
     }
@@ -127,6 +136,7 @@ class NIST(NonlinearSolverBase):
             pass
 
         extrapolation = self.options["extrapolation"]
+        extrapolateAfterModelChange = self.options["extrapolateAfterModelChange"]
         linsolverOptions = self.options["linsolverConfigFile"]
         linsolverOptionDict = json.load(open(linsolverOptions, "r")) if linsolverOptions else ""
         self.linSolver = (
@@ -285,7 +295,14 @@ class NIST(NonlinearSolverBase):
                         )
 
                 else:
-                    prevTimeStep = timeStep
+                    # After an adaptive model change, the just-converged increment's dU conflates the
+                    # load advance with the one-off warm-start/remesh settling transient. Optionally
+                    # suppress extrapolation for the next increment (start it from a zero predictor)
+                    # instead of extrapolating that polluted dU.
+                    if modelHasChanged and not extrapolateAfterModelChange:
+                        prevTimeStep = None
+                    else:
+                        prevTimeStep = timeStep
 
                     if iterationCounter >= criticalIter:
                         step.preventIncrementIncrease()

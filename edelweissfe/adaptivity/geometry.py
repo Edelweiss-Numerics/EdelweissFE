@@ -35,42 +35,81 @@ Used for topological (shared-face) neighbour identification and for computing ex
 hanging-node weights on arbitrarily oriented / non-parallelogram (trapezoidal) faces.
 """
 
+import math
+
 import numpy as np
+
+# --- plain-float 3-vector primitives -------------------------------------------------------------
+# These hot helpers operate on plain (x, y, z) float tuples. On the tiny 3-vectors of hanging-node
+# classification, numpy's np.cross / np.linalg.norm are dominated by dispatch overhead (moveaxis,
+# normalize_axis_tuple, ...); explicit scalar math is ~10-30x faster and is what the O(interface)
+# classification loop runs millions of times.
+
+
+def _sub3(a, b):
+    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+
+def _dot3(a, b):
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+
+def _cross3(a, b):
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def _norm3(a):
+    return math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2])
 
 
 def quadratic_edge_parameter(p, ca, cm, cb, tol=1e-8, itmax=25):
     """Find parameter t in [-1, 1] for point p on 3-node quadratic edge [ca, cm, cb].
     Returns (t, distance_to_edge). Robust to curved 3-node edges.
+
+    A straight edge (midside node at the corner midpoint, the octree-refinement case) is handled by
+    a closed-form linear projection; only genuinely curved edges fall through to Newton iteration.
     """
-    ca, cm, cb = np.asarray(ca, dtype=float), np.asarray(cm, dtype=float), np.asarray(cb, dtype=float)
-    p = np.asarray(p, dtype=float)
+    ca = (float(ca[0]), float(ca[1]), float(ca[2]))
+    cm = (float(cm[0]), float(cm[1]), float(cm[2]))
+    cb = (float(cb[0]), float(cb[1]), float(cb[2]))
+    p = (float(p[0]), float(p[1]), float(p[2]))
 
-    # initial guess from linear projection onto chord [ca, cb]
-    e = cb - ca
-    e2 = float(e @ e)
+    e = _sub3(cb, ca)
+    e2 = _dot3(e, e)
     if e2 == 0.0:
-        return 0.0, float(np.linalg.norm(p - cm))
-    t = 2.0 * float((p - ca) @ e) / e2 - 1.0
-    t = float(np.clip(t, -1.0, 1.0))
+        return 0.0, _norm3(_sub3(p, cm))
 
+    # straight edge? midside at the chord midpoint within tol -> exact closed-form linear projection
+    mid = ((ca[0] + cb[0]) * 0.5, (ca[1] + cb[1]) * 0.5, (ca[2] + cb[2]) * 0.5)
+    if _norm3(_sub3(cm, mid)) < tol * (1.0 + math.sqrt(e2)):
+        s = _dot3(_sub3(p, ca), e) / e2  # in [0, 1] along the chord
+        sc = 0.0 if s < 0.0 else (1.0 if s > 1.0 else s)
+        proj = (ca[0] + sc * e[0], ca[1] + sc * e[1], ca[2] + sc * e[2])
+        return 2.0 * sc - 1.0, _norm3(_sub3(p, proj))
+
+    # curved edge: Newton on the quadratic map
+    t = 2.0 * _dot3(_sub3(p, ca), e) / e2 - 1.0
+    t = -1.0 if t < -1.0 else (1.0 if t > 1.0 else t)
+    d2xdt2 = (ca[0] - 2.0 * cm[0] + cb[0], ca[1] - 2.0 * cm[1] + cb[1], ca[2] - 2.0 * cm[2] + cb[2])
     for _ in range(itmax):
-        Na = 0.5 * t * (t - 1.0)
-        Nm = 1.0 - t**2
-        Nb = 0.5 * t * (t + 1.0)
-        x = Na * ca + Nm * cm + Nb * cb
-        r = x - p
-
-        dNa = t - 0.5
-        dNm = -2.0 * t
-        dNb = t + 0.5
-        dxdt = dNa * ca + dNm * cm + dNb * cb
-
-        f = float(r @ dxdt)
-        dxdt2 = float(dxdt @ dxdt)
+        Na, Nm, Nb = 0.5 * t * (t - 1.0), 1.0 - t * t, 0.5 * t * (t + 1.0)
+        x = (
+            Na * ca[0] + Nm * cm[0] + Nb * cb[0],
+            Na * ca[1] + Nm * cm[1] + Nb * cb[1],
+            Na * ca[2] + Nm * cm[2] + Nb * cb[2],
+        )
+        r = _sub3(x, p)
+        dNa, dNm, dNb = t - 0.5, -2.0 * t, t + 0.5
+        dxdt = (
+            dNa * ca[0] + dNm * cm[0] + dNb * cb[0],
+            dNa * ca[1] + dNm * cm[1] + dNb * cb[1],
+            dNa * ca[2] + dNm * cm[2] + dNb * cb[2],
+        )
+        f = _dot3(r, dxdt)
+        dxdt2 = _dot3(dxdt, dxdt)
         if dxdt2 < 1e-14 or abs(f) < 1e-12:
             break
-        d2xdt2 = ca - 2.0 * cm + cb
-        df = dxdt2 + float(r @ d2xdt2)
+        df = dxdt2 + _dot3(r, d2xdt2)
         if abs(df) < 1e-14:
             break
         dt = -f / df
@@ -78,13 +117,14 @@ def quadratic_edge_parameter(p, ca, cm, cb, tol=1e-8, itmax=25):
         if abs(dt) < 1e-10:
             break
 
-    t = float(np.clip(t, -1.0, 1.0))
-    Na = 0.5 * t * (t - 1.0)
-    Nm = 1.0 - t**2
-    Nb = 0.5 * t * (t + 1.0)
-    x = Na * ca + Nm * cm + Nb * cb
-    dist = float(np.linalg.norm(x - p))
-    return t, dist
+    t = -1.0 if t < -1.0 else (1.0 if t > 1.0 else t)
+    Na, Nm, Nb = 0.5 * t * (t - 1.0), 1.0 - t * t, 0.5 * t * (t + 1.0)
+    x = (
+        Na * ca[0] + Nm * cm[0] + Nb * cb[0],
+        Na * ca[1] + Nm * cm[1] + Nb * cb[1],
+        Na * ca[2] + Nm * cm[2] + Nb * cb[2],
+    )
+    return t, _norm3(_sub3(x, p))
 
 
 def face_frame(corners4):
@@ -105,12 +145,37 @@ def _to2d(p, o, e1, e2):
 
 
 def point_in_convex_quad(p, corners4, tol=1e-8):
-    """True if p is (near-)coplanar with and inside the convex quad given by 4 corners (loop order)."""
-    o, n, e1, e2 = face_frame(corners4)
-    if abs((np.asarray(p, dtype=float) - o) @ n) > tol:
+    """True if p is (near-)coplanar with and inside the convex quad given by 4 corners (loop order).
+
+    Hot path of hanging-node classification: implemented in plain-float scalar math (no numpy) to
+    avoid per-call dispatch overhead on 3-vectors.
+    """
+    c0 = (float(corners4[0][0]), float(corners4[0][1]), float(corners4[0][2]))
+    c1 = (float(corners4[1][0]), float(corners4[1][1]), float(corners4[1][2]))
+    c2 = (float(corners4[2][0]), float(corners4[2][1]), float(corners4[2][2]))
+    c3 = (float(corners4[3][0]), float(corners4[3][1]), float(corners4[3][2]))
+    p = (float(p[0]), float(p[1]), float(p[2]))
+
+    u = _sub3(c1, c0)
+    w = _sub3(c3, c0)
+    n = _cross3(u, w)
+    nn = _norm3(n)
+    if nn == 0.0:
         return False
-    poly = [_to2d(c, o, e1, e2) for c in corners4]
-    pt = _to2d(p, o, e1, e2)
+    n = (n[0] / nn, n[1] / nn, n[2] / nn)
+    if abs(_dot3(_sub3(p, c0), n)) > tol:
+        return False  # not coplanar
+
+    e1n = _norm3(u)
+    e1 = (u[0] / e1n, u[1] / e1n, u[2] / e1n)
+    e2 = _cross3(n, e1)
+
+    def to2d(x):
+        d = _sub3(x, c0)
+        return (_dot3(d, e1), _dot3(d, e2))
+
+    poly = [to2d(c0), to2d(c1), to2d(c2), to2d(c3)]
+    pt = to2d(p)
     sign = 0
     for k in range(4):
         a, b = poly[k], poly[(k + 1) % 4]

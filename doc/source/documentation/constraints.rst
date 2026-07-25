@@ -206,6 +206,35 @@ Module ``edelweissfe.constraints.tie``
     :language: edelweiss
     :caption: Example (explicit dynamics): ``testfiles/edelweiss-only/TieNED/test.inp``
 
+``hangingnode`` - Hanging-node coupling for adaptive mesh refinement
+--------------------------------------------------------------------
+
+The kinematic multi-point constraint that couples a non-conforming 2:1 refined interface produced
+by hanging-node :math:`h`-adaptivity (see :doc:`modelmodifiers`). Each hanging (slave) node is
+tied to the coarse serendipity trace it lies on -- an 8-node QUAD8 face or a 3-node quadratic edge
+-- by :math:`u_s = \sum_a N_a(\xi_s)\, u_{m_a}`, enforced by master-slave DOF elimination (no
+Lagrange multipliers, no extra DOFs, no saddle point). Because the QUAD8 face-trace and quadratic
+edge spaces are nested under octree refinement, the coupling is exact. All fields active on the
+node (displacement, nonlocal damage, ...) are constrained with the same field-independent weights.
+Multi-level chains are pre-flattened to independent masters, as required by the DOF-elimination
+transformation.
+
+The records (masters + weights per slave) are either loaded from a file (``recordsFile``, one line
+per slave ``<slaveLabel> <masterLabel> <weight> ...``) for a statically pre-refined mesh, or set in
+memory by the :doc:`hAdaptivity model modifier <modelmodifiers>` after each dynamic refinement.
+
+Module ``edelweissfe.constraints.hangingnode``
+
+.. automodule:: edelweissfe.constraints.hangingnode
+    :members: __doc__
+
+.. pprint:: edelweissfe.constraints.hangingnode.documentation
+    :caption: Options:
+
+.. literalinclude:: ../../../testfiles/marmot/AMR_PatchTestU/test.inp
+    :language: edelweiss
+    :caption: Example (static 2:1 patch test): ``testfiles/marmot/AMR_PatchTestU/test.inp``
+
 Implementing your own constraints
 ---------------------------------
 

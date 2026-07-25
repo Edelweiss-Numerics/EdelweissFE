@@ -35,8 +35,9 @@ import numpy as np
 from edelweissfe.adaptivity.hex20topology import hex20_shape, octant_children_param
 from edelweissfe.adaptivity.marking import markElements
 from edelweissfe.adaptivity.refinement import AdaptiveMesh
-from edelweissfe.adaptivity.statetransfer import transferStateNearestQp
+from edelweissfe.adaptivity.statetransfer.perstatevar import PerStateVarStateTransfer
 from edelweissfe.config.elementlibrary import getElementClass
+from edelweissfe.config.statetransferstrategies import getStateTransferStrategyClass
 from edelweissfe.constraints.hangingnode import Constraint as HangingNodeConstraint
 from edelweissfe.journal.journal import Journal
 from edelweissfe.modelmodifiers.base.modelmodifierbase import ModelModifierBase
@@ -70,7 +71,38 @@ module.addOptionalArg(
 module.addOptionalArg("maxLevel", "Maximum refinement level.", int, 1)
 module.addOptionalArg("elementType", "Element type to instantiate for children (default: like parents).", str, None)
 module.addOptionalArg("elementProvider", "Element provider.", str, "marmot")
+module.addOptionalArg(
+    "stateTransfer",
+    "Quadrature-point state-transfer strategy for the whole state block: nearestQp|projection|virgin.",
+    str,
+    "nearestQp",
+)
+module.addOptionalArg(
+    "stateTransferOverrides",
+    "Per-state-variable overrides routing named variables to a different strategy, e.g. "
+    "'strain:projection, stress:virgin'. Comma-separated 'name:strategy' pairs.",
+    str,
+    None,
+)
 documentation = [module]
+
+
+def _buildStateTransferStrategy(defaultName, overridesSpec):
+    """Construct the state-transfer strategy from the input arguments. With no per-variable
+    overrides this is just the named default strategy; otherwise a
+    :class:`~edelweissfe.adaptivity.statetransfer.perstatevar.PerStateVarStateTransfer` wrapping the
+    default with the named overrides."""
+    default = getStateTransferStrategyClass(defaultName)()
+    if not overridesSpec:
+        return default
+    overrides = {}
+    for entry in overridesSpec.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        name, strategyName = entry.rsplit(":", 1)
+        overrides[name.strip()] = getStateTransferStrategyClass(strategyName.strip())()
+    return PerStateVarStateTransfer(default, overrides) if overrides else default
 
 
 class ModelModifier(ModelModifierBase):
@@ -87,6 +119,7 @@ class ModelModifier(ModelModifierBase):
         self.expression = kwargs["expression"]
         self.reducer = kwargs["reducer"]
         self.maxLevel = kwargs["maxLevel"]
+        self._stateTransfer = _buildStateTransferStrategy(kwargs["stateTransfer"], kwargs["stateTransferOverrides"])
         # restrict marking to a given element set (its labels); others are never refined
         self._markLabels = {el.elNumber for el in model.elementSets[kwargs["elSet"]]} if kwargs["elSet"] else None
         self._provider = kwargs["elementProvider"]
@@ -140,15 +173,12 @@ class ModelModifier(ModelModifierBase):
         self._hanging = HangingNodeConstraint(name + "_hanging", model)
         model.multiPointConstraints[name + "_hanging"] = self._hanging
         self._converged = False  # set True once an increment has converged
+        self._lastRefinedTime = None  # model.time of the last refinement (guards re-refine on cutback)
         self._octantParams = octant_children_param()  # parent-parametric coords of each child's nodes
 
     def updateModel(self, model: FEModel, step, timeStep: float) -> bool:
         # Do not re-refine if the solver is re-trying the exact same time state after a cutback
-        if (
-            hasattr(self, "_lastRefinedTime")
-            and self._lastRefinedTime is not None
-            and abs(model.time - self._lastRefinedTime) < 1e-12
-        ):
+        if self._lastRefinedTime is not None and abs(model.time - self._lastRefinedTime) < 1e-12:
             return False
 
         # only adapt once a non-trivial solution has developed; the hook is called on increments
@@ -231,7 +261,7 @@ class ModelModifier(ModelModifierBase):
             self._nextElLabel += 1
             child.setNodes([model.nodes[label] for label in e["conn"]])
             self._sectionOf[parentEl].assignSectionPropertiesToElement(child)  # init + material (inherit parent's)
-            transferStateNearestQp(parentEl, [child])  # WS-F (state)
+            self._stateTransfer.transferState(parentEl, [child])  # WS-F (state)
 
             # warm start (WS-H): interpolate each NEW node's field values from the parent via the
             # HEX20 isoparametric map, so the increment restarts from a consistent state, not zero
@@ -304,6 +334,3 @@ class ModelModifier(ModelModifierBase):
                     U[idx] = new[node]
 
         model._linkFieldVariableObjects(model.nodeSets["all"])
-
-        if model._modelChangeObservers:
-            model.notifyModelChanged("adaptivity", {"action": "refinement"})

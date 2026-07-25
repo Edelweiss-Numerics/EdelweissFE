@@ -22,6 +22,7 @@ Documentation
    journal
    materials
    mesh
+   modelmodifiers
    output
    parallelization
    phenomena

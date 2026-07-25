@@ -344,6 +344,24 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         """
         raise NotImplementedError("This element does not expose a state-variable buffer.")
 
+    def getStateVarSlice(self, name: str) -> tuple:
+        """Locate a named state variable within a single per-quadrature-point state block.
+
+        Enables per-state-variable routing of adaptive-refinement state transfer (see
+        :class:`~edelweissfe.adaptivity.statetransfer.perstatevar.PerStateVarStateTransfer`).
+
+        Parameters
+        ----------
+        name
+            The state-variable name (as understood by the underlying material / element).
+
+        Returns
+        -------
+        tuple
+            ``(offset, size)`` of the named variable within one per-quadrature-point block.
+        """
+        raise NotImplementedError("This element does not expose named state-variable slices.")
+
     @abstractmethod
     def getResultArray(self, result: str, quadraturePoint: int, getPersistentView: bool = True) -> np.ndarray:
         """Get the array of a result, possibly as a persistent view which is continiously
