@@ -609,7 +609,7 @@ class EnsightChunkWiseCase:
                     else:
                         cf.write("{:}".format(i) + "\n")
 
-            if self.writeTransientSingleFiles:
+            if not self.writeTransientSingleFiles:
                 cf.write("FILE\n")
                 for timeSet in self.timeAndFileSets.values():
                     cf.write("file set: {:}\n".format(timeSet.number))
@@ -617,28 +617,46 @@ class EnsightChunkWiseCase:
 
             cf.write("GEOMETRY\n")
             for geometryName, tAndFSetNum in self.geometryTrends.items():
-                cf.write(
-                    "model: {:} {:} {:}\n".format(
-                        tAndFSetNum,
-                        tAndFSetNum,
-                        os.path.join(self.caseFileNamePrefix, geometryName + ".geo"),
+                if self.writeTransientSingleFiles:
+                    cf.write(
+                        "model: {:} {:}\n".format(
+                            tAndFSetNum,
+                            os.path.join(self.caseFileNamePrefix, geometryName + ".geo"),
+                        )
                     )
-                )
+                else:
+                    cf.write(
+                        "model: {:} {:} {:}\n".format(
+                            tAndFSetNum,
+                            tAndFSetNum,
+                            os.path.join(self.caseFileNamePrefix, geometryName + ".geo"),
+                        )
+                    )
 
             cf.write("VARIABLE\n")
             for variableName, (
                 tAndFSetNum,
                 variableType,
             ) in self.variableTrends.items():
-                cf.write(
-                    "{:}: {:} {:} {:} {:}.var\n".format(
-                        variableType,
-                        tAndFSetNum,
-                        tAndFSetNum,
-                        variableName,
-                        os.path.join(self.caseFileNamePrefix, variableName),
+                if self.writeTransientSingleFiles:
+                    cf.write(
+                        "{:}: {:} {:} {:}.var\n".format(
+                            variableType,
+                            tAndFSetNum,
+                            variableName,
+                            os.path.join(self.caseFileNamePrefix, variableName),
+                        )
                     )
-                )
+                else:
+                    cf.write(
+                        "{:}: {:} {:} {:} {:}.var\n".format(
+                            variableType,
+                            tAndFSetNum,
+                            tAndFSetNum,
+                            variableName,
+                            os.path.join(self.caseFileNamePrefix, variableName),
+                        )
+                    )
 
 
 def createUnstructuredPartFromElementSet(setName, elementSet: list, partID: int):
