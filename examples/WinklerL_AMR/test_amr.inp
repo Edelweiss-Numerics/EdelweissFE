@@ -73,7 +73,7 @@ fieldOutput=RF
 >>configuration, overwrite=yes
 
 *step, solver=theSolver
-maxInc=1e-2, minInc=1e-8, maxNumInc=10000, maxIter=25, stepLength=100
+maxInc=1e-2, minInc=1e-8, maxNumInc=20, maxIter=25, stepLength=100
 >>options, category=NISTSolver, extrapolation=linear
 >>dirichlet, name=bottom, nSet=nset_bottom, field=displacement, 2=0, 1=0, 3=0
 >>dirichlet, name=load, nSet=nset_load_application, field=displacement, 2=+1

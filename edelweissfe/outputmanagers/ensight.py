@@ -517,28 +517,40 @@ class EnsightChunkWiseCase:
             The associated time and fileset number.
         """
 
-        if ensightGeometry.name not in self.fileNames:
-            fileName = os.path.join(
-                self.caseFileNamePrefix,
-                ensightGeometry.name + ".geo",
-            )
+        if self.writeTransientSingleFiles:
+            if ensightGeometry.name not in self.fileNames:
+                fileName = os.path.join(
+                    self.caseFileNamePrefix,
+                    ensightGeometry.name + ".geo",
+                )
+                self.fileNames[ensightGeometry.name] = fileName
+                # create empty file
+                with open(fileName, mode="wb") as f:
+                    pass
 
-            self.fileNames[ensightGeometry.name] = fileName
-            # create empty file
-            with open(fileName, mode="wb") as f:
-                pass
+            filename = self.fileNames[ensightGeometry.name]
 
-        filename = self.fileNames[ensightGeometry.name]
+            with open(filename, mode="ab") as f:
+                if ensightGeometry.name not in self.geometryTrends:
+                    self.geometryTrends[ensightGeometry.name] = timeAndFileSetNumber
+                    writeC80(f, "C Binary")
 
-        with open(filename, mode="ab") as f:
-            if ensightGeometry.name not in self.geometryTrends:
-                self.geometryTrends[ensightGeometry.name] = timeAndFileSetNumber
-                writeC80(f, "C Binary")
-
-            if self.writeTransientSingleFiles:
                 writeC80(f, "BEGIN TIME STEP")
                 ensightGeometry.writeToFile(f)
                 writeC80(f, "END TIME STEP")
+        else:
+            if timeAndFileSetNumber not in self.timeAndFileSets:
+                stepIndex = 0
+            else:
+                stepIndex = len(self.timeAndFileSets[timeAndFileSetNumber].timeValues)
+
+            if ensightGeometry.name not in self.geometryTrends:
+                self.geometryTrends[ensightGeometry.name] = timeAndFileSetNumber
+
+            multiFileName = os.path.join(self.caseFileNamePrefix, f"{ensightGeometry.name}.geo_{stepIndex:04d}")
+            with open(multiFileName, mode="wb") as f:
+                writeC80(f, "C Binary")
+                ensightGeometry.writeToFile(f)
 
     def writeVariableTrendChunk(self, ensightVariable: EnsightVariableTrend, timeAndFileSetNumber: int = 2):
         """
@@ -552,32 +564,45 @@ class EnsightChunkWiseCase:
             The associated time and fileset number.
         """
 
-        if ensightVariable.name not in self.fileNames:
-            # create file name
-            fileName = os.path.join(self.caseFileNamePrefix, ensightVariable.name + ".var")
+        if self.writeTransientSingleFiles:
+            if ensightVariable.name not in self.fileNames:
+                # create file name
+                fileName = os.path.join(self.caseFileNamePrefix, ensightVariable.name + ".var")
+                # append to file names
+                self.fileNames[ensightVariable.name] = fileName
+                # create empty file
+                with open(fileName, mode="wb") as f:
+                    pass
 
-            # append to file names
-            self.fileNames[ensightVariable.name] = fileName
+            filename = self.fileNames[ensightVariable.name]
 
-            # create empty file
-            with open(fileName, mode="wb") as f:
-                pass
+            with open(filename, mode="ab") as f:
+                if ensightVariable.name not in self.variableTrends:
+                    self.variableTrends[ensightVariable.name] = (
+                        timeAndFileSetNumber,
+                        ensightVariable.varType,
+                    )
+                    writeC80(f, "C Binary")
 
-        filename = self.fileNames[ensightVariable.name]
-
-        with open(filename, mode="ab") as f:
+                writeC80(f, "BEGIN TIME STEP")
+                ensightVariable.writeToFile(f)
+                writeC80(f, "END TIME STEP")
+        else:
+            if timeAndFileSetNumber not in self.timeAndFileSets:
+                stepIndex = 0
+            else:
+                stepIndex = len(self.timeAndFileSets[timeAndFileSetNumber].timeValues)
 
             if ensightVariable.name not in self.variableTrends:
                 self.variableTrends[ensightVariable.name] = (
                     timeAndFileSetNumber,
                     ensightVariable.varType,
                 )
-                writeC80(f, "C Binary")
 
-            if self.writeTransientSingleFiles:
-                writeC80(f, "BEGIN TIME STEP")
+            multiFileName = os.path.join(self.caseFileNamePrefix, f"{ensightVariable.name}.var_{stepIndex:04d}")
+            with open(multiFileName, mode="wb") as f:
+                writeC80(f, "C Binary")
                 ensightVariable.writeToFile(f)
-                writeC80(f, "END TIME STEP")
 
     def finalize(self, replaceTimeValuesByEnumeration: bool = True, closeFileHandes: bool = True):
         """Write the file .case file containing all the required information."
@@ -614,14 +639,23 @@ class EnsightChunkWiseCase:
                 for timeSet in self.timeAndFileSets.values():
                     cf.write("file set: {:}\n".format(timeSet.number))
                     cf.write("number of steps: {:}\n".format(len(timeSet.timeValues)))
+            else:
+                cf.write("FILE\n")
+                for timeSet in self.timeAndFileSets.values():
+                    cf.write("file set: {:}\n".format(timeSet.number))
+                    cf.write("number of steps: {:}\n".format(len(timeSet.timeValues)))
 
             cf.write("GEOMETRY\n")
             for geometryName, tAndFSetNum in self.geometryTrends.items():
+                if self.writeTransientSingleFiles:
+                    geoFile = os.path.join(self.caseFileNamePrefix, geometryName + ".geo")
+                else:
+                    geoFile = os.path.join(self.caseFileNamePrefix, geometryName + ".geo_****")
                 cf.write(
                     "model: {:} {:} {:}\n".format(
                         tAndFSetNum,
                         tAndFSetNum,
-                        os.path.join(self.caseFileNamePrefix, geometryName + ".geo"),
+                        geoFile,
                     )
                 )
 
@@ -630,13 +664,17 @@ class EnsightChunkWiseCase:
                 tAndFSetNum,
                 variableType,
             ) in self.variableTrends.items():
+                if self.writeTransientSingleFiles:
+                    varFile = os.path.join(self.caseFileNamePrefix, variableName + ".var")
+                else:
+                    varFile = os.path.join(self.caseFileNamePrefix, variableName + ".var_****")
                 cf.write(
-                    "{:}: {:} {:} {:} {:}.var\n".format(
+                    "{:}: {:} {:} {:} {:}\n".format(
                         variableType,
                         tAndFSetNum,
                         tAndFSetNum,
                         variableName,
-                        os.path.join(self.caseFileNamePrefix, variableName),
+                        varFile,
                     )
                 )
 
@@ -1021,7 +1059,7 @@ class OutputManager(OutputManagerBase):
             raise Exception("Only transient per node outputs are supported!")
 
     def initializeJob(self):
-        self.ensightCase = EnsightChunkWiseCase(self.exportName)
+        self.ensightCase = EnsightChunkWiseCase(self.exportName, writeTransientSingleFiles=False)
         # Geometry is written per output step (on the transient time set) rather than once, so it can
         # change with adaptive mesh refinement and stay 1:1 aligned with the variable time steps.
 
