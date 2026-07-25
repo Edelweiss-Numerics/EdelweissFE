@@ -354,11 +354,17 @@ class NodeFieldOutput(_FieldOutputBase):
         fExport_x: Callable = None,
     ):
         self.entry = result
-
+        self.fieldName = getattr(nodeField, "name", None) or getattr(nodeField, "parentNodeField").name
         self._nodeField = nodeField
         self.associatedSet = nodeField.associatedSet
 
         super().__init__(name, model, journal, saveHistory, f_x, export, fExport_x)
+        model.registerObserver(self)
+
+    def onModelChanged(self, model, changeType, details=None):
+        """Re-bind NodeField reference upon AMR mesh mutation."""
+        if self.fieldName in model.nodeFields:
+            self._nodeField = model.nodeFields[self.fieldName].subset(self.associatedSet)
 
     def updateResults(self, model: FEModel):
         """Update the field output.
@@ -492,6 +498,15 @@ class ElementFieldOutput(_FieldOutputBase):
         )
 
         super().__init__(name, model, journal, saveHistory, f_x, export, fExport_x)
+        model.registerObserver(self)
+
+    def onModelChanged(self, model, changeType, details=None):
+        """Re-bind element result collector upon AMR mesh mutation."""
+        if self.associatedSet.name in model.elementSets:
+            self.associatedSet = model.elementSets[self.associatedSet.name]
+        self.elementResultCollector = ElementResultCollector(
+            list(self.associatedSet), self.quadraturePoints, self.resultName
+        )
 
     def updateResults(self, model: FEModel):
         """Update the field output.

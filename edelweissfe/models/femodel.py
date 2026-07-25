@@ -80,12 +80,11 @@ class FEModel:
     def registerObserver(self, observer):
         """Register a :class:`~edelweissfe.models.modelchangeobserver.ModelChangeObserver` to be
         notified when the model is mutated (e.g. by adaptive mesh refinement)."""
-        if observer not in self._modelChangeObservers:
+        if not any(observer is obs for obs in self._modelChangeObservers):
             self._modelChangeObservers.append(observer)
 
     def unregisterObserver(self, observer):
-        if observer in self._modelChangeObservers:
-            self._modelChangeObservers.remove(observer)
+        self._modelChangeObservers = [obs for obs in self._modelChangeObservers if obs is not observer]
 
     def notifyModelChanged(self, changeType, details: dict = None):
         """Notify all registered observers that the model topology / sets / surfaces have changed."""

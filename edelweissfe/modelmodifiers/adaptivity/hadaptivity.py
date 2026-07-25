@@ -282,6 +282,8 @@ class ModelModifier(ModelModifierBase):
         for fieldName, nodeField in model.nodeFields.items():
             if "U" not in nodeField:
                 nodeField.createFieldValueEntry("U")
+            if "P" not in nodeField:
+                nodeField.createFieldValueEntry("P")
             U = nodeField["U"]
             old = oldValues.get(fieldName, {})
             new = newValues.get(fieldName, {})
@@ -291,3 +293,5 @@ class ModelModifier(ModelModifierBase):
                     U[idx] = old[node]
                 elif node in new:
                     U[idx] = new[node]
+
+        model._linkFieldVariableObjects(model.nodeSets["all"])
