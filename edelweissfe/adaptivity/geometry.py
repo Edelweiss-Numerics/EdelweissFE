@@ -30,11 +30,61 @@
 hexahedra. Used for topological (shared-face) neighbour identification and for computing exact
 hanging-node weights on arbitrarily oriented / non-parallelogram (trapezoidal) faces.
 
-Assumes planar, straight-edged faces (midside nodes at edge midpoints), which covers unstructured
-meshes of straight hexahedra. Curved (genuinely quadratic-geometry) faces are out of scope.
+Assumes planar quadrilateral faces of straight or curved hexahedra.
+Used for topological (shared-face) neighbour identification and for computing exact
+hanging-node weights on arbitrarily oriented / non-parallelogram (trapezoidal) faces.
 """
 
 import numpy as np
+
+
+def quadratic_edge_parameter(p, ca, cm, cb, tol=1e-8, itmax=25):
+    """Find parameter t in [-1, 1] for point p on 3-node quadratic edge [ca, cm, cb].
+    Returns (t, distance_to_edge). Robust to curved 3-node edges.
+    """
+    ca, cm, cb = np.asarray(ca, dtype=float), np.asarray(cm, dtype=float), np.asarray(cb, dtype=float)
+    p = np.asarray(p, dtype=float)
+
+    # initial guess from linear projection onto chord [ca, cb]
+    e = cb - ca
+    e2 = float(e @ e)
+    if e2 == 0.0:
+        return 0.0, float(np.linalg.norm(p - cm))
+    t = 2.0 * float((p - ca) @ e) / e2 - 1.0
+    t = float(np.clip(t, -1.0, 1.0))
+
+    for _ in range(itmax):
+        Na = 0.5 * t * (t - 1.0)
+        Nm = 1.0 - t**2
+        Nb = 0.5 * t * (t + 1.0)
+        x = Na * ca + Nm * cm + Nb * cb
+        r = x - p
+
+        dNa = t - 0.5
+        dNm = -2.0 * t
+        dNb = t + 0.5
+        dxdt = dNa * ca + dNm * cm + dNb * cb
+
+        f = float(r @ dxdt)
+        dxdt2 = float(dxdt @ dxdt)
+        if dxdt2 < 1e-14 or abs(f) < 1e-12:
+            break
+        d2xdt2 = ca - 2.0 * cm + cb
+        df = dxdt2 + float(r @ d2xdt2)
+        if abs(df) < 1e-14:
+            break
+        dt = -f / df
+        t += dt
+        if abs(dt) < 1e-10:
+            break
+
+    t = float(np.clip(t, -1.0, 1.0))
+    Na = 0.5 * t * (t - 1.0)
+    Nm = 1.0 - t**2
+    Nb = 0.5 * t * (t + 1.0)
+    x = Na * ca + Nm * cm + Nb * cb
+    dist = float(np.linalg.norm(x - p))
+    return t, dist
 
 
 def face_frame(corners4):

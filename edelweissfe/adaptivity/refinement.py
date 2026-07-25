@@ -39,7 +39,11 @@ from collections import defaultdict
 
 import numpy as np
 
-from edelweissfe.adaptivity.geometry import bilinear_inverse, point_in_convex_quad
+from edelweissfe.adaptivity.geometry import (
+    bilinear_inverse,
+    point_in_convex_quad,
+    quadratic_edge_parameter,
+)
 from edelweissfe.adaptivity.hex20topology import (
     EDGES,
     FACEID_TO_FACE,
@@ -59,10 +63,9 @@ def hanging_weights(master_coords, slave_coord):
     if len(mc) == 8:
         xi, eta = bilinear_inverse(p, mc[0:4])
         return quad8_shape(xi, eta)
-    ca, cb = mc[0], mc[2]  # edge: [corner, midside, corner]
-    e = cb - ca
-    t = 2 * float((p - ca) @ e) / float(e @ e) - 1
-    return np.array([0.5 * t * (t - 1), 1 - t**2, 0.5 * t * (t + 1)])
+    ca, cm, cb = mc[0], mc[1], mc[2]  # edge: [corner, midside, corner]
+    t, _ = quadratic_edge_parameter(p, ca, cm, cb)
+    return np.array([0.5 * t * (t - 1.0), 1.0 - t**2, 0.5 * t * (t + 1.0)])
 
 
 class NodeRegistry:
@@ -421,7 +424,7 @@ class AdaptiveMesh:
         return {s: sorted(resolve(s).items()) for s in raw}
 
 
-def classify_hanging_on_element(coarse_conn, registry, candidate_labels):
+def classify_hanging_on_element(coarse_conn, registry, candidate_labels, tol=1e-8):
     """Classify which candidate nodes hang on a coarse element's faces/edges.
 
     Parameters
@@ -454,8 +457,8 @@ def classify_hanging_on_element(coarse_conn, registry, candidate_labels):
         matched = False
         for edge in EDGES:
             ea, em, eb = (coarse_conn[edge[0]], coarse_conn[edge[1]], coarse_conn[edge[2]])
-            on, _ = _lies_on_segment(p, coords[ea], coords[eb])
-            if on:
+            _, dist = quadratic_edge_parameter(p, coords[ea], coords[em], coords[eb])
+            if dist < tol:
                 results.append({"slave": lab, "kind": "edge", "masters": [ea, em, eb]})
                 matched = True
                 break

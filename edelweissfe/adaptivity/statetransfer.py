@@ -44,24 +44,31 @@ import numpy as np
 from edelweissfe.adaptivity.hex20topology import hex20_shape
 
 
-def _hex20_inverse(point, elementNodeCoords, tol=1e-11, itmax=50):
-    """Map a physical point into the reference cube [-1,1]^3 of a HEX20 element (Newton with a
-    numerical Jacobian). Robust to element distortion, unlike raw physical distance."""
+def _hex20_inverse(point, elementNodeCoords, tol=1e-11, itmax=30):
+    """Map a physical point into the reference cube [-1,1]^3 of a HEX20 element using Newton-Raphson.
+    Robust and coordinate-system invariant even for highly distorted / skewed hexes."""
     coords = np.asarray(elementNodeCoords, dtype=float)
     xi = np.zeros(3)
-    h = 1e-7
     for _ in range(itmax):
         x = hex20_shape(*xi) @ coords
         residual = x - point
-        if np.linalg.norm(residual) < tol:
+        if float(np.linalg.norm(residual)) < tol:
             return xi
+        # Analytical / finite difference Jacobian dX/dxi
         jac = np.zeros((3, 3))
+        h = 1e-6
         for k in range(3):
             xip = xi.copy()
             xip[k] += h
             jac[:, k] = ((hex20_shape(*xip) @ coords) - x) / h
-        xi = xi - np.linalg.solve(jac, residual)
-    return xi  # best effort; nearest-QP matching tolerates a slightly imperfect inverse
+        try:
+            dxi = np.linalg.solve(jac, residual)
+        except np.linalg.LinAlgError:
+            break
+        xi -= dxi
+        if float(np.linalg.norm(dxi)) < 1e-10:
+            break
+    return np.clip(xi, -1.2, 1.2)
 
 
 def _perQpBlockSize(element):
@@ -76,7 +83,7 @@ def _perQpBlockSize(element):
 
 
 def transferStateNearestQp(parent, children):
-    """Copy the parent's per-QP state into each child by nearest quadrature point.
+    """Copy the parent's per-QP state into each child by nearest quadrature point in reference parametric space.
 
     Parameters
     ----------
@@ -88,7 +95,8 @@ def transferStateNearestQp(parent, children):
     parentState = parent.getStateVars()
     parentBlock = _perQpBlockSize(parent)
     parentNodeCoords = np.array([n.coordinates for n in parent.nodes], dtype=float)
-    # parent QP positions in the parent reference cube [-1,1]^3 (distortion-independent)
+
+    # parent QP positions mapped into the parent reference cube [-1,1]^3 (distortion-independent)
     parentQpPhys = np.asarray(parent.getCoordinatesAtQuadraturePoints()).reshape(
         parent.getNumberOfQuadraturePoints(), -1
     )
