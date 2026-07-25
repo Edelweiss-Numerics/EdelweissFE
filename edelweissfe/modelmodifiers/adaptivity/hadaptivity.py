@@ -304,3 +304,6 @@ class ModelModifier(ModelModifierBase):
                     U[idx] = new[node]
 
         model._linkFieldVariableObjects(model.nodeSets["all"])
+
+        if model._modelChangeObservers:
+            model.notifyModelChanged("adaptivity", {"action": "refinement"})

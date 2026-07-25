@@ -488,7 +488,7 @@ class EnsightChunkWiseCase:
         self.fileNames = {}
 
         if not os.path.exists(self.caseFileNamePrefix):
-            os.mkdir(self.caseFileNamePrefix)
+            os.makedirs(self.caseFileNamePrefix)
 
     def setCurrentTime(self, timeAndFileSetNumber: int, timeValue: float):
         """Set the current time of the case.
