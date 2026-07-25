@@ -654,7 +654,8 @@ class EnsightChunkWiseCase:
                 else:
                     geoFile = os.path.join(self.caseFileNamePrefix, geometryName + ".geo_****")
                     cf.write(
-                        "model: {:} {:}\n".format(
+                        "model: {:} {:} {:}\n".format(
+                            tAndFSetNum,
                             tAndFSetNum,
                             geoFile,
                         )
@@ -679,8 +680,9 @@ class EnsightChunkWiseCase:
                 else:
                     varFile = os.path.join(self.caseFileNamePrefix, variableName + ".var_****")
                     cf.write(
-                        "{:}: {:} {:} {:}\n".format(
+                        "{:}: {:} {:} {:} {:}\n".format(
                             variableType,
+                            tAndFSetNum,
                             tAndFSetNum,
                             variableName,
                             varFile,
