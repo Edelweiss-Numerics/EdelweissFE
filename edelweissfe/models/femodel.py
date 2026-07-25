@@ -68,12 +68,28 @@ class FEModel:
         self.constraints = {}  #: Constraints in the model.
         self.constraintSets = {}  #: ConstraintsSets in the model.
         self.multiPointConstraints = {}  #: Multi-point (DOF-elimination) constraints in the model.
+        self._modelChangeObservers = []  #: Observers notified when the model is mutated (e.g. AMR).
         self.materials = {}  #: Materials in the model.
         self.analyticalFields = {}  #: AnalyticalFields in the model.
         self.scalarVariables = {}  #: ScalarVariables in the model.
         self.additionalParameters = {}  #: Additional information.
         self.rigidBodies = {}  #: RigidBodies in the model.
         self.domainSize = dimension  #: Spatial dimension of the model
+
+    def registerObserver(self, observer):
+        """Register a :class:`~edelweissfe.models.modelchangeobserver.ModelChangeObserver` to be
+        notified when the model is mutated (e.g. by adaptive mesh refinement)."""
+        if observer not in self._modelChangeObservers:
+            self._modelChangeObservers.append(observer)
+
+    def unregisterObserver(self, observer):
+        if observer in self._modelChangeObservers:
+            self._modelChangeObservers.remove(observer)
+
+    def notifyModelChanged(self, changeType, details: dict = None):
+        """Notify all registered observers that the model topology / sets / surfaces have changed."""
+        for observer in list(self._modelChangeObservers):
+            observer.onModelChanged(self, changeType, details)
 
     def _populateNodeFieldVariablesFromElements(
         self,

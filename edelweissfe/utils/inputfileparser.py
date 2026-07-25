@@ -420,6 +420,8 @@ from edelweissfe.constraints.nodetorigidsurfacepenalty import inputLanguage  # n
 from edelweissfe.constraints.nodetodiscreterigidbodypenalty import inputLanguage  # noqa: F811,E402
 from edelweissfe.constraints.nodetodeformablesurfacepenalty import inputLanguage  # noqa: F811,E402
 from edelweissfe.constraints.tie import inputLanguage  # noqa: F811,E402
+from edelweissfe.constraints.hangingnode import inputLanguage  # noqa: F811,E402
+from edelweissfe.constraints.adaptivity import inputLanguage  # noqa: F811,E402
 
 # isort: on
 

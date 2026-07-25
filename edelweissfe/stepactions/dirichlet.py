@@ -113,8 +113,19 @@ class StepAction(DirichletBase):
         self.possibleComponents = [str(i + 1) for i in range(self.fieldSize)]
 
         self._components = None
+        self._journal = journal
 
         self.updateStepAction(action, jobInfo, model, fieldOutputController, journal)
+
+        # re-resolve the node set + prescribed values if the mesh is mutated mid-analysis (e.g. AMR
+        # adds new boundary nodes and rebuilds the node set object) -- fixes Finding 5
+        model.registerObserver(self)
+
+    def onModelChanged(self, model, changeType, details=None):
+        """Re-point the (possibly rebuilt) node set and re-size the prescribed values so the BC
+        covers any new boundary nodes after a model change."""
+        self.nSet = model.nodeSets[self.action["nSet"]]
+        self.updateStepAction(self.action, None, model, None, self._journal)
 
     @property
     def components(

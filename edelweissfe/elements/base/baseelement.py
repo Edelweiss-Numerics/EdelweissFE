@@ -320,6 +320,30 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
     ):
         """Rest to the last valid state."""
 
+    def getStateVars(self) -> np.ndarray:
+        """Return a copy of the element's flat (converged) quadrature-point state-variable buffer.
+
+        The buffer is laid out as ``nQuadraturePoints`` contiguous per-point blocks. Used by adaptive
+        mesh refinement to hand history down to child elements. Override in concrete elements that
+        carry a state buffer.
+
+        Returns
+        -------
+        np.ndarray
+            A copy of the converged state-variable buffer.
+        """
+        raise NotImplementedError("This element does not expose a state-variable buffer.")
+
+    def setStateVars(self, values: np.ndarray):
+        """Overwrite the element's (converged and trial) state-variable buffer.
+
+        Parameters
+        ----------
+        values
+            The new state-variable buffer, same size as :meth:`getStateVars`.
+        """
+        raise NotImplementedError("This element does not expose a state-variable buffer.")
+
     @abstractmethod
     def getResultArray(self, result: str, quadraturePoint: int, getPersistentView: bool = True) -> np.ndarray:
         """Get the array of a result, possibly as a persistent view which is continiously

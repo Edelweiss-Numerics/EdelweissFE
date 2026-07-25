@@ -315,6 +315,23 @@ cdef class MarmotElementWrapper:
 
         self._stateVars[:] = self._stateVarsTemp
 
+    def getStateVars(self):
+        """Return a copy of the converged quadrature-point state-variable buffer."""
+
+        return np.asarray(self._stateVars).copy()
+
+    def setStateVars(self, double[::1] values):
+        """Overwrite the converged and trial state-variable buffers in place (so the MarmotElement's
+        assigned pointer to the trial buffer stays valid). Used by adaptive refinement to transfer
+        history to child elements."""
+
+        if values.shape[0] != self._stateVars.shape[0]:
+            raise ValueError(
+                "setStateVars: expected {:} state variables, got {:}".format(
+                    self._stateVars.shape[0], values.shape[0]))
+        self._stateVars[:] = values
+        self._stateVarsTemp[:] = values
+
     def resetToLastValidState(self, ):
         """Reset to the last valid state."""
 

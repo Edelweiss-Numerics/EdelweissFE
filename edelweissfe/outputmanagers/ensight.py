@@ -836,25 +836,47 @@ class OutputManager(OutputManagerBase):
         if not self.overwrite:
             self.exportName = "{:}_{:}".format(self.name, datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
 
-        for definition in perNodeDefs:
-            fieldOutput = fieldOutputController.fieldOutputs[definition["fieldOutput"]]
+        # store the definitions so parts + variable jobs can be rebuilt when the mesh changes (AMR)
+        self._perNodeDefs = perNodeDefs
+        self._perElementDefs = perElementDefs
+        self._fieldOutputController = fieldOutputController
+        self._configPart = part
+        self._transientCfg = transient
+        self._nameKwarg = kwargs.get("name", None)
+        self._meshSignature = None
+        self._buildVariableJobs()
 
-            nEntries, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
+    def _buildVariableJobs(self):
+        """(Re)create the per-node/per-element variable jobs from the stored definitions against the
+        current geometry parts. Called at setup and again whenever the mesh changes (AMR)."""
+        for definition in self._perNodeDefs:
+            fieldOutput = self._fieldOutputController.fieldOutputs[definition["fieldOutput"]]
+            _, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
             if self.model.domainSize == 2 and varSize == 2:
                 varSize = 3
+            name = (self._nameKwarg or fieldOutput.name).replace(" ", "_")
+            self.createPerNodeOutput(fieldOutput, self._configPart, name, transient=self._transientCfg, varSize=varSize)
 
-            fieldOutputName = kwargs.get("name", fieldOutput.name).replace(" ", "_")
-            self.createPerNodeOutput(fieldOutput, part, fieldOutputName, transient=transient, varSize=varSize)
-
-        for definition in perElementDefs:
-            fieldOutput = fieldOutputController.fieldOutputs[definition["fieldOutput"]]
-
-            nEntries, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
+        for definition in self._perElementDefs:
+            fieldOutput = self._fieldOutputController.fieldOutputs[definition["fieldOutput"]]
+            _, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
             if self.model.domainSize == 2 and varSize == 2:
                 varSize = 3
+            name = (self._nameKwarg or fieldOutput.name).replace(" ", "_")
+            self.createPerElementOutput(
+                fieldOutput, self._configPart, name, transient=self._transientCfg, varSize=varSize
+            )
 
-            fieldOutputName = kwargs.get("name", fieldOutput.name).replace(" ", "_")
-            self.createPerElementOutput(fieldOutput, part, fieldOutputName, transient=transient, varSize=varSize)
+    def _rebuildForMeshChange(self):
+        """Rebuild geometry parts + variable jobs after an AMR mesh change, so both stay consistent
+        with the current (refined) mesh."""
+        self.elSetToEnsightPartMappings = {}
+        self.nSetToEnsightPartMappings = {}
+        self.rigidBodyToEnsightPartMappings = {}
+        self._transientPerNodeVariableJobs = defaultdict(list)
+        self._transientPerElementVariableJobs = defaultdict(list)
+        self.geometryParts = self._createGeometryParts(1)
+        self._buildVariableJobs()
 
     def updateDefinition(self, **kwargs: dict):
         # Determine the type
@@ -1000,12 +1022,8 @@ class OutputManager(OutputManagerBase):
 
     def initializeJob(self):
         self.ensightCase = EnsightChunkWiseCase(self.exportName)
-        self.ensightCase.setCurrentTime(self.staticTAndFSetNumber, self.model.time)
-
-        geometry = EnsightGeometry("geometry", "EdelweissFE", "*export*", ensightPartList=self.geometryParts)
-        geometryTimesetNumber = self.staticTAndFSetNumber
-
-        self.ensightCase.writeGeometryTrendChunk(geometry, geometryTimesetNumber)
+        # Geometry is written per output step (on the transient time set) rather than once, so it can
+        # change with adaptive mesh refinement and stay 1:1 aligned with the variable time steps.
 
     def initializeStep(self, step):
         if self.name in step.actions["options"] or "Ensight" in step.actions["options"]:
@@ -1032,7 +1050,16 @@ class OutputManager(OutputManagerBase):
 
     def writeOutput(self, model: FEModel):
         self.timeAtLastOutput = model.time
-        self.ensightCase.setCurrentTime(self.transientTAndFSetNumber, model.time)
+
+        # rebuild parts + variable jobs if the mesh changed (AMR), so geometry and variables match
+        signature = (len(model.elements), len(model.nodes))
+        if self._meshSignature is not None and signature != self._meshSignature:
+            self._rebuildForMeshChange()
+        self._meshSignature = signature
+
+        # write the current geometry every step (transient), aligned 1:1 with the variables below
+        geometry = EnsightGeometry("geometry", "EdelweissFE", "*export*", ensightPartList=self.geometryParts)
+        self.ensightCase.writeGeometryTrendChunk(geometry, self.transientTAndFSetNumber)
 
         for (
             resultName,
@@ -1075,12 +1102,19 @@ class OutputManager(OutputManagerBase):
             self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientTAndFSetNumber)
             del enSightVariable
 
-        # intermediate save of the case
-        if self.intermediateSaveInterval:
-            self.intermediateSaveIntervalCounter += 1
-            if self.intermediateSaveIntervalCounter >= self.intermediateSaveInterval:
-                self.ensightCase.finalize(replaceTimeValuesByEnumeration=False, closeFileHandes=False)
-                self.intermediateSaveIntervalCounter = 0
+        # Commit the step ONLY after geometry + all variables are written: append the time value last
+        # so a crash mid-write (e.g. a material return-mapping abort) never leaves a partial step
+        # counted. This keeps geometry-steps, variable-steps and time-values 1:1 -- required by the
+        # Ensight Gold reader for changing (AMR) geometry, which otherwise reports "undefined geometry
+        # file line" once the streams drift.
+        self.ensightCase.setCurrentTime(self.transientTAndFSetNumber, model.time)
+
+        # Rewrite the small .case every step so the on-disk step count always matches the committed
+        # data even if the job aborts before finalizeJob() (the L-panel dies on GCDP return-mapping).
+        # A trailing partial geometry step written just before an abort is simply not counted here, so
+        # the reader never overruns it. The .case is tiny text and the data files are already appended
+        # every step, so there is no benefit to gating this behind intermediateSaveInterval.
+        self.ensightCase.finalize(replaceTimeValuesByEnumeration=False, closeFileHandes=False)
 
     def finalizeStep(
         self,
