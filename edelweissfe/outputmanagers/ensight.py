@@ -601,7 +601,6 @@ class EnsightChunkWiseCase:
 
             multiFileName = os.path.join(self.caseFileNamePrefix, f"{ensightVariable.name}.var_{stepIndex:04d}")
             with open(multiFileName, mode="wb") as f:
-                writeC80(f, "C Binary")
                 ensightVariable.writeToFile(f)
 
     def finalize(self, replaceTimeValuesByEnumeration: bool = True, closeFileHandes: bool = True):
@@ -654,8 +653,7 @@ class EnsightChunkWiseCase:
                 else:
                     geoFile = os.path.join(self.caseFileNamePrefix, geometryName + ".geo_****")
                     cf.write(
-                        "model: {:} {:} {:}\n".format(
-                            tAndFSetNum,
+                        "model: {:} {:}\n".format(
                             tAndFSetNum,
                             geoFile,
                         )
@@ -680,9 +678,8 @@ class EnsightChunkWiseCase:
                 else:
                     varFile = os.path.join(self.caseFileNamePrefix, variableName + ".var_****")
                     cf.write(
-                        "{:}: {:} {:} {:} {:}\n".format(
+                        "{:}: {:} {:} {:}\n".format(
                             variableType,
-                            tAndFSetNum,
                             tAndFSetNum,
                             variableName,
                             varFile,
