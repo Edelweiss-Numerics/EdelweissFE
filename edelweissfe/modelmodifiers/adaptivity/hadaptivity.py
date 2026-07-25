@@ -143,6 +143,14 @@ class ModelModifier(ModelModifierBase):
         self._octantParams = octant_children_param()  # parent-parametric coords of each child's nodes
 
     def updateModel(self, model: FEModel, step, timeStep: float) -> bool:
+        # Do not re-refine if the solver is re-trying the exact same time state after a cutback
+        if (
+            hasattr(self, "_lastRefinedTime")
+            and self._lastRefinedTime is not None
+            and abs(model.time - self._lastRefinedTime) < 1e-12
+        ):
+            return False
+
         # only adapt once a non-trivial solution has developed; the hook is called on increments
         # whose converged state is not yet written back (all-zero), and marking on a zero state is
         # meaningless. This also makes AMR follow the *developed* field, as intended.
@@ -186,6 +194,7 @@ class ModelModifier(ModelModifierBase):
             "hadaptivity",
             0,
         )
+        self._lastRefinedTime = float(model.time)
         return True
 
     def _materialize(self, model: FEModel, records: dict):
