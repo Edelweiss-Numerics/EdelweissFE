@@ -1095,13 +1095,19 @@ class OutputManager(OutputManagerBase):
 
         # rebuild parts + variable jobs if the mesh changed (AMR), so geometry and variables match
         signature = (len(model.elements), len(model.nodes))
+        mesh_changed = False
         if self._meshSignature is not None and signature != self._meshSignature:
             self._rebuildForMeshChange()
+            mesh_changed = True
+        elif self._meshSignature is None:
+            mesh_changed = True
         self._meshSignature = signature
 
-        # write the current geometry every step (transient), aligned 1:1 with the variables below
-        geometry = EnsightGeometry("geometry", "EdelweissFE", "*export*", ensightPartList=self.geometryParts)
-        self.ensightCase.writeGeometryTrendChunk(geometry, self.transientTAndFSetNumber)
+        # write the current geometry only if it changed
+        if mesh_changed:
+            geometry = EnsightGeometry("geometry", "EdelweissFE", "*export*", ensightPartList=self.geometryParts)
+            self.ensightCase.writeGeometryTrendChunk(geometry, self.transientTAndFSetNumber)
+            self.ensightCase.setCurrentTime(self.transientTAndFSetNumber, model.time)
 
         for (
             resultName,
@@ -1144,13 +1150,7 @@ class OutputManager(OutputManagerBase):
             self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientVariableTAndFSetNumber)
             del enSightVariable
 
-        # Commit the step ONLY after geometry + all variables are written: append the time value last
-        # so a crash mid-write (e.g. a material return-mapping abort) never leaves a partial step
-        # counted. This keeps geometry-steps, variable-steps and time-values 1:1 -- required by the
-        # Ensight Gold reader for changing (AMR) geometry, which otherwise reports "undefined geometry
-        # file line" once the streams drift.
-        # register the current time for both geometry and variables
-        self.ensightCase.setCurrentTime(self.transientTAndFSetNumber, model.time)
+        # register the current time for variables
         self.ensightCase.setCurrentTime(self.transientVariableTAndFSetNumber, model.time)
 
         # Rewrite the small .case every step so the on-disk step count always matches the committed
