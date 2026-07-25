@@ -363,6 +363,12 @@ class NodeFieldOutput(_FieldOutputBase):
 
     def onModelChanged(self, model, changeType, details=None):
         """Re-bind NodeField reference upon AMR mesh mutation."""
+        if hasattr(self.associatedSet, "name"):
+            setName = self.associatedSet.name
+            if setName in model.nodeSets:
+                self.associatedSet = model.nodeSets[setName]
+            elif setName in model.elementSets:
+                self.associatedSet = model.elementSets[setName]
         if self.fieldName in model.nodeFields:
             self._nodeField = model.nodeFields[self.fieldName].subset(self.associatedSet)
 
