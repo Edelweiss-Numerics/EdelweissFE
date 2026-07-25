@@ -823,8 +823,10 @@ class OutputManager(OutputManagerBase):
         self.intermediateSaveIntervalCounter = 0
         self.fieldOutputController = fieldOutputController
         self.journal = journal
+        self.overwrite = True
 
         self.transientTAndFSetNumber = 1
+        self.transientVariableTAndFSetNumber = 2
         self.staticTAndFSetNumber = 2
 
         self.elSetToEnsightPartMappings = {}
@@ -1115,7 +1117,7 @@ class OutputManager(OutputManagerBase):
                     result,
                 )
             enSightVariable = EnsightPerNodeVariable(resultName, resultsByParts, perNodeVariableJob["varSize"])
-            self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientTAndFSetNumber)
+            self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientVariableTAndFSetNumber)
             del enSightVariable
 
         for (
@@ -1137,7 +1139,7 @@ class OutputManager(OutputManagerBase):
                 resultsByParts[part.partNumber] = partResultsByElementShape
 
             enSightVariable = EnsightPerElementVariable(resultName, resultsByParts, perElementVariableJob["varSize"])
-            self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientTAndFSetNumber)
+            self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientVariableTAndFSetNumber)
             del enSightVariable
 
         # Commit the step ONLY after geometry + all variables are written: append the time value last
@@ -1145,7 +1147,9 @@ class OutputManager(OutputManagerBase):
         # counted. This keeps geometry-steps, variable-steps and time-values 1:1 -- required by the
         # Ensight Gold reader for changing (AMR) geometry, which otherwise reports "undefined geometry
         # file line" once the streams drift.
+        # register the current time for both geometry and variables
         self.ensightCase.setCurrentTime(self.transientTAndFSetNumber, model.time)
+        self.ensightCase.setCurrentTime(self.transientVariableTAndFSetNumber, model.time)
 
         # Rewrite the small .case every step so the on-disk step count always matches the committed
         # data even if the job aborts before finalizeJob() (the L-panel dies on GCDP return-mapping).
