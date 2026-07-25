@@ -609,7 +609,7 @@ class EnsightChunkWiseCase:
                     else:
                         cf.write("{:}".format(i) + "\n")
 
-            if not self.writeTransientSingleFiles:
+            if self.writeTransientSingleFiles:
                 cf.write("FILE\n")
                 for timeSet in self.timeAndFileSets.values():
                     cf.write("file set: {:}\n".format(timeSet.number))
@@ -617,46 +617,28 @@ class EnsightChunkWiseCase:
 
             cf.write("GEOMETRY\n")
             for geometryName, tAndFSetNum in self.geometryTrends.items():
-                if self.writeTransientSingleFiles:
-                    cf.write(
-                        "model: {:} {:}\n".format(
-                            tAndFSetNum,
-                            os.path.join(self.caseFileNamePrefix, geometryName + ".geo"),
-                        )
+                cf.write(
+                    "model: {:} {:} {:}\n".format(
+                        tAndFSetNum,
+                        tAndFSetNum,
+                        os.path.join(self.caseFileNamePrefix, geometryName + ".geo"),
                     )
-                else:
-                    cf.write(
-                        "model: {:} {:} {:}\n".format(
-                            tAndFSetNum,
-                            tAndFSetNum,
-                            os.path.join(self.caseFileNamePrefix, geometryName + ".geo"),
-                        )
-                    )
+                )
 
             cf.write("VARIABLE\n")
             for variableName, (
                 tAndFSetNum,
                 variableType,
             ) in self.variableTrends.items():
-                if self.writeTransientSingleFiles:
-                    cf.write(
-                        "{:}: {:} {:} {:}.var\n".format(
-                            variableType,
-                            tAndFSetNum,
-                            variableName,
-                            os.path.join(self.caseFileNamePrefix, variableName),
-                        )
+                cf.write(
+                    "{:}: {:} {:} {:} {:}.var\n".format(
+                        variableType,
+                        tAndFSetNum,
+                        tAndFSetNum,
+                        variableName,
+                        os.path.join(self.caseFileNamePrefix, variableName),
                     )
-                else:
-                    cf.write(
-                        "{:}: {:} {:} {:} {:}.var\n".format(
-                            variableType,
-                            tAndFSetNum,
-                            tAndFSetNum,
-                            variableName,
-                            os.path.join(self.caseFileNamePrefix, variableName),
-                        )
-                    )
+                )
 
 
 def createUnstructuredPartFromElementSet(setName, elementSet: list, partID: int):
@@ -835,20 +817,21 @@ class OutputManager(OutputManagerBase):
         if configurations is None:
             configurations = []
 
-        self._configNSet = None
-        self._configElSet = None
         # configuration keyword should only be allowed once
         for configuration in configurations:
             self.intermediateSaveInterval = configuration["intermediateSaveInterval"]
             transient = configuration["transient"]
             self.overwrite = configuration["overwrite"]
 
+            # if bool(definition["nSet"]) and bool(definition["elSet"]):
+            #     raise Exception(
+            #         f"During parsing of keyword {keywordIdentifier}output ({moduleLevelKeywordIdentifier}ensight): Specify either nSet OR elSet."
+            #     )
+
             if configuration["nSet"]:
-                self._configNSet = configuration["nSet"]
-                part = self.nSetToEnsightPartMappings[self._configNSet]
+                part = self.nSetToEnsightPartMappings[configuration["nSet"]]
             elif configuration["elSet"]:
-                self._configElSet = configuration["elSet"]
-                part = self.elSetToEnsightPartMappings[self._configElSet]
+                part = self.elSetToEnsightPartMappings[configuration["elSet"]]
 
         if not self.overwrite:
             self.exportName = "{:}_{:}".format(self.name, datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
@@ -872,14 +855,7 @@ class OutputManager(OutputManagerBase):
             if self.model.domainSize == 2 and varSize == 2:
                 varSize = 3
             name = (self._nameKwarg or fieldOutput.name).replace(" ", "_")
-            part = None
-            if definition.get("nSet"):
-                part = self.nSetToEnsightPartMappings.get(definition["nSet"])
-            elif definition.get("elSet"):
-                part = self.elSetToEnsightPartMappings.get(definition["elSet"])
-            if not part:
-                part = self._configPart
-            self.createPerNodeOutput(fieldOutput, part, name, transient=self._transientCfg, varSize=varSize)
+            self.createPerNodeOutput(fieldOutput, self._configPart, name, transient=self._transientCfg, varSize=varSize)
 
         for definition in self._perElementDefs:
             fieldOutput = self._fieldOutputController.fieldOutputs[definition["fieldOutput"]]
@@ -887,14 +863,9 @@ class OutputManager(OutputManagerBase):
             if self.model.domainSize == 2 and varSize == 2:
                 varSize = 3
             name = (self._nameKwarg or fieldOutput.name).replace(" ", "_")
-            part = None
-            if definition.get("elSet"):
-                part = self.elSetToEnsightPartMappings.get(definition["elSet"])
-            elif definition.get("nSet"):
-                part = self.nSetToEnsightPartMappings.get(definition["nSet"])
-            if not part:
-                part = self._configPart
-            self.createPerElementOutput(fieldOutput, part, name, transient=self._transientCfg, varSize=varSize)
+            self.createPerElementOutput(
+                fieldOutput, self._configPart, name, transient=self._transientCfg, varSize=varSize
+            )
 
     def _rebuildForMeshChange(self):
         """Rebuild geometry parts + variable jobs after an AMR mesh change, so both stay consistent
@@ -905,12 +876,6 @@ class OutputManager(OutputManagerBase):
         self._transientPerNodeVariableJobs = defaultdict(list)
         self._transientPerElementVariableJobs = defaultdict(list)
         self.geometryParts = self._createGeometryParts(1)
-
-        if self._configElSet and self._configElSet in self.elSetToEnsightPartMappings:
-            self._configPart = self.elSetToEnsightPartMappings[self._configElSet]
-        elif self._configNSet and self._configNSet in self.nSetToEnsightPartMappings:
-            self._configPart = self.nSetToEnsightPartMappings[self._configNSet]
-
         self._buildVariableJobs()
 
     def updateDefinition(self, **kwargs: dict):
@@ -1170,8 +1135,7 @@ class OutputManager(OutputManagerBase):
 
         elSetParts = []
         partCounter = firstPartID
-        for setName in sorted(elementSets.keys()):
-            elSet = elementSets[setName]
+        for setName, elSet in elementSets.items():
             elSetPart = createUnstructuredPartFromElementSet(setName, elSet, partCounter)
             self.elSetToEnsightPartMappings[setName] = elSetPart
             elSetParts.append(elSetPart)
@@ -1180,16 +1144,14 @@ class OutputManager(OutputManagerBase):
         nodeSets = model.nodeSets
 
         nodeSetParts = []
-        for setName in sorted(nodeSets.keys()):
-            nodeSet = nodeSets[setName]
+        for setName, nodeSet in nodeSets.items():
             nodeSetPart = createUnstructuredPartFromNodeSet(setName, nodeSet, partCounter)
             self.nSetToEnsightPartMappings[setName] = nodeSetPart
             nodeSetParts.append(nodeSetPart)
             partCounter += 1
 
         rigidBodyParts = []
-        for bodyName in sorted(model.rigidBodies.keys()):
-            body = model.rigidBodies[bodyName]
+        for bodyName, body in model.rigidBodies.items():
             bodyPart = createUnstructuredPartFromRigidBody(bodyName, body, partCounter)
             self.rigidBodyToEnsightPartMappings[bodyName] = bodyPart
             rigidBodyParts.append(bodyPart)
