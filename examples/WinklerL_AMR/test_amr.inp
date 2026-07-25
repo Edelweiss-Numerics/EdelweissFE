@@ -48,7 +48,7 @@ concrete
 *section, name=secSteel, material=steelLoad, type=solid
 reinforced_concrete
 
-*constraint, type=adaptivity, name=amr
+*modelModifier, type=hAdaptivity, name=amr
 result=omega
 expression='x > 0.5'
 elSet=concrete

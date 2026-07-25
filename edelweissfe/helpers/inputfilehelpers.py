@@ -281,6 +281,7 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
         model = getGeneratorFunction(generatorType)(generatorDefinition, model, journal, *args, **kwargs)
 
     model = abqModelConstructor.createConstraintsFromInputFile(model, inputfile)
+    model = abqModelConstructor.createModelModifiersFromInputFile(model, inputfile)
     return model
 
 

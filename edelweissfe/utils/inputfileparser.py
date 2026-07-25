@@ -426,6 +426,19 @@ from edelweissfe.constraints.adaptivity import inputLanguage  # noqa: F811,E402
 # isort: on
 
 """
+*modelModifier
+"""
+kw = inputLanguage.addKeyword("modelModifier", "define a model modifier")
+kw.addRequiredArg("type", "model modifier type", str)
+kw.addRequiredDatalines("definition of the model modifier", "")
+kw.addOptionalArg("name", "name of the model modifier", str, None)
+
+# isort: off
+from edelweissfe.modelmodifiers.adaptivity.hadaptivity import inputLanguage  # noqa: F811,E402
+
+# isort: on
+
+"""
 *configurePlots
 """
 kw = inputLanguage.addKeyword("configurePlots", "customize the figures and axes")

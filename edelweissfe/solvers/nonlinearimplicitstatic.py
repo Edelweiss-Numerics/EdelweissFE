@@ -159,13 +159,15 @@ class NIST(NonlinearSolverBase):
         try:
             for timeStep in step.getTimeStep():
                 # NOTE: materialize the list before any() -- a generator would short-circuit at
-                # the first constraint reporting a change, silently skipping updateConnectivity()
-                # for every remaining constraint (their connectivity would stay stale/empty).
+                # the first modifier/constraint reporting a change.
+                modelHasChanged = any(
+                    [modifier.updateModel(model, step, timeStep) for modifier in model.modelModifiers.values()]
+                )
                 connectivityHasChanged = any(
                     [constraint.updateConnectivity(model) for constraint in model.constraints.values()]
                 )
 
-                if connectivityHasChanged or self.theDofManager is None:
+                if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
                     self.journal.message("Creating monolithic equation system", self.identification, 0)
                     self.theDofManager = DofManager(
                         model.nodeFields.values(),

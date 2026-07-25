@@ -47,6 +47,7 @@ from edelweissfe.config.analyticalfields import getAnalyticalFieldFactoryByName
 from edelweissfe.config.constraints import getConstraintClass
 from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.materiallibrary import getMaterialClass
+from edelweissfe.config.modelmodifiers import getModelModifierClass
 from edelweissfe.config.sections import getSectionFactoryByName
 from edelweissfe.constraints.base.multipointconstraintbase import (
     MultiPointConstraintBase,
@@ -354,6 +355,40 @@ class AbqModelConstructor:
                 model.multiPointConstraints[name] = constraint
             else:
                 model.constraints[name] = constraint
+
+        return model
+
+    def createModelModifiersFromInputFile(self, model: FEModel, inputFile: dict) -> dict:
+        """Collects model modifier definitions from the input file.
+
+        Parameters
+        ----------
+        model
+            A dictionary containing the model tree.
+        inputFile
+            A dictionary containing the input file tree.
+
+        Returns
+        -------
+        dict
+            The updated model tree.
+        """
+
+        for definition in inputFile["modelModifier"]:
+            modifierKwArgs = CaseInsensitiveDict(definition.copy())
+
+            name = modifierKwArgs.pop("name")
+            modifierType = modifierKwArgs.pop("type")
+            data = modifierKwArgs.pop("datalines")
+
+            module = inputLanguage["modelModifier"].getModule(modifierType)
+
+            args, kwargs = module.parseDatalines(data)
+
+            modifierClass = getModelModifierClass(modifierType)
+            modifier = modifierClass(name, model, **kwargs)
+
+            model.modelModifiers[name] = modifier
 
         return model
 

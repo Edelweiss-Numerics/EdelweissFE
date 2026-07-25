@@ -68,6 +68,7 @@ class FEModel:
         self.constraints = {}  #: Constraints in the model.
         self.constraintSets = {}  #: ConstraintsSets in the model.
         self.multiPointConstraints = {}  #: Multi-point (DOF-elimination) constraints in the model.
+        self.modelModifiers = {}  #: Model modifiers (dynamic topology / mesh mutation entities) in the model.
         self._modelChangeObservers = []  #: Observers notified when the model is mutated (e.g. AMR).
         self.materials = {}  #: Materials in the model.
         self.analyticalFields = {}  #: AnalyticalFields in the model.
