@@ -106,7 +106,8 @@ class StepAction(NodalLoadBase):
         nodeSets = model.nodeSets
 
         self._field = action["field"]
-        self._nSet = nodeSets[action["nSet"]]
+        self._nSetName = action["nSet"]
+        self._nSet = nodeSets[self._nSetName]
 
         self._fieldSize = getFieldSize(self._field, model.domainSize)
 
@@ -118,6 +119,12 @@ class StepAction(NodalLoadBase):
         self.possibleComponents = [str(i + 1) for i in range(self._fieldSize)]
 
         self.updateStepAction(action, jobInfo, model, fieldOutputController, journal)
+        model.registerObserver(self)
+
+    def onModelChanged(self, model, changeType, details=None):
+        """Re-bind the node set if it was updated by an AMR mesh change."""
+        if self._nSetName in model.nodeSets:
+            self._nSet = model.nodeSets[self._nSetName]
 
     def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
         """Update the step action.

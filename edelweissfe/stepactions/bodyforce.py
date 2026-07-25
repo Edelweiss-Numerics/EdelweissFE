@@ -65,7 +65,8 @@ class StepAction(BodyLoadBase):
     def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
         self._name = name
         self._forceAtStepStart = 0.0
-        self._elSet = model.elementSets[action["elSet"]]
+        self._elSetName = action["elSet"]
+        self._elSet = model.elementSets[self._elSetName]
         load = np.fromstring(action["forceVector"], sep=",", dtype=np.double)
 
         if len(load) < model.domainSize:
@@ -79,6 +80,12 @@ class StepAction(BodyLoadBase):
             self._amplitude = lambda x: x
 
         self._idle = False
+        model.registerObserver(self)
+
+    def onModelChanged(self, model, changeType, details=None):
+        """Re-bind the element set if it was updated by an AMR mesh change."""
+        if self._elSetName in model.elementSets:
+            self._elSet = model.elementSets[self._elSetName]
 
     def applyAtStepEnd(self, model, stepMagnitude=None):
         if not self._idle:

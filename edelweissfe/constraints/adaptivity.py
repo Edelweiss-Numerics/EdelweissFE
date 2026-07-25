@@ -111,8 +111,13 @@ class Constraint(ConstraintBase):
             if setName not in self._allLikeSets:
                 self._mesh.define_node_set(setName, [n.label for n in nodeSet])
 
-        # track element-based surfaces so surface loads stay consistent under refinement (Finding 2)
+        # track element sets so user element sets propagate child elements on refinement (Finding 1)
         elToEid = {el: eid for eid, el in self._eidToEl.items()}
+        for setName, elementSet in model.elementSets.items():
+            eids = [elToEid[el] for el in elementSet if el in elToEid]
+            self._mesh.define_element_set(setName, eids)
+
+        # track element-based surfaces so surface loads stay consistent under refinement (Finding 2)
         for surfaceName, surface in model.surfaces.items():
             pairs = [
                 (elToEid[el], faceID) for faceID, elementSet in surface.items() for el in elementSet if el in elToEid
@@ -240,8 +245,9 @@ class Constraint(ConstraintBase):
                 if label in newNodes and any(node not in newValues[f] for f in oldValues):
                     N = hex20_shape(*childParams[i])
                     for fieldName, vals in oldValues.items():
-                        parentVals = np.array([vals[pn] for pn in parentEl.nodes])
-                        newValues[fieldName][node] = N @ parentVals
+                        if all(pn in vals for pn in parentEl.nodes):
+                            parentVals = np.array([vals[pn] for pn in parentEl.nodes])
+                            newValues[fieldName][node] = N @ parentVals
 
             model.elements[child.elNumber] = child
             self._eidToEl[eid] = child
@@ -273,16 +279,17 @@ class Constraint(ConstraintBase):
                 members = [model.nodes[label] for label in sorted(labels) if label not in slaves]
                 model.nodeSets[setName] = NodeSet(setName, members)
 
-        # all-encompassing node sets (incl. the 'all' used to build node fields) must contain the new
-        # nodes; nothing caches them by object, so rebuilding them wholesale is safe
+        # sync all element sets (user sets like 'concrete' and all-encompassing sets) -- Finding 1
         from edelweissfe.sets.elementset import ElementSet
 
         allNodes = list(model.nodes.values())
         for setName in self._allLikeSets | {"all"}:
             model.nodeSets[setName] = NodeSet(setName, allNodes)
-        for setName, elementSet in list(model.elementSets.items()):
-            if len(elementSet) > 0 and setName == "all":
-                model.elementSets["all"] = ElementSet("all", list(model.elements.values()))
+        for setName, eids in mesh.elementSets.items():
+            if setName in model.elementSets:
+                elements = [self._eidToEl[eid] for eid in eids if eid in self._eidToEl]
+                model.elementSets[setName] = ElementSet(setName, elements)
+        model.elementSets["all"] = ElementSet("all", list(model.elements.values()))
 
         # rebuild node fields to include the new nodes, then restore the warm start: converged values
         # on the retained nodes and interpolated values on the new nodes (Finding 1)
