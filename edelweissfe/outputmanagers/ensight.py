@@ -644,6 +644,8 @@ class EnsightChunkWiseCase:
                 for timeSet in self.timeAndFileSets.values():
                     cf.write("file set: {:}\n".format(timeSet.number))
                     cf.write("number of steps: {:}\n".format(len(timeSet.timeValues)))
+                    cf.write("filename start number: {:}\n".format(timeSet.fileNameStartNumber))
+                    cf.write("filename increment: {:}\n".format(timeSet.fileNameNumberIncrement))
 
             cf.write("GEOMETRY\n")
             for geometryName, tAndFSetNum in self.geometryTrends.items():
