@@ -817,21 +817,20 @@ class OutputManager(OutputManagerBase):
         if configurations is None:
             configurations = []
 
+        self._configNSet = None
+        self._configElSet = None
         # configuration keyword should only be allowed once
         for configuration in configurations:
             self.intermediateSaveInterval = configuration["intermediateSaveInterval"]
             transient = configuration["transient"]
             self.overwrite = configuration["overwrite"]
 
-            # if bool(definition["nSet"]) and bool(definition["elSet"]):
-            #     raise Exception(
-            #         f"During parsing of keyword {keywordIdentifier}output ({moduleLevelKeywordIdentifier}ensight): Specify either nSet OR elSet."
-            #     )
-
             if configuration["nSet"]:
-                part = self.nSetToEnsightPartMappings[configuration["nSet"]]
+                self._configNSet = configuration["nSet"]
+                part = self.nSetToEnsightPartMappings[self._configNSet]
             elif configuration["elSet"]:
-                part = self.elSetToEnsightPartMappings[configuration["elSet"]]
+                self._configElSet = configuration["elSet"]
+                part = self.elSetToEnsightPartMappings[self._configElSet]
 
         if not self.overwrite:
             self.exportName = "{:}_{:}".format(self.name, datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
@@ -876,6 +875,12 @@ class OutputManager(OutputManagerBase):
         self._transientPerNodeVariableJobs = defaultdict(list)
         self._transientPerElementVariableJobs = defaultdict(list)
         self.geometryParts = self._createGeometryParts(1)
+
+        if self._configElSet and self._configElSet in self.elSetToEnsightPartMappings:
+            self._configPart = self.elSetToEnsightPartMappings[self._configElSet]
+        elif self._configNSet and self._configNSet in self.nSetToEnsightPartMappings:
+            self._configPart = self.nSetToEnsightPartMappings[self._configNSet]
+
         self._buildVariableJobs()
 
     def updateDefinition(self, **kwargs: dict):
@@ -1135,7 +1140,8 @@ class OutputManager(OutputManagerBase):
 
         elSetParts = []
         partCounter = firstPartID
-        for setName, elSet in elementSets.items():
+        for setName in sorted(elementSets.keys()):
+            elSet = elementSets[setName]
             elSetPart = createUnstructuredPartFromElementSet(setName, elSet, partCounter)
             self.elSetToEnsightPartMappings[setName] = elSetPart
             elSetParts.append(elSetPart)
@@ -1144,14 +1150,16 @@ class OutputManager(OutputManagerBase):
         nodeSets = model.nodeSets
 
         nodeSetParts = []
-        for setName, nodeSet in nodeSets.items():
+        for setName in sorted(nodeSets.keys()):
+            nodeSet = nodeSets[setName]
             nodeSetPart = createUnstructuredPartFromNodeSet(setName, nodeSet, partCounter)
             self.nSetToEnsightPartMappings[setName] = nodeSetPart
             nodeSetParts.append(nodeSetPart)
             partCounter += 1
 
         rigidBodyParts = []
-        for bodyName, body in model.rigidBodies.items():
+        for bodyName in sorted(model.rigidBodies.keys()):
+            body = model.rigidBodies[bodyName]
             bodyPart = createUnstructuredPartFromRigidBody(bodyName, body, partCounter)
             self.rigidBodyToEnsightPartMappings[bodyName] = bodyPart
             rigidBodyParts.append(bodyPart)
