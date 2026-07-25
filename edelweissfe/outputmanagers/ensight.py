@@ -854,7 +854,14 @@ class OutputManager(OutputManagerBase):
             if self.model.domainSize == 2 and varSize == 2:
                 varSize = 3
             name = (self._nameKwarg or fieldOutput.name).replace(" ", "_")
-            self.createPerNodeOutput(fieldOutput, self._configPart, name, transient=self._transientCfg, varSize=varSize)
+            part = None
+            if definition.get("nSet"):
+                part = self.nSetToEnsightPartMappings.get(definition["nSet"])
+            elif definition.get("elSet"):
+                part = self.elSetToEnsightPartMappings.get(definition["elSet"])
+            if not part:
+                part = self._configPart
+            self.createPerNodeOutput(fieldOutput, part, name, transient=self._transientCfg, varSize=varSize)
 
         for definition in self._perElementDefs:
             fieldOutput = self._fieldOutputController.fieldOutputs[definition["fieldOutput"]]
@@ -862,9 +869,14 @@ class OutputManager(OutputManagerBase):
             if self.model.domainSize == 2 and varSize == 2:
                 varSize = 3
             name = (self._nameKwarg or fieldOutput.name).replace(" ", "_")
-            self.createPerElementOutput(
-                fieldOutput, self._configPart, name, transient=self._transientCfg, varSize=varSize
-            )
+            part = None
+            if definition.get("elSet"):
+                part = self.elSetToEnsightPartMappings.get(definition["elSet"])
+            elif definition.get("nSet"):
+                part = self.nSetToEnsightPartMappings.get(definition["nSet"])
+            if not part:
+                part = self._configPart
+            self.createPerElementOutput(fieldOutput, part, name, transient=self._transientCfg, varSize=varSize)
 
     def _rebuildForMeshChange(self):
         """Rebuild geometry parts + variable jobs after an AMR mesh change, so both stay consistent
