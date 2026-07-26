@@ -56,6 +56,7 @@ from edelweissfe.utils.exceptions import (
     StepFailed,
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
+from edelweissfe.utils.misc import strCaseCmp
 
 kw = inputLanguage["step"].getModule("adaptive").getKeyword("options")
 kw.addOptionalArg("defaultMaxIter", "", int, 10)
@@ -69,6 +70,19 @@ kw.addOptionalArg(
     "zero predictor, avoiding extrapolation of the one-off warm-start/remesh settling transient.",
     bool,
     True,
+)
+kw.addOptionalArg(
+    "equilibrateAfterModelChange",
+    "Whether to insert one constant-load, zero-time re-equilibration increment immediately after an "
+    "adaptive mesh refinement, before advancing the load. Default False. When True, the warm-started "
+    "refined mesh is first settled to equilibrium at the last converged load level (no load advance, "
+    "no Dirichlet increment, zero time increment) so the subsequent load-advancing increment starts "
+    "from an equilibrated state. Intended for softening problems where remeshing near the process "
+    "zone otherwise couples the load advance with the warm-start settling transient in one solve. "
+    "Note: the equilibration solve integrates materials with dT=0, which suits rate-independent "
+    "models; rate-dependent materials see no time advance during it (by design).",
+    bool,
+    False,
 )
 kw.addOptionalArg("linsolver", "", str, "pardiso")
 kw.addOptionalArg("linsolverConfigFile", "", str, "")
@@ -93,6 +107,7 @@ class NIST(NonlinearSolverBase):
         "defaultMaxGrowingIter": 10,
         "extrapolation": "linear",
         "extrapolateAfterModelChange": True,
+        "equilibrateAfterModelChange": False,
         "linsolver": "pardiso",
         "linsolverConfigFile": "",
     }
@@ -106,6 +121,9 @@ class NIST(NonlinearSolverBase):
 
         self.options = self.SolverSpecificOptions.copy()
         self._updateOptions(kwargs, journal)
+        # baseline (defaults + solver-construction options) to reset to at the start of each step, so
+        # a >>options block in one step does not leak into later steps that omit one
+        self._baseOptions = dict(self.options)
 
     def solveStep(
         self,
@@ -130,13 +148,18 @@ class NIST(NonlinearSolverBase):
             The field output controller.
         """
 
-        try:
-            self._updateOptions(step.actions["options"]["NISTSolver"].options, self.journal)
-        except KeyError:
-            pass
+        # Reset to the baseline so each step's options are independent (no leak across steps), then
+        # apply any >>options block routed to this solver. Options actions are auto-named (the
+        # 'options' keyword has no 'name' arg), so they are matched by their 'category' field rather
+        # than by dict key.
+        self.options = dict(self._baseOptions)
+        for optionsAction in step.actions.get("options", {}).values():
+            if strCaseCmp(optionsAction.get("category", ""), self.identification):
+                self._updateOptions(optionsAction.options, self.journal)
 
         extrapolation = self.options["extrapolation"]
         extrapolateAfterModelChange = self.options["extrapolateAfterModelChange"]
+        equilibrateAfterModelChange = self.options["equilibrateAfterModelChange"]
         linsolverOptions = self.options["linsolverConfigFile"]
         linsolverOptionDict = json.load(open(linsolverOptions, "r")) if linsolverOptions else ""
         self.linSolver = (
@@ -251,6 +274,70 @@ class NIST(NonlinearSolverBase):
                 )
                 self.journal.message(self.iterationHeader, self.identification, level=2)
                 self.journal.message(self.iterationHeader2, self.identification, level=2)
+
+                if modelHasChanged and equilibrateAfterModelChange:
+                    # Settle the warm-started refined mesh to equilibrium at the LAST converged load
+                    # before advancing the load. A synthetic time step with a zero step-progress
+                    # increment holds every load at its previous absolute level (getCurrentLoad reads
+                    # the absolute stepProgress) and yields a zero Dirichlet increment (getDelta reads
+                    # the difference), with a zero time increment -> a pure equilibration solve. The
+                    # settled U feeds the real increment below; its dU is reset there (prevTimeStep is
+                    # None on a rebuild increment, so extrapolation zeroes dU).
+                    equilibrationTimeStep = TimeStep(
+                        timeStep.number,
+                        0.0,
+                        timeStep.stepProgress - timeStep.stepProgressIncrement,
+                        0.0,
+                        timeStep.stepTime - timeStep.timeIncrement,
+                        timeStep.totalTime - timeStep.timeIncrement,
+                    )
+                    self.journal.message(
+                        "Model changed: re-equilibrating at constant load before advancing",
+                        self.identification,
+                        1,
+                    )
+                    try:
+                        U, dU, P, _, _ = self.solveIncrement(
+                            U,
+                            dU,
+                            P,
+                            K,
+                            step.actions,
+                            model,
+                            equilibrationTimeStep,
+                            None,
+                            extrapolation,
+                            maxIter,
+                            maxGrowingIter,
+                        )
+                    except (CutbackRequest, ReachedMaxIterations, DivergingSolution) as e:
+                        self.journal.message(
+                            "Re-equilibration after model change failed ({:}); cutting back".format(str(e)),
+                            self.identification,
+                            1,
+                        )
+                        step.discardAndChangeIncrement(cutbackFactor)
+                        prevTimeStep = None
+                        statusInfoDict["iters"] = np.inf
+                        statusInfoDict["notes"] = "re-equilibration failed: {:}".format(str(e))
+                        for man in outputmanagers:
+                            man.finalizeFailedIncrement(statusInfoDict=statusInfoDict)
+                        continue
+
+                    # Commit the settled state as a genuine converged (constant-load, zero-time)
+                    # sub-increment so the real increment builds on the equilibrated state. Elements
+                    # integrate strain incrementally from the COMMITTED state (computeKernels resets
+                    # the trial buffer each call and forms dE = B*dU), so without this commit the
+                    # settling deformation dU would be dropped from the strain/stress state while
+                    # remaining in U -- leaving U inconsistent with the internal state and making the
+                    # option a physics no-op. No output frame is emitted (it is an internal sub-step).
+                    for fieldName, field in model.nodeFields.items():
+                        self.theDofManager.writeDofVectorToNodeField(U, field, "U")
+                        self.theDofManager.writeDofVectorToNodeField(P, field, "P")
+                        self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
+                    for variable in model.scalarVariables.values():
+                        variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+                    model.advanceToTime(equilibrationTimeStep.totalTime)
 
                 try:
                     U, dU, P, iterationCounter, incrementResidualHistory = self.solveIncrement(

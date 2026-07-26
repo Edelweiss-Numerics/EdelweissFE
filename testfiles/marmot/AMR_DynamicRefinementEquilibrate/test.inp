@@ -1,0 +1,84 @@
+** Dynamic h-adaptivity + constant-load re-equilibration regression test. Same cantilever and marker
+** as AMR_DynamicRefinement, but with the NIST option equilibrateAfterModelChange=True: after the
+** octree refinement fires, the solver inserts one zero-time, constant-load re-equilibration increment
+** (no load advance, zero Dirichlet increment) that settles the warm-started refined mesh to
+** equilibrium -- and COMMITS that settled state as a genuine converged sub-increment -- before the
+** load is advanced. This cantilever stays in the elastic regime (AT2PhaseField damage not initiated),
+** so the re-equilibration is non-destructive: it reproduces the non-equilibrated AMR_DynamicRefinement
+** solution to machine precision (~1e-17). That is the strongest correctness signal -- it proves the
+** option is wired end to end AND that the settled deformation is correctly committed (an earlier
+** implementation dropped it from the strain state, leaving U inconsistent). On a history-dependent
+** material near a softening front the committed settling instead yields a distinct, relaxed path --
+** the intended effect.
+*material, name=AT2PHASEFIELD, id=mat
+20000, 0.2, 0.1, 5
+
+*section, name=sec, material=mat, type=solid
+all
+
+*modelModifier, type=hAdaptivity, name=amr
+result=stress
+expression='x > 0.6'
+reducer=absmax
+maxLevel=1
+
+*job, name=amr, domain=3d
+*solver, solver=NIST, name=S
+*fieldOutput
+>>perNode, elSet=all, field=displacement, result=U, name=U
+>>perNode, elSet=all, field=nonlocal damage, result=U, name=D
+
+*step, solver=S
+maxInc=0.5, minInc=1e-4, maxNumInc=50, maxIter=25,
+>>options, category=NISTSolver, equilibrateAfterModelChange=True
+>>dirichlet, name=x0, nSet=x0, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=x1, nSet=x1, field=displacement, 3=0.0005
+
+*Node
+1, 0.0, 1.0, 1.0
+2, 0.0, 0.0, 1.0
+3, 0.0, 0.0, 0.0
+4, 0.0, 1.0, 0.0
+5, 1.0, 1.0, 1.0
+6, 1.0, 0.0, 1.0
+7, 1.0, 0.0, 0.0
+8, 1.0, 1.0, 0.0
+9, 0.0, 0.5, 1.0
+10, 0.0, 0.0, 0.5
+11, 0.0, 0.5, 0.0
+12, 0.0, 1.0, 0.5
+13, 1.0, 0.5, 1.0
+14, 1.0, 0.0, 0.5
+15, 1.0, 0.5, 0.0
+16, 1.0, 1.0, 0.5
+17, 0.5, 1.0, 1.0
+18, 0.5, 0.0, 1.0
+19, 0.5, 0.0, 0.0
+20, 0.5, 1.0, 0.0
+21, 2.0, 1.0, 1.0
+22, 2.0, 0.0, 1.0
+23, 2.0, 0.0, 0.0
+24, 2.0, 1.0, 0.0
+25, 2.0, 0.5, 1.0
+26, 2.0, 0.0, 0.5
+27, 2.0, 0.5, 0.0
+28, 2.0, 1.0, 0.5
+29, 1.5, 1.0, 1.0
+30, 1.5, 0.0, 1.0
+31, 1.5, 0.0, 0.0
+32, 1.5, 1.0, 0.0
+*Element, type=GC3D20R
+1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
+2, 5, 6, 7, 8, 21, 22, 23, 24, 13, 14, 15, 16, 25, 26, 27, 28, 29, 30, 31, 32
+*elSet, elSet=all, generate
+1, 2, 1
+*nSet, nSet=x0
+1, 2, 3, 4, 9, 10, 11, 12
+*nSet, nSet=x1
+21, 22, 23, 24, 25, 26, 27, 28
+*nSet, nSet=yf
+2, 3, 6, 7, 10, 14, 18, 19
+22, 23, 26, 30, 31
+*nSet, nSet=zf
+3, 4, 7, 8, 11, 15, 19, 20
+23, 24, 27, 31, 32

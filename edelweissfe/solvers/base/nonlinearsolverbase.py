@@ -74,12 +74,23 @@ class NonlinearSolverBase(ABC):
             The journal module.
         """
 
+        # Input keywords arrive case-folded (the parser lowercases option keys), while the option
+        # names in SolverSpecificOptions are camelCase -- match them case-insensitively via their
+        # canonical spelling. A >>options block carries the UNION of every solver's options (they all
+        # register on the same 'options' keyword) plus routing/meta keys ('category', 'inputFile',
+        # 'datalines'), so keys not belonging to this solver are silently skipped rather than rejected.
+        canonicalByLower = {key.lower(): key for key in self.SolverSpecificOptions}
         for k, v in updatedOptions.items():
-            if k in self.SolverSpecificOptions:
-                journal.message("Updating option {:}={:}".format(k, v), self.identification)
-                self.options[k] = type(self.SolverSpecificOptions[k])(updatedOptions[k])
+            canonicalKey = canonicalByLower.get(k.lower())
+            if canonicalKey is None:
+                continue
+            journal.message("Updating option {:}={:}".format(canonicalKey, v), self.identification)
+            defaultValue = self.SolverSpecificOptions[canonicalKey]
+            if isinstance(defaultValue, bool):
+                # bool("False") is truthy, so parse the string explicitly rather than via bool(...)
+                self.options[canonicalKey] = str(v).strip().lower() in ("true", "1", "yes", "on")
             else:
-                raise AttributeError("Invalid option {:} for {:}".format(k, self.identification))
+                self.options[canonicalKey] = type(defaultValue)(v)
 
     @abstractmethod
     def solveStep(self, *args):

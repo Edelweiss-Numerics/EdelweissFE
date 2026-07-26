@@ -103,6 +103,24 @@ also start the increment after a refinement from a zero predictor::
 
 This changes only the Newton starting guess, not the converged solution.
 
+Re-equilibration after a refinement
+-----------------------------------
+
+By default the increment in which the mesh is refined advances the load *and* settles the
+warm-started refined mesh in a single solve. Near a softening process zone -- exactly where
+refinement is triggered -- coupling the load advance with the one-off warm-start settling transient
+can prevent recovery. The ``NISTSolver`` option ``equilibrateAfterModelChange`` (default ``False``)
+inserts, immediately after a refinement, one constant-load, zero-time re-equilibration increment
+(no load advance, zero Dirichlet increment) that settles the refined mesh to equilibrium at the last
+converged load *before* the load is advanced::
+
+    >>options, category=NISTSolver, equilibrateAfterModelChange=True
+
+On a path-independent material this is non-destructive (it changes only the increment sequence, not
+the converged root); for a history-dependent material it yields a physically distinct, relaxed path,
+which is the intended effect. The equilibration solve integrates materials with ``dT = 0``, so it
+suits rate-independent models; rate-dependent materials see no time advance during it by design.
+
 Implementing your own model modifiers
 -------------------------------------
 
