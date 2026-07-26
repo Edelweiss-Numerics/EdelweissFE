@@ -278,6 +278,16 @@ class ModelModifier(ModelModifierBase):
         mesh = self._mesh
         reg = mesh.registry
 
+        # Resync against the model's current label range before claiming any new ones. Other
+        # components can legitimately claim element labels between two refinements -- notably a
+        # tied surface's facets, rebuilt via the observer/MeshDependent escape hatches fired at the
+        # end of THIS very call (see below), which pick their labels fresh from max(model.elements).
+        # self._nextElLabel is otherwise a plain running counter that would stay oblivious to that
+        # and, on the next call, collide with (and silently overwrite) those facets -- which then
+        # get erroneously deleted as "stale" the next time they are rebuilt, orphaning the solid
+        # elements (and their nodes) that stole their labels. Only ever advance the counter.
+        self._nextElLabel = max(self._nextElLabel, max(model.elements.keys(), default=0) + 1)
+
         # snapshot the converged nodal values BEFORE the mesh mutates, for the warm start
         oldValues = {}
         for fieldName, nodeField in model.nodeFields.items():
