@@ -61,6 +61,53 @@ critical time step untouched.
 """
 
 
+def _flattenChainedRecords(
+    records: list[tuple[int, list[tuple[int, float]]]]
+) -> list[tuple[int, list[tuple[int, float]]]]:
+    """Resolve a slave DOF's masters that are themselves slave DOFs of another (or the same) record,
+    substituting them recursively until every master is an independent DOF.
+
+    Distinct MPC instances are free to compose this way -- e.g. a tie constraint's projected facet
+    can legitimately reference a hanging-node MPC's slave node as one of its own interpolation
+    nodes. :class:`~edelweissfe.adaptivity.refinement.AdaptiveMesh` already flattens chains *within*
+    the hanging-node MPC's own records; this generalizes the same substitution *across* all of a
+    model's multi-point constraints, in whatever order they were collected.
+
+    Parameters
+    ----------
+    records
+        The raw per-constraint records, one per slave DOF.
+
+    Returns
+    -------
+    list of (int, list of (int, float))
+        The same slave DOFs, with every master substituted down to independent DOFs and duplicate
+        ultimate masters (reached via more than one path) coalesced by summing their coefficients.
+    """
+    recordOf = dict(records)
+    resolved = {}
+
+    def resolve(slaveDof, visiting):
+        if slaveDof in resolved:
+            return resolved[slaveDof]
+        if slaveDof in visiting:
+            raise ValueError(
+                "Multi-point constraints: circular master/slave dependency detected at DOF {:}.".format(slaveDof)
+            )
+        visiting = visiting | {slaveDof}
+        flat = {}
+        for masterDof, coefficient in recordOf[slaveDof]:
+            if masterDof in recordOf:
+                for mm, cc in resolve(masterDof, visiting).items():
+                    flat[mm] = flat.get(mm, 0.0) + coefficient * cc
+            else:
+                flat[masterDof] = flat.get(masterDof, 0.0) + coefficient
+        resolved[slaveDof] = flat
+        return flat
+
+    return [(slaveDof, list(resolve(slaveDof, frozenset()).items())) for slaveDof in recordOf]
+
+
 class MultiPointConstraintTransformation:
     """The assembled master-slave condensation operator for all linear multi-point constraints of
     an equation system.
@@ -82,17 +129,14 @@ class MultiPointConstraintTransformation:
         if len(set(slaveDofs)) != len(slaveDofs):
             raise ValueError("Multi-point constraints: a DOF is claimed as slave by more than one constraint record.")
 
-        allMasterDofs = {masterDof for _, masters in records for masterDof, _ in masters}
-        chained = allMasterDofs.intersection(slaveDofs)
-        if chained:
-            raise ValueError(
-                "Multi-point constraints: {:} slave DOF(s) appear as master DOFs of another "
-                "constraint -- chained multi-point constraints are not supported.".format(len(chained))
-            )
-
         for slaveDof, masters in records:
             if not masters:
                 raise ValueError("Multi-point constraints: slave DOF {:} has no master DOFs.".format(slaveDof))
+
+        # a master referenced by one constraint may itself be a slave DOF of another (or the same)
+        # constraint -- e.g. a tie facet referencing a hanging-node MPC's slave node. Substitute those
+        # down to independent DOFs rather than rejecting the composition.
+        records = _flattenChainedRecords(records)
 
         self.nDof = nDof
         self.slaveDofIndices = np.array(sorted(slaveDofs), dtype=int)

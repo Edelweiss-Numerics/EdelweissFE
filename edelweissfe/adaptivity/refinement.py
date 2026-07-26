@@ -418,9 +418,11 @@ class AdaptiveMesh:
         """Flattened master-slave records for DOF-elimination MPCs (WS-J / surface_tie branch).
 
         Returns {slaveLabel: [(masterLabel, weight), ...]} where every master is an INDEPENDENT
-        (non-hanging) node. Multi-level chains (a master that is itself a slave) are resolved by
-        recursive substitution with weight composition, since the DOF-elimination transformation
-        does not accept chained records. Weights are field-independent (equal-order).
+        (non-hanging) node. Multi-level chains (a master that is itself a slave) are resolved here by
+        recursive substitution with weight composition; kept as a cheap pre-flattening even though
+        :class:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation` now also
+        flattens chains generally (including across other MPCs, e.g. a tie facet referencing a
+        hanging slave). Weights are field-independent (equal-order).
         """
         coords = self.registry.coordinates
         raw = {}  # slaveLabel -> [(masterLabel, weight)]
