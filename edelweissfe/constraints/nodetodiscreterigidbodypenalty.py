@@ -30,6 +30,7 @@ import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.rigidbodies.discreterigidbody import DiscreteRigidBody
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
@@ -42,6 +43,14 @@ from edelweissfe.utils.misc import (
 """
 A penalty based unilateral contact constraint between a node set of ordinary FE nodes and the
 surface of a :class:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody`.
+
+This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if an AMR refinement
+(e.g. :mod:`~edelweissfe.modelmodifiers.adaptivity.hadaptivity`) adds nodes to the watched slave
+``nSet`` (a boundary reaching into a refined region), the new nodes are picked up and protected from
+penetrating the rigid body at the constraint's own next :meth:`updateConnectivity` tick -- no
+separate wiring needed. There is no per-slave history to preserve across the rebuild (unlike the
+deformable-surface/tie facet constraints): every quantity is recomputed fresh from the current
+geometry every Newton iteration.
 """
 
 module = Module(
@@ -158,7 +167,7 @@ class DiscreteRigidBodyContactStiffnessView:
             self.K_rpp.append(rpp)
 
 
-class Constraint(ConstraintBase):
+class Constraint(ConstraintBase, MeshDependent):
     """
     Penalty based unilateral contact between a slave node set and a discrete rigid body.
 
@@ -236,9 +245,6 @@ class Constraint(ConstraintBase):
         self.rigidBody = model.rigidBodies[kwargs["rigidBody"]]
         self.rpNode = self.rigidBody.rpNode
 
-        self.slaveNodes = [node for node in model.nodeSets[kwargs["nSet"]] if node is not self.rpNode]
-        self.nSlaves = len(self.slaveNodes)
-
         self.penalty = kwargs["penalty"]
         self.type = kwargs["type"].lower()
         if self.type not in ["linear", "quadratic"]:
@@ -249,6 +255,17 @@ class Constraint(ConstraintBase):
         self.nRot = 3
         self.rprpDof = self.nDim + self.nRot
 
+        self._nSetName = kwargs["nSet"]
+        self._lastSeenTopologyVersion = model.topologyVersion
+        self.slaveNodes = [node for node in model.nodeSets[self._nSetName] if node is not self.rpNode]
+        self._rebuildFromSlaveNodes()
+
+        self.totalNormalForce = 0.0
+
+    def _rebuildFromSlaveNodes(self) -> None:
+        """(Re)derive every quantity that depends on the slave node list/count."""
+
+        self.nSlaves = len(self.slaveNodes)
         self._referenceCoords = np.array([n.coordinates for n in self.slaveNodes])
 
         self._nodes = self.slaveNodes + [self.rpNode]
@@ -263,7 +280,17 @@ class Constraint(ConstraintBase):
         )
         self._indicesOfRPInLocal = self._indicesOfRPDispInLocal + self._indicesOfRPRotInLocal
 
-        self.totalNormalForce = 0.0
+    def reconcile(self, model: FEModel, change) -> bool:
+        """Refresh the slave node list from the (possibly grown) watched ``nSet``."""
+
+        if not change.touchesNodeSet(self._nSetName):
+            return False
+        self.slaveNodes = [node for node in model.nodeSets[self._nSetName] if node is not self.rpNode]
+        self._rebuildFromSlaveNodes()
+        return True
+
+    def updateConnectivity(self, model: FEModel) -> bool:
+        return self.reconcileIfChanged(model)
 
     @property
     def nodes(self) -> list:

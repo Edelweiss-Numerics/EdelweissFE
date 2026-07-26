@@ -178,6 +178,17 @@ by name::
     :caption: Example (the master surface's solid block is refined mid-run while already tied):
               ``testfiles/marmot/AMR_TieRefine/test.inp``
 
+The rigid-body contact constraints (:mod:`~edelweissfe.constraints.nodetorigidsurfacepenalty`,
+:mod:`~edelweissfe.constraints.nodetodiscreterigidbodypenalty`) are likewise ``MeshDependent``, but
+lighter still: their master geometry is rigid (an analytic plane, or a triangulated rigid body), so
+refinement only ever grows their watched slave ``nSet`` -- no facet regeneration, no per-slave
+history, just a refreshed node list at the next :meth:`updateConnectivity` tick::
+
+.. literalinclude:: ../../../testfiles/marmot/AMR_RigidContactRefine/test.inp
+    :language: edelweiss
+    :caption: Example (the block is refined mid-run while its face already rests against an
+              analytic rigid wall): ``testfiles/marmot/AMR_RigidContactRefine/test.inp``
+
 Implementing your own model modifiers
 -------------------------------------
 

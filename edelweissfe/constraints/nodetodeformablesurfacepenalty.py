@@ -505,7 +505,7 @@ class Constraint(ConstraintBase, MeshDependent):
 
         return hasChanged
 
-    def reconcile(self, model: FEModel, change) -> None:
+    def reconcile(self, model: FEModel, change) -> bool:
         """Regenerate whichever side's facets were affected by ``change`` (via its recorded
         :attr:`~edelweissfe.models.femodel.FEModel.contactFacetRecipes`) and rebind the cached
         per-slave/per-facet arrays to match. A currently-tracked slave node keeps its frictional
@@ -520,7 +520,7 @@ class Constraint(ConstraintBase, MeshDependent):
         touchedSlave = slaveRecipe is not None and change.touchesSurface(slaveRecipe[0])
         touchedMaster = masterRecipe is not None and change.touchesSurface(masterRecipe[0])
         if not (touchedSlave or touchedMaster):
-            return
+            return False
 
         if touchedSlave:
             buildContactFacets(model, *slaveRecipe, self._journal)
@@ -528,6 +528,7 @@ class Constraint(ConstraintBase, MeshDependent):
         if touchedMaster:
             buildContactFacets(model, *masterRecipe, self._journal)
             self._rebindMaster(model)
+        return True
 
     def _rebindSlave(self, model: FEModel) -> None:
         """Rebuild the slave-side node list/tributary areas from the regenerated facet set,

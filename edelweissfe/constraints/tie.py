@@ -220,7 +220,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
 
         return tiedRecords, untiedSlaveNodes
 
-    def reconcile(self, model: FEModel, change) -> None:
+    def reconcile(self, model: FEModel, change) -> bool:
         """Regenerate whichever side's facets were affected by ``change`` (via its recorded
         :attr:`~edelweissfe.models.femodel.FEModel.contactFacetRecipes`) and re-project the tied
         records from scratch against the rebuilt surfaces -- never adjusting coordinates, since the
@@ -231,7 +231,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         touchedSlave = slaveRecipe is not None and change.touchesSurface(slaveRecipe[0])
         touchedMaster = masterRecipe is not None and change.touchesSurface(masterRecipe[0])
         if not (touchedSlave or touchedMaster):
-            return
+            return False
 
         if touchedSlave:
             buildContactFacets(model, *slaveRecipe, self._journal)
@@ -243,6 +243,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         self.tiedRecords, self.untiedSlaveNodes = self._buildTiedRecords(
             slaveFacetElements, masterFacetElements, adjust=False
         )
+        return True
 
     def getMultiPointConstraints(self, dofManager) -> list[tuple[int, list[tuple[int, float]]]]:
         fieldVariableIndices = dofManager.idcsOfFieldVariablesInDofVector

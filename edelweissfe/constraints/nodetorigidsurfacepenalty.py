@@ -34,6 +34,7 @@ import numpy as np
 from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
@@ -44,6 +45,10 @@ from edelweissfe.utils.misc import (
 
 """
 A penalty based unilateral constraint used for preventing the nodes of a node set from penetrating a defined rigid boundary.
+
+This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if an AMR refinement
+adds nodes to the watched ``nSet``, the new nodes are picked up and protected from penetrating the
+boundary at the constraint's own next :meth:`updateConnectivity` tick -- no separate wiring needed.
 """
 
 module = Module(
@@ -81,7 +86,7 @@ module.addOptionalArg(
 documentation = [module]
 
 
-class Constraint(ConstraintBase):
+class Constraint(ConstraintBase, MeshDependent):
     @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
     @castKwargsValuesAndAddDefaults(module)
     def __init__(self, name: str, model: FEModel, *args, **kwargs):
@@ -89,29 +94,43 @@ class Constraint(ConstraintBase):
 
         kwargs = CaseInsensitiveDict(kwargs)
 
-        theField = kwargs["field"]
-        self.sizeField = getFieldSize(theField, model.domainSize)
+        self._field = kwargs["field"]
+        self.sizeField = getFieldSize(self._field, model.domainSize)
         self.component = kwargs["component"]
         self.penalty = kwargs["penalty"]
         self.value = kwargs["value"]
         self.direction = kwargs["direction"]
-        self._nodes = model.nodeSets[kwargs["nSet"]]
-        self._nNodes = len(self._nodes)
-        self._nDof = self.sizeField * self._nNodes
 
         self.type = kwargs["type"].lower()
         if self.type not in ["linear", "quadratic"]:
             raise ValueError(f"Constraint type '{self.type}' is not supported. Use 'linear' or 'quadratic'.")
 
-        self.indices_component = np.arange(self.component, self._nDof + self.component, self.sizeField)
-
-        self._fieldsOnNodes = [
-            [
-                theField,
-            ]
-        ] * self._nNodes
+        self._nSetName = kwargs["nSet"]
+        self._lastSeenTopologyVersion = model.topologyVersion
+        self._nodes = model.nodeSets[self._nSetName]
+        self._rebuildFromNodes()
 
         self.active = True
+
+    def _rebuildFromNodes(self) -> None:
+        """(Re)derive every quantity that depends on the node set/count."""
+
+        self._nNodes = len(self._nodes)
+        self._nDof = self.sizeField * self._nNodes
+        self.indices_component = np.arange(self.component, self._nDof + self.component, self.sizeField)
+        self._fieldsOnNodes = [[self._field]] * self._nNodes
+
+    def reconcile(self, model: FEModel, change) -> bool:
+        """Refresh the node list from the (possibly grown) watched ``nSet``."""
+
+        if not change.touchesNodeSet(self._nSetName):
+            return False
+        self._nodes = model.nodeSets[self._nSetName]
+        self._rebuildFromNodes()
+        return True
+
+    def updateConnectivity(self, model: FEModel) -> bool:
+        return self.reconcileIfChanged(model)
 
     @property
     def nodes(self) -> list:

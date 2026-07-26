@@ -43,10 +43,17 @@ class MeshDependent(ABC):
     _lastSeenTopologyVersion = 0
 
     @abstractmethod
-    def reconcile(self, model, change) -> None:
+    def reconcile(self, model, change) -> bool:
         """Patch cached mesh-derived state to account for ``change`` (a
         :class:`~edelweissfe.models.modelchange.ModelChange`). Called only when the model's
-        ``topologyVersion`` actually advanced since this consumer last checked."""
+        ``topologyVersion`` actually advanced since this consumer last checked.
+
+        Returns
+        -------
+        bool
+            True if ``change`` was actually relevant to this consumer (e.g. touched one of its
+            watched surfaces/sets) and it patched its cached state; False if it was a no-op.
+        """
 
     def reconcileIfChanged(self, model) -> bool:
         """Pull-by-version entry point: call this at the consumer's own per-increment tick.
@@ -54,13 +61,14 @@ class MeshDependent(ABC):
         Returns
         -------
         bool
-            True if the model changed since this consumer last checked (whether or not
-            :meth:`reconcile` found the change relevant to it).
+            True if the model changed since this consumer last checked AND :meth:`reconcile` found
+            that change relevant (e.g. this is a direct, correct value to return from a
+            :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity`
+            override -- a mesh mutation this consumer didn't care about shouldn't, on its own,
+            force an equation-system rebuild).
         """
         if model.topologyVersion == self._lastSeenTopologyVersion:
             return False
         change = model.changesSince(self._lastSeenTopologyVersion)
         self._lastSeenTopologyVersion = model.topologyVersion
-        if change is not None:
-            self.reconcile(model, change)
-        return True
+        return change is not None and self.reconcile(model, change)
