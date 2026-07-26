@@ -38,6 +38,7 @@ import numpy as np
 from edelweissfe.config.phenomena import getFieldSize, phenomena
 from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.journal.journal import Journal
+from edelweissfe.models.modelchange import ModelChange, coalesce
 from edelweissfe.variables.fieldvariable import FieldVariable
 from edelweissfe.variables.scalarvariable import ScalarVariable
 
@@ -70,6 +71,8 @@ class FEModel:
         self.multiPointConstraints = {}  #: Multi-point (DOF-elimination) constraints in the model.
         self.modelModifiers = {}  #: Model modifiers (dynamic topology / mesh mutation entities) in the model.
         self._modelChangeObservers = []  #: Observers notified when the model is mutated (e.g. AMR).
+        self.topologyVersion = 0  #: Bumped on every structural mutation; drives pull-based reconcile.
+        self._changeLog = []  #: Recorded :class:`ModelChange` per mutation, newest last.
         self.materials = {}  #: Materials in the model.
         self.analyticalFields = {}  #: AnalyticalFields in the model.
         self.scalarVariables = {}  #: ScalarVariables in the model.
@@ -86,10 +89,35 @@ class FEModel:
     def unregisterObserver(self, observer):
         self._modelChangeObservers = [obs for obs in self._modelChangeObservers if obs is not observer]
 
-    def notifyModelChanged(self, changeType, details: dict = None):
-        """Notify all registered observers that the model topology / sets / surfaces have changed."""
+    def notifyModelChanged(self, changeType, change: ModelChange = None):
+        """Record a model mutation (bumping :attr:`topologyVersion`, so a pull-based consumer can
+        catch up later via :meth:`changesSince`) and notify all registered push observers.
+
+        Parameters
+        ----------
+        changeType
+            The :class:`~edelweissfe.models.modelchangeobserver.ModelChangeType` of the mutation.
+        change
+            The structured :class:`ModelChange` describing what changed. If omitted, an empty one
+            (bare ``changeType`` marker only, e.g. for a modifier that hasn't adopted the changeset
+            yet) is recorded instead.
+        """
+        self.topologyVersion += 1
+        if change is None:
+            change = ModelChange(kind=changeType)
+        change.version = self.topologyVersion
+        self._changeLog.append(change)
         for observer in list(self._modelChangeObservers):
-            observer.onModelChanged(self, changeType, details)
+            observer.onModelChanged(self, changeType, change)
+
+    def changesSince(self, version: int) -> ModelChange:
+        """The :class:`ModelChange` coalesced across every mutation recorded after ``version``, or
+        ``None`` if the model hasn't changed since. A pull-based consumer compares its own
+        last-seen version against :attr:`topologyVersion` and, on a mismatch, reconciles from this,
+        then adopts the new :attr:`topologyVersion` as its own last-seen version."""
+        if version >= self.topologyVersion:
+            return None
+        return coalesce([c for c in self._changeLog if c.version > version])
 
     def _populateNodeFieldVariablesFromElements(
         self,

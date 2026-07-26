@@ -14,9 +14,21 @@ solution vectors and any multi-point-constraint transformation) before continuin
 
 Because a mutation invalidates references cached by other subsystems (step actions caching node
 sets, output managers caching the mesh, field outputs caching result collectors), modifiers
-broadcast a :class:`~edelweissfe.models.modelchangeobserver.ModelChangeType` event through the
-model's observer mechanism (:meth:`~edelweissfe.models.femodel.FEModel.notifyModelChanged`), and
-those subsystems re-bind themselves in their ``onModelChanged`` callbacks.
+broadcast a :class:`~edelweissfe.models.modelchangeobserver.ModelChangeType` event, together with a
+structured :class:`~edelweissfe.models.modelchange.ModelChange` describing exactly what changed,
+through the model's observer mechanism (:meth:`~edelweissfe.models.femodel.FEModel.notifyModelChanged`);
+push-style subsystems re-bind themselves in their ``onModelChanged`` callbacks.
+
+A subsystem with its own per-increment tick (most do) can instead reconcile lazily, by *pulling*:
+compare its own last-seen value against :attr:`~edelweissfe.models.femodel.FEModel.topologyVersion`
+(bumped on every mutation) and, on a mismatch, fetch the net change since then via
+:meth:`~edelweissfe.models.femodel.FEModel.changesSince`, which coalesces every mutation missed into
+a single :class:`~edelweissfe.models.modelchange.ModelChange` -- added/removed nodes and elements,
+the parent -> children map, the per-face child tiling, and which node/element sets or surfaces were
+touched (with ``touchesSurface``/``touchesNodeSet``/``touchesElementSet`` early-outs so a consumer
+can skip a change that doesn't concern it). Pull needs no registration and therefore has no observer
+lifecycle to leak, and a consumer always reconciles at its own point of use, after the mutation is
+complete.
 
 ``hAdaptivity`` - Hanging-node h-adaptivity for HEX20
 -----------------------------------------------------

@@ -32,7 +32,12 @@ from collections import defaultdict
 
 import numpy as np
 
-from edelweissfe.adaptivity.hex20topology import hex20_shape, subdivision_children_param
+from edelweissfe.adaptivity.hex20topology import (
+    FACEID_TO_FACE,
+    face_child_octants,
+    hex20_shape,
+    subdivision_children_param,
+)
 from edelweissfe.adaptivity.marking import markElements
 from edelweissfe.adaptivity.refinement import AdaptiveMesh
 from edelweissfe.adaptivity.statetransfer.perstatevar import PerStateVarStateTransfer
@@ -42,6 +47,7 @@ from edelweissfe.constraints.hangingnode import Constraint as HangingNodeConstra
 from edelweissfe.journal.journal import Journal
 from edelweissfe.modelmodifiers.base.modelmodifierbase import ModelModifierBase
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.models.modelchange import ModelChange
 from edelweissfe.models.modelchangeobserver import ModelChangeType
 from edelweissfe.points.node import Node
 from edelweissfe.sets.nodeset import NodeSet
@@ -249,10 +255,10 @@ class ModelModifier(ModelModifierBase):
         self._mesh.balance_2to1()
 
         records = self._mesh.hanging_mpc_records()  # computed once (expensive), reused below
-        self._materialize(model, records)
+        change = self._materialize(model, records)
         self._hanging.setRecords(records)
         # notify observers (e.g. Dirichlet BCs, Ensight output manager) so they re-index against the mutated mesh
-        model.notifyModelChanged(ModelChangeType.REFINEMENT)
+        model.notifyModelChanged(ModelChangeType.REFINEMENT, change)
         self._journal.message(
             "AMR ModelModifier: marked {:}, refined -> active elements {:} -> {:}, {:} hanging nodes".format(
                 len(markedEids), nBefore, len(self._mesh.active()), len(records)
@@ -287,9 +293,13 @@ class ModelModifier(ModelModifierBase):
         active = set(mesh.active())
         materialized = set(self._eidToEl.keys())
         newValues = {fieldName: {} for fieldName in oldValues}  # interpolated values for new nodes
+        newChildEids = active - materialized
+
+        # the changeset this call produces (Finding 1/2 above become its faceMap/*Sets entries)
+        change = ModelChange(kind=ModelChangeType.REFINEMENT, addedNodes=set(newNodes.keys()))
 
         # new child elements (single level of new refinement per call -> parents are materialized)
-        for eid in active - materialized:
+        for eid in newChildEids:
             e = mesh.elements[eid]
             parentEid = e["parent"]
             parentEl = self._eidToEl[parentEid]
@@ -320,14 +330,31 @@ class ModelModifier(ModelModifierBase):
             if self._markLabels is not None and parentEl.elNumber in self._markLabels:
                 self._markLabels.add(child.elNumber)
 
+            change.addedElements.add(child.elNumber)
+            change.parentToChildren.setdefault(parentEl.elNumber, []).append(child.elNumber)
+
+        # per-face parent -> child tiling (Finding 2's faceMap), while parents are still materialized
+        newlyRefinedParentEids = {mesh.elements[eid]["parent"] for eid in newChildEids}
+        for parentEid in newlyRefinedParentEids:
+            parentLabel = self._eidToEl[parentEid].elNumber
+            childEids = mesh.elements[parentEid]["children"]
+            for faceID, faceIndex in FACEID_TO_FACE.items():
+                childLabels = [
+                    self._eidToEl[childEids[j]].elNumber for j in face_child_octants(faceIndex, self.splitFactor)
+                ]
+                change.faceMap[(parentLabel, faceID)] = [(label, faceID) for label in childLabels]
+
         # remove refined parents
         for eid in materialized - active:
             el = self._eidToEl.pop(eid)
             del model.elements[el.elNumber]
+            change.removedElements.add(el.elNumber)
 
         # keep model.surfaces in sync (Finding 2): parent (eid,faceID) -> child faces
         for surfaceName, pairs in mesh.surfaces.items():
             if surfaceName in model.surfaces:
+                if any(meid in newChildEids for meid, _ in pairs):
+                    change.changedSurfaces.add(surfaceName)
                 byFace = defaultdict(list)
                 for meid, faceID in pairs:
                     if meid in self._eidToEl:
@@ -342,18 +369,24 @@ class ModelModifier(ModelModifierBase):
             if any(label not in present and label not in slaves for label in labels):
                 members = [model.nodes[label] for label in sorted(labels) if label not in slaves]
                 model.nodeSets[setName] = NodeSet(setName, members)
+                change.changedNodeSets.add(setName)
 
         # sync all element sets (user sets like 'concrete' and all-encompassing sets) -- Finding 1
         from edelweissfe.sets.elementset import ElementSet
 
         allNodes = list(model.nodes.values())
-        for setName in self._allLikeSets | {"all"}:
-            model.nodeSets[setName] = NodeSet(setName, allNodes)
+        if newNodes:
+            for setName in self._allLikeSets | {"all"}:
+                model.nodeSets[setName] = NodeSet(setName, allNodes)
+                change.changedNodeSets.add(setName)
         for setName, eids in mesh.elementSets.items():
             if setName in model.elementSets:
+                if eids & newChildEids:
+                    change.changedElementSets.add(setName)
                 elements = [self._eidToEl[eid] for eid in eids if eid in self._eidToEl]
                 model.elementSets[setName] = ElementSet(setName, elements)
         model.elementSets["all"] = ElementSet("all", list(model.elements.values()))
+        change.changedElementSets.add("all")
 
         # rebuild node fields to include the new nodes, then restore the warm start: converged values
         # on the retained nodes and interpolated values on the new nodes (Finding 1)
@@ -374,3 +407,4 @@ class ModelModifier(ModelModifierBase):
                     U[idx] = new[node]
 
         model._linkFieldVariableObjects(model.nodeSets["all"])
+        return change
