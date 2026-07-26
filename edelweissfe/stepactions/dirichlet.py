@@ -123,9 +123,13 @@ class StepAction(DirichletBase):
 
     def onModelChanged(self, model, changeType, details=None):
         """Re-point the (possibly rebuilt) node set and re-size the prescribed values so the BC
-        covers any new boundary nodes after a model change."""
+        covers any new boundary nodes after a model change. Preserve the active/inactive flag:
+        updateStepAction unconditionally activates, but a BC deactivated at a prior step end must
+        stay inactive -- otherwise a refinement in a later step would silently revive it."""
         self.nSet = model.nodeSets[self.action["nSet"]]
+        wasActive = self.active
         self.updateStepAction(self.action, None, model, None, self._journal)
+        self.active = wasActive
 
     @property
     def components(

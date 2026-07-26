@@ -122,9 +122,23 @@ class StepAction(NodalLoadBase):
         model.registerObserver(self)
 
     def onModelChanged(self, model, changeType, details=None):
-        """Re-bind the node set if it was updated by an AMR mesh change."""
-        if self._nSetName in model.nodeSets:
-            self._nSet = model.nodeSets[self._nSetName]
+        """Re-bind the node set if it was updated by an AMR mesh change, and re-size the load arrays
+        to the (possibly larger) set. Retained nodes keep their accumulated load per node identity;
+        newly added boundary nodes get zero force. Without this, the flat load array would no longer
+        match the node set's DOF layout after refinement grows a loaded boundary."""
+        if self._nSetName not in model.nodeSets:
+            return
+        oldNodes = list(self._nSet)
+        oldStart = {node: self.nodeForcesStepStart[i] for i, node in enumerate(oldNodes)}
+        oldDelta = {node: self.nodeForcesDelta[i] for i, node in enumerate(oldNodes)}
+        self._nSet = model.nodeSets[self._nSetName]
+        shape = (len(self._nSet), self._fieldSize)
+        self.nodeForcesStepStart = np.zeros(shape)
+        self.nodeForcesDelta = np.zeros(shape)
+        for i, node in enumerate(self._nSet):
+            if node in oldStart:
+                self.nodeForcesStepStart[i] = oldStart[node]
+                self.nodeForcesDelta[i] = oldDelta[node]
 
     def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
         """Update the step action.

@@ -221,7 +221,7 @@ class NodeFieldSubset(NodeField):
         return self.parentNodeField[key][self._indicesOfNodesInParentArray]
 
     def __contains__(self, key):
-        return key in self.subsetNodes
+        return key in self.nodes
 
     def createFieldValueEntry(self, name):
         raise Exception("Invalid operation on subset of a NodeField")

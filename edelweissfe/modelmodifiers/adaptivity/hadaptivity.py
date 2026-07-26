@@ -279,6 +279,10 @@ class ModelModifier(ModelModifierBase):
             model.elements[child.elNumber] = child
             self._eidToEl[eid] = child
             self._sectionOf[child] = self._sectionOf[parentEl]
+            # keep the mark-eligible label set in sync so children of a marked element can themselves
+            # be marked on a later increment (required for maxLevel > 1 under an elSet restriction)
+            if self._markLabels is not None and parentEl.elNumber in self._markLabels:
+                self._markLabels.add(child.elNumber)
 
         # remove refined parents
         for eid in materialized - active:

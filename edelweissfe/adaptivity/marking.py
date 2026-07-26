@@ -76,6 +76,8 @@ def markElements(model, result, expression, reducer="absmax", elementLabels=None
     set
         Labels of the elements whose expression evaluates truthy.
     """
+    if reducer not in _REDUCERS:  # fail loud on a mistyped reducer instead of silently marking nothing
+        raise ValueError("Unknown reducer {!r}; expected one of {}.".format(reducer, sorted(_REDUCERS)))
     predicate = createMathExpression(expression)  # symbol "x"
     labels = model.elements.keys() if elementLabels is None else elementLabels
     marked = set()
@@ -85,7 +87,7 @@ def markElements(model, result, expression, reducer="absmax", elementLabels=None
         element = model.elements[label]
         try:
             x = elementScalar(element, result, reducer)
-        except (KeyError, Exception):  # result not available on this element -> not markable
+        except KeyError:  # this element/material does not expose the marked result -> not markable
             continue
         if bool(predicate(x)):
             marked.add(label)
