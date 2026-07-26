@@ -30,7 +30,10 @@ import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.elements.contactsurfaceelement import facetNormalAndMeasure
+from edelweissfe.generators.surfaceelementgenerator import buildContactFacets
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.facetcontactgeometry import (
@@ -54,6 +57,14 @@ The slave surface's nodes act as the contact points; each slave node's penalty f
 its tributary area (the sum of ``measure / nFacetNodes`` over its incident slave facets, evaluated
 in the reference configuration), so ``penalty`` has the meaning of an interface stiffness modulus
 per unit area, and the contact response converges under slave surface refinement.
+
+This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if either surface's
+source solid elements are refined mid-run (e.g. by :mod:`~edelweissfe.modelmodifiers.adaptivity.
+hadaptivity`), it regenerates that side's facets from the current (refined) ``*surface`` definition
+and rebinds its cached facet list/reference coordinates at its own next :meth:`updateConnectivity`
+tick -- no separate wiring needed. A retained slave node (same across the rebuild, by ``Node``
+identity) keeps its frictional history and augmented-Lagrange multiplier; a newly exposed one
+starts at rest.
 """
 
 module = Module(
@@ -219,7 +230,7 @@ def _line2Containment(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> tuple[f
     return t, 0.0 <= t <= 1.0
 
 
-class Constraint(ConstraintBase):
+class Constraint(ConstraintBase, MeshDependent):
     """
     Penalty based unilateral contact between the tributary-area-weighted nodes of a deformable
     slave surface and a deformable master surface, both represented by flat (Tria3/Line2) contact
@@ -309,8 +320,13 @@ class Constraint(ConstraintBase):
 
         kwargs = CaseInsensitiveDict(kwargs)
 
-        self.slaveFacetElements = list(model.elementSets[kwargs["slaveSurface"]])
-        self.facetElements = list(model.elementSets[kwargs["masterSurface"]])
+        self._journal = Journal()
+        self._lastSeenTopologyVersion = model.topologyVersion
+
+        self._slaveSurfaceSetName = kwargs["slaveSurface"]
+        self._masterSurfaceSetName = kwargs["masterSurface"]
+        self.slaveFacetElements = list(model.elementSets[self._slaveSurfaceSetName])
+        self.facetElements = list(model.elementSets[self._masterSurfaceSetName])
 
         # The contact points are the unique nodes of the slave surface, each weighted by its
         # tributary area: the sum of its area shares over its incident slave facets (assigned by
@@ -416,7 +432,11 @@ class Constraint(ConstraintBase):
     def updateConnectivity(self, model: FEModel) -> bool:
         """Re-assign each slave node to its single closest facet, based on the last converged
         configuration. Called once per increment by the solver, before the equation system is
-        (re)built."""
+        (re)built. Reconciles against a mesh mutation (e.g. an AMR refinement of either surface's
+        source solid elements) first, at this natural per-increment tick -- see
+        :class:`~edelweissfe.models.meshdependent.MeshDependent`."""
+
+        self.reconcileIfChanged(model)
 
         slaveCoords = self._currentCoordinates(self.slaveNodes, model, self._referenceCoordsSlaves)
         facetCoords = [
@@ -484,6 +504,69 @@ class Constraint(ConstraintBase):
         self._nDof = sum(self.nDim for _ in newNodes)
 
         return hasChanged
+
+    def reconcile(self, model: FEModel, change) -> None:
+        """Regenerate whichever side's facets were affected by ``change`` (via its recorded
+        :attr:`~edelweissfe.models.femodel.FEModel.contactFacetRecipes`) and rebind the cached
+        per-slave/per-facet arrays to match. A currently-tracked slave node keeps its frictional
+        history and augmented-Lagrange multiplier (keyed on ``Node`` identity, since AMR reuses the
+        same ``Node`` objects for retained nodes); a newly exposed slave starts at rest. Per-slave
+        facet assignment, frozen weights and normals are simply re-sized to the new slave count --
+        the next :meth:`updateConnectivity` (called right before this, every increment) recomputes
+        them from the current geometry regardless, so there is no stale-index window."""
+
+        slaveRecipe = model.contactFacetRecipes.get(self._slaveSurfaceSetName)
+        masterRecipe = model.contactFacetRecipes.get(self._masterSurfaceSetName)
+        touchedSlave = slaveRecipe is not None and change.touchesSurface(slaveRecipe[0])
+        touchedMaster = masterRecipe is not None and change.touchesSurface(masterRecipe[0])
+        if not (touchedSlave or touchedMaster):
+            return
+
+        if touchedSlave:
+            buildContactFacets(model, *slaveRecipe, self._journal)
+            self._rebindSlave(model)
+        if touchedMaster:
+            buildContactFacets(model, *masterRecipe, self._journal)
+            self._rebindMaster(model)
+
+    def _rebindSlave(self, model: FEModel) -> None:
+        """Rebuild the slave-side node list/tributary areas from the regenerated facet set,
+        preserving frictional history and the AL multiplier of retained slave nodes by identity."""
+
+        oldTangential = dict(zip(self.slaveNodes, self._tangentialForceConverged))
+        oldLambda = dict(zip(self.slaveNodes, self._lambdaN))
+
+        self.slaveFacetElements = list(model.elementSets[self._slaveSurfaceSetName])
+        tributaryAreaOfSlaveNode = {}
+        for slaveFacet in self.slaveFacetElements:
+            for node, share in zip(slaveFacet.nodes, slaveFacet.nodalAreaShares):
+                tributaryAreaOfSlaveNode[node] = tributaryAreaOfSlaveNode.get(node, 0.0) + share
+
+        self.slaveNodes = list(tributaryAreaOfSlaveNode.keys())
+        self.tributaryAreas = np.array(list(tributaryAreaOfSlaveNode.values()))
+        self.nSlaves = len(self.slaveNodes)
+        self._referenceCoordsSlaves = np.array([n.coordinates for n in self.slaveNodes])
+
+        self._tangentialForceConverged = np.array([oldTangential.get(n, np.zeros(self.nDim)) for n in self.slaveNodes])
+        self._tangentialForceCurrent = np.zeros((self.nSlaves, self.nDim))
+        self._lambdaN = np.array([oldLambda.get(n, 0.0) for n in self.slaveNodes])
+        self._gapCurrent = np.zeros(self.nSlaves)
+        self._normalForceCurrent = np.zeros(self.nSlaves)
+
+        self._assignedFacetIdx = [None] * self.nSlaves
+        self._frozenWeights = [None] * self.nSlaves
+        self._frozenNormals = [None] * self.nSlaves
+
+    def _rebindMaster(self, model: FEModel) -> None:
+        """Rebuild the master facet list/reference coordinates from the regenerated facet set. Any
+        per-slave facet assignment is invalidated, since it indexes into this list."""
+
+        self.facetElements = list(model.elementSets[self._masterSurfaceSetName])
+        self._referenceCoordsFacets = [np.array([n.coordinates for n in el.nodes]) for el in self.facetElements]
+
+        self._assignedFacetIdx = [None] * self.nSlaves
+        self._frozenWeights = [None] * self.nSlaves
+        self._frozenNormals = [None] * self.nSlaves
 
     def getVIJContributionSize(self) -> int:
         size = 0

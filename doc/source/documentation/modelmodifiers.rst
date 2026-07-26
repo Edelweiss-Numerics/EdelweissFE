@@ -54,7 +54,10 @@ elements of a different kind (e.g. lower-order contact-facet elements bonded to 
 untouched by construction, since anything without exactly 20 nodes is skipped automatically. To
 restrict refinement explicitly (rather than relying on the node-count heuristic), or to refine only
 part of a purely 20-node mesh, set ``refineElSet`` (falls back to ``elSet`` if given) to the element
-set that should become the octree mirror.
+set that should become the octree mirror. Marking (see below) is likewise restricted to the octree
+mirror's own elements by default -- there is nothing to gain from evaluating the marking expression
+on an element that can never be refined anyway, and most non-solid element types don't expose most
+quadrature-point results in the first place.
 
 The non-conforming 2:1 interface is coupled kinematically rather than by mortar: octree refinement
 is non-conforming but *nested*, the QUAD8 face-trace (and 3-node quadratic edge) spaces are
@@ -141,6 +144,30 @@ On a path-independent material this is non-destructive (it changes only the incr
 the converged root); for a history-dependent material it yields a physically distinct, relaxed path,
 which is the intended effect. The equilibration solve integrates materials with ``dT = 0``, so it
 suits rate-independent models; rate-dependent materials see no time advance during it by design.
+
+Compatibility with facet-based contact
+---------------------------------------
+
+Refining a solid whose surface feeds a facet-based contact constraint (:mod:`~edelweissfe.
+constraints.nodetodeformablesurfacepenalty`) works out of the box: the modifier keeps the relevant
+``*surface`` definition in sync with the refined child faces, and the constraint -- a
+:class:`~edelweissfe.models.meshdependent.MeshDependent` -- notices via
+:meth:`~edelweissfe.models.femodel.FEModel.changesSince` and regenerates its facets from it at its
+own next connectivity update. A model with both solid elements to be refined and pre-existing
+contact-facet elements should restrict the octree mirror explicitly with ``refineElSet`` (see
+above), since a facet element is never itself 20-node but need not be excluded by name::
+
+    *modelModifier, type=hAdaptivity, name=amr
+    result=stress
+    expression='x > 300.0'
+    reducer=absmax
+    maxLevel=1
+    refineElSet=lower_all
+
+.. literalinclude:: ../../../testfiles/marmot/AMR_ContactRefinePatch/test.inp
+    :language: edelweiss
+    :caption: Example (the master surface's solid block is refined mid-run while contact is already
+              engaged): ``testfiles/marmot/AMR_ContactRefinePatch/test.inp``
 
 Implementing your own model modifiers
 -------------------------------------

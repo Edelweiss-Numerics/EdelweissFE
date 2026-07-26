@@ -143,8 +143,6 @@ class ModelModifier(ModelModifierBase):
         self.maxLevel = kwargs["maxLevel"]
         self.splitFactor = kwargs["splitFactor"]
         self._stateTransfer = _buildStateTransferStrategy(kwargs["stateTransfer"], kwargs["stateTransferOverrides"])
-        # restrict marking to a given element set (its labels); others are never refined
-        self._markLabels = {el.elNumber for el in model.elementSets[kwargs["elSet"]]} if kwargs["elSet"] else None
         self._provider = kwargs["elementProvider"]
         # element -> its section, so children inherit the parent's material (multi-material meshes)
         self._sectionOf = {}
@@ -167,6 +165,15 @@ class ModelModifier(ModelModifierBase):
                 "hAdaptivity found no refineable (20-node) elements in the model; specify "
                 "'refineElSet' (or 'elSet') to select the solid element set explicitly."
             )
+
+        # restrict marking to a given element set (its labels); others are never marked/refined.
+        # Defaulting to the refineable elements themselves (rather than "no restriction") matters in
+        # a mixed mesh: a non-refineable element (e.g. a contact facet) can neither expose most
+        # quadrature-point results nor ever be refined, so there is nothing to gain from marking it.
+        if kwargs["elSet"]:
+            self._markLabels = {el.elNumber for el in model.elementSets[kwargs["elSet"]]}
+        else:
+            self._markLabels = {el.elNumber for el in refineElements}
 
         # element type: infer from a refineable element if not given
         anyEl = refineElements[0]
@@ -327,7 +334,7 @@ class ModelModifier(ModelModifierBase):
             self._sectionOf[child] = self._sectionOf[parentEl]
             # keep the mark-eligible label set in sync so children of a marked element can themselves
             # be marked on a later increment (required for maxLevel > 1 under an elSet restriction)
-            if self._markLabels is not None and parentEl.elNumber in self._markLabels:
+            if parentEl.elNumber in self._markLabels:
                 self._markLabels.add(child.elNumber)
 
             change.addedElements.add(child.elNumber)

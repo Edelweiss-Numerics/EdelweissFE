@@ -73,6 +73,7 @@ class FEModel:
         self._modelChangeObservers = []  #: Observers notified when the model is mutated (e.g. AMR).
         self.topologyVersion = 0  #: Bumped on every structural mutation; drives pull-based reconcile.
         self._changeLog = []  #: Recorded :class:`ModelChange` per mutation, newest last.
+        self.contactFacetRecipes = {}  #: facet elSet name -> (surfaceName, prefix, triangulation).
         self.materials = {}  #: Materials in the model.
         self.analyticalFields = {}  #: AnalyticalFields in the model.
         self.scalarVariables = {}  #: ScalarVariables in the model.

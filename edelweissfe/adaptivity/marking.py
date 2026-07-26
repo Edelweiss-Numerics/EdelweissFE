@@ -87,7 +87,7 @@ def markElements(model, result, expression, reducer="absmax", elementLabels=None
         element = model.elements[label]
         try:
             x = elementScalar(element, result, reducer)
-        except KeyError:  # this element/material does not expose the marked result -> not markable
+        except (KeyError, ValueError):  # this element/material does not expose the marked result
             continue
         if bool(predicate(x)):
             marked.add(label)
