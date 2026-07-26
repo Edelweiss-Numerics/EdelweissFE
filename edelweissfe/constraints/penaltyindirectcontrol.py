@@ -90,12 +90,12 @@ class Constraint(ConstraintBase):
         self.constrainedNSet = model.nodeSets[kwargs["constrainedNSet"]]
         self.loadNSet = model.nodeSets[kwargs["loadNSet"]]
 
-        self.loadVector = np.fromstring(kwargs["loadVector"], dtype=float, sep=",")
-
-        # we may normalize in order to end up with an identical load irrespective of the number of nodes
-        # in the load node set
-        if kwargs["normalizeLoad"]:
-            self.loadVector *= 1.0 / len(self.loadNSet)
+        # the target total load, never mutated -- the per-node share (self.unitResidual, built in
+        # _rebuildDerivedState) is (re)derived from this against the *current* size of loadNSet, so
+        # a mid-run AMR growth of loadNSet keeps the documented normalizeLoad semantics (constant
+        # total load, or a fixed per-node load) instead of freezing them at construction-time size
+        self._targetLoadVector = np.fromstring(kwargs["loadVector"], dtype=float, sep=",")
+        self._normalizeLoad = kwargs["normalizeLoad"]
 
         self.penaltyStiffness = kwargs["penaltyStiffness"]
         self.length = kwargs["length"]
@@ -108,6 +108,20 @@ class Constraint(ConstraintBase):
 
         self.offset = kwargs["offset"]
 
+        self._nDim = model.domainSize
+
+        self.active = True
+
+        self.constrainedValue = 0.0
+
+        self._rebuildDerivedState()
+
+    def _rebuildDerivedState(self):
+        """(Re)derive every array/index sized to ``loadNSet``/``constrainedNSet`` -- the node
+        list, the field list, the DOF-block boundaries, ``nDof`` and the per-node unit residual --
+        from their *current* size. Called once at construction and again, lazily, from
+        :meth:`updateConnectivity` whenever either watched node set was mutated in-place (e.g. by
+        AMR) since the last increment."""
         self._nodes = list(self.loadNSet) + list(self.constrainedNSet)
 
         self._fieldsOnNodes = [
@@ -116,23 +130,22 @@ class Constraint(ConstraintBase):
             ]
         ] * len(self._nodes)
 
-        nDim = model.domainSize
-
-        sizeBlock_loadNodes = nDim * len(self.loadNSet)
+        sizeBlock_loadNodes = self._nDim * len(self.loadNSet)
         self.startBlock_loadNodes = 0
         self.endBlock_loadNodes = sizeBlock_loadNodes
 
-        sizeBlock_constrainedNodes = nDim * len(self.constrainedNSet)
+        sizeBlock_constrainedNodes = self._nDim * len(self.constrainedNSet)
         self.startBlock_constrainedNodes = self.endBlock_loadNodes
         self.endBlock_constrainedNodes = self.startBlock_constrainedNodes + sizeBlock_constrainedNodes
 
         self._nDof = self.endBlock_constrainedNodes
 
-        self.active = True
-
-        self.constrainedValue = 0.0
-
-        self.unitResidual = np.tile(self.loadVector, len(self.loadNSet))
+        # we may normalize in order to end up with an identical total load irrespective of the
+        # number of nodes in the load node set
+        perNodeLoad = self._targetLoadVector
+        if self._normalizeLoad:
+            perNodeLoad = perNodeLoad / len(self.loadNSet)
+        self.unitResidual = np.tile(perNodeLoad, len(self.loadNSet))
 
     @property
     def nodes(self) -> list:
@@ -145,6 +158,18 @@ class Constraint(ConstraintBase):
     @property
     def nDof(self) -> int:
         return self._nDof
+
+    def updateConnectivity(self, model) -> bool:
+        """Called once per increment, before the equation system is (re)built. Recomputes the
+        node lists, DOF-block boundaries and unit residual (see :meth:`_rebuildDerivedState`) if
+        either watched node set was mutated in-place since the last check, and reports the change
+        so the caller rebuilds the equation system even on an increment where nothing else did."""
+        loadChanged = self._checkSetChanged(self.loadNSet)
+        constrainedChanged = self._checkSetChanged(self.constrainedNSet)
+        if loadChanged or constrainedChanged:
+            self._rebuildDerivedState()
+            return True
+        return False
 
     def applyConstraint(self, U_np, dU, PExt, K, timeStep: TimeStep):
         if not self.active:
