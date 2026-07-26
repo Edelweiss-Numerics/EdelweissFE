@@ -80,12 +80,6 @@ class StepAction(BodyLoadBase):
             self._amplitude = lambda x: x
 
         self._idle = False
-        model.registerObserver(self)
-
-    def onModelChanged(self, model, changeType, details=None):
-        """Re-bind the element set if it was updated by an AMR mesh change."""
-        if self._elSetName in model.elementSets:
-            self._elSet = model.elementSets[self._elSetName]
 
     def applyAtStepEnd(self, model, stepMagnitude=None):
         if not self._idle:

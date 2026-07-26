@@ -100,12 +100,6 @@ class StepAction(DistributedLoadBase):
             self.amplitude = lambda x: x
 
         self.idle = False
-        model.registerObserver(self)
-
-    def onModelChanged(self, model, changeType, details=None):
-        """Re-bind the surface dictionary if it was updated by an AMR mesh change."""
-        if self._surfaceName in model.surfaces:
-            self._surface = model.surfaces[self._surfaceName]
 
     @property
     def surface(self) -> str:

@@ -36,6 +36,7 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.surfaces.entitybasedsurface import EntityBasedSurface
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
@@ -378,13 +379,19 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args,
         model.elementSets[elementSet.name] = elementSet
 
     # surfaces
-    model.surfaces["{:}_bottom".format(name)] = {1: model.elementSets["{:}_bottom".format(name)]}
-    model.surfaces["{:}_top".format(name)] = {2: model.elementSets["{:}_top".format(name)]}
+    surfaceName = "{:}_bottom".format(name)
+    model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {1: model.elementSets[surfaceName]})
+    surfaceName = "{:}_top".format(name)
+    model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {2: model.elementSets[surfaceName]})
 
-    model.surfaces["{:}_outer".format(name)] = {5: model.elementSets["{:}_outer".format(name)]}
-    model.surfaces["{:}_inner".format(name)] = {3: model.elementSets["{:}_inner".format(name)]}
+    surfaceName = "{:}_outer".format(name)
+    model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {5: model.elementSets[surfaceName]})
+    surfaceName = "{:}_inner".format(name)
+    model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {3: model.elementSets[surfaceName]})
 
-    model.surfaces["{:}_end".format(name)] = {4: model.elementSets["{:}_end".format(name)]}
-    model.surfaces["{:}_begin".format(name)] = {6: model.elementSets["{:}_begin".format(name)]}
+    surfaceName = "{:}_end".format(name)
+    model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {4: model.elementSets[surfaceName]})
+    surfaceName = "{:}_begin".format(name)
+    model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {6: model.elementSets[surfaceName]})
 
     return model

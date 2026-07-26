@@ -150,6 +150,32 @@ class ConstraintBase(ABC, VIJEntityBase):
 
         self.scalarVariables = scalarVariables
 
+    def _checkSetChanged(self, theSet) -> bool:
+        """Lazily detect whether ``theSet`` (a stable-identity
+        :class:`~edelweissfe.sets.nodeset.NodeSet` or :class:`~edelweissfe.sets.elementset.ElementSet`)
+        was mutated in-place (e.g. by AMR) since this constraint last checked it.
+
+        A constraint that pre-sizes a derived array to the set's size calls this at its own
+        per-increment entry point (e.g. :meth:`updateConnectivity`) to recompute that array
+        lazily, without registering as a
+        :class:`~edelweissfe.models.modelchangeobserver.ModelChangeObserver`.
+
+        Parameters
+        ----------
+        theSet
+            The set whose version is being tracked.
+
+        Returns
+        -------
+        bool
+            True once per version bump of ``theSet`` since the last call for this same set.
+        """
+        setVersions = self.__dict__.setdefault("_setVersions", {})
+        key = id(theSet)
+        changed = setVersions.get(key, theSet._version) != theSet._version
+        setVersions[key] = theSet._version
+        return changed
+
     @abstractmethod
     def applyConstraint(
         self,

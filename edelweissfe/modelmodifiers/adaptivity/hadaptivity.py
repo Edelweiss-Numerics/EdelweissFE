@@ -50,8 +50,6 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.modelchange import ModelChange
 from edelweissfe.models.modelchangeobserver import ModelChangeType
 from edelweissfe.points.node import Node
-from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.surfaces.entitybasedsurface import EntityBasedSurface
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
@@ -366,7 +364,7 @@ class ModelModifier(ModelModifierBase):
                 for meid, faceID in pairs:
                     if meid in self._eidToEl:
                         byFace[faceID].append(self._eidToEl[meid])
-                model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {f: els for f, els in byFace.items()})
+                model.surfaces[surfaceName].replaceData({f: els for f, els in byFace.items()})
 
         # Tracked (non-all) node sets that gain nodes are rebuilt with the new members (excluding
         # hanging slave nodes, whose motion is set by the MPC).
@@ -375,43 +373,47 @@ class ModelModifier(ModelModifierBase):
             present = {n.label for n in model.nodeSets[setName].nodes}
             if any(label not in present and label not in slaves for label in labels):
                 members = [model.nodes[label] for label in sorted(labels) if label not in slaves]
-                model.nodeSets[setName] = NodeSet(setName, members)
+                model.nodeSets[setName].replaceMembers(members)
                 change.changedNodeSets.add(setName)
 
         # sync all element sets (user sets like 'concrete' and all-encompassing sets) -- Finding 1
-        from edelweissfe.sets.elementset import ElementSet
-
         allNodes = list(model.nodes.values())
         if newNodes:
             for setName in self._allLikeSets | {"all"}:
-                model.nodeSets[setName] = NodeSet(setName, allNodes)
+                model.nodeSets[setName].replaceMembers(allNodes)
                 change.changedNodeSets.add(setName)
         for setName, eids in mesh.elementSets.items():
             if setName in model.elementSets:
                 if eids & newChildEids:
                     change.changedElementSets.add(setName)
                 elements = [self._eidToEl[eid] for eid in eids if eid in self._eidToEl]
-                model.elementSets[setName] = ElementSet(setName, elements)
-        model.elementSets["all"] = ElementSet("all", list(model.elements.values()))
+                model.elementSets[setName].replaceMembers(elements)
+        model.elementSets["all"].replaceMembers(list(model.elements.values()))
         change.changedElementSets.add("all")
 
-        # rebuild node fields to include the new nodes, then restore the warm start: converged values
-        # on the retained nodes and interpolated values on the new nodes (Finding 1)
-        model._prepareVariablesAndFields(self._journal)
+        # resize node fields in place to include the new nodes, then restore the warm start:
+        # converged values on the retained nodes and interpolated values on the new nodes (Finding 1).
+        # Both U (current) and P (previous converged) get the same warm-start value, so the first
+        # Newton iteration after refinement sees a normal residual rather than a spurious dU = U - P
+        # = U - 0 cold-restart spike on every retained/new node (P-field warm-start fix).
+        model._resizeNodeFieldsForNodes(self._journal)
         for fieldName, nodeField in model.nodeFields.items():
             if "U" not in nodeField:
                 nodeField.createFieldValueEntry("U")
             if "P" not in nodeField:
                 nodeField.createFieldValueEntry("P")
             U = nodeField["U"]
+            P = nodeField["P"]
             old = oldValues.get(fieldName, {})
             new = newValues.get(fieldName, {})
             for node in nodeField.nodes:
                 idx = nodeField._indicesOfNodesInArray[node]
                 if node in old:
                     U[idx] = old[node]
+                    P[idx] = old[node]
                 elif node in new:
                     U[idx] = new[node]
+                    P[idx] = new[node]
 
         model._linkFieldVariableObjects(model.nodeSets["all"])
         return change

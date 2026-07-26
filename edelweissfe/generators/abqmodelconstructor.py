@@ -56,6 +56,7 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.surfaces.entitybasedsurface import EntityBasedSurface
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import (
     keywordIdentifier,
@@ -244,7 +245,7 @@ class AbqModelConstructor:
                     faceNumber = int(faceNumber.replace("S", ""))
                     surface[faceNumber] = model.elementSets[elSet]
 
-            model.surfaces[name] = surface
+            model.surfaces[name] = EntityBasedSurface(name, surface)
 
         return model
 

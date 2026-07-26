@@ -59,6 +59,7 @@ from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.surfaces.entitybasedsurface import EntityBasedSurface
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
@@ -225,9 +226,13 @@ def generateModelData(generatorDefinition, model, journal, *args, **kwargs):
 
     model.elementSets["{:}_all".format(name)] = ElementSet("{:}_all".format(name), np.ravel(elGrid))
     # surfaces
-    model.surfaces["{:}_bottom".format(name)] = {1: np.ravel(elGrid[:, 0])}
-    model.surfaces["{:}_top".format(name)] = {3: np.ravel(elGrid[:, -1])}
-    model.surfaces["{:}_right".format(name)] = {2: np.ravel(elGrid[-1, :])}
-    model.surfaces["{:}_left".format(name)] = {4: np.ravel(elGrid[0, :])}
+    surfaceName = "{:}_bottom".format(name)
+    model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {1: np.ravel(elGrid[:, 0])})
+    surfaceName = "{:}_top".format(name)
+    model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {3: np.ravel(elGrid[:, -1])})
+    surfaceName = "{:}_right".format(name)
+    model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {2: np.ravel(elGrid[-1, :])})
+    surfaceName = "{:}_left".format(name)
+    model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {4: np.ravel(elGrid[0, :])})
 
     return model

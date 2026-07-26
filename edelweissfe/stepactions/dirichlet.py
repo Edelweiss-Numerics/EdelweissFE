@@ -114,22 +114,20 @@ class StepAction(DirichletBase):
 
         self._components = None
         self._journal = journal
+        self._model = model
 
         self.updateStepAction(action, jobInfo, model, fieldOutputController, journal)
 
-        # re-resolve the node set + prescribed values if the mesh is mutated mid-analysis (e.g. AMR
-        # adds new boundary nodes and rebuilds the node set object) -- fixes Finding 5
-        model.registerObserver(self)
-
-    def onModelChanged(self, model, changeType, details=None):
-        """Re-point the (possibly rebuilt) node set and re-size the prescribed values so the BC
-        covers any new boundary nodes after a model change. Preserve the active/inactive flag:
-        updateStepAction unconditionally activates, but a BC deactivated at a prior step end must
-        stay inactive -- otherwise a refinement in a later step would silently revive it."""
-        self.nSet = model.nodeSets[self.action["nSet"]]
-        wasActive = self.active
-        self.updateStepAction(self.action, None, model, None, self._journal)
-        self.active = wasActive
+    def _reconcileIfSetChanged(self):
+        """Re-size the prescribed values if the node set was mutated in-place (e.g. AMR adding new
+        boundary nodes) since the last check. Preserve the active/inactive flag: updateStepAction
+        unconditionally activates, but a BC deactivated at a prior step end must stay inactive --
+        otherwise a refinement in a later step would silently revive it. The node set itself needs
+        no re-fetch: it has stable identity (mutated in place), so ``self.nSet`` is already current."""
+        if self._checkSetChanged(self.nSet):
+            wasActive = self.active
+            self.updateStepAction(self.action, None, self._model, None, self._journal)
+            self.active = wasActive
 
     @property
     def components(
@@ -169,6 +167,7 @@ class StepAction(DirichletBase):
         self.amplitude = self._getAmplitude(action)
 
     def getDelta(self, timeStep: TimeStep):
+        self._reconcileIfSetChanged()
         if self.active:
             return self.delta * (
                 self.amplitude(timeStep.stepProgress)

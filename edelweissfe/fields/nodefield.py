@@ -88,6 +88,41 @@ class NodeField:
         self._indicesOfNodesInArray = {n: i for i, n in enumerate(self.nodes)}
         self._subsetCache = dict()
         self._values = dict()
+        self._version = 0  #: bumped on every in-place mutation (resize); stable identity for AMR
+
+    def resize(self, nodes) -> None:
+        """Resize this NodeField in-place for a new list of associated nodes, preserving values
+        for every node identity present both before and after the resize (e.g. AMR-retained
+        nodes keep their converged state; new nodes get a zeroed entry until a caller fills it
+        in, e.g. with an interpolated warm start).
+
+        This object's identity is preserved -- consumers holding a reference to this NodeField
+        (or a :class:`NodeFieldSubset` of it) see the new size without re-fetching from the
+        model.
+
+        Parameters
+        ----------
+        nodes
+            The new (possibly larger or smaller) list of nodes this NodeField is associated with.
+            Only nodes with this field active are retained, exactly as at construction.
+        """
+        oldIndicesOfNodesInArray = self._indicesOfNodesInArray
+        oldValues = self._values
+
+        self.nodes = [n for n in nodes if self.name in n.fields]
+        self._indicesOfNodesInArray = {n: i for i, n in enumerate(self.nodes)}
+
+        newValues = dict()
+        for entry, oldArray in oldValues.items():
+            newArray = np.zeros((len(self.nodes), self.dimension), dtype=float)
+            for node, newIdx in self._indicesOfNodesInArray.items():
+                oldIdx = oldIndicesOfNodesInArray.get(node)
+                if oldIdx is not None:
+                    newArray[newIdx] = oldArray[oldIdx]
+            newValues[entry] = newArray
+        self._values = newValues
+
+        self._version += 1
 
     def _getNodeFieldSubsetClass(
         self,
@@ -214,13 +249,36 @@ class NodeFieldSubset(NodeField):
         self.parentNodeField = parentNodeField
         self.name = parentNodeField.name
         self.associatedSet = subset
+        self._seenParentVersion = parentNodeField._version
         self.nodes = self._getSubsetNodes(subset)
         self._indicesOfNodesInParentArray = np.array([parentNodeField._indicesOfNodesInArray[n] for n in self.nodes])
 
+    def _healIfParentResized(self):
+        """Rebuild the cached parent-index array if the parent NodeField was resized (e.g. by AMR)
+        since this subset was created or last accessed. Since the parent NodeField (and, for a
+        NodeSet/ElementSet-based subset, ``associatedSet`` itself) has stable identity, this makes
+        the subset transparent to a mesh mutation -- no observer registration needed.
+
+        This keys off the *parent's* version only, not ``associatedSet``'s own version -- correct
+        as long as every mutator that changes a NodeSet/ElementSet's membership also resizes every
+        NodeField of that model in the same call (true today: hadaptivity._materialize always goes
+        through FEModel._resizeNodeFieldsForNodes, which resizes every NodeField, whenever any set
+        changes). A future mutator that changes set membership without touching NodeFields would
+        need this subset to key off ``associatedSet._version`` as well, or this heal would silently
+        miss it."""
+        if self.parentNodeField._version != self._seenParentVersion:
+            self.nodes = self._getSubsetNodes(self.associatedSet)
+            self._indicesOfNodesInParentArray = np.array(
+                [self.parentNodeField._indicesOfNodesInArray[n] for n in self.nodes]
+            )
+            self._seenParentVersion = self.parentNodeField._version
+
     def __getitem__(self, key):
+        self._healIfParentResized()
         return self.parentNodeField[key][self._indicesOfNodesInParentArray]
 
     def __contains__(self, key):
+        self._healIfParentResized()
         return key in self.nodes
 
     def createFieldValueEntry(self, name):

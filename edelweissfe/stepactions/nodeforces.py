@@ -115,30 +115,32 @@ class StepAction(NodalLoadBase):
 
         self.nodeForcesStepStart = np.zeros(shape)
         self.nodeForcesDelta = np.zeros(shape)
+        self._nSetNodeOrder = list(self._nSet)  # node identity per row, for the lazy resize below
 
         self.possibleComponents = [str(i + 1) for i in range(self._fieldSize)]
 
         self.updateStepAction(action, jobInfo, model, fieldOutputController, journal)
-        model.registerObserver(self)
 
-    def onModelChanged(self, model, changeType, details=None):
-        """Re-bind the node set if it was updated by an AMR mesh change, and re-size the load arrays
-        to the (possibly larger) set. Retained nodes keep their accumulated load per node identity;
-        newly added boundary nodes get zero force. Without this, the flat load array would no longer
-        match the node set's DOF layout after refinement grows a loaded boundary."""
-        if self._nSetName not in model.nodeSets:
+    def _reconcileIfSetChanged(self):
+        """Re-size the load arrays if the node set was mutated in-place (e.g. AMR adding new
+        boundary nodes) since the last check, preserving each retained node's accumulated/pending
+        load by identity; newly added nodes get zero force. Without this, the flat load array
+        would no longer match the node set's DOF layout after refinement grows a loaded boundary.
+        The node set itself needs no re-fetch: it has stable identity (mutated in place), so
+        ``self._nSet`` is already current -- only these derived, pre-sized arrays go stale."""
+        if not self._checkSetChanged(self._nSet):
             return
-        oldNodes = list(self._nSet)
-        oldStart = {node: self.nodeForcesStepStart[i] for i, node in enumerate(oldNodes)}
-        oldDelta = {node: self.nodeForcesDelta[i] for i, node in enumerate(oldNodes)}
-        self._nSet = model.nodeSets[self._nSetName]
-        shape = (len(self._nSet), self._fieldSize)
+        oldStart = {node: self.nodeForcesStepStart[i] for i, node in enumerate(self._nSetNodeOrder)}
+        oldDelta = {node: self.nodeForcesDelta[i] for i, node in enumerate(self._nSetNodeOrder)}
+        newNodes = list(self._nSet)
+        shape = (len(newNodes), self._fieldSize)
         self.nodeForcesStepStart = np.zeros(shape)
         self.nodeForcesDelta = np.zeros(shape)
-        for i, node in enumerate(self._nSet):
+        for i, node in enumerate(newNodes):
             if node in oldStart:
                 self.nodeForcesStepStart[i] = oldStart[node]
                 self.nodeForcesDelta[i] = oldDelta[node]
+        self._nSetNodeOrder = newNodes
 
     def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
         """Update the step action.
@@ -146,6 +148,7 @@ class StepAction(NodalLoadBase):
         It is a reasonable requirement that the updated direction components cannot change.
         """
 
+        self._reconcileIfSetChanged()
         self._idle = False
 
         if action["components"] is not None:
@@ -191,6 +194,7 @@ class StepAction(NodalLoadBase):
         return amplitude
 
     def applyAtStepEnd(self, model, stepMagnitude=None):
+        self._reconcileIfSetChanged()
         if not self._idle:
             if stepMagnitude is None:
                 # standard case
@@ -203,6 +207,7 @@ class StepAction(NodalLoadBase):
             self._idle = True
 
     def getCurrentLoad(self, timeStep: TimeStep):
+        self._reconcileIfSetChanged()
         if self._idle:
             return self.nodeForcesStepStart
         else:

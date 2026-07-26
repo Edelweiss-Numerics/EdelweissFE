@@ -257,6 +257,42 @@ class FEModel:
         self.scalarVariables = dict()
         self._createAndAssignScalarVariableForConstraints(journal)
 
+    def _resizeNodeFieldsForNodes(self, journal: Journal):
+        """Resize the existing NodeFields in place for the current ``self.nodeSets["all"]``,
+        instead of rebuilding :attr:`nodeFields` from scratch as :meth:`_prepareVariablesAndFields`
+        does. Used by mesh mutators (e.g. AMR's ``hadaptivity._materialize``) so that NodeField
+        identity -- and hence any :class:`~edelweissfe.fields.nodefield.NodeFieldSubset` or
+        reference a consumer cached -- survives a topology change.
+
+        Parameters
+        ----------
+        journal
+            The journal instance.
+        """
+        journal.message(
+            "Activating fields on nodes from Elements and Constraints",
+            self.identification,
+        )
+        self._populateNodeFieldVariablesFromElements()
+        self._populateNodeFieldVariablesFromConstraints()
+
+        journal.message("Resizing NodeFields", self.identification)
+        nodes = self.nodeSets["all"]
+        for nodeField in self.nodeFields.values():
+            nodeField.resize(nodes)
+
+        # a phenomenon activated for the first time (e.g. by a newly materialized constraint) has
+        # no NodeField yet -- create it exactly as _prepareVariablesAndFields would
+        for field in phenomena.keys():
+            if field not in self.nodeFields:
+                newNodeField = NodeField(field, getFieldSize(field, self.domainSize), nodes)
+                if newNodeField.nodes:
+                    self.nodeFields[field] = newNodeField
+
+        journal.message("Assembling ScalarVariables", self.identification)
+        self.scalarVariables = dict()
+        self._createAndAssignScalarVariableForConstraints(journal)
+
     def _prepareElements(self, journal: Journal):
         """Prepare elements for a simulation.
         In detail, sections are assigned.

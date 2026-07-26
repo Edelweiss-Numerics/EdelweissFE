@@ -359,17 +359,6 @@ class NodeFieldOutput(_FieldOutputBase):
         self.associatedSet = nodeField.associatedSet
 
         super().__init__(name, model, journal, saveHistory, f_x, export, fExport_x)
-        model.registerObserver(self)
-
-    def onModelChanged(self, model, changeType, details=None):
-        """Re-bind NodeField reference upon AMR mesh mutation."""
-        setName = self.associatedSet.name
-        if setName in model.nodeSets:
-            self.associatedSet = model.nodeSets[setName]
-        elif setName in model.elementSets:
-            self.associatedSet = model.elementSets[setName]
-        if self.fieldName in model.nodeFields:
-            self._nodeField = model.nodeFields[self.fieldName].subset(self.associatedSet)
 
     def updateResults(self, model: FEModel):
         """Update the field output.
@@ -498,20 +487,23 @@ class ElementFieldOutput(_FieldOutputBase):
         self.resultName = resultName
         self.quadraturePoints = quadraturePoints
 
+        self._seenSetVersion = elSet._version
         self.elementResultCollector = ElementResultCollector(
             list(self.associatedSet), self.quadraturePoints, self.resultName
         )
 
         super().__init__(name, model, journal, saveHistory, f_x, export, fExport_x)
-        model.registerObserver(self)
 
-    def onModelChanged(self, model, changeType, details=None):
-        """Re-bind element result collector upon AMR mesh mutation."""
-        if self.associatedSet.name in model.elementSets:
-            self.associatedSet = model.elementSets[self.associatedSet.name]
-        self.elementResultCollector = ElementResultCollector(
-            list(self.associatedSet), self.quadraturePoints, self.resultName
-        )
+    def _rebuildCollectorIfSetChanged(self):
+        """Rebuild the element result collector -- which pins a fixed snapshot of the element
+        list at construction -- if the associated ElementSet was mutated in-place (e.g. AMR
+        replacing a refined parent element with its children) since the last check. Unlike a plain
+        iteration over the set, this pinned snapshot does not see new elements on its own."""
+        if self.associatedSet._version != self._seenSetVersion:
+            self.elementResultCollector = ElementResultCollector(
+                list(self.associatedSet), self.quadraturePoints, self.resultName
+            )
+            self._seenSetVersion = self.associatedSet._version
 
     def updateResults(self, model: FEModel):
         """Update the field output.
@@ -523,6 +515,7 @@ class ElementFieldOutput(_FieldOutputBase):
             The model tree.
         """
 
+        self._rebuildCollectorIfSetChanged()
         result = self.elementResultCollector.getCurrentResults()
 
         super()._applyResultsPipleline(result)
@@ -539,6 +532,7 @@ class ElementFieldOutput(_FieldOutputBase):
         if self.f:
             raise Exception("cannot set field output for modified results (f(x) != None) !")
 
+        self._rebuildCollectorIfSetChanged()
         for i, el in enumerate(self.associatedSet):
             for j, g in enumerate(self.quadraturePoints):
                 theArray = el.getResultArray(self.resultName, g, True)
