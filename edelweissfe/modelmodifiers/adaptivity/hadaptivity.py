@@ -68,6 +68,15 @@ module.addOptionalArg(
     str,
     None,
 )
+module.addOptionalArg(
+    "refineElSet",
+    "Restrict the AMR octree mirror itself to this element set, e.g. the solid elements in a mesh "
+    "that also contains contact-facet elements. Elements outside this set never become octree roots "
+    "and are left untouched by refinement. Defaults to 'elSet' if given, otherwise to every 20-node "
+    "(HEX20-family) element in the model.",
+    str,
+    None,
+)
 module.addOptionalArg("maxLevel", "Maximum refinement level.", int, 1)
 module.addOptionalArg(
     "splitFactor",
@@ -138,8 +147,23 @@ class ModelModifier(ModelModifierBase):
                 for element in elementSet:
                     self._sectionOf[element] = section
 
-        # element type: infer from an existing element if not given
-        anyEl = next(iter(model.elements.values()))
+        # restrict the octree mirror to the refineable solid elements: a model that also contains
+        # e.g. contact-facet elements (2/3 nodes) must not have those become octree roots. Prefer an
+        # explicit restriction; otherwise fall back to the 20-node (HEX20-family) elements, which is
+        # the only family this modifier supports anyway.
+        refineSetName = kwargs["refineElSet"] or kwargs["elSet"]
+        if refineSetName is not None:
+            refineElements = list(model.elementSets[refineSetName])
+        else:
+            refineElements = [el for el in model.elements.values() if len(el.nodes) == 20]
+        if not refineElements:
+            raise ValueError(
+                "hAdaptivity found no refineable (20-node) elements in the model; specify "
+                "'refineElSet' (or 'elSet') to select the solid element set explicitly."
+            )
+
+        # element type: infer from a refineable element if not given
+        anyEl = refineElements[0]
         self._elementType = kwargs["elementType"] or anyEl.elType
         self._elementClass = getElementClass(self._elementType, self._provider)
         self._nextElLabel = max(model.elements.keys()) + 1
@@ -149,7 +173,7 @@ class ModelModifier(ModelModifierBase):
         for label, node in model.nodes.items():
             self._mesh.registry.seed(label, node.coordinates)
         self._eidToEl = {}  # mesh element id -> live element
-        for label, el in model.elements.items():
+        for el in refineElements:
             coords = np.array([n.coordinates for n in el.nodes])
             eid = self._mesh.add_root(coords)
             self._eidToEl[eid] = el
@@ -167,7 +191,10 @@ class ModelModifier(ModelModifierBase):
         elToEid = {el: eid for eid, el in self._eidToEl.items()}
         for setName, elementSet in model.elementSets.items():
             eids = [elToEid[el] for el in elementSet if el in elToEid]
-            self._mesh.define_element_set(setName, eids)
+            # a set with no refineable member (e.g. a contact-facet-only set) is left untracked, so
+            # _materialize never overwrites it with an emptied-out ElementSet
+            if eids:
+                self._mesh.define_element_set(setName, eids)
 
         # track element-based surfaces so surface loads stay consistent under refinement (Finding 2)
         for surfaceName, surface in model.surfaces.items():

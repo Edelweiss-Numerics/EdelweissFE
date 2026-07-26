@@ -37,6 +37,13 @@ interpolation) and quadrature-point history (via a pluggable state-transfer stra
 non-conforming interface with an exact hanging-node multi-point constraint. Element/node sets, sections and element-based surfaces are propagated to
 the children so material assignment and surface loads stay consistent.
 
+The octree mirror only ever tracks the refineable 20-node elements: a model that also contains
+elements of a different kind (e.g. lower-order contact-facet elements bonded to the mesh) is left
+untouched by construction, since anything without exactly 20 nodes is skipped automatically. To
+restrict refinement explicitly (rather than relying on the node-count heuristic), or to refine only
+part of a purely 20-node mesh, set ``refineElSet`` (falls back to ``elSet`` if given) to the element
+set that should become the octree mirror.
+
 The non-conforming 2:1 interface is coupled kinematically rather than by mortar: octree refinement
 is non-conforming but *nested*, the QUAD8 face-trace (and 3-node quadratic edge) spaces are
 invariant under the axis-aligned affine sub-maps of a uniform subdivision (of *any* factor, not only
