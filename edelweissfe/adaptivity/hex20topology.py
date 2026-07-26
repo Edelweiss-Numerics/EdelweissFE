@@ -196,15 +196,26 @@ def _build_edges():
     return edges
 
 
-def octant_children_param():
-    """Parametric coordinates (in the parent cube) of the 20 nodes of each of the 8 octree children."""
-    halves = [(-1.0, 0.0), (0.0, 1.0)]
+def subdivision_children_param(n: int = 2):
+    """Parametric coordinates (in the parent cube [-1, 1]^3) of the 20 nodes of each of the ``n**3``
+    children produced by subdividing a HEX20 into ``n`` equal parts per axis.
+
+    ``n = 2`` is octree bisection (8 children); ``n = 3`` gives a 3x3x3 split (27 children), etc.
+    Children are ordered ``index = ix*n*n + iy*n + iz`` with ``ix, iy, iz`` in ``0..n-1`` (x outer,
+    z inner) -- the ordering assumed by :func:`face_child_octants` and the warm-start interpolation.
+    """
+    slabs = [(-1.0 + 2.0 * i / n, -1.0 + 2.0 * (i + 1) / n) for i in range(n)]
     children = []
-    for hx in halves:
-        for hy in halves:
-            for hz in halves:
-                children.append(hex20_box_coords(hx[0], hx[1], hy[0], hy[1], hz[0], hz[1]))
+    for sx in slabs:
+        for sy in slabs:
+            for sz in slabs:
+                children.append(hex20_box_coords(sx[0], sx[1], sy[0], sy[1], sz[0], sz[1]))
     return children
+
+
+def octant_children_param():
+    """Octree (2x2x2) children -- backward-compatible alias for ``subdivision_children_param(2)``."""
+    return subdivision_children_param(2)
 
 
 FACES = _build_faces()  # 6 x 8
@@ -236,19 +247,20 @@ FACEID_TO_FACE = _faceid_to_face()  # faceID (1-6) -> FACES index (0-5)
 FACE_TO_FACEID = {v: k for k, v in FACEID_TO_FACE.items()}
 
 
-def face_child_octants(face_index):
-    """The 4 octree-child indices (0-7, in octant_children_param order) that tile a given face.
+def face_child_octants(face_index, n: int = 2):
+    """The ``n**2`` child indices (in :func:`subdivision_children_param` order) that tile a given face
+    of an ``n``-per-axis subdivision.
 
     A child tiles a parent face iff it is on that face's side of the split; the child covers it with
     its SAME local face (and hence the SAME faceID)."""
     axis = face_index // 2
-    side = 1 if (face_index % 2 == 1) else 0  # even index = minus side, odd = plus side
+    side = n - 1 if (face_index % 2 == 1) else 0  # even index = minus side, odd = plus side
     out = []
-    for ix in (0, 1):
-        for iy in (0, 1):
-            for iz in (0, 1):
+    for ix in range(n):
+        for iy in range(n):
+            for iz in range(n):
                 if (ix, iy, iz)[axis] == side:
-                    out.append(ix * 4 + iy * 2 + iz)
+                    out.append(ix * n * n + iy * n + iz)
     return out
 
 

@@ -29,8 +29,9 @@ Module ``edelweissfe.modelmodifiers.adaptivity.hadaptivity``
 Dynamic adaptive :math:`h`-refinement of 20-node serendipity hexahedra (``GC3D20`` / ``GC3D20R``)
 in the small-strain, multifield (displacement + nonlocal damage) regime. Each increment the
 modifier evaluates a user marking expression on a quadrature-point result, subdivides every marked
-element into eight octree children (honouring curved edges via the parent isoparametric map),
-enforces a 2:1 face-balance, transfers the converged nodal values (parent isoparametric
+element into ``splitFactor**3`` children (default ``splitFactor=2``, i.e. eight octree children;
+``splitFactor=3`` gives a 3x3x3 split into 27, and so on -- honouring curved edges via the parent
+isoparametric map), enforces a one-level face-balance, transfers the converged nodal values (parent isoparametric
 interpolation) and quadrature-point history (via a pluggable state-transfer strategy, see
 ``edelweissfe.adaptivity.statetransfer``) to the children, and couples the resulting
 non-conforming interface with an exact hanging-node multi-point constraint. Element/node sets, sections and element-based surfaces are propagated to
@@ -38,7 +39,8 @@ the children so material assignment and surface loads stay consistent.
 
 The non-conforming 2:1 interface is coupled kinematically rather than by mortar: octree refinement
 is non-conforming but *nested*, the QUAD8 face-trace (and 3-node quadratic edge) spaces are
-invariant under the axis-aligned affine sub-maps of octree bisection, so pinning each hanging
+invariant under the axis-aligned affine sub-maps of a uniform subdivision (of *any* factor, not only
+bisection), so pinning each hanging
 (slave) node to the coarse serendipity trace, :math:`u_s = \sum_a N_a(\xi_s)\, u_{m_a}`, is exact.
 The same field-independent weights apply to every field on the node (equal-order serendipity), so a
 single record per hanging node covers displacement and nonlocal damage alike. The constraint itself

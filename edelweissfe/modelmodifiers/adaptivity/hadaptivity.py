@@ -32,7 +32,7 @@ from collections import defaultdict
 
 import numpy as np
 
-from edelweissfe.adaptivity.hex20topology import hex20_shape, octant_children_param
+from edelweissfe.adaptivity.hex20topology import hex20_shape, subdivision_children_param
 from edelweissfe.adaptivity.marking import markElements
 from edelweissfe.adaptivity.refinement import AdaptiveMesh
 from edelweissfe.adaptivity.statetransfer.perstatevar import PerStateVarStateTransfer
@@ -69,6 +69,13 @@ module.addOptionalArg(
     None,
 )
 module.addOptionalArg("maxLevel", "Maximum refinement level.", int, 1)
+module.addOptionalArg(
+    "splitFactor",
+    "Number of equal parts per axis a marked element is split into (2 = octree bisection into 8 "
+    "children; 3 = 3x3x3 = 27 children, etc.). The hanging-node coupling stays exact for any factor.",
+    int,
+    2,
+)
 module.addOptionalArg("elementType", "Element type to instantiate for children (default: like parents).", str, None)
 module.addOptionalArg("elementProvider", "Element provider.", str, "marmot")
 module.addOptionalArg(
@@ -119,6 +126,7 @@ class ModelModifier(ModelModifierBase):
         self.expression = kwargs["expression"]
         self.reducer = kwargs["reducer"]
         self.maxLevel = kwargs["maxLevel"]
+        self.splitFactor = kwargs["splitFactor"]
         self._stateTransfer = _buildStateTransferStrategy(kwargs["stateTransfer"], kwargs["stateTransferOverrides"])
         # restrict marking to a given element set (its labels); others are never refined
         self._markLabels = {el.elNumber for el in model.elementSets[kwargs["elSet"]]} if kwargs["elSet"] else None
@@ -137,7 +145,7 @@ class ModelModifier(ModelModifierBase):
         self._nextElLabel = max(model.elements.keys()) + 1
 
         # build the AdaptiveMesh mirror, sharing node labels with the live model
-        self._mesh = AdaptiveMesh()
+        self._mesh = AdaptiveMesh(splitFactor=self.splitFactor)
         for label, node in model.nodes.items():
             self._mesh.registry.seed(label, node.coordinates)
         self._eidToEl = {}  # mesh element id -> live element
@@ -174,7 +182,8 @@ class ModelModifier(ModelModifierBase):
         model.multiPointConstraints[name + "_hanging"] = self._hanging
         self._converged = False  # set True once an increment has converged
         self._lastRefinedTime = None  # model.time of the last refinement (guards re-refine on cutback)
-        self._octantParams = octant_children_param()  # parent-parametric coords of each child's nodes
+        # parent-parametric coords of each child's nodes (used for warm-start interpolation)
+        self._octantParams = subdivision_children_param(self.splitFactor)
 
     def updateModel(self, model: FEModel, step, timeStep: float) -> bool:
         # Do not re-refine if the solver is re-trying the exact same time state after a cutback

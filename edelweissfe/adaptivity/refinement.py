@@ -50,8 +50,8 @@ from edelweissfe.adaptivity.hex20topology import (
     FACES,
     face_child_octants,
     hex20_shape,
-    octant_children_param,
     quad8_shape,
+    subdivision_children_param,
 )
 
 
@@ -102,23 +102,25 @@ class NodeRegistry:
         return [self.label(c) for c in coords]
 
 
-def subdivide(parent_coords: np.ndarray):
-    """Subdivide one HEX20 into 8 octree children.
+def subdivide(parent_coords: np.ndarray, n: int = 2):
+    """Subdivide one HEX20 into ``n**3`` children (``n = 2`` = octree bisection, 8 children).
 
     Parameters
     ----------
     parent_coords
         (20, 3) physical coordinates of the parent HEX20 (C3D20 order).
+    n
+        Number of equal parts per axis (the split factor).
 
     Returns
     -------
     list of (20, 3) arrays
-        Physical coordinates of the 8 child HEX20s, in C3D20 order, obtained by evaluating the
+        Physical coordinates of the ``n**3`` child HEX20s, in C3D20 order, obtained by evaluating the
         parent isoparametric map at each child node's parent-parametric position.
     """
     parent_coords = np.asarray(parent_coords, dtype=float)
     children = []
-    for child_param in octant_children_param():  # (20, 3) parent-parametric coords
+    for child_param in subdivision_children_param(n):  # (20, 3) parent-parametric coords
         phys = np.array([hex20_shape(*p) @ parent_coords for p in child_param])
         children.append(phys)
     return children
@@ -209,8 +211,9 @@ class AdaptiveMesh:
     require topological (shared-face) adjacency instead; that is future work.
     """
 
-    def __init__(self, decimals: int = 8):
+    def __init__(self, decimals: int = 8, splitFactor: int = 2):
         self.registry = NodeRegistry(decimals)
+        self.splitFactor = splitFactor  # n: each refined element is split into n**3 children per axis
         self.elements = {}  # eid -> dict(conn, coords, level, active, parent, children)
         self.elementSets = {}  # name -> set(eid)      (children inherit membership on refine)
         self.nodeSets = {}  # name -> set(node label)
@@ -271,7 +274,7 @@ class AdaptiveMesh:
         if not e["active"]:
             return e["children"]
         parent_conn = e["conn"]
-        kids = [self._add(ch, e["level"] + 1, eid) for ch in subdivide(e["coords"])]
+        kids = [self._add(ch, e["level"] + 1, eid) for ch in subdivide(e["coords"], self.splitFactor)]
         e["active"] = False
         e["children"] = kids
 
@@ -285,7 +288,7 @@ class AdaptiveMesh:
             faceids_here = [fid for (peid, fid) in pairs if peid == eid]
             for fid in faceids_here:
                 pairs.discard((eid, fid))
-                for j in face_child_octants(FACEID_TO_FACE[fid]):
+                for j in face_child_octants(FACEID_TO_FACE[fid], self.splitFactor):
                     pairs.add((kids[j], fid))
 
         # node sets: a new node joins a set if it lies on a parent face/edge fully contained in the set
