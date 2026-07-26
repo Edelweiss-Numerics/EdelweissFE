@@ -145,17 +145,21 @@ the converged root); for a history-dependent material it yields a physically dis
 which is the intended effect. The equilibration solve integrates materials with ``dT = 0``, so it
 suits rate-independent models; rate-dependent materials see no time advance during it by design.
 
-Compatibility with facet-based contact
----------------------------------------
+Compatibility with facet-based contact and tie
+-------------------------------------------------
 
-Refining a solid whose surface feeds a facet-based contact constraint (:mod:`~edelweissfe.
-constraints.nodetodeformablesurfacepenalty`) works out of the box: the modifier keeps the relevant
-``*surface`` definition in sync with the refined child faces, and the constraint -- a
-:class:`~edelweissfe.models.meshdependent.MeshDependent` -- notices via
-:meth:`~edelweissfe.models.femodel.FEModel.changesSince` and regenerates its facets from it at its
-own next connectivity update. A model with both solid elements to be refined and pre-existing
-contact-facet elements should restrict the octree mirror explicitly with ``refineElSet`` (see
-above), since a facet element is never itself 20-node but need not be excluded by name::
+Refining a solid whose surface feeds a facet-based contact or :mod:`~edelweissfe.constraints.tie`
+constraint works out of the box: the modifier keeps the relevant ``*surface`` definition in sync
+with the refined child faces, and the constraint -- a :class:`~edelweissfe.models.meshdependent.
+MeshDependent` -- regenerates its facets from it. :mod:`~edelweissfe.constraints.
+nodetodeformablesurfacepenalty` notices via :meth:`~edelweissfe.models.femodel.FEModel.changesSince`
+at its own next connectivity update (a pull, since that tick already runs before the equation
+system is rebuilt); a tie has no such early tick of its own (its only hook is called *from inside*
+that rebuild, too late to safely swap in new facet elements), so it reconciles via the model's push
+notification instead. Either way, no separate wiring is needed. A model with both solid elements to
+be refined and pre-existing contact-facet elements should restrict the octree mirror explicitly with
+``refineElSet`` (see above), since a facet element is never itself 20-node but need not be excluded
+by name::
 
     *modelModifier, type=hAdaptivity, name=amr
     result=stress
@@ -168,6 +172,11 @@ above), since a facet element is never itself 20-node but need not be excluded b
     :language: edelweiss
     :caption: Example (the master surface's solid block is refined mid-run while contact is already
               engaged): ``testfiles/marmot/AMR_ContactRefinePatch/test.inp``
+
+.. literalinclude:: ../../../testfiles/marmot/AMR_TieRefine/test.inp
+    :language: edelweiss
+    :caption: Example (the master surface's solid block is refined mid-run while already tied):
+              ``testfiles/marmot/AMR_TieRefine/test.inp``
 
 Implementing your own model modifiers
 -------------------------------------

@@ -31,7 +31,10 @@ import numpy as np
 from edelweissfe.constraints.base.multipointconstraintbase import (
     MultiPointConstraintBase,
 )
+from edelweissfe.generators.surfaceelementgenerator import buildContactFacets
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.facetcontactgeometry import line2ClosestPoint, tria3ClosestPoint
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
@@ -52,6 +55,18 @@ and every displacement component of the slave node is constrained to the identic
 master interpolation. The constraint is enforced exactly -- no penalty parameter, no Lagrange
 multiplier DOFs -- and adds zero stiffness, which in particular leaves the critical time step of
 explicit dynamics untouched.
+
+This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if either surface's
+source solid elements are refined mid-run (e.g. by :mod:`~edelweissfe.modelmodifiers.adaptivity.
+hadaptivity`), it regenerates that side's facets and re-projects the tied records -- no separate
+wiring needed. Unlike the penalty contact constraint, a tie has no per-increment tick of its own
+that runs *before* the DofManager/system matrix is rebuilt (its only hook,
+:meth:`getMultiPointConstraints`, is called from inside that rebuild -- too late to safely swap in
+freshly regenerated facet elements), so it reconciles via the model's push notification instead,
+synchronously as part of the mesh-mutating modifier's own call. The re-projection never re-adjusts
+slave node coordinates regardless of the ``adjust`` setting: that snap is a setup-time convenience
+for removing an initial geometric gap, not something to repeat on an already-loaded, already-tied
+node.
 """
 
 module = Module(
@@ -101,7 +116,7 @@ module.addOptionalArg(
 documentation = [module]
 
 
-class Constraint(MultiPointConstraintBase):
+class Constraint(MultiPointConstraintBase, MeshDependent):
     """
     An Abaqus-style surface-to-surface tie constraint via master-slave DOF elimination.
 
@@ -136,29 +151,51 @@ class Constraint(MultiPointConstraintBase):
         self.name = name
         self.nDim = model.domainSize
 
-        slaveFacetElements = list(model.elementSets[kwargs["slaveSurface"]])
-        masterFacetElements = list(model.elementSets[kwargs["masterSurface"]])
+        self._journal = Journal()
+        self._slaveSurfaceSetName = kwargs["slaveSurface"]
+        self._masterSurfaceSetName = kwargs["masterSurface"]
+        self._positionTolerance = kwargs["positionTolerance"]
 
-        # the tied points are the unique nodes of the slave surface, in first-seen order
-        slaveNodes = list(dict.fromkeys(node for el in slaveFacetElements for node in el.nodes))
+        slaveFacetElements = list(model.elementSets[self._slaveSurfaceSetName])
+        masterFacetElements = list(model.elementSets[self._masterSurfaceSetName])
 
         masterNodes = {node for el in masterFacetElements for node in el.nodes}
-        if not masterNodes.isdisjoint(slaveNodes):
+        slaveNodesForCheck = {node for el in slaveFacetElements for node in el.nodes}
+        if not masterNodes.isdisjoint(slaveNodesForCheck):
             raise ValueError(
                 f"Constraint '{name}': slave surface '{kwargs['slaveSurface']}' and master surface "
                 f"'{kwargs['masterSurface']}' share nodes -- a node cannot be tied to itself."
             )
 
-        positionTolerance = kwargs["positionTolerance"]
-        adjust = strtobool(kwargs["adjust"])
+        self.tiedRecords, self.untiedSlaveNodes = self._buildTiedRecords(
+            slaveFacetElements, masterFacetElements, adjust=strtobool(kwargs["adjust"])
+        )
+
+        # A tie has no per-increment tick of its own that runs before the DofManager/VIJSystemMatrix
+        # rebuild -- getMultiPointConstraints() is only called from inside that rebuild, too late to
+        # safely swap in newly regenerated facet elements (the just-built system wouldn't know about
+        # them). So, unlike nodeToDeformableSurfacePenalty, a tie reconciles via the push escape
+        # hatch: model.notifyModelChanged() calls onModelChanged() synchronously, from inside the
+        # model modifier's own updateModel(), strictly before the rebuild decision is even made.
+        model.registerObserver(self)
+
+    def onModelChanged(self, model: FEModel, changeType, change) -> None:
+        if change is not None:
+            self.reconcile(model, change)
+
+    def _buildTiedRecords(self, slaveFacetElements, masterFacetElements, adjust: bool):
+        """Project every unique slave-surface node onto its closest master facet (reference
+        configuration) and freeze the resulting clamped weights. With ``adjust``, additionally snap
+        each tied node onto its projected point, removing any initial geometric gap -- a setup-time
+        convenience, never applied on a reconcile-triggered re-projection."""
+
+        slaveNodes = list(dict.fromkeys(node for el in slaveFacetElements for node in el.nodes))
 
         closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
         masterFacetCoords = [np.array([n.coordinates for n in el.nodes]) for el in masterFacetElements]
 
-        #: Tied records: (slaveNode, masterNodes of the assigned facet, frozen weights).
-        self.tiedRecords = []
-        #: Slave nodes beyond positionTolerance, left untied.
-        self.untiedSlaveNodes = []
+        tiedRecords = []
+        untiedSlaveNodes = []
 
         for slaveNode in slaveNodes:
             bestWeights = None
@@ -172,14 +209,40 @@ class Constraint(MultiPointConstraintBase):
                     bestWeights = weights
                     bestFacetIdx = facetIdx
 
-            if positionTolerance is not None and bestDistance > positionTolerance:
-                self.untiedSlaveNodes.append(slaveNode)
+            if self._positionTolerance is not None and bestDistance > self._positionTolerance:
+                untiedSlaveNodes.append(slaveNode)
                 continue
 
             if adjust and bestDistance > 0.0:
                 slaveNode.coordinates[:] = bestWeights @ masterFacetCoords[bestFacetIdx]
 
-            self.tiedRecords.append((slaveNode, masterFacetElements[bestFacetIdx].nodes, bestWeights))
+            tiedRecords.append((slaveNode, masterFacetElements[bestFacetIdx].nodes, bestWeights))
+
+        return tiedRecords, untiedSlaveNodes
+
+    def reconcile(self, model: FEModel, change) -> None:
+        """Regenerate whichever side's facets were affected by ``change`` (via its recorded
+        :attr:`~edelweissfe.models.femodel.FEModel.contactFacetRecipes`) and re-project the tied
+        records from scratch against the rebuilt surfaces -- never adjusting coordinates, since the
+        tied nodes are already loaded mid-run."""
+
+        slaveRecipe = model.contactFacetRecipes.get(self._slaveSurfaceSetName)
+        masterRecipe = model.contactFacetRecipes.get(self._masterSurfaceSetName)
+        touchedSlave = slaveRecipe is not None and change.touchesSurface(slaveRecipe[0])
+        touchedMaster = masterRecipe is not None and change.touchesSurface(masterRecipe[0])
+        if not (touchedSlave or touchedMaster):
+            return
+
+        if touchedSlave:
+            buildContactFacets(model, *slaveRecipe, self._journal)
+        if touchedMaster:
+            buildContactFacets(model, *masterRecipe, self._journal)
+
+        slaveFacetElements = list(model.elementSets[self._slaveSurfaceSetName])
+        masterFacetElements = list(model.elementSets[self._masterSurfaceSetName])
+        self.tiedRecords, self.untiedSlaveNodes = self._buildTiedRecords(
+            slaveFacetElements, masterFacetElements, adjust=False
+        )
 
     def getMultiPointConstraints(self, dofManager) -> list[tuple[int, list[tuple[int, float]]]]:
         fieldVariableIndices = dofManager.idcsOfFieldVariablesInDofVector
