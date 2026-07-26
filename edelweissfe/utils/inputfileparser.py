@@ -421,6 +421,7 @@ from edelweissfe.constraints.nodetodiscreterigidbodypenalty import inputLanguage
 from edelweissfe.constraints.nodetodeformablesurfacepenalty import inputLanguage  # noqa: F811,E402
 from edelweissfe.constraints.tie import inputLanguage  # noqa: F811,E402
 from edelweissfe.constraints.hangingnode import inputLanguage  # noqa: F811,E402
+from edelweissfe.constraints.amrtransparencyprobe import inputLanguage  # noqa: F811,E402
 
 # isort: on
 

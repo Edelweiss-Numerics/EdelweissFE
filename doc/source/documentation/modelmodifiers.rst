@@ -12,23 +12,43 @@ start of every increment via :meth:`~edelweissfe.modelmodifiers.base.modelmodifi
 when it reports a change, the solver rebuilds the equation system (DOF manager, sparsity pattern,
 solution vectors and any multi-point-constraint transformation) before continuing.
 
-Because a mutation invalidates references cached by other subsystems (step actions caching node
-sets, output managers caching the mesh, field outputs caching result collectors), modifiers
-broadcast a :class:`~edelweissfe.models.modelchangeobserver.ModelChangeType` event, together with a
-structured :class:`~edelweissfe.models.modelchange.ModelChange` describing exactly what changed,
-through the model's observer mechanism (:meth:`~edelweissfe.models.femodel.FEModel.notifyModelChanged`);
-push-style subsystems re-bind themselves in their ``onModelChanged`` callbacks.
+**Topological containers have stable identity.** :class:`~edelweissfe.sets.nodeset.NodeSet`,
+:class:`~edelweissfe.sets.elementset.ElementSet`, :class:`~edelweissfe.surfaces.entitybasedsurface.
+EntityBasedSurface` and :class:`~edelweissfe.fields.nodefield.NodeField` are created once and
+mutated in place (``replaceMembers``/``replaceData``/``resize``) by a mesh-mutating modifier --
+they are never replaced with a new object under the same name. A component that simply caches one
+of these, e.g. ``self._nodes = model.nodeSets["mySet"]`` in ``__init__`` and later iterates
+``self._nodes``, sees any later refinement automatically: no observer, no ``MeshDependent``, no
+re-fetch. This is deliberate -- it lets a student write a new constraint, step action or output
+without ever thinking about AMR.
 
-A subsystem with its own per-increment tick (most do) can instead reconcile lazily, by *pulling*:
-compare its own last-seen value against :attr:`~edelweissfe.models.femodel.FEModel.topologyVersion`
-(bumped on every mutation) and, on a mismatch, fetch the net change since then via
-:meth:`~edelweissfe.models.femodel.FEModel.changesSince`, which coalesces every mutation missed into
-a single :class:`~edelweissfe.models.modelchange.ModelChange` -- added/removed nodes and elements,
-the parent -> children map, the per-face child tiling, and which node/element sets or surfaces were
-touched (with ``touchesSurface``/``touchesNodeSet``/``touchesElementSet`` early-outs so a consumer
-can skip a change that doesn't concern it). Pull needs no registration and therefore has no observer
-lifecycle to leak, and a consumer always reconciles at its own point of use, after the mutation is
-complete.
+A component that additionally pre-sizes a *derived* array or object to a container's current size
+(e.g. a Dirichlet BC's ``delta`` tiled to ``len(nSet)``, or a field output's result collector
+pinning a snapshot element list) does need to notice a resize, since the array does not grow with
+the container on its own. Two mechanisms remain, narrowed to exactly these cases:
+
+* **Lazy version check** -- each mutable container carries a ``_version`` counter, bumped on every
+  in-place mutation. A component compares its own last-seen version against the container's current
+  one at its own per-increment entry point (e.g. ``StepActionBase._checkSetChanged``,
+  ``ConstraintBase._checkSetChanged``) and recomputes the derived array only on a mismatch --
+  see :mod:`~edelweissfe.stepactions.dirichlet`, :mod:`~edelweissfe.stepactions.nodeforces` and
+  :class:`~edelweissfe.utils.fieldoutput.ElementFieldOutput` for examples. This needs no
+  registration and therefore has no observer lifecycle to leak.
+* **Push notification** -- for derived *geometry* that must be regenerated strictly before the next
+  equation-system rebuild decision (facet-based contact and tie; see below), a modifier still
+  broadcasts a :class:`~edelweissfe.models.modelchangeobserver.ModelChangeType` event, together with
+  a structured :class:`~edelweissfe.models.modelchange.ModelChange` describing exactly what
+  changed, through the model's observer mechanism
+  (:meth:`~edelweissfe.models.femodel.FEModel.notifyModelChanged`); the few remaining push
+  observers re-bind themselves in their ``onModelChanged`` callbacks. Most consumers with their own
+  per-increment tick instead pull: compare their own last-seen value against
+  :attr:`~edelweissfe.models.femodel.FEModel.topologyVersion` (bumped on every mutation) and, on a
+  mismatch, fetch the net change since then via
+  :meth:`~edelweissfe.models.femodel.FEModel.changesSince`, which coalesces every mutation missed
+  into a single :class:`~edelweissfe.models.modelchange.ModelChange` -- added/removed nodes and
+  elements, the parent -> children map, the per-face child tiling, and which node/element sets or
+  surfaces were touched (with ``touchesSurface``/``touchesNodeSet``/``touchesElementSet``
+  early-outs so a consumer can skip a change that doesn't concern it).
 
 ``hAdaptivity`` - Hanging-node h-adaptivity for HEX20
 -----------------------------------------------------
@@ -188,6 +208,19 @@ history, just a refreshed node list at the next :meth:`updateConnectivity` tick:
     :language: edelweiss
     :caption: Example (the block is refined mid-run while its face already rests against an
               analytic rigid wall): ``testfiles/marmot/AMR_RigidContactRefine/test.inp``
+
+Transparency for ordinary (AMR-unaware) consumers
+--------------------------------------------------
+
+A constraint, step action or output that only caches a node/element set or a surface -- e.g.
+``self._nodes = model.nodeSets["mySet"]`` at construction -- needs none of the above: it sees a
+later refinement automatically, because that container is mutated in place rather than replaced
+(see the note at the top of this page). ``testfiles/marmot/AMR_TransparencyProbe`` is the
+acceptance test for this: a minimal ``ConstraintBase`` (``edelweissfe.constraints.
+amrtransparencyprobe``) that does exactly this, registers no observer and implements no
+``MeshDependent``, yet raises if its cached node set is ever found not to have grown across a
+refinement it should have seen -- guarding against a regression that reintroduces replacing a set
+instead of mutating it.
 
 Implementing your own model modifiers
 -------------------------------------
