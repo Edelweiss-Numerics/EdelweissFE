@@ -307,7 +307,15 @@ def buildContactFacets(model: FEModel, surfaceName: str, prefix: str, triangulat
 
     model.elements.update(newElements)
 
-    model.elementSets[facetsSetName] = ElementSet(facetsSetName, list(newElements.values()))
+    # stable identity across rebuilds (mutate in place rather than replace under the same key), like
+    # every other AMR-mutated topological container -- a consumer that merely caches
+    # model.elementSets[facetsSetName]/model.nodeSets[nodesSetName] (e.g. a fromExpression
+    # FieldOutput reading a contact constraint's per-facet-node result) would otherwise keep
+    # referencing the pre-rebuild object and silently go stale/size-mismatched on the next rebuild.
+    if facetsSetName in model.elementSets:
+        model.elementSets[facetsSetName].replaceMembers(list(newElements.values()))
+    else:
+        model.elementSets[facetsSetName] = ElementSet(facetsSetName, list(newElements.values()))
 
     seenNodes = set()
     facetNodesInOrder = []
@@ -317,7 +325,10 @@ def buildContactFacets(model: FEModel, surfaceName: str, prefix: str, triangulat
                 seenNodes.add(node)
                 facetNodesInOrder.append(node)
 
-    model.nodeSets[nodesSetName] = NodeSet(nodesSetName, facetNodesInOrder)
+    if nodesSetName in model.nodeSets:
+        model.nodeSets[nodesSetName].replaceMembers(facetNodesInOrder)
+    else:
+        model.nodeSets[nodesSetName] = NodeSet(nodesSetName, facetNodesInOrder)
     model.contactFacetRecipes[facetsSetName] = (surfaceName, prefix, triangulation)
 
     journal.message(
