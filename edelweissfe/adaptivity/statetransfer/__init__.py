@@ -37,9 +37,13 @@ from edelweissfe.adaptivity.statetransfer.projection import PolynomialProjection
 from edelweissfe.adaptivity.statetransfer.virgin import VirginState
 
 
-def transferStateNearestQp(parent, children):
+def transferStateNearestQp(parent, children, topology=None):
     """Backward-compatible shortcut for the default nearest-quadrature-point block copy."""
-    NearestQuadraturePointCopy().transferState(parent, children)
+    if topology is None:
+        from edelweissfe.adaptivity.hex20topology import Hex20Topology
+
+        topology = Hex20Topology()
+    NearestQuadraturePointCopy().transferState(parent, children, topology)
 
 
 __all__ = [

@@ -40,32 +40,9 @@ from collections import defaultdict
 import numpy as np
 
 from edelweissfe.adaptivity.geometry import (
-    bilinear_inverse,
     point_in_convex_quad,
     quadratic_edge_parameter,
 )
-from edelweissfe.adaptivity.hex20topology import (
-    EDGES,
-    FACEID_TO_FACE,
-    FACES,
-    face_child_octants,
-    hex20_shape,
-    quad8_shape,
-    subdivision_children_param,
-)
-
-
-def hanging_weights(master_coords, slave_coord):
-    """Exact coarse-trace weights of a slave on its master entity (8-node QUAD8 face via bilinear
-    inverse, or 3-node quadratic edge). Field-independent (equal-order interpolation)."""
-    mc = np.asarray(master_coords, dtype=float)
-    p = np.asarray(slave_coord, dtype=float)
-    if len(mc) == 8:
-        xi, eta = bilinear_inverse(p, mc[0:4])
-        return quad8_shape(xi, eta)
-    ca, cm, cb = mc[0], mc[1], mc[2]  # edge: [corner, midside, corner]
-    t, _ = quadratic_edge_parameter(p, ca, cm, cb)
-    return np.array([0.5 * t * (t - 1.0), 1.0 - t**2, 0.5 * t * (t + 1.0)])
 
 
 class NodeRegistry:
@@ -133,43 +110,6 @@ class NodeRegistry:
         return [self.label(c, componentId) for c in coords]
 
 
-def subdivide(parent_coords: np.ndarray, n: int = 2):
-    """Subdivide one HEX20 into ``n**3`` children (``n = 2`` = octree bisection, 8 children).
-
-    Parameters
-    ----------
-    parent_coords
-        (20, 3) physical coordinates of the parent HEX20 (C3D20 order).
-    n
-        Number of equal parts per axis (the split factor).
-
-    Returns
-    -------
-    list of (20, 3) arrays
-        Physical coordinates of the ``n**3`` child HEX20s, in C3D20 order, obtained by evaluating the
-        parent isoparametric map at each child node's parent-parametric position.
-    """
-    parent_coords = np.asarray(parent_coords, dtype=float)
-    children = []
-    for child_param in subdivision_children_param(n):  # (20, 3) parent-parametric coords
-        phys = np.array([hex20_shape(*p) @ parent_coords for p in child_param])
-        children.append(phys)
-    return children
-
-
-def _lies_on_segment(p, a, b, tol=1e-8):
-    """True if point p lies on segment [a, b] (within tol), returning also the parameter t in [0,1]."""
-    ab = b - a
-    L2 = float(ab @ ab)
-    if L2 == 0.0:
-        return False, 0.0
-    t = float((p - a) @ ab) / L2
-    if t < -tol or t > 1 + tol:
-        return False, t
-    proj = a + t * ab
-    return bool(np.linalg.norm(p - proj) < tol), t
-
-
 def _box_of(coords):
     coords = np.asarray(coords, dtype=float)
     return coords.min(axis=0), coords.max(axis=0)
@@ -198,20 +138,14 @@ def _boxes_overlap(boxA, boxB, tol=1e-8):
     return all(aMin[ax] - tol <= bMax[ax] and bMin[ax] - tol <= aMax[ax] for ax in range(3))
 
 
-def _element_face_corners(coords):
-    """The 4 corner coordinates of each of the 6 faces of a HEX20 (in QUAD8 loop order)."""
-    coords = np.asarray(coords, dtype=float)
-    return [coords[[f[0], f[1], f[2], f[3]]] for f in FACES]
-
-
-def _elements_share_face(coordsA, coordsB, tol=1e-7):
+def _elements_share_face(coordsA, coordsB, topology, tol=1e-7):
     """Topological/geometric shared-face neighbour test: do the two hexes have a pair of coplanar,
     overlapping faces? Coordinate-system agnostic (works for arbitrarily oriented, non-parallelogram
     faces) and handles coarse/fine (a fine face nested in a coarse one) via centroid containment."""
     if not _boxes_overlap(_box_of(coordsA), _box_of(coordsB), tol):
         return False
-    facesA = _element_face_corners(coordsA)
-    facesB = _element_face_corners(coordsB)
+    facesA = topology.element_face_corners(coordsA)
+    facesB = topology.element_face_corners(coordsB)
     for fa in facesA:
         ca = fa.mean(axis=0)
         na = np.cross(fa[1] - fa[0], fa[3] - fa[0])
@@ -229,11 +163,6 @@ def _elements_share_face(coordsA, coordsB, tol=1e-7):
     return False
 
 
-def _point_on_element_surface(p, coords, tol=1e-7):
-    """True if point p lies on any of the 6 faces of the hex given by its 20 node coordinates."""
-    return any(point_in_convex_quad(p, fc, tol) for fc in _element_face_corners(coords))
-
-
 class AdaptiveMesh:
     """Octree hierarchy of HEX20 elements: refinement, 2:1 balancing and hanging-node classification.
 
@@ -242,7 +171,12 @@ class AdaptiveMesh:
     require topological (shared-face) adjacency instead; that is future work.
     """
 
-    def __init__(self, decimals: int = 8, splitFactor: int = 2):
+    def __init__(self, decimals: int = 8, splitFactor: int = 2, topology=None):
+        if topology is None:
+            from edelweissfe.adaptivity.hex20topology import Hex20Topology
+
+            topology = Hex20Topology()
+        self.topology = topology
         self.registry = NodeRegistry(decimals)
         self.splitFactor = splitFactor  # n: each refined element is split into n**3 children per axis
         self.elements = {}  # eid -> dict(conn, coords, level, active, parent, children)
@@ -313,7 +247,7 @@ class AdaptiveMesh:
         parent_conn = e["conn"]
         kids = [
             self._add(ch, e["level"] + 1, eid, e["componentId"])
-            for ch in subdivide(e["coords"], self.splitFactor)  # children stay in the parent's body
+            for ch in self.topology.subdivide(e["coords"], self.splitFactor)  # children stay in the parent's body
         ]
         e["active"] = False
         e["children"] = kids
@@ -328,24 +262,25 @@ class AdaptiveMesh:
             faceids_here = [fid for (peid, fid) in pairs if peid == eid]
             for fid in faceids_here:
                 pairs.discard((eid, fid))
-                for j in face_child_octants(FACEID_TO_FACE[fid], self.splitFactor):
+                for j in self.topology.face_child_indices(self.topology.faceid_to_face[fid], self.splitFactor):
                     pairs.add((kids[j], fid))
 
         # node sets: a new node joins a set if it lies on a parent face/edge fully contained in the set
         new_nodes = {lab for k in kids for lab in self.elements[k]["conn"]} - set(parent_conn)
         coords = self.registry.coordinates
         for S in self.nodeSets.values():
-            for f in FACES:
+            for f in self.topology.faces:
                 if all(parent_conn[i] in S for i in f):
                     fcorners = np.array([coords[parent_conn[i]] for i in f[:4]])
                     for nl in new_nodes:
                         if point_in_convex_quad(coords[nl], fcorners):
                             S.add(nl)
-            for ed in EDGES:
+            for ed in self.topology.edges:
                 if all(parent_conn[i] in S for i in ed):
-                    a, b = coords[parent_conn[ed[0]]], coords[parent_conn[ed[2]]]
+                    a, m, b = coords[parent_conn[ed[0]]], coords[parent_conn[ed[1]]], coords[parent_conn[ed[2]]]
                     for nl in new_nodes:
-                        if _lies_on_segment(coords[nl], a, b)[0]:
+                        _, dist = quadratic_edge_parameter(coords[nl], a, m, b)
+                        if dist < 1e-8:
                             S.add(nl)
         return kids
 
@@ -381,7 +316,7 @@ class AdaptiveMesh:
                 for b in neighbours:
                     if a is b or lev[a] > lev[b] - 2:
                         continue  # only test whether the coarser 'a' must be refined
-                    if _elements_share_face(crd[a], crd[b], tol):
+                    if _elements_share_face(crd[a], crd[b], self.topology, tol):
                         to_refine.add(a)
                         break
             if not to_refine:
@@ -453,7 +388,7 @@ class AdaptiveMesh:
                 for lab in nodeGrid.get(cell, ()):
                     if lab not in Eset and componentOf[lab] == comp[eid]:
                         cands.add(lab)
-            for h in classify_hanging_on_element(E["conn"], self.registry, cands):
+            for h in self.topology.classify_hanging_on_element(E["conn"], self.registry, cands, tol):
                 dim = 1 if h["kind"] == "edge" else 2
                 key = (dim, E["level"])
                 cur = best.get(h["slave"])
@@ -476,7 +411,7 @@ class AdaptiveMesh:
         raw = {}  # slaveLabel -> [(masterLabel, weight)]
         for h in self.classify_hanging(tol):
             mc = [coords[m] for m in h["masters"]]
-            w = hanging_weights(mc, coords[h["slave"]])
+            w = self.topology.hanging_weights(mc, coords[h["slave"]], h["kind"])
             raw[h["slave"]] = list(zip(h["masters"], w))
 
         slaves = set(raw)
@@ -496,54 +431,3 @@ class AdaptiveMesh:
             return memo[s]
 
         return {s: sorted(resolve(s).items()) for s in raw}
-
-
-def classify_hanging_on_element(coarse_conn, registry, candidate_labels, tol=1e-8):
-    """Classify which candidate nodes hang on a coarse element's faces/edges.
-
-    Parameters
-    ----------
-    coarse_conn
-        The 20 node labels of the coarse element (C3D20 order).
-    registry
-        NodeRegistry holding coordinates.
-    candidate_labels
-        Iterable of node labels to test (typically all nodes not belonging to the coarse element).
-
-    Returns
-    -------
-    list of dict
-        One entry per hanging node: {"slave": label, "kind": "edge"|"face",
-        "masters": [labels], "master_coords": (m,3)}. The lowest-dimensional coarse entity wins
-        (edge before face), so shared-edge nodes get 3 masters, face-interior nodes get 8.
-    """
-    coarse_conn = list(coarse_conn)
-    coarse_set = set(coarse_conn)
-    coords = registry.coordinates
-    results = []
-
-    for lab in candidate_labels:
-        if lab in coarse_set:
-            continue
-        p = coords[lab]
-
-        # 1) edge?  (lowest dimension first)
-        matched = False
-        for edge in EDGES:
-            ea, em, eb = (coarse_conn[edge[0]], coarse_conn[edge[1]], coarse_conn[edge[2]])
-            _, dist = quadratic_edge_parameter(p, coords[ea], coords[em], coords[eb])
-            if dist < tol:
-                results.append({"slave": lab, "kind": "edge", "masters": [ea, em, eb]})
-                matched = True
-                break
-        if matched:
-            continue
-
-        # 2) face interior?
-        for face in FACES:
-            fcorners = np.array([coords[coarse_conn[i]] for i in face[:4]])
-            if point_in_convex_quad(p, fcorners):
-                results.append({"slave": lab, "kind": "face", "masters": [coarse_conn[i] for i in face]})
-                break
-
-    return results

@@ -48,43 +48,6 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from edelweissfe.adaptivity.hex20topology import hex20_shape_grad
-
-
-def hex20InverseMap(point, elementNodeCoords, tol=1e-11, itmax=30):
-    """Map a physical point into the reference cube :math:`[-1,1]^3` of a HEX20 element by
-    Newton-Raphson. Robust and coordinate-system invariant even for highly distorted / skewed hexes.
-
-    Parameters
-    ----------
-    point
-        The physical coordinate to invert.
-    elementNodeCoords
-        The (20, 3) physical node coordinates of the HEX20 element.
-
-    Returns
-    -------
-    np.ndarray
-        The reference coordinate (clipped slightly outside the cube if the point lies outside).
-    """
-    coords = np.asarray(elementNodeCoords, dtype=float)
-    xi = np.zeros(3)
-    for _ in range(itmax):
-        N, dN = hex20_shape_grad(*xi)
-        x = N @ coords
-        residual = x - point
-        if float(np.linalg.norm(residual)) < tol:
-            return xi
-        jac = coords.T @ dN  # jac[i, k] = dx_i / dxi_k
-        try:
-            dxi = np.linalg.solve(jac, residual)
-        except np.linalg.LinAlgError:
-            break
-        xi -= dxi
-        if float(np.linalg.norm(dxi)) < 1e-10:
-            break
-    return np.clip(xi, -1.2, 1.2)
-
 
 def perQuadraturePointBlockSize(element) -> int:
     """Number of state-variable doubles per quadrature point (the flat buffer is
@@ -99,13 +62,13 @@ def perQuadraturePointBlockSize(element) -> int:
     return n // nqp
 
 
-def quadraturePointReferenceCoordinates(element, referenceNodeCoords) -> np.ndarray:
+def quadraturePointReferenceCoordinates(element, referenceNodeCoords, topology) -> np.ndarray:
     """Reference-cube coordinates (in the frame of ``referenceNodeCoords``) of ``element``'s
     quadrature points. Passing the parent's node coordinates maps both the parent's and the
     children's quadrature points into the same (parent) reference frame, which is what makes
     nearest-point matching and projection distortion-independent and octant-correct."""
     phys = np.asarray(element.getCoordinatesAtQuadraturePoints()).reshape(element.getNumberOfQuadraturePoints(), -1)
-    return np.array([hex20InverseMap(p, referenceNodeCoords) for p in phys])
+    return np.array([topology.inverse_map(p, referenceNodeCoords) for p in phys])
 
 
 class StateTransferStrategy(ABC):
@@ -118,7 +81,7 @@ class StateTransferStrategy(ABC):
     to answer "given the parent's per-quadrature-point values, what are the children's?".
     """
 
-    def transferState(self, parent, children):
+    def transferState(self, parent, children, topology):
         """Transfer the whole state block of ``parent`` into each element of ``children``.
 
         Parameters
@@ -127,11 +90,13 @@ class StateTransferStrategy(ABC):
             The (converged) parent element being refined.
         children
             The freshly created & initialised child elements (same type / material as the parent).
+        topology
+            The TopologyBase instance for the element type.
         """
         parentBlock = perQuadraturePointBlockSize(parent)
         parentValues = parent.getStateVars().reshape(parent.getNumberOfQuadraturePoints(), parentBlock)
         parentNodeCoords = np.array([n.coordinates for n in parent.nodes], dtype=float)
-        parentRefCoords = quadraturePointReferenceCoordinates(parent, parentNodeCoords)
+        parentRefCoords = quadraturePointReferenceCoordinates(parent, parentNodeCoords, topology)
 
         allColumns = np.arange(parentBlock)
         for child in children:
@@ -139,7 +104,7 @@ class StateTransferStrategy(ABC):
             if childBlock != parentBlock:
                 raise ValueError("state transfer: parent and child per-QP state sizes differ.")
             childInit = child.getStateVars().reshape(child.getNumberOfQuadraturePoints(), childBlock)
-            childRefCoords = quadraturePointReferenceCoordinates(child, parentNodeCoords)
+            childRefCoords = quadraturePointReferenceCoordinates(child, parentNodeCoords, topology)
 
             result = childInit.copy()
             result[:, allColumns] = self._transferColumns(

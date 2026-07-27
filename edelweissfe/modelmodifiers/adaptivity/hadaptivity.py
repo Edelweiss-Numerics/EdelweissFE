@@ -32,12 +32,7 @@ from collections import defaultdict
 
 import numpy as np
 
-from edelweissfe.adaptivity.hex20topology import (
-    FACEID_TO_FACE,
-    face_child_octants,
-    hex20_shape,
-    subdivision_children_param,
-)
+from edelweissfe.adaptivity.hex20topology import Hex20Topology
 from edelweissfe.adaptivity.marking import markElements
 from edelweissfe.adaptivity.refinement import AdaptiveMesh
 from edelweissfe.adaptivity.statetransfer.perstatevar import PerStateVarStateTransfer
@@ -232,7 +227,8 @@ class ModelModifier(ModelModifierBase):
         # build the AdaptiveMesh mirror, sharing node labels with the live model. Only the nodes of
         # the refineable elements are seeded: a node the octree does not own must not be able to
         # claim a coordinate key, and only an octree-owned node can be seeded with a body.
-        self._mesh = AdaptiveMesh(splitFactor=self.splitFactor)
+        self._topology = Hex20Topology()
+        self._mesh = AdaptiveMesh(splitFactor=self.splitFactor, topology=self._topology)
         self._eidToEl = {}  # mesh element id -> live element
         for el in refineElements:
             componentId = componentOfElement[el]
@@ -282,7 +278,7 @@ class ModelModifier(ModelModifierBase):
         self._converged = False  # set True once an increment has converged
         self._lastRefinedTime = None  # model.time of the last refinement (guards re-refine on cutback)
         # parent-parametric coords of each child's nodes (used for warm-start interpolation)
-        self._octantParams = subdivision_children_param(self.splitFactor)
+        self._octantParams = self._topology.subdivision_children_param(self.splitFactor)
 
     @timeit("AMR")
     def updateModel(self, model: FEModel, step, timeStep: float) -> bool:
@@ -391,8 +387,8 @@ class ModelModifier(ModelModifierBase):
                 child = self._elementClass(self._elementType, self._nextElLabel)
                 self._nextElLabel += 1
                 child.setNodes([model.nodes[label] for label in e["conn"]])
-                self._sectionOf[parentEl].assignSectionPropertiesToElement(child)  # init + material (inherit parent's)
-                self._stateTransfer.transferState(parentEl, [child])  # WS-F (state)
+                self._sectionOf[parentEl].assignSectionPropertiesToElement(child)
+                self._stateTransfer.transferState(parentEl, [child], self._topology)  # WS-F (state)
 
                 # warm start (WS-H): interpolate each NEW node's field values from the parent via the
                 # HEX20 isoparametric map, so the increment restarts from a consistent state, not zero
@@ -401,7 +397,7 @@ class ModelModifier(ModelModifierBase):
                 for i, label in enumerate(e["conn"]):
                     node = model.nodes[label]
                     if label in newNodes and any(node not in newValues[f] for f in oldValues):
-                        N = hex20_shape(*childParams[i])
+                        N = self._topology.shape_functions(*childParams[i])
                         for fieldName, vals in oldValues.items():
                             if all(pn in vals for pn in parentEl.nodes):
                                 parentVals = np.array([vals[pn] for pn in parentEl.nodes])
@@ -423,9 +419,10 @@ class ModelModifier(ModelModifierBase):
         for parentEid in newlyRefinedParentEids:
             parentLabel = self._eidToEl[parentEid].elNumber
             childEids = mesh.elements[parentEid]["children"]
-            for faceID, faceIndex in FACEID_TO_FACE.items():
+            for faceID, faceIndex in self._topology.faceid_to_face.items():
                 childLabels = [
-                    self._eidToEl[childEids[j]].elNumber for j in face_child_octants(faceIndex, self.splitFactor)
+                    self._eidToEl[childEids[j]].elNumber
+                    for j in self._topology.face_child_indices(faceIndex, self.splitFactor)
                 ]
                 change.faceMap[(parentLabel, faceID)] = [(label, faceID) for label in childLabels]
 
