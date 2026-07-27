@@ -30,6 +30,7 @@ import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.elements.contactsurfaceelement import facetNormalAndMeasure
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
@@ -360,8 +361,10 @@ class Constraint(ConstraintBase):
 
     @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
     @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name: str, model: FEModel, *args, **kwargs):
+    def __init__(self, name: str, model: FEModel, journal: Journal, *args, **kwargs):
         super().__init__(name, model, *args, **kwargs)
+
+        self.journal = journal
 
         kwargs = CaseInsensitiveDict(kwargs)
 
@@ -448,6 +451,13 @@ class Constraint(ConstraintBase):
         self._nDof = 0
 
         self.totalNormalForce = 0.0
+
+        self.journal.message(
+            f"{self.nSlaves} slave nodes, {len(self.facetElements)} master facets, "
+            f"sliding={self.sliding}, type={self.type}, friction={'on' if self.mu > 0.0 else 'off'}, "
+            f"augmentedLagrange={self.augmentedLagrange}",
+            name,
+        )
 
     @property
     def nodes(self) -> list:

@@ -342,7 +342,7 @@ class AbqModelConstructor:
 
             args, kwargs = module.parseDatalines(data)
 
-            constraint = getConstraintClass(constraintType)(name, model, **kwargs)
+            constraint = getConstraintClass(constraintType)(name, model, self.journal, **kwargs)
             model.constraints[name] = constraint
 
         return model

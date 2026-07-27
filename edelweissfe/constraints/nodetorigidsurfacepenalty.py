@@ -33,6 +33,7 @@ import numpy as np
 
 from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
@@ -84,8 +85,10 @@ documentation = [module]
 class Constraint(ConstraintBase):
     @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
     @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name: str, model: FEModel, *args, **kwargs):
+    def __init__(self, name: str, model: FEModel, journal: Journal, *args, **kwargs):
         super().__init__(name, model, *args, **kwargs)
+
+        self.journal = journal
 
         kwargs = CaseInsensitiveDict(kwargs)
 
@@ -112,6 +115,12 @@ class Constraint(ConstraintBase):
         ] * self._nNodes
 
         self.active = True
+
+        self.journal.message(
+            f"{self._nNodes} nodes, field={theField}, component={self.component}, "
+            f"type={self.type}, direction={self.direction:+.1f}",
+            name,
+        )
 
     @property
     def nodes(self) -> list:
