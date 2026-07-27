@@ -27,7 +27,7 @@
 
 import inspect
 from collections import defaultdict
-from time import time
+from time import perf_counter
 
 from prettytable import PrettyTable
 
@@ -46,7 +46,7 @@ class _PerformanceTimerBranch(defaultdict):
         """
         Start measuring time.
         """
-        self._tic = time()
+        self._tic = perf_counter()
         self.calls += 1
 
     def toc(
@@ -55,7 +55,7 @@ class _PerformanceTimerBranch(defaultdict):
         """
         Stop measuring time.
         """
-        self.time += time() - self._tic
+        self.time += perf_counter() - self._tic
 
     def get_snapshot(self) -> dict:
         """Returns a nested dictionary of the current accumulated times."""
@@ -102,6 +102,17 @@ class timeit:
 
         return wrapper
 
+    def __enter__(self):
+        self._parentStackLevel = timeit._currentStackLevel
+        timer = timeit._currentStackLevel[self._category]
+        timeit._currentStackLevel = timer
+        timer.tic()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        timeit._currentStackLevel.toc()
+        timeit._currentStackLevel = self._parentStackLevel
+
 
 def _makeTable(branch: _PerformanceTimerBranch, level: int, maxLevels: int) -> list[tuple]:
     """Recursive function for creating a table of the measured times.
@@ -145,15 +156,17 @@ def makePrettyTable(maxLevels: int = 4) -> PrettyTable:
     theTable = _makeTable(times, 0, maxLevels)
 
     prettytable = PrettyTable()
-    prettytable.field_names = ["function", "acc. runtime", "calls"]
+    prettytable.field_names = ["function", "acc. runtime", "calls", "time/call"]
     prettytable.align = "l"
 
     for level, cat, t, calls in theTable:
+        t_per_call = t / calls if calls > 0 else 0.0
         prettytable.add_row(
             (
                 "{:}{:}".format(" " * level, cat),
-                "{:}{:10.4E}s".format(" " * level, t),
+                "{:}{:10.5f} s".format(" " * level, t),
                 calls,
+                "{:10.5f} s".format(t_per_call),
             )
         )
 
@@ -199,10 +212,13 @@ def extractIncrementTimes(maxLevels: int = 4) -> PrettyTable:
     delta_rows = flatten_delta(delta_tree, 0)
 
     prettytable = PrettyTable()
-    prettytable.field_names = ["function", "inc. runtime", "calls"]
+    prettytable.field_names = ["function", "inc. runtime", "calls", "time/call"]
     prettytable.align = "l"
     for level, cat, t, calls in delta_rows:
-        prettytable.add_row([" " * level + cat, "{:}{:10.4E}s".format(" " * level, t), calls])
+        t_per_call = t / calls if calls > 0 else 0.0
+        prettytable.add_row(
+            [" " * level + cat, "{:}{:10.5f} s".format(" " * level, t), calls, "{:10.5f} s".format(t_per_call)]
+        )
 
     return prettytable
 
