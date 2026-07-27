@@ -45,6 +45,10 @@ directives = {
     "wraparound": False,
     "nonecheck": False,
     "initializedcheck": False,
+    # Declare all extensions safe for free-threading CPython builds. Without this,
+    # importing any of them silently re-enables the GIL process-wide, which disables
+    # the thread-parallel element loops of the parallel solvers.
+    "freethreading_compatible": True,
 }
 
 default_install_prefix = sys.prefix
@@ -74,6 +78,7 @@ extensions = [
         library_dirs=[join(marmot_dir, "lib")],
         runtime_library_dirs=[join(marmot_dir, "lib")],
         language="c++",
+        extra_compile_args=["-O3", "-march=native"],
     )
 ]
 
@@ -114,6 +119,7 @@ extensions += [
         ["edelweissfe/utils/elementresultcollector.pyx"],
         include_dirs=[numpy.get_include()],
         language="c++",
+        extra_compile_args=["-O3", "-march=native"],
     )
 ]
 
@@ -147,6 +153,8 @@ extensions += [
         include_dirs=[numpy.get_include()],
         language="c++",
         extra_compile_args=[
+            "-O3",
+            "-march=native",
             "-fopenmp",
             "-Wno-maybe-uninitialized",
         ],

@@ -55,6 +55,10 @@ class NonlinearSolverBase(ABC):
 
     SolverSpecificOptions = {}
 
+    #: Cache for :meth:`findDirichletIndices`; lazily initialized since not all
+    #: subclasses call ``super().__init__()``.
+    _dirichletIndicesCache = None
+
     def __init__(self, jobInfo, journal, **kwargs):
         pass
 
@@ -244,7 +248,11 @@ class NonlinearSolverBase(ABC):
         csr_matrix
             The system matrix in compressed sparse row format.
         """
-        KCsr = self.csrGenerator.updateCSR(K)
+        # In-place update: the returned matrix is the generator's internal CSR matrix.
+        # This is safe since no solver retains it across iterations, and the subsequent
+        # Dirichlet application only modifies values (the pattern is preserved), which
+        # are fully overwritten again on the next update.
+        KCsr = self.csrGenerator.updateInPlace(K)
         return KCsr
 
     def computeSpatialAveragedFluxes(self, F: DofVector) -> dict[str, float]:
@@ -405,6 +413,20 @@ class NonlinearSolverBase(ABC):
         field = dirichlet.field
         components = dirichlet.components
 
-        fieldIndices = self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[field][nSet]
+        # The result is fully determined by the boundary condition, its (mutable)
+        # components, and the current DofManager, so it is memoized. It is requested
+        # multiple times per Newton iteration (residual zeroing and system matrix
+        # modification), but only changes when the equation system is rebuilt or the
+        # boundary condition is updated between steps.
+        cache = self._dirichletIndicesCache
+        if cache is None:
+            cache = self._dirichletIndicesCache = {}
 
-        return fieldIndices.reshape((len(nSet), -1))[:, components].flatten()
+        key = (dirichlet, self.theDofManager, tuple(components))
+        indices = cache.get(key)
+        if indices is None:
+            fieldIndices = self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[field][nSet]
+
+            indices = cache[key] = fieldIndices.reshape((len(nSet), -1))[:, components].flatten()
+
+        return indices

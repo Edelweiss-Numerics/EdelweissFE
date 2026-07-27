@@ -29,7 +29,6 @@
 "Müller, S., Schüler, L., Zech, A., and Heße, F.: GSTools v1.3: a toolbox for geostatistical modelling in Python, Geosci. Model Dev., 15, 3161–3182, https://doi.org/10.5194/gmd-15-3161-2022, 2022."
 """
 
-import gstools
 import numpy as np
 
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
@@ -88,6 +87,18 @@ class AnalyticalField(AnalyticalFieldBase):
         nu: float = module["nu"].default,
         seed: int = module["seed"].default,
     ):
+        # gstools is imported lazily: its Cython extension does not declare
+        # free-threading support, so importing it re-enables the GIL process-wide
+        # and would disable thread-parallel computations for ALL simulations,
+        # even those not using random fields.
+        try:
+            import gstools
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                "the 'randomScalar' analytical field requires the 'gstools' package "
+                "(install via 'pip install gstools' or 'mamba install -c conda-forge gstools')"
+            ) from e
+
         self.name = name
         self.type = "randomScalar"
 

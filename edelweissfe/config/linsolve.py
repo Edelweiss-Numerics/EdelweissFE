@@ -36,9 +36,11 @@ from collections.abc import Mapping
 
 def getDefaultLinSolver():
     try:
-        from edelweissfe.linsolve.pardiso.pardiso import pardisoSolve
+        from edelweissfe.linsolve.pardiso.pardiso import PardisoSolver
 
-        return pardisoSolve
+        # symbolic-factorization reuse is opt-in only, see getLinSolverByName; the
+        # default here intentionally matches that safe default.
+        return PardisoSolver()
     except ImportError:
         from scipy.sparse.linalg import spsolve
 
@@ -55,9 +57,20 @@ def getLinSolverByName(linsolverName, opts):
 
         return lambda A, b: spsolve(A, b, use_umfpack=True)
     elif linsolverName.lower() == "pardiso":
-        from edelweissfe.linsolve.pardiso.pardiso import pardisoSolve
+        from edelweissfe.linsolve.pardiso.pardiso import PardisoSolver
 
-        return pardisoSolve
+        # Symbolic-factorization reuse across solves is only correct if the caller
+        # can guarantee the sparsity pattern stays genuinely stable for the solver
+        # instance's entire lifetime; it has been observed to silently produce wrong
+        # (but not NaN, so undetected by the usual failure check) results for some
+        # coupled-DOF problems. Off by default; opt in explicitly via
+        # opts["reuseSymbolicFactorization"] = True once that has been verified safe
+        # for the problem at hand.
+        reuseSymbolicFactorization = (
+            bool(opts.get("reuseSymbolicFactorization", False)) if isinstance(opts, Mapping) else False
+        )
+
+        return PardisoSolver(reuseSymbolicFactorization=reuseSymbolicFactorization)
     elif linsolverName.lower() == "panuapardiso":
         from edelweissfe.linsolve.panuapardiso.panuapardiso import panuaPardisoSolve
 

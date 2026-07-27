@@ -24,8 +24,13 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+import concurrent.futures
 import os
 import sys
+import threading
+
+_threadPools = {}
+_threadPoolsLock = threading.Lock()
 
 
 def isFreeThreadingSupported() -> bool:
@@ -52,6 +57,7 @@ def getNumberOfThreads() -> int:
     EdelweissFE has a built-in mechanism to determine the number of threads to be used for parallel computations.
     It checks if the environment variable `OMP_NUM_THREADS` is set. If it is
     and can be converted to an integer, that value is used. If not, the function falls back to using a default value of 1.
+    The result is clamped to at least 1, since a `ThreadPoolExecutor` requires at least one worker.
 
     Returns:
         int: Number of threads to be used.
@@ -63,4 +69,34 @@ def getNumberOfThreads() -> int:
     except ValueError:
         num_workers = 1
 
-    return num_workers
+    return max(1, num_workers)
+
+
+def getThreadPool(numThreads: int) -> concurrent.futures.ThreadPoolExecutor:
+    """Get a persistent thread pool with the requested number of worker threads.
+
+    Pools are created lazily and reused for the lifetime of the process. This avoids
+    the cost of spawning and joining worker threads for every parallel computation,
+    which the solvers request once per Newton iteration.
+
+    Parameters
+    ----------
+    numThreads
+        The number of worker threads. Clamped to at least 1.
+
+    Returns
+    -------
+    concurrent.futures.ThreadPoolExecutor
+        The persistent thread pool.
+    """
+
+    numThreads = max(1, numThreads)
+
+    pool = _threadPools.get(numThreads)
+    if pool is None:
+        with _threadPoolsLock:
+            pool = _threadPools.get(numThreads)
+            if pool is None:
+                pool = _threadPools[numThreads] = concurrent.futures.ThreadPoolExecutor(max_workers=numThreads)
+
+    return pool

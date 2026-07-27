@@ -31,10 +31,14 @@ import numpy as np
 import edelweissfe.numerics.dofvector
 
 
-class ScatterDofVector(np.ndarray):
+class ScatterDofVectorTemplate:
     """
-    A Scatter Vector that stores data for entities contiguously.
-    Includes a fast lookup map to support random access by Entity.
+    The precomputed, immutable layout of a :class:`ScatterDofVector`:
+    the entity lookup map and the gather/scatter index array.
+
+    Since the layout only depends on the entities and their indices in the DofVector,
+    it can be computed once and shared by all scatter vectors of the same equation
+    system, e.g. across Newton iterations.
 
     Parameters
     ----------
@@ -44,29 +48,49 @@ class ScatterDofVector(np.ndarray):
         The total number of degrees of freedom.
     """
 
-    def __new__(cls, entitiesInDofVector: dict, nDof: int):
-        entities = list(entitiesInDofVector.keys())
-
+    def __init__(self, entitiesInDofVector: dict, nDof: int):
         sizes = np.array([len(v) for v in entitiesInDofVector.values()], dtype=np.intc)
-        total_size = np.sum(sizes)
+        total_size = int(np.sum(sizes))
 
-        obj = np.zeros(total_size, dtype=float).view(cls)
-
-        offsets = np.zeros(len(entities) + 1, dtype=np.intc)
+        offsets = np.zeros(len(entitiesInDofVector) + 1, dtype=np.intc)
         np.cumsum(sizes, out=offsets[1:])
 
-        obj._offset_map = dict(zip(entities, offsets))
+        # map entity -> (offset, size), such that a single lookup suffices for access
+        self.offsetMap = {
+            entity: (offset, size) for entity, offset, size in zip(entitiesInDofVector.keys(), offsets, sizes)
+        }
 
-        obj._global_indices = np.empty(total_size, dtype=np.int32)
+        self.globalIndices = np.empty(total_size, dtype=np.int32)
 
         current_offset = 0
         for entity, indices in entitiesInDofVector.items():
             n = len(indices)
-            obj._global_indices[current_offset : current_offset + n] = indices
+            self.globalIndices[current_offset : current_offset + n] = indices
             current_offset += n
 
-        obj._entitiesInDofVector = entitiesInDofVector
-        obj._nDof = nDof
+        self.entitiesInDofVector = entitiesInDofVector
+        self.nDof = nDof
+        self.totalSize = total_size
+
+
+class ScatterDofVector(np.ndarray):
+    """
+    A Scatter Vector that stores data for entities contiguously.
+    Includes a fast lookup map to support random access by Entity.
+
+    Parameters
+    ----------
+    template
+        The precomputed layout of the scatter vector.
+    """
+
+    def __new__(cls, template: ScatterDofVectorTemplate):
+        obj = np.zeros(template.totalSize, dtype=float).view(cls)
+
+        obj._offset_map = template.offsetMap
+        obj._global_indices = template.globalIndices
+        obj._entitiesInDofVector = template.entitiesInDofVector
+        obj._nDof = template.nDof
 
         return obj
 
@@ -87,13 +111,10 @@ class ScatterDofVector(np.ndarray):
         key
             The key for indexing, either an entity or an integer index.
         """
-        if isinstance(key, (int, slice, np.ndarray, list)):
-            return super().__getitem__(key)
-
+        # try the entity lookup first; it is by far the most common access pattern
         try:
-            val = self._offset_map[key]
-            size = len(self._entitiesInDofVector[key])
-            return super().__getitem__(slice(val, val + size))
+            offset, size = self._offset_map[key]
+            return super().__getitem__(slice(offset, offset + size))
         except (KeyError, TypeError):
             return super().__getitem__(key)
 
@@ -108,7 +129,9 @@ class ScatterDofVector(np.ndarray):
             If True, assemble the absolute values.
         """
         data = np.abs(self) if absolute else self
-        np.add.at(targetDofVector, self._global_indices, data)
+        # bincount performs the duplicate-resolving scatter-add in a single pass,
+        # considerably faster than the unbuffered np.add.at
+        targetDofVector += np.bincount(self._global_indices, weights=data, minlength=self._nDof)
 
     def toDofVector(self, absolute=False) -> "DofVector":  # noqa: F821
         """Create a new DofVector from this scatter vector.
