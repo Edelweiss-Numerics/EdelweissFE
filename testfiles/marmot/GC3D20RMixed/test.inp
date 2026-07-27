@@ -4,7 +4,7 @@
 all
 
 *job, name=c3d8nljob, domain=3d
-*solver, solver=NISTParallelForMarmotElements, name=theSolver
+*solver, solver=NISTParallel, name=theSolver
 
 *include, input=mesh.inp
 

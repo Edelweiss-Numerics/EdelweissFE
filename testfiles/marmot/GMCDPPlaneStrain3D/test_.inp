@@ -38,15 +38,16 @@ bottom
 
 ** *job, name=cpe4job, domain=3d, solver=NISTParallel, linsolver=amgcl
 *job, name=cpe4job, domain=3d, solver=NISTParallel,
-*fieldOutput
-create=perNode, elSet=all, field=displacement, result=U, name=displacement
+*solver, solver=NISTParallel, name=theSolver
+*fieldOutput,
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
 **elSet=all, field=micro rotation, result=U, name=micro rotation
-create=perElement, elSet=all, field=nonlocal damage, result=U, name=nonlocal damage
-create=perElement, elSet=all, result=alphaP, quadraturePoint=0:4, name=alphaP, f(x)='max( x[:,:], axis=1) '
-create=perElement, elSet=all, result=alphaD, quadraturePoint=0:4, name=alphaD, f(x)='max( x[:,:], axis=1) '
-create=perElement, elSet=all, result=omega, quadraturePoint=0:4, name=omega, f(x)='max( x[:,:], axis=1) '
-create=perNode, name=RF, nSet=top, field=displacement, result=P, f(x)='sum(x[:,1])/2.5', saveHistory=True
-create=perNode, name=U, nSet=top, field=displacement, result=U, f(x)='mean(x[:,1])', saveHistory=True
+>>perNode, elSet=all, field=nonlocal damage, result=U, name=nonlocal damage
+>>perElement, elSet=all, result=alphaP, quadraturePoint=0:4, name=alphaP, f(x)='max( x[:,:], axis=1) '
+>>perElement, elSet=all, result=alphaD, quadraturePoint=0:4, name=alphaD, f(x)='max( x[:,:], axis=1) '
+>>perElement, elSet=all, result=omega, quadraturePoint=0:4, name=omega, f(x)='max( x[:,:], axis=1) '
+>>perNode, name=RF, nSet=top, field=displacement, result=P, f(x)='sum(x[:,1])/2.5', saveHistory=True
+>>perNode, name=U, nSet=top, field=displacement, result=U, f(x)='mean(x[:,1])', saveHistory=True
 
 *output, type=monitor, name=omegaMon
 fieldOutput=omega, f(x)='max(x)'
@@ -55,24 +56,25 @@ fieldOutput=alphaD, f(x)='max(x)'
 fieldOutput=RF
 
 *output, type=ensight, name=esExport
-create=perNode,    fieldOutput=displacement
-configuration, overwrite=yes
+>>perNode, fieldOutput=displacement
+>>configuration, overwrite=yes
 **create=perNode,    fieldOutput=micro rotation
-create=perNode,    fieldOutput=nonlocal damage
-create=perElement, fieldOutput=alphaP
-create=perElement, fieldOutput=alphaD
-create=perElement, fieldOutput=omega
+>>perNode, fieldOutput=nonlocal damage
+>>perElement, fieldOutput=alphaP
+>>perElement, fieldOutput=alphaD
+>>perElement, fieldOutput=omega
 
 *output, type=meshplot, name=RFPlot
 figure=1, axSpec=111, c=k, ls=solid, create=xyData, x=time, y=RF
 
-*step, maxInc=1e-2, minInc=5e-4, maxNumInc=10000, maxIter=25, stepLength=100
-options, category=NISTSolver, extrapolation=linear
-options, category=Ensight, intermediateSaveInterval=1
-dirichlet, name=bottom, nSet=bottom,  field=displacement, 2=0,
+*step, solver=theSolver
+maxInc=1e-2, minInc=5e-4, maxNumInc=10000, maxIter=25, stepLength=100
+>>options, category=NISTSolver, extrapolation=linear
+>>options, category=Ensight, intermediateSaveInterval=1
+>>dirichlet, name=bottom, nSet=bottom,  field=displacement, 2=0,
 **dirichlet, name=bottomR, nSet=bottom,  field=micro rotation, 1=0,2=0,3=0
 **dirichlet, name=topR, nSet=top,  field=micro rotation, 1=0,2=0,3=0
-dirichlet, name=origin, nSet=origin,  field=displacement, 2=0, 1=0, 3=0
-dirichlet, name=top, nSet=top, field=displacement, 2=-5
-dirichlet, name=frontAndBackD, nSet=frontAndBack, field=displacement, 3=0
-dirichlet, name=frontAndBackR, nSet=frontAndBack, field=micro rotation, 1=0, 2=0
+>>dirichlet, name=origin, nSet=origin,  field=displacement, 2=0, 1=0, 3=0
+>>dirichlet, name=top, nSet=top, field=displacement, 2=-5
+>>dirichlet, name=frontAndBackD, nSet=frontAndBack, field=displacement, 3=0
+>>dirichlet, name=frontAndBackR, nSet=frontAndBack, field=micro rotation, 1=0, 2=0
