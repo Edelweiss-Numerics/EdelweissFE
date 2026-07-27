@@ -168,7 +168,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
             )
 
         self.tiedRecords, self.untiedSlaveNodes = self._buildTiedRecords(
-            slaveFacetElements, masterFacetElements, adjust=strtobool(kwargs["adjust"])
+            model, slaveFacetElements, masterFacetElements, adjust=strtobool(kwargs["adjust"])
         )
 
         # A tie has no per-increment tick of its own that runs before the DofManager/VIJSystemMatrix
@@ -183,21 +183,38 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         if change is not None:
             self.reconcile(model, change)
 
-    def _buildTiedRecords(self, slaveFacetElements, masterFacetElements, adjust: bool):
+    def _buildTiedRecords(self, model: FEModel, slaveFacetElements, masterFacetElements, adjust: bool):
         """Project every unique slave-surface node onto its closest master facet (reference
         configuration) and freeze the resulting clamped weights. With ``adjust``, additionally snap
         each tied node onto its projected point, removing any initial geometric gap -- a setup-time
-        convenience, never applied on a reconcile-triggered re-projection."""
+        convenience, never applied on a reconcile-triggered re-projection.
+
+        Slave nodes already claimed as slaves by another multi-point constraint of the model are
+        skipped: a DOF may be condensed out only once, and a second record for it would be rejected
+        by the condensation operator. Dropping the tie record is exact, not a silencer -- the typical
+        case is a hanging node created by adaptive refinement of the slave surface, whose masters are
+        the coarse-trace nodes of that very surface and are themselves tied, so its interpolated
+        motion already is the tied motion and the tie equation is redundant."""
 
         slaveNodes = list(dict.fromkeys(node for el in slaveFacetElements for node in el.nodes))
+
+        alreadyClaimedNodes = set()
+        for constraint in model.multiPointConstraints.values():
+            if constraint is not self:
+                alreadyClaimedNodes |= constraint.claimedSlaveNodes()
 
         closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
         masterFacetCoords = [np.array([n.coordinates for n in el.nodes]) for el in masterFacetElements]
 
         tiedRecords = []
         untiedSlaveNodes = []
+        nSkippedClaimedNodes = 0
 
         for slaveNode in slaveNodes:
+            if slaveNode in alreadyClaimedNodes:
+                nSkippedClaimedNodes += 1
+                continue
+
             bestWeights = None
             bestFacetIdx = None
             bestDistance = np.inf
@@ -217,6 +234,13 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
                 slaveNode.coordinates[:] = bestWeights @ masterFacetCoords[bestFacetIdx]
 
             tiedRecords.append((slaveNode, masterFacetElements[bestFacetIdx].nodes, bestWeights))
+
+        if nSkippedClaimedNodes:
+            self._journal.message(
+                "{:} slave node(s) are already slaves of another multi-point constraint "
+                "(e.g. hanging nodes); their redundant tie records were dropped".format(nSkippedClaimedNodes),
+                self.name,
+            )
 
         return tiedRecords, untiedSlaveNodes
 
@@ -241,9 +265,15 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         slaveFacetElements = list(model.elementSets[self._slaveSurfaceSetName])
         masterFacetElements = list(model.elementSets[self._masterSurfaceSetName])
         self.tiedRecords, self.untiedSlaveNodes = self._buildTiedRecords(
-            slaveFacetElements, masterFacetElements, adjust=False
+            model, slaveFacetElements, masterFacetElements, adjust=False
         )
         return True
+
+    def claimedSlaveNodes(self) -> set:
+        """The tied slave nodes of this constraint. Overrides the base implementation, since a tie
+        keeps its records in :attr:`tiedRecords` rather than in the base class' ``_records``."""
+
+        return {slaveNode for slaveNode, _, _ in self.tiedRecords}
 
     def getMultiPointConstraints(self, dofManager) -> list[tuple[int, list[tuple[int, float]]]]:
         fieldVariableIndices = dofManager.idcsOfFieldVariablesInDofVector

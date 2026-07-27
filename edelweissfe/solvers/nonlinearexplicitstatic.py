@@ -174,7 +174,9 @@ class NEST(NIST):
         self.journal = journal
 
         self.options = self.SolverSpecificOptions.copy()
-        self._updateOptions(kwargs, journal)
+        # the datalines of the *solver keyword belong exclusively to this solver, so unknown entries
+        # are user typos and must not be swallowed
+        self._updateOptions(kwargs, journal, strict=True)
 
     def solveStep(
         self,

@@ -125,6 +125,50 @@ def _buildStateTransferStrategy(defaultName, overridesSpec):
     return PerStateVarStateTransfer(default, overrides) if overrides else default
 
 
+def _connectedComponents(elements: list) -> dict:
+    """Partition elements into connected bodies via union-find over shared node labels.
+
+    Two elements belong to the same body if they share at least one node label. The resulting
+    component id namespaces the refinement node registry and confines hanging-node classification
+    to one body, so two bodies meeting at a flush interface -- a tied surface pair (``adjust`` moves
+    the slave nodes exactly onto the master surface), a zero-gap contact pair, a duplicated-node
+    crack plane -- are neither collapsed onto shared node labels nor welded together by refinement.
+
+    Parameters
+    ----------
+    elements
+        The refineable elements, in the order in which they become octree roots.
+
+    Returns
+    -------
+    dict
+        element -> component id, densely numbered from 0 in order of first appearance.
+    """
+    parentOf = list(range(len(elements)))
+
+    def find(i):
+        while parentOf[i] != i:
+            parentOf[i] = parentOf[parentOf[i]]  # path halving
+            i = parentOf[i]
+        return i
+
+    def union(i, j):
+        rootI, rootJ = find(i), find(j)
+        if rootI != rootJ:
+            parentOf[max(rootI, rootJ)] = min(rootI, rootJ)
+
+    firstElementAtNode = {}
+    for i, element in enumerate(elements):
+        for node in element.nodes:
+            union(i, firstElementAtNode.setdefault(node.label, i))
+
+    componentOfElement = {}
+    denseIds = {}
+    for i, element in enumerate(elements):
+        componentOfElement[element] = denseIds.setdefault(find(i), len(denseIds))
+    return componentOfElement
+
+
 class ModelModifier(ModelModifierBase):
     @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
     @castKwargsValuesAndAddDefaults(module)
@@ -179,15 +223,26 @@ class ModelModifier(ModelModifierBase):
         self._elementClass = getElementClass(self._elementType, self._provider)
         self._nextElLabel = max(model.elements.keys()) + 1
 
-        # build the AdaptiveMesh mirror, sharing node labels with the live model
+        # bodies of the refineable mesh: node labels are namespaced per body, so coincident nodes of
+        # two bodies (a tied interface -- 'adjust' makes it flush by default --, a zero-gap contact
+        # pair, a duplicated-node crack plane) are never deduplicated into one label
+        componentOfElement = _connectedComponents(refineElements)
+
+        # build the AdaptiveMesh mirror, sharing node labels with the live model. Only the nodes of
+        # the refineable elements are seeded: a node the octree does not own must not be able to
+        # claim a coordinate key, and only an octree-owned node can be seeded with a body.
         self._mesh = AdaptiveMesh(splitFactor=self.splitFactor)
-        for label, node in model.nodes.items():
-            self._mesh.registry.seed(label, node.coordinates)
         self._eidToEl = {}  # mesh element id -> live element
         for el in refineElements:
+            componentId = componentOfElement[el]
+            for n in el.nodes:
+                self._mesh.registry.seed(n.label, n.coordinates, componentId)
             coords = np.array([n.coordinates for n in el.nodes])
-            eid = self._mesh.add_root(coords)
+            eid = self._mesh.add_root(coords, componentId)
             self._eidToEl[eid] = el
+        # nodes outside the refineable mesh are deliberately not seeded, but their labels are taken:
+        # keep the registry's high-water mark above them so new nodes never collide with them
+        self._mesh.registry.reserve_labels_up_to(max(model.nodes.keys(), default=0))
 
         # all-encompassing sets (contain every node, e.g. 'all', 'ALLNODES') are not boundary BCs --
         # they just gain every new node; rebuild them wholesale, don't guard/track them
@@ -200,12 +255,17 @@ class ModelModifier(ModelModifierBase):
 
         # track element sets so user element sets propagate child elements on refinement (Finding 1)
         elToEid = {el: eid for eid, el in self._eidToEl.items()}
+        # passengers of a tracked set: members the octree mirror does not know (non-refineable
+        # elements, e.g. HEX8, interface elements, contact facets). A mixed set would lose them on
+        # the first refinement, since _materialize rebuilds the set from mesh element ids only
+        self._untrackedOfElementSet = {}  # element set name -> list of non-mirrored members
         for setName, elementSet in model.elementSets.items():
             eids = [elToEid[el] for el in elementSet if el in elToEid]
             # a set with no refineable member (e.g. a contact-facet-only set) is left untracked, so
             # _materialize never overwrites it with an emptied-out ElementSet
             if eids:
                 self._mesh.define_element_set(setName, eids)
+                self._untrackedOfElementSet[setName] = [el for el in elementSet if el not in elToEid]
 
         # track element-based surfaces so surface loads stay consistent under refinement (Finding 2)
         for surfaceName, surface in model.surfaces.items():
@@ -397,6 +457,10 @@ class ModelModifier(ModelModifierBase):
                 if eids & newChildEids:
                     change.changedElementSets.add(setName)
                 elements = [self._eidToEl[eid] for eid in eids if eid in self._eidToEl]
+                # carry the non-mirrored members along: the octree only knows refineable elements,
+                # so a mixed set would silently drop them here. Members deleted from the model in
+                # the meantime are filtered out by their label
+                elements += [el for el in self._untrackedOfElementSet[setName] if el.elNumber in model.elements]
                 model.elementSets[setName].replaceMembers(elements)
         model.elementSets["all"].replaceMembers(list(model.elements.values()))
         change.changedElementSets.add("all")

@@ -72,6 +72,16 @@ documentation = [module]
 
 
 class Constraint(ConstraintBase):
+    """A Lagrangian multiplier based constraint enforcing equal nodal values on a node set.
+
+    .. note::
+       This constraint requires a node set of *fixed* size. It needs ``len(nSet) - 1`` Lagrange
+       multipliers, and those scalar variables are allocated exactly once, when the equation system
+       is first set up. A node set that grows in-place during the simulation (e.g. by adaptive mesh
+       refinement) can therefore not be supported, and is rejected in :meth:`updateConnectivity`.
+       Use the penalty variant ``equalValuePenalty`` instead, which re-sizes itself per increment.
+    """
+
     @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
     @castKwargsValuesAndAddDefaults(module)
     def __init__(self, name: str, model: FEModel, *args, **kwargs):
@@ -116,6 +126,40 @@ class Constraint(ConstraintBase):
     @property
     def nDof(self) -> int:
         return self._nDof
+
+    def updateConnectivity(self, model) -> bool:
+        """Called once per increment, before the equation system is (re)built.
+
+        This constraint cannot adapt to a node set that changed size: it would need
+        ``len(nSet) - 1`` Lagrange multipliers, but its scalar variables were already allocated for
+        the original size and are not re-allocated per increment. Rebuilding the derived state
+        would silently emit more DOF indices than ``nDof`` accounts for, so we fail loudly instead.
+
+        Parameters
+        ----------
+        model
+            The current model.
+
+        Returns
+        -------
+        bool
+            Always False; this constraint's DOF footprint is fixed at construction.
+
+        Raises
+        ------
+        Exception
+            If the constrained node set was mutated in-place since the last check.
+        """
+
+        if self._checkSetChanged(self._nodes):
+            raise Exception(
+                "Constraint '{:}' (equalValueLagrangian) does not support a node set that changes "
+                "size during the simulation: its {:} Lagrange multipliers are allocated once, when "
+                "the equation system is first set up, and cannot grow with the node set (e.g. under "
+                "adaptive mesh refinement). Use the penalty variant 'equalValuePenalty' on this node "
+                "set instead, or constrain a node set that is not refined.".format(self._name, self.nMultipliers)
+            )
+        return False
 
     def getNumberOfAdditionalNeededScalarVariables(self):
         return self.nNodes - 1

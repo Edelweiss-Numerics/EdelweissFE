@@ -120,7 +120,9 @@ class NIST(NonlinearSolverBase):
         self.fluxResidualTolerancesAlt = jobInfo["fluxResidualToleranceAlternative"]
 
         self.options = self.SolverSpecificOptions.copy()
-        self._updateOptions(kwargs, journal)
+        # the datalines of the *solver keyword belong exclusively to this solver, so unknown entries
+        # are user typos and must not be swallowed
+        self._updateOptions(kwargs, journal, strict=True)
         # baseline (defaults + solver-construction options) to reset to at the start of each step, so
         # a >>options block in one step does not leak into later steps that omit one
         self._baseOptions = dict(self.options)
@@ -155,7 +157,15 @@ class NIST(NonlinearSolverBase):
         self.options = dict(self._baseOptions)
         for optionsAction in step.actions.get("options", {}).values():
             if strCaseCmp(optionsAction.get("category", ""), self.identification):
-                self._updateOptions(optionsAction.options, self.journal)
+                # only those options the user actually wrote down may be applied: the parser fills the
+                # defaults of every module registered on the shared 'options' keyword into the action,
+                # and applying those would silently reset options given in the *solver datalines
+                userDefinedOptions = {
+                    key: value
+                    for key, value in optionsAction.options.items()
+                    if key.casefold() in optionsAction.explicitlySetOptions
+                }
+                self._updateOptions(userDefinedOptions, self.journal)
 
         extrapolation = self.options["extrapolation"]
         extrapolateAfterModelChange = self.options["extrapolateAfterModelChange"]

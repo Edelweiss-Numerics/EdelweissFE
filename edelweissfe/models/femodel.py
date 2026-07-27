@@ -262,7 +262,9 @@ class FEModel:
         instead of rebuilding :attr:`nodeFields` from scratch as :meth:`_prepareVariablesAndFields`
         does. Used by mesh mutators (e.g. AMR's ``hadaptivity._materialize``) so that NodeField
         identity -- and hence any :class:`~edelweissfe.fields.nodefield.NodeFieldSubset` or
-        reference a consumer cached -- survives a topology change.
+        reference a consumer cached -- survives a topology change. ScalarVariables (e.g. Lagrange
+        multipliers of constraints) are rebuilt, but values are preserved by name for constraints
+        that still exist, so their converged state survives the refinement too.
 
         Parameters
         ----------
@@ -290,8 +292,16 @@ class FEModel:
                     self.nodeFields[field] = newNodeField
 
         journal.message("Assembling ScalarVariables", self.identification)
+        # rebuilding scalarVariables cold-starts every value (ScalarVariable() defaults to 0.0), which
+        # would silently discard converged Lagrange-multiplier values on every AMR refinement, even
+        # though node fields are warm-started. Snapshot by name and restore the overlapping subset so
+        # unchanged constraints keep their converged multiplier and only genuinely new ones cold-start.
+        previousScalarVariableValues = {name: v.value for name, v in self.scalarVariables.items()}
         self.scalarVariables = dict()
         self._createAndAssignScalarVariableForConstraints(journal)
+        for name, v in self.scalarVariables.items():
+            if name in previousScalarVariableValues:
+                v.value = previousScalarVariableValues[name]
 
     def _prepareElements(self, journal: Journal):
         """Prepare elements for a simulation.

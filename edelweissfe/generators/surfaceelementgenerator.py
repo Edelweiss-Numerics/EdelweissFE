@@ -307,6 +307,13 @@ def buildContactFacets(model: FEModel, surfaceName: str, prefix: str, triangulat
 
     model.elements.update(newElements)
 
+    # this function is the one that mutates model.elements outside the mesh modifier (removing the
+    # stale facets above and inserting newElements here), so model.elementSets["all"] must be
+    # resynced here to mirror model.elements -- otherwise "all" keeps dangling references to the
+    # popped stale facets and misses the new ones for the rest of the refinement window.
+    if "all" in model.elementSets:
+        model.elementSets["all"].replaceMembers(list(model.elements.values()))
+
     # stable identity across rebuilds (mutate in place rather than replace under the same key), like
     # every other AMR-mutated topological container -- a consumer that merely caches
     # model.elementSets[facetsSetName]/model.nodeSets[nodesSetName] (e.g. a fromExpression

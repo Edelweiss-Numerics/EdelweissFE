@@ -63,7 +63,7 @@ class NonlinearSolverBase(ABC):
     def __init__(self, jobInfo, journal, **kwargs):
         pass
 
-    def _updateOptions(self, updatedOptions: dict, journal):
+    def _updateOptions(self, updatedOptions: dict, journal, strict: bool = False):
         """Update options of the solver using a string dict
 
         Parameters
@@ -72,6 +72,10 @@ class NonlinearSolverBase(ABC):
             The options dictionary.
         journal
             The journal module.
+        strict
+            If True, an unrecognised option raises an AttributeError instead of being ignored. Use it
+            for option sources which are exclusively owned by this solver (i.e. the datalines of the
+            *solver keyword), such that typos are not silently swallowed.
         """
 
         # Input keywords arrive case-folded (the parser lowercases option keys), while the option
@@ -83,6 +87,8 @@ class NonlinearSolverBase(ABC):
         for k, v in updatedOptions.items():
             canonicalKey = canonicalByLower.get(k.lower())
             if canonicalKey is None:
+                if strict:
+                    raise AttributeError("Invalid option {:} for {:}".format(k, self.identification))
                 continue
             journal.message("Updating option {:}={:}".format(canonicalKey, v), self.identification)
             defaultValue = self.SolverSpecificOptions[canonicalKey]

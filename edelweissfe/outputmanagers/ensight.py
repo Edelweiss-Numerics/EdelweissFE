@@ -854,7 +854,8 @@ class OutputManager(OutputManagerBase):
         self.intermediateSaveInterval = int(val) if val is not None else None
         self.overwrite = module.getKeyword("configuration")["overwrite"].default
         transient = module.getKeyword("configuration")["transient"].default
-        part = None
+        configSetName = None
+        configIsNodeSet = None
 
         if perNodeDefs is None:
             perNodeDefs = []
@@ -877,9 +878,11 @@ class OutputManager(OutputManagerBase):
             #     )
 
             if configuration["nSet"]:
-                part = self.nSetToEnsightPartMappings[configuration["nSet"]]
+                configSetName = configuration["nSet"]
+                configIsNodeSet = True
             elif configuration["elSet"]:
-                part = self.elSetToEnsightPartMappings[configuration["elSet"]]
+                configSetName = configuration["elSet"]
+                configIsNodeSet = False
 
         if not self.overwrite:
             self.exportName = "{:}_{:}".format(self.name, datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
@@ -888,11 +891,25 @@ class OutputManager(OutputManagerBase):
         self._perNodeDefs = perNodeDefs
         self._perElementDefs = perElementDefs
         self._fieldOutputController = fieldOutputController
-        self._configPart = part
+        self._configSetName = configSetName
+        self._configIsNodeSet = configIsNodeSet
+        self._configPart = None
+        self._resolveConfigPart()
         self._transientCfg = transient
         self._nameKwarg = kwargs.get("name", None)
         self._meshSignature = None
         self._buildVariableJobs()
+
+    def _resolveConfigPart(self):
+        """(Re)resolve `self._configPart` from the configured set name/kind against the current
+        nSetToEnsightPartMappings/elSetToEnsightPartMappings, so it stays consistent with the geometry
+        parts after a mesh change (AMR). Leaves `self._configPart` as None if no set was configured."""
+        if self._configSetName is None:
+            self._configPart = None
+        elif self._configIsNodeSet:
+            self._configPart = self.nSetToEnsightPartMappings[self._configSetName]
+        else:
+            self._configPart = self.elSetToEnsightPartMappings[self._configSetName]
 
     def _buildVariableJobs(self):
         """(Re)create the per-node/per-element variable jobs from the stored definitions against the
@@ -924,6 +941,7 @@ class OutputManager(OutputManagerBase):
         self._transientPerNodeVariableJobs = defaultdict(list)
         self._transientPerElementVariableJobs = defaultdict(list)
         self.geometryParts = self._createGeometryParts(1)
+        self._resolveConfigPart()
         self._buildVariableJobs()
 
     def updateDefinition(self, **kwargs: dict):

@@ -95,7 +95,9 @@ class Constraint(MultiPointConstraintBase):
         self._name = name
         self._model = model
 
-        self._records = []  # (slaveNode, [(masterNode, weight), ...])
+        # (slaveNode, [(masterNode, weight), ...]); slave node first, so the base class'
+        # claimedSlaveNodes() accessor works unmodified for this constraint
+        self._records = []
         if kwargs["recordsFile"] is not None:
             with open(kwargs["recordsFile"]) as f:
                 for line in f:

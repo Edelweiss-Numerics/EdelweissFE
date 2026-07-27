@@ -69,37 +69,68 @@ def hanging_weights(master_coords, slave_coord):
 
 
 class NodeRegistry:
-    """Coordinate-keyed node registry that mints unique labels and deduplicates shared nodes."""
+    """Coordinate-keyed node registry that mints unique labels and deduplicates shared nodes.
+
+    Keys are namespaced per connected component (body): across a flush interface -- a tied surface
+    pair, a zero-gap contact pair, a duplicated-node crack plane -- two topologically distinct nodes
+    legitimately share one coordinate, and must not be deduplicated into a single label.
+    """
 
     def __init__(self, decimals: int = 8):
         self.decimals = decimals
-        self._byKey = {}  # rounded-coord key -> label
+        self._byKey = {}  # (componentId, rounded-coord) key -> label
         self.coordinates = {}  # label -> np.ndarray(coord)
+        self.componentOf = {}  # label -> componentId of the body the node belongs to
         self._maxLabel = 0
 
-    def _key(self, coord):
-        return tuple(round(float(v), self.decimals) for v in coord)
+    def _key(self, coord, componentId: int):
+        return (componentId, tuple(round(float(v), self.decimals) for v in coord))
 
-    def seed(self, label: int, coord):
-        """Pre-register an existing (label, coordinate), so a live model's node labels are reused."""
-        self._byKey[self._key(coord)] = label
-        self.coordinates[label] = np.asarray(coord, dtype=float)
+    def seed(self, label: int, coord, componentId: int = 0):
+        """Pre-register an existing (label, coordinate) of one body, so a live model's node labels
+        are reused.
+
+        Seeding the same node repeatedly (it is shared by several elements of the body) is a no-op.
+        A coordinate already claimed by a DIFFERENT label of the same body means two distinct nodes
+        occupy the same point, which a coordinate-keyed registry cannot disambiguate -- rejected
+        here rather than silently collapsed.
+        """
+        key = self._key(coord, componentId)
+        taken = self._byKey.get(key)
+        if taken is not None and taken != label:
+            raise ValueError(
+                "two distinct nodes ({:d} and {:d}) of the same body occupy the point {:s}; "
+                "adaptive refinement identifies nodes by their coordinates and cannot "
+                "disambiguate them".format(taken, label, np.array2string(np.asarray(coord, dtype=float)))
+            )
+        self._byKey[key] = label
+        # a copy, never an alias of a live Node's array: an in-place coordinate mutation would
+        # otherwise desync the stored coordinate from the key it was registered under
+        self.coordinates[label] = np.array(coord, dtype=float)
+        self.componentOf[label] = componentId
         self._maxLabel = max(self._maxLabel, label)
 
-    def label(self, coord) -> int:
-        """Return the label for a coordinate, minting a fresh (max+1) label if unseen."""
-        key = self._key(coord)
+    def reserve_labels_up_to(self, label: int):
+        """Raise the label high-water mark without registering a coordinate, so freshly minted
+        labels cannot collide with existing labels the registry does not track (nodes outside the
+        refineable mesh, e.g. those of contact facets)."""
+        self._maxLabel = max(self._maxLabel, label)
+
+    def label(self, coord, componentId: int = 0) -> int:
+        """Return the label of a coordinate within one body, minting a fresh (max+1) label if unseen."""
+        key = self._key(coord, componentId)
         lab = self._byKey.get(key)
         if lab is None:
             self._maxLabel += 1
             lab = self._maxLabel
             self._byKey[key] = lab
-            self.coordinates[lab] = np.asarray(coord, dtype=float)
+            self.coordinates[lab] = np.array(coord, dtype=float)
+            self.componentOf[lab] = componentId
         return lab
 
-    def connectivity(self, coords) -> list:
-        """Map a list/array of node coordinates to their labels (registering as needed)."""
-        return [self.label(c) for c in coords]
+    def connectivity(self, coords, componentId: int = 0) -> list:
+        """Map a list/array of node coordinates of one body to their labels (registering as needed)."""
+        return [self.label(c, componentId) for c in coords]
 
 
 def subdivide(parent_coords: np.ndarray, n: int = 2):
@@ -231,23 +262,29 @@ class AdaptiveMesh:
         """pairs: iterable of (eid, faceID) with Marmot faceID (1-6)."""
         self.surfaces[name] = set(pairs)
 
-    def _add(self, coords, level, parent):
+    def _add(self, coords, level, parent, componentId: int = 0):
         coords = np.asarray(coords, dtype=float)
         eid = self._next
         self._next += 1
         self.elements[eid] = dict(
-            conn=self.registry.connectivity(coords),
+            conn=self.registry.connectivity(coords, componentId),
             coords=coords,
             level=level,
             active=True,
             parent=parent,
             children=[],
+            componentId=componentId,
         )
         return eid
 
-    def add_root(self, coords) -> int:
-        """Add a level-0 element from its 20 node coordinates (C3D20 order)."""
-        return self._add(coords, level=0, parent=None)
+    def add_root(self, coords, componentId: int = 0) -> int:
+        """Add a level-0 element from its 20 node coordinates (C3D20 order).
+
+        ``componentId`` identifies the connected body (mesh component) the element belongs to. Node
+        labels are namespaced per body, and hanging nodes are only ever classified within one body,
+        so two bodies sharing a flush interface are never welded together by refinement.
+        """
+        return self._add(coords, level=0, parent=None, componentId=componentId)
 
     def active(self) -> list:
         return [eid for eid, e in self.elements.items() if e["active"]]
@@ -274,7 +311,10 @@ class AdaptiveMesh:
         if not e["active"]:
             return e["children"]
         parent_conn = e["conn"]
-        kids = [self._add(ch, e["level"] + 1, eid) for ch in subdivide(e["coords"], self.splitFactor)]
+        kids = [
+            self._add(ch, e["level"] + 1, eid, e["componentId"])
+            for ch in subdivide(e["coords"], self.splitFactor)  # children stay in the parent's body
+        ]
         e["active"] = False
         e["children"] = kids
 
@@ -382,6 +422,10 @@ class AdaptiveMesh:
         # with the total number of active elements (which grows every adaptation).
         lev = {eid: self.elements[eid]["level"] for eid in act}
         box = {eid: self.box(eid) for eid in act}
+        # a hanging node is a within-body notion: two bodies meeting at a flush interface (tie,
+        # zero-gap contact, crack plane) merely touch, and neither may master the other's nodes
+        comp = {eid: self.elements[eid]["componentId"] for eid in act}
+        componentOf = self.registry.componentOf
         elemGrid = defaultdict(set)
         for eid in act:
             for cell in _grid_cells_for_box(box[eid][0], box[eid][1], h_cell, pad=0):
@@ -391,7 +435,11 @@ class AdaptiveMesh:
             neighbours = set()
             for cell in _grid_cells_for_box(box[eid][0], box[eid][1], h_cell):
                 neighbours |= elemGrid.get(cell, set())
-            return any(lev[f] > lev[eid] and _boxes_overlap(box[eid], box[f]) for f in neighbours if f != eid)
+            return any(
+                lev[f] > lev[eid] and _boxes_overlap(box[eid], box[f])
+                for f in neighbours
+                if f != eid and comp[f] == comp[eid]
+            )
 
         best = {}  # slave -> (dim, level, masters)
         for eid in act:
@@ -403,7 +451,7 @@ class AdaptiveMesh:
             cands = set()
             for cell in _grid_cells_for_box(bMin, bMax, h_cell):
                 for lab in nodeGrid.get(cell, ()):
-                    if lab not in Eset:
+                    if lab not in Eset and componentOf[lab] == comp[eid]:
                         cands.add(lab)
             for h in classify_hanging_on_element(E["conn"], self.registry, cands):
                 dim = 1 if h["kind"] == "edge" else 2

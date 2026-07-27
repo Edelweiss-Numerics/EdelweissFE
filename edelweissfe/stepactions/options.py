@@ -55,13 +55,21 @@ for module in modules:
 
 
 class StepAction(StepActionBase):
+    #: The casefolded names of those options the user actually assigned in the input file. Since every
+    #: module registers its optional args on this shared keyword, the parser additionally fills in the
+    #: defaults of all foreign modules; consumers should restrict themselves to this subset in order to
+    #: not override settings made elsewhere (e.g. in a solver's own datalines).
+    explicitlySetOptions: set[str]
+
     def __init__(self, name, options, jobInfo, model, fieldOutputController, journal):
         self.name = name
         self.options = CaseInsensitiveDict(options)
+        self.explicitlySetOptions = set()
         self.updateStepAction(options, jobInfo, model, fieldOutputController, journal)
 
     def updateStepAction(self, options, jobInfo, model, fieldOutputController, journal):
         self.options.update(options)
+        self.explicitlySetOptions |= set(options.get("explicitlySetArgs", []))
 
     def __contains__(self, *args):
         """wrapper method for CaseInsensitiveDict"""

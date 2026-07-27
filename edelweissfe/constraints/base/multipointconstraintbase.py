@@ -51,7 +51,17 @@ class MultiPointConstraintBase(ABC):
     Multi-point constraints are defined via the ``*constraint`` keyword like ordinary constraints,
     but live in :attr:`~edelweissfe.models.femodel.FEModel.multiPointConstraints` and stay outside
     the DofManager and the constraint assembly loop entirely.
+
+    A degree of freedom may be claimed as slave by at most one multi-point constraint of a model --
+    the condensation operator rejects duplicate claims. Constraints that build their slave set
+    dynamically (e.g. a tie re-projecting its surface after adaptive refinement) therefore query
+    :meth:`claimedSlaveNodes` on their peers to stay out of each other's way.
     """
+
+    #: The constraint's own records, ``(slaveNode, ...)`` tuples with the slave node first. Declared
+    #: here so :meth:`claimedSlaveNodes` has a meaningful default for every subclass; subclasses
+    #: storing their records elsewhere override :meth:`claimedSlaveNodes` instead.
+    _records: list = []
 
     @abstractmethod
     def __init__(self, name: str, model: FEModel, **kwargs):
@@ -84,3 +94,18 @@ class MultiPointConstraintBase(ABC):
             One record per slave degree of freedom:
             ``(slaveDofIndex, [(masterDofIndex, coefficient), ...])``.
         """
+
+    def claimedSlaveNodes(self) -> set:
+        """Return the nodes this constraint claims as multi-point-constraint slaves.
+
+        Peer constraints use this to avoid claiming the same slave twice, which the condensation
+        operator would reject. The default derives the set from :attr:`_records`, whose entries are
+        expected to carry the slave node as their first item.
+
+        Returns
+        -------
+        set
+            The slave nodes of this constraint.
+        """
+
+        return {record[0] for record in self._records}

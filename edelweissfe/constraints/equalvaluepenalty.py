@@ -74,19 +74,28 @@ class Constraint(ConstraintBase):
 
         kwargs = CaseInsensitiveDict(kwargs)
 
-        theField = kwargs["field"]
-        self.sizeField = getFieldSize(theField, model.domainSize)
+        self.theField = kwargs["field"]
+        self.sizeField = getFieldSize(self.theField, model.domainSize)
         self.component = kwargs["component"]
         self.penalty = kwargs["penalty"]
         self._nodes = model.nodeSets[kwargs["nSet"]]
+
+        self.active = True
+
+        self._rebuildDerivedState()
+
+    def _rebuildDerivedState(self):
+        """(Re)derive every quantity sized to the constrained node set -- the node count, ``nDof``,
+        the component index slice and the field list -- from its *current* size. Called once at
+        construction and again, lazily, from :meth:`updateConnectivity` whenever the node set was
+        mutated in-place (e.g. by AMR) since the last increment."""
+
         self._nNodes = len(self._nodes)
         self._nDof = self.sizeField * self._nNodes
 
         self.indices_component = slice(self.component, self._nDof + self.component, self.sizeField)
 
-        self._fieldsOnNodes = [[theField]] * self._nNodes
-
-        self.active = True
+        self._fieldsOnNodes = [[self.theField]] * self._nNodes
 
     @property
     def nodes(self) -> list:
@@ -99,6 +108,17 @@ class Constraint(ConstraintBase):
     @property
     def nDof(self) -> int:
         return self._nDof
+
+    def updateConnectivity(self, model) -> bool:
+        """Called once per increment, before the equation system is (re)built. Recomputes the
+        node-set-sized derived state (see :meth:`_rebuildDerivedState`) if the constrained node set
+        was mutated in-place since the last check, and reports the change so the caller rebuilds
+        the equation system even on an increment where nothing else did."""
+
+        if self._checkSetChanged(self._nodes):
+            self._rebuildDerivedState()
+            return True
+        return False
 
     def applyConstraint(
         self,
