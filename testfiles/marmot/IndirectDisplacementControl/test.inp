@@ -16,8 +16,8 @@ elType = GC3D8
 100.0,      0.00,   10,         30,         35,         3.00,       0.85,       0.12,
 **Bh        Ch      Dh          As          softmod     l           m           omegaMax
 0.003,      2.0,    1e-6,       15.0,       .1,         2,          1.05,       1,
-**derivativeMethod, dTThresholdElasticStiffness
-1,                  1e-8
+**derivativeMethod, dTThresholdElasticStiffness, viscoplasticity
+1,                  1e-8,       0
 
 *section, name=concrete, material=concrete, type=solid
 all
