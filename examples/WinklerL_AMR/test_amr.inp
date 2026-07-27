@@ -53,6 +53,7 @@ result=alphaP
 expression='x > 0.0'
 elSet=concrete
 maxLevel=1
+splitFactor=3
 
 *job, domain=3d, name=theJob
 *solver, solver=NISTParallel, name=theSolver
