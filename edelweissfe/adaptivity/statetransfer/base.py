@@ -48,7 +48,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from edelweissfe.adaptivity.hex20topology import hex20_shape
+from edelweissfe.adaptivity.hex20topology import hex20_shape_grad
 
 
 def hex20InverseMap(point, elementNodeCoords, tol=1e-11, itmax=30):
@@ -70,16 +70,12 @@ def hex20InverseMap(point, elementNodeCoords, tol=1e-11, itmax=30):
     coords = np.asarray(elementNodeCoords, dtype=float)
     xi = np.zeros(3)
     for _ in range(itmax):
-        x = hex20_shape(*xi) @ coords
+        N, dN = hex20_shape_grad(*xi)
+        x = N @ coords
         residual = x - point
         if float(np.linalg.norm(residual)) < tol:
             return xi
-        jac = np.zeros((3, 3))
-        h = 1e-6
-        for k in range(3):
-            xip = xi.copy()
-            xip[k] += h
-            jac[:, k] = ((hex20_shape(*xip) @ coords) - x) / h
+        jac = coords.T @ dN  # jac[i, k] = dx_i / dxi_k
         try:
             dxi = np.linalg.solve(jac, residual)
         except np.linalg.LinAlgError:

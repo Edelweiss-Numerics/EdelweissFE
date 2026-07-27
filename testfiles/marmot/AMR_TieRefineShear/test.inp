@@ -16,9 +16,9 @@ fixed_all
 shear_all
 
 *modelGenerator, generator=boxGen, name=fixed
-nX      =2
-nY      =2
-nZ      =1
+nX      =3
+nY      =3
+nZ      =2
 x0      =0
 y0      =0
 z0      =0
@@ -28,8 +28,8 @@ lZ      =1
 elType  =C3D20
 
 *modelGenerator, generator=boxGen, name=shear
-nX      =3
-nY      =3
+nX      =4
+nY      =4
 nZ      =2
 x0      =0
 y0      =0
