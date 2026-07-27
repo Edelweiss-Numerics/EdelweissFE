@@ -112,13 +112,19 @@ class NodeField:
         self.nodes = [n for n in nodes if self.name in n.fields]
         self._indicesOfNodesInArray = {n: i for i, n in enumerate(self.nodes)}
 
+        # nodes retained across the resize (e.g. AMR-untouched nodes); computed once and reused for
+        # every value entry below, instead of a per-node dict lookup repeated for each entry
+        commonNodes = oldIndicesOfNodesInArray.keys() & self._indicesOfNodesInArray.keys()
+        oldIdx = np.fromiter((oldIndicesOfNodesInArray[n] for n in commonNodes), dtype=np.intp, count=len(commonNodes))
+        newIdx = np.fromiter(
+            (self._indicesOfNodesInArray[n] for n in commonNodes), dtype=np.intp, count=len(commonNodes)
+        )
+
         newValues = dict()
         for entry, oldArray in oldValues.items():
             newArray = np.zeros((len(self.nodes), self.dimension), dtype=float)
-            for node, newIdx in self._indicesOfNodesInArray.items():
-                oldIdx = oldIndicesOfNodesInArray.get(node)
-                if oldIdx is not None:
-                    newArray[newIdx] = oldArray[oldIdx]
+            if len(oldIdx):
+                newArray[newIdx] = oldArray[oldIdx]
             newValues[entry] = newArray
         self._values = newValues
 

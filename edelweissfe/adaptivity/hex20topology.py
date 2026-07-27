@@ -130,22 +130,38 @@ def quad8_shape(xi, eta):
     return N
 
 
+def _partition_local_coords():
+    """Group node indices by shape-function family (corner / midside-x / midside-y / midside-z),
+    each entry pre-flattened to plain-Python scalars. Evaluated once at import time so
+    :func:`hex20_shape` -- called ~10^5-10^6 times per refinement event via the Newton-Raphson
+    inverse map (:func:`~edelweissfe.adaptivity.statetransfer.base.hex20InverseMap`) -- never pays
+    per-call numpy-array-indexing/branching overhead for a fixed, tiny (20-entry) topology."""
+    coords = [tuple(row) for row in LOCAL_COORDS.tolist()]
+    corner = [(i, xa, ya, za) for i, (xa, ya, za) in enumerate(coords) if xa != 0 and ya != 0 and za != 0]
+    midX = [(i, ya, za) for i, (xa, ya, za) in enumerate(coords) if xa == 0]
+    midY = [(i, xa, za) for i, (xa, ya, za) in enumerate(coords) if xa != 0 and ya == 0]
+    midZ = [(i, xa, ya) for i, (xa, ya, za) in enumerate(coords) if xa != 0 and ya != 0 and za == 0]
+    return corner, midX, midY, midZ
+
+
+_CORNER_NODES, _MIDX_NODES, _MIDY_NODES, _MIDZ_NODES = _partition_local_coords()
+
+
 def hex20_shape(xi, eta, zeta):
     """Evaluate the 20 serendipity shape functions at (xi, eta, zeta)."""
-    N = np.zeros(N_NODES)
-    for a in range(N_NODES):
-        xa, ya, za = LOCAL_COORDS[a]
-        nzero = int(xa == 0) + int(ya == 0) + int(za == 0)
-        if nzero == 0:  # corner
-            N[a] = 0.125 * (1 + xi * xa) * (1 + eta * ya) * (1 + zeta * za) * (xi * xa + eta * ya + zeta * za - 2)
-        else:  # midside (exactly one zero component)
-            if xa == 0:
-                N[a] = 0.25 * (1 - xi**2) * (1 + eta * ya) * (1 + zeta * za)
-            elif ya == 0:
-                N[a] = 0.25 * (1 - eta**2) * (1 + xi * xa) * (1 + zeta * za)
-            else:
-                N[a] = 0.25 * (1 - zeta**2) * (1 + xi * xa) * (1 + eta * ya)
-    return N
+    N = [0.0] * N_NODES
+    for i, xa, ya, za in _CORNER_NODES:
+        N[i] = 0.125 * (1 + xi * xa) * (1 + eta * ya) * (1 + zeta * za) * (xi * xa + eta * ya + zeta * za - 2)
+    xi2 = 1 - xi**2
+    for i, ya, za in _MIDX_NODES:
+        N[i] = 0.25 * xi2 * (1 + eta * ya) * (1 + zeta * za)
+    eta2 = 1 - eta**2
+    for i, xa, za in _MIDY_NODES:
+        N[i] = 0.25 * eta2 * (1 + xi * xa) * (1 + zeta * za)
+    zeta2 = 1 - zeta**2
+    for i, xa, ya in _MIDZ_NODES:
+        N[i] = 0.25 * zeta2 * (1 + xi * xa) * (1 + eta * ya)
+    return np.array(N)
 
 
 def _corner_indices():
