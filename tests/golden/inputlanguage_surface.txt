@@ -1,0 +1,1035 @@
+===== printKeywords() =====
+    element    definition of element(s)
+        type                  string              assign one of the types
+                                                  defined in the elementlibrary
+        elSet                 string              name of elSet to be created
+        provider              string              provider (library) for the
+                                                  element type. Default: Marmot
+
+
+    elSet    definition of an element set
+        elSet                 string              name
+        generate              boolean             set True to generate from data
+                                                  line 1: start-element, end-
+                                                  element, step
+
+
+    node    definition of nodes
+        nSet                  string              name of nSet to be created
+
+
+    nSet    definition of an element set
+        nSet                  string              name
+        generate              boolean             set True to generate from data
+                                                  line 1: start-node, end-node,
+                                                  step
+
+
+    surface    definition of surface set
+        name                  string              name
+        type                  string              type of surface (currently
+                                                  'element' only)
+
+
+    section    definition of a section
+        name                  string              name
+        material              string              associated id of defined
+                                                  material
+        type                  string              type of the section
+
+
+    material    definition of a material
+        name                  string              name of material
+        id                    string              id of material
+        provider              string              material provider
+
+
+    advancedmaterial    definition of an advanced material
+        name                  string              name of material
+        id                    string              id of material
+        provider              string              material provider
+
+
+    fieldOutput    define fieldoutput, which is used by outputmanagers
+
+
+    analyticalField    define an analytical field
+        name                  string              name of analytical field
+        type                  string              type of analytical field
+
+
+    job    definition of an analysis job
+        domain                string              define spatial domain: 1d, 2d,
+                                                  3d
+        startTime             float               (optional) start time of job
+        name                  string              Name of job.
+        solver                string              (deprecated) define the solver
+                                                  to be used
+
+
+    solver    define a solver
+        name                  string              solver name
+        solver                string              solver type
+
+
+    step    define steps
+        solver                string              solver to be used
+        type                  string              step type
+
+
+    output    define an output module
+        type                  string              output module
+        name                  string              name of output manager
+
+
+    updateConfiguration    update a configuration
+        configuration         string              name of configuration to be
+                                                  changed
+
+
+    modelGenerator    define a model generator, loaded from a module
+        name                  string              name of the generator
+        generator             string              name of generator module
+        executeAfterManualGenerationboolean             Delay the execution of
+                                                        the generator after
+                                                        model generation
+
+
+    constraint    define a constraint
+        type                  string              constraint type
+        name                  string              name of the constraint
+
+
+    modelModifier    define a model modifier
+        type                  string              model modifier type
+        name                  string              name of the model modifier
+
+
+    configurePlots    customize the figures and axes
+
+
+    exportPlots    export your figures
+
+
+    include    load contents of extra file
+        input                 string              path to file (use relative
+                                                  path to current .inp)
+===== module documentation: edelweissfe.analyticalfields.fromvtk =====
+Use PyVista to interpolate from vtk data.
+[fromVtk] Use PyVista to interpolate from vtk data.
+  required arguments
+    [file] path to database file (<class 'str'>)
+    [result] result name in database (<class 'str'>)
+===== module documentation: edelweissfe.analyticalfields.mapped =====
+  f(t): (optional) define an amplitude
+  f(xyz): (optional) define a spatial field for scaling the BC
+  f(xyzt): (optional) define a spatial field for scaling the BC
+===== module documentation: edelweissfe.analyticalfields.randomscalar =====
+Define a random field using the GSTools library.
+"Müller, S., Schüler, L., Zech, A., and Heße, F.: GSTools v1.3: a toolbox for geostatistical modelling in Python, Geosci. Model Dev., 15, 3161–3182, https://doi.org/10.5194/gmd-15-3161-2022, 2022."
+[randomScalar] Define a random field using the GSTools library.
+  optional arguments
+    [model] Covariance Model of the spatial random field (<class 'str'>, default = Gaussian)
+    [mean] Mean of the spatial random field (<class 'float'>, default = 0.0)
+    [variance] Variance of the model (<class 'float'>, default = 1.0)
+    [lengthScale] Length scale of the model (<class 'float'>, default = 10.0)
+    [nu] Smoothness parameter for Matern covariance function (<class 'float'>, default = 1.0)
+    [seed] Seed of the random number generator (<class 'int'>, default = 0)
+===== module documentation: edelweissfe.analyticalfields.scalarexpression =====
+Define a field using a scalar expression.
+[scalarExpression] Define an analytical field using a scalar expression.
+  required arguments
+    [f(x,y,z)] Python expression using variables x, y, z (coordinates); dictionaries contained in model can be accessed (<class 'str'>)
+===== module documentation: edelweissfe.constraints.amrtransparencyprobe =====
+[amrtransparencyprobe] Test-only acceptance double verifying that a cached NodeSet reference survives AMR without any observer registration.
+  required arguments
+    [nSet] The node set whose growth under AMR this probe verifies. (<class 'str'>)
+===== module documentation: edelweissfe.constraints.directionalspringpenalty =====
+[directionalSpringPenalty] A penalty based constraint used for assigning a specific stiffness to the nodes of a defined node set.
+  required arguments
+    [field] The field this constraint acts on. (<class 'str'>)
+    [component] The component of the field. (<class 'int'>)
+    [penalty] The numerical penalty value. (<class 'float'>)
+    [nSet] The node set to be constrained. (<class 'str'>)
+===== module documentation: edelweissfe.constraints.equalvaluelagrangian =====
+[equalvaluelagrangian] A lagrangian multiplier based constraint used for constraining nodal values of a node set to be equal.
+  required arguments
+    [field] The field this constraint acts on. (<class 'str'>)
+    [component] The component of the field. (<class 'int'>)
+    [nSet] The node set to be constrained. (<class 'str'>)
+===== module documentation: edelweissfe.constraints.equalvaluepenalty =====
+[equalvaluepenalty] A lagrangian multiplier based constraint used for constraining nodal values of a node set to be equal.
+  required arguments
+    [field] The field this constraint acts on. (<class 'str'>)
+    [component] The component of the field. (<class 'int'>)
+    [penalty] The numerical penalty value. (<class 'float'>)
+    [nSet] The node set to be constrained. (<class 'str'>)
+===== module documentation: edelweissfe.constraints.hangingnode =====
+Hanging-node constraint for adaptive-mesh-refinement, enforced by master-slave DOF elimination
+(multi-point constraint), Abaqus-style -- no Lagrange multipliers, no extra DOFs, no saddle point.
+
+Each hanging (slave) node on a 2:1-refined HEX20 face is tied to the coarse serendipity trace it
+hangs on:
+
+.. math::
+    u_s = \sum_a N_a \, u_{m_a}
+
+for EVERY field active on the node (displacement, nonlocal damage, ...) and every component. Because
+the QUAD8 face-trace / quadratic-edge spaces are nested under octree refinement, these constraints
+are exact. The records are precomputed (masters + weights, with multi-level chains already flattened
+to independent masters) by the adaptivity machinery -- see
+:meth:`edelweissfe.adaptivity.refinement.AdaptiveMesh.hanging_mpc_records` -- and written to a plain
+records file, one line per slave node::
+
+    <slaveLabel>  <masterLabel> <weight>  <masterLabel> <weight>  ...
+[hangingnode] Hanging-node MPC (DOF elimination) tying refined-side nodes to the coarse serendipity trace.
+  optional arguments
+    [recordsFile] Path (relative to the input file) to the flattened hanging-node records: one line per slave '<slaveLabel> <masterLabel> <weight> ...' with independent masters. Omit for dynamic AMR, where the adaptivity manager sets the records in memory via updateRecords(). (<class 'str'>, default = None)
+===== module documentation: edelweissfe.constraints.linearizedrigidbody =====
+[linearizedrigidbody] A rigid body constraint tying nodes to a reference point.
+  required arguments
+    [nSet] Node set to tie. (<class 'str'>)
+    [referencePoint] Node set containing only the reference point. (<class 'str'>)
+===== module documentation: edelweissfe.constraints.nodetodeformablesurfacepenalty =====
+[nodeToDeformableSurfacePenalty] A penalty based unilateral contact constraint preventing the nodes of a slave surface from penetrating a deformable master surface, both represented by contact facet elements.
+  required arguments
+    [slaveSurface] The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) forming the slave surface; its nodes act as the contact points, penalty-weighted by their tributary areas. (<class 'str'>)
+    [masterSurface] The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) forming the master surface. (<class 'str'>)
+    [penalty] The numerical penalty value, an interface stiffness modulus per unit slave surface area. (<class 'float'>)
+  optional arguments
+    [type] The formulation type: 'linear' (linear force, constant stiffness with jump) or 'quadratic' (quadratic force, linear stiffness). (<class 'str'>, default = linear)
+    [searchDistance] An optional broadphase distance for the per-increment candidate-facet search. If not given, every slave is always assigned its single closest facet, without a distance gate. (<class 'float'>, default = None)
+    [sliding] The kinematic treatment of the contact geometry: 'finite' (gap, gradient and exact Hessian recomputed from the current Newton iterate every iteration) or 'small' (Abaqus-style small sliding: the closest-point projection -- facet, clamped local coordinates, and normal -- is frozen once per increment from the last converged configuration, making the gap linear in the displacement DOFs). (<class 'str'>, default = finite)
+    [mu] The Coulomb friction coefficient. Requires sliding=small; mu=0 disables friction. Strongly recommended in combination with type=quadratic: the quadratic law's contact stiffness vanishes continuously at gap activation, keeping the frictional tangent continuous for slave nodes lifting off/touching down -- with type=linear, the activation stiffness jump scaled by mu makes Newton prone to limit-cycling at such events. (<class 'float'>, default = 0.0)
+    [tangentPenalty] The tangential penalty stiffness per unit slave surface area for frictional stick. Defaults to the normal penalty. (<class 'float'>, default = None)
+    [augmentedLagrange] Augment the penalty force with a per-slave normal traction multiplier, updated once per increment on acceptance (incremental Uzawa: lambda <- min(0, lambda + penalty * A * g)). The multiplier is constant within an increment (zero tangent contribution), drives the penetration toward zero over the increments at a fixed penalty, and sharpens the friction cone mu * N. Requires sliding=small. (<class 'str'>, default = False)
+===== module documentation: edelweissfe.constraints.nodetodiscreterigidbodypenalty =====
+[nodeToDiscreteRigidBodyPenalty] A penalty based unilateral contact constraint preventing nodes of a node set from penetrating the surface of a discrete rigid body.
+  required arguments
+    [nSet] The (slave) node set to be protected from penetrating the rigid body. (<class 'str'>)
+    [rigidBody] The name of the discrete rigid body (as registered in model.rigidBodies). (<class 'str'>)
+    [penalty] The numerical penalty value. (<class 'float'>)
+  optional arguments
+    [type] The formulation type: 'linear' (linear force, constant stiffness with jump) or 'quadratic' (quadratic force, linear stiffness). (<class 'str'>, default = linear)
+    [searchDistance] An optional broadphase distance (passed on to the rigid body's surface query) for culling nodes far away from the rigid body. If not given, every slave node is queried exactly every iteration. (<class 'float'>, default = None)
+===== module documentation: edelweissfe.constraints.nodetorigidsurfacepenalty =====
+[nodeToRigidSurfacePenalty] A penalty based unilateral constraint used for preventing the nodes of a node set from penetrating a defined rigid boundary.
+  required arguments
+    [field] The field this constraint acts on. (<class 'str'>)
+    [component] The component of the field. (<class 'int'>)
+    [penalty] The numerical penalty value. (<class 'float'>)
+    [nSet] The node set to be constrained. (<class 'str'>)
+  optional arguments
+    [value] The prescribed distance to the rigid boundary. A value of 0.0 implies no initial gap between the node set and the boundary. (<class 'float'>, default = 0.0)
+    [direction] The normal direction outward from the continuum towards the boundary (1.0 or -1.0). (<class 'float'>, default = 1.0)
+    [type] The formulation type: 'linear' (linear force, constant stiffness with jump) or 'quadratic' (quadratic force, linear stiffness). (<class 'str'>, default = linear)
+===== module documentation: edelweissfe.constraints.penaltyindirectcontrol =====
+[penaltyindirectcontrol] A penalty based constraint used for indirect (displacement) control.
+  required arguments
+    [cVector] The projection vector for the constrained nodes (e.g., CMOD). (<class 'str'>)
+    [constrainedNSet] The node set for determining the constraint (e.g., CMOD). (<class 'str'>)
+    [loadNSet] The node set for application of the controlled load. (<class 'str'>)
+    [loadVector] The vector (in correct) dimensions and tensorial order  determining the load. (<class 'str'>)
+    [length] The value of the constraint (e.g., CMOD). (<class 'float'>)
+    [penaltyStiffness] The stiffness for formulating the constraint. (<class 'float'>)
+  optional arguments
+    [field] The field this constraint acts on. (<class 'str'>, default = displacement)
+    [offset] A correction value for the computation of the constraint (e.g, initial displacement). (<class 'float'>, default = 0.0)
+    [normalizeLoad] Normalize the applied force per node w. r. t. the number of nodes, i.e., apply a load irrespective of the total number of nodes in ``loadNSet``. (<class 'bool'>, default = True)
+    [f(t)] Amplitude function. (<class 'str'>, default = None)
+===== module documentation: edelweissfe.constraints.rigidbody =====
+[rigidbody] A rigid body constraint tying nodes to a reference point.
+  required arguments
+    [nSet] Node set to tie. (<class 'str'>)
+    [referencePoint] Node set containing only the reference point. (<class 'str'>)
+===== module documentation: edelweissfe.constraints.tie =====
+[tie] An Abaqus-style tie constraint, bonding a slave surface rigidly to a deformable master surface via master-slave DOF elimination.
+  required arguments
+    [slaveSurface] The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) forming the slave surface; its nodes are tied. For quadratic (hexa20/quad8) faces, generate the facets with triangulation=midside on BOTH surfaces -- the corner triangulation excludes the midside nodes from the facet node list entirely, leaving them untied. (<class 'str'>)
+    [masterSurface] The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) forming the master surface. (<class 'str'>)
+  optional arguments
+    [positionTolerance] If given, slave nodes whose reference-configuration closest-point distance to the master surface exceeds this tolerance are left untied (recorded in the constraint's untiedSlaveNodes). If not given, every slave node is tied unconditionally. (<class 'float'>, default = None)
+    [adjust] Move each tied slave node onto its closest master point at construction (Abaqus-like default). If False, any initial geometric gap between the surfaces is preserved rigidly (the displacements are tied, not the positions). Note that adjusting modifies the nodal coordinates before the element geometry is initialized; avoid adjusting nodes that also belong to an already-generated contact surface of another constraint. (<class 'str'>, default = True)
+===== module documentation: edelweissfe.generators.boxgen =====
+A mesh generator for cuboid geometries and structured hex meshes:
+
+.. code-block:: console
+
+                          __ __ __ __
+                        /__/__/__/__/|    A                               back
+                       /__/__/__/__/ |    |                           top /
+                      /__/__/__/__/ /|    | lY                         | /
+                      |__|__|__|__|//|    | nY elements                |/
+           y          |__|__|__|__|//|    |                    left----/----right
+           |          |__|__|__|__|//|    V                           /|
+           |___x      |__|__|__|__|//|   /                           / |
+          /           |__|__|__|__|//   / lZ                        / bottom
+         z            |__|__|__|__|/   /  nZ elements           front
+
+                     <----lX----->
+                      nX elements
+
+nSets, elSets, surface : 'name'_left, _right, _bottom, _top, _front, _back, _all,
+elSets : 'name'_centralFrontToBack, _shearBandFrontToBack, _shearBandCenterFrontToBack
+are automatically generated
+
+.. code-block:: edelweiss
+    :caption: Generate meshes on the fly. Example:
+
+    *job, name=job, domain=3d, solver=NIST
+
+    *modelGenerator, generator=boxGen, name=gen
+        nX      =4
+        nY      =8
+        nZ      =2
+        lX      =20
+        lY      =40
+        lZ      =1
+        elType  =C3D20R
+[boxgen] A mesh generator for cuboid geometries and structured hex meshes.
+  required arguments
+    [elType] Element type. (<class 'str'>)
+  optional arguments
+    [x0] Origin along the x axis. (<class 'float'>, default = 0.0)
+    [y0] Origin along the y axis. (<class 'float'>, default = 0.0)
+    [z0] Origin along the z axis. (<class 'float'>, default = 0.0)
+    [lX] Length of the body along the x axis. (<class 'float'>, default = 1.0)
+    [lY] Length of the body along the y axis. (<class 'float'>, default = 1.0)
+    [lZ] Length of the body along the z axis. (<class 'float'>, default = 1.0)
+    [nX] Number of elements along the x axis. (<class 'int'>, default = 1)
+    [nY] Number of elements along the y axis. (<class 'int'>, default = 1)
+    [nZ] Number of elements along the z axis. (<class 'int'>, default = 1)
+    [elProvider] Element provider. (<class 'str'>, default = None)
+===== module documentation: edelweissfe.generators.cubit =====
+Interface to Cubit. Generate mesh using Cubit .jou files.
+[cubit] Interface to Cubit. Generate mesh using Cubit .jou files.
+  required arguments
+    [jouFile] Path to Cubit journal (.jou) file. (<class 'str'>)
+  optional arguments
+    [cubitCmd] Cubit executable. (<class 'str'>, default = cubit)
+    [outFile] Path to output mesh file. (<class 'str'>, default = mesh.inc)
+    [APREPROVars] APREPRO variables as comma-separated <key>=<value> pairs. (<class 'str'>, default = None)
+    [overwrite] Overwrite existing output files. (<class 'bool'>, default = True)
+    [runCubit] Run Cubit GUI for debugging purposes. (<class 'bool'>, default = False)
+    [silent] Hide Cubit output. (<class 'bool'>, default = False)
+    [elType] Specify element type for all sections. (<class 'str'>, default = None)
+    [elTypePerBlock] Specify element type per block as comma-separated <key>=<value> pairs. (<class 'str'>, default = None)
+    [elProvider] Element provider. (<class 'str'>, default = None)
+===== module documentation: edelweissfe.generators.cuboidlatticegenerator =====
+A mesh generator for generating cuboid lattice structure.
+The following unit cell is generted and then replicated in x, y, and z direction:
+
+.. code-block:: console
+
+               +---------------+
+              /  +---------+  /|
+             /  /         /  / |
+            /  /         /  /  |
+           /  +---------+  /  +|
+          +---------------+  /||
+          |               | + ||
+          |  +---------+  | | ||
+          |  |         |  | | +|
+          |  |         |  | |/ +
+          |  |         |  | + /
+          |  |         |  |  /
+          |  +---------+  | /
+          |               |/
+          +---------------+
+
+After generating the unit cell mesh the microstructure generator is used
+to replicate the unit cell mesh in x, y, and z direction.
+
+Example
+-------
+
+Generate meshes on the fly using the following syntax:
+
+.. code-block:: edelweiss
+
+    *job, name=job, domain=2d, solver=NIST
+
+    *modelGenerator, generator=cuboidlatticegenerator, name=gen
+        lX=4
+        lY=8
+        lZ=2
+        nEleX=8
+        nEleY=16
+        nEleZ=4
+        nEleStrutX=2
+        nEleStrutY=4
+        nEleStrutZ=1
+        nX=3
+        nY=4
+        nZ=2
+[cuboidlatticegenerator] A mesh generator for generating cuboid lattice structure.
+  required arguments
+    [elType] Element type. (<class 'str'>)
+  optional arguments
+    [lX] Length of the body along the x axis. (<class 'float'>, default = 1.0)
+    [lY] Length of the body along the y axis. (<class 'float'>, default = 1.0)
+    [lZ] Length of the body along the z axis. (<class 'float'>, default = 1.0)
+    [nEleX] Number of elements along the x axis. (<class 'int'>, default = 1)
+    [nEleY] Number of elements along the y axis. (<class 'int'>, default = 1)
+    [nEleZ] Number of elements along the z axis. (<class 'int'>, default = 1)
+    [nEleStrutX] Number of in struts along the x axis. (<class 'int'>, default = 1)
+    [nEleStrutY] Number of in struts along the y axis. (<class 'int'>, default = 1)
+    [nEleStrutZ] Number of in struts along the z axis. (<class 'int'>, default = 1)
+    [nX] Number of replications along the x axis. (<class 'int'>, default = 1)
+    [nY] Number of replications along the y axis. (<class 'int'>, default = 1)
+    [nZ] Number of replications along the z axis. (<class 'int'>, default = 1)
+    [elProvider] Element provider. (<class 'str'>, default = None)
+===== module documentation: edelweissfe.generators.discreterigidbodygenerator =====
+A generator for discrete rigid bodies from surface mesh files (Exodus, STL,
+OBJ, or any other format readable by PyVista).
+
+Loading the mesh, creating the surface/reference-point nodes, and mutating
+the model are all handled here -- mirroring how every other model-populating
+generator in EdelweissFE/EdelweissMeshfree works -- so that
+:class:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody` itself
+only has to deal with rigid body kinematics, not with how it is instantiated.
+[discreteRigidBodyGenerator] Generates a discrete rigid body from a surface mesh file (Exodus, STL, OBJ, or any other format readable by PyVista).
+  required arguments
+    [filename] The file path to the surface mesh (e.g., Exodus, STL, OBJ). (<class 'str'>)
+  optional arguments
+    [translation] A comma-separated 3D vector to translate the mesh globally upon initialization. (<class 'str'>, default = None)
+    [density] The (uniform) mass density of the rigid body; if given, mass and rotary inertia are computed exactly from the mesh geometry. (<class 'float'>, default = None)
+    [mass] The total mass of the rigid body. Overrides the density-based computation. (<class 'float'>, default = None)
+    [inertia] A comma-separated diagonal rotary inertia [Ixx, Iyy, Izz]. Overrides the density-based computation. (<class 'str'>, default = None)
+    [initialVelocity] A comma-separated initial velocity vector [vx, vy, vz]. (<class 'str'>, default = None)
+    [rpCoordinate] A comma-separated explicit global coordinate for the reference point. Defaults to the (exact or approximate) center of mass. (<class 'str'>, default = None)
+===== module documentation: edelweissfe.generators.executepythoncode =====
+Directly execute Python code to create the model tree.
+[executePythoncode] Directly execute Python code to create the model tree.
+  required datalines
+    Python code to run
+===== module documentation: edelweissfe.generators.findclosestnode =====
+Find the node closest to a given spatial position, and store it in an existing or new node set.
+[findclosestnode] Find the node closest to a given spatial position, and store it in an existing or new node set.
+  required arguments
+    [location] Query point. (<class 'str'>)
+    [storeIn] Node set to store closest node in. (<class 'str'>)
+===== module documentation: edelweissfe.generators.microstructuregenerator =====
+A mesh generator for generating a structure from a single unit cell mesh:
+The unit cell mesh must be readable by meshio (e.g., in .inp format).
+
+.. code-block:: edelweiss
+    :caption: Generate meshes on the fly. Example:
+
+    *job, name=job, domain=2d, solver=NIST
+
+    *modelGenerator, generator=microstructuregenerator, name=gen
+        unitCellMeshFile = myUnitCellMesh.inp
+        nX      =4
+        nY      =8
+        nZ      =2
+[microstructuregenerator] A mesh generator for generating a structure from a single unit cell mesh.
+  required arguments
+    [elType] Element type. (<class 'str'>)
+  optional arguments
+    [unitCellMeshFile] Path to the unit cell mesh file. (<class 'str'>, default = None)
+    [nX] Number of cells along the x axis. (<class 'int'>, default = 1)
+    [nY] Number of cells along the y axis. (<class 'int'>, default = 1)
+    [nZ] Number of cells along the z axis. (<class 'int'>, default = 1)
+    [elProvider] Element provider. (<class 'str'>, default = None)
+===== module documentation: edelweissfe.generators.pipegen =====
+[pipegen] A structured hex mesh generator for pipe geometries.
+  required arguments
+    [elType] Element type. (<class 'str'>)
+  optional arguments
+    [x0] Origin along the x axis. (<class 'float'>, default = 0.0)
+    [y0] Origin along the y axis. (<class 'float'>, default = 0.0)
+    [z0] Origin along the z axis. (<class 'float'>, default = 0.0)
+    [Ro(y)] Outer radius of the pipe as a function of height. (<class 'str'>, default = 1.0)
+    [Ri(y)] Inner radius of the pipe as a function of height. (<class 'str'>, default = 1.0)
+    [lT] Thickness of the pipe. (<class 'float'>, default = 0.5)
+    [lY] Height of the pipe. (<class 'float'>, default = 1.0)
+    [phi] Total angle for the pipe sector. (<class 'float'>, default = 360.0)
+    [nT] Number of elements along radial direction. (<class 'int'>, default = 1)
+    [nC] Number of elements along circumferential direction. (<class 'int'>, default = 4)
+    [nY] Number of elements along longitudinal direction. (<class 'int'>, default = 4)
+    [exG] Flag to place nodes on exact geometry. (<class 'bool'>, default = True)
+    [elProvider] Element provider. (<class 'str'>, default = None)
+===== module documentation: edelweissfe.generators.planerectquad =====
+A mesh generator, for rectangular geometries and structured quad meshes:
+
+
+.. code-block:: console
+
+        <-----l----->
+         nX elements
+         __ __ __ __
+        |__|__|__|__|  A
+        |__|__|__|__|  |
+        |__|__|__|__|  | h
+        |__|__|__|__|  | nY elements
+      | |__|__|__|__|  |
+      | |__|__|__|__|  V
+    x0|_____
+      y0
+
+nSets, elSets, surface : 'name'_top, _bottom, _left, _right, ...
+are automatically generated
+
+Datalines:
+[planeRectQuad] A mesh generator for cuboid geometries and structured hex meshes.
+  required arguments
+    [elType] Element type. (<class 'str'>)
+  optional arguments
+    [x0] Origin along the x axis. (<class 'float'>, default = 0.0)
+    [y0] Origin along the y axis. (<class 'float'>, default = 0.0)
+    [z0] Origin along the z axis. (<class 'float'>, default = 0.0)
+    [l] Height of the body. (<class 'float'>, default = 1.0)
+    [h] Length of the body. (<class 'float'>, default = 1.0)
+    [nX] Number of elements along the x axis. (<class 'int'>, default = 1)
+    [nY] Number of elements along the y axis. (<class 'int'>, default = 1)
+    [nZ] Number of elements along the z axis. (<class 'int'>, default = 1)
+    [elProvider] Element provider. (<class 'str'>, default = None)
+===== module documentation: edelweissfe.generators.surfaceelementgenerator =====
+Generates flat, geometry-only "contact facet" elements (:class:`~edelweissfe.elements.
+contactsurfaceelement.Tria3ContactFacet` / ``Line2ContactFacet``) from an existing ``*surface``
+definition, for use as the slave or master side of node-to-deformable-surface penalty contact.
+Quad faces of 3D solids are split into two Tria3 facets via a fixed diagonal. Higher-order
+element faces are either reduced to their linear corner-node subset (``triangulation=corner``,
+exact for straight-edged meshes) or triangulated including their midside nodes
+(``triangulation=midside``, strictly more accurate for curved faces). The facets carry
+face-consistent per-node tributary area shares for the pressure-weighted contact formulation.
+See the :doc:`contact theory documentation </documentation/contacttheory>` for the full
+background.
+
+The underlying :func:`buildContactFacets` is idempotent and re-runnable, so a
+:class:`~edelweissfe.models.meshdependent.MeshDependent` consumer of these facets (e.g.
+:mod:`~edelweissfe.constraints.nodetodeformablesurfacepenalty`) can regenerate them from the
+current ``*surface`` definition after the source solid elements change underneath it (e.g. an AMR
+refinement) as well as at setup time; the recipe is recorded in ``model.contactFacetRecipes``.
+
+.. code-block:: edelweiss
+    :caption: Example
+
+    *modelGenerator, generator=surfaceElementGenerator, name=gen
+        surface = mySurface
+        name    = myContactSurface
+[surfaceElementGenerator] Generates flat contact facet elements (Tria3ContactFacet/Line2ContactFacet) from an existing *surface definition.
+  required arguments
+    [surface] The name of an existing *surface definition. (<class 'str'>)
+    [name] The prefix for the generated element/node sets. (<class 'str'>)
+  optional arguments
+    [triangulation] The facet triangulation of higher-order element faces: 'corner' (linear corner-node subset only; exact for straight-edged meshes) or 'midside' (triangulation of the full face boundary including midside nodes; strictly more accurate for curved faces). Linear element faces are unaffected by this option. (<class 'str'>, default = corner)
+===== module documentation: edelweissfe.modelmodifiers.adaptivity.hadaptivity =====
+Dynamic h-adaptivity model modifier for HEX20 hanging-node AMR.
+[hadaptivity] Dynamic hanging-node h-adaptivity model modifier for HEX20 elements.
+  optional arguments
+    [moduleOptions] Internal (<class 'dict'>, default = {})
+    [elSet] Fallback for 'refineElSet' if that is not given. Each '>>marker' scopes its own eligible elements (a fieldOutput's associated set, an elementSet/nodeSet/surface's members); this no longer restricts marking itself. (<class 'str'>, default = None)
+    [refineElSet] Restrict the AMR octree mirror itself to this element set, e.g. the solid elements in a mesh that also contains contact-facet elements. Elements outside this set never become octree roots and are left untouched by refinement. Defaults to 'elSet' if given, otherwise to every 20-node (HEX20-family) element in the model. (<class 'str'>, default = None)
+    [maxLevel] Maximum refinement level. (<class 'int'>, default = 1)
+    [splitFactor] Number of equal parts per axis a marked element is split into (2 = octree bisection into 8 children; 3 = 3x3x3 = 27 children, etc.). The hanging-node coupling stays exact for any factor. (<class 'int'>, default = 2)
+    [elementType] Element type to instantiate for children (default: like parents). (<class 'str'>, default = None)
+    [elementProvider] Element provider. (<class 'str'>, default = marmot)
+    [stateTransfer] Quadrature-point state-transfer strategy for the whole state block: nearestQp|projection|virgin. (<class 'str'>, default = nearestQp)
+    [stateTransferOverrides] Per-state-variable overrides routing named variables to a different strategy, e.g. 'strain:projection, stress:virgin'. Comma-separated 'name:strategy' pairs. (<class 'str'>, default = None)
+  optional keywords
+    < marker > AMR marker definition. At least one is required.
+      required arguments
+        [type] Type of marker: fieldOutput, elementSet, nodeSet, surface (<class 'str'>)
+      optional arguments
+        [initialOnly] Evaluate only once at simulation start (<class 'bool'>, default = False)
+        [fieldOutput] Name of an already-declared 'perElement' *fieldOutput (covering every quadrature point of interest, no 'f(x)') to mark on. (<class 'str'>, default = None)
+        [expression] Boolean expression in x (the fieldOutput's raw per-element result). (<class 'str'>, default = None)
+        [elSet] Element set to mark (<class 'str'>, default = None)
+        [nSet] Node set to mark (<class 'str'>, default = None)
+        [surface] Surface to mark (<class 'str'>, default = None)
+===== module documentation: edelweissfe.outputmanagers.computetimemonitor =====
+[computetimemonitor] A simple monitor to observe results (fieldOutputs) in the console during analysis.
+  optional arguments
+    [export] Provide a filename to export the results. (<class 'str'>, default = None)
+===== module documentation: edelweissfe.outputmanagers.conditionalstop =====
+[ConditionalStop] A simple monitor to observe results (fieldOutputs) in the console during analysis.
+  required arguments
+    [stop] Model accessible function describing the stop condition. (<class 'str'>)
+===== module documentation: edelweissfe.outputmanagers.ensight =====
+[ensight] Ensight export.
+  optional keywords
+    < perNode > Node-based Ensight export.
+      required arguments
+        [fieldOutput] Name of the result, defined on an elSet (also for perNode results!) (<class 'str'>)
+    < perElement > Element-based Ensight export.
+      required arguments
+        [fieldOutput] Name of the result, defined on an elSet (also for perNode results!) (<class 'str'>)
+    < configuration >
+      optional arguments
+        [overwrite] Overwrite results. (<class 'bool'>, default = False)
+        [intermediateSaveInterval] Set intermediate save interval. (<class 'int'>, default = 10)
+        [elSet] Element set. (<class 'str'>, default = None)
+        [nSet] Node set. (<class 'str'>, default = None)
+        [transient] Set transient ensight output. (<class 'bool'>, default = True)
+===== module documentation: edelweissfe.outputmanagers.fractureenergyintegrator =====
+[fractureEnergyIntegrator] A simple integrator to compute the fracture energy by integrating a load-displacement curve.
+  required arguments
+    [forceFieldOutput] fieldOutput for force (with time history). (<class 'str'>)
+    [displacementFieldOutput] fieldOutput for displacement (with time history). (<class 'str'>)
+  optional arguments
+    [f(x)] Apply a model accessible function on the result. (<class 'str'>, default = 1)
+===== module documentation: edelweissfe.outputmanagers.meshdatatofile =====
+[meshdatatofile] Writes the (generated) mesh data to a file.
+  optional arguments
+    [filename] Name of file for writing output. (<class 'str'>, default = None)
+===== module documentation: edelweissfe.outputmanagers.meshplot =====
+@author: Magdalena
+
+Module meshplot divided into classes:
+    * Triangulation:
+        creates triangles out of rectangles in order to use matplotlib plotting
+        options
+    * Plotter:
+        creates figures, axes, grid, labels
+    * Outputmanager:
+        creates the plotting specific for the defined keyword lines
+  axSpec: axis specification according to matplotlib syntax, (default=111)
+  create=meshOnly: plot the mesh only
+  create=perElement: result per element is plotted in a meshplot
+  create=perNode: result per node is plotted in a meshplot
+  create=xyData: 2D Plot of results
+  figure: figure number, (default=1)
+===== module documentation: edelweissfe.outputmanagers.monitor =====
+[monitor] A simple monitor to observe results (fieldOutputs) in the console during analysis.
+  required arguments
+    [fieldOutput] Name of the field output to monitor. (<class 'str'>)
+  optional arguments
+    [label] Name of the output manager. (<class 'str'>, default = Monitor)
+    [f(x)] Apply a model accessible function on the result. (<class 'str'>, default = None)
+===== module documentation: edelweissfe.outputmanagers.plotalongpath =====
+[plotAlongPath] Plot result for a nodeSet or an elementSet along the true geometrical distance.
+  required arguments
+    [fieldOutput] Name of the field output. (<class 'str'>)
+  optional arguments
+    [figure] Figure of the plotter. (<class 'int'>, default = 1)
+    [axSpec] AxSpec (MATLAB syntax) in the figure. (<class 'int'>, default = 111)
+    [normalize] Normalize results. (<class 'int'>, default = 111)
+    [label] Label. (<class 'str'>, default = None)
+    [f(x)] Function to apply in each increment. (<class 'str'>, default = None)
+    [nStages]  (<class 'int'>, default = 1)
+    [export] Export the field output to a file at the end of the job. (<class 'str'>, default = None)
+===== module documentation: edelweissfe.outputmanagers.statusfile =====
+[statusfile] Writes a status file during the analysis.
+  optional arguments
+    [filename] Name of the output manager. (<class 'str'>, default = job.sta)
+===== module documentation: edelweissfe.outputmanagers.timemonitor =====
+Created on Thu Apr 13 14:08:32 2017
+
+@author: Matthias Neuner
+[computetimemonitor] A simple monitor to observe results (fieldOutputs) in the console during analysis.
+  required arguments
+    [export] Provide a filename to export the results. (<class 'str'>)
+===== module documentation: edelweissfe.sections.plane =====
+[plane] This section represents a classical plane solid materal section.
+  required arguments
+    [thickness] thickness (<class 'float'>)
+  optional keywords
+    < materialParameterFromField > use material properties given by an analytical field
+      required arguments
+        [index] index of material parameter (<class 'int'>)
+        [field] name of analytical field (<class 'str'>)
+        [type] either 'setToValue' or 'scale' (<class 'str'>)
+      optional arguments
+        [f(p,f)] p...value of parameter from material definition; f...value of analytical field (<class 'str'>, default = f)
+    < writeMaterialPropertiesToFile > export material properties to file
+      required arguments
+        [filename] file name for material property export (<class 'str'>)
+  required datalines
+    elementSets as comma separated list of element sets for this section
+===== module documentation: edelweissfe.sections.solid =====
+[solid] This section represents a classical solid materal section.
+  optional keywords
+    < materialParameterFromField > use material properties given by an analytical field
+      required arguments
+        [index] index of material parameter (<class 'int'>)
+        [field] name of analytical field (<class 'str'>)
+        [type] either 'setToValue' or 'scale' (<class 'str'>)
+      optional arguments
+        [f(p,f)] p...value of parameter from material definition; f...value of analytical field (<class 'str'>, default = f)
+    < writeMaterialPropertiesToFile > export material properties to file
+      required arguments
+        [filename] file name for material property export (<class 'str'>)
+  required datalines
+    elementSets as comma separated list of element sets for this section
+===== module documentation: edelweissfe.stepactions.bodyforce =====
+< bodyforce > Apply body forces on element sets.
+  required arguments
+    [name] Name of the step action. (<class 'str'>)
+    [elSet] The element set for application of the boundary condition. (<class 'str'>)
+    [forceVector] The force vector. (<class 'str'>)
+  optional arguments
+    [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+    [delta] In subsequent steps only: define the updated force vector incrementally (<class 'str'>, default = 0)
+< bodyforce > Apply body forces on element sets.
+  required arguments
+    [name] Name of the step action. (<class 'str'>)
+    [elSet] The element set for application of the boundary condition. (<class 'str'>)
+    [forceVector] The force vector. (<class 'str'>)
+  optional arguments
+    [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+    [delta] In subsequent steps only: define the updated force vector incrementally (<class 'str'>, default = 0)
+===== module documentation: edelweissfe.stepactions.changematerialproperty =====
+< changematerialproperty > Stepaction to change material properties.
+  required arguments
+    [name] Name of the step action. (<class 'str'>)
+    [material] The id of the material to be changed (<class 'str'>)
+    [index] The index of the property in the material properties vector (<class 'int'>)
+  optional arguments
+    [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+< changematerialproperty > Stepaction to change material properties.
+  required arguments
+    [name] Name of the step action. (<class 'str'>)
+    [material] The id of the material to be changed (<class 'str'>)
+    [index] The index of the property in the material properties vector (<class 'int'>)
+  optional arguments
+    [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+===== module documentation: edelweissfe.stepactions.dirichlet =====
+< dirichlet > Standard Dirichlet boundary condition.
+  required arguments
+    [name] Name of the step action. (<class 'str'>)
+    [nSet] The node set for application of the boundary condition. (<class 'str'>)
+    [field] Field for which the boundary condition is active. (<class 'str'>)
+  optional arguments
+    [1] Prescribe first component of field. (<class 'float'>, default = None)
+    [2] Prescribe second component of field. (<class 'float'>, default = None)
+    [3] Prescribe third component of field. (<class 'float'>, default = None)
+    [4] Prescribe fourth component of field. (<class 'float'>, default = None)
+    [5] Prescribe fifth component of field. (<class 'float'>, default = None)
+    [6] Prescribe sixth component of field. (<class 'float'>, default = None)
+    [components] Prescribe values using a numpy ndarray for representation; use 'x' for ignored values. (<class 'str'>, default = None)
+    [analyticalField] Scales the defined boundary condition (<class 'str'>, default = None)
+    [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+< updateDirichlet > Update a previously defined dirichlet definition.
+  required arguments
+    [name] Name of the step action to update. (<class 'str'>)
+  optional arguments
+    [1] Prescribe first component of field. (<class 'float'>, default = None)
+    [2] Prescribe second component of field. (<class 'float'>, default = None)
+    [3] Prescribe third component of field. (<class 'float'>, default = None)
+    [4] Prescribe fourth component of field. (<class 'float'>, default = None)
+    [5] Prescribe fifth component of field. (<class 'float'>, default = None)
+    [6] Prescribe sixth component of field. (<class 'float'>, default = None)
+    [components] Prescribe values using a numpy ndarray for representation; use 'x' for ignored values. (<class 'str'>, default = None)
+    [analyticalField] Scales the defined boundary condition (<class 'str'>, default = None)
+    [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+< dirichlet > Standard Dirichlet boundary condition.
+  required arguments
+    [name] Name of the step action. (<class 'str'>)
+    [nSet] The node set for application of the boundary condition. (<class 'str'>)
+    [field] Field for which the boundary condition is active. (<class 'str'>)
+  optional arguments
+    [1] Prescribe first component of field. (<class 'float'>, default = None)
+    [2] Prescribe second component of field. (<class 'float'>, default = None)
+    [3] Prescribe third component of field. (<class 'float'>, default = None)
+    [4] Prescribe fourth component of field. (<class 'float'>, default = None)
+    [5] Prescribe fifth component of field. (<class 'float'>, default = None)
+    [6] Prescribe sixth component of field. (<class 'float'>, default = None)
+    [components] Prescribe values using a numpy ndarray for representation; use 'x' for ignored values. (<class 'str'>, default = None)
+    [analyticalField] Scales the defined boundary condition (<class 'str'>, default = None)
+    [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+< updateDirichlet > Update a previously defined dirichlet definition.
+  required arguments
+    [name] Name of the step action to update. (<class 'str'>)
+  optional arguments
+    [1] Prescribe first component of field. (<class 'float'>, default = None)
+    [2] Prescribe second component of field. (<class 'float'>, default = None)
+    [3] Prescribe third component of field. (<class 'float'>, default = None)
+    [4] Prescribe fourth component of field. (<class 'float'>, default = None)
+    [5] Prescribe fifth component of field. (<class 'float'>, default = None)
+    [6] Prescribe sixth component of field. (<class 'float'>, default = None)
+    [components] Prescribe values using a numpy ndarray for representation; use 'x' for ignored values. (<class 'str'>, default = None)
+    [analyticalField] Scales the defined boundary condition (<class 'str'>, default = None)
+    [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+===== module documentation: edelweissfe.stepactions.distributedload =====
+< distributedload > Standard distributed load, applied on a surface set.
+  required arguments
+    [name] Name of the step action. (<class 'str'>)
+    [surface] Surface for application of the distributed load (<class 'str'>)
+    [magnitude] Magnitude of the distributed load (<class 'str'>)
+    [type] The load type, e.g., pressure or surface traction; Must be supported by the element type (<class 'str'>)
+  optional arguments
+    [field] Field for which the boundary condition is active. (<class 'str'>, default = displacement)
+    [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+< updatedistributedload > Update a previously defined distributedload definition.
+  required arguments
+    [name] Name of the step action to update. (<class 'str'>)
+  optional arguments
+    [magnitude] Magnitude of the distributed load (<class 'str'>, default = None)
+    [delta] In subsequent steps only: define the new magnitude incrementally (<class 'str'>, default = None)
+    [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+< distributedload > Standard distributed load, applied on a surface set.
+  required arguments
+    [name] Name of the step action. (<class 'str'>)
+    [surface] Surface for application of the distributed load (<class 'str'>)
+    [magnitude] Magnitude of the distributed load (<class 'str'>)
+    [type] The load type, e.g., pressure or surface traction; Must be supported by the element type (<class 'str'>)
+  optional arguments
+    [field] Field for which the boundary condition is active. (<class 'str'>, default = displacement)
+    [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+< updatedistributedload > Update a previously defined distributedload definition.
+  required arguments
+    [name] Name of the step action to update. (<class 'str'>)
+  optional arguments
+    [magnitude] Magnitude of the distributed load (<class 'str'>, default = None)
+    [delta] In subsequent steps only: define the new magnitude incrementally (<class 'str'>, default = None)
+    [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+===== module documentation: edelweissfe.stepactions.geostatic =====
+Initialize materials to an geostatic stress state
+< geostatic > Initialize materials to an geostatic stress state.
+  required arguments
+    [name] Name of the step action. (<class 'str'>)
+    [p1] sig_x=sig_y=sig_z in first point. (<class 'float'>)
+  optional arguments
+    [p2] sig_x=sig_y=sig_z in second point. (<class 'float'>, default = None)
+    [h1] y coordinate of first point (<class 'float'>, default = 1.0)
+    [h2] y coordinate of second point (<class 'float'>, default = -1.0)
+    [xLateral] ratio of sig_x/sig_y, default=1.0 (<class 'float'>, default = 1.0)
+    [zLateral] ratio of sig_z/sig_y, default=1.0 (<class 'float'>, default = 1.0)
+    [elSet] The element set for which the initaliziation is performed (<class 'str'>, default = all)
+< geostatic > Initialize materials to an geostatic stress state.
+  required arguments
+    [name] Name of the step action. (<class 'str'>)
+    [p1] sig_x=sig_y=sig_z in first point. (<class 'float'>)
+  optional arguments
+    [p2] sig_x=sig_y=sig_z in second point. (<class 'float'>, default = None)
+    [h1] y coordinate of first point (<class 'float'>, default = 1.0)
+    [h2] y coordinate of second point (<class 'float'>, default = -1.0)
+    [xLateral] ratio of sig_x/sig_y, default=1.0 (<class 'float'>, default = 1.0)
+    [zLateral] ratio of sig_z/sig_y, default=1.0 (<class 'float'>, default = 1.0)
+    [elSet] The element set for which the initaliziation is performed (<class 'str'>, default = all)
+===== module documentation: edelweissfe.stepactions.indirectcontractioncontrol =====
+< indirectcontractioncontrol > Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.
+  required arguments
+    [name] Name of the step action. (<class 'str'>)
+    [contractionNSet] The node set defining the contraction ring (<class 'str'>)
+    [L] Final distance (e.g. crack opening) (<class 'float'>)
+  optional arguments
+    [exportCVector] File to export the computed c vector (<class 'str'>, default = None)
+    [absolute] Use absolute formulation (<class 'bool'>, default = True)
+< indirectcontractioncontrol > Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.
+  required arguments
+    [name] Name of the step action. (<class 'str'>)
+    [contractionNSet] The node set defining the contraction ring (<class 'str'>)
+    [L] Final distance (e.g. crack opening) (<class 'float'>)
+  optional arguments
+    [exportCVector] File to export the computed c vector (<class 'str'>, default = None)
+    [absolute] Use absolute formulation (<class 'bool'>, default = True)
+===== module documentation: edelweissfe.stepactions.indirectcontrol =====
+< indirectcontrol > Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.
+  required arguments
+    [dof1] Degree of freedom for the constraint (model access expression). (<class 'str'>)
+    [dof2] Degree of freedom for the constraint (model access expression). (<class 'str'>)
+    [cVector1] c vector. (<class 'str'>)
+    [cVector2] c vector. (<class 'str'>)
+    [L] Final distance (e.g. crack opening) (<class 'float'>)
+  optional arguments
+    [exportCVector] File to export the computed c vector (<class 'str'>, default = )
+    [absolute] Use absolute formulation (<class 'bool'>, default = True)
+< indirectcontrol > Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.
+  required arguments
+    [dof1] Degree of freedom for the constraint (model access expression). (<class 'str'>)
+    [dof2] Degree of freedom for the constraint (model access expression). (<class 'str'>)
+    [cVector1] c vector. (<class 'str'>)
+    [cVector2] c vector. (<class 'str'>)
+    [L] Final distance (e.g. crack opening) (<class 'float'>)
+  optional arguments
+    [exportCVector] File to export the computed c vector (<class 'str'>, default = )
+    [absolute] Use absolute formulation (<class 'bool'>, default = True)
+===== module documentation: edelweissfe.stepactions.initializematerial =====
+Let materials initialize themselves (e.g., state vars depending on material parameters...) !
+< initializematerial > Standard distributed load, applied on a surface set.
+  required arguments
+    [name] Name of the step action. (<class 'str'>)
+  optional arguments
+    [elSet] The element set for application of the boundary condition. (<class 'str'>, default = all)
+< initializematerial > Standard distributed load, applied on a surface set.
+  required arguments
+    [name] Name of the step action. (<class 'str'>)
+  optional arguments
+    [elSet] The element set for application of the boundary condition. (<class 'str'>, default = all)
+===== module documentation: edelweissfe.stepactions.modelupdate =====
+< modelupdate > This step action may be used for updating the model at the beginning of a step.
+  required arguments
+    [update] Model accessible, executable expression (<class 'str'>)
+< modelupdate > This step action may be used for updating the model at the beginning of a step.
+  required arguments
+    [update] Model accessible, executable expression (<class 'str'>)
+===== module documentation: edelweissfe.stepactions.nodeforces =====
+< nodeforces > Apply node forces on node sets.
+  required arguments
+    [name] Name of the step action. (<class 'str'>)
+    [nSet] The node set for application of the boundary condition. (<class 'str'>)
+    [field] Field for which the boundary condition is active. (<class 'str'>)
+  optional arguments
+    [1] Prescribe first component of field. (<class 'float'>, default = None)
+    [2] Prescribe second component of field. (<class 'float'>, default = None)
+    [3] Prescribe third component of field. (<class 'float'>, default = None)
+    [4] Prescribe fourth component of field. (<class 'float'>, default = None)
+    [5] Prescribe fifth component of field. (<class 'float'>, default = None)
+    [6] Prescribe sixth component of field. (<class 'float'>, default = None)
+    [components] Prescribe values using a numpy ndarray for representation; use 'x' for ignored values. (<class 'str'>, default = None)
+    [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+< updateNodeforces > Update a previously defined nodeforces definition.
+  required arguments
+    [name] Name of the step action to update. (<class 'str'>)
+  optional arguments
+    [1] Prescribe first component of field. (<class 'float'>, default = None)
+    [2] Prescribe second component of field. (<class 'float'>, default = None)
+    [3] Prescribe third component of field. (<class 'float'>, default = None)
+    [4] Prescribe fourth component of field. (<class 'float'>, default = None)
+    [5] Prescribe fifth component of field. (<class 'float'>, default = None)
+    [6] Prescribe sixth component of field. (<class 'float'>, default = None)
+    [components] Prescribe values using a numpy ndarray for representation; use 'x' for ignored values. (<class 'str'>, default = None)
+    [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+< nodeforces > Apply node forces on node sets.
+  required arguments
+    [name] Name of the step action. (<class 'str'>)
+    [nSet] The node set for application of the boundary condition. (<class 'str'>)
+    [field] Field for which the boundary condition is active. (<class 'str'>)
+  optional arguments
+    [1] Prescribe first component of field. (<class 'float'>, default = None)
+    [2] Prescribe second component of field. (<class 'float'>, default = None)
+    [3] Prescribe third component of field. (<class 'float'>, default = None)
+    [4] Prescribe fourth component of field. (<class 'float'>, default = None)
+    [5] Prescribe fifth component of field. (<class 'float'>, default = None)
+    [6] Prescribe sixth component of field. (<class 'float'>, default = None)
+    [components] Prescribe values using a numpy ndarray for representation; use 'x' for ignored values. (<class 'str'>, default = None)
+    [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+< updateNodeforces > Update a previously defined nodeforces definition.
+  required arguments
+    [name] Name of the step action to update. (<class 'str'>)
+  optional arguments
+    [1] Prescribe first component of field. (<class 'float'>, default = None)
+    [2] Prescribe second component of field. (<class 'float'>, default = None)
+    [3] Prescribe third component of field. (<class 'float'>, default = None)
+    [4] Prescribe fourth component of field. (<class 'float'>, default = None)
+    [5] Prescribe fifth component of field. (<class 'float'>, default = None)
+    [6] Prescribe sixth component of field. (<class 'float'>, default = None)
+    [components] Prescribe values using a numpy ndarray for representation; use 'x' for ignored values. (<class 'str'>, default = None)
+    [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+===== module documentation: edelweissfe.stepactions.options =====
+This stepaction serves as a simple case insensitive container for
+storing step options for various modules, grouped by a category, e.g.,
+
+.. code-block:: edelweiss
+
+    *step, solver=mySolver
+    >>options, category=NISTSolver, extrapolation=linear
+
+Consumers (e.g., solvers and output managers) declare their available options
+via :func:`registerOptionsArg`, and retrieve the options defined for their
+category via :func:`getOptionsOfCategory`.
+< options > This stepaction serves as a case insensitive container for storing step options for various modules.
+  required arguments
+    [category] Option category. (<class 'str'>)
+  optional arguments
+    [defaultMaxIter] The default maximum number of iterations. (<class 'int'>, default = None)
+    [defaultCriticalIter] The default number of critical iterations. (<class 'int'>, default = None)
+    [defaultMaxGrowingIter] The default number of allowed residual growths. (<class 'int'>, default = None)
+    [extrapolation] The extrapolation strategy for new increments (off|linear). (<class 'str'>, default = None)
+    [extrapolateAfterModelChange] Whether to extrapolate the predictor on the increment FOLLOWING a model change (adaptive mesh refinement). Defaults to True, which keeps the previous behaviour; set False to start that increment from a zero predictor, avoiding extrapolation of the one-off warm-start/remesh settling transient. (<class 'bool'>, default = None)
+    [equilibrateAfterModelChange] Whether to insert one constant-load, zero-time re-equilibration increment immediately after an adaptive mesh refinement, before advancing the load. Defaults to False. When True, the warm-started refined mesh is first settled to equilibrium at the last converged load level (no load advance, no Dirichlet increment, zero time increment) so the subsequent load-advancing increment starts from an equilibrated state. Intended for softening problems where remeshing near the process zone otherwise couples the load advance with the warm-start settling transient in one solve. Note: the equilibration solve integrates materials with dT=0, which suits rate-independent models; rate-dependent materials see no time advance during it (by design). (<class 'bool'>, default = None)
+    [linsolver] The linear solver to be used. (<class 'str'>, default = None)
+    [linsolverConfigFile] A JSON configuration file for the linear solver. (<class 'str'>, default = None)
+    [arcLengthController] The step action module serving as the arc length controller. (<class 'str'>, default = None)
+    [stopCondition] A model accessible expression defining a conditional stop. (<class 'str'>, default = None)
+    [runge-kutta-stages] The number of Runge-Kutta stages. (<class 'int'>, default = None)
+    [runge-kutta-error-tolerance] The error tolerance for the Runge-Kutta error control. (<class 'float'>, default = None)
+    [runge-kutta-error-control] Activate the Runge-Kutta error control (on|off). (<class 'str'>, default = None)
+    [intermediateSaveInterval] Set the intermediate save interval for the Ensight export. (<class 'float'>, default = None)
+    [minDTForOutput] Set the minimum time between two Ensight exports. (<class 'float'>, default = None)
+< options > This stepaction serves as a case insensitive container for storing step options for various modules.
+  required arguments
+    [category] Option category. (<class 'str'>)
+  optional arguments
+    [defaultMaxIter] The default maximum number of iterations. (<class 'int'>, default = None)
+    [defaultCriticalIter] The default number of critical iterations. (<class 'int'>, default = None)
+    [defaultMaxGrowingIter] The default number of allowed residual growths. (<class 'int'>, default = None)
+    [extrapolation] The extrapolation strategy for new increments (off|linear). (<class 'str'>, default = None)
+    [extrapolateAfterModelChange] Whether to extrapolate the predictor on the increment FOLLOWING a model change (adaptive mesh refinement). Defaults to True, which keeps the previous behaviour; set False to start that increment from a zero predictor, avoiding extrapolation of the one-off warm-start/remesh settling transient. (<class 'bool'>, default = None)
+    [equilibrateAfterModelChange] Whether to insert one constant-load, zero-time re-equilibration increment immediately after an adaptive mesh refinement, before advancing the load. Defaults to False. When True, the warm-started refined mesh is first settled to equilibrium at the last converged load level (no load advance, no Dirichlet increment, zero time increment) so the subsequent load-advancing increment starts from an equilibrated state. Intended for softening problems where remeshing near the process zone otherwise couples the load advance with the warm-start settling transient in one solve. Note: the equilibration solve integrates materials with dT=0, which suits rate-independent models; rate-dependent materials see no time advance during it (by design). (<class 'bool'>, default = None)
+    [linsolver] The linear solver to be used. (<class 'str'>, default = None)
+    [linsolverConfigFile] A JSON configuration file for the linear solver. (<class 'str'>, default = None)
+    [arcLengthController] The step action module serving as the arc length controller. (<class 'str'>, default = None)
+    [stopCondition] A model accessible expression defining a conditional stop. (<class 'str'>, default = None)
+    [runge-kutta-stages] The number of Runge-Kutta stages. (<class 'int'>, default = None)
+    [runge-kutta-error-tolerance] The error tolerance for the Runge-Kutta error control. (<class 'float'>, default = None)
+    [runge-kutta-error-control] Activate the Runge-Kutta error control (on|off). (<class 'str'>, default = None)
+    [intermediateSaveInterval] Set the intermediate save interval for the Ensight export. (<class 'float'>, default = None)
+    [minDTForOutput] Set the minimum time between two Ensight exports. (<class 'float'>, default = None)
+===== module documentation: edelweissfe.stepactions.setfield =====
+< setfield > Set a field (via fieldOutput) to a predefined value.
+  required arguments
+    [fieldOutput] Field output to be set. (<class 'str'>)
+    [type] Either 'uniform' or 'analyticalField'. (<class 'str'>)
+    [value] Scalar value if type 'const'; name of analyticalField if type 'analyticalField' (<class 'str'>)
+  optional arguments
+    [name] Name of the step action. (<class 'str'>, default = setfield)
+< setfield > Set a field (via fieldOutput) to a predefined value.
+  required arguments
+    [fieldOutput] Field output to be set. (<class 'str'>)
+    [type] Either 'uniform' or 'analyticalField'. (<class 'str'>)
+    [value] Scalar value if type 'const'; name of analyticalField if type 'analyticalField' (<class 'str'>)
+  optional arguments
+    [name] Name of the step action. (<class 'str'>, default = setfield)
+===== module documentation: edelweissfe.stepactions.setinitialconditions =====
+Pass initial conditions to elements.
+< setinitialconditions > Pass initial conditions to elements.
+  required arguments
+    [property] The name of the property to be initialized (<class 'str'>)
+    [values] Comma separated property values. (<class 'str'>)
+  optional arguments
+    [elSet] The element set for which the initaliziation is performed (<class 'str'>, default = all)
+< setinitialconditions > Pass initial conditions to elements.
+  required arguments
+    [property] The name of the property to be initialized (<class 'str'>)
+    [values] Comma separated property values. (<class 'str'>)
+  optional arguments
+    [elSet] The element set for which the initaliziation is performed (<class 'str'>, default = all)
+===== module documentation: edelweissfe.utils.fieldoutput =====
+FieldOutputs store all kind of analysis results,
+and are defined via the keyword ``*fieldOutput``.
+All fieldOutputs are accessable to all outputmanagers at the end of each
+increment, step and job.
+Furthermore, they can be exported to ``*.csv`` files at the end of the analysis job.
+
+ATTENTION:
+    If the results are exported to a .csv file with enabled "saveHistory",
+    the time History is automatically appended to the .csv file"
+< perNode > Create node-based field output.
+  required arguments
+    [name] Name of the field output. (<class 'str'>)
+    [field] Field of the result. (<class 'str'>)
+    [result] Result name. (<class 'str'>)
+  optional arguments
+    [elSet] Element set. (<class 'str'>, default = None)
+    [nSet] Node set. (<class 'str'>, default = None)
+    [rigidBody] Rigid body (as registered in model.rigidBodies). (<class 'str'>, default = None)
+    [saveHistory] Save complete History or only last (increment) result (<class 'bool'>, default = False)
+    [f(x)] Function to apply in each increment. (<class 'str'>, default = None)
+    [f_export(x)] Function to apply on final result (table). (<class 'str'>, default = None)
+    [export] Export the field output to a file at the end of the job. (<class 'str'>, default = None)
+< perElement > Create element-based field output.
+  required arguments
+    [name] Name of the field output. (<class 'str'>)
+    [elSet] Element set. (<class 'str'>)
+    [result] Result name. (<class 'str'>)
+    [quadraturePoint] Integer or slice. (<class 'str'>)
+  optional arguments
+    [saveHistory] Save complete History or only last (increment) result (<class 'bool'>, default = False)
+    [f(x)] Function to apply in each increment. (<class 'str'>, default = None)
+    [f_export(x)] Function to apply on final result (table). (<class 'str'>, default = None)
+    [export] Export the field output to a file at the end of the job. (<class 'str'>, default = None)
+< fromExpression > Create field output from expression.
+  required arguments
+    [name] Name of the field output. (<class 'str'>)
+    [expression] Expression for retrieving field output. (<class 'str'>)
+  optional arguments
+    [elSet] Element set. (<class 'str'>, default = None)
+    [nSet] Node set. (<class 'str'>, default = None)
+    [saveHistory] Save complete History or only last (increment) result (<class 'bool'>, default = False)
+    [f(x)] Function to apply in each increment. (<class 'str'>, default = None)
+    [f_export(x)] Function to apply on final result (table). (<class 'str'>, default = None)
+    [export] Export the field output to a file at the end of the job. (<class 'str'>, default = None)

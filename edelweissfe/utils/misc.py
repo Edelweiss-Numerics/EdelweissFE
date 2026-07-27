@@ -313,6 +313,26 @@ def strtobool(val: str) -> bool:
         raise ValueError("invalid truth value %r" % (val,))
 
 
+def asBool(val: bool or str) -> bool:
+    """Coerce a value that may already be a real ``bool`` (e.g. passed by a programmatic caller
+    such as EdelweissMeshfree) or a string representation of truth (as produced by the input file
+    parser) into a ``bool``.
+
+    Parameters
+    ----------
+    val
+        Either a real ``bool``, or a string representation of truth understood by :func:`strtobool`.
+
+    Returns
+    -------
+    bool
+        The truth value.
+    """
+    if isinstance(val, bool):
+        return val
+    return strtobool(val)
+
+
 def typeString(dtype: type or str) -> str:
     """.
 

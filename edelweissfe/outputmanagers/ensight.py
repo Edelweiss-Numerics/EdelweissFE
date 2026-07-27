@@ -51,7 +51,7 @@ from edelweissfe.utils.fieldoutput import (
 )
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.meshtools import disassembleElsetToEnsightShapes
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker, strtobool
+from edelweissfe.utils.misc import asBool, caseInsensitiveKwargsChecker
 
 """
 Output manager for Ensight exports.
@@ -956,8 +956,7 @@ class OutputManager(OutputManagerBase):
             if self.model.domainSize == 2 and varSize == 2:
                 varSize = 3
 
-            transient = kwargs.get("transient", "True")
-            transient = strtobool(transient)
+            transient = asBool(kwargs.get("transient", "True"))
 
             if create == "perElement":
                 self.createPerElementOutput(fieldOutput, part, name, transient=transient, varSize=varSize)
@@ -966,7 +965,7 @@ class OutputManager(OutputManagerBase):
 
         if "configuration" in kwargs:
             # ensight output is overwritten by default
-            self.overwrite = strtobool(kwargs.get("overwrite", "True"))
+            self.overwrite = asBool(kwargs.get("overwrite", "True"))
             if not self.overwrite:
                 self.exportName = "{:}_{:}".format(self.name, datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
 
