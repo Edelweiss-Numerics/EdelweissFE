@@ -49,8 +49,7 @@ concrete
 reinforced_concrete
 
 *modelModifier, type=hAdaptivity, name=amr
-result=alphaP
-expression='x > 0.0'
+>>marker, type=fieldOutput, fieldOutput=alphaPForAMR, expression='abs(x) > 0.0'
 elSet=concrete
 maxLevel=1
 splitFactor=3
@@ -64,6 +63,7 @@ splitFactor=3
 >>perNode, name=RF, nSet=nset_load_application, field=displacement, result=P, f(x)='np.sum(x[:,1], axis=0)', saveHistory=True, export=RF
 >>perElement, elSet=concrete, name=damage, result=omega, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
 >>perElement, elSet=concrete, name=alphaP, result=alphaP, quadraturePoint=0:8, f(x)='np.min(x,axis=1)'
+>>perElement, elSet=concrete, name=alphaPForAMR, result=alphaP, quadraturePoint=0:8
 
 *output, type=monitor, name=monitor
 fieldOutput=RF

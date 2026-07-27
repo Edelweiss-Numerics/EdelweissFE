@@ -30,6 +30,7 @@
 
 from abc import ABC, abstractmethod
 
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 
 
@@ -38,9 +39,10 @@ class ModelModifierBase(ABC):
     mesh, or state variables during analysis steps.
     """
 
-    def __init__(self, name: str, model: FEModel, **kwargs):
+    def __init__(self, name: str, model: FEModel, journal: Journal, **kwargs):
         self._name = name
         self._model = model
+        self._journal = journal
 
     @property
     def name(self) -> str:

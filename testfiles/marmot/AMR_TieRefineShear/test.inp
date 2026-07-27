@@ -51,9 +51,8 @@ name    = slaveSurf
 slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, adjust=False
 
 *modelModifier, type=hAdaptivity, name=amr
-result=strain
-expression='x > 0.01'
-reducer=absmax
+>>marker, type=fieldOutput, fieldOutput=strainFixedForAMR, expression='abs(x) > 0.01'
+>>marker, type=fieldOutput, fieldOutput=strainShearForAMR, expression='abs(x) > 0.01'
 maxLevel=1
 
 *job, name=amrtieshear, domain=3d
@@ -68,6 +67,8 @@ maxLevel=1
 >>perElement, elSet=fixed_all, result=strain, quadraturePoint=1, name=strainFixed
 >>perElement, elSet=shear_all, result=stress, quadraturePoint=1, name=stressShear
 >>perElement, elSet=shear_all, result=strain, quadraturePoint=1, name=strainShear
+>>perElement, elSet=fixed_all, result=strain, quadraturePoint=0:27, name=strainFixedForAMR
+>>perElement, elSet=shear_all, result=strain, quadraturePoint=0:27, name=strainShearForAMR
 
 *output, type=ensight, name=esExport
 >>perNode, fieldOutput=dispFixed

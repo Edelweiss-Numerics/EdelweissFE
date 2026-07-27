@@ -897,6 +897,7 @@ class OutputManager(OutputManagerBase):
         self._resolveConfigPart()
         self._transientCfg = transient
         self._nameKwarg = kwargs.get("name", None)
+        self._initialMeshSignature = (len(self.model.elements), len(self.model.nodes))
         self._meshSignature = None
         self._buildVariableJobs()
 
@@ -1120,11 +1121,15 @@ class OutputManager(OutputManagerBase):
         # rebuild parts + variable jobs if the mesh changed (AMR), so geometry and variables match
         signature = (len(model.elements), len(model.nodes))
         mesh_changed = False
-        if self._meshSignature is not None and signature != self._meshSignature:
+
+        if self._meshSignature is None:
+            mesh_changed = True
+            if signature != self._initialMeshSignature:
+                self._rebuildForMeshChange()
+        elif signature != self._meshSignature:
             self._rebuildForMeshChange()
             mesh_changed = True
-        elif self._meshSignature is None:
-            mesh_changed = True
+
         self._meshSignature = signature
 
         # write the current geometry only if it changed

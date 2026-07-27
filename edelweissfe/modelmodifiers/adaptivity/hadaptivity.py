@@ -33,7 +33,12 @@ from collections import defaultdict
 import numpy as np
 
 from edelweissfe.adaptivity.hex20topology import Hex20Topology
-from edelweissfe.adaptivity.marking import markElements
+from edelweissfe.adaptivity.marking import (
+    ElementSetMarker,
+    FieldOutputMarker,
+    NodeSetMarker,
+    SurfaceMarker,
+)
 from edelweissfe.adaptivity.refinement import AdaptiveMesh
 from edelweissfe.adaptivity.statetransfer.perstatevar import PerStateVarStateTransfer
 from edelweissfe.config.elementlibrary import getElementClass
@@ -58,13 +63,28 @@ inputLanguage = InputLanguage()
 keyword = "modelModifier"
 if keyword in inputLanguage:
     inputLanguage[keyword].addModule(module)
-module.addRequiredArg("result", "Quadrature-point result to mark on (e.g. 'stress', 'nonlocal damage').", str)
-module.addRequiredArg("expression", "Boolean expression in x (the reduced per-element scalar), e.g. 'x > 0.1'.", str)
-module.addOptionalArg("reducer", "Reduction over components/QPs: absmax|max|min|mean.", str, "absmax")
+
+module.addOptionalArg("moduleOptions", "Internal", dict, {})
+
+markerKw = module.addOptionalKeyword("marker", "AMR marker definition. At least one is required.")
+markerKw.addRequiredArg("type", "Type of marker: fieldOutput, elementSet, nodeSet, surface", str)
+markerKw.addOptionalArg("initialOnly", "Evaluate only once at simulation start", bool, False)
+markerKw.addOptionalArg(
+    "fieldOutput",
+    "Name of an already-declared 'perElement' *fieldOutput (covering every quadrature point of "
+    "interest, no 'f(x)') to mark on.",
+    str,
+    None,
+)
+markerKw.addOptionalArg("expression", "Boolean expression in x (the fieldOutput's raw per-element result).", str, None)
+markerKw.addOptionalArg("elSet", "Element set to mark", str, None)
+markerKw.addOptionalArg("nSet", "Node set to mark", str, None)
+markerKw.addOptionalArg("surface", "Surface to mark", str, None)
 module.addOptionalArg(
     "elSet",
-    "Restrict marking to this element set (e.g. the elements that carry the "
-    "marked result). Others are never marked/refined.",
+    "Fallback for 'refineElSet' if that is not given. Each '>>marker' scopes its own eligible "
+    "elements (a fieldOutput's associated set, an elementSet/nodeSet/surface's members); this no "
+    "longer restricts marking itself.",
     str,
     None,
 )
@@ -168,16 +188,41 @@ def _connectedComponents(elements: list) -> dict:
 class ModelModifier(ModelModifierBase):
     @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
     @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name: str, model: FEModel, *args, **kwargs):
-        super().__init__(name, model, *args, **kwargs)
+    def __init__(self, name: str, model: FEModel, journal: Journal, *args, **kwargs):
+        super().__init__(name, model, journal, *args, **kwargs)
         kwargs = CaseInsensitiveDict(kwargs)
 
         self._name = name
         self._model = model
-        self._journal = Journal()
-        self.result = kwargs["result"]
-        self.expression = kwargs["expression"]
-        self.reducer = kwargs["reducer"]
+        self._journal = journal
+
+        self.markers = []
+        for m_opt in kwargs.get("moduleOptions", {}).get("marker", []):
+            m_type = m_opt.get("type", "")
+            init_only = m_opt.get("initialOnly", False)
+            if isinstance(init_only, str):
+                init_only = init_only.lower() in ("true", "yes", "1")
+
+            if m_type == "fieldOutput":
+                self.markers.append(FieldOutputMarker(m_opt["fieldOutput"], m_opt["expression"], initialOnly=init_only))
+            elif m_type == "elementSet":
+                self.markers.append(ElementSetMarker(m_opt["elSet"], initialOnly=init_only))
+            elif m_type == "nodeSet":
+                self.markers.append(NodeSetMarker(m_opt["nSet"], initialOnly=init_only))
+            elif m_type == "surface":
+                self.markers.append(SurfaceMarker(m_opt["surface"], initialOnly=init_only))
+            else:
+                raise ValueError(
+                    f"hAdaptivity modifier {name!r}: unknown '>>marker' type {m_type!r}; expected one "
+                    "of 'fieldOutput', 'elementSet', 'nodeSet', 'surface'."
+                )
+        if not self.markers:
+            raise ValueError(
+                f"hAdaptivity modifier {name!r} defines no '>>marker' block. At least one is required, "
+                "e.g. '>>marker, type=fieldOutput, fieldOutput=stress, expression=\"abs(x) > 0.1\"' "
+                "(referencing an already-declared 'perElement' *fieldOutput)."
+            )
+
         self.maxLevel = kwargs["maxLevel"]
         self.splitFactor = kwargs["splitFactor"]
         self._stateTransfer = _buildStateTransferStrategy(kwargs["stateTransfer"], kwargs["stateTransferOverrides"])
@@ -204,14 +249,28 @@ class ModelModifier(ModelModifierBase):
                 "'refineElSet' (or 'elSet') to select the solid element set explicitly."
             )
 
-        # restrict marking to a given element set (its labels); others are never marked/refined.
-        # Defaulting to the refineable elements themselves (rather than "no restriction") matters in
-        # a mixed mesh: a non-refineable element (e.g. a contact facet) can neither expose most
-        # quadrature-point results nor ever be refined, so there is nothing to gain from marking it.
-        if kwargs["elSet"]:
-            self._markLabels = {el.elNumber for el in model.elementSets[kwargs["elSet"]]}
-        else:
-            self._markLabels = {el.elNumber for el in refineElements}
+        # two hAdaptivity instances cannot independently own overlapping elements: each maintains
+        # its own AdaptiveMesh mirror and materializes/deletes elements directly in the model, so a
+        # second instance refining/removing an element the first still tracks leaves the first with
+        # a stale reference (an Element object no longer in model.elements) -- which later corrupts
+        # element-set membership (a "deleted" element gets carried back into e.g. 'fixed_all') and
+        # can surface as a node simultaneously Dirichlet-prescribed and a hanging-node MPC slave.
+        # Fail loud at construction time instead of silently corrupting state deep in the solve loop.
+        refineElementNumbers = {el.elNumber for el in refineElements}
+        for otherName, otherModifier in model.modelModifiers.items():
+            if isinstance(otherModifier, ModelModifier):
+                overlap = refineElementNumbers & otherModifier._refineElementNumbers
+                if overlap:
+                    raise ValueError(
+                        f"hAdaptivity modifier {name!r} and existing modifier {otherName!r} both "
+                        f"claim {len(overlap)} of the same element(s) (e.g. label "
+                        f"{sorted(overlap)[0]}) as refineable roots via overlapping 'refineElSet'/"
+                        "'elSet' (or no restriction at all). Combine all markers -- including "
+                        "'initialOnly' ones -- into a single hAdaptivity block via multiple "
+                        "'>>marker' lines instead of stacking separate modifiers over the same "
+                        "elements."
+                    )
+        self._refineElementNumbers = refineElementNumbers
 
         # element type: infer from a refineable element if not given
         anyEl = refineElements[0]
@@ -277,6 +336,7 @@ class ModelModifier(ModelModifierBase):
         model.multiPointConstraints[name + "_hanging"] = self._hanging
         self._converged = False  # set True once an increment has converged
         self._lastRefinedTime = None  # model.time of the last refinement (guards re-refine on cutback)
+        self._isFirstCall = True
         # parent-parametric coords of each child's nodes (used for warm-start interpolation)
         self._octantParams = self._topology.subdivision_children_param(self.splitFactor)
 
@@ -286,27 +346,37 @@ class ModelModifier(ModelModifierBase):
         if self._lastRefinedTime is not None and abs(model.time - self._lastRefinedTime) < 1e-12:
             return False
 
-        # only adapt once a non-trivial solution has developed; the hook is called on increments
-        # whose converged state is not yet written back (all-zero), and marking on a zero state is
-        # meaningless. This also makes AMR follow the *developed* field, as intended.
+        elForEid = {v: k for k, v in self._eidToEl.items()}
+        marked_elements = set()
+
+        if self._isFirstCall:
+            initial_markers = [m for m in self.markers if m.initialOnly]
+            for m in initial_markers:
+                elements = m.mark(model, self._eidToEl.values(), self._mesh)
+                marked_elements.update(elements)
+
+        # dynamic markers (not initialOnly) need a non-zero state to evaluate safely
+        dynamic_markers = [m for m in self.markers if not m.initialOnly]
+
         stateMagnitude = max(
             (float(np.abs(np.asarray(nf["U"])).max()) for nf in model.nodeFields.values() if "U" in nf),
             default=0.0,
         )
-        if stateMagnitude < 1e-12:
+        if stateMagnitude >= 1e-12:
+            for m in dynamic_markers:
+                marked_elements.update(m.mark(model, self._eidToEl.values(), self._mesh))
+
+        self._isFirstCall = False
+
+        if not marked_elements:
             return False
 
-        elForEid = {v: k for k, v in self._eidToEl.items()}
-
-        # (WS-G) mark, keeping only active elements below maxLevel
-        with timeit("marking"):
-            marked = markElements(model, self.result, self.expression, self.reducer, elementLabels=self._markLabels)
+        # keep only active elements below maxLevel
+        with timeit("marking filter"):
             markedEids = [
-                elForEid[model.elements[label]]
-                for label in marked
-                if label in model.elements
-                and model.elements[label] in elForEid
-                and self._mesh.elements[elForEid[model.elements[label]]]["level"] < self.maxLevel
+                elForEid[el]
+                for el in sorted(marked_elements, key=lambda e: e.elNumber)
+                if el in elForEid and self._mesh.elements[elForEid[el]]["level"] < self.maxLevel
             ]
         if not markedEids:
             return False
@@ -406,10 +476,6 @@ class ModelModifier(ModelModifierBase):
                 model.elements[child.elNumber] = child
                 self._eidToEl[eid] = child
                 self._sectionOf[child] = self._sectionOf[parentEl]
-                # keep the mark-eligible label set in sync so children of a marked element can themselves
-                # be marked on a later increment (required for maxLevel > 1 under an elSet restriction)
-                if parentEl.elNumber in self._markLabels:
-                    self._markLabels.add(child.elNumber)
 
                 change.addedElements.add(child.elNumber)
                 change.parentToChildren.setdefault(parentEl.elNumber, []).append(child.elNumber)

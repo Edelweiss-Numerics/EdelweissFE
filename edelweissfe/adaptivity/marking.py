@@ -27,68 +27,117 @@
 #  ---------------------------------------------------------------------
 
 """Refinement marking (WS-G): decide which elements to refine from a user expression evaluated on a
-per-element quantity derived from the converged state -- reusing EdelweissFE's math-expression stack
+per-element quantity -- reusing EdelweissFE's math-expression stack
 (:func:`edelweissfe.utils.math.createMathExpression`), the same mechanism as monitor/conditionalstop.
 """
 
 import numpy as np
 
+from edelweissfe.utils.fieldoutput import ElementFieldOutput
 from edelweissfe.utils.math import createMathExpression
 
-_REDUCERS = {
-    "max": np.max,
-    "min": np.min,
-    "mean": np.mean,
-    "absmax": lambda a: np.max(np.abs(a)),
-}
+
+class MarkerBase:
+    def __init__(self, initialOnly=False):
+        self.initialOnly = initialOnly
+
+    def mark(self, model, refineElements, mesh):
+        raise NotImplementedError()
 
 
-def elementScalar(element, result, reducer="absmax"):
-    """Reduce a named quadrature-point result of an element to a single scalar over all its QPs."""
-    red = _REDUCERS[reducer]
-    values = [
-        red(np.asarray(element.getResultArray(result, qp, getPersistentView=False)))
-        for qp in range(element.getNumberOfQuadraturePoints())
-    ]
-    return float(red(np.asarray(values)))
-
-
-def markElements(model, result, expression, reducer="absmax", elementLabels=None):
-    """Return the set of element labels to refine.
-
-    Parameters
-    ----------
-    model
-        The FE model.
-    result
-        Name of the quadrature-point result to evaluate (e.g. ``"stress"``, ``"nonlocal damage"``).
-    expression
-        A boolean math expression in the symbol ``x`` (the reduced per-element scalar), e.g.
-        ``"x > 0.1"``. Evaluated with :func:`createMathExpression`.
-    reducer
-        How to reduce the result over components and quadrature points: one of
-        ``max``, ``min``, ``mean``, ``absmax`` (default).
-    elementLabels
-        Restrict marking to these element labels (default: all elements).
-
-    Returns
-    -------
-    set
-        Labels of the elements whose expression evaluates truthy.
+class FieldOutputMarker(MarkerBase):
+    """Marks elements by evaluating a boolean expression against an already-declared ``*fieldOutput``
+    (a ``perElement`` one, covering every quadrature point of interest), instead of re-deriving a
+    per-element scalar from the elements' raw quadrature-point results independently. This way
+    refinement is driven by the exact same numbers the field output reports -- not a second,
+    possibly divergent, reduction over the same underlying data (e.g. a marker silently reducing
+    over all QPs while the corresponding output only reports QP 1).
     """
-    if reducer not in _REDUCERS:  # fail loud on a mistyped reducer instead of silently marking nothing
-        raise ValueError("Unknown reducer {!r}; expected one of {}.".format(reducer, sorted(_REDUCERS)))
-    predicate = createMathExpression(expression)  # symbol "x"
-    labels = model.elements.keys() if elementLabels is None else elementLabels
-    marked = set()
-    for label in labels:
-        if label not in model.elements:  # e.g. a parent removed by a previous refinement
-            continue
-        element = model.elements[label]
-        try:
-            x = elementScalar(element, result, reducer)
-        except (KeyError, ValueError):  # this element/material does not expose the marked result
-            continue
-        if bool(predicate(x)):
-            marked.add(label)
-    return marked
+
+    def __init__(self, fieldOutputName, expression, initialOnly=False):
+        super().__init__(initialOnly)
+        self.fieldOutputName = fieldOutputName
+        self._predicate = createMathExpression(expression)
+
+    def mark(self, model, refineElements, mesh):
+        fieldOutputController = model.fieldOutputController
+        if fieldOutputController is None or self.fieldOutputName not in fieldOutputController.fieldOutputs:
+            raise KeyError(
+                f"hAdaptivity marker references fieldOutput {self.fieldOutputName!r}, which is not "
+                "defined. Declare it under '*fieldOutput' (before the increment loop starts) so the "
+                "marker can look it up by name."
+            )
+        fieldOutput = fieldOutputController.fieldOutputs[self.fieldOutputName]
+
+        if not isinstance(fieldOutput, ElementFieldOutput):
+            raise TypeError(
+                f"hAdaptivity marker references fieldOutput {self.fieldOutputName!r}, which is a "
+                f"{type(fieldOutput).__name__}; only a 'perElement' fieldOutput exposes one result "
+                "row per element, as required for marking."
+            )
+        if fieldOutput.f is not None:
+            raise ValueError(
+                f"hAdaptivity marker references fieldOutput {self.fieldOutputName!r}, which defines "
+                "'f(x)'; that reduces away the per-element axis, so it can no longer drive per-element "
+                "marking. Declare a separate, unreduced fieldOutput (same result/quadraturePoint, no "
+                "f(x)) for marking."
+            )
+
+        elements = list(fieldOutput.associatedSet)
+        values = np.asarray(fieldOutput.getLastResult())
+
+        if values.shape[0] != len(elements):
+            raise ValueError(
+                f"hAdaptivity marker: fieldOutput {self.fieldOutputName!r} reports {values.shape[0]} "
+                f"result row(s) for {len(elements)} element(s) in its associated set; refusing to mark "
+                "against a mismatched fieldOutput."
+            )
+
+        marked = set()
+        for element, row in zip(elements, values):
+            if bool(np.any(self._predicate(row))):
+                marked.add(element)
+        return marked
+
+
+class ElementSetMarker(MarkerBase):
+    def __init__(self, elSetName, initialOnly=False):
+        super().__init__(initialOnly)
+        self.elSetName = elSetName
+
+    def mark(self, model, refineElements, mesh):
+        if self.elSetName not in model.elementSets:
+            return set()
+        return set(model.elementSets[self.elSetName])
+
+
+class NodeSetMarker(MarkerBase):
+    def __init__(self, nSetName, initialOnly=False):
+        super().__init__(initialOnly)
+        self.nSetName = nSetName
+
+    def mark(self, model, refineElements, mesh):
+        if self.nSetName not in model.nodeSets:
+            return set()
+        ns_nodes = set(model.nodeSets[self.nSetName].nodes)
+        marked = set()
+        for el in refineElements:
+            if any(n in ns_nodes for n in el.nodes):
+                marked.add(el)
+        return marked
+
+
+class SurfaceMarker(MarkerBase):
+    def __init__(self, surfaceName, initialOnly=False):
+        super().__init__(initialOnly)
+        self.surfaceName = surfaceName
+
+    def mark(self, model, refineElements, mesh):
+        if self.surfaceName not in model.surfaces:
+            return set()
+        marked = set()
+        # model.surfaces[name] is a dict of faceID -> list of elements
+        for elements in model.surfaces[self.surfaceName].values():
+            for el in elements:
+                marked.add(el)
+        return marked

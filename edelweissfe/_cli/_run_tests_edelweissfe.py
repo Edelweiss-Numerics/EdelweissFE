@@ -43,6 +43,15 @@ from rich import print
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.utils.inputfileparser import parseInputFile
 
+# Force single-threaded OpenMP execution before any Marmot/Cython extension is imported below: the
+# golden-file (U.ref) comparison in main() requires bit-reproducible results, but multi-threaded
+# CSR assembly sums element/constraint contributions in whatever order threads happen to finish, so
+# floating-point rounding differs from run to run. Usually invisible, but a path-dependent
+# nonlinearity (e.g. Coulomb friction stick/slip) can amplify that noise into a visibly different
+# converged solution. The OpenMP runtime picks up OMP_NUM_THREADS at first parallel-region entry,
+# which can be as early as extension import time -- setting it inside main() is too late.
+os.environ["OMP_NUM_THREADS"] = "1"
+
 matplotlib.use("Agg")
 
 

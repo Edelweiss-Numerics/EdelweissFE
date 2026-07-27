@@ -26,19 +26,19 @@ z0      =0
 lX      =1
 lY      =1
 lZ      =1
-elType  =C3D20
+elType  =C3D20R
 
 *modelGenerator, generator=boxGen, name=moving
 nX      =3
 nY      =3
-nZ      =1
+nZ      =2
 x0      =0
 y0      =0
 z0      =1.05
 lX      =1
 lY      =1
 lZ      =1
-elType  =C3D20
+elType  =C3D20R
 
 *modelGenerator, generator=surfaceElementGenerator, name=genMaster
 surface = fixed_front
@@ -53,13 +53,13 @@ triangulation = midside
 ** quadratic force law: continuous stiffness at gap activation, avoids the Newton limit-cycling
 ** the linear law can trigger for nodes touching down/lifting off during AMR facet regeneration
 *constraint, name=contact, type=nodeToDeformableSurfacePenalty
-slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=1e7, type=quadratic,
+slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=1e6, type=quadratic,
 searchDistance=2.0, sliding=small, mu=0.3, tangentPenalty=1e6
 
-*modelModifier, type=hAdaptivity, name=amr
-result=strain
-expression='x > 0.01'
-reducer=absmax
+*modelModifier, type=hadaptivity, name=amr0
+** Test modular initial refinement using different marker types
+>>marker, type=fieldOutput, fieldOutput=strainFixedForAMR, expression='abs(x) > 0.02'
+>>marker, type=fieldOutput, fieldOutput=strainMovingForAMR, expression='abs(x) > 0.02'
 maxLevel=1
 
 *job, name=amrcontactshear, domain=3d
@@ -74,6 +74,8 @@ maxLevel=1
 >>perElement, elSet=fixed_all, result=strain, quadraturePoint=1, name=strainFixed
 >>perElement, elSet=moving_all, result=stress, quadraturePoint=1, name=stressMoving
 >>perElement, elSet=moving_all, result=strain, quadraturePoint=1, name=strainMoving
+>>perElement, elSet=fixed_all, result=strain, quadraturePoint=0:8, name=strainFixedForAMR
+>>perElement, elSet=moving_all, result=strain, quadraturePoint=0:8, name=strainMovingForAMR
 >>fromExpression, name=pN, nSet=slaveSurf_nodes, expression='model.constraints["contact"].getNormalPressures()'
 >>fromExpression, name=pNmean, nSet=slaveSurf_nodes, expression='model.constraints["contact"].getNormalPressures()', f(x)='np.mean(x)'
 >>fromExpression, name=pT, nSet=slaveSurf_nodes, expression='model.constraints["contact"].getTangentialTractions()'
@@ -102,4 +104,4 @@ maxInc=0.2, minInc=1e-4, maxNumInc=50, maxIter=25, stepLength=1
 maxInc=0.2, minInc=1e-4, maxNumInc=50, maxIter=25, stepLength=1
 >>options, category=NISTSolver, extrapolation=off
 >>dirichlet, name=fixBack, nSet=fixed_back, field=displacement, 1=0.0, 2=0.0, 3=0.0
->>dirichlet, name=moveFront, nSet=moving_front, field=displacement, 1=0.15, 2=0.0, 3=0.0
+>>dirichlet, name=moveFront, nSet=moving_front, field=displacement, 1=0.05, 2=0.0, 3=0.0

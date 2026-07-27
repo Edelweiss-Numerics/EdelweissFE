@@ -385,9 +385,11 @@ class AbqModelConstructor:
             module = inputLanguage["modelModifier"].getModule(modifierType)
 
             args, kwargs = module.parseDatalines(data)
+            if "moduleOptions" in modifierKwArgs:
+                kwargs["moduleOptions"] = modifierKwArgs["moduleOptions"]
 
             modifierClass = getModelModifierClass(modifierType)
-            modifier = modifierClass(name, model, **kwargs)
+            modifier = modifierClass(name, model, self.journal, **kwargs)
 
             model.modelModifiers[name] = modifier
 

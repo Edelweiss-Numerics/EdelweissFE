@@ -49,9 +49,7 @@ slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=1e6, typ
 searchDistance=2.0, sliding=small
 
 *modelModifier, type=hAdaptivity, name=amr
-result=stress
-expression='x > 300.0'
-reducer=absmax
+>>marker, type=fieldOutput, fieldOutput=stressForAMR, expression='abs(x) > 300.0'
 maxLevel=1
 refineElSet=lower_all
 
@@ -62,6 +60,7 @@ refineElSet=lower_all
 >>perNode, elSet=upper_all, field=displacement, result=U, name=dispUpper
 >>fromExpression, name=pN, nSet=slaveSurf_nodes, expression='model.constraints["contact"].getNormalPressures()'
 >>fromExpression, name=pNmean, nSet=slaveSurf_nodes, expression='model.constraints["contact"].getNormalPressures()', f(x)='np.mean(x)'
+>>perElement, elSet=lower_all, result=stress, quadraturePoint=0:27, name=stressForAMR
 
 *step, solver=theSolver
 maxInc=0.02, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1

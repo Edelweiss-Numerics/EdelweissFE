@@ -80,6 +80,7 @@ class FEModel:
         self.additionalParameters = {}  #: Additional information.
         self.rigidBodies = {}  #: RigidBodies in the model.
         self.domainSize = dimension  #: Spatial dimension of the model
+        self.fieldOutputController = None  #: Set once by the driver; lets in-model entities (e.g. AMR markers) look up a named *fieldOutput by value, not just by declaration.
 
     def registerObserver(self, observer):
         """Register a :class:`~edelweissfe.models.modelchangeobserver.ModelChangeObserver` to be

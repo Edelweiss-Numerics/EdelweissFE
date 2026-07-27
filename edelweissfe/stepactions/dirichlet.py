@@ -141,6 +141,7 @@ class StepAction(DirichletBase):
     def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
         self.active = True
 
+        self._checkSetChanged(self.nSet)
         self.action = action
 
         if action["components"] is not None:

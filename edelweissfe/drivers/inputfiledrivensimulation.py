@@ -142,6 +142,7 @@ def finiteElementSimulation(
     plotter = createPlotterFromInputFile(inputfile, journal)
     stepManager = createStepManagerFromInputFile(inputfile)
     fieldOutputController = createFieldOutputFromInputFile(inputfile, model, journal)
+    model.fieldOutputController = fieldOutputController
     fieldOutputController.initializeJob()
 
     outputManagers = createOutputManagersFromInputFile(
