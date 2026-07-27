@@ -56,6 +56,7 @@ from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
 )
+from edelweissfe.utils.performancetiming import timeit
 
 module = Module("hadaptivity", "Dynamic hanging-node h-adaptivity model modifier for HEX20 elements.")
 inputLanguage = InputLanguage()
@@ -283,6 +284,7 @@ class ModelModifier(ModelModifierBase):
         # parent-parametric coords of each child's nodes (used for warm-start interpolation)
         self._octantParams = subdivision_children_param(self.splitFactor)
 
+    @timeit("AMR")
     def updateModel(self, model: FEModel, step, timeStep: float) -> bool:
         # Do not re-refine if the solver is re-trying the exact same time state after a cutback
         if self._lastRefinedTime is not None and abs(model.time - self._lastRefinedTime) < 1e-12:
@@ -301,29 +303,36 @@ class ModelModifier(ModelModifierBase):
         elForEid = {v: k for k, v in self._eidToEl.items()}
 
         # (WS-G) mark, keeping only active elements below maxLevel
-        marked = markElements(model, self.result, self.expression, self.reducer, elementLabels=self._markLabels)
-        markedEids = [
-            elForEid[model.elements[label]]
-            for label in marked
-            if label in model.elements
-            and model.elements[label] in elForEid
-            and self._mesh.elements[elForEid[model.elements[label]]]["level"] < self.maxLevel
-        ]
+        with timeit("marking"):
+            marked = markElements(model, self.result, self.expression, self.reducer, elementLabels=self._markLabels)
+            markedEids = [
+                elForEid[model.elements[label]]
+                for label in marked
+                if label in model.elements
+                and model.elements[label] in elForEid
+                and self._mesh.elements[elForEid[model.elements[label]]]["level"] < self.maxLevel
+            ]
         if not markedEids:
             return False
 
         # (WS-B/C) refine + 2:1 balance in the mirror
         nBefore = len(self._mesh.active())
-        for eid in markedEids:
-            if self._mesh.elements[eid]["active"]:
-                self._mesh.refine(eid)
-        self._mesh.balance_2to1()
+        with timeit("refine & balance"):
+            for eid in markedEids:
+                if self._mesh.elements[eid]["active"]:
+                    self._mesh.refine(eid)
+            self._mesh.balance_2to1()
 
-        records = self._mesh.hanging_mpc_records()  # computed once (expensive), reused below
-        change = self._materialize(model, records)
+        with timeit("hanging nodes"):
+            records = self._mesh.hanging_mpc_records()  # computed once (expensive), reused below
+
+        with timeit("materialize"):
+            change = self._materialize(model, records)
+
         self._hanging.setRecords(records)
         # notify observers (e.g. Dirichlet BCs, Ensight output manager) so they re-index against the mutated mesh
-        model.notifyModelChanged(ModelChangeType.REFINEMENT, change)
+        with timeit("notify observers"):
+            model.notifyModelChanged(ModelChangeType.REFINEMENT, change)
         self._journal.message(
             "AMR ModelModifier: marked {:}, refined -> active elements {:} -> {:}, {:} hanging nodes".format(
                 len(markedEids), nBefore, len(self._mesh.active()), len(records)
@@ -374,39 +383,40 @@ class ModelModifier(ModelModifierBase):
         change = ModelChange(kind=ModelChangeType.REFINEMENT, addedNodes=set(newNodes.keys()))
 
         # new child elements (single level of new refinement per call -> parents are materialized)
-        for eid in newChildEids:
-            e = mesh.elements[eid]
-            parentEid = e["parent"]
-            parentEl = self._eidToEl[parentEid]
-            child = self._elementClass(self._elementType, self._nextElLabel)
-            self._nextElLabel += 1
-            child.setNodes([model.nodes[label] for label in e["conn"]])
-            self._sectionOf[parentEl].assignSectionPropertiesToElement(child)  # init + material (inherit parent's)
-            self._stateTransfer.transferState(parentEl, [child])  # WS-F (state)
+        with timeit("elements & state transfer"):
+            for eid in newChildEids:
+                e = mesh.elements[eid]
+                parentEid = e["parent"]
+                parentEl = self._eidToEl[parentEid]
+                child = self._elementClass(self._elementType, self._nextElLabel)
+                self._nextElLabel += 1
+                child.setNodes([model.nodes[label] for label in e["conn"]])
+                self._sectionOf[parentEl].assignSectionPropertiesToElement(child)  # init + material (inherit parent's)
+                self._stateTransfer.transferState(parentEl, [child])  # WS-F (state)
 
-            # warm start (WS-H): interpolate each NEW node's field values from the parent via the
-            # HEX20 isoparametric map, so the increment restarts from a consistent state, not zero
-            octant = mesh.elements[parentEid]["children"].index(eid)
-            childParams = self._octantParams[octant]
-            for i, label in enumerate(e["conn"]):
-                node = model.nodes[label]
-                if label in newNodes and any(node not in newValues[f] for f in oldValues):
-                    N = hex20_shape(*childParams[i])
-                    for fieldName, vals in oldValues.items():
-                        if all(pn in vals for pn in parentEl.nodes):
-                            parentVals = np.array([vals[pn] for pn in parentEl.nodes])
-                            newValues[fieldName][node] = N @ parentVals
+                # warm start (WS-H): interpolate each NEW node's field values from the parent via the
+                # HEX20 isoparametric map, so the increment restarts from a consistent state, not zero
+                octant = mesh.elements[parentEid]["children"].index(eid)
+                childParams = self._octantParams[octant]
+                for i, label in enumerate(e["conn"]):
+                    node = model.nodes[label]
+                    if label in newNodes and any(node not in newValues[f] for f in oldValues):
+                        N = hex20_shape(*childParams[i])
+                        for fieldName, vals in oldValues.items():
+                            if all(pn in vals for pn in parentEl.nodes):
+                                parentVals = np.array([vals[pn] for pn in parentEl.nodes])
+                                newValues[fieldName][node] = N @ parentVals
 
-            model.elements[child.elNumber] = child
-            self._eidToEl[eid] = child
-            self._sectionOf[child] = self._sectionOf[parentEl]
-            # keep the mark-eligible label set in sync so children of a marked element can themselves
-            # be marked on a later increment (required for maxLevel > 1 under an elSet restriction)
-            if parentEl.elNumber in self._markLabels:
-                self._markLabels.add(child.elNumber)
+                model.elements[child.elNumber] = child
+                self._eidToEl[eid] = child
+                self._sectionOf[child] = self._sectionOf[parentEl]
+                # keep the mark-eligible label set in sync so children of a marked element can themselves
+                # be marked on a later increment (required for maxLevel > 1 under an elSet restriction)
+                if parentEl.elNumber in self._markLabels:
+                    self._markLabels.add(child.elNumber)
 
-            change.addedElements.add(child.elNumber)
-            change.parentToChildren.setdefault(parentEl.elNumber, []).append(child.elNumber)
+                change.addedElements.add(child.elNumber)
+                change.parentToChildren.setdefault(parentEl.elNumber, []).append(child.elNumber)
 
         # per-face parent -> child tiling (Finding 2's faceMap), while parents are still materialized
         newlyRefinedParentEids = {mesh.elements[eid]["parent"] for eid in newChildEids}
@@ -436,58 +446,60 @@ class ModelModifier(ModelModifierBase):
                         byFace[faceID].append(self._eidToEl[meid])
                 model.surfaces[surfaceName].replaceData({f: els for f, els in byFace.items()})
 
-        # Tracked (non-all) node sets that gain nodes are rebuilt with the new members (excluding
-        # hanging slave nodes, whose motion is set by the MPC).
-        slaves = set(records.keys())
-        for setName, labels in mesh.nodeSets.items():
-            present = {n.label for n in model.nodeSets[setName].nodes}
-            if any(label not in present and label not in slaves for label in labels):
-                members = [model.nodes[label] for label in sorted(labels) if label not in slaves]
-                model.nodeSets[setName].replaceMembers(members)
-                change.changedNodeSets.add(setName)
+        with timeit("sets & fields sync"):
+            # Tracked (non-all) node sets that gain nodes are rebuilt with the new members (excluding
+            # hanging slave nodes, whose motion is set by the MPC).
+            slaves = set(records.keys())
+            for setName, labels in mesh.nodeSets.items():
+                present = {n.label for n in model.nodeSets[setName].nodes}
+                if any(label not in present and label not in slaves for label in labels):
+                    members = [model.nodes[label] for label in sorted(labels) if label not in slaves]
+                    model.nodeSets[setName].replaceMembers(members)
+                    change.changedNodeSets.add(setName)
 
-        # sync all element sets (user sets like 'concrete' and all-encompassing sets) -- Finding 1
-        allNodes = list(model.nodes.values())
-        if newNodes:
-            for setName in self._allLikeSets | {"all"}:
-                model.nodeSets[setName].replaceMembers(allNodes)
-                change.changedNodeSets.add(setName)
-        for setName, eids in mesh.elementSets.items():
-            if setName in model.elementSets:
-                if eids & newChildEids:
-                    change.changedElementSets.add(setName)
-                elements = [self._eidToEl[eid] for eid in eids if eid in self._eidToEl]
-                # carry the non-mirrored members along: the octree only knows refineable elements,
-                # so a mixed set would silently drop them here. Members deleted from the model in
-                # the meantime are filtered out by their label
-                elements += [el for el in self._untrackedOfElementSet[setName] if el.elNumber in model.elements]
-                model.elementSets[setName].replaceMembers(elements)
-        model.elementSets["all"].replaceMembers(list(model.elements.values()))
-        change.changedElementSets.add("all")
+            # sync all element sets (user sets like 'concrete' and all-encompassing sets) -- Finding 1
+            allNodes = list(model.nodes.values())
+            if newNodes:
+                for setName in self._allLikeSets | {"all"}:
+                    model.nodeSets[setName].replaceMembers(allNodes)
+                    change.changedNodeSets.add(setName)
+            for setName, eids in mesh.elementSets.items():
+                if setName in model.elementSets:
+                    if eids & newChildEids:
+                        change.changedElementSets.add(setName)
+                    elements = [self._eidToEl[eid] for eid in eids if eid in self._eidToEl]
+                    # carry the non-mirrored members along: the octree only knows refineable elements,
+                    # so a mixed set would silently drop them here. Members deleted from the model in
+                    # the meantime are filtered out by their label
+                    elements += [el for el in self._untrackedOfElementSet[setName] if el.elNumber in model.elements]
+                    model.elementSets[setName].replaceMembers(elements)
+            model.elementSets["all"].replaceMembers(list(model.elements.values()))
+            change.changedElementSets.add("all")
 
-        # resize node fields in place to include the new nodes, then restore the warm start:
-        # converged values on the retained nodes and interpolated values on the new nodes (Finding 1).
-        # Both U (current) and P (previous converged) get the same warm-start value, so the first
-        # Newton iteration after refinement sees a normal residual rather than a spurious dU = U - P
-        # = U - 0 cold-restart spike on every retained/new node (P-field warm-start fix).
-        model._resizeNodeFieldsForNodes(self._journal)
-        for fieldName, nodeField in model.nodeFields.items():
-            if "U" not in nodeField:
-                nodeField.createFieldValueEntry("U")
-            if "P" not in nodeField:
-                nodeField.createFieldValueEntry("P")
-            U = nodeField["U"]
-            P = nodeField["P"]
-            old = oldValues.get(fieldName, {})
-            new = newValues.get(fieldName, {})
-            for node in nodeField.nodes:
-                idx = nodeField._indicesOfNodesInArray[node]
-                if node in old:
-                    U[idx] = old[node]
-                    P[idx] = old[node]
-                elif node in new:
-                    U[idx] = new[node]
-                    P[idx] = new[node]
+        with timeit("fields resize & restore"):
+            # resize node fields in place to include the new nodes, then restore the warm start:
+            # converged values on the retained nodes and interpolated values on the new nodes (Finding 1).
+            # Both U (current) and P (previous converged) get the same warm-start value, so the first
+            # Newton iteration after refinement sees a normal residual rather than a spurious dU = U - P
+            # = U - 0 cold-restart spike on every retained/new node (P-field warm-start fix).
+            model._resizeNodeFieldsForNodes(self._journal)
+            for fieldName, nodeField in model.nodeFields.items():
+                if "U" not in nodeField:
+                    nodeField.createFieldValueEntry("U")
+                if "P" not in nodeField:
+                    nodeField.createFieldValueEntry("P")
+                U = nodeField["U"]
+                P = nodeField["P"]
+                old = oldValues.get(fieldName, {})
+                new = newValues.get(fieldName, {})
+                for node in nodeField.nodes:
+                    idx = nodeField._indicesOfNodesInArray[node]
+                    if node in old:
+                        U[idx] = old[node]
+                        P[idx] = old[node]
+                    elif node in new:
+                        U[idx] = new[node]
+                        P[idx] = new[node]
 
-        model._linkFieldVariableObjects(model.nodeSets["all"])
+            model._linkFieldVariableObjects(model.nodeSets["all"])
         return change
