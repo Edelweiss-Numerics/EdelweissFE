@@ -43,14 +43,19 @@ It did so because of a gap that P3(c) has now started closing. Originally, const
 hand-assembling one here would have meant writing a second, hidden input-file parser. The second
 test below is the successor that gap was blocking: it builds a real ``dirichlet.StepAction``
 through its typed constructor, with no dict and no parser anywhere, and checks the boundary
-condition it produces. The remaining 12 step actions still take the dict (they keep working through
-the default hooks on ``StepActionBase``), so a full ``StepManager``-driven programmatic cycle waits
-on the rest of P3(c).
+condition it produces, but it stops at ``getDelta`` and never reaches a solver.
+
+With all 13 step actions ported (P3(c) complete), the third test closes the remaining gap: it drives
+a real ``AdaptiveStep`` through the production ``NIST`` solver, with typed step actions and a real
+``FieldOutputController``, mirroring the lifecycle of
+``edelweissfe/drivers/inputfiledrivensimulation.py`` -- but built from Python objects rather than
+from a parsed input file.
 """
 
 import numpy as np
 import pytest
 
+from edelweissfe.config.configurator import loadConfiguration
 from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.materiallibrary import getMaterialClass
 from edelweissfe.journal.journal import Journal
@@ -59,8 +64,13 @@ from edelweissfe.points.node import Node
 from edelweissfe.sections.plane import Section
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 from edelweissfe.stepactions.dirichlet import StepAction as DirichletStepAction
+from edelweissfe.stepactions.nodeforces import StepAction as NodeForcesStepAction
+from edelweissfe.steps.adaptivestep import AdaptiveStep
+from edelweissfe.steps.stepmanager import StepActionCollection
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.fieldoutput import FieldOutputController
 
 
 def test_single_cpe4_patch_test_pure_python_no_parser():
@@ -221,3 +231,238 @@ def test_dirichlet_step_action_built_from_python_without_a_parser_dict():
     # an unknown key in a definition dict would have been
     with pytest.raises(ValueError, match="do not exist on field"):
         bc.updateStepAction({7: 1.0})
+
+
+def _buildPatchModel(youngsModulus: float, poissonsRatio: float, thickness: float) -> FEModel:
+    """Build a 2x2 patch of CPE4 elements on the unit-spaced square [0,2] x [0,2].
+
+    Nodes are labelled row-wise from the bottom left (1..9), so that ``bottom`` = 1,2,3,
+    ``middle`` = 4,5,6 and ``top`` = 7,8,9, and ``left`` = 1,4,7 / ``right`` = 3,6,9 are ordered by
+    increasing y -- i.e. the i-th node of ``left`` is the mirror image of the i-th node of ``right``
+    about the axis x = 1, which is what makes the symmetry assertion below a per-row comparison.
+
+    Parameters
+    ----------
+    youngsModulus
+        Young's modulus of the linear elastic material.
+    poissonsRatio
+        Poisson's ratio of the linear elastic material.
+    thickness
+        The out-of-plane thickness of the section.
+
+    Returns
+    -------
+    FEModel
+        The model, with nodes, elements, sets, material and section assigned -- but not yet
+        prepared: the lifecycle calls are the business of the test itself.
+    """
+
+    nodes = {}
+    label = 1
+    for j in range(3):
+        for i in range(3):
+            nodes[label] = Node(label, np.array([float(i), float(j)]))
+            label += 1
+
+    ElementClass = getElementClass("CPE4", "edelweiss")
+    elements = {}
+    # CCW node order per element, matching the Quad4 shape functions (see the first test)
+    for elNumber, connectivity in enumerate([(1, 2, 5, 4), (2, 3, 6, 5), (4, 5, 8, 7), (5, 6, 9, 8)], start=1):
+        element = ElementClass("CPE4", elNumber)
+        element.setNodes([nodes[label] for label in connectivity])
+        elements[elNumber] = element
+
+    model = FEModel(2)
+    model.nodes.update(nodes)
+    model.elements.update(elements)
+
+    model.elementSets["all"] = ElementSet("all", list(elements.values()))
+    model.nodeSets["all"] = NodeSet("all", list(nodes.values()))
+    model.nodeSets["bottom"] = NodeSet("bottom", [nodes[1], nodes[2], nodes[3]])
+    model.nodeSets["middle"] = NodeSet("middle", [nodes[4], nodes[5], nodes[6]])
+    model.nodeSets["top"] = NodeSet("top", [nodes[7], nodes[8], nodes[9]])
+    model.nodeSets["left"] = NodeSet("left", [nodes[1], nodes[4], nodes[7]])
+    model.nodeSets["right"] = NodeSet("right", [nodes[3], nodes[6], nodes[9]])
+
+    material = getMaterialClass("linearelastic", "edelweiss")(np.array([youngsModulus, poissonsRatio]))
+    model.materials["linearelastic"] = material
+
+    section = Section(
+        "section1",
+        model,
+        thickness,
+        material,
+        [model.elementSets["all"]],
+        materialParameterFromFieldDefs=[],
+        writeMaterialPropertiesToFileDefs=[],
+    )
+    model.sections["section1"] = section
+    for element in elements.values():
+        section.assignSectionPropertiesToElement(element)
+
+    return model
+
+
+def test_full_step_and_solver_cycle_driven_programmatically():
+    """A complete ``Step``/``StepAction``/solver cycle driven from Python objects only.
+
+    This is the P0.1 successor that P3(c) unblocked, and the point where the programmatic path
+    reaches the same place the ``.inp`` front-end does: a 2x2 CPE4 patch is built, prepared through
+    the very lifecycle calls ``drivers/inputfiledrivensimulation.py`` makes (``prepareYourself``,
+    ``advanceToTime``, ``loadConfiguration``, the ``"U"``/``"P"`` field value entries,
+    ``_linkFieldVariableObjects``, ``FieldOutputController.initializeJob``), and solved by a real
+    ``NIST`` instance inside a real ``AdaptiveStep`` via ``step.solve()`` -- which is exactly what
+    the driver calls. No ``.inp`` file, no ``parseInputFile``, no ``InputLanguage`` lookup, and no
+    parser-shaped definition dict anywhere: every step action is built through its typed L1
+    constructor, and the step actions are handed over in the same ``StepActionCollection`` the
+    ``StepManager`` would fill.
+
+    Before P3(c) this test could not be written: constructing *any* ``StepAction`` required a
+    fully-populated parser-shaped ``action`` dict (see the module docstring and
+    PLAN_INPUT_SYSTEM.md's section 6), and a step cannot be solved without one -- ``NIST``
+    unconditionally reads ``stepActions["dirichlet"]``, ``["nodeforces"]`` and friends.
+
+    The assertions are physical invariants of the setup rather than expected numbers:
+
+    1. The prescribed Dirichlet value is reached *and* traversed along the prescribed amplitude:
+       the recorded history of the top edge's vertical displacement must equal
+       ``uyPrescribed * t**2`` at every recorded time, for the quadratic ``f(t)`` handed to the
+       boundary condition. This constrains both the destination (the amplitude cancels at t=1) and
+       the path, so a step action whose amplitude never reached the solver fails it.
+    2. Global equilibrium (Newton's third law): the element internal forces are self-equilibrated,
+       so the reactions collected on the constrained edges must balance the total externally applied
+       nodal load. This holds only if the ``nodeforces`` action actually reached the assembly *and*
+       the Newton iteration converged.
+    3. Mirror symmetry about x = 1, which the geometry, the boundary conditions and the load all
+       respect: the horizontal displacements of the left and right edge must be opposite and the
+       vertical ones equal.
+    """
+
+    youngsModulus = 1000.0
+    poissonsRatio = 0.3
+    thickness = 1.0
+    uyPrescribed = 0.02
+    FyPerNode = 25.0
+    nIncrements = 4
+
+    journal = Journal(verbose=False)
+
+    model = _buildPatchModel(youngsModulus, poissonsRatio, thickness)
+
+    # --- the model lifecycle of the production driver, in the production order ---
+    model.prepareYourself(journal)
+    model.advanceToTime(0.0)
+
+    jobInfo = loadConfiguration(dict())
+
+    for nodeField in model.nodeFields.values():
+        nodeField.createFieldValueEntry("U")
+        nodeField.createFieldValueEntry("P")
+
+    model._linkFieldVariableObjects(model.nodeSets["all"])
+
+    # --- field outputs, built through the controller's typed methods ---
+    fieldOutputController = FieldOutputController(model, journal)
+    displacement = model.nodeFields["displacement"]
+    fieldOutputController.addPerNodeFieldOutput(
+        "topU", displacement.subset(model.nodeSets["top"]), "U", saveHistory=True
+    )
+    fieldOutputController.addPerNodeFieldOutput("bottomP", displacement.subset(model.nodeSets["bottom"]), "P")
+    fieldOutputController.addPerNodeFieldOutput("topP", displacement.subset(model.nodeSets["top"]), "P")
+    fieldOutputController.addPerNodeFieldOutput("leftU", displacement.subset(model.nodeSets["left"]), "U")
+    fieldOutputController.addPerNodeFieldOutput("rightU", displacement.subset(model.nodeSets["right"]), "U")
+    model.fieldOutputController = fieldOutputController
+    fieldOutputController.initializeJob()
+
+    # --- step actions, all through their typed L1 constructors, in the collection the
+    # StepManager would hand to the step (keyed by step action module name) ---
+    stepActions = StepActionCollection()
+    stepActions["dirichlet"]["clamp"] = DirichletStepAction(
+        "clamp", model.nodeSets["bottom"], "displacement", {0: 0.0, 1: 0.0}, model, journal
+    )
+    stepActions["dirichlet"]["stretch"] = DirichletStepAction(
+        "stretch",
+        model.nodeSets["top"],
+        "displacement",
+        {1: uyPrescribed},
+        model,
+        journal,
+        f_t=lambda t: t**2,
+    )
+    stepActions["nodeforces"]["pull"] = NodeForcesStepAction(
+        "pull", model.nodeSets["middle"], "displacement", np.array([0.0, FyPerNode]), model, journal
+    )
+
+    # --- the production solver and step, then solve ---
+    solver = NIST(jobInfo, journal)
+
+    step = AdaptiveStep(
+        0,
+        model,
+        fieldOutputController,
+        journal,
+        jobInfo,
+        solver,
+        [],
+        stepActions,
+        stepLength=1.0,
+        startInc=1.0 / nIncrements,
+        maxInc=1.0 / nIncrements,
+    )
+    step.solve()
+    fieldOutputController.finalizeJob()
+
+    # ------------------------------------------------------------------
+    # 1. the prescribed value is reached, along the prescribed amplitude
+    # ------------------------------------------------------------------
+    # The step starts at time 0 and is one time unit long, so the recorded total time equals the
+    # step progress, and the accumulated Dirichlet increments must sum to uyPrescribed * f(t).
+    topU = fieldOutputController.fieldOutputs["topU"]
+    recordedTime = topU.getTimeHistory()
+    uyHistory = topU.getResultHistory()[:, :, 1]
+
+    assert recordedTime[-1] == 1.0
+    assert len(np.unique(recordedTime)) == nIncrements + 1  # every increment converged, none lost
+
+    np.testing.assert_allclose(
+        uyHistory,
+        uyPrescribed * np.tile((recordedTime**2)[:, None], (1, uyHistory.shape[1])),
+        atol=1e-12,
+        err_msg="the top edge did not follow the prescribed quadratic amplitude to the prescribed value",
+    )
+
+    # -------------------------------------------------
+    # 2. global equilibrium: reactions balance the load
+    # -------------------------------------------------
+    # The internal force vector of a solid element is self-equilibrated (a rigid body translation is
+    # in its kernel), hence the assembled P sums to zero over all nodes. At convergence P equals the
+    # external load on every free DOF, so the reactions on the constrained DOFs -- the clamped bottom
+    # edge and the vertically prescribed top edge -- must equal minus the total applied nodal load.
+    reactionsBottom = fieldOutputController.fieldOutputs["bottomP"].getLastResult()
+    reactionsTop = fieldOutputController.fieldOutputs["topP"].getLastResult()
+
+    appliedFy = FyPerNode * len(model.nodeSets["middle"])
+    reactionFy = reactionsBottom[:, 1].sum() + reactionsTop[:, 1].sum()
+    np.testing.assert_allclose(
+        reactionFy,
+        -appliedFy,
+        rtol=1e-8,
+        err_msg="the vertical reactions do not balance the applied nodal forces",
+    )
+
+    # nothing is loaded horizontally, so the horizontal reactions must cancel
+    reactionFx = reactionsBottom[:, 0].sum() + reactionsTop[:, 0].sum()
+    np.testing.assert_allclose(reactionFx, 0.0, atol=1e-8 * appliedFy)
+
+    # ---------------------------------------
+    # 3. mirror symmetry of the response
+    # ---------------------------------------
+    leftU = fieldOutputController.fieldOutputs["leftU"].getLastResult()
+    rightU = fieldOutputController.fieldOutputs["rightU"].getLastResult()
+
+    np.testing.assert_allclose(leftU[:, 0], -rightU[:, 0], atol=1e-12)
+    np.testing.assert_allclose(leftU[:, 1], rightU[:, 1], atol=1e-12)
+
+    # the upward pull on the middle row lifts it beyond the prescribed top displacement, so the
+    # solution is not merely the homogeneous stretch: the load genuinely deforms the patch
+    assert leftU[1, 1] > uyPrescribed

@@ -247,6 +247,21 @@ outputs.
 This is a genuine, reachable wall, documented rather than papered over: no monkeypatching, no
 hidden mini-parser, no faked assertions.
 
+**Closed by P3(c).** `tests/test_programmatic_model_build.py::test_full_step_and_solver_cycle_driven_programmatically`
+now drives the whole stack from Python objects: a 2x2 CPE4 patch, prepared through the very lifecycle
+calls `drivers/inputfiledrivensimulation.py` makes and in its order (`prepareYourself`,
+`advanceToTime`, `loadConfiguration`, the `"U"`/`"P"` field value entries,
+`_linkFieldVariableObjects`, `FieldOutputController.initializeJob`), three step actions built through
+their typed L1 constructors into a real `StepActionCollection`, a real `NIST` inside a real
+`AdaptiveStep`, solved by the driver's own `step.solve()`. No `.inp` file, no `parseInputFile`, no
+`InputLanguage` lookup, no definition dict. It asserts physical invariants rather than expected
+numbers -- the prescribed value is reached *along* the prescribed quadratic amplitude, the reactions
+balance the applied nodal load, and the response is mirror-symmetric -- and each was falsified
+separately (a constant amplitude, halving the expected load, dropping the `nodeforces` action) to
+confirm the invariants are independent and name their own failure mode. **Nothing under
+`edelweissfe/` had to change to make this writable**, which is the concrete evidence that P3(c)
+closed the gap rather than merely moving it.
+
 ## 7. P1 outcome: what was built
 
 Three new, additive-only modules, plus unit tests -- nothing existing was wired in to them (P2
