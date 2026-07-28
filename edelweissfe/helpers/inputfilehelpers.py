@@ -28,10 +28,7 @@
 
 from edelweissfe.config import registry
 from edelweissfe.config.generators import getGeneratorFunction
-from edelweissfe.config.outputmanagers import (
-    getOutputManagerClass,
-    getOutputManagerFactoryByName,
-)
+from edelweissfe.config.outputmanagers import getOutputManagerFactoryByName
 from edelweissfe.config.solvers import getSolverByName
 from edelweissfe.generators.abqmodelconstructor import AbqModelConstructor
 from edelweissfe.journal.journal import Journal
@@ -58,7 +55,7 @@ from edelweissfe.utils.misc import (
     withoutParserBookkeeping,
 )
 from edelweissfe.utils.plotter import Plotter
-from edelweissfe.utils.schema import buildSchemaFromOptions
+from edelweissfe.utils.schema import DatalineAggregatingSchema, buildSchemaFromOptions
 
 
 def flattenDefinitions(ll):
@@ -443,28 +440,33 @@ def createOutputManagersFromInputFile(
 
         moduleOptions = outputManagerKwargs.pop("moduleOptions")
 
-        # new input file parsing not yet implemented for meshplot
-        if outputManagerType.casefold() in ["meshplot"]:
-            OutputManager = getOutputManagerClass(definition["type"].lower())
-            definitionLines = definition["datalines"]
-
-            outputManager = OutputManager(outputManagerName, model, fieldOutputController, journal, plotter)
-
-            for defLine in definitionLines:
-                kwargs = convertLineToStringDictionary(defLine)
-                if "elSet" in kwargs:
-                    kwargs["elSet"] = model.elementSets[kwargs["elSet"]]
-                if "nSet" in kwargs:
-                    kwargs["nSet"] = model.nodeSets[kwargs["nSet"]]
-                if "fieldOutput" in kwargs:
-                    kwargs["fieldOutput"] = fieldOutputController.fieldOutputs[kwargs["fieldOutput"]]
-
-                outputManager.updateDefinition(**kwargs)
-
-            outputManagers.append(outputManager)
-            continue
-
         outputManagerClass, outputManagerSchema = registry.lookup("outputmanager", outputManagerType)
+
+        if outputManagerSchema is not None and issubclass(outputManagerSchema, DatalineAggregatingSchema):
+            # One instance aggregating a heterogeneous list of jobs, one or more per dataline,
+            # instead of one instance per dataline -- see `DatalineAggregatingSchema` for why the
+            # dataline interpretation belongs to the schema rather than to this adapter.
+            try:
+                configuration = outputManagerSchema.fromDatalines(
+                    [convertLineToStringDictionary(line) for line in datalines]
+                )
+            except ValueError as e:
+                raise ValueError(
+                    f"Error during parsing of keyword {keywordIdentifier}output "
+                    f"(type={outputManagerType}): " + e.args[0]
+                ) from e
+
+            outputManagers.append(
+                outputManagerClass(
+                    outputManagerName,
+                    model,
+                    fieldOutputController,
+                    journal,
+                    plotter,
+                    configuration=configuration,
+                )
+            )
+            continue
 
         if outputManagerSchema is not None:
             # L4 adapter over the L3 registry: parse -> validate/coerce into the module's own L2

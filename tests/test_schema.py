@@ -441,3 +441,77 @@ def test_parser_bookkeeping_keys_are_stripped_from_sub_keyword_blocks():
         [{"fieldOutput": "U", "inputFile": "/some/path/test.inp", "datalines": [], "explicitlySetArgs": {"x"}}]
     )
     assert stripped == [{"fieldOutput": "U"}]
+
+
+def test_meshplot_datalines_are_dispatched_to_the_arm_selected_by_create():
+    """meshplot aggregates a heterogeneous job list, one or more per dataline, with the arm chosen
+    by the `create=` tag -- the `DatalineAggregatingSchema` pattern."""
+    from edelweissfe.outputmanagers.meshplot import (
+        MeshPlotMeshOnlyJob,
+        MeshPlotPerElementJob,
+        MeshPlotPerNodeJob,
+        MeshPlotSchema,
+        MeshPlotXYDataJob,
+    )
+
+    configuration = MeshPlotSchema.fromDatalines(
+        [
+            {"create": "xyData", "x": "time", "y": "RF", "integral": "True"},
+            {"create": "perNode", "fieldOutput": "S"},
+            {"create": "perElement", "fieldOutput": "alphaP"},
+            {"create": "meshOnly", "configuration": "deformed", "warpBy": "U", "scaleFactor": "5"},
+        ]
+    )
+
+    assert [type(job) for job in configuration.jobs] == [
+        MeshPlotXYDataJob,
+        MeshPlotPerNodeJob,
+        MeshPlotPerElementJob,
+        MeshPlotMeshOnlyJob,
+    ]
+    assert configuration.jobs[0].integral is True
+    assert configuration.jobs[3].scaleFactor == 5.0
+
+
+def test_meshplot_rejects_a_dataline_selecting_two_jobs_at_once():
+    """Legacy `updateDefinition` tested for `saveFigure` and `create` independently, so one line
+    could emit two jobs -- but only because each arm tolerated the other's options, which is the
+    silent-typo tolerance the closed schema removes. No input file does this."""
+    from edelweissfe.outputmanagers.meshplot import MeshPlotSchema
+
+    with pytest.raises(ValueError, match="must select a single job"):
+        MeshPlotSchema.fromDatalines([{"create": "xyData", "x": "time", "y": "RF", "saveFigure": None}])
+
+
+def test_meshplot_rejects_an_unknown_create_value_and_a_dataline_selecting_no_job():
+    from edelweissfe.outputmanagers.meshplot import MeshPlotSchema
+
+    with pytest.raises(ValueError, match="not a valid 'create' value"):
+        MeshPlotSchema.fromDatalines([{"create": "perGaussPoint", "fieldOutput": "S"}])
+
+    with pytest.raises(ValueError, match="must select a job"):
+        MeshPlotSchema.fromDatalines([{"figure": "1", "label": "orphan"}])
+
+
+def test_meshplot_rejects_a_misspelled_option_within_an_arm():
+    """The whole point of the closed schema: options the plotter never reads (`legend` for `label`,
+    `axpSec` for `axSpec`) used to be silently ignored."""
+    from edelweissfe.outputmanagers.meshplot import MeshPlotSchema
+
+    with pytest.raises(ValueError, match="legend"):
+        MeshPlotSchema.fromDatalines([{"create": "xyData", "x": "time", "y": "RF", "legend": "ignored"}])
+
+
+def test_meshplot_schema_is_constructible_programmatically_without_the_parser():
+    """The hard requirement: an external caller builds jobs directly, no `.inp` file involved."""
+    from edelweissfe.outputmanagers.meshplot import (
+        MeshPlotSchema,
+        MeshPlotXYDataJob,
+        OutputManager,
+    )
+
+    configuration = MeshPlotSchema(jobs=(MeshPlotXYDataJob(x="time", y="RF", label="reaction force"),))
+
+    assert MeshPlotSchema() == MeshPlotSchema(jobs=())
+    assert OutputManager.schema is MeshPlotSchema
+    assert configuration.jobs[0].label == "reaction force"

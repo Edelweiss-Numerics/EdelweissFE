@@ -380,6 +380,49 @@ class OptionSchemaProvider:
     schema: ClassVar[type | None] = None
 
 
+class DatalineAggregatingSchema:
+    """Base for an L2 schema that is built from *all* datalines of one keyword block at once.
+
+    The ordinary L4 adapter treats each dataline as an independent module instance: it builds one
+    schema per dataline and calls the L1 constructor once per dataline. A few legacy modules invert
+    that -- a single instance aggregates a *heterogeneous list of jobs*, one per dataline, with the
+    kind of job selected by an option value on the line itself (``meshplot``'s
+    ``create=perNode|perElement|xyData|meshOnly``, plus its orthogonal ``saveFigure``). Neither a
+    flat schema nor :func:`subKeywordField` expresses that: the jobs are not sub-keyword blocks and
+    they do not share one option set.
+
+    Rather than teach the generic adapter about tag options, arm tables and presence flags -- a
+    third schema pattern, in the framework, for a module shape we do not want to encourage -- a
+    schema of this kind takes responsibility for its own dataline interpretation in
+    :meth:`fromDatalines`, and the adapter dispatches on this base class (a type check, like
+    :func:`schemaOf`, not attribute probing). The generic path stays two lines shorter than the
+    special-case it replaces, and the whole pattern disappears with the last module that uses it.
+
+    Prefer a flat schema or :func:`subKeywordField` for anything new.
+    """
+
+    @classmethod
+    def fromDatalines(cls, datalines: list[Mapping[str, Any]]) -> Any:
+        """Build one schema instance from the option mappings of every dataline, in file order.
+
+        Parameters
+        ----------
+        datalines
+            One mapping of raw (string) option name to value per dataline of the keyword block.
+
+        Returns
+        -------
+        Any
+            An instance of the schema.
+
+        Raises
+        ------
+        ValueError
+            If a dataline is not interpretable, with a message naming the offending option.
+        """
+        raise NotImplementedError  # pragma: no cover -- subclass responsibility
+
+
 def schemaOf(target: Any) -> type | None:
     """Return the L2 schema declared by ``target``, or ``None`` if it declares none.
 

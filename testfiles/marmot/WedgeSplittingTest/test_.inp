@@ -14156,7 +14156,7 @@ Set-Complete
 **nSet=_PickedSet20,
 **referencePoint=_PickedSet19
 *output, type=meshPlot,
-figure=1, create=xyData,  export=True, label=FSP_CMOD_medium_E22000_epsF8e-4_fcu20MPa_nu0_15_mg1_5_m0_6_5_l4mm_BC10mm_thick100mm_allCycles_looseTol_pointLoad, x=Displacement_NotchNew, y=Force_SPnew, f(x)='sum(abs(x[:,:,0]), axis=1)', f(y)='sum(y[:,:,0], axis=1)'
+figure=1, create=xyData, label=FSP_CMOD_medium_E22000_epsF8e-4_fcu20MPa_nu0_15_mg1_5_m0_6_5_l4mm_BC10mm_thick100mm_allCycles_looseTol_pointLoad, x=Displacement_NotchNew, y=Force_SPnew, f(x)='sum(abs(x[:,:,0]), axis=1)', f(y)='sum(y[:,:,0], axis=1)'
 
 
 *output, type=ensight, name=WST_medium_pointload
