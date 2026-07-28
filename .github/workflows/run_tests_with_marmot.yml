@@ -82,7 +82,7 @@ jobs:
         run: |
           # Use github.base_ref (target of PR).
           # If not a PR (like a push to a feature branch), fall back to next_v26.11, the shared
-          # development branch (see CLAUDE.md) - NOT github.ref_name, since the EdelweissFE branch
+          # development branch - NOT github.ref_name, since the EdelweissFE branch
           # name essentially never matches a Marmot branch name, and falling through to Marmot's
           # default branch ("master") silently builds against a stale, possibly API-incompatible
           # Marmot revision.
