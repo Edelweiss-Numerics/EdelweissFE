@@ -26,7 +26,14 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """
-Created on Thu Apr 13 14:08:32 2017
+Records the model time at the end of every increment and writes the collected times to a
+``.csv`` file when the job finishes.
+
+.. code-block:: console
+    :caption: Example:
+
+    *output, type=timemonitor, name=mytimes
+        export=myTimes
 
 @author: Matthias Neuner
 """
@@ -45,7 +52,12 @@ from edelweissfe.utils.plotter import Plotter
 from edelweissfe.utils.schema import schemaField
 
 module = Module(
-    "computetimemonitor", "A simple monitor to observe results (fieldOutputs) in the console during analysis."
+    # This used to read "computetimemonitor" -- a copy-paste from computetimemonitor.py, which
+    # declares a module of that very name with a *different* required-ness for 'export'. Two modules
+    # sharing one name made the grammar depend on import order (getModule returns the first match),
+    # and left 'type=timemonitor' undeclared even though the registry resolves it.
+    "timemonitor",
+    "Writes the model time at the end of each increment to a file.",
 )
 
 inputLanguage = InputLanguage()
@@ -134,18 +146,17 @@ class OutputManager(OutputManagerBase):
     def initializeStep(self, step):
         pass
 
-    def finalizeIncrement(self, U, P, **kwargs):
+    # The three signatures below used to take (U, P), a call convention the solvers and the driver
+    # dropped long ago; every other output manager already matches OutputManagerBase. Nothing could
+    # reach this module while its Module name was shadowed, so the drift went unnoticed.
+    def finalizeIncrement(self, **kwargs):
         self.timeVals.append(self.model.time)
 
     def finalizeFailedIncrement(self, **kwargs):
         pass
 
-    def finalizeStep(self, U, P):
+    def finalizeStep(self):
         pass
 
-    def finalizeJob(
-        self,
-        U,
-        P,
-    ):
+    def finalizeJob(self):
         np.savetxt("{:}.csv".format(self.exportFile), np.asarray(self.timeVals).T)

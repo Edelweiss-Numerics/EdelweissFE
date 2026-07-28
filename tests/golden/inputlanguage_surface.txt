@@ -615,10 +615,17 @@ Module meshplot divided into classes:
   optional arguments
     [filename] Name of the output manager. (<class 'str'>, default = job.sta)
 ===== module documentation: edelweissfe.outputmanagers.timemonitor =====
-Created on Thu Apr 13 14:08:32 2017
+Records the model time at the end of every increment and writes the collected times to a
+``.csv`` file when the job finishes.
+
+.. code-block:: console
+    :caption: Example:
+
+    *output, type=timemonitor, name=mytimes
+        export=myTimes
 
 @author: Matthias Neuner
-[computetimemonitor] A simple monitor to observe results (fieldOutputs) in the console during analysis.
+[timemonitor] Writes the model time at the end of each increment to a file.
   required arguments
     [export] Provide a filename to export the results. (<class 'str'>)
 ===== module documentation: edelweissfe.sections.plane =====
