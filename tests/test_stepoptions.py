@@ -36,6 +36,12 @@ With the redundant mechanism deleted, the invariant is load-bearing on its own, 
 here rather than left to reviewers: one test pins the ``None`` defaults, one pins that
 ``registerOptionsArg`` is the only registrar (a future call site adding an arg directly would bypass
 the ``None``), and one pins that the documentation-only default does not leak into the runtime one.
+
+P3(c) moved the strip itself from ``getOptionsOfCategory`` into the ``options`` step action's L4
+seam, so that the container stores what a consumer receives rather than a parser dict to be
+re-stripped on every query. Two further tests cover that seam: one that it keeps only what the user
+set, and one that a later step's block *replaces* its category's options instead of merging into
+them -- the one behaviour that stopped being implied by the mechanism and had to become explicit.
 """
 
 import subprocess
@@ -44,8 +50,8 @@ from pathlib import Path
 
 import pytest
 
+from edelweissfe.stepactions.options import StepAction as OptionsStepAction
 from edelweissfe.stepactions.options import getOptionsOfCategory
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -114,44 +120,71 @@ def test_documented_default_is_rendered_but_does_not_change_the_runtime_default(
     assert byName["linsolver"] == ("None", "'pardiso'")
 
 
-def test_getOptionsOfCategory_strips_parser_bookkeeping_and_unset_options():
-    """Consumers get the user's entries only -- no ``None``s, no parser internals, no category tag."""
+#: A parsed ``>>options, category=NISTSolver, defaultMaxIter=25`` block, as the parser hands it over:
+#: every arg any module registered on the shared keyword is present, ``None`` where unset, plus the
+#: parser's own bookkeeping keys.
+_PARSED_OPTIONS_BLOCK = {
+    "category": "NISTSolver",
+    "defaultMaxIter": "25",
+    "linsolver": None,
+    "inputFile": "/some/path/test.inp",
+    "datalines": [],
+    "explicitlySetArgs": {"defaultmaxiter"},
+}
 
-    class _FakeOptionsAction:
-        def __init__(self, options):
-            self.options = CaseInsensitiveDict(options)
 
-    actions = {
-        "options": {
-            "someName": _FakeOptionsAction(
-                {
-                    "category": "NISTSolver",
-                    "defaultMaxIter": "25",
-                    "linsolver": None,
-                    "inputFile": "/some/path/test.inp",
-                    "datalines": [],
-                    "explicitlySetArgs": {"defaultmaxiter"},
-                }
-            )
-        }
-    }
+def _optionsAction(name, definition):
+    """Build a real ``options`` step action from a parsed block, through the L4 seam."""
 
-    options = getOptionsOfCategory(actions, "nistsolver")
+    return OptionsStepAction.fromStepActionDefinition(name, definition, None, None, None, None)
+
+
+def test_parsed_options_block_keeps_only_what_the_user_set():
+    """Consumers get the user's entries only -- no ``None``s, no parser internals, no category tag.
+
+    The stripping is asserted on the L4 seam rather than on ``getOptionsOfCategory``, because that is
+    where it moved in P3(c): the container now stores what a consumer receives. Note that these
+    actions are built with no ``jobInfo``/``model``/``fieldOutputController``/``journal`` at all,
+    which is the property the port bought -- the stand-in class this test used to need existed only
+    because the real one could not be constructed without a parser-shaped dict.
+    """
+
+    options = getOptionsOfCategory(
+        {"options": {"NISTSolver": _optionsAction("NISTSolver", _PARSED_OPTIONS_BLOCK)}}, "nistsolver"
+    )
 
     # a CaseInsensitiveDict stores its keys casefolded, hence the lookup rather than a dict compare
     assert len(options) == 1
     assert options["defaultMaxIter"] == "25"
 
 
-def test_getOptionsOfCategory_rejects_two_blocks_for_one_category():
-    class _FakeOptionsAction:
-        def __init__(self, options):
-            self.options = CaseInsensitiveDict(options)
+def test_a_later_step_replaces_the_options_of_its_category_rather_than_merging():
+    """An option set in an earlier step and omitted in a later one must not leak into it.
 
+    Pre-port this fell out of the mechanism: ``self.options.update(parsedBlock)`` was handed a
+    mapping carrying *every* declared arg, so an omitted option arrived as ``None`` and was dropped
+    by the read-time strip. Once the strip moves to the seam the mapping is sparse, and a merge would
+    silently carry the earlier value over -- which no simulation test would catch, because the only
+    input that re-declares one category with differing option sets
+    (``testfiles/marmot/IndirectDisplacementControl2``) skips for a missing Marmot material.
+    """
+
+    action = _optionsAction("NISTSolver", _PARSED_OPTIONS_BLOCK)
+    assert getOptionsOfCategory({"options": {"NISTSolver": action}}, "NISTSolver")["defaultMaxIter"] == "25"
+
+    laterStep = dict(_PARSED_OPTIONS_BLOCK, defaultMaxIter=None, linsolver="klu")
+    action.updateStepActionFromDefinition(laterStep, None, None, None, None)
+
+    options = getOptionsOfCategory({"options": {"NISTSolver": action}}, "NISTSolver")
+    assert options["linsolver"] == "klu"
+    assert "defaultMaxIter" not in options
+
+
+def test_getOptionsOfCategory_rejects_two_blocks_for_one_category():
     actions = {
         "options": {
-            "a": _FakeOptionsAction({"category": "NISTSolver"}),
-            "b": _FakeOptionsAction({"category": "nistsolver"}),
+            "a": _optionsAction("a", {"category": "NISTSolver"}),
+            "b": _optionsAction("b", {"category": "nistsolver"}),
         }
     }
 

@@ -117,7 +117,7 @@ def getOptionsOfCategory(stepActions, category: str) -> CaseInsensitiveDict:
         step action of this category is present.
     """
 
-    matches = [action for action in stepActions["options"].values() if strCaseCmp(action.options["category"], category)]
+    matches = [action for action in stepActions["options"].values() if strCaseCmp(action.category, category)]
 
     if len(matches) > 1:
         raise ValueError(f"Multiple 'options' step action definitions for category {category}.")
@@ -125,48 +125,99 @@ def getOptionsOfCategory(stepActions, category: str) -> CaseInsensitiveDict:
     if not matches:
         return CaseInsensitiveDict()
 
-    return CaseInsensitiveDict(
-        {
-            key: value
-            for key, value in withoutParserBookkeepingKeys(matches[0].options).items()
-            if value is not None and not strCaseCmp(key, "category")
-        }
-    )
+    return CaseInsensitiveDict(matches[0].options)
 
 
 class StepAction(StepActionBase):
     """A case insensitive container for storing step options of a category.
 
+    The constructor is typed: it takes the category and a mapping of the options that were actually
+    *set*. Recovering that mapping from a parsed ``>>options`` block -- discarding the parser's own
+    bookkeeping keys, the ``category`` tag, and the ``None`` defaults every foreign module
+    contributes to this shared keyword -- is the job of :meth:`fromStepActionDefinition` below.
+
+    That the recovery lives there and not in :func:`getOptionsOfCategory` is the point of the port.
+    The strip used to happen at *read* time, once per consumer query, which meant a function the
+    solvers call had to know the shape of a parser dict, and a programmatic caller had to hand this
+    class a ``None``-filled mapping to be stripped again later. Now ``options`` holds exactly what a
+    consumer receives, and nothing downstream of the constructor mentions the input file.
+
     Two mechanisms for telling the user's entries apart from the defaults contributed by foreign
     modules used to live side by side here: an ``explicitlySetOptions`` set, fed from the parser's
-    ``explicitlySetArgs``, and :func:`getOptionsOfCategory`'s strip-``None``\\ s. They were developed
-    independently on feat/amr-hanging-nodes and on the step management refactor. ``explicitlySetOptions``
-    is gone: it was written on every update and read by nothing, in EdelweissFE or EdelweissMeshfree,
-    so it protected no consumer. The single surviving mechanism relies on the invariant that every
-    option on the shared keyword defaults to ``None``, which :func:`registerOptionsArg` now guarantees
-    by construction rather than by convention.
+    ``explicitlySetArgs``, and the strip-``None``\\ s. They were developed independently on
+    feat/amr-hanging-nodes and on the step management refactor. ``explicitlySetOptions`` is gone: it
+    was written on every update and read by nothing, in EdelweissFE or EdelweissMeshfree, so it
+    protected no consumer. The single surviving mechanism relies on the invariant that every option
+    on the shared keyword defaults to ``None``, which :func:`registerOptionsArg` guarantees by
+    construction rather than by convention.
+
+    Parameters
+    ----------
+    name
+        The name of this step action. The parser uses the category for it, since the ``options``
+        keyword declares no ``name`` of its own.
+    category
+        The category the options belong to, e.g. ``"NISTSolver"``.
+    options
+        The options set for this category. Only entries a consumer should see -- no ``None``
+        placeholders.
     """
 
-    def __init__(self, name, options, jobInfo, model, fieldOutputController, journal):
+    def __init__(self, name: str, category: str, options: dict):
         self.name = name
+        self.category = category
         self.options = CaseInsensitiveDict(options)
-        self.updateStepAction(options, jobInfo, model, fieldOutputController, journal)
 
-    def updateStepAction(self, options, jobInfo, model, fieldOutputController, journal):
-        self.options.update(options)
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build this container from a parsed ``>>options`` block. See :class:`StepActionBase` for
+        why this is separate from ``__init__``."""
 
-    def __contains__(self, *args):
-        """wrapper method for CaseInsensitiveDict"""
-        return self.options.__contains__(*args)
+        return cls(name, definition["category"], cls._setOptionsFromDefinition(definition))
 
-    def __getitem__(self, *args):
-        """wrapper method for CaseInsensitiveDict"""
-        return self.options.__getitem__(*args)
+    def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
+        """Update from an ``>>options`` block of the same category in a later step."""
 
-    def __setitem__(self, *args):
-        """wrapper method for CaseInsensitiveDict"""
-        self.options.__setitem__(*args)
+        self.updateStepAction(self._setOptionsFromDefinition(definition))
 
-    def get(self, *args):
-        """wrapper method for CaseInsensitiveDict"""
-        return self.options.get(*args)
+    def updateStepAction(self, options: dict):
+        """Replace the options set for this category.
+
+        Parameters
+        ----------
+        options
+            The options now set for this category. Entries set previously and absent here are
+            dropped, i.e. each declaration states the options of its own step in full.
+
+        Notes
+        -----
+        Replacing rather than merging is what the pre-port code did, although it read as a merge:
+        ``self.options.update(...)`` was handed the parser's ``None``-filled mapping, which carries
+        *every* declared arg, so every key was overwritten -- an option set in an earlier step and
+        omitted here became ``None`` and was then dropped by the read-time strip. Merging the
+        stripped mapping instead would silently leak an earlier step's options into this one.
+        """
+
+        self.options = CaseInsensitiveDict(options)
+
+    @staticmethod
+    def _setOptionsFromDefinition(definition: dict) -> dict:
+        """Recover the options a user actually set from a parsed ``>>options`` block.
+
+        Parameters
+        ----------
+        definition
+            The parsed option mapping of one ``>>options`` block.
+
+        Returns
+        -------
+        dict
+            The set options, without the parser's bookkeeping keys, the ``category`` tag, or the
+            ``None`` defaults contributed by every module that registered on this shared keyword.
+        """
+
+        return {
+            key: value
+            for key, value in withoutParserBookkeepingKeys(definition).items()
+            if value is not None and not strCaseCmp(key, "category")
+        }
