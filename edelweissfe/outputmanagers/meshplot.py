@@ -354,7 +354,7 @@ class OutputManager(OutputManagerBase):
             self.plotter.plotXYData(x, y, xyJob["figure"], xyJob["axSpec"], xyJob)
             ax = self.plotter.getAx(xyJob["figure"], xyJob["axSpec"])
             if xyJob["integral"]:
-                integral = np.trapz(y.flatten(), x=x.flatten())
+                integral = np.trapezoid(y.flatten(), x=x.flatten())
                 ax.fill_between(x.flatten(), 0, y.flatten(), color="gray", label=str(integral))
 
         for perNodeJob in self.perNodeJobs:

@@ -184,7 +184,7 @@ class OutputManager(OutputManagerBase):
     def finalizeJob(
         self,
     ):
-        self.fractureEnergy = np.trapz(self.fpF.getResultHistory(), x=self.fpU.getResultHistory()) / self.A
+        self.fractureEnergy = np.trapezoid(self.fpF.getResultHistory(), x=self.fpU.getResultHistory()) / self.A
         self.journal.message(
             "integrated fracture energy: {:3.4f}".format(self.fractureEnergy),
             self.identification,
