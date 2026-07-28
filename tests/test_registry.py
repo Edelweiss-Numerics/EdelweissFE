@@ -380,3 +380,98 @@ def test_schema_is_none_for_a_function_target_rather_than_raising():
 
     assert callable(target) and not isinstance(target, type)
     assert schema is None
+
+
+def test_registering_the_identical_target_twice_is_idempotent():
+    """Tests and repeated imports rely on this, so identity is compared before raising."""
+
+    class _Implementation:
+        pass
+
+    registry.register("registryconflictcategory", "idempotent", _Implementation)
+    registry.register("registryconflictcategory", "idempotent", _Implementation)
+
+    assert registry.lookup("registryconflictcategory", "idempotent")[0] is _Implementation
+
+
+def test_registering_a_different_target_under_a_taken_name_raises_naming_both():
+    class _Incumbent:
+        pass
+
+    class _Newcomer:
+        pass
+
+    registry.register("registryconflictcategory", "contested", _Incumbent)
+
+    with pytest.raises(registry.RegistryConflictError) as excInfo:
+        registry.register("registryconflictcategory", "contested", _Newcomer)
+
+    assert "_Incumbent" in str(excInfo.value) and "_Newcomer" in str(excInfo.value)
+    assert registry.lookup("registryconflictcategory", "contested")[0] is _Incumbent, "unchanged"
+
+    registry.register("registryconflictcategory", "contested", _Newcomer, override=True)
+    assert registry.lookup("registryconflictcategory", "contested")[0] is _Newcomer
+
+
+def test_registering_over_a_builtin_name_raises_without_importing_it():
+    """The core hazard: names are casefolded, so `register("outputmanager", "Ensight", ...)` used to
+    make the built-in `ensight` simply stop existing, with no diagnostic anywhere. Checked against
+    the static table of strings, so it neither imports the built-in nor depends on whether anything
+    resolved it earlier -- collision detection must not itself be import-order dependent."""
+
+    class _Impostor:
+        pass
+
+    with pytest.raises(registry.RegistryConflictError, match="built-in"):
+        registry.register("outputmanager", "Ensight", _Impostor)
+
+    from edelweissfe.outputmanagers.ensight import OutputManager
+
+    assert registry.lookup("outputmanager", "ensight")[0] is OutputManager, "built-in still reachable"
+
+
+def test_two_entry_points_claiming_one_name_raise_rather_than_resolving_arbitrarily():
+    """`entry_points()` has no documented ordering, so returning the first match made the winner
+    depend on installation order and differ between identical environments."""
+    duplicates = [
+        EntryPoint(
+            name="outputmanager.contestedplugin",
+            value=f"{__name__}:_PluginOutputManager",
+            group=registry.ENTRY_POINT_GROUP,
+        ),
+        EntryPoint(
+            name="outputmanager.contestedplugin",
+            value=f"{__name__}:_PluginOutputManagerWithoutSchema",
+            group=registry.ENTRY_POINT_GROUP,
+        ),
+    ]
+
+    with patch.object(registry, "entry_points", return_value=duplicates):
+        with pytest.raises(registry.RegistryConflictError, match="claim the 'outputmanager' name"):
+            registry.lookup("outputmanager", "contestedplugin")
+
+
+def test_an_entry_point_shadowing_a_builtin_name_is_reported_not_silently_ignored():
+    """The mirror image of the `register` hazard: built-ins resolve first, so a plugin claiming a
+    built-in name would never load and its author would get no diagnostic at all."""
+    shadowing = EntryPoint(
+        name="outputmanager.ensight",
+        value=f"{__name__}:_PluginOutputManager",
+        group=registry.ENTRY_POINT_GROUP,
+    )
+
+    with patch.object(registry, "entry_points", return_value=[shadowing]):
+        assert registry._entryPointsShadowingBuiltins() == {
+            "outputmanager.ensight": (
+                "edelweissfe.outputmanagers.ensight:OutputManager",
+                f"{__name__}:_PluginOutputManager",
+            )
+        }
+
+        # The audit runs once per process and may already have run; force it for this assertion.
+        registry._entryPointsAudited = False
+        try:
+            with pytest.raises(registry.RegistryConflictError, match="claim built-in names"):
+                registry._auditEntryPoints()
+        finally:
+            registry._entryPointsAudited = True

@@ -62,9 +62,9 @@ Four properties are load-bearing; the first three are each covered by a dedicate
    13 ``config/*.py`` registries this replaces already did via ``name.lower()``; the lone
    exception, ``config/solvers.py``, is case-sensitive, so solver names becoming case-insensitive
    is this registry's one behavioral change (strictly more permissive -- no existing ``.inp``
-   changes meaning). See rule (c) in ``PLAN_INPUT_SYSTEM.md`` §3, amended to say so. Note the
-   consequence tracked as a P2 deliverable: casefolded keys widen the window for registration
-   collisions, and :func:`register` does not yet detect them.
+   changes meaning). See rule (c) in ``PLAN_INPUT_SYSTEM.md`` §3, amended to say so. Casefolded keys
+   widen the window for registration collisions, which is why every way of claiming a name now
+   raises :class:`RegistryConflictError` instead of silently overwriting -- see that class.
 
 Built-in coverage
 ------------------
@@ -117,6 +117,26 @@ class RegistryLookupError(LookupError):
     ``Exception`` with the message "You tried to find a string similar to ... in an empty list."
     when the candidate list happens to be empty), this always produces a message naming the
     category and, whenever at least one name is registered for it, a "did you mean" suggestion.
+    """
+
+
+class RegistryConflictError(RegistryLookupError):
+    """Raised when two different implementations claim the same ``(category, name)``.
+
+    A :class:`RegistryLookupError` subclass so that a caller guarding a name resolution with
+    ``except RegistryLookupError`` sees a conflict too, rather than having it escape as an unrelated
+    exception type.
+
+    Without this, a collision resolved silently in favour of whichever implementation happened to
+    win: :func:`register` overwrote its predecessor with a bare assignment (so a plugin registering
+    ``"Foo"`` made a built-in ``"foo"`` simply stop existing -- names are casefolded, which widens
+    the hazard but does not create it), and two entry points claiming one name were resolved by
+    taking the *first* match while iterating an unordered
+    :func:`~importlib.metadata.entry_points` result, so the winner was not even reproducible across
+    environments. Both now raise, naming the incumbent and the newcomer.
+
+    Deliberately **not** a conflict: re-registering the identical object under the same name, which
+    is idempotent and which tests rely on. Identity is compared before raising.
     """
 
 
@@ -281,6 +301,16 @@ _resolved: dict[tuple[str, str], tuple[Any, type | None]] = {}
 #: cached result or waits for the lock and then sees it.
 _lock = threading.Lock()
 
+#: Explicit :func:`register` calls: ``(category, name)`` -> ``(target, schema)``. Kept separate from
+#: ``_resolved`` (which also holds lazily-memoized *resolutions*) so that whether a registration
+#: collides does not depend on whether something happened to look the name up first -- i.e. so
+#: collision detection is not itself import-order dependent, which is the pathology this module
+#: exists to remove.
+_registered: dict[tuple[str, str], tuple[Any, type | None]] = {}
+
+#: Whether :func:`_auditEntryPoints` has already run in this process.
+_entryPointsAudited = False
+
 
 def _resolveDottedString(dotted: str) -> Any:
     """Import ``module.path:AttrName`` and return the attribute.
@@ -322,10 +352,75 @@ def _entryPointDottedString(category: str, name: str) -> str | None:
         The dotted string registered by a third party, or ``None`` if none matches.
     """
     wantedName = f"{category}.{name}".casefold()
+    matches = {ep.value for ep in entry_points(group=ENTRY_POINT_GROUP) if ep.name.casefold() == wantedName}
+
+    if len(matches) > 1:
+        # Every match is collected rather than returning the first, because `entry_points()` has no
+        # documented ordering: taking the first made the winner depend on installation order, and
+        # differ between environments with the same packages installed.
+        raise RegistryConflictError(
+            f"Several packages claim the '{category}' name '{name}' via '{ENTRY_POINT_GROUP}' entry "
+            f"points: {', '.join(sorted(matches))}. Uninstall one, or have the packages agree on "
+            "distinct names -- which of them would win is not defined."
+        )
+
+    return matches.pop() if matches else None
+
+
+def _entryPointsShadowingBuiltins() -> dict[str, tuple[str, str]]:
+    """Find entry points claiming a name the built-in table already owns.
+
+    Returns
+    -------
+    dict[str, tuple[str, str]]
+        ``"category.name"`` -> ``(builtinDotted, entryPointDotted)`` for every colliding name.
+    """
+    shadowed = {}
     for ep in entry_points(group=ENTRY_POINT_GROUP):
-        if ep.name.casefold() == wantedName:
-            return ep.value
-    return None
+        category, _, name = ep.name.casefold().rpartition(".")
+        builtinDotted = _BUILTINS.get((category, name))
+        if builtinDotted is not None and builtinDotted != ep.value:
+            shadowed[ep.name] = (builtinDotted, ep.value)
+    return shadowed
+
+
+def _auditEntryPoints() -> None:
+    """Raise if any installed entry point shadows a built-in name.
+
+    :func:`lookup` consults the built-in table *before* entry points, so a third party claiming a
+    built-in name would otherwise be silently ignored -- its implementation never loaded, with no
+    diagnostic anywhere. That is the mirror image of the :func:`register` hazard and just as quiet.
+
+    Run once per process, from the first :func:`lookup` that misses the memo cache, rather than per
+    lookup: the environment does not normally change mid-run, and the audit costs one
+    :func:`~importlib.metadata.entry_points` query (a few milliseconds) that would otherwise be
+    repeated for every distinct name resolved. The consequence is that the audit reflects the
+    environment as of the first lookup; a test that patches ``entry_points`` afterwards still gets
+    correct *per-name* resolution (which re-queries every time, see
+    :func:`_entryPointDottedString`), just no re-audit.
+
+    Raises
+    ------
+    RegistryConflictError
+        If an entry point claims a name owned by the built-in table.
+    """
+    global _entryPointsAudited
+
+    if _entryPointsAudited:
+        return
+    _entryPointsAudited = True
+
+    shadowed = _entryPointsShadowingBuiltins()
+    if shadowed:
+        details = "; ".join(
+            f"'{epName}' is built in as '{builtinDotted}' but an entry point claims it as " f"'{entryPointDotted}'"
+            for epName, (builtinDotted, entryPointDotted) in sorted(shadowed.items())
+        )
+        raise RegistryConflictError(
+            f"Installed '{ENTRY_POINT_GROUP}' entry points claim built-in names, which would be "
+            f"silently ignored because built-ins resolve first: {details}. Rename the entry "
+            "point(s)."
+        )
 
 
 def _availableNames(category: str) -> list[str]:
@@ -350,7 +445,7 @@ def _availableNames(category: str) -> list[str]:
     return sorted(names)
 
 
-def register(category: str, name: str, target: Any, *, schema: type | None = None) -> None:
+def register(category: str, name: str, target: Any, *, schema: type | None = None, override: bool = False) -> None:
     """Manually register an implementation, bypassing both the built-in table and entry points.
 
     This is the seam a plugin (or a test) uses to register an object it already holds a reference
@@ -373,9 +468,40 @@ def register(category: str, name: str, target: Any, *, schema: type | None = Non
         declares its own ``schema`` attribute -- :func:`lookup` picks that up by itself. Pass it
         explicitly only when ``target`` cannot declare it, e.g. a factory callable or a
         dynamically-created class in a test.
+    override
+        Replace an existing claim on ``name`` instead of raising. Deliberately explicit: silently
+        replacing an implementation is how a built-in could stop existing with no diagnostic, so
+        deliberate replacement has to say so.
+
+    Raises
+    ------
+    RegistryConflictError
+        If ``name`` is already claimed in ``category`` -- by the built-in table, or by an earlier
+        :func:`register` call with a *different* target -- and ``override`` is not set.
     """
     key = (category.casefold(), name.casefold())
+
     with _lock:
+        if not override:
+            previous = _registered.get(key)
+            if previous is not None and (previous[0] is not target or previous[1] is not schema):
+                raise RegistryConflictError(
+                    f"The '{category}' name '{name}' is already registered to {previous[0]!r}; "
+                    f"refusing to replace it with {target!r}. Pass override=True to replace it "
+                    "deliberately."
+                )
+
+            # Checked against the *table of strings*, so this neither imports the built-in nor
+            # depends on whether anything resolved it earlier.
+            builtinDotted = _BUILTINS.get(key)
+            if builtinDotted is not None and previous is None:
+                raise RegistryConflictError(
+                    f"'{name}' is a built-in '{category}' implementation ('{builtinDotted}'); "
+                    f"registering {target!r} under that name would make the built-in unreachable. "
+                    "Choose a different name, or pass override=True to shadow it deliberately."
+                )
+
+        _registered[key] = (target, schema)
         _resolved[key] = (target, schema)
 
 
@@ -415,6 +541,9 @@ def lookup(category: str, name: str) -> tuple[Any, type | None]:
     ------
     RegistryLookupError
         If no implementation is registered for ``(category, name)``.
+    RegistryConflictError
+        If two implementations claim ``(category, name)`` -- two entry points, or an entry point
+        against a built-in (see :func:`_auditEntryPoints`).
     """
     key = (category.casefold(), name.casefold())
 
@@ -426,6 +555,8 @@ def lookup(category: str, name: str) -> tuple[Any, type | None]:
         cached = _resolved.get(key)
         if cached is not None:
             return cached
+
+        _auditEntryPoints()
 
         dotted = _BUILTINS.get(key)
         if dotted is None:
