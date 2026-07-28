@@ -816,7 +816,8 @@ class OutputManager(OutputManagerBase):
 
         # configuration keyword should only be allowed once
         for configuration in configurations:
-            self.intermediateSaveInterval = configuration["intermediateSaveInterval"]
+            val = configuration["intermediateSaveInterval"]
+            self.intermediateSaveInterval = int(val) if val is not None else None
             transient = configuration["transient"]
             self.overwrite = configuration["overwrite"]
 

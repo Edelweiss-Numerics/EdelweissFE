@@ -126,6 +126,14 @@ def createFieldOutputFromInputFile(inputfile: dict, model: FEModel, journal: Jou
                         f"result={definition['result']!r}."
                     )
 
+                if definition["rigidBody"] not in model.rigidBodies:
+                    raise Exception(
+                        f"During parsing of keyword {keywordIdentifier}fieldOutput "
+                        f"({moduleLevelKeywordIdentifier}perNode) '{definition['name']}': rigidBody "
+                        f"'{definition['rigidBody']}' is not defined. Available rigid bodies: "
+                        f"{list(model.rigidBodies.keys())}."
+                    )
+
                 fieldOutputController.addRigidBodyFieldOutput(
                     name=definition["name"],
                     rigidBody=model.rigidBodies[definition["rigidBody"]],
