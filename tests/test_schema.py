@@ -46,8 +46,11 @@ from edelweissfe.utils.schema import (
     fieldSchemaMeta,
     optionNames,
     resolveCaseInsensitiveOptions,
+    scalarOptionNames,
     schemaField,
     schemaFields,
+    subKeywordField,
+    subKeywordFieldNames,
 )
 
 
@@ -280,3 +283,161 @@ def test_an_explicit_none_falls_back_to_the_field_default():
     # mask a typo.
     with pytest.raises(ValueError, match="not a valid option"):
         buildSchemaFromOptions(_Schema, {"exprot": None})
+
+
+# --- nested >> sub-keyword blocks ----------------------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class _BlockSchema:
+    """One repeatable sub-keyword block."""
+
+    fieldOutput: str | None = schemaField(description="A field output.", dtype=str, default=None, required=True)
+
+
+@dataclasses.dataclass(frozen=True)
+class _NestedSchema:
+    """A schema mixing a scalar option with repeatable and renamed sub-keyword blocks, mirroring
+    ensight's ``>>perNode`` / ``>>configuration`` shape."""
+
+    label: str = schemaField(description="A label.", dtype=str, default="unnamed")
+    perNode: tuple[_BlockSchema, ...] = subKeywordField(description="Per-node blocks.", schema=_BlockSchema)
+    configurations: tuple[_BlockSchema, ...] = subKeywordField(
+        description="Configuration blocks.", schema=_BlockSchema, optionName="configuration"
+    )
+
+
+def test_sub_keyword_blocks_are_built_in_file_order():
+    built = buildSchemaFromOptions(
+        _NestedSchema,
+        {"label": "myExport"},
+        {"perNode": [{"fieldOutput": "Displacement"}, {"fieldOutput": "Temperature"}]},
+    )
+
+    assert built.label == "myExport"
+    assert [block.fieldOutput for block in built.perNode] == ["Displacement", "Temperature"]
+    assert isinstance(built.perNode, tuple), "must be immutable, so the enclosing frozen schema is"
+    assert built.configurations == (), "a block kind that was not supplied defaults to empty"
+
+
+def test_sub_keyword_blocks_are_matched_case_insensitively_and_by_option_name():
+    """The parser stores the sub-keyword name exactly as the user wrote it, so the fold happens
+    here. `configurations` answers to the declared option name `configuration`, not its field name.
+    """
+    built = buildSchemaFromOptions(_NestedSchema, {}, {"PERNODE": [{"fieldOutput": "U"}]})
+    assert [block.fieldOutput for block in built.perNode] == ["U"]
+
+    built = buildSchemaFromOptions(_NestedSchema, {}, {"configuration": [{"fieldOutput": "U"}]})
+    assert [block.fieldOutput for block in built.configurations] == ["U"]
+
+    with pytest.raises(ValueError, match="not a valid sub-keyword"):
+        buildSchemaFromOptions(_NestedSchema, {}, {"configurations": [{"fieldOutput": "U"}]})
+
+
+def test_a_sub_keyword_is_not_reachable_as_a_scalar_option():
+    """Writing `perNode=1` as a plain option must be rejected -- with an error that explains the
+    remedy rather than offering `perNode` as a spelling suggestion."""
+    with pytest.raises(ValueError, match=r"is a sub-keyword .*>>perNode"):
+        buildSchemaFromOptions(_NestedSchema, {"perNode": "1"})
+
+
+def test_an_unknown_sub_keyword_is_rejected_rather_than_silently_dropped():
+    with pytest.raises(ValueError, match="not a valid sub-keyword"):
+        buildSchemaFromOptions(_NestedSchema, {}, {"perFace": [{"fieldOutput": "U"}]})
+
+
+def test_a_validation_error_inside_a_block_names_the_sub_keyword():
+    with pytest.raises(ValueError, match=r"In sub-keyword 'perNode'.*fieldOutput"):
+        buildSchemaFromOptions(_NestedSchema, {}, {"perNode": [{}]})
+
+
+def test_a_required_sub_keyword_must_appear_at_least_once():
+    @dataclasses.dataclass(frozen=True)
+    class _RequiresBlock:
+        marker: tuple[_BlockSchema, ...] = subKeywordField(
+            description="At least one is required.", schema=_BlockSchema, required=True
+        )
+
+    with pytest.raises(ValueError, match="marker"):
+        buildSchemaFromOptions(_RequiresBlock, {}, {})
+
+    # An empty list is treated as "not supplied", not as "supplied with zero blocks".
+    with pytest.raises(ValueError, match="marker"):
+        buildSchemaFromOptions(_RequiresBlock, {}, {"marker": []})
+
+    built = buildSchemaFromOptions(_RequiresBlock, {}, {"marker": [{"fieldOutput": "U"}]})
+    assert len(built.marker) == 1
+
+
+def test_scalar_and_sub_keyword_names_are_partitioned():
+    assert list(scalarOptionNames(_NestedSchema)) == ["label"]
+    assert list(subKeywordFieldNames(_NestedSchema)) == ["perNode", "configuration"]
+
+
+# --- ensight: the first real user of subKeywordField ---------------------------------------------
+
+
+def test_ensight_schema_is_buildable_from_the_parser_shaped_module_options():
+    """End-to-end over the real ensight schema, from the shape the ``.inp`` parser produces for::
+
+    *output, type=ensight, name=myExport
+    >>perNode,    fieldOutput=Displacement
+    >>perElement, fieldOutput=Stress
+    >>perElement, fieldOutput=Strain
+    >>configuration, overwrite=yes
+    """
+    from edelweissfe.outputmanagers.ensight import EnsightSchema
+
+    built = buildSchemaFromOptions(
+        EnsightSchema,
+        {},
+        {
+            "perNode": [{"fieldOutput": "Displacement"}],
+            "perElement": [{"fieldOutput": "Stress"}, {"fieldOutput": "Strain"}],
+            "configuration": [
+                {"overwrite": "yes", "intermediateSaveInterval": 10, "elSet": None, "nSet": None, "transient": True}
+            ],
+        },
+    )
+
+    assert [b.fieldOutput for b in built.perNode] == ["Displacement"]
+    assert [b.fieldOutput for b in built.perElement] == ["Stress", "Strain"]
+    assert len(built.configurations) == 1
+    assert built.configurations[0].overwrite is True
+    # elSet/nSet arrive as explicit Nones from the parser's default-filling and must stay None
+    # rather than becoming the string "None".
+    assert built.configurations[0].elSet is None
+    assert built.configurations[0].nSet is None
+
+
+def test_ensight_configuration_defaults_are_the_declared_ones():
+    """Pins the defaults that apply when no ``>>configuration`` block is given at all -- the branch
+    that used to be read out of the ``Module`` declaration, and which no simulation test covers
+    (the one input without ``overwrite=`` is not named ``test.inp``, so it is never run)."""
+    from edelweissfe.outputmanagers.ensight import EnsightConfigurationSchema
+
+    defaults = EnsightConfigurationSchema()
+    assert defaults.overwrite is False, "False means the export directory gets a timestamp suffix"
+    assert defaults.intermediateSaveInterval == 10
+    assert defaults.transient is True
+    assert defaults.elSet is None and defaults.nSet is None
+
+
+def test_ensight_schema_is_constructible_with_no_arguments_and_no_input_language():
+    """The L1 constructor default `configuration=EnsightSchema()` must not require the parser."""
+    from edelweissfe.outputmanagers.ensight import EnsightSchema, OutputManager
+
+    assert EnsightSchema() == EnsightSchema(perNode=(), perElement=(), configurations=())
+    assert OutputManager.schema is EnsightSchema
+
+
+def test_parser_bookkeeping_keys_are_stripped_from_sub_keyword_blocks():
+    """The parser injects `inputFile` into every `>>` block (and `datalines`/`explicitlySetArgs`
+    into some), which are not user-facing options. Forgetting to strip them makes every ensight
+    input fail validation, so this is pinned directly."""
+    from edelweissfe.utils.misc import withoutParserBookkeeping
+
+    stripped = withoutParserBookkeeping(
+        [{"fieldOutput": "U", "inputFile": "/some/path/test.inp", "datalines": [], "explicitlySetArgs": {"x"}}]
+    )
+    assert stripped == [{"fieldOutput": "U"}]

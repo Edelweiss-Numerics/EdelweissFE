@@ -48,6 +48,7 @@ import pytest
 
 from edelweissfe.config import registry
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
+from edelweissfe.utils.schema import schemaOf
 
 
 class _PluginSchema:
@@ -168,7 +169,11 @@ def test_builtin_lookup_resolves_without_any_entry_point_metadata():
     from edelweissfe.outputmanagers.ensight import OutputManager
 
     assert target is OutputManager
-    assert schema is None
+    # What this test is about is the *target* resolving off the static table. The schema is asserted
+    # against what the class itself declares rather than against a literal, so that porting a module
+    # to L1/L2 (which gives it a non-None schema) cannot fail this test as a side effect -- the
+    # contract "the registry hands out exactly the schema the class declares" holds either way.
+    assert schema is schemaOf(OutputManager)
 
 
 @pytest.mark.parametrize(
@@ -188,7 +193,9 @@ def test_builtin_lookup_matches_direct_import(category, name, moduleName, attrNa
     expected = getattr(importlib.import_module(moduleName), attrName)
     target, schema = registry.lookup(category, name)
     assert target is expected
-    assert schema is None
+    # As above: pinned to the class's own declaration, not to a literal None, so this stays true as
+    # categories are ported. `schema is None` is still what it asserts for the unported ones.
+    assert schema is schemaOf(expected)
 
 
 def test_case_insensitive_lookup():

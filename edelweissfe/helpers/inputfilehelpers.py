@@ -55,6 +55,7 @@ from edelweissfe.utils.misc import (
     isInteger,
     strCaseCmp,
     strToRange,
+    withoutParserBookkeeping,
 )
 from edelweissfe.utils.plotter import Plotter
 from edelweissfe.utils.schema import buildSchemaFromOptions
@@ -473,15 +474,21 @@ def createOutputManagersFromInputFile(
             # converted (P2) -- at which point the legacy path below, `moduleOptions`, and
             # `getOutputManagerFactoryByName` all go with it.
             #
-            # `moduleOptions` is deliberately not forwarded: only ensight ever read it, and a
-            # converted module takes its options through `configuration` instead.
+            # `moduleOptions` carries the nested `>>` sub-keyword blocks (ensight's `>>perNode`,
+            # `>>perElement`, `>>configuration`). It is forwarded as the schema's sub-keyword source;
+            # for a schema that declares no sub-keyword fields it is `{}`, and a stray block under
+            # such a keyword is rejected by `buildSchemaFromOptions` rather than silently dropped.
             module = inputLanguage["output"].getModule(outputManagerType)
 
             for optionsForOneManager in [datalines] if len(datalines) == 0 else datalines:
                 args, kwargs = module.parseDatalines(optionsForOneManager)
 
                 try:
-                    configuration = buildSchemaFromOptions(outputManagerSchema, kwargs)
+                    configuration = buildSchemaFromOptions(
+                        outputManagerSchema,
+                        kwargs,
+                        {name: withoutParserBookkeeping(blocks) for name, blocks in moduleOptions.items()},
+                    )
                 except ValueError as e:
                     raise ValueError(
                         f"Error during parsing of keyword {keywordIdentifier}output "

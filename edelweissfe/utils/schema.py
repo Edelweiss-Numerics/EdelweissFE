@@ -98,12 +98,17 @@ class SchemaFieldMeta:
         result-transforming expression accepted by several output managers) and ``f_export(x)`` are
         the real cases. Rather than renaming user-facing options, which would break every existing
         ``.inp`` file, a field may declare the spelling it answers to.
+    subSchema
+        For a field representing a *sub-keyword block* rather than a scalar option: the schema
+        dataclass describing one such block. ``None`` (the common case) marks an ordinary scalar
+        option. See :func:`subKeywordField`.
     """
 
     description: str
     dtype: type
     required: bool = False
     optionName: str | None = None
+    subSchema: type | None = None
 
 
 def schemaField(
@@ -114,6 +119,7 @@ def schemaField(
     default_factory: Any = MISSING,
     required: bool | None = None,
     optionName: str | None = None,
+    subSchema: type | None = None,
 ) -> dataclasses.Field:
     """Declare one field of an L2 option schema dataclass.
 
@@ -149,6 +155,9 @@ def schemaField(
     optionName
         The name this option is spelled with in the input file, if it cannot be the field name --
         e.g. ``optionName="f(x)"`` on a field called ``f_x``. See :class:`SchemaFieldMeta`.
+    subSchema
+        Marks this field as a repeatable sub-keyword block described by the given schema. Prefer
+        :func:`subKeywordField`, which sets the remaining arguments consistently.
 
     Returns
     -------
@@ -161,7 +170,13 @@ def schemaField(
     if required is None:
         required = default is MISSING and default_factory is MISSING
 
-    meta = SchemaFieldMeta(description=description, dtype=dtype, required=required, optionName=optionName)
+    meta = SchemaFieldMeta(
+        description=description,
+        dtype=dtype,
+        required=required,
+        optionName=optionName,
+        subSchema=subSchema,
+    )
 
     fieldKwargs: dict[str, Any] = {"metadata": {_METADATA_KEY: meta}}
     if default is not MISSING:
@@ -170,6 +185,64 @@ def schemaField(
         fieldKwargs["default_factory"] = default_factory
 
     return dataclasses.field(**fieldKwargs)
+
+
+def subKeywordField(
+    *,
+    description: str,
+    schema: type,
+    optionName: str | None = None,
+    required: bool = False,
+) -> dataclasses.Field:
+    """Declare one field of an L2 schema as a repeatable *sub-keyword block*.
+
+    Several keywords of the input language are not flat lists of options but carry nested,
+    repeatable blocks introduced by the module-level keyword identifier ``>>``. ``*output,
+    type=ensight`` is the first such case to be ported::
+
+        *output, type=ensight, name=myExport
+        >>perNode,    fieldOutput=Displacement
+        >>perElement, fieldOutput=Stress
+        >>configuration, overwrite=yes
+
+    Each block has its own option set, so the natural L2 representation is a schema per block kind
+    plus, on the enclosing schema, one field per kind holding a **tuple** of block instances. The
+    tuple (rather than a single instance) is what makes repetition representable, and it is
+    immutable, so it does not compromise the enclosing dataclass's ``frozen=True``.
+
+    The field defaults to the empty tuple, i.e. "no block of this kind was given". A block kind
+    that must appear at least once can say so via ``required=True``.
+
+    This is deliberately generic rather than special-cased for ensight: roughly two dozen modules
+    use ``>>`` sub-keywords today (all of ``sections/``, thirteen ``stepactions/``,
+    ``utils/fieldoutput.py``, ``modelmodifiers/adaptivity/hadaptivity.py``), so P4 needs exactly
+    this mechanism.
+
+    Parameters
+    ----------
+    description
+        Human-readable description of the block kind.
+    schema
+        The schema dataclass describing the options of a single block.
+    optionName
+        The name the sub-keyword is spelled with in the input file, if it differs from the field
+        name -- e.g. a field ``configurations`` answering to ``>>configuration``.
+    required
+        Whether at least one block of this kind must be supplied.
+
+    Returns
+    -------
+    dataclasses.Field
+        A field descriptor suitable as a dataclass class-body value.
+    """
+    return schemaField(
+        description=description,
+        dtype=tuple,
+        default=(),
+        required=required,
+        optionName=optionName,
+        subSchema=schema,
+    )
 
 
 def fieldSchemaMeta(field: dataclasses.Field) -> SchemaFieldMeta:
@@ -234,6 +307,51 @@ def optionNames(schemaCls: type) -> dict[str, dataclasses.Field]:
     """
     fields = dataclasses.fields(schemaCls)
     return {(fieldSchemaMeta(field).optionName or field.name): field for field in fields}
+
+
+def scalarOptionNames(schemaCls: type) -> dict[str, dataclasses.Field]:
+    """Like :func:`optionNames`, but restricted to ordinary scalar options.
+
+    Fields declared via :func:`subKeywordField` are excluded: they are filled from nested ``>>``
+    blocks, not from the keyword's own option assignments, and must therefore not be reachable as
+    a plain ``name=value`` pair (writing ``perNode=1`` on an ensight dataline is an error, not a
+    way to populate the ``perNode`` blocks).
+
+    Parameters
+    ----------
+    schemaCls
+        A frozen dataclass whose fields were declared via :func:`schemaField`.
+
+    Returns
+    -------
+    dict[str, dataclasses.Field]
+        Mapping of user-facing option name to its field, in declaration order.
+    """
+    return {
+        optionName: field
+        for optionName, field in optionNames(schemaCls).items()
+        if fieldSchemaMeta(field).subSchema is None
+    }
+
+
+def subKeywordFieldNames(schemaCls: type) -> dict[str, dataclasses.Field]:
+    """The inverse of :func:`scalarOptionNames`: only the sub-keyword block fields.
+
+    Parameters
+    ----------
+    schemaCls
+        A frozen dataclass whose fields were declared via :func:`schemaField`.
+
+    Returns
+    -------
+    dict[str, dataclasses.Field]
+        Mapping of user-facing sub-keyword name to its field, in declaration order.
+    """
+    return {
+        optionName: field
+        for optionName, field in optionNames(schemaCls).items()
+        if fieldSchemaMeta(field).subSchema is not None
+    }
 
 
 class OptionSchemaProvider:
@@ -361,13 +479,23 @@ def resolveCaseInsensitiveOptions(schemaCls: type, options: Mapping[str, Any]) -
     ValueError
         If a key in ``options`` does not case-insensitively match any field of ``schemaCls``.
     """
-    fieldNamesByFold = {optionName.casefold(): field.name for optionName, field in optionNames(schemaCls).items()}
+    scalarNames = scalarOptionNames(schemaCls)
+    fieldNamesByFold = {optionName.casefold(): field.name for optionName, field in scalarNames.items()}
+    subKeywordNamesByFold = {name.casefold(): name for name in subKeywordFieldNames(schemaCls)}
 
     resolved: dict[str, Any] = {}
     for key, value in options.items():
         exactName = fieldNamesByFold.get(key.casefold())
         if exactName is None:
-            availableNames = sorted(optionNames(schemaCls))
+            availableNames = sorted(scalarNames)
+            # A sub-keyword name misused as a scalar option is a distinct mistake with a distinct
+            # remedy, so say so instead of offering it as a "did you mean" spelling suggestion.
+            subKeywordName = subKeywordNamesByFold.get(key.casefold())
+            if subKeywordName is not None:
+                raise ValueError(
+                    f"'{key}' is a sub-keyword of {schemaCls.__name__}, not an option: write it on "
+                    f"its own line as '>>{subKeywordName}, ...' rather than as '{key}=...'."
+                )
             hint = ""
             if availableNames:
                 try:
@@ -384,7 +512,11 @@ def resolveCaseInsensitiveOptions(schemaCls: type, options: Mapping[str, Any]) -
     return resolved
 
 
-def buildSchemaFromOptions(schemaCls: type, options: Mapping[str, Any]) -> Any:
+def buildSchemaFromOptions(
+    schemaCls: type,
+    options: Mapping[str, Any],
+    subKeywordOptions: Mapping[str, list] | None = None,
+) -> Any:
     """Build an instance of a schema dataclass from a (possibly mis-cased, string-valued) mapping.
 
     This is the L4-facing counterpart of ``castKwargsValuesAndAddDefaults`` /
@@ -416,6 +548,12 @@ def buildSchemaFromOptions(schemaCls: type, options: Mapping[str, Any]) -> Any:
         A frozen dataclass whose fields were declared via :func:`schemaField`.
     options
         A mapping of (possibly mis-cased) option names to raw (typically string) values.
+    subKeywordOptions
+        For a schema with :func:`subKeywordField` fields: a mapping of sub-keyword name to the list
+        of option mappings for the blocks of that kind, in file order -- exactly the shape the
+        ``.inp`` parser produces as ``moduleOptions``. Each block is built recursively into its own
+        sub-schema instance. Sub-keyword names are matched case-insensitively, like every other
+        name in the input language; the parser stores them as the user wrote them.
 
     Returns
     -------
@@ -426,7 +564,7 @@ def buildSchemaFromOptions(schemaCls: type, options: Mapping[str, Any]) -> Any:
     ------
     ValueError
         If ``options`` contains an unknown key, a value that cannot be coerced, or omits a
-        required field.
+        required field; or if ``subKeywordOptions`` names a sub-keyword the schema does not declare.
     """
     fieldsByName = {field.name: field for field in dataclasses.fields(schemaCls)}
     resolvedOptions = resolveCaseInsensitiveOptions(schemaCls, options)
@@ -438,8 +576,12 @@ def buildSchemaFromOptions(schemaCls: type, options: Mapping[str, Any]) -> Any:
         meta = fieldSchemaMeta(fieldsByName[name])
         kwargs[name] = coerceValue(rawValue, meta.dtype)
 
+    kwargs.update(_buildSubKeywords(schemaCls, subKeywordOptions or {}))
+
     # Reported by input-file option name, not field name, so a user reading the error sees the
     # spelling they are expected to type (they cannot know that `f(x)` is a field called `f_x`).
+    # A required sub-keyword field lands in `kwargs` only when at least one block was supplied,
+    # so the same check covers "at least one >>block of this kind is mandatory".
     missingRequired = [
         optionName
         for optionName, field in optionNames(schemaCls).items()
@@ -449,3 +591,37 @@ def buildSchemaFromOptions(schemaCls: type, options: Mapping[str, Any]) -> Any:
         raise ValueError(f"Missing required option(s) for {schemaCls.__name__}: {', '.join(missingRequired)}.")
 
     return schemaCls(**kwargs)
+
+
+def _buildSubKeywords(schemaCls: type, subKeywordOptions: Mapping[str, list]) -> dict[str, tuple]:
+    """Build the sub-keyword block tuples of ``schemaCls`` from raw per-block option mappings.
+
+    Returns only the fields for which at least one block was supplied, so that an absent block kind
+    falls back to the field's own default (the empty tuple) and is reported as missing if the field
+    was declared ``required=True``.
+    """
+    subKeywordFields = subKeywordFieldNames(schemaCls)
+    if not subKeywordOptions:
+        return {}
+
+    fieldsByFold = {name.casefold(): (name, field) for name, field in subKeywordFields.items()}
+
+    built: dict[str, tuple] = {}
+    for givenName, blocks in subKeywordOptions.items():
+        match = fieldsByFold.get(givenName.casefold())
+        if match is None:
+            available = sorted(subKeywordFields)
+            raise ValueError(
+                f"'{givenName}' is not a valid sub-keyword for {schemaCls.__name__}. "
+                f"Available sub-keywords: {', '.join(available) if available else 'none'}."
+            )
+        canonicalName, field = match
+        if not blocks:
+            continue
+        subSchema = fieldSchemaMeta(field).subSchema
+        try:
+            built[field.name] = tuple(buildSchemaFromOptions(subSchema, block) for block in blocks)
+        except ValueError as e:
+            raise ValueError(f"In sub-keyword '{canonicalName}': " + e.args[0]) from e
+
+    return built
