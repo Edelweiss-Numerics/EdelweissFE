@@ -32,8 +32,8 @@ nY=40
 >>configuration, overwrite=yes
 
 *output, type=meshplot, name=RFPlot
-create=xyData, x=time, y=RFTop, legend=RF
-create=xyData, x=time, y=UTop, legend=U, figure=2
+create=xyData, x=time, y=RFTop, label=RF
+create=xyData, x=time, y=UTop, label=U, figure=2
 
 *step, solver=theSolver
 maxInc=1e-1, minInc=1e-8, maxNumInc=10000, maxIter=25, stepLength=100

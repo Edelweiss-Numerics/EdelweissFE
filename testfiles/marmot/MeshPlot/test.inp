@@ -22,11 +22,11 @@ all
 fieldOutput=ForceTop, f(x)='sum(x[:,1])'
 
 *output, type=meshPlot,
-figure=1, axSpec=211, >>perNode, fieldOutput=alphaDNonlocal
-figure=1, axSpec=212, >>perElement, fieldOutput=omega, f(x)='mean(x, axis=1)'
-figure=2, axSpec=111, >>perNode, fieldOutput=UMag
+figure=1, axSpec=211, create=perNode, fieldOutput=alphaDNonlocal
+figure=1, axSpec=212, create=perElement, fieldOutput=omega, f(x)='mean(x, axis=1)'
+figure=2, axSpec=111, create=perNode, fieldOutput=UMag
 figure=3, axSpec=111, c=red, ls=dashed, create=xyData, x=meanDispLoad, y=sumRFNodes
-figure=4, axpSec=111, create=meshOnly,
+figure=4, axSpec=111, create=meshOnly,
 
 *configurePlots
 figure=1, axSpec=211,

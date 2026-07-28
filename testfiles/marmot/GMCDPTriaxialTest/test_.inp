@@ -51,7 +51,7 @@ bottom
 >>perElement, elSet=all, result=omega, quadraturePoint=0:4, name=omega, f(x)='mean( x[:,:], axis=1) '
 
 *output, type=meshplot, name=RFPlot
-figure=1, axSpec=111, create=xyData, x=time, y=RF, legend=RF
+figure=1, axSpec=111, create=xyData, x=time, y=RF, label=RF
 *output, type=ensight, name=ensightExport
 >>perNode, fieldOutput=displacement
 >>configuration, overwrite=yes

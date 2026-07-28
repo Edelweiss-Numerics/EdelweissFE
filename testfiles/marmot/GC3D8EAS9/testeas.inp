@@ -51,7 +51,7 @@ weak
 >>configuration, overwrite=yes
 
 *output, type=meshplot, name=RFPlot
-figure=1, axSpec=111, create=xyData, x=time, y=RFTop, legend=RF
+figure=1, axSpec=111, create=xyData, x=time, y=RFTop, label=RF
 
 *step, solver=theSolver
 maxInc=1e-1, minInc=1e-8, maxNumInc=10000, maxIter=25, stepLength=100
