@@ -26,13 +26,15 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+from dataclasses import dataclass
+
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.plotter import Plotter
+from edelweissfe.utils.schema import schemaField
 
 """
 Writes a status file during the analysis.
@@ -64,14 +66,18 @@ optional = [kw.name for kw in module.optionalArgs]
 optional += [kw.name for kw in module.optionalKeywords]
 
 
-@caseInsensitiveKwargsChecker(required, optional)
-@castKwargsValuesAndAddDefaults(module)
-def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
-    kwargs = CaseInsensitiveDict(kwargs)
+@dataclass(frozen=True)
+class StatusFileSchema:
+    """L2: the options this output manager accepts, owned by this module and never mutated from
+    outside it.
 
-    filename = kwargs["filename"]
+    Mirrors the ``module.addOptionalArg(...)`` declaration above one-for-one, including the
+    default, and is the schema the L3 registry hands out for ``("outputmanager", "statusfile")``.
+    The two declarations coexist while the migration is in progress; the ``Module`` one goes away
+    with the ``InputLanguage`` singleton in P5.
+    """
 
-    return OutputManager(name, FEModel, fieldOutputController, journal, plotter, filename)
+    filename: str = schemaField(description="Name of the output manager.", dtype=str, default="job.sta")
 
 
 class OutputManager(OutputManagerBase):
@@ -80,9 +86,41 @@ class OutputManager(OutputManagerBase):
     identification = "Statusfile"
     printTemplate = "{:}, {:}: {:}"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter, filename):
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = StatusFileSchema
+
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        fieldOutputController: FieldOutputController,
+        journal: Journal,
+        plotter: Plotter,
+        *,
+        configuration: StatusFileSchema = StatusFileSchema(),
+    ):
+        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement and
+        no ``moduleOptions``. Options arrive as an already-validated, already-typed schema
+        instance, so nothing here coerces strings or inspects dictionaries.
+
+        Parameters
+        ----------
+        name
+            The name of this output manager.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controller instance.
+        journal
+            The journal instance for logging.
+        plotter
+            The plotter instance.
+        configuration
+            The options this output manager accepts; defaults to all-defaults.
+        """
+        self.name = name
         self.journal = journal
-        self.filename = filename
+        self.filename = configuration.filename
         self.statusFileExists = False
 
     # def initializeSimulation(self, model):

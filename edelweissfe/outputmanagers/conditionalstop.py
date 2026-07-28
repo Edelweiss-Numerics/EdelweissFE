@@ -29,15 +29,17 @@
 
 # @author: Matthias Neuner
 
+from dataclasses import dataclass
+
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.exceptions import ConditionalStop
+from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.math import createModelAccessibleFunction
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.plotter import Plotter
+from edelweissfe.utils.schema import schemaField
 
 """
 A conditional stop conditions wenn an expression becomes true.
@@ -70,28 +72,86 @@ optional = [kw.name for kw in module.optionalArgs]
 optional += [kw.name for kw in module.optionalKeywords]
 
 
-@caseInsensitiveKwargsChecker(required, optional)
-@castKwargsValuesAndAddDefaults(module)
-def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
-    kwargs = CaseInsensitiveDict(kwargs)
+@dataclass(frozen=True)
+class ConditionalStopSchema:
+    """L2: the options this output manager accepts, owned by this module and never mutated from
+    outside it.
 
-    stopFunction = createModelAccessibleFunction(
-        kwargs["stop"], FEModel, fieldOutputs=fieldOutputController.fieldOutputs
+    Mirrors the ``module.addRequiredArg(...)`` declaration above one-for-one, and is the schema the
+    L3 registry hands out for ``("outputmanager", "conditionalstop")``. The two declarations coexist
+    while the migration is in progress; the ``Module`` one goes away with the ``InputLanguage``
+    singleton in P5.
+
+    ``stop`` is declared ``required=True`` explicitly, mirroring ``addRequiredArg`` above, but is
+    still given ``default=None`` -- purely so that ``ConditionalStopSchema()`` (the fixed L1
+    constructor-default shape used by every ported output manager) is constructible without an
+    argument at import time. A caller going through the L4 adapter still must supply ``stop``
+    (``buildSchemaFromOptions`` rejects a missing required field regardless of this default); a
+    caller constructing this schema directly with no arguments gets a manager that never stops the
+    analysis -- see :class:`OutputManager`.
+    """
+
+    stop: str | None = schemaField(
+        description="Model accessible function describing the stop condition.",
+        dtype=str,
+        default=None,
+        required=True,
     )
-    return OutputManager(name, FEModel, fieldOutputController, journal, plotter, stopFunction)
 
 
 class OutputManager(OutputManagerBase):
     identification = "ConditionalStop"
     printTemplate = "{:}, {:}: {:}"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter, stopFunction):
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = ConditionalStopSchema
+
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        fieldOutputController: FieldOutputController,
+        journal: Journal,
+        plotter: Plotter,
+        *,
+        configuration: ConditionalStopSchema = ConditionalStopSchema(),
+    ):
+        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement and
+        no ``moduleOptions``. Options arrive as an already-validated, already-typed schema instance,
+        so nothing here coerces strings or inspects dictionaries.
+
+        Building the stop-condition callable from ``configuration.stop`` is domain construction
+        (turning a user-written expression string into a callable that closes over ``model`` and
+        ``fieldOutputController.fieldOutputs``), not option coercion, so it happens here in L1 where
+        those collaborators are available -- exactly as the deleted ``outputManagerFactory`` did.
+
+        Parameters
+        ----------
+        name
+            The name of this output manager.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controller instance.
+        journal
+            The journal instance for logging.
+        plotter
+            The plotter instance.
+        configuration
+            The options this output manager accepts; ``stop`` is required by the input language,
+            but defaults to ``None`` here so that no stop condition is ever triggered.
+        """
+        self.name = name
         self.model = model
         self.journal = journal
         self.monitorJobs = []
         self.fieldOutputController = fieldOutputController
 
-        self.monitorJobs.append(stopFunction)
+        if configuration.stop is not None:
+            stopFunction = createModelAccessibleFunction(
+                configuration.stop, model, fieldOutputs=fieldOutputController.fieldOutputs
+            )
+            self.monitorJobs.append(stopFunction)
 
     def initializeJob(self):
         pass

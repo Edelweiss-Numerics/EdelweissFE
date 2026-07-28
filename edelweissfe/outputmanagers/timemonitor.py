@@ -32,15 +32,17 @@ Created on Thu Apr 13 14:08:32 2017
 """
 
 
+from dataclasses import dataclass
+
 import numpy as np
 
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.plotter import Plotter
+from edelweissfe.utils.schema import schemaField
 
 module = Module(
     "computetimemonitor", "A simple monitor to observe results (fieldOutputs) in the console during analysis."
@@ -63,25 +65,67 @@ optional = [kw.name for kw in module.optionalArgs]
 optional += [kw.name for kw in module.optionalKeywords]
 
 
-@caseInsensitiveKwargsChecker(required, optional)
-@castKwargsValuesAndAddDefaults(module)
-def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
-    kwargs = CaseInsensitiveDict(kwargs)
+@dataclass(frozen=True)
+class TimeMonitorSchema:
+    """L2: the options this output manager accepts, owned by this module and never mutated from
+    outside it.
 
-    filename = kwargs["export"]
+    Mirrors the ``module.addRequiredArg(...)`` declaration above one-for-one. The option itself has
+    no default in the ``Module`` declaration (it is required there), but a default of ``None`` is
+    given here -- with ``required`` forced to ``True`` -- so that ``TimeMonitorSchema()`` remains
+    constructible for the L1 constructor's default argument; the L4 adapter
+    (``buildSchemaFromOptions``) still enforces that an ``.inp`` file supplies ``export``, exactly
+    as ``caseInsensitiveKwargsChecker`` did against the old ``required`` list.
+    """
 
-    return OutputManager(name, FEModel, fieldOutputController, journal, plotter, filename)
+    export: str | None = schemaField(
+        description="Provide a filename to export the results.", dtype=str, default=None, required=True
+    )
 
 
 class OutputManager(OutputManagerBase):
     identification = "TimeMonitor"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter, filename):
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = TimeMonitorSchema
+
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        fieldOutputController: FieldOutputController,
+        journal: Journal,
+        plotter: Plotter,
+        *,
+        configuration: TimeMonitorSchema = TimeMonitorSchema(),
+    ):
+        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement and
+        no ``moduleOptions``. Options arrive as an already-validated, already-typed schema instance,
+        so nothing here coerces strings or inspects dictionaries.
+
+        Parameters
+        ----------
+        name
+            The name of this output manager.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controller instance.
+        journal
+            The journal instance for logging.
+        plotter
+            The plotter instance.
+        configuration
+            The options this output manager accepts; defaults to all-defaults.
+        """
+        self.name = name
         self.journal = journal
         self.monitorJobs = []
         self.model = model
 
-        self.exportFile = filename
+        # old factory read the "export" option into a local variable named "filename"; kept as
+        # self.exportFile for behavioral parity.
+        self.exportFile = configuration.export
         self.timeVals = []
 
     def initializeJob(self):

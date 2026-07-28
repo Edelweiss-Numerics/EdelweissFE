@@ -54,6 +54,31 @@ class _PluginSchema:
     """Stand-in for a third-party package's L2 option schema."""
 
 
+class _PluginOutputManagerWithoutSchema(OutputManagerBase):
+    """A plugin that has not declared an L2 schema, inheriting OptionSchemaProvider's None."""
+
+    def __init__(self, name, definitionLines, model, fieldOutputController, journal, plotter):
+        pass
+
+    def initializeJob(self):
+        pass
+
+    def initializeStep(self, step):
+        pass
+
+    def finalizeIncrement(self, timeStep, **kwargs):
+        pass
+
+    def finalizeFailedIncrement(self, **kwargs):
+        pass
+
+    def finalizeStep(self):
+        pass
+
+    def finalizeJob(self):
+        pass
+
+
 class _PluginOutputManager(OutputManagerBase):
     """Stand-in for an output manager contributed by an external package via an entry point.
 
@@ -313,11 +338,31 @@ def test_schema_reaches_the_caller_through_a_third_party_entry_point():
     assert schema is _PluginSchema
 
 
-def test_schema_is_none_for_a_target_that_declares_none():
-    """The unported majority: an output manager that has not been given an L2 schema yet inherits
-    ``OptionSchemaProvider``'s ``None`` default rather than failing lookup."""
-    _, schema = registry.lookup("outputmanager", "statusfile")
+def test_schema_is_none_for_a_class_that_declares_none():
+    """A class that has not been given an L2 schema inherits ``OptionSchemaProvider``'s ``None``
+    default rather than failing lookup -- which is what lets a base class adopt the mixin before its
+    subclasses are ported.
+
+    Deliberately asserted against a synthetic subclass rather than a real not-yet-ported module:
+    the set of unported modules shrinks with every port, so naming one here would make this test
+    fail as a side effect of unrelated progress (it did exactly that when statusfile was ported).
+    The contract, unlike the module list, is stable.
+    Resolved through an entry point rather than ``register()`` on purpose: ``register()`` writes
+    ``(target, schema)`` straight into the memo cache, so a lookup that hits it never calls
+    ``schemaOf`` at all and the test would prove nothing.
+    """
+    fakeEntryPoint = EntryPoint(
+        name="outputmanager.syntheticpluginwithoutschema",
+        value=f"{__name__}:_PluginOutputManagerWithoutSchema",
+        group=registry.ENTRY_POINT_GROUP,
+    )
+
+    with patch.object(registry, "entry_points", return_value=[fakeEntryPoint]):
+        target, schema = registry.lookup("outputmanager", "syntheticpluginwithoutschema")
+
+    assert target is _PluginOutputManagerWithoutSchema
     assert schema is None
+    assert _PluginOutputManagerWithoutSchema.schema is None, "the inherited default itself"
 
 
 def test_schema_is_none_for_a_function_target_rather_than_raising():
