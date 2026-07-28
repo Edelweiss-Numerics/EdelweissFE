@@ -28,7 +28,6 @@
 
 from edelweissfe.config import registry
 from edelweissfe.config.generators import getGeneratorFunction
-from edelweissfe.config.outputmanagers import getOutputManagerFactoryByName
 from edelweissfe.config.solvers import getSolverByName
 from edelweissfe.generators.abqmodelconstructor import AbqModelConstructor
 from edelweissfe.journal.journal import Journal
@@ -468,99 +467,47 @@ def createOutputManagersFromInputFile(
             )
             continue
 
-        if outputManagerSchema is not None:
-            # L4 adapter over the L3 registry: parse -> validate/coerce into the module's own L2
-            # schema -> call its L1 constructor. Branching on "does this module declare a schema?"
-            # rather than on a hardcoded list of ported modules means this branch needs no
-            # maintenance as the migration proceeds, and disappears once the last output manager is
-            # converted (P2) -- at which point the legacy path below, `moduleOptions`, and
-            # `getOutputManagerFactoryByName` all go with it.
-            #
-            # `moduleOptions` carries the nested `>>` sub-keyword blocks (ensight's `>>perNode`,
-            # `>>perElement`, `>>configuration`). It is forwarded as the schema's sub-keyword source;
-            # for a schema that declares no sub-keyword fields it is `{}`, and a stray block under
-            # such a keyword is rejected by `buildSchemaFromOptions` rather than silently dropped.
-            module = inputLanguage["output"].getModule(outputManagerType)
+        if outputManagerSchema is None:
+            raise ValueError(
+                f"Output manager '{outputManagerType}' declares no option schema. Declare one as a "
+                "`schema` class attribute (see `edelweissfe.utils.schema.OptionSchemaProvider`). The "
+                "pre-schema `outputManagerFactory` protocol was removed once the last built-in output "
+                "manager was ported, so there is no fallback path any more."
+            )
 
-            for optionsForOneManager in [datalines] if len(datalines) == 0 else datalines:
-                args, kwargs = module.parseDatalines(optionsForOneManager)
+        # L4 adapter over the L3 registry: parse -> validate/coerce into the module's own L2 schema
+        # -> call its L1 constructor. `moduleOptions` carries the nested `>>` sub-keyword blocks
+        # (ensight's `>>perNode`, `>>perElement`, `>>configuration`) and is forwarded as the schema's
+        # sub-keyword source; for a schema that declares no sub-keyword fields it is `{}`, and a
+        # stray block under such a keyword is rejected by `buildSchemaFromOptions` rather than
+        # silently dropped.
+        module = inputLanguage["output"].getModule(outputManagerType)
 
-                try:
-                    configuration = buildSchemaFromOptions(
-                        outputManagerSchema,
-                        kwargs,
-                        {name: withoutParserBookkeeping(blocks) for name, blocks in moduleOptions.items()},
-                    )
-                except ValueError as e:
-                    raise ValueError(
-                        f"Error during parsing of keyword {keywordIdentifier}output "
-                        f"(type={outputManagerType}): " + e.args[0]
-                    ) from e
+        for optionsForOneManager in [datalines] if len(datalines) == 0 else datalines:
+            args, kwargs = module.parseDatalines(optionsForOneManager)
 
-                outputManagers.append(
-                    outputManagerClass(
-                        outputManagerName,
-                        model,
-                        fieldOutputController,
-                        journal,
-                        plotter,
-                        configuration=configuration,
-                    )
-                )
-
-            continue
-
-        if len(datalines) == 0:
-            module = inputLanguage["output"].getModule(outputManagerType)
-            args, kwargs = module.parseDatalines(datalines)
-
-            outputManagerFactory = getOutputManagerFactoryByName(outputManagerType)
             try:
-                outputManager = outputManagerFactory(
+                configuration = buildSchemaFromOptions(
+                    outputManagerSchema,
+                    kwargs,
+                    {name: withoutParserBookkeeping(blocks) for name, blocks in moduleOptions.items()},
+                )
+            except ValueError as e:
+                raise ValueError(
+                    f"Error during parsing of keyword {keywordIdentifier}output "
+                    f"(type={outputManagerType}): " + e.args[0]
+                ) from e
+
+            outputManagers.append(
+                outputManagerClass(
                     outputManagerName,
                     model,
                     fieldOutputController,
-                    # args,
-                    moduleOptions,
                     journal,
                     plotter,
-                    **kwargs,
+                    configuration=configuration,
                 )
-            except ValueError as e:
-                e.args = (
-                    f"Error during parsing of keyword {keywordIdentifier}output (type={outputManagerType}): "
-                    + e.args[0],
-                )
-                raise e
-
-            outputManagers.append(outputManager)
-
-        else:
-            for dataline in datalines:
-                module = inputLanguage["output"].getModule(outputManagerType)
-                args, kwargs = module.parseDatalines(dataline)
-
-                outputManagerFactory = getOutputManagerFactoryByName(outputManagerType)
-
-                try:
-                    outputManager = outputManagerFactory(
-                        outputManagerName,
-                        model,
-                        fieldOutputController,
-                        # args,
-                        moduleOptions,
-                        journal,
-                        plotter,
-                        **kwargs,
-                    )
-                except ValueError as e:
-                    e.args = (
-                        f"Error during parsing of keyword {keywordIdentifier}output (type={outputManagerType}): "
-                        + e.args[0],
-                    )
-                    raise e
-
-                outputManagers.append(outputManager)
+            )
 
     return outputManagers
 

@@ -59,8 +59,3 @@ def getOutputManagerClass(name: str) -> type:
 
     module = importlib.import_module("edelweissfe.outputmanagers." + name.lower())
     return module.OutputManager
-
-
-def getOutputManagerFactoryByName(name):
-    module = importlib.import_module("edelweissfe.outputmanagers." + name.lower())
-    return module.outputManagerFactory
