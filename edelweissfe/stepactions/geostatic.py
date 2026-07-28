@@ -63,21 +63,56 @@ for module in modules:
 
 class StepAction(StepActionBase):
     """Initializes elements of set with an Abaqus-like geostatic stress state.
-    Is automatically deactivated at the end of the step."""
+    Is automatically deactivated at the end of the step.
 
-    def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
+    The constructor is typed: it takes the element set itself and the geostatic stress state as
+    plain floats. Nothing here parses an input file -- resolving ``elSet=all`` against the model,
+    and defaulting an omitted ``p2`` to ``p1``, is the job of :meth:`fromStepActionDefinition`
+    below, which is the only part of this module the ``.inp`` front-end needs.
+
+    Parameters
+    ----------
+    name
+        The name of this step action.
+    elementSet
+        The element set the geostatic stress state is applied to.
+    p1
+        sig_x=sig_y=sig_z in the first point.
+    p2
+        sig_x=sig_y=sig_z in the second point.
+    h1
+        y coordinate of the first point.
+    h2
+        y coordinate of the second point.
+    xLateral
+        Ratio of sig_x/sig_y.
+    zLateral
+        Ratio of sig_z/sig_y.
+    journal
+        The journal object for logging.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        elementSet,
+        p1: float,
+        p2: float,
+        h1: float,
+        h2: float,
+        xLateral: float,
+        zLateral: float,
+        journal,
+    ):
         self.name = name
 
-        self.geostaticElements = model.elementSets[action["elSet"]]
-        self.p1 = action["p1"]
-        if action["p2"] is not None:
-            self.p2 = action["p2"]
-        else:
-            self.p2 = action["p1"]
-        self.level1 = action["h1"]
-        self.level2 = action["h2"]
-        self.xLateral = action["xLateral"]
-        self.zLateral = action["zLateral"]
+        self.geostaticElements = elementSet
+        self.p1 = p1
+        self.p2 = p2
+        self.level1 = h1
+        self.level2 = h2
+        self.xLateral = xLateral
+        self.zLateral = zLateral
 
         self.geostaticDefinition = np.array(
             [
@@ -93,6 +128,28 @@ class StepAction(StepActionBase):
         self.journal = journal
 
         self.active = True
+
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build this step action from a parsed ``>>geostatic`` definition. See
+        :class:`StepActionBase` for why this is separate from ``__init__``.
+
+        An omitted ``p2`` defaults to ``p1`` -- this is input-file convenience, so the defaulting
+        happens here rather than in ``__init__``, which requires both to be passed explicitly."""
+
+        p2 = definition["p2"] if definition["p2"] is not None else definition["p1"]
+
+        return cls(
+            name,
+            model.elementSets[definition["elSet"]],
+            definition["p1"],
+            p2,
+            definition["h1"],
+            definition["h2"],
+            definition["xLateral"],
+            definition["zLateral"],
+            journal,
+        )
 
     def applyAtStepEnd(self, model, stepMagnitude=None):
         if not self.active:

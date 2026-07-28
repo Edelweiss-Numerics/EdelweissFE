@@ -56,15 +56,49 @@ for module in modules:
 
 
 class StepAction(StepActionBase):
-    """Set initial conditions to elements."""
+    """Set initial conditions to elements.
 
-    def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
+    The constructor is typed: it takes the element set itself, not its name, and the property
+    values as a ``np.ndarray`` rather than a comma-separated string. ``propertyName`` stays a plain
+    string here -- it is an element-facing identifier (the name ``el.setInitialCondition`` dispatches
+    on), not a serialization of some richer object, so there is nothing for
+    :meth:`fromStepActionDefinition` to translate it into. Nothing here parses an input file --
+    resolving ``elSet=all`` against the model and splitting the comma-separated ``values`` string is
+    the job of :meth:`fromStepActionDefinition` below, which is the only part of this module the
+    ``.inp`` front-end needs.
+
+    Parameters
+    ----------
+    name
+        The name of this step action.
+    elementSet
+        The element set for which the initialization is performed.
+    propertyName
+        The name of the property to be initialized. Named to avoid shadowing the ``property``
+        builtin, which this codebase uses as a decorator throughout.
+    values
+        The property values.
+    """
+
+    def __init__(self, name: str, elementSet, propertyName: str, values: np.ndarray):
         self.name = name
 
-        self.theElements = model.elementSets[action["elSet"]]
-        self.theProperty = action["property"]
-        self.values = np.fromstring(action["values"], dtype=float, sep=",")
+        self.theElements = elementSet
+        self.theProperty = propertyName
+        self.values = values
         self.active = True
+
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build this step action from a parsed ``>>setinitialconditions`` definition. See
+        :class:`StepActionBase` for why this is separate from ``__init__``."""
+
+        return cls(
+            name,
+            model.elementSets[definition["elSet"]],
+            definition["property"],
+            np.fromstring(definition["values"], dtype=float, sep=","),
+        )
 
     def applyAtStepEnd(self, model, stepMagnitude=None):
         self.active = False

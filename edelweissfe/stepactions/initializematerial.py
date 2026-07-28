@@ -54,14 +54,34 @@ for module in modules:
 
 
 class StepAction(StepActionBase):
-    """Initializes materials"""
+    """Initializes materials.
 
-    def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
+    The constructor is typed: it takes the element set itself, not its name. Nothing here parses
+    an input file -- resolving ``elSet=all`` against the model is the job of
+    :meth:`fromStepActionDefinition` below, which is the only part of this module the ``.inp``
+    front-end needs.
+
+    Parameters
+    ----------
+    name
+        The name of this step action.
+    elementSet
+        The element set whose materials are initialized.
+    """
+
+    def __init__(self, name: str, elementSet):
         self.name = name
 
-        self.theElements = model.elementSets[action["elSet"]]
+        self.theElements = elementSet
         self.active = True
         self.emptyDef = np.array([0.0])
+
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build this step action from a parsed ``>>initializematerial`` definition. See
+        :class:`StepActionBase` for why this is separate from ``__init__``."""
+
+        return cls(name, model.elementSets[definition["elSet"]])
 
     def applyAtStepEnd(self, model, stepMagnitude=None):
         self.active = False
