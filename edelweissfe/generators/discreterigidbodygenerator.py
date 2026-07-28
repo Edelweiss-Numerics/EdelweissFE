@@ -396,13 +396,15 @@ def _readGenericSurfaceMesh(filename: str, translation: np.ndarray = None):
     if isinstance(mesh, pv.MultiBlock):
         mesh = mesh.combine()
 
-    points = mesh.points.copy()
-    if translation is not None:
-        points = points + np.asarray(translation)
-    mesh.points = points
-
     surf = mesh.extract_surface()
     surf.compute_normals(cell_normals=True, point_normals=False, inplace=True)
+
+    # points must come from surf, not mesh, since extract_surface() can drop/renumber
+    # points relative to the input mesh - faces below index into surf's point array.
+    points = surf.points.copy()
+    if translation is not None:
+        points = points + np.asarray(translation)
+        surf.points = points
 
     # PyVista renamed PolyData.cells -> PolyData.faces for this flat VTK cell-array representation.
     cells = surf.faces

@@ -708,10 +708,14 @@ def createUnstructuredPartFromRigidBody(bodyName, rigidBody, partID: int):
         The id of this part.
     """
 
-    nodeCounter = 0
-    partNodes = dict()
-    elementDict = dict()
+    # the node list must follow getVisualizationNodes()'s order, since that is the
+    # order in which RigidBodyFieldOutput.getVisualizationField() reports per-node
+    # results - deriving it from the facets instead (e.g. by first-seen order, or
+    # excluding nodes unreferenced by any facet) would misalign or drop entries.
+    visualizationNodes = rigidBody.getVisualizationNodes()
+    nodeIndices = {node: idx for idx, node in enumerate(visualizationNodes)}
 
+    elementDict = dict()
     facets = rigidBody.getVisualizationElements()
 
     facetID = 1
@@ -719,16 +723,10 @@ def createUnstructuredPartFromRigidBody(bodyName, rigidBody, partID: int):
         elShape = facet["type"]
         if elShape not in elementDict:
             elementDict[elShape] = dict()
-        elNodeIndices = []
-        for node in facet["nodes"]:
-            idx = partNodes.setdefault(node, nodeCounter)
-            elNodeIndices.append(idx)
-            if idx == nodeCounter:
-                nodeCounter += 1
-        elementDict[elShape][facetID] = elNodeIndices
+        elementDict[elShape][facetID] = [nodeIndices[node] for node in facet["nodes"]]
         facetID += 1
 
-    return EnsightUnstructuredPart(bodyName, partID, list(partNodes.keys()), elementDict)
+    return EnsightUnstructuredPart(bodyName, partID, visualizationNodes, elementDict)
 
 
 required = [kw.name for kw in module.requiredArgs]
