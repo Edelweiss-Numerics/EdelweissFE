@@ -173,8 +173,20 @@ class EnsightSchema:
     )
 
 
-registerOptionsArg("intermediateSaveInterval", "Set the intermediate save interval for the Ensight export.", float)
-registerOptionsArg("minDTForOutput", "Set the minimum time between two Ensight exports.", float)
+# Unlike a solver option, these two have no default of their own: not writing them leaves whatever the
+# manager was configured with in place, so that -- not the runtime None -- is what the docs must say.
+registerOptionsArg(
+    "intermediateSaveInterval",
+    "Set the intermediate save interval for the Ensight export.",
+    float,
+    documentedDefault="the value set in the '>>configuration' block",
+)
+registerOptionsArg(
+    "minDTForOutput",
+    "Set the minimum time between two Ensight exports.",
+    float,
+    documentedDefault="no minimum",
+)
 
 
 def writeCFloat(f, ndarray):

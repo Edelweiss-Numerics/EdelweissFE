@@ -57,33 +57,6 @@ from edelweissfe.utils.exceptions import (
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
 
-registerOptionsArg("defaultMaxIter", "The default maximum number of iterations.", int)
-registerOptionsArg("defaultCriticalIter", "The default number of critical iterations.", int)
-registerOptionsArg("defaultMaxGrowingIter", "The default number of allowed residual growths.", int)
-registerOptionsArg("extrapolation", "The extrapolation strategy for new increments (off|linear).", str)
-registerOptionsArg(
-    "extrapolateAfterModelChange",
-    "Whether to extrapolate the predictor on the increment FOLLOWING a model change (adaptive mesh "
-    "refinement). Defaults to True, which keeps the previous behaviour; set False to start that "
-    "increment from a zero predictor, avoiding extrapolation of the one-off warm-start/remesh "
-    "settling transient.",
-    bool,
-)
-registerOptionsArg(
-    "equilibrateAfterModelChange",
-    "Whether to insert one constant-load, zero-time re-equilibration increment immediately after an "
-    "adaptive mesh refinement, before advancing the load. Defaults to False. When True, the "
-    "warm-started refined mesh is first settled to equilibrium at the last converged load level (no "
-    "load advance, no Dirichlet increment, zero time increment) so the subsequent load-advancing "
-    "increment starts from an equilibrated state. Intended for softening problems where remeshing "
-    "near the process zone otherwise couples the load advance with the warm-start settling transient "
-    "in one solve. Note: the equilibration solve integrates materials with dT=0, which suits "
-    "rate-independent models; rate-dependent materials see no time advance during it (by design).",
-    bool,
-)
-registerOptionsArg("linsolver", "The linear solver to be used.", str)
-registerOptionsArg("linsolverConfigFile", "A JSON configuration file for the linear solver.", str)
-
 
 class NIST(NonlinearSolverBase):
     """This is the Nonlinear Implicit STatic -- solver.
@@ -863,3 +836,36 @@ class NIST(NonlinearSolverBase):
         PExt, K = self.computeBodyForces(bodyForces, U_np, PExt, K, timeStep)
 
         return PExt, K
+
+
+# Registered *after* the class so that every documented default can be read straight out of
+# SolverSpecificOptions, which is where the value that actually takes effect lives. The runtime
+# default on the shared 'options' step keyword stays None regardless -- see registerOptionsArg.
+for _name, _dataType, _description in [
+    ("defaultMaxIter", int, "The default maximum number of iterations."),
+    ("defaultCriticalIter", int, "The default number of critical iterations."),
+    ("defaultMaxGrowingIter", int, "The default number of allowed residual growths."),
+    ("extrapolation", str, "The extrapolation strategy for new increments (off|linear)."),
+    (
+        "extrapolateAfterModelChange",
+        bool,
+        "Whether to extrapolate the predictor on the increment FOLLOWING a model change (adaptive mesh "
+        "refinement). Set False to start that increment from a zero predictor, avoiding extrapolation of "
+        "the one-off warm-start/remesh settling transient.",
+    ),
+    (
+        "equilibrateAfterModelChange",
+        bool,
+        "Whether to insert one constant-load, zero-time re-equilibration increment immediately after an "
+        "adaptive mesh refinement, before advancing the load. When True, the warm-started refined mesh is "
+        "first settled to equilibrium at the last converged load level (no load advance, no Dirichlet "
+        "increment, zero time increment) so the subsequent load-advancing increment starts from an "
+        "equilibrated state. Intended for softening problems where remeshing near the process zone "
+        "otherwise couples the load advance with the warm-start settling transient in one solve. Note: "
+        "the equilibration solve integrates materials with dT=0, which suits rate-independent models; "
+        "rate-dependent materials see no time advance during it (by design).",
+    ),
+    ("linsolver", str, "The linear solver to be used."),
+    ("linsolverConfigFile", str, "A JSON configuration file for the linear solver."),
+]:
+    registerOptionsArg(_name, _description, _dataType, documentedDefault=NIST.SolverSpecificOptions[_name])

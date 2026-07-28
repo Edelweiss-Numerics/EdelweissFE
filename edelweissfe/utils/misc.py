@@ -454,6 +454,22 @@ def castKwargsValuesAndAddDefaults(module):
 _parserBookkeepingKeys = frozenset({"inputfile", "explicitlysetargs", "datalines"})
 
 
+def withoutParserBookkeepingKeys(block) -> dict:
+    """Strip the parser's own bookkeeping keys from a single option mapping.
+
+    Parameters
+    ----------
+    block
+        One option mapping, as produced by the parser.
+
+    Returns
+    -------
+    dict
+        The same mapping, as a plain dict, without the bookkeeping keys.
+    """
+    return {key: value for key, value in block.items() if key.casefold() not in _parserBookkeepingKeys}
+
+
 def withoutParserBookkeeping(blocks: list) -> list:
     """Strip the parser's own bookkeeping keys from each block of a module-level (``>>``) keyword.
 
@@ -480,6 +496,4 @@ def withoutParserBookkeeping(blocks: list) -> list:
     list
         The same blocks, as plain dicts, without the bookkeeping keys.
     """
-    return [
-        {key: value for key, value in block.items() if key.casefold() not in _parserBookkeepingKeys} for block in blocks
-    ]
+    return [withoutParserBookkeepingKeys(block) for block in blocks]

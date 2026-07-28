@@ -50,10 +50,6 @@ from edelweissfe.utils.exceptions import (
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
 
-registerOptionsArg("runge-kutta-stages", "The number of Runge-Kutta stages.", int)
-registerOptionsArg("runge-kutta-error-tolerance", "The error tolerance for the Runge-Kutta error control.", float)
-registerOptionsArg("runge-kutta-error-control", "Activate the Runge-Kutta error control (on|off).", str)
-
 
 def getRungeKuttaParameters(rungeKuttaStages: int) -> tuple[dict, dict, dict]:
 
@@ -502,3 +498,14 @@ class NEST(NIST):
             beta = max(0.1, min(np.sqrt(self.tol / (normErr + 1e-15)) * 0.9, 2))
 
         return U_np, dU, P, beta
+
+
+# Registered *after* the class so that every documented default can be read straight out of
+# SolverSpecificOptions, which is where the value that actually takes effect lives. The runtime
+# default on the shared 'options' step keyword stays None regardless -- see registerOptionsArg.
+for _name, _dataType, _description in [
+    ("runge-kutta-stages", int, "The number of Runge-Kutta stages."),
+    ("runge-kutta-error-tolerance", float, "The error tolerance for the Runge-Kutta error control."),
+    ("runge-kutta-error-control", str, "Activate the Runge-Kutta error control (on|off)."),
+]:
+    registerOptionsArg(_name, _description, _dataType, documentedDefault=NEST.SolverSpecificOptions[_name])

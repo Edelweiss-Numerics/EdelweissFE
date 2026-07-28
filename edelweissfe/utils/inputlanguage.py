@@ -45,6 +45,10 @@ indent2 = " " * 4
 indent3 = " " * 6
 indent4 = " " * 8
 
+#: Marks "no documentation-only default was supplied" on :class:`OptionalKeywordArg`. A plain ``None``
+#: would not do: ``None``, ``0`` and ``False`` are all legitimate documented defaults.
+_noDocumentedDefault = object()
+
 
 def singleton(class_):
     """class decorated with this function will only be instantiated once"""
@@ -233,8 +237,10 @@ class InputFileKeyword:
 
         return arg
 
-    def addOptionalArg(self, name: str, description: str, dataType: type, defaultValue):
-        arg = OptionalKeywordArg(name, description, dataType, default=defaultValue)
+    def addOptionalArg(
+        self, name: str, description: str, dataType: type, defaultValue, documentedDefault=_noDocumentedDefault
+    ):
+        arg = OptionalKeywordArg(name, description, dataType, default=defaultValue, documentedDefault=documentedDefault)
         self.optionalArgs.append(arg)
 
         return arg
@@ -333,8 +339,10 @@ class Module:
 
         return arg
 
-    def addOptionalArg(self, name: str, description: str, dataType: type, defaultValue):
-        arg = OptionalKeywordArg(name, description, dataType, default=defaultValue)
+    def addOptionalArg(
+        self, name: str, description: str, dataType: type, defaultValue, documentedDefault=_noDocumentedDefault
+    ):
+        arg = OptionalKeywordArg(name, description, dataType, default=defaultValue, documentedDefault=documentedDefault)
         self.optionalArgs.append(arg)
 
         self.expectsOptionalDatalines = True
@@ -485,8 +493,17 @@ class KeywordArg:
 
 
 class OptionalKeywordArg(KeywordArg):
-    def __init__(self, name: str, description: str, dtype: type, default):
+    def __init__(self, name: str, description: str, dtype: type, default, documentedDefault=_noDocumentedDefault):
         self.default = default
+
+        #: What the generated documentation shows as this option's default. Equals ``default`` unless a
+        #: caller deliberately separates the two, which only the shared ``options`` step keyword does:
+        #: there the *runtime* default must be ``None`` so that
+        #: :func:`~edelweissfe.stepactions.options.getOptionsOfCategory` can strip the options the user
+        #: did not write, while the value that actually takes effect lives in the consuming module (e.g.
+        #: a solver's ``SolverSpecificOptions``) and is what a reader of the docs needs to see.
+        self.documentedDefault = default if documentedDefault is _noDocumentedDefault else documentedDefault
+
         super().__init__(name, description, dtype)
 
         return
@@ -498,7 +515,7 @@ class OptionalKeywordArg(KeywordArg):
             return self.default
 
     def __doc__(self) -> str:
-        return self.__repr__() + " " + self.description + " " + f"({self.dtype}, default = {self.default})"
+        return self.__repr__() + " " + self.description + " " + f"({self.dtype}, default = {self.documentedDefault})"
 
 
 class ModuleKeywordArg:

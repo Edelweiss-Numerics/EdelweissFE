@@ -42,7 +42,7 @@ category via :func:`getOptionsOfCategory`.
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
-from edelweissfe.utils.misc import strCaseCmp
+from edelweissfe.utils.misc import strCaseCmp, withoutParserBookkeepingKeys
 
 inputLanguage = InputLanguage()
 
@@ -62,12 +62,18 @@ for module in modules:
     documentation.append(kw)
 
 
-def registerOptionsArg(name: str, description: str, dataType: type):
+def registerOptionsArg(name: str, description: str, dataType: type, documentedDefault=None):
     """Register an available option on the ``options`` keyword of all step types.
 
-    The default value is always None, which marks the option as not specified by
+    The runtime default is always None, which marks the option as not specified by
     the user; :func:`getOptionsOfCategory` strips unspecified options, such that
     consumers receive only the options which were actually defined in the input file.
+
+    This function is the *only* way anything is registered on the shared ``options`` keyword
+    (asserted by ``tests/test_stepoptions.py``), which is what turns that "always None" into a
+    structural guarantee rather than a convention every future caller has to remember: the
+    strip-``None``\\ s rule above is only correct while no option on this keyword carries a real
+    default, and a caller cannot supply one here.
 
     Parameters
     ----------
@@ -77,13 +83,21 @@ def registerOptionsArg(name: str, description: str, dataType: type):
         The description of the option.
     dataType
         The data type of the option.
+    documentedDefault
+        The default to *show in the generated documentation*, i.e. the value that takes effect when
+        the user does not write this option. It lives in the consuming module (a solver's
+        ``SolverSpecificOptions``, say), not here, so it cannot be derived -- pass it explicitly, or
+        the docs will claim the option defaults to None. Documentation only: it deliberately does not
+        touch the registered arg's runtime default.
     """
 
     if "step" not in inputLanguage:
         return
 
     for stepModule in inputLanguage["step"].modules:
-        stepModule.getKeyword("options").addOptionalArg(name, description, dataType, None)
+        stepModule.getKeyword("options").addOptionalArg(
+            name, description, dataType, None, documentedDefault=documentedDefault
+        )
 
 
 def getOptionsOfCategory(stepActions, category: str) -> CaseInsensitiveDict:
@@ -114,37 +128,32 @@ def getOptionsOfCategory(stepActions, category: str) -> CaseInsensitiveDict:
     return CaseInsensitiveDict(
         {
             key: value
-            for key, value in matches[0].options.items()
+            for key, value in withoutParserBookkeepingKeys(matches[0].options).items()
             if value is not None and not strCaseCmp(key, "category")
         }
     )
 
 
 class StepAction(StepActionBase):
-    """A case insensitive container for storing step options of a category."""
+    """A case insensitive container for storing step options of a category.
 
-    #: The casefolded names of those options the user actually assigned in the input file. Since every
-    #: module registers its optional args on this shared keyword, the parser additionally fills in the
-    #: defaults of all foreign modules; consumers should restrict themselves to this subset in order to
-    #: not override settings made elsewhere (e.g. in a solver's own datalines).
-    #:
-    #: Redundant with :func:`getOptionsOfCategory`, which achieves the same by requiring every option
-    #: registered via :func:`registerOptionsArg` to default to None and stripping those. Both
-    #: mechanisms are retained here deliberately: they were developed independently on
-    #: feat/amr-hanging-nodes and on the step management refactor. P3 of PLAN_INPUT_SYSTEM.md unifies
-    #: them; until then this is the belt-and-braces guard should any option ever be registered on the
-    #: shared keyword with a non-None default.
-    explicitlySetOptions: set[str]
+    Two mechanisms for telling the user's entries apart from the defaults contributed by foreign
+    modules used to live side by side here: an ``explicitlySetOptions`` set, fed from the parser's
+    ``explicitlySetArgs``, and :func:`getOptionsOfCategory`'s strip-``None``\\ s. They were developed
+    independently on feat/amr-hanging-nodes and on the step management refactor. ``explicitlySetOptions``
+    is gone: it was written on every update and read by nothing, in EdelweissFE or EdelweissMeshfree,
+    so it protected no consumer. The single surviving mechanism relies on the invariant that every
+    option on the shared keyword defaults to ``None``, which :func:`registerOptionsArg` now guarantees
+    by construction rather than by convention.
+    """
 
     def __init__(self, name, options, jobInfo, model, fieldOutputController, journal):
         self.name = name
         self.options = CaseInsensitiveDict(options)
-        self.explicitlySetOptions = set()
         self.updateStepAction(options, jobInfo, model, fieldOutputController, journal)
 
     def updateStepAction(self, options, jobInfo, model, fieldOutputController, journal):
         self.options.update(options)
-        self.explicitlySetOptions |= set(options.get("explicitlySetArgs", []))
 
     def __contains__(self, *args):
         """wrapper method for CaseInsensitiveDict"""
