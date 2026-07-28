@@ -100,6 +100,7 @@ from importlib.metadata import entry_points
 from typing import Any
 
 from edelweissfe.utils.misc import findSimilarString
+from edelweissfe.utils.schema import schemaOf
 
 #: Entry-point group name third-party packages register EdelweissFE-discoverable implementations
 #: under, e.g. in a plugin's ``pyproject.toml``::
@@ -367,9 +368,11 @@ def register(category: str, name: str, target: Any, *, schema: type | None = Non
     target
         The class (or factory callable) implementing ``name``.
     schema
-        The L2 option schema dataclass associated with ``target``, if any. ``None`` for modules
-        that have not yet been given a schema (true of every built-in entry as of P1 -- P2 wires
-        schemas in per module).
+        The L2 option schema dataclass associated with ``target``, if any. Usually unnecessary for
+        a class that derives from :class:`edelweissfe.utils.schema.OptionSchemaProvider` and
+        declares its own ``schema`` attribute -- :func:`lookup` picks that up by itself. Pass it
+        explicitly only when ``target`` cannot declare it, e.g. a factory callable or a
+        dynamically-created class in a test.
     """
     key = (category.casefold(), name.casefold())
     with _lock:
@@ -398,9 +401,15 @@ def lookup(category: str, name: str) -> tuple[Any, type | None]:
     Returns
     -------
     tuple[Any, type | None]
-        ``(target, schema)``. ``schema`` is ``None`` for every entry resolved via the built-in
-        table or a plain entry point as of P1 (no module has an L2 schema wired in yet); P2+
-        registrations made via :func:`register` may supply one.
+        ``(target, schema)``. Along the dotted-string paths (built-in table and entry points) the
+        schema is obtained from the resolved target itself via
+        :func:`edelweissfe.utils.schema.schemaOf` -- i.e. the target declares it as a class
+        attribute by deriving from
+        :class:`edelweissfe.utils.schema.OptionSchemaProvider`. It is ``None`` for targets that
+        declare no schema, which as of P2 is still most of them, and structurally always will be
+        for the categories whose targets are plain functions rather than classes (see
+        :func:`~edelweissfe.utils.schema.schemaOf`). :func:`register` may instead supply a schema
+        explicitly, which takes precedence because it writes straight into the memo cache.
 
     Raises
     ------
@@ -440,6 +449,6 @@ def lookup(category: str, name: str) -> tuple[Any, type | None]:
             raise RegistryLookupError(message)
 
         target = _resolveDottedString(dotted)
-        result = (target, None)
+        result = (target, schemaOf(target))
         _resolved[key] = result
         return result

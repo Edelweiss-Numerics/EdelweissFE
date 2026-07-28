@@ -61,7 +61,7 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 from edelweissfe.utils.misc import asBool, findSimilarString
 
@@ -199,6 +199,61 @@ def schemaFields(schemaCls: type) -> dict[str, SchemaFieldMeta]:
         Mapping of field name to its schema metadata, in declaration order.
     """
     return {field.name: fieldSchemaMeta(field) for field in dataclasses.fields(schemaCls)}
+
+
+class OptionSchemaProvider:
+    """Mixin declaring that a class owns an L2 option schema, exposed as the class attribute
+    :attr:`schema`.
+
+    This is the convention by which a schema reaches the L3 registry along the *dotted-string*
+    resolution paths -- the built-in table and, crucially, third-party ``importlib.metadata`` entry
+    points. ``registry.register(..., schema=...)`` can pass a schema explicitly, but nothing can
+    pass an argument alongside a dotted string in a ``pyproject.toml``; without this convention the
+    registry would be schema-blind for exactly the external caller it exists to serve (see
+    ``PLAN_INPUT_SYSTEM.md`` §4 and the P2 row). Keeping the schema on the class also keeps it next
+    to the constructor it describes, so the two cannot drift apart or be registered inconsistently.
+
+    Deriving from this mixin is what makes a class's schema discoverable; the default of ``None``
+    means "no schema declared yet", which is the correct answer for every module that has not been
+    converted to L1/L2 yet, so a base class can adopt the mixin before its subclasses are ported.
+
+    The declared default is also why :func:`schemaOf` needs no ``getattr``/``hasattr`` probing
+    (which this codebase's conventions forbid): the attribute is guaranteed to exist on every
+    subclass, so a plain attribute access suffices.
+    """
+
+    #: The L2 schema dataclass describing the options this class accepts, or ``None`` if it does
+    #: not declare one (yet). Overridden as a plain class attribute by concrete subclasses.
+    schema: ClassVar[type | None] = None
+
+
+def schemaOf(target: Any) -> type | None:
+    """Return the L2 schema declared by ``target``, or ``None`` if it declares none.
+
+    Used by :func:`edelweissfe.config.registry.lookup` to attach a schema to an object it resolved
+    from a dotted string.
+
+    ``None`` is returned for anything that is not a class deriving from
+    :class:`OptionSchemaProvider`. That deliberately includes the registry targets that are plain
+    module-level *functions* rather than classes -- e.g. every ``generator`` entry resolves to
+    ``generateModelData`` -- which cannot inherit a class attribute at all. Those categories
+    therefore have no schema until they are given class-based L1 targets (P4); dispatching on the
+    type here rather than probing for an attribute is what keeps that case an explicit,
+    documented ``None`` instead of an ``AttributeError`` at lookup time.
+
+    Parameters
+    ----------
+    target
+        Any object resolved by the registry -- a class, a factory function, anything.
+
+    Returns
+    -------
+    type | None
+        The schema dataclass, or ``None``.
+    """
+    if isinstance(target, type) and issubclass(target, OptionSchemaProvider):
+        return target.schema
+    return None
 
 
 def coerceValue(value: Any, dtype: type) -> Any:

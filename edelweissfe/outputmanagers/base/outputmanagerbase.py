@@ -33,11 +33,18 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.plotter import Plotter
+from edelweissfe.utils.schema import OptionSchemaProvider
 
 
-class OutputManagerBase(ABC):
+class OutputManagerBase(OptionSchemaProvider, ABC):
     """This is the abstract base class for all output managers.
     User defined output managers must implement the abstract methods.
+
+    Deriving from :class:`~edelweissfe.utils.schema.OptionSchemaProvider` means every output
+    manager -- including one supplied by a third-party package via an entry point -- exposes a
+    ``schema`` class attribute, so the L3 registry can hand its L2 option schema to the caller
+    alongside the class itself. Subclasses that have not been ported to L1/L2 yet simply inherit
+    the default of ``None``.
 
     Parameters
     ----------

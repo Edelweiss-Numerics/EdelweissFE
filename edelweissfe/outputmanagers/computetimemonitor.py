@@ -27,6 +27,8 @@
 #  ---------------------------------------------------------------------
 
 
+from dataclasses import dataclass
+
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
@@ -35,6 +37,7 @@ from edelweissfe.utils.misc import (
     castKwargsValuesAndAddDefaults,
 )
 from edelweissfe.utils.performancetiming import extractIncrementTimes
+from edelweissfe.utils.schema import schemaField
 
 """
 Prints the compute times per increment to the screen and writes them into a file (optional).
@@ -77,8 +80,25 @@ def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, jo
     return OutputManager(name, FEModel, fieldOutputController, journal, plotter, filename)
 
 
+@dataclass(frozen=True)
+class ComputeTimeMonitorSchema:
+    """L2: the options this output manager accepts, owned by this module and never mutated from
+    outside it.
+
+    Mirrors the ``module.addOptionalArg(...)`` declaration above one-for-one, including the default,
+    and is the schema the L3 registry hands out for ``("outputmanager", "computetimemonitor")``. The
+    two declarations coexist while the migration is in progress; the ``Module`` one goes away with
+    the ``InputLanguage`` singleton in P5.
+    """
+
+    export: str | None = schemaField(description="Provide a filename to export the results.", dtype=str, default=None)
+
+
 class OutputManager(OutputManagerBase):
     identification = "ComputeTimeMonitor"
+
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = ComputeTimeMonitorSchema
 
     def __init__(self, name, model, fieldOutputController, journal, plotter, filename):
         self.journal = journal

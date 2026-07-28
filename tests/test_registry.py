@@ -47,6 +47,43 @@ from unittest.mock import patch
 import pytest
 
 from edelweissfe.config import registry
+from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
+
+
+class _PluginSchema:
+    """Stand-in for a third-party package's L2 option schema."""
+
+
+class _PluginOutputManager(OutputManagerBase):
+    """Stand-in for an output manager contributed by an external package via an entry point.
+
+    Defined at module level (not inside the test) because the entry point must resolve it by
+    dotted string, exactly as a real installed plugin would. The abstract methods are stubbed
+    only so the class is concrete; none of them is called -- the test asserts on resolution.
+    """
+
+    schema = _PluginSchema
+
+    def __init__(self, name, definitionLines, model, fieldOutputController, journal, plotter):
+        pass
+
+    def initializeJob(self):
+        pass
+
+    def initializeStep(self, step):
+        pass
+
+    def finalizeIncrement(self, timeStep, **kwargs):
+        pass
+
+    def finalizeFailedIncrement(self, **kwargs):
+        pass
+
+    def finalizeStep(self):
+        pass
+
+    def finalizeJob(self):
+        pass
 
 
 def test_importing_registry_does_not_import_any_builtin_category_module():
@@ -228,3 +265,66 @@ def test_register_allows_manual_registration_bypassing_builtins_and_entrypoints(
     target, schema = registry.lookup("registrytestcategory", "manualentry")
     assert target is _FakeImplementation
     assert schema is _FakeSchema
+
+
+def test_schema_reaches_the_caller_through_the_builtin_dotted_string_path():
+    """A schema declared as a class attribute on a *built-in* must come back from ``lookup``.
+
+    This is the P2 blocker's resolution: ``register(..., schema=...)`` writes straight into the
+    memo cache and was previously the *only* way a non-``None`` schema could ever be returned, so
+    the built-in table and the entry-point paths were structurally schema-blind. ``lookup`` now
+    obtains the schema from the resolved target itself via ``schemaOf``.
+
+    Asserted against a real built-in (not a synthetic stand-in) so that a regression in either the
+    registry or the output manager's own declaration fails this test.
+    """
+    target, schema = registry.lookup("outputmanager", "computetimemonitor")
+
+    from edelweissfe.outputmanagers.computetimemonitor import (
+        ComputeTimeMonitorSchema,
+        OutputManager,
+    )
+
+    assert target is OutputManager
+    assert schema is ComputeTimeMonitorSchema
+
+
+def test_schema_reaches_the_caller_through_a_third_party_entry_point():
+    """The case that actually motivates the whole convention (PLAN_INPUT_SYSTEM.md §4).
+
+    An external package -- EdelweissMeshfree, or any plugin -- registers a class via an entry
+    point in its own ``pyproject.toml``. There is no way to pass a ``schema=`` argument alongside a
+    dotted string there, so if the schema did not travel *on the class*, every third-party module
+    would silently lose its schema while EdelweissFE's own modules kept theirs. The plugin here
+    derives from ``OutputManagerBase`` exactly as a real one would.
+    """
+    fakeEntryPoint = EntryPoint(
+        name="outputmanager.syntheticpluginwithschema",
+        # Derived from __name__ rather than hardcoded so the test does not depend on pytest's
+        # import mode (prepend imports this file as "test_registry", importlib as "tests.test_registry").
+        value=f"{__name__}:_PluginOutputManager",
+        group=registry.ENTRY_POINT_GROUP,
+    )
+
+    with patch.object(registry, "entry_points", return_value=[fakeEntryPoint]):
+        target, schema = registry.lookup("outputmanager", "syntheticpluginwithschema")
+
+    assert target is _PluginOutputManager
+    assert schema is _PluginSchema
+
+
+def test_schema_is_none_for_a_target_that_declares_none():
+    """The unported majority: an output manager that has not been given an L2 schema yet inherits
+    ``OptionSchemaProvider``'s ``None`` default rather than failing lookup."""
+    _, schema = registry.lookup("outputmanager", "statusfile")
+    assert schema is None
+
+
+def test_schema_is_none_for_a_function_target_rather_than_raising():
+    """Every ``generator`` entry resolves to the module-level function ``generateModelData``, which
+    cannot inherit a class attribute. ``schemaOf`` must report ``None`` for it, not raise
+    ``AttributeError`` -- this is the case that rules out a bare ``target.schema`` in ``lookup``."""
+    target, schema = registry.lookup("generator", "boxgen")
+
+    assert callable(target) and not isinstance(target, type)
+    assert schema is None
