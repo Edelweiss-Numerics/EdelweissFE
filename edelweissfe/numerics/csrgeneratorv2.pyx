@@ -31,6 +31,77 @@ cimport numpy as np
 from libcpp.vector cimport vector
 
 
+class AliasedCSRMatrix(csr_matrix):
+    """
+    The csr_matrix returned by :meth:`CSRGenerator.updateInPlace`.
+
+    Its ``data``/``indices``/``indptr`` buffers are owned by the generator's C++ core,
+    which rewrites ``data`` in place on every subsequent ``updateInPlace`` call via a
+    gather/scatter map fixed once at construction time. Structurally mutating this
+    matrix (``eliminate_zeros()``, ``prune()``, ``sum_duplicates()``, ``resize()``, or
+    reassigning ``.data``/``.indices``/``.indptr`` to arrays of a different length)
+    would silently desynchronize that fixed map from the (now compacted/reshaped)
+    matrix -- every subsequent update would then write numerically correct values into
+    the wrong ``(row, col)`` slots, with no error or warning. See GitHub issue #72.
+
+    This subclass turns that into a loud failure instead of silent corruption. If you
+    need to reduce/reshape the pattern for a one-off use, copy the matrix first --
+    ``.copy()`` (here and via :meth:`CSRGenerator.updateCSR`) always returns a plain,
+    unrestricted ``csr_matrix``.
+
+    The guard only applies once :class:`CSRGenerator` marks construction complete
+    (``_locked = True``): scipy's own ``csr_matrix.__init__`` calls ``self.prune()``
+    internally as part of its format check, which must go through unhindered.
+    """
+
+    _locked = False
+
+    _MUTATION_ERROR = (
+        "Refusing to call {:}() on a CSRGenerator.updateInPlace() matrix: this is the "
+        "generator's own aliased, reused buffer, and structurally mutating it would "
+        "silently corrupt every subsequent update (see GitHub issue #72). Call "
+        ".copy() first if you need an independently mutable snapshot."
+    )
+
+    def eliminate_zeros(self):
+        if self._locked:
+            raise RuntimeError(self._MUTATION_ERROR.format("eliminate_zeros"))
+        super().eliminate_zeros()
+
+    def prune(self):
+        if self._locked:
+            raise RuntimeError(self._MUTATION_ERROR.format("prune"))
+        super().prune()
+
+    def sum_duplicates(self):
+        if self._locked:
+            raise RuntimeError(self._MUTATION_ERROR.format("sum_duplicates"))
+        super().sum_duplicates()
+
+    def resize(self, *shape):
+        if self._locked:
+            raise RuntimeError(self._MUTATION_ERROR.format("resize"))
+        super().resize(*shape)
+
+    def __setattr__(self, name, value):
+        if self._locked and name in ("data", "indices", "indptr"):
+            existing = getattr(self, name, None)
+            if existing is not None and len(value) != len(existing):
+                raise RuntimeError(
+                    "Refusing to reassign '{:}' to an array of a different length on a "
+                    "CSRGenerator.updateInPlace() matrix (see AliasedCSRMatrix docstring, "
+                    "GitHub issue #72). Call .copy() first if you need an independently "
+                    "mutable snapshot.".format(name)
+                )
+        super().__setattr__(name, value)
+
+    def copy(self):
+        # Always hand back a plain, unrestricted csr_matrix: once copied, the arrays
+        # are independent of the generator's buffer and safe to mutate freely.
+        c = super().copy()
+        return csr_matrix((c.data, c.indices, c.indptr), shape=c.shape)
+
+
 cdef extern from "_csrcore.h":
     cdef cppclass CSRCore nogil:
         CSRCore(const int* I, const int* J, long n_pairs, int n_dof) except +
@@ -90,7 +161,7 @@ cdef class CSRGenerator:
         cdef np.ndarray nd_indices = np.asarray(view_indices)
 
         cdef np.ndarray[double, ndim=1] data = np.zeros(nnz, dtype=np.double)
-        self.csrMatrix = csr_matrix((data, nd_indices, nd_indptr), shape=(nDof, nDof))
+        self.csrMatrix = AliasedCSRMatrix((data, nd_indices, nd_indptr), shape=(nDof, nDof))
 
         # Keep this CSRGenerator object alive as long as csrMatrix is referenced.
         # _parent is a SciPy-internal attribute — it exists in all supported
@@ -100,13 +171,22 @@ cdef class CSRGenerator:
 
         self.data_view = self.csrMatrix.data
 
+        # Construction (including scipy's own internal format check/prune) is done;
+        # from here on, structural mutation of this specific matrix is unsafe -- see
+        # AliasedCSRMatrix's docstring.
+        self.csrMatrix._locked = True
+
     def updateInPlace(self, double[:] V):
         """
         Update the values of the CSR matrix in-place based on the input vector V.
 
         Returns the internal CSR matrix directly (no copy). The caller must not
         retain the returned object across subsequent calls to ``updateInPlace``
-        or ``updateCSR``, as the underlying data will be overwritten.
+        or ``updateCSR``, as the underlying data will be overwritten. It also must not
+        be structurally mutated (``eliminate_zeros()``, ``prune()``, ``resize()``, a
+        differently-shaped ``.data``/``.indices``/``.indptr`` reassignment, ...) --
+        the returned :class:`AliasedCSRMatrix` raises rather than allowing this
+        silently; see its docstring and GitHub issue #72.
 
         Parameters
         ----------
@@ -115,7 +195,7 @@ cdef class CSRGenerator:
 
         Returns
         -------
-        csr_matrix
+        AliasedCSRMatrix
             A live view of the internal CSR matrix (not a copy).
         """
 
