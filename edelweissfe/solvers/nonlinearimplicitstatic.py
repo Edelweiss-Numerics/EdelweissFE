@@ -679,7 +679,32 @@ class NIST(NonlinearSolverBase):
 
     @performancetiming.timeit("dirichlet K on CSR")
     def applyDirichletK(self, K: csr_matrix, dirichlets: list[StepActionBase]) -> csr_matrix:
-        return applyDirichletK(self, K, dirichlets)
+        K = applyDirichletK(self, K, dirichlets)
+
+        # Compacting the just-zeroed entries out of K is a storage/performance concern,
+        # not part of applying the boundary condition -- and whether it's even safe
+        # depends on K's identity, which only the assembler/solver side knows:
+        #
+        # - No MPC transformation: K is self.csrGenerator's own persistent CSR matrix,
+        #   returned by reference (assembleStiffnessCSR/updateInPlace) and reused, in
+        #   place, every Newton iteration. eliminate_zeros() would shrink/compact its
+        #   data/indices arrays -- but the generator's C++ core scatters fresh values
+        #   into the ORIGINAL, full-length buffer on every subsequent update via a fixed
+        #   assembly map computed once at construction. After a shrink, that buffer and
+        #   the (now compacted) K.indices/K.indptr disagree about which stored slot
+        #   belongs to which (row, col) -- silently misaligned values from the next
+        #   iteration on. Must NOT eliminate.
+        # - MPC transformation active (hanging nodes / ties): K is the freshly computed,
+        #   disposable T^T @ K @ T + C from mpcTransformation.transformSystemMatrix,
+        #   independent of the generator's buffer and discarded after this solve.
+        #   Eliminating here is always safe, and PARDISO's reordering on these more
+        #   poorly conditioned, path-dependent (contact/friction) condensed systems is
+        #   sensitive enough to the extra explicit-zero structural entries to visibly
+        #   drift from the converged reference path if they are kept.
+        if self.mpcTransformation is not None:
+            K.eliminate_zeros()
+
+        return K
 
     @performancetiming.timeit("elements")
     def computeElements(
