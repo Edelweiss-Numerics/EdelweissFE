@@ -29,14 +29,13 @@
 
 from dataclasses import dataclass
 
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
 from edelweissfe.utils.performancetiming import extractIncrementTimes
+from edelweissfe.utils.plotter import Plotter
 from edelweissfe.utils.schema import schemaField
 
 """
@@ -70,16 +69,6 @@ optional = [kw.name for kw in module.optionalArgs]
 optional += [kw.name for kw in module.optionalKeywords]
 
 
-@caseInsensitiveKwargsChecker(required, optional)
-@castKwargsValuesAndAddDefaults(module)
-def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
-    kwargs = CaseInsensitiveDict(kwargs)
-
-    filename = kwargs["export"]
-
-    return OutputManager(name, FEModel, fieldOutputController, journal, plotter, filename)
-
-
 @dataclass(frozen=True)
 class ComputeTimeMonitorSchema:
     """L2: the options this output manager accepts, owned by this module and never mutated from
@@ -100,11 +89,40 @@ class OutputManager(OutputManagerBase):
     #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
     schema = ComputeTimeMonitorSchema
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter, filename):
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        fieldOutputController: FieldOutputController,
+        journal: Journal,
+        plotter: Plotter,
+        *,
+        configuration: ComputeTimeMonitorSchema = ComputeTimeMonitorSchema(),
+    ):
+        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement and
+        no ``moduleOptions``. Options arrive as an already-validated, already-typed schema instance,
+        so nothing here coerces strings or inspects dictionaries.
+
+        Parameters
+        ----------
+        name
+            The name of this output manager.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controller instance.
+        journal
+            The journal instance for logging.
+        plotter
+            The plotter instance.
+        configuration
+            The options this output manager accepts; defaults to all-defaults.
+        """
+        self.name = name
         self.journal = journal
         self.stepcounter = 0
 
-        self.exportFile = filename
+        self.exportFile = configuration.export
 
         if self.exportFile:
             with open(self.exportFile, "w+") as f:

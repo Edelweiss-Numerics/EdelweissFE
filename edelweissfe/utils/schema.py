@@ -359,6 +359,22 @@ def buildSchemaFromOptions(schemaCls: type, options: Mapping[str, Any]) -> Any:
     field that was not present in ``options`` -- exactly as ``OptionalKeywordArg.default`` does
     today, just expressed as an ordinary Python default value instead of a side object.
 
+    An option whose value is ``None`` is treated as **not supplied**, so the field's default
+    applies. This is deliberate and is decided here, once, rather than in each L4 adapter. The
+    ``.inp`` parser represents "the user did not specify this optional argument" as a key present
+    with the value ``None`` (see e.g. ``inputfilehelpers.py``'s ``definition["name"] is not None``
+    test), and coercing that ``None`` would be actively harmful rather than merely useless: for a
+    ``str``-typed option, ``coerceValue(None, str)`` yields the *string* ``"None"``, which is
+    truthy, so "the user said nothing" would silently become a real value -- an export filename
+    literally called ``None``, for instance. Legacy avoided this only by construction, coercing
+    exclusively the keys actually present in the kwargs
+    (``utils/misc.py``'s ``castKwargsValuesAndAddDefaults``); stating the rule explicitly here
+    means an adapter cannot reintroduce the trap by passing definition-level keys straight in.
+
+    Key *names* are still validated before values are examined, so a misspelled option raises even
+    if its value happens to be ``None``, and a required field given ``None`` is reported as missing
+    rather than being coerced into nonsense.
+
     Parameters
     ----------
     schemaCls
@@ -382,6 +398,8 @@ def buildSchemaFromOptions(schemaCls: type, options: Mapping[str, Any]) -> Any:
 
     kwargs: dict[str, Any] = {}
     for name, rawValue in resolvedOptions.items():
+        if rawValue is None:
+            continue
         meta = fieldSchemaMeta(fieldsByName[name])
         kwargs[name] = coerceValue(rawValue, meta.dtype)
 

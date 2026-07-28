@@ -26,6 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+from edelweissfe.config import registry
 from edelweissfe.config.generators import getGeneratorFunction
 from edelweissfe.config.outputmanagers import (
     getOutputManagerClass,
@@ -56,6 +57,7 @@ from edelweissfe.utils.misc import (
     strToRange,
 )
 from edelweissfe.utils.plotter import Plotter
+from edelweissfe.utils.schema import buildSchemaFromOptions
 
 
 def flattenDefinitions(ll):
@@ -459,6 +461,44 @@ def createOutputManagersFromInputFile(
                 outputManager.updateDefinition(**kwargs)
 
             outputManagers.append(outputManager)
+            continue
+
+        outputManagerClass, outputManagerSchema = registry.lookup("outputmanager", outputManagerType)
+
+        if outputManagerSchema is not None:
+            # L4 adapter over the L3 registry: parse -> validate/coerce into the module's own L2
+            # schema -> call its L1 constructor. Branching on "does this module declare a schema?"
+            # rather than on a hardcoded list of ported modules means this branch needs no
+            # maintenance as the migration proceeds, and disappears once the last output manager is
+            # converted (P2) -- at which point the legacy path below, `moduleOptions`, and
+            # `getOutputManagerFactoryByName` all go with it.
+            #
+            # `moduleOptions` is deliberately not forwarded: only ensight ever read it, and a
+            # converted module takes its options through `configuration` instead.
+            module = inputLanguage["output"].getModule(outputManagerType)
+
+            for optionsForOneManager in [datalines] if len(datalines) == 0 else datalines:
+                args, kwargs = module.parseDatalines(optionsForOneManager)
+
+                try:
+                    configuration = buildSchemaFromOptions(outputManagerSchema, kwargs)
+                except ValueError as e:
+                    raise ValueError(
+                        f"Error during parsing of keyword {keywordIdentifier}output "
+                        f"(type={outputManagerType}): " + e.args[0]
+                    ) from e
+
+                outputManagers.append(
+                    outputManagerClass(
+                        outputManagerName,
+                        model,
+                        fieldOutputController,
+                        journal,
+                        plotter,
+                        configuration=configuration,
+                    )
+                )
+
             continue
 
         if len(datalines) == 0:
