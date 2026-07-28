@@ -57,23 +57,124 @@ for module in modules:
 
 
 class StepAction(StepActionBase):
-    def __init__(self, name, options, jobInfo, model, fieldOutputController, journal):
+    """Execute a Python expression against the live model at the beginning of a step.
+
+    The constructor is typed, but its ``updateExpression`` deliberately stays a **string**: the
+    expression is executed against a live model by
+    :func:`~edelweissfe.utils.math.execModelAccessibleExpression`, so here the string *is* the value
+    rather than a serialization of one -- unlike, say, a ``f(t)`` amplitude, which serializes a
+    callable. There is consequently nothing for :meth:`fromStepActionDefinition` to translate beyond
+    reading the option out of the definition.
+
+    Parameters
+    ----------
+    name
+        The name of this step action.
+    updateExpression
+        The model accessible, executable Python expression, e.g.
+        ``'model.constraints["pc1"].active=False'``.
+    model
+        The model tree. Accepted for uniformity with the other step actions; the expression is
+        evaluated against the model handed to :meth:`updateModel` at execution time, not against
+        this one.
+    journal
+        The journal object for logging. Accepted for uniformity as well; this action logs with the
+        journal handed to :meth:`updateModel`.
+    """
+
+    def __init__(self, name, updateExpression: str, model, journal):
         self.name = name
-        self.updateStepAction(options, jobInfo, model, fieldOutputController, journal)
+
+        self.updateStepAction(updateExpression)
 
     def applyAtStepEnd(self, model):
-        """By default, this action is only executed once."""
+        """By default, this action is only executed once.
+
+        Parameters
+        ----------
+        model
+            The current state of the model.
+        """
 
         self.active = False
 
-    def updateStepAction(self, options, jobInfo, model, fieldOutputController, journal):
-        """Update the expression, and set the action active again."""
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build this step action from a parsed ``>>modelupdate`` definition. See
+        :class:`~edelweissfe.stepactions.base.stepactionbase.StepActionBase` for why this is separate
+        from ``__init__``.
 
-        self.updateExpression = options["update"]
+        Parameters
+        ----------
+        name
+            The name of the step action.
+        definition
+            The parsed option mapping for this step action.
+        jobInfo
+            A dictionary containing the information about the job.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controlling object.
+        journal
+            The journal object for logging.
+
+        Returns
+        -------
+        StepAction
+            The constructed step action.
+        """
+
+        return cls(name, definition["update"], model, journal)
+
+    def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
+        """Update from a parsed ``>>modelupdate`` definition re-declared in a later step.
+
+        Parameters
+        ----------
+        definition
+            The parsed option mapping for this step action.
+        jobInfo
+            A dictionary containing the information about the job.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controlling object.
+        journal
+            The journal object for logging.
+        """
+
+        self.updateStepAction(definition["update"])
+
+    def updateStepAction(self, updateExpression: str):
+        """Prescribe a new expression, and set the action active again.
+
+        Parameters
+        ----------
+        updateExpression
+            The model accessible, executable Python expression.
+        """
+
+        self.updateExpression = updateExpression
         self.active = True
 
     def updateModel(self, model, fieldOutputController, journal):
-        """Update the model based on an executable provided Python expression."""
+        """Update the model based on an executable provided Python expression.
+
+        Parameters
+        ----------
+        model
+            The current state of the model.
+        fieldOutputController
+            The field output controlling object, whose field outputs the expression may access.
+        journal
+            The journal object for logging.
+
+        Returns
+        -------
+        FEModel
+            The updated model.
+        """
 
         if not self.active:
             return model

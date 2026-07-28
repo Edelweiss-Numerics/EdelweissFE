@@ -31,6 +31,9 @@
 
 import numpy as np
 
+from edelweissfe.analyticalfields.base.analyticalfieldbase import (
+    AnalyticalField as AnalyticalFieldBase,
+)
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 
 # from edelweissfe.utils.inputlanguage import InputLanguage
@@ -59,67 +62,202 @@ for module in modules:
 
 
 class StepAction(StepActionBase):
-    def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
+    """Set a field, addressed through a field output, to a prescribed value at the start of a step.
+
+    The declared input file grammar is a tagged union: ``type=uniform`` makes ``value`` a
+    comma-separated numeric vector, ``type=analyticalField`` makes it the *name* of an analytical
+    field. The tag is collapsed here: the constructor takes the value itself, either as an
+    ``np.ndarray`` or as an analytical field object, and :meth:`applyAtStepStart` dispatches on its
+    type. That is what turning ``type``/``value`` into typed arguments amounts to -- the tag only
+    exists because an ``.inp`` file transports both arms as text, so both it and the name resolution
+    belong on :meth:`fromStepActionDefinition`.
+
+    Parameters
+    ----------
+    name
+        The name of this step action.
+    fieldOutput
+        The field output whose results are overwritten. The resolved object, not its name -- this
+        action genuinely needs the field output, not the controller it is registered with.
+    value
+        Either the value prescribed uniformly for every entry of the field output, as an
+        ``np.ndarray``, or an analytical field, which is evaluated at the quadrature points of the
+        elements the field output is associated with.
+    model
+        The model tree.
+    journal
+        The journal object for logging.
+    """
+
+    def __init__(self, name, fieldOutput, value, model, journal):
         self.name = name
-        self.active = True
-        self.journal = journal
-        self.fieldOutputName = action["fieldOutput"]
-        self.fieldOutput = fieldOutputController.fieldOutputs[self.fieldOutputName]
-        self.type = action["type"]
-        self.value = action["value"]
+        self.fieldOutput = fieldOutput
+        self.value = value
 
-        if self.type not in ["uniform", "analyticalField"]:
-            raise Exception("Invalid type: {}".format(self.type))
+        self._journal = journal
 
-        if self.type == "analyticalField":
-            self.analyticalField = model.analyticalFields[self.value]
+        self.updateStepAction()
+
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build this step action from a parsed ``>>setfield`` definition. See
+        :class:`~edelweissfe.stepactions.base.stepactionbase.StepActionBase` for why this is separate
+        from ``__init__``.
+
+        Parameters
+        ----------
+        name
+            The name of the step action.
+        definition
+            The parsed option mapping for this step action.
+        jobInfo
+            A dictionary containing the information about the job.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controlling object.
+        journal
+            The journal object for logging.
+
+        Returns
+        -------
+        StepAction
+            The constructed step action.
+        """
+
+        return cls(
+            name,
+            fieldOutputController.fieldOutputs[definition["fieldOutput"]],
+            cls._valueFromDefinition(definition, model),
+            model,
+            journal,
+        )
+
+    def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
+        """Update from a parsed ``>>setfield`` definition re-declared in a later step.
+
+        The re-declared field output and value are deliberately ignored, as they always have been:
+        re-declaring this action only arms it again, so that the *same* value is set once more at the
+        start of the new step.
+
+        Parameters
+        ----------
+        definition
+            The parsed option mapping for this step action.
+        jobInfo
+            A dictionary containing the information about the job.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controlling object.
+        journal
+            The journal object for logging.
+        """
+
+        self.updateStepAction()
 
     def applyAtStepEnd(self, model, stepMagnitude=None):
+        """Deactivate this step action; the value is set once per step it is declared in.
+
+        Parameters
+        ----------
+        model
+            The current state of the model.
+        stepMagnitude
+            Unused; present for signature compatibility with the other step actions.
+        """
+
         self.active = False
 
-    def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
+    def updateStepAction(self):
+        """Arm this step action again, so that its value is set at the start of the next step."""
+
         self.active = True
 
     def applyAtStepStart(
         self,
         model,
     ):
+        """Set the field output's results to the prescribed value, dispatching on the value's type.
+
+        Parameters
+        ----------
+        model
+            The current state of the model.
+        """
+
         if not self.active:
             return
 
-        if self.type == "uniform":
-            currentResults = np.zeros_like(self.fieldOutput.getLastResult())
-            newResult = np.fromstring(self.value, float, sep=",")
+        if isinstance(self.value, AnalyticalFieldBase):
+            self._setFromAnalyticalField()
+        else:
+            self._setUniformly()
 
-            if currentResults.ndim == 2:
-                currentResults = np.expand_dims(currentResults, 0)
+    def _setUniformly(self):
+        """Set every entry of the field output's results to the prescribed value vector."""
 
-            if not currentResults.shape[-1] == newResult.shape[-1]:
-                self.journal.errorMessage(
-                    f"Dimension mismatch. Result '{self.fieldOutputName}' has length {currentResults.shape[-1]} but value has length {newResult.shape[-1]}",  # noqa: E501
-                    self.name,
-                )
-                raise Exception
+        currentResults = np.zeros_like(self.fieldOutput.getLastResult())
+        newResult = self.value
 
-            currentResults[:] = newResult
-            self.journal.message(
-                "Setting field {:} to uniform value {:}".format(self.fieldOutputName, self.value),
+        if currentResults.ndim == 2:
+            currentResults = np.expand_dims(currentResults, 0)
+
+        if not currentResults.shape[-1] == newResult.shape[-1]:
+            self._journal.errorMessage(
+                f"Dimension mismatch. Result '{self.fieldOutput.name}' has length {currentResults.shape[-1]} but value has length {newResult.shape[-1]}",  # noqa: E501
                 self.name,
             )
-            self.fieldOutput.setResults(currentResults)
+            raise Exception
 
-        if self.type == "analyticalField":
-            currentResults = np.zeros_like(self.fieldOutput.getLastResult())
+        currentResults[:] = newResult
+        self._journal.message(
+            "Setting field {:} to uniform value {:}".format(self.fieldOutput.name, self.value),
+            self.name,
+        )
+        self.fieldOutput.setResults(currentResults)
 
-            if self.analyticalField.type == "scalarExpression" and not currentResults.shape[2] == 1:
-                self.journal.errorMessage(f"Cannot map scalar value to {currentResults.shape[2]}-dimensional result.")
-                raise Exception
+    def _setFromAnalyticalField(self):
+        """Set the field output's results by evaluating the prescribed analytical field at the
+        quadrature points of the elements the field output is associated with."""
 
-            elementList = self.fieldOutput.associatedSet
+        currentResults = np.zeros_like(self.fieldOutput.getLastResult())
 
-            for i1, element in enumerate(elementList):
-                coordinatesAtQuadraturePoints = element.getCoordinatesAtQuadraturePoints()
+        if self.value.type == "scalarExpression" and not currentResults.shape[2] == 1:
+            self._journal.errorMessage(f"Cannot map scalar value to {currentResults.shape[2]}-dimensional result.")
+            raise Exception
 
-                currentResults[i1] = self.analyticalField.evaluateAtCoordinates(coordinatesAtQuadraturePoints)
+        elementList = self.fieldOutput.associatedSet
 
-            self.fieldOutput.setResults(currentResults)
+        for i1, element in enumerate(elementList):
+            coordinatesAtQuadraturePoints = element.getCoordinatesAtQuadraturePoints()
+
+            currentResults[i1] = self.value.evaluateAtCoordinates(coordinatesAtQuadraturePoints)
+
+        self.fieldOutput.setResults(currentResults)
+
+    @staticmethod
+    def _valueFromDefinition(definition: dict, model):
+        """Turn a parsed definition's ``type``/``value`` pair into the prescribed value itself.
+
+        Parameters
+        ----------
+        definition
+            The parsed option mapping defining this step action.
+        model
+            The model tree, against which an analytical field's name is resolved.
+
+        Returns
+        -------
+        np.ndarray | AnalyticalField
+            The uniform value vector for ``type=uniform``, or the analytical field for
+            ``type=analyticalField``.
+        """
+
+        if definition["type"] == "uniform":
+            return np.fromstring(definition["value"], float, sep=",")
+
+        if definition["type"] == "analyticalField":
+            return model.analyticalFields[definition["value"]]
+
+        raise Exception("Invalid type: {}".format(definition["type"]))
