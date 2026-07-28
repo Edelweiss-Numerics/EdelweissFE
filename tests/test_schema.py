@@ -44,6 +44,7 @@ from edelweissfe.utils.schema import (
     buildSchemaFromOptions,
     coerceValue,
     fieldSchemaMeta,
+    optionNames,
     resolveCaseInsensitiveOptions,
     schemaField,
     schemaFields,
@@ -225,3 +226,57 @@ def test_buildSchemaFromOptions_passes_already_correct_types_through_unchanged()
         {"name": "myOutput", "overwrite": True, "intermediateSaveInterval": 7, "scaleFactor": 3.0},
     )
     assert instance == _SampleSchema(name="myOutput", overwrite=True, intermediateSaveInterval=7, scaleFactor=3.0)
+
+
+def test_option_name_may_differ_from_the_field_name():
+    """An input-file option that is not a valid Python identifier -- ``f(x)`` is the real case --
+    must still be reachable, without renaming the user-facing option."""
+
+    @dataclasses.dataclass(frozen=True)
+    class _Schema:
+        f_x: str = schemaField(
+            description="A result-transforming expression.", dtype=str, default="x", optionName="f(x)"
+        )
+
+    built = buildSchemaFromOptions(_Schema, {"f(x)": "x**2"})
+    assert built.f_x == "x**2"
+
+    assert optionNames(_Schema) == {"f(x)": dataclasses.fields(_Schema)[0]}
+
+    # Case-insensitively too, as for any other option, and the field name itself is *not* accepted
+    # as an alias -- the schema answers to the declared option name only.
+    assert buildSchemaFromOptions(_Schema, {"F(X)": "2*x"}).f_x == "2*x"
+    with pytest.raises(ValueError, match="not a valid option"):
+        buildSchemaFromOptions(_Schema, {"f_x": "2*x"})
+
+
+def test_missing_required_option_is_reported_by_its_input_file_name():
+    """The diagnostic must name the spelling the user has to type, not the internal field name."""
+
+    @dataclasses.dataclass(frozen=True)
+    class _Schema:
+        f_x: str = schemaField(description="Required expression.", dtype=str, optionName="f(x)")
+
+    with pytest.raises(ValueError, match=r"f\(x\)"):
+        buildSchemaFromOptions(_Schema, {})
+
+
+def test_an_explicit_none_falls_back_to_the_field_default():
+    """The parser spells "user did not specify this optional argument" as a present key with value
+    None. Coercing that would turn it into the *string* "None" for a str-typed option -- truthy,
+    and silently wrong. See buildSchemaFromOptions' docstring."""
+
+    @dataclasses.dataclass(frozen=True)
+    class _Schema:
+        export: str | None = schemaField(description="Export filename.", dtype=str, default=None)
+        count: int = schemaField(description="A count.", dtype=int, default=7)
+
+    built = buildSchemaFromOptions(_Schema, {"export": None, "count": None})
+
+    assert built.export is None, "an explicit None must not become the string 'None'"
+    assert built.count == 7
+
+    # A misspelled option still raises even when its value is None, so the None-tolerance cannot
+    # mask a typo.
+    with pytest.raises(ValueError, match="not a valid option"):
+        buildSchemaFromOptions(_Schema, {"exprot": None})

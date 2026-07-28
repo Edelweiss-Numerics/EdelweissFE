@@ -89,11 +89,21 @@ class SchemaFieldMeta:
         than being re-derived from "does the dataclass field have a default") so that
         documentation generation does not need to inspect :data:`dataclasses.MISSING` sentinels
         directly.
+    optionName
+        The name this option carries in the input file, when that differs from the dataclass field
+        name. ``None`` means they are identical, which is the common case.
+
+        This exists because the input language admits option names that are not valid Python
+        identifiers and therefore cannot be dataclass field names at all -- ``f(x)`` (the
+        result-transforming expression accepted by several output managers) and ``f_export(x)`` are
+        the real cases. Rather than renaming user-facing options, which would break every existing
+        ``.inp`` file, a field may declare the spelling it answers to.
     """
 
     description: str
     dtype: type
     required: bool = False
+    optionName: str | None = None
 
 
 def schemaField(
@@ -103,6 +113,7 @@ def schemaField(
     default: Any = MISSING,
     default_factory: Any = MISSING,
     required: bool | None = None,
+    optionName: str | None = None,
 ) -> dataclasses.Field:
     """Declare one field of an L2 option schema dataclass.
 
@@ -135,6 +146,9 @@ def schemaField(
         Explicitly override whether the option is required. If not given (``None``), it is
         inferred as ``True`` exactly when neither ``default`` nor ``default_factory`` was
         supplied.
+    optionName
+        The name this option is spelled with in the input file, if it cannot be the field name --
+        e.g. ``optionName="f(x)"`` on a field called ``f_x``. See :class:`SchemaFieldMeta`.
 
     Returns
     -------
@@ -147,7 +161,7 @@ def schemaField(
     if required is None:
         required = default is MISSING and default_factory is MISSING
 
-    meta = SchemaFieldMeta(description=description, dtype=dtype, required=required)
+    meta = SchemaFieldMeta(description=description, dtype=dtype, required=required, optionName=optionName)
 
     fieldKwargs: dict[str, Any] = {"metadata": {_METADATA_KEY: meta}}
     if default is not MISSING:
@@ -199,6 +213,27 @@ def schemaFields(schemaCls: type) -> dict[str, SchemaFieldMeta]:
         Mapping of field name to its schema metadata, in declaration order.
     """
     return {field.name: fieldSchemaMeta(field) for field in dataclasses.fields(schemaCls)}
+
+
+def optionNames(schemaCls: type) -> dict[str, dataclasses.Field]:
+    """Map each of a schema's input-file option names to the field that implements it.
+
+    The option name is the field name unless the field declared an explicit
+    :attr:`SchemaFieldMeta.optionName` -- see there for why that indirection exists (input-file
+    options such as ``f(x)`` are not valid Python identifiers).
+
+    Parameters
+    ----------
+    schemaCls
+        A frozen dataclass whose fields were declared via :func:`schemaField`.
+
+    Returns
+    -------
+    dict[str, dataclasses.Field]
+        Mapping of user-facing option name to its field, in declaration order.
+    """
+    fields = dataclasses.fields(schemaCls)
+    return {(fieldSchemaMeta(field).optionName or field.name): field for field in fields}
 
 
 class OptionSchemaProvider:
@@ -326,13 +361,13 @@ def resolveCaseInsensitiveOptions(schemaCls: type, options: Mapping[str, Any]) -
     ValueError
         If a key in ``options`` does not case-insensitively match any field of ``schemaCls``.
     """
-    fieldNamesByFold = {field.name.casefold(): field.name for field in dataclasses.fields(schemaCls)}
+    fieldNamesByFold = {optionName.casefold(): field.name for optionName, field in optionNames(schemaCls).items()}
 
     resolved: dict[str, Any] = {}
     for key, value in options.items():
         exactName = fieldNamesByFold.get(key.casefold())
         if exactName is None:
-            availableNames = sorted(fieldNamesByFold.values())
+            availableNames = sorted(optionNames(schemaCls))
             hint = ""
             if availableNames:
                 try:
@@ -403,8 +438,12 @@ def buildSchemaFromOptions(schemaCls: type, options: Mapping[str, Any]) -> Any:
         meta = fieldSchemaMeta(fieldsByName[name])
         kwargs[name] = coerceValue(rawValue, meta.dtype)
 
+    # Reported by input-file option name, not field name, so a user reading the error sees the
+    # spelling they are expected to type (they cannot know that `f(x)` is a field called `f_x`).
     missingRequired = [
-        name for name, field in fieldsByName.items() if fieldSchemaMeta(field).required and name not in kwargs
+        optionName
+        for optionName, field in optionNames(schemaCls).items()
+        if fieldSchemaMeta(field).required and field.name not in kwargs
     ]
     if missingRequired:
         raise ValueError(f"Missing required option(s) for {schemaCls.__name__}: {', '.join(missingRequired)}.")
