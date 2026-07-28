@@ -29,9 +29,14 @@
 
 # @author: Matthias Neuner
 
-import numpy as np
-import sympy as sp
+from collections.abc import Callable
 
+import numpy as np
+
+from edelweissfe.stepactions.base.amplitude import (
+    amplitudeFromExpression,
+    linearAmplitude,
+)
 from edelweissfe.stepactions.base.bodyloadbase import BodyLoadBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.inputlanguage import InputLanguage
@@ -61,26 +66,152 @@ for module in modules:
 
 
 class StepAction(BodyLoadBase):
-    def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
-        self._name = name
-        self._forceAtStepStart = 0.0
-        self._elSetName = action["elSet"]
-        self._elSet = model.elementSets[self._elSetName]
-        load = np.fromstring(action["forceVector"], sep=",", dtype=np.double)
+    """Body force load, based on an element set.
 
-        if len(load) < model.domainSize:
+    The constructor is typed: it takes the element set itself, the force vector as an
+    ``np.ndarray`` and the amplitude as a callable. Nothing here parses an input file -- turning
+    ``elSet=all``, ``forceVector='0.0, 10.0'`` and ``f(t)='t**2'`` into those arguments is the job of
+    :meth:`fromStepActionDefinition` below, which is the only part of this module the ``.inp``
+    front-end needs.
+
+    The load accumulates *over steps*: the force reached at the end of a step is remembered, and the
+    next step's declaration prescribes either a new total (``forceVector``) or an increment on top of
+    that total (``delta``). See :meth:`updateStepAction` for the exact convention.
+
+    Parameters
+    ----------
+    name
+        The name of this step action.
+    elSet
+        The element set the body force is applied to.
+    forceVector
+        The force vector, with one entry per spatial dimension.
+    model
+        The model tree.
+    journal
+        The journal object for logging.
+    f_t
+        The amplitude over the step progress interval ``[0...1]``. Defaults to the identity, i.e. the
+        force vector is reached linearly at the end of the step.
+    """
+
+    def __init__(
+        self,
+        name,
+        elSet,
+        forceVector: np.ndarray,
+        model,
+        journal,
+        f_t: Callable[[float], float] = None,
+    ):
+        self._name = name
+        self._elSet = elSet
+
+        self._journal = journal
+        self._model = model
+
+        if len(forceVector) < model.domainSize:
             raise Exception("BodyForce {:}: force vector has wrong dimension!".format(self._name))
 
-        self._delta = load
-        if action["f(t)"] is not None:
-            t = sp.symbols("t")
-            self._amplitude = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
-        else:
-            self._amplitude = lambda x: x
+        self._forceAtStepStart = 0.0
+
+        self.updateStepAction(forceVector=forceVector, f_t=f_t)
+
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build this body force from a parsed ``>>bodyforce`` definition. See
+        :class:`StepActionBase` for why this is separate from ``__init__``."""
+
+        return cls(
+            name,
+            model.elementSets[definition["elSet"]],
+            np.fromstring(definition["forceVector"], sep=",", dtype=np.double),
+            model,
+            journal,
+            f_t=amplitudeFromExpression(definition["f(t)"]),
+        )
+
+    def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
+        """Update from a parsed ``>>bodyforce`` definition re-declared in a later step.
+
+        The two magnitude options are mutually exclusive and ``forceVector`` wins, exactly as before:
+        ``forceVector`` is a new *total*, ``delta`` an *increment*.
+
+        Unlike ``nodeforces``/``distributedload``, this module's ``delta`` really is **unreachable**.
+        A *partial* re-declaration would have to be validated against an ``updatebodyforce`` keyword
+        (that is how the parser handles a re-declaration missing required args, see
+        ``utils/inputfileparser.py``, ``parseModuleKeywordLine``) and no such keyword is declared, so
+        a partial ``>>bodyforce`` fails parsing outright. What remains is the *full* re-declaration,
+        which always carries ``forceVector`` -- a required arg -- so the first branch always wins.
+        The ``elif`` is carried across unchanged rather than simplified away, so that the day
+        ``bodyforce`` grows an update keyword the intended semantics are still written down here.
+        """
+
+        forceVector = None
+        delta = None
+
+        if definition["forceVector"] is not None:
+            forceVector = np.fromstring(definition["forceVector"], sep=",", dtype=np.double)
+        elif definition["delta"] is not None:
+            delta = np.fromstring(definition["delta"], sep=",", dtype=np.double)
+
+        self.updateStepAction(
+            forceVector=forceVector,
+            delta=delta,
+            f_t=amplitudeFromExpression(definition["f(t)"]),
+        )
+
+    def updateStepAction(
+        self,
+        forceVector: np.ndarray = None,
+        delta: np.ndarray = None,
+        f_t: Callable[[float], float] = None,
+    ):
+        """Prescribe a new force vector and amplitude on the same element set.
+
+        The load accumulated up to the start of this step stays untouched; what is prescribed here is
+        the increment applied on top of it during this step. ``forceVector`` and ``delta`` are two
+        ways of expressing that increment and ``forceVector`` takes precedence; supplying neither
+        leaves the increment as it is, which after a completed step means zero -- i.e. the load is
+        held constant at its accumulated level.
+
+        Parameters
+        ----------
+        forceVector
+            The new *total* force vector, i.e. the value to be reached at the end of this step. The
+            increment applied during the step is the difference to the accumulated force.
+        delta
+            The *increment* of the force vector to be applied during this step. Only consulted if
+            ``forceVector`` is omitted.
+        f_t
+            The amplitude over the step progress interval ``[0...1]``; the identity if omitted.
+        """
+
+        if forceVector is not None:
+            self._delta = forceVector - self._forceAtStepStart
+        elif delta is not None:
+            self._delta = delta
+
+        self._amplitude = f_t if f_t is not None else linearAmplitude
 
         self._idle = False
 
     def applyAtStepEnd(self, model, stepMagnitude=None):
+        """Fold this step's increment into the accumulated force and go idle.
+
+        Idle means "no increment pending": until a later step re-declares this load, it stays at the
+        accumulated level.
+
+        Parameters
+        ----------
+        model
+            The current state of the model.
+        stepMagnitude
+            The fraction of the increment that was actually applied. None means the full increment,
+            i.e. the amplitude evaluated at the end of the step; the arc length solvers pass their
+            load parameter here instead.
+        """
+
         if not self._idle:
             if stepMagnitude is None:
                 # standard case
@@ -92,21 +223,20 @@ class StepAction(BodyLoadBase):
             self._delta = 0
             self._idle = True
 
-    def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
-        if action["forceVector"] is not None:
-            self._delta = np.fromstring(action["forceVector"], sep=",", dtype=np.double) - self._forceAtStepStart
-        elif action["delta"] is not None:
-            self._delta = np.fromstring(action["delta"], sep=",", dtype=np.double)
+    def getCurrentLoad(self, timeStep: TimeStep) -> np.ndarray:
+        """The force vector at the current point of the step.
 
-        if action["f(t)"] is not None:
-            t = sp.symbols("t")
-            self._amplitude = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
-        else:
-            self._amplitude = lambda x: x
+        Parameters
+        ----------
+        timeStep
+            The current time step.
 
-        self._idle = False
+        Returns
+        -------
+        np.ndarray
+            The accumulated force plus the amplitude-scaled increment of this step.
+        """
 
-    def getCurrentLoad(self, timeStep: TimeStep):
         if self._idle is True:
             t = 1.0
         else:
@@ -116,4 +246,12 @@ class StepAction(BodyLoadBase):
 
     @property
     def elementSet(self) -> list:
+        """The elements this body force is acting on.
+
+        Returns
+        -------
+        list
+            The element set.
+        """
+
         return self._elSet

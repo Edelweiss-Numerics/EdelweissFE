@@ -29,11 +29,16 @@
 
 # @author: Matthias Neuner
 
+from collections.abc import Callable
+
 import numpy as np
-import sympy as sp
 
 from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.stepactions.base.amplitude import (
+    amplitudeFromExpression,
+    linearAmplitude,
+)
 from edelweissfe.stepactions.base.nodalloadbase import NodalLoadBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.inputlanguage import InputLanguage
@@ -98,15 +103,53 @@ for module in modules:
 
 
 class StepAction(NodalLoadBase):
-    """Defines node based load, defined on a nodeset."""
+    """Defines node based load, defined on a nodeset.
 
-    def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
+    The constructor is typed: it takes the node set itself, the per-node force vector as an
+    ``np.ndarray`` and the amplitude as a callable. Nothing here parses an input file -- turning
+    ``nSet=gen_top``, ``2=-50`` (or ``components='0,-1000'``) and ``f(t)='sin(t*2*pi)'`` into those
+    arguments is the job of :meth:`fromStepActionDefinition` below, which is the only part of this
+    module the ``.inp`` front-end needs.
+
+    The load accumulates *over steps*: the force reached at the end of a step is remembered, and what
+    a later step declares is applied on top of it. See :meth:`updateStepAction`.
+
+    Parameters
+    ----------
+    name
+        The name of this step action.
+    nSet
+        The node set the forces are applied to.
+    field
+        The field the forces act on, e.g. ``"displacement"``.
+    nodeForces
+        The force applied to every node of the set, with one entry per component of ``field``.
+    model
+        The model tree.
+    journal
+        The journal object for logging.
+    f_t
+        The amplitude over the step progress interval ``[0...1]``. Defaults to the identity, i.e. the
+        forces are reached linearly at the end of the step.
+    """
+
+    def __init__(
+        self,
+        name,
+        nSet,
+        field,
+        nodeForces: np.ndarray,
+        model,
+        journal,
+        f_t: Callable[[float], float] = None,
+    ):
         self.name = name
-        nodeSets = model.nodeSets
 
-        self._field = action["field"]
-        self._nSetName = action["nSet"]
-        self._nSet = nodeSets[self._nSetName]
+        self._field = field
+        self._nSet = nSet
+
+        self._journal = journal
+        self._model = model
 
         self._fieldSize = getFieldSize(self._field, model.domainSize)
 
@@ -116,9 +159,43 @@ class StepAction(NodalLoadBase):
         self.nodeForcesDelta = np.zeros(shape)
         self._nSetNodeOrder = list(self._nSet)  # node identity per row, for the lazy resize below
 
-        self.possibleComponents = [str(i + 1) for i in range(self._fieldSize)]
+        self.updateStepAction(nodeForces, f_t=f_t)
 
-        self.updateStepAction(action, jobInfo, model, fieldOutputController, journal)
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build these node forces from a parsed ``>>nodeforces`` definition. See
+        :class:`StepActionBase` for why this is separate from ``__init__``."""
+
+        field = definition["field"]
+
+        return cls(
+            name,
+            model.nodeSets[definition["nSet"]],
+            field,
+            cls._nodeForcesFromDefinition(definition, getFieldSize(field, model.domainSize)),
+            model,
+            journal,
+            f_t=amplitudeFromExpression(definition["f(t)"]),
+        )
+
+    def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
+        """Update from a parsed ``>>nodeforces`` definition re-declared in a later step.
+
+        Neither ``nSet`` nor ``field`` may be read here: a *partial* re-declaration
+        (``>>nodeforces, name=cloadTop, 2=-10, f(t)=sin(t*2*pi)``, as in
+        ``testfiles/marmot/NodeForces/test.inp``) omits them, and the parser then validates the line
+        against the ``update`` + keyword-name schema, i.e. the ``updateNodeforces`` keyword declared
+        above (``utils/inputfileparser.py``, ``parseModuleKeywordLine``), whose definition contains
+        no ``nSet``/``field`` keys at all. The field size therefore comes from the instance -- which
+        is also the right source, since the node set a load acts on cannot change. Note that only
+        the *schema* is live: a ``>>updateNodeforces`` keyword *line* is unroutable, because the
+        parser would look for a step action module of that name (see PLAN_INPUT_SYSTEM.md's P3
+        row)."""
+
+        self.updateStepAction(
+            self._nodeForcesFromDefinition(definition, self._fieldSize),
+            f_t=amplitudeFromExpression(definition["f(t)"]),
+        )
 
     def _reconcileIfSetChanged(self):
         """Re-size the load arrays if the node set was mutated in-place (e.g. AMR adding new
@@ -141,58 +218,108 @@ class StepAction(NodalLoadBase):
                 self.nodeForcesDelta[i] = oldDelta[node]
         self._nSetNodeOrder = newNodes
 
-    def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
-        """Update the step action.
+    def updateStepAction(self, nodeForces: np.ndarray, f_t: Callable[[float], float] = None):
+        """Prescribe a new force vector and amplitude on the same node set.
 
-        It is a reasonable requirement that the updated direction components cannot change.
+        The load accumulated up to the start of this step stays untouched; ``nodeForces`` is the
+        increment applied on top of it during this step -- unlike ``bodyforce``/``distributedload``,
+        which additionally accept a new *total*.
+
+        Parameters
+        ----------
+        nodeForces
+            The force *increment* applied to every node of the set during this step, with one entry
+            per component of the field.
+        f_t
+            The amplitude over the step progress interval ``[0...1]``; the identity if omitted.
         """
 
         self._reconcileIfSetChanged()
         self._idle = False
 
-        if action["components"] is not None:
-            nodeLoad = np.asarray(eval(action["components"].replace("x", "0")), dtype=float)
-        else:
-            nodeLoad = self._getComponentsFromDirection(action)
+        if len(nodeForces) != self._fieldSize:
+            raise ValueError(
+                f"NodeForces '{self.name}': {len(nodeForces)} force component(s) given, but field "
+                f"'{self._field}' has {self._fieldSize} component(s)."
+            )
 
-        nodeForcesDelta = np.tile(nodeLoad, (len(self._nSet), 1))
-
-        self.nodeForcesDelta = nodeForcesDelta
-        self.amplitude = self._getAmplitude(action)
+        self.nodeForcesDelta = np.tile(nodeForces, (len(self._nSet), 1))
+        self.amplitude = f_t if f_t is not None else linearAmplitude
 
     @property
     def field(self) -> str:
+        """The field these forces act on.
+
+        Returns
+        -------
+        str
+            The name of the field.
+        """
+
         return self._field
 
     @property
     def nodeSet(self) -> NodeSet:
-        return self._nSet
-
-    def _getAmplitude(self, action: dict) -> callable:
-        """Determine the amplitude for the step, depending on a potentially specified function.
-
-        Parameters
-        ----------
-        action
-            The dictionary defining this step action.
+        """The nodes these forces are acting on.
 
         Returns
         -------
-        callable
-            The function defining the amplitude depending on the step propress.
+        NodeSet
+            The node set.
         """
 
-        if action["f(t)"] is not None:
-            t = sp.symbols("t")
-            amplitude = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
-        else:
+        return self._nSet
 
-            def amplitude(x):
-                return x
+    @staticmethod
+    def _nodeForcesFromDefinition(definition: dict, fieldSize: int) -> np.ndarray:
+        """Collect the per-node force vector from a parsed definition's ``1``..``6`` and
+        ``components``.
 
-        return amplitude
+        Note the deliberate difference to ``dirichlet``, which offers options of the same names: an
+        entry of ``x`` means *free* to a boundary condition, so dirichlet maps it to ``np.nan`` and
+        uses the result as a mask, whereas an unloaded component simply carries no force, so here
+        ``x`` means the value zero and the result is a dense vector. Do not unify the two.
+
+        Parameters
+        ----------
+        definition
+            The parsed option mapping defining this step action.
+        fieldSize
+            The number of components the field has.
+
+        Returns
+        -------
+        np.ndarray
+            The force applied to every node of the set, one entry per field component.
+        """
+
+        if definition["components"] is not None:
+            return np.asarray(eval(definition["components"].replace("x", "0")), dtype=float)
+
+        nodeForces = np.zeros(fieldSize)
+
+        for index in range(fieldSize):
+            if definition[str(index + 1)] is not None:
+                nodeForces[index] = float(definition[str(index + 1)])
+
+        return nodeForces
 
     def applyAtStepEnd(self, model, stepMagnitude=None):
+        """Fold this step's increment into the accumulated forces and go idle.
+
+        Idle means "no increment pending": until a later step re-declares this load, it stays at the
+        accumulated level.
+
+        Parameters
+        ----------
+        model
+            The current state of the model.
+        stepMagnitude
+            The fraction of the increment that was actually applied. None means the full increment,
+            i.e. the amplitude evaluated at the end of the step; the arc length solvers pass their
+            load parameter here instead.
+        """
+
         self._reconcileIfSetChanged()
         if not self._idle:
             if stepMagnitude is None:
@@ -205,7 +332,21 @@ class StepAction(NodalLoadBase):
             self.nodeForcesDelta[:] = 0
             self._idle = True
 
-    def getCurrentLoad(self, timeStep: TimeStep):
+    def getCurrentLoad(self, timeStep: TimeStep) -> np.ndarray:
+        """The nodal forces at the current point of the step.
+
+        Parameters
+        ----------
+        timeStep
+            The current time step.
+
+        Returns
+        -------
+        np.ndarray
+            The accumulated forces plus the amplitude-scaled increment of this step, one row per node
+            of the set.
+        """
+
         self._reconcileIfSetChanged()
         if self._idle:
             return self.nodeForcesStepStart
@@ -214,12 +355,3 @@ class StepAction(NodalLoadBase):
             amp = self.amplitude(t)
 
             return self.nodeForcesStepStart + self.nodeForcesDelta * amp
-
-    def _getComponentsFromDirection(self, action: dict) -> np.ndarray:
-        nodeLoad = np.zeros(self._fieldSize)
-
-        for i, comp in enumerate(self.possibleComponents):
-            if action[comp] is not None:
-                nodeLoad[i] = float(action[comp])
-
-        return nodeLoad
