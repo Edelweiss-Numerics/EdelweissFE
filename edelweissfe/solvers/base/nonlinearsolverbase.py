@@ -56,6 +56,12 @@ class NonlinearSolverBase(ABC):
 
     SolverSpecificOptions = {}
 
+    #: The active multi-point-constraint (hanging node / tie) condensation, if any.
+    #: None for solvers that never build one (e.g. the explicit dynamic solvers), so
+    #: dirichlet.applyDirichletToStiffness can tell an MPC-transformed (fresh, disposable)
+    #: system matrix apart from the assembler's own persistent, in-place-updated one.
+    mpcTransformation = None
+
     def __init__(self, jobInfo, journal, **kwargs):
         pass
 
