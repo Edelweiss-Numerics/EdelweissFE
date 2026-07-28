@@ -38,6 +38,22 @@ class StepActionBase(ABC):
     """This is the base class for all step actions.
     User defined step actions must implement the methods.
 
+    Two construction paths (see ``PLAN_INPUT_SYSTEM.md``, P3(c))
+    -----------------------------------------------------------
+    A step action is reached either from Python or from an ``.inp`` file, and the input file is a
+    *serialization* of the Python path, not a second way of building the object. So a **ported**
+    step action declares a real typed constructor -- ``nSet`` is a node set, ``f_t`` is a callable,
+    prescribed values are a ``dict`` -- and overrides :meth:`fromStepActionDefinition` /
+    :meth:`updateStepActionFromDefinition` to translate the parser's option mapping into a call to
+    it. Everything string-shaped stays on that translation, which is the only thing the ``.inp``
+    front-end adds.
+
+    An **unported** step action needs no changes at all: the two hooks below default to the legacy
+    convention of handing the raw ``definition`` dict to ``__init__``/``updateStepAction``, so the
+    port proceeds one module at a time. Which path a module takes is decided by whether it overrides
+    the hooks -- ordinary polymorphism, not attribute probing, and no list of ported modules for
+    anyone to forget to update.
+
     Parameters
     ----------
     name
@@ -64,6 +80,75 @@ class StepActionBase(ABC):
         journal: Journal,
     ):
         pass
+
+    @classmethod
+    def fromStepActionDefinition(
+        cls,
+        name: str,
+        definition: dict,
+        jobInfo: dict,
+        model: FEModel,
+        fieldOutputController: FieldOutputController,
+        journal: Journal,
+    ) -> "StepActionBase":
+        """Create this step action from a parsed ``.inp`` step action definition.
+
+        This is the L4 seam: the one place a module's input-file shape (numbered component options,
+        a ``f(t)`` expression string, a node *set name*) is turned into the typed arguments its real
+        constructor takes. Override it together with a typed ``__init__``; leave it alone and the
+        legacy dict-consuming constructor is used unchanged.
+
+        Parameters
+        ----------
+        name
+            The name of the step action.
+        definition
+            The parsed option mapping for this step action.
+        jobInfo
+            A dictionary containing the information about the job.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controlling object.
+        journal
+            The journal object for logging.
+
+        Returns
+        -------
+        StepActionBase
+            The constructed step action.
+        """
+        return cls(name, definition, jobInfo, model, fieldOutputController, journal)
+
+    def updateStepActionFromDefinition(
+        self,
+        definition: dict,
+        jobInfo: dict,
+        model: FEModel,
+        fieldOutputController: FieldOutputController,
+        journal: Journal,
+    ):
+        """Update this step action from a parsed ``.inp`` step action definition.
+
+        The update counterpart of :meth:`fromStepActionDefinition`, needed as its own hook because a
+        later step re-declaring an action reaches the *instance*, not the class. Override both or
+        neither: a module whose constructor is typed but whose update path still consumed a dict
+        would work only until the first multi-step input.
+
+        Parameters
+        ----------
+        definition
+            The parsed option mapping for this step action.
+        jobInfo
+            A dictionary containing the information about the job.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controlling object.
+        journal
+            The journal object for logging.
+        """
+        self.updateStepAction(definition, jobInfo, model, fieldOutputController, journal)
 
     def updateStepAction(
         self,

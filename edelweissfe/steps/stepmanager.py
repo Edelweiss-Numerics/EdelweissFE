@@ -218,8 +218,12 @@ class StepManager:
                     )
                 actionNamesInThisStep.add(action.name)
 
+                # Both paths go through the L4 seam on StepActionBase rather than calling
+                # __init__/updateStepAction directly, so that a step action with a real typed
+                # constructor and one still consuming the raw definition dict are driven
+                # identically from here -- see StepActionBase.fromStepActionDefinition.
                 if action.name in self.stepActions[action.module]:
-                    self.stepActions[action.module][action.name].updateStepAction(
+                    self.stepActions[action.module][action.name].updateStepActionFromDefinition(
                         action.kwargs, jobInfo, model, fieldOutputController, journal
                     )
                     printActionDefinition('Updating "{:}"'.format(action.name), action.kwargs)
@@ -227,7 +231,9 @@ class StepManager:
                 else:
                     printActionDefinition('Creating "{:}"'.format(action.name), action.kwargs)
 
-                    self.stepActions[action.module][action.name] = stepActionFactory(action.module)(
+                    self.stepActions[action.module][action.name] = stepActionFactory(
+                        action.module
+                    ).fromStepActionDefinition(
                         action.name,
                         action.kwargs,
                         jobInfo,

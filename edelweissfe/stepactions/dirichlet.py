@@ -29,6 +29,8 @@
 
 # @author: Matthias Neuner
 
+from collections.abc import Callable
+
 import numpy as np
 import sympy as sp
 
@@ -89,33 +91,103 @@ for module in modules:
 
 
 class StepAction(DirichletBase):
-    """Dirichlet boundary condition, based on a node set"""
+    """Dirichlet boundary condition, based on a node set.
 
-    def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
+    The constructor is typed: it takes the node set itself, the prescribed values as a mapping, and
+    the amplitude as a callable. Nothing here parses an input file -- turning ``nSet=bottom``,
+    ``2=0.5`` and ``f(t)='t**2'`` into those arguments is the job of
+    :meth:`fromStepActionDefinition` below, which is the only part of this module the ``.inp``
+    front-end needs. That split is what lets an external caller (EdelweissMeshfree, a script) use
+    this class directly; the signature deliberately matches EdelweissMeshfree's own
+    ``stepactions/dirichlet.py``, which exists only because this one could not be constructed
+    without a parser-shaped dict.
+
+    Parameters
+    ----------
+    name
+        The name of this step action.
+    nSet
+        The node set the boundary condition is applied to.
+    field
+        The field the boundary condition acts on, e.g. ``"displacement"``.
+    prescribedComponents
+        Maps the zero-based component index of ``field`` to the value prescribed for it. Components
+        absent from the mapping are left free.
+    model
+        The model tree.
+    journal
+        The journal object for logging.
+    f_t
+        The amplitude over the step progress interval ``[0...1]``. Defaults to the identity, i.e. the
+        prescribed values are reached linearly at the end of the step.
+    analyticalField
+        Scales the prescribed values per node, evaluated at each node's coordinates.
+    """
+
+    def __init__(
+        self,
+        name,
+        nSet,
+        field,
+        prescribedComponents: dict,
+        model,
+        journal,
+        f_t: Callable[[float], float] = None,
+        analyticalField=None,
+    ):
         self.name = name
 
-        self.field = action["field"]
-
-        self.action = action
-        self.nSet = model.nodeSets[action["nSet"]]
+        self.field = field
+        self.nSet = nSet
         self.fieldSize = getFieldSize(self.field, model.domainSize)
-        self.possibleComponents = [str(i + 1) for i in range(self.fieldSize)]
 
         self._components = None
         self._journal = journal
         self._model = model
 
-        self.updateStepAction(action, jobInfo, model, fieldOutputController, journal)
+        self.updateStepAction(prescribedComponents, f_t, analyticalField)
+
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build this boundary condition from a parsed ``>>dirichlet`` definition. See
+        :class:`StepActionBase` for why this is separate from ``__init__``."""
+
+        field = definition["field"]
+
+        return cls(
+            name,
+            model.nodeSets[definition["nSet"]],
+            field,
+            cls._prescribedComponentsFromDefinition(definition, getFieldSize(field, model.domainSize)),
+            model,
+            journal,
+            f_t=cls._amplitudeFromDefinition(definition),
+            analyticalField=cls._analyticalFieldFromDefinition(definition, model),
+        )
+
+    def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
+        """Update from a parsed ``>>dirichlet`` definition re-declared in a later step."""
+
+        self.updateStepAction(
+            self._prescribedComponentsFromDefinition(definition, self.fieldSize),
+            self._amplitudeFromDefinition(definition),
+            self._analyticalFieldFromDefinition(definition, model),
+        )
 
     def _reconcileIfSetChanged(self):
         """Re-size the prescribed values if the node set was mutated in-place (e.g. AMR adding new
         boundary nodes) since the last check. Preserve the active/inactive flag: updateStepAction
         unconditionally activates, but a BC deactivated at a prior step end must stay inactive --
         otherwise a refinement in a later step would silently revive it. The node set itself needs
-        no re-fetch: it has stable identity (mutated in place), so ``self.nSet`` is already current."""
+        no re-fetch: it has stable identity (mutated in place), so ``self.nSet`` is already current.
+
+        Replays the *typed* state rather than a stashed definition dict, which is why
+        ``__init__`` keeps ``prescribedComponents``/``f_t``/``analyticalField`` as attributes: the
+        replay used to depend on the dict having been mutated in place by the ``components=``
+        handling, an interaction that only worked because both lived in the same dict."""
         if self._checkSetChanged(self.nSet):
             wasActive = self.active
-            self.updateStepAction(self.action, None, self._model, None, self._journal)
+            self.updateStepAction(self._prescribedComponents, self._f_t, self._analyticalField)
             self.active = wasActive
 
     @property
@@ -127,34 +199,48 @@ class StepAction(DirichletBase):
     def applyAtStepEnd(self, model):
         self.active = False
 
-    def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
+    def updateStepAction(
+        self,
+        prescribedComponents: dict,
+        f_t: Callable[[float], float] = None,
+        analyticalField=None,
+    ):
+        """Prescribe a new set of values, amplitude and analytical field on the same node set.
+
+        Parameters
+        ----------
+        prescribedComponents
+            Maps the zero-based component index of the field to the value prescribed for it.
+        f_t
+            The amplitude over the step progress interval ``[0...1]``; the identity if omitted.
+        analyticalField
+            Scales the prescribed values per node.
+        """
         self.active = True
 
         self._checkSetChanged(self.nSet)
-        self.action = action
 
-        if action["components"] is not None:
-            action = self._getDirectionsFromComponents(action)
+        outOfRange = [index for index in prescribedComponents if not 0 <= index < self.fieldSize]
+        if outOfRange:
+            raise ValueError(
+                f"Dirichlet '{self.name}': component index/indices {sorted(outOfRange)} do not exist on "
+                f"field '{self.field}', which has {self.fieldSize} component(s)."
+            )
 
-        components = [i for i, direction in enumerate(self.possibleComponents) if action[direction] is not None]
+        self._prescribedComponents = dict(prescribedComponents)
+        self._f_t = f_t
+        self._analyticalField = analyticalField
 
-        values = {
-            i: float(action[direction])
-            for i, direction in enumerate(self.possibleComponents)
-            if action[direction] is not None
-        }
+        self._components = sorted(self._prescribedComponents)
 
-        self.delta = np.tile(list(values.values()), (len(self.nSet), 1))
+        self.delta = np.tile([self._prescribedComponents[i] for i in self._components], (len(self.nSet), 1))
 
-        # for i, node in enumerate(self.nSet):
-        if action["analyticalField"] is not None:
-            self.analyticalField = model.analyticalFields[action["analyticalField"]]
+        if analyticalField is not None:
+            self.analyticalField = analyticalField
             for i, node in enumerate(self.nSet):
-                self.delta[i, :] *= self.analyticalField.evaluateAtCoordinates(node.coordinates)[0][0]
+                self.delta[i, :] *= analyticalField.evaluateAtCoordinates(node.coordinates)[0][0]
 
-        self._components = components
-
-        self.amplitude = self._getAmplitude(action)
+        self.amplitude = f_t if f_t is not None else lambda x: x
 
     def getPrescribedIncrement(self, timeStep: TimeStep):
         self._reconcileIfSetChanged()
@@ -166,48 +252,76 @@ class StepAction(DirichletBase):
         else:
             return self.delta * 0.0
 
-    def _getDirectionsFromComponents(self, action: dict) -> dict:
-        """Determine the direction components from a numpy array representation.
+    @staticmethod
+    def _prescribedComponentsFromDefinition(definition: dict, fieldSize: int) -> dict:
+        """Collect the prescribed values from a parsed definition's ``1``..``6`` and ``components``.
 
         Parameters
         ----------
-        action
-            The dictionary defining this step action.
+        definition
+            The parsed option mapping defining this step action.
+        fieldSize
+            The number of components the field has.
 
         Returns
         -------
         dict
-            The updated dictionary defining this step action containing the directional definitions.
+            Maps the zero-based component index to its prescribed value.
         """
 
-        components = np.array(eval(action["components"].replace("x", "np.nan")), dtype=float)
+        prescribed = {
+            index: float(definition[str(index + 1)])
+            for index in range(fieldSize)
+            if definition[str(index + 1)] is not None
+        }
 
-        for i, t in enumerate(components):
-            if not np.isnan(t):
-                action[str(i + 1)] = t
+        if definition["components"] is not None:
+            # An entry of `x` marks a component as free; anything else overrides a numbered option
+            # for the same component, which is the precedence the in-place dict mutation this
+            # replaces happened to produce.
+            values = np.array(eval(definition["components"].replace("x", "np.nan")), dtype=float)
+            prescribed.update({index: value for index, value in enumerate(values) if not np.isnan(value)})
 
-        return action
+        return prescribed
 
-    def _getAmplitude(self, action: dict) -> callable:
-        """Determine the amplitude for the step, depending on a potentially specified function.
+    @staticmethod
+    def _amplitudeFromDefinition(definition: dict) -> Callable[[float], float]:
+        """Compile a parsed definition's ``f(t)`` expression into an amplitude function.
 
         Parameters
         ----------
-        action
-            The dictionary defining this step action.
+        definition
+            The parsed option mapping defining this step action.
 
         Returns
         -------
-        callable
-            The function defining the amplitude depending on the step propress.
+        Callable[[float], float]
+            The amplitude as a function of step progress, or None if none was specified.
         """
 
-        if action["f(t)"] is not None:
-            t = sp.symbols("t")
-            amplitude = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
-        else:
+        if definition["f(t)"] is None:
+            return None
 
-            def amplitude(x):
-                return x
+        t = sp.symbols("t")
+        return sp.lambdify(t, sp.sympify(definition["f(t)"]), "numpy")
 
-        return amplitude
+    @staticmethod
+    def _analyticalFieldFromDefinition(definition: dict, model):
+        """Resolve a parsed definition's ``analyticalField`` name against the model.
+
+        Parameters
+        ----------
+        definition
+            The parsed option mapping defining this step action.
+        model
+            The model tree.
+
+        Returns
+        -------
+        The analytical field, or None if none was specified.
+        """
+
+        if definition["analyticalField"] is None:
+            return None
+
+        return model.analyticalFields[definition["analyticalField"]]

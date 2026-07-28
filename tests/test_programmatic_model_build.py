@@ -30,25 +30,26 @@ P0.1 safety net (see PLAN_INPUT_SYSTEM.md): a model built and solved entirely vi
 constructors -- no ``.inp`` file, no ``parseInputFile``, no dependency on the ``InputLanguage``
 singleton having been populated.
 
-This test intentionally stops short of driving the model through the production
-``StepManager``/``StepAction``/``NIST`` solver stack: constructing a ``StepAction`` (e.g.
-``edelweissfe.stepactions.dirichlet.StepAction``) currently requires a fully-populated,
-parser-shaped ``action`` dict (every optional key, e.g. ``"components"``, ``"analyticalField"``,
-``"f(t)")``, must already be present, even if ``None``) -- see
-``edelweissfe/stepactions/dirichlet.py:105-168``. Hand-assembling that dict here would amount to
-writing a second, hidden input-file parser, which is explicitly out of scope. So instead, this
-test drives the single element directly to equilibrium: it assembles the element's tangent
-stiffness and internal force vector itself and solves the reduced (Dirichlet-eliminated) linear
-system with plain numpy -- which is mathematically exactly what the production solver does for a
-single, linear-elastic Newton iteration, just without the ``Step``/``StepAction`` wrapping.
+The first test stops short of driving the model through the production
+``StepManager``/``StepAction``/``NIST`` solver stack, and drives the single element to equilibrium
+itself instead: it assembles the element's tangent stiffness and internal force vector and solves
+the reduced (Dirichlet-eliminated) linear system with plain numpy, which is mathematically exactly
+what the production solver does for a single linear-elastic Newton iteration, just without the
+``Step``/``StepAction`` wrapping.
 
-The precise gap this documents for P1/P2: ``StepAction`` subclasses need a real L1 constructor
-(explicit typed kwargs mirroring ``createFieldOutputFromInputFile``'s pattern in
-``edelweissfe/helpers/inputfilehelpers.py:72``), with the current dict-consuming ``__init__``
-demoted to a thin adapter called from the L4 (input-file) layer.
+It did so because of a gap that P3(c) has now started closing. Originally, constructing a
+``StepAction`` required a fully-populated *parser-shaped* ``action`` dict -- every optional key
+(``"components"``, ``"analyticalField"``, ``"f(t)"``) had to be present even as ``None`` -- so
+hand-assembling one here would have meant writing a second, hidden input-file parser. The second
+test below is the successor that gap was blocking: it builds a real ``dirichlet.StepAction``
+through its typed constructor, with no dict and no parser anywhere, and checks the boundary
+condition it produces. The remaining 12 step actions still take the dict (they keep working through
+the default hooks on ``StepActionBase``), so a full ``StepManager``-driven programmatic cycle waits
+on the rest of P3(c).
 """
 
 import numpy as np
+import pytest
 
 from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.materiallibrary import getMaterialClass
@@ -58,6 +59,8 @@ from edelweissfe.points.node import Node
 from edelweissfe.sections.plane import Section
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.stepactions.dirichlet import StepAction as DirichletStepAction
+from edelweissfe.timesteppers.timestep import TimeStep
 
 
 def test_single_cpe4_patch_test_pure_python_no_parser():
@@ -154,3 +157,67 @@ def test_single_cpe4_patch_test_pure_python_no_parser():
 
     # a tensile load must elongate the bar
     assert uy_n3 > 0
+
+
+def test_dirichlet_step_action_built_from_python_without_a_parser_dict():
+    """A real ``dirichlet.StepAction`` constructed through its typed L1 constructor.
+
+    This is the P0.1 gap closing: no ``.inp`` file, no ``parseInputFile``, and -- the part that was
+    impossible before P3(c) -- no hand-assembled parser-shaped ``action`` dict either. The node set
+    is a ``NodeSet``, the prescribed values are a ``dict``, and the amplitude is an ordinary Python
+    callable, so nothing about this construction path knows that an input file exists.
+    """
+    n1 = Node(1, np.array([0.0, 0.0]))
+    n2 = Node(2, np.array([1.0, 0.0]))
+
+    model = FEModel(2)
+    for n in (n1, n2):
+        model.nodes[n.label] = n
+    nSet = NodeSet("bottom", [n1, n2])
+    model.nodeSets["bottom"] = nSet
+
+    journal = Journal(verbose=False)
+
+    # prescribe only the y component (index 1), leaving x free, and ramp it quadratically
+    bc = DirichletStepAction(
+        "bottom",
+        nSet,
+        "displacement",
+        {1: 0.5},
+        model,
+        journal,
+        f_t=lambda t: t**2,
+    )
+
+    assert bc.components == [1]
+    assert bc.field == "displacement"
+    assert bc.fieldSize == 2
+
+    # one prescribed component per node in the set
+    assert bc.delta.shape == (2, 1)
+
+    # The increment handed to the solver is delta * (f_t(progress) - f_t(progress - increment)),
+    # so over the whole step it must sum to the prescribed value regardless of the amplitude: the
+    # amplitude shapes the path, not the destination.
+    total = 0.0
+    nIncrements = 4
+    for i in range(nIncrements):
+        progress = (i + 1) / nIncrements
+        timeStep = TimeStep(i, 1.0 / nIncrements, progress, 1.0 / nIncrements, progress, progress)
+        total += bc.getDelta(timeStep)[0, 0]
+    np.testing.assert_allclose(total, 0.5, atol=1e-12)
+
+    # a nonlinear amplitude must actually be nonlinear in the increments, otherwise the callable
+    # was silently ignored and the assertion above would pass for the wrong reason
+    firstHalf = bc.getDelta(TimeStep(0, 0.5, 0.5, 0.5, 0.5, 0.5))[0, 0]
+    assert firstHalf < 0.5 * 0.5
+
+    # updating on the same set is typed too, and re-prescribing must replace, not accumulate
+    bc.updateStepAction({0: 1.0, 1: 2.0})
+    assert bc.components == [0, 1]
+    np.testing.assert_allclose(bc.delta[0], [1.0, 2.0])
+
+    # a component the field does not have must be rejected, rather than silently ignored the way
+    # an unknown key in a definition dict would have been
+    with pytest.raises(ValueError, match="do not exist on field"):
+        bc.updateStepAction({7: 1.0})
