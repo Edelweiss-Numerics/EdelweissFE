@@ -475,3 +475,45 @@ def test_an_entry_point_shadowing_a_builtin_name_is_reported_not_silently_ignore
                 registry._auditEntryPoints()
         finally:
             registry._entryPointsAudited = True
+
+
+def test_isRegistered_answers_without_importing_the_implementation():
+    """The property that lets ``isRegistered`` replace ``importlib.util.find_spec`` in
+    :class:`~edelweissfe.steps.stepmanager.StepActionCollection`.
+
+    That collection is asked about categories a consumer defines *no* actions in (a solver checking
+    for ``indirectcontrol``, say), so an existence check that imported the implementation would pull
+    in modules the simulation never uses -- and would do it for a name the user never wrote.
+
+    A fresh subprocess again, because by the time this runs in a shared pytest session some other
+    test has certainly imported half of ``edelweissfe.stepactions`` already.
+    """
+    code = (
+        "import sys\n"
+        "from edelweissfe.config import registry\n"
+        "assert registry.isRegistered('stepaction', 'Dirichlet')\n"
+        "assert not registry.isRegistered('stepaction', 'nosuchstepaction')\n"
+        "for m in sorted(m for m in sys.modules if m.startswith('edelweissfe.stepactions.')):\n"
+        "    print(m)\n"
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    imported = [line for line in result.stdout.splitlines() if line]
+    assert imported == [], f"isRegistered imported step action modules: {imported}"
+
+
+def test_isRegistered_sees_all_three_registration_mechanisms():
+    """Built-in table, entry point and in-process ``register`` must all be visible to the predicate,
+    otherwise it would disagree with :func:`lookup` about what exists."""
+    assert registry.isRegistered("stepaction", "dirichlet")  # built-in table
+
+    plugin = EntryPoint(
+        name="stepaction.pluginaction",
+        value=f"{__name__}:_PluginOutputManager",
+        group=registry.ENTRY_POINT_GROUP,
+    )
+    with patch.object(registry, "entry_points", return_value=[plugin]):
+        assert registry.isRegistered("stepaction", "PluginAction")
+
+    registry.register("stepaction", "inprocessaction", _PluginOutputManager)
+    assert registry.isRegistered("stepaction", "InProcessAction")
+    assert "inprocessaction" in registry.availableNames("stepaction")

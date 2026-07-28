@@ -423,7 +423,7 @@ def _auditEntryPoints() -> None:
         )
 
 
-def _availableNames(category: str) -> list[str]:
+def availableNames(category: str) -> list[str]:
     """List the names known for ``category`` across both the built-in table and entry points.
 
     Parameters
@@ -438,11 +438,40 @@ def _availableNames(category: str) -> list[str]:
     """
     casefoldedCategory = category.casefold()
     names = {builtinName for (cat, builtinName) in _BUILTINS if cat == casefoldedCategory}
+    names |= {registeredName for (cat, registeredName) in _registered if cat == casefoldedCategory}
     prefix = f"{casefoldedCategory}."
     for ep in entry_points(group=ENTRY_POINT_GROUP):
         if ep.name.casefold().startswith(prefix):
             names.add(ep.name[len(prefix) :])
     return sorted(names)
+
+
+def isRegistered(category: str, name: str) -> bool:
+    """Report whether ``(category, name)`` resolves, *without* importing its implementation.
+
+    :func:`lookup` is the wrong tool for a caller that only wants to validate a name -- it imports
+    the implementing module as a side effect, so merely asking "is 'dirichlet' a step action?" would
+    pull in every module ever asked about. This is the predicate for those callers; it consults the
+    same three sources in the same order, but compares strings only.
+
+    Parameters
+    ----------
+    category
+        The registry category.
+    name
+        The name within that category.
+
+    Returns
+    -------
+    bool
+        Whether an implementation is registered, by any of the three mechanisms.
+    """
+    key = (category.casefold(), name.casefold())
+
+    if key in _resolved or key in _BUILTINS:
+        return True
+
+    return _entryPointDottedString(*key) is not None
 
 
 def register(category: str, name: str, target: Any, *, schema: type | None = None, override: bool = False) -> None:
@@ -563,17 +592,17 @@ def lookup(category: str, name: str) -> tuple[Any, type | None]:
             dotted = _entryPointDottedString(*key)
 
         if dotted is None:
-            availableNames = _availableNames(category)
+            known = availableNames(category)
             hint = ""
-            if availableNames:
+            if known:
                 try:
-                    similar = findSimilarString(name, availableNames)
+                    similar = findSimilarString(name, known)
                     hint = f" Did you mean '{similar}'?"
                 except ValueError:
                     pass
                 message = (
                     f"No '{category}' implementation registered under the name '{name}'. "
-                    f"Available: {', '.join(availableNames)}.{hint}"
+                    f"Available: {', '.join(known)}.{hint}"
                 )
             else:
                 message = f"No '{category}' implementation registered under the name '{name}' " "(no names known)."

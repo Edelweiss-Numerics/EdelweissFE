@@ -42,11 +42,19 @@ by specifying their ``name`` and a list of ``option=value``, for example
     >>distributedload, name=dload2, surface=left, type=pressure, magnitude=50, f(t)=t
 """
 
-import importlib
+from edelweissfe.config import registry
 
 
 def stepActionFactory(name: str) -> type:
     """Get the class type of the requested step action.
+
+    Resolved through the L3 registry (``stepaction`` category) rather than by importing
+    ``edelweissfe.stepactions.<name>`` directly. That import-by-convention could only ever find step
+    actions living *inside* this package, so an external package -- EdelweissMeshfree, a plugin --
+    had no way to contribute one; going through the registry means a built-in, an entry point and an
+    in-process :func:`~edelweissfe.config.registry.register` call are all equally reachable here.
+    An unknown name now raises :class:`~edelweissfe.config.registry.RegistryLookupError` naming the
+    available step actions, instead of a bare ``ModuleNotFoundError``.
 
     Parameters
     ----------
@@ -59,6 +67,6 @@ def stepActionFactory(name: str) -> type:
         The step action class type.
     """
 
-    module = importlib.import_module("edelweissfe.stepactions." + name.lower())
+    stepActionClass, _ = registry.lookup("stepaction", name)
 
-    return module.StepAction
+    return stepActionClass

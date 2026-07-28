@@ -26,9 +26,9 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-import importlib.util
 import textwrap
 
+from edelweissfe.config import registry
 from edelweissfe.config.stepactions import stepActionFactory
 from edelweissfe.config.steps import getStepClassByType
 from edelweissfe.journal.journal import Journal
@@ -88,6 +88,13 @@ class StepActionCollection:
     empty dictionary, whereas accessing an unknown step action module raises a
     KeyError. This ensures that typos in step action module names fail loudly
     instead of being silently treated as empty collections.
+
+    What counts as "valid" comes from the L3 registry, via
+    :func:`~edelweissfe.config.registry.isRegistered` -- deliberately the non-importing predicate
+    rather than ``lookup``, because a consumer asking for a category it defines no actions in (a
+    solver checking for ``indirectcontrol``, say) must not thereby import that step action's module.
+    The check it replaces, ``importlib.util.find_spec("edelweissfe.stepactions." + module)``, could
+    only ever see step actions shipped inside this package.
     """
 
     def __init__(self):
@@ -97,8 +104,11 @@ class StepActionCollection:
         module = module.lower()
 
         if module not in self._actionsPerModule:
-            if importlib.util.find_spec("edelweissfe.stepactions." + module) is None:
-                raise KeyError(f"'{module}' is not a known step action module")
+            if not registry.isRegistered("stepaction", module):
+                raise KeyError(
+                    f"'{module}' is not a known step action module. Available: "
+                    + ", ".join(registry.availableNames("stepaction"))
+                )
             self._actionsPerModule[module] = dict()
 
         return self._actionsPerModule[module]
