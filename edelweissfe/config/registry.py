@@ -32,7 +32,7 @@ Maps ``(category, name)`` to the implementing object (a class, or occasionally a
 function -- see the coverage notes below) that EdelweissFE's own modules or third-party packages
 (EdelweissMeshfree, plugins) provide for that name.
 
-Three properties are load-bearing and are each covered by a dedicated test in
+Four properties are load-bearing; the first three are each covered by a dedicated test in
 ``tests/test_registry.py``:
 
 1. **Zero eager imports.** Importing this module must not import any element, material, solver,
@@ -52,6 +52,19 @@ Three properties are load-bearing and are each covered by a dedicated test in
    given ``(category, name)`` is only imported once. Under free-threading (``PYTHON_GIL=0``),
    multiple threads can call ``lookup()`` for the same key concurrently; see the docstring of
    :func:`lookup` for the chosen strategy.
+4. **Names are case-insensitive, deliberately, and that belongs here rather than in the input-file
+   front-end.** Both ``category`` and ``name`` are casefolded on the way in (:func:`lookup`,
+   :func:`register`) and stored casefolded in ``_BUILTINS``. This is not a convenience shortcut and
+   should not be "corrected" to exact matching: the whole point of this registry is that an
+   external package (EdelweissMeshfree, a plugin) reaches these modules *without* the ``.inp``
+   parser in the loop, so if case-insensitivity lived only in the parser, the same name would
+   resolve differently depending on which front-end it arrived through. It is also what 12 of the
+   13 ``config/*.py`` registries this replaces already did via ``name.lower()``; the lone
+   exception, ``config/solvers.py``, is case-sensitive, so solver names becoming case-insensitive
+   is this registry's one behavioral change (strictly more permissive -- no existing ``.inp``
+   changes meaning). See rule (c) in ``PLAN_INPUT_SYSTEM.md`` §3, amended to say so. Note the
+   consequence tracked as a P2 deliverable: casefolded keys widen the window for registration
+   collisions, and :func:`register` does not yet detect them.
 
 Built-in coverage
 ------------------
