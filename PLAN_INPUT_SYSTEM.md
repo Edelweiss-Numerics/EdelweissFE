@@ -310,6 +310,156 @@ failures -- `edelweiss-only/NodeToDeformableSurfaceContactPullOut`,
 (`tests/test_inputlanguage_golden.py`) passes unchanged, confirming P1 did not alter the grammar
 surface (it could not have -- nothing new is wired in yet).
 
+## 8. P3(c) outcome: all 13 step actions ported, and a recorded finding corrected
+
+**Status: complete.** All 13 `stepactions/*.py` now declare a typed L1 constructor and translate the
+input file's shape in the two L4 hooks (`fromStepActionDefinition` /
+`updateStepActionFromDefinition`) established for `dirichlet` in `c56f974a`. Nothing takes `jobInfo`
+or `fieldOutputController` in L1 any more; sets, surfaces, materials, field outputs and analytical
+fields arrive as objects, magnitudes as `np.ndarray`, amplitudes as callables.
+
+Two pieces of shared infrastructure came out of it:
+
+- **`stepactions/base/amplitude.py`** — six modules each compiled `f(t)` with their own copy of
+  `sp.lambdify(t, sp.sympify(...), "numpy")`, and the copies had drifted on what an *absent* `f(t)`
+  means. Now `amplitudeFromExpression` (returns None for None, so "unset" stays distinguishable) and
+  `linearAmplitude` (the named default that `f_t=None` selects) live in one place. Deliberately not
+  in `utils/math.py`: that module is imported by the solvers, and this one pulls in sympy.
+- **`tests/test_stepaction_option_coverage.py`** — a *source-level* audit of every step action's L4
+  option handling against the declared grammar, in the spirit of `test_stepoptions.py`'s registrar
+  test. It pins four things: every module declares a keyword of its own name; every module overrides
+  `fromStepActionDefinition` (i.e. this phase stays done); each hook reads only options the keyword
+  it is validated against declares; and no *new* declared-but-never-read option appears. It exists
+  because simulation coverage of these modules is far thinner than the file count suggests —
+  **41 of the `testfiles/marmot` cases SKIP** on a Marmot build lacking their material or element, so
+  e.g. `geostatic` and `initializematerial` have exactly one executing test each. Both new tests were
+  falsified (merge instead of replace in `options`; a `definition["nSet"]` read in `nodeforces`'
+  update hook) before being trusted.
+
+### The correction: the three `update<keyword>` keywords are NOT dead grammar
+
+The P3 row above records `updateDirichlet`, `updatedistributedload` and `updateNodeforces` as
+"documented keyword[s] ... None of them can be used", concluding they "describe a real convenience
+feature that was never wired up". **The conclusion is wrong, and the port depended on knowing that.**
+What is true is only that a literal `>>updateDirichlet` *line* is unroutable (the parser keys
+`moduleOptions` by keyword name and there is no `updatedirichlet` step action module). But the
+keyword is not reached that way: `utils/inputfileparser.py`'s `parseModuleKeywordLine` first
+validates a `>>nodeforces` line against the `nodeforces` keyword and, if that fails **and** a step
+action of the same `name` was declared earlier, re-validates it against `module.getKeyword("update" +
+keyword)`. So the `update*` keywords are the schema for a **partial re-declaration**, which is live,
+documented and exercised by two tests that pass on this branch:
+
+- `testfiles/marmot/NodeForces/test.inp` steps 2 and 3: `>>nodeforces, name=cloadTop, 2=-10,
+  f(t)=sin(t*2*pi)` — no `nSet`, no `field`.
+- `testfiles/marmot/GeoStatic/test.inp` step 2: `>>distributedload, name=dlTop, delta=-10.0,
+  f(t)=t` — no `surface`, no `magnitude`, no `type`, and it uses `delta`, which the
+  `distributedload` keyword does not declare at all.
+
+The practical consequence is a trap the port had to avoid and the new audit now guards: an update
+hook may only read what the **update** keyword declares. Reading `definition["nSet"]` there works for
+a full re-declaration and raises `KeyError` for `NodeForces`. The earlier finding stands only as
+"a `>>update*` line cannot be written", and the "partial update was never wired up" claim is
+withdrawn.
+
+### Which modules can reach their update hook at all
+
+A second, related reachability rule was found and is worth writing down, because it decides whether a
+module's update path is live: `helpers/inputfilehelpers.py` names a step action
+`definition.pop("name") or definition.get("category")`, falling back to an **auto-generated unique**
+`f"{module}-{counter}"`. So a module that declares no `name` arg gets a fresh name — and therefore a
+fresh *instance* — for every declaration, and `StepManager` never takes the update branch.
+`indirectcontrol`, `modelupdate` and `setinitialconditions` are in that group (their `name` arg is
+commented out in the source); `options` escapes it only because it is keyed by `category`.
+
+For `indirectcontrol` this is a live bug, verified by running a two-declaration input and observing
+`Creating "indirectcontrol-0"` then `Creating "indirectcontrol-1"`, never `Updating`: its
+`updateStepAction`, `currentL0` and the entire `absolute` formulation are inert via the `.inp`
+front-end, and because `nonlinearimplicitstaticparallelarclength.py:89` takes
+`[... step.actions["indirectcontrol"].values()][0]`, the controller in force is the *first ever
+declared* — so `IndirectDisplacementControl2`'s per-step `L` has never taken effect. Not fixed:
+declaring a `name` is a grammar change and having the solver honour the option's value is a product
+decision. The hooks are implemented anyway, since they are reachable programmatically.
+
+### Bugs fixed, and bugs recorded
+
+Fixed (each could never have worked, so none is a behaviour change for a working input):
+
+- **`changematerialproperty` crashed for every `provider=edelweiss` material, in two places.**
+  `hasattr(self.material, "_materialEnergy")` names an attribute this class never sets (it stores
+  `self.theMaterial`) — and `hasattr` does not shield the *object* expression, so it raised
+  `AttributeError`; and before that, `self.theMaterial["name"]`/`["properties"]` assume the Marmot
+  provider's `dict` record, while an edelweiss material is an *instance*
+  (`TypeError: 'NeoHookeanWaMaterial' object is not subscriptable`). The provider-dependent parts are
+  now four small `isinstance`-dispatching helpers; the Marmot path is unchanged (log text compared
+  verbatim). Proven with a throwaway edelweiss-provider input: the step action changes the result
+  (`RF` 2807.07 without it, 3447.38 with it), so the rebuilt material really reaches the elements.
+- **The `setEnergyFunction` carry-over it was trying to do is provably redundant**, so it was deleted
+  rather than repaired: `_materialEnergy` is assigned only by `setEnergyFunction`, which is called
+  only from each autodiff material's own `__init__` with `materialProperties["psi_e"]` (grepped
+  across both repos), so `type(material)(properties)` reinstalls the identical function.
+  `sections/base/sectionbase.py:88` has the same redundant call and the same `hasattr`; it is left
+  alone, as its own change. (An earlier attempt reached the branch via a `@runtime_checkable
+  Protocol` — dropped: it is `hasattr` in disguise, and a new idiom in this repo, to reach code that
+  does nothing.)
+- **`changematerialproperty` without `f(t)`** left `self.f_t` unset and died on the first increment
+  with a bare `AttributeError`. `f_t` is now a required constructor argument and the L4 hook raises a
+  `ValueError` naming the action. The keyword stays `addOptionalArg` (grammar-neutral).
+- **`indirectcontrol` built and discarded a whole `NISTPArcLength` solver instance** on every
+  construction *and* every update, storing it in a `self.arcLengthController` that nothing ever read
+  (the solver sets its own attribute from the step action *object*). Deleting it removed the module's
+  last use of `jobInfo` and the `edelweissfe.stepactions` → `edelweissfe.solvers` import edge — a
+  latent cycle, since that solver imports `stepactions.options` at module level. Verified: a fresh
+  import of `indirectcontrol` now pulls in no `edelweissfe.solvers` module at all.
+- **`np.trapz`**-style silent-drop family, one more instance: `nodeforces` gained a
+  `len(nodeForces) != fieldSize` guard, where a mismatch previously crashed later inside
+  `PExt[...] += load.flatten()`.
+
+Recorded, deliberately not fixed (all pre-existing; each is a product decision or a reference-solution
+change):
+
+- **`indirectcontractioncontrol` is unusable as an arc-length controller**, confirmed by running it:
+  the solver checks only that the `arcLengthController` option is *truthy* and then hardcodes
+  `step.actions["indirectcontrol"]`, so selecting it raises
+  `KeyError: 'Arc length controller "indirectcontractioncontrol" not found in current step'` — or, if
+  an `indirectcontrol` action happens to exist, silently uses that instead. It has **zero** testfile
+  and example coverage, which is why nobody noticed; per the `timemonitor` lesson it was smoke-run
+  and its `cVector` checked programmatically (inward unit vectors scaled by `1/nNodes`).
+- **`distributedload`'s `field` option is declared and read by nothing** (`DistributedLoadBase` has no
+  notion of a field). Two running inputs write `field=displacement`, which agrees with the unused
+  default, so nothing looks wrong. Pinned in the audit's `KNOWN_UNREAD_OPTIONS`.
+- **`bodyforce`'s `delta` is unreachable** — it declares no `updatebodyforce` keyword, so a partial
+  re-declaration fails to parse and a full one always carries the required `forceVector`, which wins.
+  And it could not work if reached: the declared default is the **int** `0` despite `dtype=str`, and
+  `np.fromstring(0, ...)` raises `TypeError`. Also pinned.
+- **`indirectcontrol`'s `exportCVector` is declared and read by nothing** — only its sibling
+  implements it.
+- **`absolute` is silently ignored on re-declaration** in both indirect controllers.
+- **The three load modules disagree on what a re-declared magnitude means, with identical syntax:**
+  `bodyforce`/`distributedload` read it as a new *total* (`delta = total - accumulated`),
+  `nodeforces` as an *increment* on top of the accumulated force. Changing either would move
+  reference solutions.
+- `bodyforce`'s force-vector dimension check runs only in `__init__`, so a later step can install a
+  wrong-dimension vector unchecked.
+
+### The `options` container
+
+Ported last and separately, because it is the one step action whose whole purpose is parser
+bookkeeping. `__init__(name, category, options)` now takes the options that were actually *set*, and
+the strip (parser bookkeeping keys, the `category` tag, and the `None` defaults every foreign module
+contributes to this shared keyword) moved from `getOptionsOfCategory` — a function the *solvers* call
+— into the L4 seam. So nothing downstream of the constructor mentions the input file, and a
+programmatic caller no longer has to hand over a `None`-filled mapping to be stripped again later.
+
+One behaviour that stopped being implied by the mechanism had to be made explicit: `updateStepAction`
+**replaces** rather than merges. Pre-port `self.options.update(parsedBlock)` read like a merge but
+was a replacement, because the parsed block carries *every* declared arg, so an option omitted in a
+later step arrived as `None` and was then dropped at read time. Merging the now-sparse mapping would
+silently leak an earlier step's options forward. No simulation test covers this — the only input that
+re-declares one category with differing option sets, `testfiles/marmot/IndirectDisplacementControl2`,
+skips for a missing Marmot material — hence the dedicated, falsified unit test. The four dead
+`__contains__`/`__getitem__`/`__setitem__`/`get` wrappers went too: every consumer reaches these
+options through `getOptionsOfCategory`, in both repos.
+
 ## Scope of this branch
 
 This branch implements **P0 and P1**. P0 (safety net): the golden test, the programmatic-build
