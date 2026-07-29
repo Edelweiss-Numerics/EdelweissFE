@@ -98,23 +98,24 @@ UNREAD_CHECK_EXEMPT_MODULES = {
     "options",
 }
 
-#: The two L2 validation entry points a ported module hands its `definition`/`self.schema` to
-#: (see ``utils/schema.py``). A call to either is a delegate this file's AST walk cannot follow
-#: (the option names it "reads" live in the schema dataclass, in *this* file, not in a
-#: locally-defined function), so it is resolved by name instead of by walking into it.
-SCHEMA_BUILD_FUNCTIONS = frozenset({"buildSchemaFromOptions"})
-
-#: ``coercePresentOptions`` validates only *present* keys and never raises ``KeyError`` for an
-#: absent one (that is its entire purpose -- see its docstring) -- so a call to it carries none of
-#: the "this method requires the key to exist" risk the per-method subset tests below are pinning.
-#: Its reads still count toward "is this option read *anywhere* in the module", just not toward
-#: "does *this* method risk a KeyError for an option its validated keyword doesn't declare".
-SCHEMA_COERCE_FUNCTIONS = frozenset({"coercePresentOptions"})
+#: The two L2 validation entry points a ported module hands its `definition`/`self.schema` to (see
+#: ``utils/schema.py``). Neither can ``KeyError`` on a key its schema declares but the caller's
+#: dict happens to lack: ``buildSchemaFromOptions`` lets the dataclass default fill it in (its only
+#: failure mode for an absent key is "missing *required*", a distinct, already-enforced check), and
+#: ``coercePresentOptions`` is explicitly absence-tolerant for *any* field, required or not. So a
+#: call to either is a delegate this file's AST walk cannot follow (the option names it "reads" live
+#: in the schema dataclass, in *this* file, not in a locally-defined function) -- resolved by name
+#: instead -- but its reads count only toward "read *anywhere* in the module", never toward a
+#: per-method "does this risk a KeyError for an option the validated keyword doesn't declare" check,
+#: since that risk cannot arise through either function. The real risk schema-based modules carry is
+#: different -- calling the *wrong one* of the two in an update path -- and is pinned separately by
+#: :func:`test_update_path_does_not_use_build_schema_from_options_when_a_partial_update_is_possible`.
+SCHEMA_VALIDATION_FUNCTIONS = frozenset({"buildSchemaFromOptions", "coercePresentOptions"})
 
 #: Synthetic method-name key under which module-wide, KeyError-safe reads are recorded (2-arg
-#: `.pop(key, default)` calls, and whatever `coercePresentOptions` validates) -- picked up by the
-#: aggregate "not silently unread" check but invisible to the per-method subset checks, which only
-#: ever look up real method names.
+#: `.pop(key, default)` calls, and whatever a :data:`SCHEMA_VALIDATION_FUNCTIONS` call validates) --
+#: picked up by the aggregate "not silently unread" check but invisible to the per-method subset
+#: checks, which only ever look up real method names.
 SCHEMA_LENIENT_READS_KEY = "__lenient_reads__"
 
 
@@ -296,12 +297,10 @@ def _optionReadsByMethod(modulePath: Path) -> dict[str, set[str]]:
 
     A method that hands the definition mapping to a helper is credited with the helper's reads, so
     that a module which factors its translation into ``_xFromDefinition`` staticmethods -- as the
-    ported ones do -- is audited as a whole. A method that hands the mapping to
-    :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` is credited with every option its own
-    ``schema = XSchema`` class attribute declares, since that is exactly what the function
-    validates; a method using the KeyError-safe
-    :func:`~edelweissfe.utils.schema.coercePresentOptions` instead contributes those same option
-    names only under :data:`SCHEMA_LENIENT_READS_KEY`, not to its own per-method reads (see there).
+    ported ones do -- is audited as a whole. A method that hands the mapping to either of
+    :data:`SCHEMA_VALIDATION_FUNCTIONS` is credited with every option its own ``schema = XSchema``
+    class attribute declares, but only under :data:`SCHEMA_LENIENT_READS_KEY` -- see there for why
+    neither function's reads belong in a per-method subset check.
 
     Parameters
     ----------
@@ -335,20 +334,52 @@ def _optionReadsByMethod(modulePath: Path) -> dict[str, set[str]]:
             return set()
         reads = set(directReads[name])
         for delegate in delegatesOf.get(name, ()):
-            if delegate in SCHEMA_BUILD_FUNCTIONS:
-                reads |= schemaOptionNames
             reads |= resolve(delegate, seen | {name})
         return reads
 
     result = {name: resolve(name, frozenset()) for name in directReads}
 
     lenientAggregate = {key for reads in lenientDirectReads.values() for key in reads}
-    if any(delegate in SCHEMA_COERCE_FUNCTIONS for delegates in delegatesOf.values() for delegate in delegates):
+    if any(delegate in SCHEMA_VALIDATION_FUNCTIONS for delegates in delegatesOf.values() for delegate in delegates):
         lenientAggregate |= schemaOptionNames
     if lenientAggregate:
         result[SCHEMA_LENIENT_READS_KEY] = lenientAggregate
 
     return result
+
+
+def _schemaValidationCallsByMethod(modulePath: Path) -> dict[str, set[str]]:
+    """Which of :data:`SCHEMA_VALIDATION_FUNCTIONS` each method of a step action module
+    transitively calls.
+
+    Parameters
+    ----------
+    modulePath
+        The path of the step action module.
+
+    Returns
+    -------
+    dict[str, set[str]]
+        Maps method name to the subset of :data:`SCHEMA_VALIDATION_FUNCTIONS` reachable from it.
+    """
+
+    tree = ast.parse(modulePath.read_text())
+
+    delegatesOf: dict[str, set[str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            _, _, delegates = _readsAndDelegates(node)
+            delegatesOf[node.name] = delegatesOf.get(node.name, set()) | delegates
+
+    def resolve(name: str, seen: frozenset[str]) -> set[str]:
+        if name in seen or name not in delegatesOf:
+            return set()
+        used = {delegate for delegate in delegatesOf[name] if delegate in SCHEMA_VALIDATION_FUNCTIONS}
+        for delegate in delegatesOf[name]:
+            used |= resolve(delegate, seen | {name})
+        return used
+
+    return {name: resolve(name, frozenset()) for name in delegatesOf}
 
 
 def _moduleNames() -> list[str]:
@@ -363,6 +394,11 @@ def grammar() -> dict:
 @pytest.fixture(scope="module")
 def optionReads() -> dict:
     return {name: _optionReadsByMethod(STEP_ACTION_DIR / f"{name}.py") for name in _moduleNames()}
+
+
+@pytest.fixture(scope="module")
+def schemaValidationCalls() -> dict:
+    return {name: _schemaValidationCallsByMethod(STEP_ACTION_DIR / f"{name}.py") for name in _moduleNames()}
 
 
 def test_every_builtin_step_action_declares_its_own_keyword(grammar):
@@ -426,6 +462,38 @@ def test_update_path_reads_only_options_the_update_keyword_declares(moduleName, 
         f"{moduleName}.updateStepActionFromDefinition reads option(s) {sorted(undeclared)}, which the "
         f"'{validatedAgainst}' keyword -- the one a re-declaration is validated against -- does not "
         f"declare"
+    )
+
+
+@pytest.mark.parametrize("moduleName", _moduleNames())
+def test_update_path_does_not_use_build_schema_from_options_when_a_partial_update_is_possible(
+    moduleName, grammar, schemaValidationCalls
+):
+    """A module offering a dedicated ``update<keyword>`` grammar accepts a *partial*
+    re-declaration -- exactly the shape :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`
+    cannot handle, since it enforces every field the schema calls required.
+
+    This is not hypothetical: ``dirichlet``'s update path was first written this way and broke on
+    the very re-declaration ``testfiles/marmot/GosfordSandstone`` exercises (``>>dirichlet,
+    name=top, 2=-1``, omitting the required ``field``), raising ``ValueError: Missing required
+    option(s)`` instead of applying the partial update.
+    :func:`~edelweissfe.utils.schema.coercePresentOptions` is the function built for this path -- it
+    validates only whatever keys are actually present, with no missing-required check -- so a module
+    that declares an update keyword must reach it, not ``buildSchemaFromOptions``, from
+    ``updateStepActionFromDefinition``.
+    """
+
+    keywords = grammar[moduleName]
+    hasUpdateKeyword = any(kw.casefold() == "update" + moduleName for kw in keywords)
+    if not hasUpdateKeyword:
+        pytest.skip(f"'{moduleName}' declares no update{moduleName} keyword; a re-declaration is always full")
+
+    used = schemaValidationCalls[moduleName].get("updateStepActionFromDefinition", set())
+    assert "buildSchemaFromOptions" not in used, (
+        f"{moduleName}.updateStepActionFromDefinition calls buildSchemaFromOptions, but '{moduleName}' "
+        f"declares an update{moduleName} keyword for partial re-declarations -- a re-declaration omitting "
+        f"a required field would raise 'Missing required option(s)' instead of applying the partial "
+        f"update. Use coercePresentOptions instead."
     )
 
 
