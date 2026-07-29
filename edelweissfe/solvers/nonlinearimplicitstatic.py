@@ -30,6 +30,7 @@
 # @author: Matthias Neuner
 
 import json
+from dataclasses import dataclass
 
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -56,6 +57,60 @@ from edelweissfe.utils.exceptions import (
     StepFailed,
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
+from edelweissfe.utils.schema import schemaField
+
+
+@dataclass(frozen=True)
+class NISTSchema:
+    """L2: the options of the ``*solver`` datalines and of an ``>>options`` block routed to this
+    solver, owned by this module and never mutated from outside it.
+
+    Mirrors :attr:`NIST.SolverSpecificOptions` one-for-one; that dict remains the actual source of
+    truth consulted at runtime (``self.options``, a plain mutable dict) -- this schema exists so the
+    L3 registry and the future name-based ``>>options`` override mechanism have a typed description
+    of what this solver accepts, without yet requiring every internal ``self.options[...]`` access
+    to become a dataclass attribute access.
+    """
+
+    defaultMaxIter: int | None = schemaField(
+        description="The default maximum number of iterations.", dtype=int, default=10
+    )
+    defaultCriticalIter: int | None = schemaField(
+        description="The default number of critical iterations.", dtype=int, default=5
+    )
+    defaultMaxGrowingIter: int | None = schemaField(
+        description="The default number of allowed residual growths.", dtype=int, default=10
+    )
+    extrapolation: str | None = schemaField(
+        description="The extrapolation strategy for new increments (off|linear).", dtype=str, default="linear"
+    )
+    extrapolateAfterModelChange: bool | None = schemaField(
+        description=(
+            "Whether to extrapolate the predictor on the increment FOLLOWING a model change (adaptive mesh "
+            "refinement). Set False to start that increment from a zero predictor, avoiding extrapolation of "
+            "the one-off warm-start/remesh settling transient."
+        ),
+        dtype=bool,
+        default=True,
+    )
+    equilibrateAfterModelChange: bool | None = schemaField(
+        description=(
+            "Whether to insert one constant-load, zero-time re-equilibration increment immediately after an "
+            "adaptive mesh refinement, before advancing the load. When True, the warm-started refined mesh is "
+            "first settled to equilibrium at the last converged load level (no load advance, no Dirichlet "
+            "increment, zero time increment) so the subsequent load-advancing increment starts from an "
+            "equilibrated state. Intended for softening problems where remeshing near the process zone "
+            "otherwise couples the load advance with the warm-start settling transient in one solve. Note: "
+            "the equilibration solve integrates materials with dT=0, which suits rate-independent models; "
+            "rate-dependent materials see no time advance during it (by design)."
+        ),
+        dtype=bool,
+        default=False,
+    )
+    linsolver: str | None = schemaField(description="The linear solver to be used.", dtype=str, default="pardiso")
+    linsolverConfigFile: str | None = schemaField(
+        description="A JSON configuration file for the linear solver.", dtype=str, default=""
+    )
 
 
 class NIST(NonlinearSolverBase):
@@ -73,6 +128,9 @@ class NIST(NonlinearSolverBase):
 
     supportsMPC = True
     supportsModelModifiers = True
+
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = NISTSchema
 
     SolverSpecificOptions = {
         "defaultMaxIter": 10,

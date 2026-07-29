@@ -39,9 +39,10 @@ from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransform
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import DivergingSolution
+from edelweissfe.utils.schema import OptionSchemaProvider
 
 
-class NonlinearSolverBase(ABC):
+class NonlinearSolverBase(OptionSchemaProvider, ABC):
     """This is the base class for all nonlinear solvers.
 
     Parameters

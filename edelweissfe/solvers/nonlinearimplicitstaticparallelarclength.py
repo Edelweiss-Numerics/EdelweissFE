@@ -31,6 +31,8 @@
 Replaces the NewtonRaphson scheme of the NISTParallel Solver.
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.models.femodel import FEModel
@@ -47,15 +49,37 @@ from edelweissfe.utils.exceptions import (
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.math import createModelAccessibleFunction
+from edelweissfe.utils.schema import schemaField
 
 registerOptionsArg("arcLengthController", "The step action module serving as the arc length controller.", str)
 registerOptionsArg("stopCondition", "A model accessible expression defining a conditional stop.", str)
+
+
+@dataclass(frozen=True)
+class NISTPArcLengthSchema(NISTParallel.schema):
+    """L2: :class:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema`'s options, plus the two
+    bespoke fields this solver reads from an ``>>options`` block under the (mismatched, pre-existing)
+    ``category=NISTArcLength`` -- not ``category=NISTPArcLength``, this solver's own
+    :attr:`identification`. Neither is a ``*solver`` dataline option (there is no
+    ``SolverSpecificOptions`` entry for either; see :meth:`NISTPArcLength.solveStep`), so both are
+    added here only, not to the parent schema.
+    """
+
+    arcLengthController: str | None = schemaField(
+        description="The step action module serving as the arc length controller.", dtype=str, default=None
+    )
+    stopCondition: str | None = schemaField(
+        description="A model accessible expression defining a conditional stop.", dtype=str, default=None
+    )
 
 
 class NISTPArcLength(NISTParallel):
     identification = "NISTPArcLength"
 
     supportsMPC = False
+
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = NISTPArcLengthSchema
 
     def __init__(self, jobInfo, journal, **kwargs):
         self.Lambda = 0.0

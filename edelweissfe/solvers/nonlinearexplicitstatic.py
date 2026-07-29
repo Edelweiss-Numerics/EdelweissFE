@@ -27,6 +27,7 @@
 #  ---------------------------------------------------------------------
 
 import json
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -49,6 +50,7 @@ from edelweissfe.utils.exceptions import (
     StepFailed,
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
+from edelweissfe.utils.schema import schemaField
 
 
 def getRungeKuttaParameters(rungeKuttaStages: int) -> tuple[dict, dict, dict]:
@@ -151,6 +153,38 @@ def getRungeKuttaParameters(rungeKuttaStages: int) -> tuple[dict, dict, dict]:
     return _alpha, _omega, _lambda
 
 
+@dataclass(frozen=True)
+class NESTSchema:
+    """L2: the options of the ``*solver`` datalines and of an ``>>options`` block routed to this
+    solver, owned by this module and never mutated from outside it.
+
+    Mirrors :attr:`NEST.SolverSpecificOptions` one-for-one (see :class:`NISTSchema` for why this
+    schema coexists with the plain ``self.options`` dict rather than replacing it). The
+    ``runge-kutta-*`` option names are not valid Python identifiers, hence the ``optionName``
+    indirection.
+    """
+
+    rungeKuttaStages: int | None = schemaField(
+        description="The number of Runge-Kutta stages.", dtype=int, default=2, optionName="runge-kutta-stages"
+    )
+    rungeKuttaErrorTolerance: float | None = schemaField(
+        description="The error tolerance for the Runge-Kutta error control.",
+        dtype=float,
+        default=1e-3,
+        optionName="runge-kutta-error-tolerance",
+    )
+    rungeKuttaErrorControl: str | None = schemaField(
+        description="Activate the Runge-Kutta error control (on|off).",
+        dtype=str,
+        default="on",
+        optionName="runge-kutta-error-control",
+    )
+    linsolver: str | None = schemaField(description="The linear solver to be used.", dtype=str, default="pardiso")
+    linsolverConfigFile: str | None = schemaField(
+        description="A JSON configuration file for the linear solver.", dtype=str, default=""
+    )
+
+
 class NEST(NIST):
     """This is the Nonlinear Explicit STatic -- solver.
 
@@ -166,6 +200,9 @@ class NEST(NIST):
 
     supportsMPC = False
     supportsModelModifiers = False
+
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = NESTSchema
 
     SolverSpecificOptions = {
         "runge-kutta-stages": 2,
