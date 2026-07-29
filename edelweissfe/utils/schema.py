@@ -42,8 +42,11 @@ free-threading behavior) infrastructure that L1 modules and the future L4 adapte
 Per rule (c) of the target architecture, case-insensitivity and string-to-type coercion belong to
 L4 (the input-file front-end), not to the L2 schema objects themselves -- a schema instance is
 always exact-case and precisely typed. The coercion helpers in this module (:func:`coerceValue`,
-:func:`resolveCaseInsensitiveOptions`, :func:`buildSchemaFromOptions`) are therefore utilities
-*available to* L4, not something a schema class does to itself.
+:func:`resolveCaseInsensitiveOptions`, :func:`buildSchemaFromOptions`,
+:func:`coercePresentOptions`) are therefore utilities *available to* L4, not something a schema
+class does to itself. :func:`coercePresentOptions` is the partial-application sibling of
+:func:`buildSchemaFromOptions`, for *overriding* a subset of an already-constructed instance's
+fields (via ``dataclasses.replace``) rather than building a fresh, fully-defaulted one.
 
 The coercion logic mirrors, rather than reinvents, the casting already performed by
 ``edelweissfe.utils.inputlanguage.KeywordArg.getValueFromKwargs`` and
@@ -633,6 +636,56 @@ def buildSchemaFromOptions(
         raise ValueError(f"Missing required option(s) for {schemaCls.__name__}: {', '.join(missingRequired)}.")
 
     return schemaCls(**kwargs)
+
+
+def coercePresentOptions(schemaCls: type, options: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate and coerce only the keys actually present in ``options`` against ``schemaCls``,
+    without requiring or defaulting anything absent.
+
+    This is the partial-application sibling of :func:`buildSchemaFromOptions`, for overriding a
+    handful of fields of an *already-constructed* instance of ``schemaCls`` (via
+    ``dataclasses.replace(existingInstance, **coercePresentOptions(type(existingInstance).schema,
+    rawOptions))``) rather than building a fresh instance from scratch. There is no missing-required
+    check here -- an override is by definition partial, so "required at construction" does not mean
+    "must be restated on every override" -- and no field of ``schemaCls`` gets a default value
+    inserted for a key that was not given.
+
+    An option whose value is ``None`` is still treated as **not supplied** (see
+    :func:`buildSchemaFromOptions`), for the identical reason: a ``None``-valued key is how the
+    ``.inp`` parser spells "the user did not write this option", and coercing it would manufacture a
+    value out of "nothing was said".
+
+    Parameters
+    ----------
+    schemaCls
+        A frozen dataclass whose fields were declared via :func:`schemaField`.
+    options
+        A mapping of (possibly mis-cased) option names to raw (typically string) values -- typically
+        a small subset of ``schemaCls``'s fields, not all of them.
+
+    Returns
+    -------
+    dict[str, Any]
+        Maps each *present*, non-``None`` option to its coerced value, keyed by the schema's
+        exact-case field name. Safe to splat into ``dataclasses.replace``.
+
+    Raises
+    ------
+    ValueError
+        If ``options`` contains a key that is not a valid (scalar) option of ``schemaCls``, or a
+        value that cannot be coerced to its field's declared ``dtype``.
+    """
+    fieldsByName = {field.name: field for field in dataclasses.fields(schemaCls)}
+    resolvedOptions = resolveCaseInsensitiveOptions(schemaCls, options)
+
+    coerced: dict[str, Any] = {}
+    for name, rawValue in resolvedOptions.items():
+        if rawValue is None:
+            continue
+        meta = fieldSchemaMeta(fieldsByName[name])
+        coerced[name] = coerceValue(rawValue, meta.dtype)
+
+    return coerced
 
 
 def _buildSubKeywords(schemaCls: type, subKeywordOptions: Mapping[str, list]) -> dict[str, tuple]:
