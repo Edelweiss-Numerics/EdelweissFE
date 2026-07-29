@@ -430,12 +430,11 @@ def schemaOf(target: Any) -> type | None:
     from a dotted string.
 
     ``None`` is returned for anything that is not a class deriving from
-    :class:`OptionSchemaProvider`. That deliberately includes the registry targets that are plain
-    module-level *functions* rather than classes -- e.g. every ``generator`` entry resolves to
-    ``generateModelData`` -- which cannot inherit a class attribute at all. Those categories
-    therefore have no schema until they are given class-based L1 targets (P4); dispatching on the
-    type here rather than probing for an attribute is what keeps that case an explicit,
-    documented ``None`` instead of an ``AttributeError`` at lookup time.
+    :class:`OptionSchemaProvider`. That covers a registry target that is a plain module-level
+    *function* rather than a class (e.g. ``executePythonCode``'s ``Generator``, whose datalines are
+    raw code rather than a flat option mapping, so it declares ``schema = None`` deliberately) --
+    dispatching on the type here rather than probing for an attribute is what keeps that case an
+    explicit, documented ``None`` instead of an ``AttributeError`` at lookup time.
 
     Parameters
     ----------

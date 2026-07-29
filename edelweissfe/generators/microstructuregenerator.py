@@ -42,22 +42,20 @@ The unit cell mesh must be readable by meshio (e.g., in .inp format).
 """
 
 import time
+from dataclasses import dataclass
 
 import meshio
 import numpy as np
 
 from edelweissfe.config.elementlibrary import getElementClass
+from edelweissfe.generators.base.generatorbase import GeneratorBase
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.schema import schemaField
 
 module = Module("microstructuregenerator", "A mesh generator for generating a structure from a single unit cell mesh.")
 
@@ -81,140 +79,198 @@ documentation = [module]
 identification = "microgen"
 
 
-@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-@castKwargsValuesAndAddDefaults(module)
-def generateModelData(generatorDefinition: dict, model: FEModel, journal: Journal, *args, **kwargs) -> dict:
-    kwargs = CaseInsensitiveDict(kwargs)
+@dataclass(frozen=True)
+class MicrostructureGeneratorSchema:
+    """L2: the options this generator accepts, owned by this module and never mutated from
+    outside it.
 
-    journal.message("Generating microstructure mesh from unit cell mesh...", identification)
-    name = generatorDefinition.get("name", "microgen")
+    Mirrors the ``module.addOptionalArg``/``module.addRequiredArg(...)`` declarations above
+    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
+    one goes away with the ``InputLanguage`` singleton in P5.
 
-    unitCellMeshFile = kwargs["unitCellMeshFile"]
+    ``elType`` is declared ``required=True`` explicitly, mirroring ``addRequiredArg`` above, but is
+    still given a ``default=None`` so the schema remains constructible for the L1 constructor's
+    default argument.
+    """
 
-    nX = kwargs["nX"]
-    nY = kwargs["nY"]
-    nZ = kwargs["nZ"]
+    unitCellMeshFile: str | None = schemaField(description="Path to the unit cell mesh file.", dtype=str, default=None)
+    nX: int = schemaField(description="Number of cells along the x axis.", dtype=int, default=1)
+    nY: int = schemaField(description="Number of cells along the y axis.", dtype=int, default=1)
+    nZ: int = schemaField(description="Number of cells along the z axis.", dtype=int, default=1)
+    elType: str | None = schemaField(description="Element type.", dtype=str, default=None, required=True)
+    elProvider: str | None = schemaField(description="Element provider.", dtype=str, default=None)
 
-    elementType = getElementClass(kwargs["elType"], kwargs["elProvider"])
 
-    unitCellMesh = meshio.read(unitCellMeshFile)
+class Generator(GeneratorBase):
+    """A mesh generator for generating a structure from a single unit cell mesh."""
 
-    nodes = np.array(unitCellMesh.points)
-    elements = unitCellMesh.cells
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = MicrostructureGeneratorSchema
 
-    all_nodes = nodes.copy()
-    all_elements = np.array([], dtype=int).reshape(0, elements[0].data.shape[1])
-    block_elements_assignments = {}
-    for i, block in enumerate(elements):
-        # stacke all elements together
-        all_elements = np.vstack((all_elements, block.data))
-        # store element ids for each block
-        block_elements_assignments[i] = list(range(len(all_elements) - len(block.data), len(all_elements)))
-        # create an empty element set for each block
-        model.elementSets[f"{name}_block-{i + 1}"] = ElementSet(f"{name}_block-{i + 1}", set())
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        journal: Journal,
+        *,
+        configuration: MicrostructureGeneratorSchema = MicrostructureGeneratorSchema(),
+    ):
+        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        Populates ``model`` directly; construction *is* the generation.
 
-    # print information about the unit cell mesh
-    journal.message(f"Unit cell mesh has {len(all_nodes)} nodes and {len(all_elements)} elements.", identification)
-    journal.message(
-        f"Element blocks in unit cell mesh: {len(block_elements_assignments)} with assignments:", identification
-    )
-    for block_id, el_ids in block_elements_assignments.items():
-        journal.message(f"block-{block_id + 1}: {len(el_ids)} elements", identification)
+        Parameters
+        ----------
+        name
+            The name of this generator instance, used as the prefix for the generated sets.
+        model
+            The model tree to populate. Mutated in place.
+        journal
+            The journal object for logging.
+        configuration
+            The options this generator accepts; ``elType`` is still required, see
+            :class:`MicrostructureGeneratorSchema`.
+        """
+        journal.message("Generating microstructure mesh from unit cell mesh...", identification)
 
-    # get unit cell dimensions
-    x_min = np.min(nodes[:, 0])
-    x_max = np.max(nodes[:, 0])
-    y_min = np.min(nodes[:, 1])
-    y_max = np.max(nodes[:, 1])
+        unitCellMeshFile = configuration.unitCellMeshFile
 
-    lX = x_max - x_min
-    lY = y_max - y_min
+        nX = configuration.nX
+        nY = configuration.nY
+        nZ = configuration.nZ
 
-    # create nodes and elements for the unit cell
-    _nodes = []
-    for idx, node in enumerate(all_nodes):
-        _node = Node(idx + 1, np.array(node))
-        _nodes.append(_node)
-        model.nodes[idx + 1] = _node
+        elementType = getElementClass(configuration.elType, configuration.elProvider)
 
-    idx = 0
-    for block_id, el_ids in block_elements_assignments.items():
-        elements_per_block = []
-        for local_el_id in el_ids:
-            newEl = elementType(kwargs["elType"], idx + 1)
-            nodeList = [_nodes[nid] for nid in all_elements[local_el_id]]
-            newEl.setNodes(nodeList)
+        unitCellMesh = meshio.read(unitCellMeshFile)
 
-            model.elements[idx + 1] = newEl
-            # add element to corresponding element set
-            elements_per_block.append(newEl)
-            idx += 1
+        nodes = np.array(unitCellMesh.points)
+        elements = unitCellMesh.cells
 
-        # not set(...): ElementSet already deduplicates and keeps the order it is fed, whereas a set
-        # of identity-hashed elements would fix the member order from object addresses instead of the
-        # mesh -- and that order reaches facet/element numbering downstream (see hadaptivity.py).
-        model.elementSets[f"{name}_block-{block_id + 1}"] = ElementSet(
-            f"{name}_block-{block_id + 1}", elements_per_block
+        all_nodes = nodes.copy()
+        all_elements = np.array([], dtype=int).reshape(0, elements[0].data.shape[1])
+        block_elements_assignments = {}
+        for i, block in enumerate(elements):
+            # stacke all elements together
+            all_elements = np.vstack((all_elements, block.data))
+            # store element ids for each block
+            block_elements_assignments[i] = list(range(len(all_elements) - len(block.data), len(all_elements)))
+            # create an empty element set for each block
+            model.elementSets[f"{name}_block-{i + 1}"] = ElementSet(f"{name}_block-{i + 1}", set())
+
+        # print information about the unit cell mesh
+        journal.message(f"Unit cell mesh has {len(all_nodes)} nodes and {len(all_elements)} elements.", identification)
+        journal.message(
+            f"Element blocks in unit cell mesh: {len(block_elements_assignments)} with assignments:", identification
         )
+        for block_id, el_ids in block_elements_assignments.items():
+            journal.message(f"block-{block_id + 1}: {len(el_ids)} elements", identification)
 
-    # replicate the mesh of the unit cell in x direction
-    model = replicateMesh(
-        model, direction=0, nReplications=nX, elementType=elementType, options=kwargs, journal=journal
-    )
+        # get unit cell dimensions
+        x_min = np.min(nodes[:, 0])
+        x_max = np.max(nodes[:, 0])
+        y_min = np.min(nodes[:, 1])
+        y_max = np.max(nodes[:, 1])
 
-    # replicate the already replicated mesh in y direction
-    model = replicateMesh(
-        model, direction=1, nReplications=nY, elementType=elementType, options=kwargs, journal=journal
-    )
+        lX = x_max - x_min
+        lY = y_max - y_min
 
-    if model.domainSize == 3:
-        # replicate the already replicated mesh in z direction
+        # create nodes and elements for the unit cell
+        _nodes = []
+        for idx, node in enumerate(all_nodes):
+            _node = Node(idx + 1, np.array(node))
+            _nodes.append(_node)
+            model.nodes[idx + 1] = _node
+
+        idx = 0
+        for block_id, el_ids in block_elements_assignments.items():
+            elements_per_block = []
+            for local_el_id in el_ids:
+                newEl = elementType(configuration.elType, idx + 1)
+                nodeList = [_nodes[nid] for nid in all_elements[local_el_id]]
+                newEl.setNodes(nodeList)
+
+                model.elements[idx + 1] = newEl
+                # add element to corresponding element set
+                elements_per_block.append(newEl)
+                idx += 1
+
+            # not set(...): ElementSet already deduplicates and keeps the order it is fed, whereas a set
+            # of identity-hashed elements would fix the member order from object addresses instead of the
+            # mesh -- and that order reaches facet/element numbering downstream (see hadaptivity.py).
+            model.elementSets[f"{name}_block-{block_id + 1}"] = ElementSet(
+                f"{name}_block-{block_id + 1}", elements_per_block
+            )
+
+        # replicate the mesh of the unit cell in x direction
         model = replicateMesh(
-            model, direction=2, nReplications=nZ, elementType=elementType, options=kwargs, journal=journal
+            model,
+            direction=0,
+            nReplications=nX,
+            elementType=elementType,
+            elTypeName=configuration.elType,
+            journal=journal,
         )
 
-    model._populateNodeFieldVariablesFromElements()
+        # replicate the already replicated mesh in y direction
+        model = replicateMesh(
+            model,
+            direction=1,
+            nReplications=nY,
+            elementType=elementType,
+            elTypeName=configuration.elType,
+            journal=journal,
+        )
 
-    # create node sets for boundary conditions
-    nSet_left = set()
-    nSet_right = set()
-    nSet_bottom = set()
-    nSet_top = set()
-    # add sets for corners as well
-    nSet_top_left = set()
-    nSet_top_right = set()
-    nSet_bottom_left = set()
-    nSet_bottom_right = set()
+        if model.domainSize == 3:
+            # replicate the already replicated mesh in z direction
+            model = replicateMesh(
+                model,
+                direction=2,
+                nReplications=nZ,
+                elementType=elementType,
+                elTypeName=configuration.elType,
+                journal=journal,
+            )
 
-    # create node sets for left and bottom boundaries
-    for nodeID, node in model.nodes.items():
-        if np.isclose(node.coordinates[1], y_min, atol=1e-8):
-            nSet_bottom.add(node)
+        model._populateNodeFieldVariablesFromElements()
+
+        # create node sets for boundary conditions
+        nSet_left = set()
+        nSet_right = set()
+        nSet_bottom = set()
+        nSet_top = set()
+        # add sets for corners as well
+        nSet_top_left = set()
+        nSet_top_right = set()
+        nSet_bottom_left = set()
+        nSet_bottom_right = set()
+
+        # create node sets for left and bottom boundaries
+        for nodeID, node in model.nodes.items():
+            if np.isclose(node.coordinates[1], y_min, atol=1e-8):
+                nSet_bottom.add(node)
+                if np.isclose(node.coordinates[0], x_min, atol=1e-8):
+                    nSet_bottom_left.add(node)
+                elif np.isclose(node.coordinates[0], x_max + (nX - 1) * lX, atol=1e-8):
+                    nSet_bottom_right.add(node)
             if np.isclose(node.coordinates[0], x_min, atol=1e-8):
-                nSet_bottom_left.add(node)
-            elif np.isclose(node.coordinates[0], x_max + (nX - 1) * lX, atol=1e-8):
-                nSet_bottom_right.add(node)
-        if np.isclose(node.coordinates[0], x_min, atol=1e-8):
-            nSet_left.add(node)
-        if np.isclose(node.coordinates[0], x_max + (nX - 1) * lX, atol=1e-8):
-            nSet_right.add(node)
-        if np.isclose(node.coordinates[1], y_max + (nY - 1) * lY, atol=1e-8):
-            nSet_top.add(node)
-            if np.isclose(node.coordinates[0], x_min, atol=1e-8):
-                nSet_top_left.add(node)
-            elif np.isclose(node.coordinates[0], x_max + (nX - 1) * lX, atol=1e-8):
-                nSet_top_right.add(node)
+                nSet_left.add(node)
+            if np.isclose(node.coordinates[0], x_max + (nX - 1) * lX, atol=1e-8):
+                nSet_right.add(node)
+            if np.isclose(node.coordinates[1], y_max + (nY - 1) * lY, atol=1e-8):
+                nSet_top.add(node)
+                if np.isclose(node.coordinates[0], x_min, atol=1e-8):
+                    nSet_top_left.add(node)
+                elif np.isclose(node.coordinates[0], x_max + (nX - 1) * lX, atol=1e-8):
+                    nSet_top_right.add(node)
 
-    model.nodeSets[f"{name}_left"] = NodeSet(f"{name}_left", nSet_left)
-    model.nodeSets[f"{name}_right"] = NodeSet(f"{name}_right", nSet_right)
-    model.nodeSets[f"{name}_bottom"] = NodeSet(f"{name}_bottom", nSet_bottom)
-    model.nodeSets[f"{name}_top"] = NodeSet(f"{name}_top", nSet_top)
-    model.nodeSets[f"{name}_bottom_left"] = NodeSet(f"{name}_bottom_left", nSet_bottom_left)
-    model.nodeSets[f"{name}_bottom_right"] = NodeSet(f"{name}_bottom_right", nSet_bottom_right)
-    model.nodeSets[f"{name}_top_left"] = NodeSet(f"{name}_top_left", nSet_top_left)
-    model.nodeSets[f"{name}_top_right"] = NodeSet(f"{name}_top_right", nSet_top_right)
-
-    return model
+        model.nodeSets[f"{name}_left"] = NodeSet(f"{name}_left", nSet_left)
+        model.nodeSets[f"{name}_right"] = NodeSet(f"{name}_right", nSet_right)
+        model.nodeSets[f"{name}_bottom"] = NodeSet(f"{name}_bottom", nSet_bottom)
+        model.nodeSets[f"{name}_top"] = NodeSet(f"{name}_top", nSet_top)
+        model.nodeSets[f"{name}_bottom_left"] = NodeSet(f"{name}_bottom_left", nSet_bottom_left)
+        model.nodeSets[f"{name}_bottom_right"] = NodeSet(f"{name}_bottom_right", nSet_bottom_right)
+        model.nodeSets[f"{name}_top_left"] = NodeSet(f"{name}_top_left", nSet_top_left)
+        model.nodeSets[f"{name}_top_right"] = NodeSet(f"{name}_top_right", nSet_top_right)
 
 
 def findInterfaceNodes(nodes, coordIndex, coordValue, idx_offset=0):
@@ -225,7 +281,7 @@ def findInterfaceNodes(nodes, coordIndex, coordValue, idx_offset=0):
 
 
 def replicateMesh(
-    model: FEModel, direction: int, nReplications: int, elementType, options: dict, journal: Journal = None
+    model: FEModel, direction: int, nReplications: int, elementType, elTypeName: str, journal: Journal = None
 ) -> FEModel:
 
     all_elements_to_copy = [[n.label - 1 for n in el.nodes] for el in model.elements.values()]
@@ -290,7 +346,7 @@ def replicateMesh(
                 for nid in el:
                     k = np.where(associated_nodes_array[:, 0] == nid)[0][0]
                     new_el.append(int(associated_nodes_array[k, 1]))
-                newEl = elementType(options["elType"], len(model.elements) + 1)
+                newEl = elementType(elTypeName, len(model.elements) + 1)
                 nodeList = [model.nodes[nid + 1] for nid in new_el]
                 newEl.setNodes(nodeList)
                 model.elements[len(model.elements) + 1] = newEl

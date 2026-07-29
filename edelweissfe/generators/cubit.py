@@ -34,13 +34,13 @@ Interface to Cubit. Generate mesh using Cubit .jou files.
 
 import os
 import shlex
+from dataclasses import dataclass
 
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.generators.base.generatorbase import GeneratorBase
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.schema import schemaField
 
 module = Module("cubit", "Interface to Cubit. Generate mesh using Cubit .jou files.")
 
@@ -67,88 +67,132 @@ module.addOptionalArg("elProvider", "Element provider.", str, None)
 documentation = [module]
 
 
-@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-@castKwargsValuesAndAddDefaults(module)
-def generateModelData(generatorDefinition, model, journal, *args, **kwargs):
-    from edelweissfe.generators.abqmodelconstructor import AbqModelConstructor
-    from edelweissfe.utils.inputfileparser import parseInputFile
+@dataclass(frozen=True)
+class CubitSchema:
+    """L2: the options this generator accepts, owned by this module and never mutated from
+    outside it.
 
-    kwargs = CaseInsensitiveDict(kwargs)
+    Mirrors the ``module.addOptionalArg``/``module.addRequiredArg(...)`` declarations above
+    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
+    one goes away with the ``InputLanguage`` singleton in P5.
 
-    # options = generatorDefinition["datalines"]
-    # options = convertLinesToStringDictionary(options)
-    # name = generatorDefinition.get("name", "cubit")
+    ``jouFile`` is declared ``required=True`` explicitly, mirroring ``addRequiredArg`` above, but
+    is still given a ``default=None`` so the schema remains constructible for the L1 constructor's
+    default argument.
+    """
 
-    cubitCmd = kwargs["cubitCmd"]
-    jouFile = kwargs["jouFile"]
-    outFile = kwargs["outFile"]
-    APREPROVars = kwargs["APREPROVars"]
-    elType = kwargs["elType"]
-    elTypePerBlock = kwargs["elTypePerBlock"]
-    overwrite = kwargs["overwrite"]
-    runCubit = kwargs["runCubit"]
-    silent = kwargs["silent"]
+    cubitCmd: str = schemaField(description="Cubit executable.", dtype=str, default="cubit")
+    jouFile: str | None = schemaField(
+        description="Path to Cubit journal (.jou) file.", dtype=str, default=None, required=True
+    )
+    outFile: str = schemaField(description="Path to output mesh file.", dtype=str, default="mesh.inc")
+    APREPROVars: str | None = schemaField(
+        description="APREPRO variables as comma-separated <key>=<value> pairs.", dtype=str, default=None
+    )
+    overwrite: bool = schemaField(description="Overwrite existing output files.", dtype=bool, default=True)
+    runCubit: bool = schemaField(description="Run Cubit GUI for debugging purposes.", dtype=bool, default=False)
+    silent: bool = schemaField(description="Hide Cubit output.", dtype=bool, default=False)
+    elType: str | None = schemaField(description="Specify element type for all sections.", dtype=str, default=None)
+    elTypePerBlock: str | None = schemaField(
+        description="Specify element type per block as comma-separated <key>=<value> pairs.",
+        dtype=str,
+        default=None,
+    )
+    elProvider: str | None = schemaField(description="Element provider.", dtype=str, default=None)
 
-    # getElementClass(options["elType"], options.get("elProvider", None))
 
-    generate = False
-    if not os.path.exists(outFile) or overwrite:
-        generate = True
+class Generator(GeneratorBase):
+    """Interface to Cubit. Generate mesh using Cubit .jou files."""
 
-    if generate:
-        cubitOptns = []
-        cubitOptns.append("-information off")
-        cubitOptns.append("-nojournal")
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = CubitSchema
 
-        if not runCubit:
-            cubitOptns.append("-batch")
-            cubitOptns.append("-nographics")
+    def __init__(self, name: str, model: FEModel, journal: Journal, *, configuration: CubitSchema = CubitSchema()):
+        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        Populates ``model`` directly; construction *is* the generation.
 
-        if APREPROVars:
-            varStr = ""
-            s = shlex.shlex(APREPROVars.replace(" ", ""), posix=True)
+        Parameters
+        ----------
+        name
+            Unused: this generator names no sets of its own; sections/constraints created from the
+            Cubit-exported mesh come from that mesh's own ``.inc`` definitions.
+        model
+            The model tree to populate. Mutated in place.
+        journal
+            The journal object for logging.
+        configuration
+            The options this generator accepts; ``jouFile`` is still required, see
+            :class:`CubitSchema`.
+        """
+        from edelweissfe.generators.abqmodelconstructor import AbqModelConstructor
+        from edelweissfe.utils.inputfileparser import parseInputFile
+
+        cubitCmd = configuration.cubitCmd
+        jouFile = configuration.jouFile
+        outFile = configuration.outFile
+        APREPROVars = configuration.APREPROVars
+        elType = configuration.elType
+        elTypePerBlock = configuration.elTypePerBlock
+        overwrite = configuration.overwrite
+        runCubit = configuration.runCubit
+        silent = configuration.silent
+
+        generate = False
+        if not os.path.exists(outFile) or overwrite:
+            generate = True
+
+        if generate:
+            cubitOptns = []
+            cubitOptns.append("-information off")
+            cubitOptns.append("-nojournal")
+
+            if not runCubit:
+                cubitOptns.append("-batch")
+                cubitOptns.append("-nographics")
+
+            if APREPROVars:
+                varStr = ""
+                s = shlex.shlex(APREPROVars.replace(" ", ""), posix=True)
+                s.whitespace_split = True
+                s.whitespace = ","
+                varDict = dict(item.split("=", 1) for item in s)
+
+                for key, value in varDict.items():
+                    varStr += "{}={} ".format(key, value)
+                cubitOptns.append(varStr)
+
+            cubitOptns.append(jouFile)
+
+            optnStr = " ".join(cubitOptns)
+            cmd = " ".join([cubitCmd, optnStr])
+
+            exportFile = "./exportAbaqus.jou"
+            with open(exportFile, "w+") as f:
+                f.write('export abaqus "{}" partial overwrite\n'.format(outFile))
+            cmd = " ".join([cmd, exportFile])
+
+            if silent:
+                cmd = " ".join([cmd, "> /dev/null"])
+
+            os.system(cmd)
+            os.remove(exportFile)
+
+        fileDict = parseInputFile(outFile)
+
+        if elType:
+            for elDef in fileDict["element"]:
+                elDef["type"] = elType
+
+        if elTypePerBlock:
+            s = shlex.shlex(elTypePerBlock.replace(" ", ""), posix=True)
             s.whitespace_split = True
             s.whitespace = ","
-            varDict = dict(item.split("=", 1) for item in s)
+            elDict = dict(item.split("=", 1) for item in s)
+            for elDef in fileDict["element"]:
+                elSet = elDef["elset"]
+                elDef["type"] = elDict[elSet]
 
-            for key, value in varDict.items():
-                varStr += "{}={} ".format(key, value)
-            cubitOptns.append(varStr)
-
-        cubitOptns.append(jouFile)
-
-        optnStr = " ".join(cubitOptns)
-        cmd = " ".join([cubitCmd, optnStr])
-
-        exportFile = "./exportAbaqus.jou"
-        with open(exportFile, "w+") as f:
-            f.write('export abaqus "{}" partial overwrite\n'.format(outFile))
-        cmd = " ".join([cmd, exportFile])
-
-        if silent:
-            cmd = " ".join([cmd, "> /dev/null"])
-
-        os.system(cmd)
-        os.remove(exportFile)
-
-    fileDict = parseInputFile(outFile)
-
-    if elType:
-        for elDef in fileDict["element"]:
-            elDef["type"] = elType
-
-    if elTypePerBlock:
-        s = shlex.shlex(elTypePerBlock.replace(" ", ""), posix=True)
-        s.whitespace_split = True
-        s.whitespace = ","
-        elDict = dict(item.split("=", 1) for item in s)
-        for elDef in fileDict["element"]:
-            elSet = elDef["elset"]
-            elDef["type"] = elDict[elSet]
-
-    abqModelConstructor = AbqModelConstructor(journal)
-    model = abqModelConstructor.createGeometryFromInputFile(model, fileDict)
-    model = abqModelConstructor.createSectionsFromInputFile(model, fileDict)
-    model = abqModelConstructor.createConstraintsFromInputFile(model, fileDict)
-
-    return model
+        abqModelConstructor = AbqModelConstructor(journal)
+        model = abqModelConstructor.createGeometryFromInputFile(model, fileDict)
+        model = abqModelConstructor.createSectionsFromInputFile(model, fileDict)
+        model = abqModelConstructor.createConstraintsFromInputFile(model, fileDict)

@@ -32,18 +32,17 @@
 Find the node closest to a given spatial position, and store it in an existing or new node set.
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 
+from edelweissfe.generators.base.generatorbase import GeneratorBase
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.exceptions import WrongDomain
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.schema import schemaField
 
 inputLanguage = InputLanguage()
 module = Module(
@@ -62,28 +61,70 @@ module.addRequiredArg("storeIn", "Node set to store closest node in.", str)
 documentation = [module]
 
 
-@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-@castKwargsValuesAndAddDefaults(module)
-def generateModelData(generatorDefinition: dict, model: FEModel, journal: Journal, *args, **kwargs):
-    kwargs = CaseInsensitiveDict(kwargs)
+@dataclass(frozen=True)
+class FindClosestNodeSchema:
+    """L2: the options this generator accepts, owned by this module and never mutated from outside
+    it.
 
-    loc = np.fromstring(kwargs["location"], sep=",", dtype=float)
+    Mirrors the ``module.addRequiredArg(...)`` declarations above one-for-one. The two declarations
+    coexist while the migration is in progress; the ``Module`` one goes away with the
+    ``InputLanguage`` singleton in P5.
 
-    if len(loc) != model.domainSize:
-        raise WrongDomain("Spatial dimension of specified location does not match model dimension")
+    Both fields are declared ``required=True`` explicitly, but are still given a ``default=None``
+    so the schema remains constructible for the L1 constructor's default argument.
+    """
 
-    allNodes = np.asarray([n.coordinates for n in model.nodes.values()])
+    location: str | None = schemaField(description="Query point.", dtype=str, default=None, required=True)
+    storeIn: str | None = schemaField(
+        description="Node set to store closest node in.", dtype=str, default=None, required=True
+    )
 
-    differenceNorm = np.linalg.norm(allNodes - loc, axis=1)
 
-    indexClosest = differenceNorm.argmin()
+class Generator(GeneratorBase):
+    """Find the node closest to a given spatial position, and store it in an existing or new node
+    set."""
 
-    closestNode = list(model.nodes.values())[indexClosest]
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = FindClosestNodeSchema
 
-    storeIn = kwargs["storeIn"]
-    if storeIn in model.nodeSets:
-        raise Exception(f"Nodeset {storeIn} already exists")
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        journal: Journal,
+        *,
+        configuration: FindClosestNodeSchema = FindClosestNodeSchema(),
+    ):
+        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        Populates ``model`` directly; construction *is* the generation.
 
-    model.nodeSets[storeIn] = NodeSet(storeIn, [closestNode])
+        Parameters
+        ----------
+        name
+            Unused: this generator names no sets of its own beyond ``storeIn``.
+        model
+            The model tree to populate. Mutated in place.
+        journal
+            The journal object for logging.
+        configuration
+            The options this generator accepts; both are still required, see
+            :class:`FindClosestNodeSchema`.
+        """
+        loc = np.fromstring(configuration.location, sep=",", dtype=float)
 
-    return model
+        if len(loc) != model.domainSize:
+            raise WrongDomain("Spatial dimension of specified location does not match model dimension")
+
+        allNodes = np.asarray([n.coordinates for n in model.nodes.values()])
+
+        differenceNorm = np.linalg.norm(allNodes - loc, axis=1)
+
+        indexClosest = differenceNorm.argmin()
+
+        closestNode = list(model.nodes.values())[indexClosest]
+
+        storeIn = configuration.storeIn
+        if storeIn in model.nodeSets:
+            raise Exception(f"Nodeset {storeIn} already exists")
+
+        model.nodeSets[storeIn] = NodeSet(storeIn, [closestNode])

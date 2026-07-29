@@ -245,7 +245,7 @@ _addBuiltins(
 
 _addBuiltins(
     "generator",
-    "generateModelData",
+    "Generator",
     [
         "boxgen",
         "cubit",

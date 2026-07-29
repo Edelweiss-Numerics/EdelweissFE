@@ -52,19 +52,19 @@ refinement) as well as at setup time; the recipe is recorded in ``model.contactF
         name    = myContactSurface
 """
 
+from dataclasses import dataclass
+
 from edelweissfe.elements.contactsurfaceelement import (
     Line2ContactFacet,
     Tria3ContactFacet,
 )
+from edelweissfe.generators.base.generatorbase import GeneratorBase
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.schema import schemaField
 
 module = Module(
     "surfaceElementGenerator",
@@ -359,26 +359,69 @@ def buildContactFacets(model: FEModel, surfaceName: str, prefix: str, triangulat
     return facetsSetName, nodesSetName
 
 
-@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-@castKwargsValuesAndAddDefaults(module)
-def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args, **kwargs) -> FEModel:
-    """Generate contact facet elements from an existing ``*surface`` definition.
+@dataclass(frozen=True)
+class SurfaceElementGeneratorSchema:
+    """L2: the options this generator accepts, owned by this module and never mutated from
+    outside it.
 
-    Parameters
-    ----------
-    generatorDefinition
-        The generator definition dict.
-    model
-        The model tree.
-    journal
-        The journal instance.
+    Mirrors the ``module.addRequiredArg``/``module.addOptionalArg(...)`` declarations above
+    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
+    one goes away with the ``InputLanguage`` singleton in P5.
 
-    Returns
-    -------
-    FEModel
-        The updated model tree.
+    Unlike every other generator, ``name`` here is a *required scalar option* (the facet-set name
+    prefix), independent of the ``*modelGenerator`` keyword's own top-line ``name`` argument (which
+    this generator, uniquely among the built-ins, never reads).
     """
 
-    kwargs = CaseInsensitiveDict(kwargs)
-    buildContactFacets(model, kwargs["surface"], kwargs["name"], kwargs["triangulation"], journal)
-    return model
+    surface: str | None = schemaField(
+        description="The name of an existing *surface definition.", dtype=str, default=None, required=True
+    )
+    name: str | None = schemaField(
+        description="The prefix for the generated element/node sets.", dtype=str, default=None, required=True
+    )
+    triangulation: str = schemaField(
+        description="The facet triangulation of higher-order element faces: 'corner' (linear "
+        "corner-node subset only; exact for straight-edged meshes) or 'midside' (triangulation of "
+        "the full face boundary including midside nodes; strictly more accurate for curved "
+        "faces). Linear element faces are unaffected by this option.",
+        dtype=str,
+        default="corner",
+    )
+
+
+class Generator(GeneratorBase):
+    """Generates flat, geometry-only "contact facet" elements
+    (:class:`~edelweissfe.elements.contactsurfaceelement.Tria3ContactFacet` /
+    ``Line2ContactFacet``) from an existing ``*surface`` definition. See the module docstring for
+    the full background.
+    """
+
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = SurfaceElementGeneratorSchema
+
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        journal: Journal,
+        *,
+        configuration: SurfaceElementGeneratorSchema = SurfaceElementGeneratorSchema(),
+    ):
+        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        Populates ``model`` directly (via :func:`buildContactFacets`); construction *is* the
+        generation.
+
+        Parameters
+        ----------
+        name
+            Unused: this generator's set-name prefix is ``configuration.name``, a required scalar
+            option distinct from the ``*modelGenerator`` keyword's own top-line ``name``.
+        model
+            The model tree to populate. Mutated in place.
+        journal
+            The journal instance.
+        configuration
+            The options this generator accepts; ``surface``/``name`` are still required, see
+            :class:`SurfaceElementGeneratorSchema`.
+        """
+        buildContactFacets(model, configuration.surface, configuration.name, configuration.triangulation, journal)

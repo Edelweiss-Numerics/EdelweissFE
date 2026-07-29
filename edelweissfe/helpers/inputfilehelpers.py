@@ -27,7 +27,7 @@
 #  ---------------------------------------------------------------------
 
 from edelweissfe.config import registry
-from edelweissfe.config.generators import getGeneratorFunction
+from edelweissfe.config.generators import getGeneratorClass
 from edelweissfe.config.solvers import getSolverByName
 from edelweissfe.generators.abqmodelconstructor import AbqModelConstructor
 from edelweissfe.journal.journal import Journal
@@ -259,7 +259,8 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
         if strCaseCmp(module.name, "executePythoncode"):
             args = data
 
-        model = getGeneratorFunction(generatorType)(generatorDefinition, model, journal, *args, **kwargs)
+        generatorClass = getGeneratorClass(generatorType)
+        model = generatorClass.fromGeneratorDefinition(generatorDefinition["name"], model, journal, args, kwargs)
 
     # the standard 'Abaqus like' model generator is invoked unconditionally, and it has direct access to the inputfile
     abqModelConstructor = AbqModelConstructor(journal)
@@ -285,7 +286,8 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
         if strCaseCmp(module.name, "executePythoncode"):
             args = data
 
-        model = getGeneratorFunction(generatorType)(generatorDefinition, model, journal, *args, **kwargs)
+        generatorClass = getGeneratorClass(generatorType)
+        model = generatorClass.fromGeneratorDefinition(generatorDefinition["name"], model, journal, args, kwargs)
 
     model = abqModelConstructor.createConstraintsFromInputFile(model, inputfile)
     model = abqModelConstructor.createModelModifiersFromInputFile(model, inputfile)

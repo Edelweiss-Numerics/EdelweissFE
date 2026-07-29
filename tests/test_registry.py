@@ -396,13 +396,15 @@ def test_schema_is_none_for_a_class_that_declares_none():
     assert _PluginOutputManagerWithoutSchema.schema is None, "the inherited default itself"
 
 
-def test_schema_is_none_for_a_function_target_rather_than_raising():
-    """Every ``generator`` entry resolves to the module-level function ``generateModelData``, which
-    cannot inherit a class attribute. ``schemaOf`` must report ``None`` for it, not raise
-    ``AttributeError`` -- this is the case that rules out a bare ``target.schema`` in ``lookup``."""
-    target, schema = registry.lookup("generator", "boxgen")
+def test_schema_is_none_for_a_target_declaring_none_rather_than_raising():
+    """``executePythonCode``'s datalines are raw Python source, not a flat option mapping, so its
+    ``Generator`` deliberately declares ``schema = None``. ``schemaOf`` must report ``None`` for
+    it via the declared class attribute, not raise -- this is the case that rules out a bare
+    ``target.schema`` probe in ``lookup`` for a class that hasn't (or can't meaningfully) declare
+    one."""
+    target, schema = registry.lookup("generator", "executepythoncode")
 
-    assert callable(target) and not isinstance(target, type)
+    assert isinstance(target, type)
     assert schema is None
 
 

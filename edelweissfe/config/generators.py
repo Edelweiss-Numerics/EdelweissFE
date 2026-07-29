@@ -46,8 +46,8 @@ Keyword: ``*generator``
 from edelweissfe.config import registry
 
 
-def getGeneratorFunction(name: str) -> type:
-    """Get the function type of the requested generator.
+def getGeneratorClass(name: str) -> type:
+    """Get the class type of the requested generator.
 
     Resolved through the L3 registry (``generator`` category) rather than by importing
     ``edelweissfe.generators.<name>`` directly. That import-by-convention could only ever find
@@ -57,10 +57,6 @@ def getGeneratorFunction(name: str) -> type:
     An unknown name now raises :class:`~edelweissfe.config.registry.RegistryLookupError` naming the
     available generators, instead of a bare ``ModuleNotFoundError``.
 
-    Note that the registry target here is the module-level *function* ``generateModelData``, not a
-    class, so the schema :func:`~edelweissfe.config.registry.lookup` returns alongside it is
-    structurally always ``None`` until generators grow class-based L1 targets.
-
     Parameters
     ----------
     name
@@ -69,9 +65,9 @@ def getGeneratorFunction(name: str) -> type:
     Returns
     -------
     type
-        The generator function type.
+        The generator class type.
     """
 
-    generatorFunction, _ = registry.lookup("generator", name)
+    generatorClass, _ = registry.lookup("generator", name)
 
-    return generatorFunction
+    return generatorClass
