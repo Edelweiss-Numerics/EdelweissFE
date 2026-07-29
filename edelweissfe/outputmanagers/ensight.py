@@ -43,7 +43,7 @@ from edelweissfe.points.node import Node
 from edelweissfe.rigidbodies.rigidbody import RigidBody
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.stepactions.options import getOptionsOfCategory, registerOptionsArg
+from edelweissfe.stepactions.options import registerSchemaOptions
 from edelweissfe.utils.fieldoutput import (
     ElementFieldOutput,
     NodeFieldOutput,
@@ -160,6 +160,15 @@ class EnsightSchema:
     as a field name because it, too, is a tuple -- the input language does not currently forbid
     repeating the block, and this port deliberately does not start forbidding it (see the
     constructor).
+
+    ``intermediateSaveInterval``/``minDTForOutput`` are, unlike every other field here, not read at
+    construction time at all: they exist purely so a later ``>>options, name=<this export's name>,
+    ...`` block (``stepactions/options.py``) has something to validate against and
+    :meth:`OutputManager.applyOptionsOverride` to apply -- adjusting the running export mid-job
+    without repeating its full ``>>configuration``. Unlike a solver option, neither has a default of
+    its own here: not writing them leaves whatever the manager was configured with in place (the
+    ``>>configuration`` block's value, or ``-1e16``, respectively), so that -- not the runtime
+    ``None`` -- is what the docs must say.
     """
 
     perNode: tuple[EnsightPerNodeSchema, ...] = subKeywordField(
@@ -171,22 +180,21 @@ class EnsightSchema:
     configurations: tuple[EnsightConfigurationSchema, ...] = subKeywordField(
         description="", schema=EnsightConfigurationSchema, optionName="configuration"
     )
+    intermediateSaveInterval: int | None = schemaField(
+        description="Set the intermediate save interval for the Ensight export. Not writing it "
+        "leaves whatever the '>>configuration' block set (or its own default) in place.",
+        dtype=int,
+        default=None,
+    )
+    minDTForOutput: float | None = schemaField(
+        description="Set the minimum time between two Ensight exports. Not writing it leaves no " "minimum in place.",
+        dtype=float,
+        default=None,
+    )
 
 
-# Unlike a solver option, these two have no default of their own: not writing them leaves whatever the
-# manager was configured with in place, so that -- not the runtime None -- is what the docs must say.
-registerOptionsArg(
-    "intermediateSaveInterval",
-    "Set the intermediate save interval for the Ensight export.",
-    float,
-    documentedDefault="the value set in the '>>configuration' block",
-)
-registerOptionsArg(
-    "minDTForOutput",
-    "Set the minimum time between two Ensight exports.",
-    float,
-    documentedDefault="no minimum",
-)
+# Registered after the schema itself -- see the equivalent comment in nonlinearimplicitstatic.py.
+registerSchemaOptions(EnsightSchema)
 
 
 def writeCFloat(f, ndarray):
@@ -1181,14 +1189,32 @@ class OutputManager(OutputManagerBase):
         # change with adaptive mesh refinement and stay 1:1 aligned with the variable time steps.
 
     def initializeStep(self, step):
-        options = getOptionsOfCategory(step.actions, self.name) or getOptionsOfCategory(step.actions, "Ensight")
-        if options:
-            # Both fall-backs may legitimately be None (no intermediate saving configured, no minimum
-            # output interval), so guard the casts instead of calling int(None) / float(None).
-            val = options.get("intermediateSaveInterval", self.intermediateSaveInterval)
-            self.intermediateSaveInterval = int(val) if val is not None else None
-            valDTForOutput = options.get("minDTForOutput", self.minDTForOutput)
-            self.minDTForOutput = float(valDTForOutput) if valDTForOutput is not None else 0.0
+        # Adjusting intermediateSaveInterval/minDTForOutput mid-job used to be pulled from here, once
+        # per step; it is now pushed directly by applyOptionsOverride as soon as a step's >>options
+        # block routed to this export (by name) is constructed -- which happens before any step in
+        # StepManager.generateSteps runs -- so there is nothing left to do here.
+        pass
+
+    def applyOptionsOverride(self, fieldValues: dict) -> None:
+        """Adjust the running export's intermediate-save interval and/or minimum output spacing.
+
+        See :meth:`~edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.applyOptionsOverride`
+        for the calling convention. Named fields, not a generic loop over ``fieldValues``: this class
+        has exactly two overridable options, and mapping schema-field-name to instance-attribute
+        generically would mean ``setattr``, which this codebase's conventions forbid.
+
+        Parameters
+        ----------
+        fieldValues
+            Maps schema field name (``intermediateSaveInterval``, ``minDTForOutput``) to its new,
+            already-coerced value; either may be absent (only whatever the user actually wrote is
+            present at all).
+        """
+
+        if "intermediateSaveInterval" in fieldValues:
+            self.intermediateSaveInterval = fieldValues["intermediateSaveInterval"]
+        if "minDTForOutput" in fieldValues:
+            self.minDTForOutput = fieldValues["minDTForOutput"]
 
     def finalizeIncrement(self, **kwargs):
         time = self.model.time

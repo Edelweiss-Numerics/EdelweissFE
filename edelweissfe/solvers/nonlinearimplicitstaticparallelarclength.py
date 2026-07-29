@@ -40,7 +40,7 @@ from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstaticparallel import NISTParallel
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.stepactions.options import getOptionsOfCategory, registerOptionsArg
+from edelweissfe.stepactions.options import registerSchemaOptions
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -50,9 +50,6 @@ from edelweissfe.utils.exceptions import (
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.math import createModelAccessibleFunction
 from edelweissfe.utils.schema import schemaField
-
-registerOptionsArg("arcLengthController", "The step action module serving as the arc length controller.", str)
-registerOptionsArg("stopCondition", "A model accessible expression defining a conditional stop.", str)
 
 
 @dataclass(frozen=True)
@@ -85,8 +82,45 @@ class NISTPArcLength(NISTParallel):
         self.Lambda = 0.0
         self.dLambda = 0.0
         self.arcLengthController = None
+        # arcLengthController/stopCondition are not consulted through self.options -- solveStep
+        # reads them from here directly, every step, unconditionally (see applyOptionsOverride).
+        self._arcLengthOptions = {}
 
         return super().__init__(jobInfo, journal, **kwargs)
+
+    def applyOptionsOverride(self, fieldValues: dict) -> None:
+        """Split a validated ``>>options`` override between the two storage locations this solver
+        actually consults: ``arcLengthController``/``stopCondition`` are read directly out of
+        :attr:`_arcLengthOptions` by :meth:`solveStep` (never through ``self.options``, and not
+        every step -- only when present), while every inherited ``NISTSchema`` field goes through
+        the ordinary ``self.options`` dict via the base implementation.
+
+        The pair is replaced *together*, not merged in individually, whenever either is mentioned:
+        this is what the pre-existing mechanism did too, since ``arcLengthController``/
+        ``stopCondition`` lived on their own step-action object (category ``"NISTArcLength"``,
+        distinct from the solver's own ``"NISTSolver"``/``"NISTPSolver"`` category), and a
+        re-declaration of that object always replaced its *entire* option set rather than adding to
+        it -- confirmed against ``testfiles/marmot/IndirectDisplacementControl2``, whose later steps
+        write ``arcLengthController=off`` alone, omitting ``stopCondition`` from an earlier step's
+        declaration specifically to clear it, not to leave it in effect.
+
+        Parameters
+        ----------
+        fieldValues
+            Maps schema field name to its new, already-coerced value.
+        """
+
+        arcLengthFieldNames = ("arcLengthController", "stopCondition")
+        if any(fieldName in fieldValues for fieldName in arcLengthFieldNames):
+            self._arcLengthOptions = {
+                fieldName: fieldValues[fieldName] for fieldName in arcLengthFieldNames if fieldName in fieldValues
+            }
+
+        inheritedFieldValues = {
+            fieldName: value for fieldName, value in fieldValues.items() if fieldName not in arcLengthFieldNames
+        }
+        if inheritedFieldValues:
+            super().applyOptionsOverride(inheritedFieldValues)
 
     def solveStep(
         self,
@@ -103,7 +137,11 @@ class NISTPArcLength(NISTParallel):
         if "arc length parameter" in model.additionalParameters:
             self.Lambda = model.additionalParameters["arc length parameter"]
 
-        arcLengthControllerOptions = getOptionsOfCategory(step.actions, "NISTArcLength")
+        # Sticky: whatever the last >>options, name=<this solver's name>, arcLengthController=...
+        # block set (applyOptionsOverride) -- not re-fetched from step.actions, and not reset if a
+        # later step omits it, matching the pre-existing (empirically verified, despite a comment
+        # elsewhere in this codebase once claiming otherwise for the analogous NIST case) behavior.
+        arcLengthControllerOptions = self._arcLengthOptions
 
         if arcLengthControllerOptions:
             arcLengthController = arcLengthControllerOptions.get("arcLengthController")
@@ -431,3 +469,9 @@ class NISTPArcLength(NISTParallel):
                 stepAction.applyAtStepEnd(model, stepMagnitude=self.Lambda)
 
         return super().applyStepActionsAtStepEnd(model, stepActions)
+
+
+# Registered *after* the class, from the schema itself -- see the equivalent comment in
+# nonlinearimplicitstatic.py. Only arcLengthController/stopCondition are new here: every inherited
+# NISTSchema field was already registered by NIST's own registerSchemaOptions call.
+registerSchemaOptions(NISTPArcLengthSchema)

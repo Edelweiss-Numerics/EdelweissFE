@@ -26,6 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+import dataclasses
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -39,7 +40,7 @@ from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransform
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import DivergingSolution
-from edelweissfe.utils.schema import OptionSchemaProvider
+from edelweissfe.utils.schema import OptionSchemaProvider, fieldSchemaMeta
 
 
 class NonlinearSolverBase(OptionSchemaProvider, ABC):
@@ -129,6 +130,33 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 self.options[canonicalKey] = str(v).strip().lower() in ("true", "1", "yes", "on")
             else:
                 self.options[canonicalKey] = type(defaultValue)(v)
+
+    def applyOptionsOverride(self, fieldValues: dict) -> None:
+        """Apply a partial override of this solver's own ``schema`` fields onto ``self.options``.
+
+        The counterpart, on the solver side, of the name-based ``>>options`` override mechanism
+        (``stepactions/options.py``): once that mechanism has resolved an ``>>options, name=X, ...``
+        block to this solver instance and validated the present keys against ``type(self).schema``
+        via :func:`~edelweissfe.utils.schema.coercePresentOptions`, it calls this method with the
+        result to actually apply them.
+
+        ``fieldValues`` is keyed by *schema field name* (e.g. ``rungeKuttaStages``), while
+        ``self.options`` -- read throughout ``solveStep``/``solveIncrement`` -- is keyed by the
+        option's ``.inp``-facing spelling (e.g. ``"runge-kutta-stages"``), which are not always the
+        same (a hyphenated name cannot be a Python identifier). The schema's ``optionName`` metadata
+        is the one place that mapping is recorded, so it is consulted here rather than duplicated.
+
+        Parameters
+        ----------
+        fieldValues
+            Maps schema field name to its new, already-coerced value.
+        """
+
+        fieldsByName = {field.name: field for field in dataclasses.fields(self.schema)}
+        for fieldName, value in fieldValues.items():
+            optionName = fieldSchemaMeta(fieldsByName[fieldName]).optionName or fieldName
+            self.journal.message("Updating option {:}={:}".format(optionName, value), self.identification)
+            self.options[optionName] = value
 
     @abstractmethod
     def solveStep(self, *args):

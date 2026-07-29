@@ -38,6 +38,7 @@ Module meshplot divided into classes:
     * Outputmanager:
         creates the plotting specific for the defined keyword lines
 """
+
 from dataclasses import dataclass
 from typing import Any, ClassVar, Mapping
 
@@ -401,6 +402,7 @@ class OutputManager(OutputManagerBase):
         *,
         configuration: MeshPlotSchema = MeshPlotSchema(),
     ):
+        self.name = name
         self.domainSize = model.domainSize
         self.plotter = plotter
         self.journal = journal

@@ -55,7 +55,7 @@ figure=1, axSpec=111, create=xyData, x=time, y=RFTop, label=RF
 
 *step, solver=theSolver
 maxInc=1e-1, minInc=1e-8, maxNumInc=10000, maxIter=25, stepLength=100
->>options, category=NISTSolver, extrapolation=linear
+>>options, name=theSolver, extrapolation=linear
 >>dirichlet, name=bcCorner,     nSet=origin,      field=displacement,     1=0, 2=0, 3=0
 >>dirichlet, name=bottom2, nSet=bottom,  field=displacement,               2=0,
 >>dirichlet, name=zrot,   nSet=zrotlock, field=displacement,             3=0,
@@ -64,5 +64,5 @@ maxInc=1e-1, minInc=1e-8, maxNumInc=10000, maxIter=25, stepLength=100
 
 *step, solver=theSolver
 maxInc=1e-2, minInc=1e-8, maxNumInc=10000, maxIter=25, stepLength=100
->>options, category=NISTSolver, extrapolation=linear
+>>options, name=theSolver, extrapolation=linear
 >>dirichlet, name=top, nSet=top, field=displacement, 2=-2,

@@ -40,7 +40,7 @@ from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
-from edelweissfe.stepactions.options import getOptionsOfCategory, registerOptionsArg
+from edelweissfe.stepactions.options import registerSchemaOptions
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -283,7 +283,8 @@ class NEST(NIST):
 
         self.computationTimes = createTimingDict()
 
-        self._updateOptions(getOptionsOfCategory(step.actions, "NESTSolver"), self.journal)
+        # self.options already reflects every >>options, name=<this solver's name>, ... block applied
+        # so far -- see the equivalent comment in NIST.solveStep.
 
         # get parameters for runge kutta scheme
         self.rkAlpha, self.rkOmega, self.rkLambda = getRungeKuttaParameters(self.options.get("runge-kutta-stages", 2))
@@ -537,12 +538,7 @@ class NEST(NIST):
         return U_np, dU, P, beta
 
 
-# Registered *after* the class so that every documented default can be read straight out of
-# SolverSpecificOptions, which is where the value that actually takes effect lives. The runtime
-# default on the shared 'options' step keyword stays None regardless -- see registerOptionsArg.
-for _name, _dataType, _description in [
-    ("runge-kutta-stages", int, "The number of Runge-Kutta stages."),
-    ("runge-kutta-error-tolerance", float, "The error tolerance for the Runge-Kutta error control."),
-    ("runge-kutta-error-control", str, "Activate the Runge-Kutta error control (on|off)."),
-]:
-    registerOptionsArg(_name, _description, _dataType, documentedDefault=NEST.SolverSpecificOptions[_name])
+# Registered *after* the class, from the schema itself -- see the equivalent comment in
+# nonlinearimplicitstatic.py. linsolver/linsolverConfigFile are skipped here (already registered by
+# NIST, whose own registerSchemaOptions call already ran by the time this module's body executes).
+registerSchemaOptions(NESTSchema)

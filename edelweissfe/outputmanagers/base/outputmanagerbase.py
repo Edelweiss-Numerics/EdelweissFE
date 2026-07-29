@@ -80,6 +80,27 @@ class OutputManagerBase(OptionSchemaProvider, ABC):
     # def updateDefinition(self, **kwargs: dict):
     #     pass
 
+    def applyOptionsOverride(self, fieldValues: dict) -> None:
+        """Apply a partial override of this output manager's own ``schema`` fields.
+
+        The counterpart, on the output manager side, of the name-based ``>>options`` override
+        mechanism (``stepactions/options.py``): once that mechanism has resolved an ``>>options,
+        name=X, ...`` block to this output manager instance and validated the present keys against
+        ``type(self).schema`` via :func:`~edelweissfe.utils.schema.coercePresentOptions`, it calls
+        this method with the result to actually apply them.
+
+        Concrete output managers vary in how (or whether) they store overridable runtime options --
+        unlike a solver's uniform ``self.options`` dict, there is no single shared storage shape to
+        update generically here, so the default is a no-op and a subclass overrides it with its own
+        named fields (ordinary polymorphism, not attribute probing -- see :class:`OutputManager` in
+        ``ensight.py`` for the one concrete case that needs this today).
+
+        Parameters
+        ----------
+        fieldValues
+            Maps schema field name to its new, already-coerced value.
+        """
+
     @abstractmethod
     def initializeJob(self):
         """Initalize the output manager at the beginning of a step.

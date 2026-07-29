@@ -21,27 +21,24 @@
 #  modify it under the terms of the GNU Lesser General Public
 #  License as published by the Free Software Foundation; either
 #  version 2.1 of the License, or (at your option) any later version.
-#
-#  The full text of the license can be found in the file LICENSE.md at
-#  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""
-P3 (see PLAN_INPUT_SYSTEM.md): guards for the *single* remaining step-options mechanism.
+"""Guards for the name-based ``>>options`` override mechanism (see
+``edelweissfe/stepactions/options.py``'s module docstring for the design).
 
-``getOptionsOfCategory`` recovers "what did the user actually write" by stripping ``None``-valued
-entries, which is only correct while **every** option on the shared ``options`` step keyword carries
-a runtime default of ``None``. That used to be a convention, backed up by a second, redundant
-mechanism (``StepAction.explicitlySetOptions``) that was written on every update and read by nothing.
-With the redundant mechanism deleted, the invariant is load-bearing on its own, so it is asserted
-here rather than left to reviewers: one test pins the ``None`` defaults, one pins that
-``registerOptionsArg`` is the only registrar (a future call site adding an arg directly would bypass
-the ``None``), and one pins that the documentation-only default does not leak into the runtime one.
+Three concerns, mirrored by three groups of tests below:
 
-P3(c) moved the strip itself from ``getOptionsOfCategory`` into the ``options`` step action's L4
-seam, so that the container stores what a consumer receives rather than a parser dict to be
-re-stripped on every query. Two further tests cover that seam: one that it keeps only what the user
-set, and one that a later step's block *replaces* its category's options instead of merging into
-them -- the one behaviour that stopped being implied by the mechanism and had to become explicit.
+- **Resolution.** ``name`` must resolve to exactly one of ``model.solvers``/``model.outputManagers``,
+  with a loud error for "neither" and for "both" (an instance name reused across the two, which would
+  otherwise silently pick one).
+- **The shared keyword's grammar.** Every solver's and output manager's option names must be
+  pre-declared on ``>>options`` (:func:`~edelweissfe.stepactions.options.registerSchemaOptions`), with
+  a runtime default of ``None`` -- the invariant :func:`~edelweissfe.stepactions.options._writtenOptions`
+  rests on to tell "the user wrote this" apart from "some other module's option sharing this keyword".
+- **The override itself.** Only what the user actually wrote is validated against the resolved
+  target's own schema and applied, and an override sticks until changed again -- confirmed empirically
+  (this module used to claim otherwise) against the pre-existing mechanism this one replaces: a step
+  that does not re-declare ``>>options`` for a given target leaves that target's last-set options in
+  effect, it does not revert them.
 """
 
 import subprocess
@@ -50,8 +47,9 @@ from pathlib import Path
 
 import pytest
 
-from edelweissfe.stepactions.options import StepAction as OptionsStepAction
-from edelweissfe.stepactions.options import getOptionsOfCategory
+from edelweissfe.journal.journal import Journal
+from edelweissfe.solvers.nonlinearimplicitstatic import NIST
+from edelweissfe.stepactions.options import StepAction, _resolveTarget, _writtenOptions
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -77,20 +75,44 @@ def _optionsKeywordArgs() -> list:
     return [line.split("|", 3) for line in result.stdout.splitlines() if line]
 
 
+def test_name_is_the_only_required_arg_on_the_shared_keyword():
+    """Every other option is target-specific and therefore optional at the keyword level; only
+    ``name`` -- which every ``>>options`` block needs regardless of what it resolves to -- is not."""
+
+    script = (
+        "from edelweissfe.utils.inputlanguage import InputLanguage\n"
+        "language = InputLanguage()\n"
+        "language.ensureParserLoaded()\n"
+        "for module in language['step'].modules:\n"
+        "    kw = module.getKeyword('options')\n"
+        "    print(','.join(arg.name for arg in kw.requiredArgs))\n"
+    )
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, cwd=_REPO_ROOT, check=False)
+    if result.returncode != 0:
+        pytest.fail(f"Could not render the 'options' keyword:\n{result.stderr}")
+
+    lines = [line for line in result.stdout.splitlines() if line]
+    assert lines, "no step type registers the 'options' keyword at all -- the render must be broken"
+    assert all(
+        line == "name" for line in lines
+    ), "the 'options' keyword must declare exactly one required arg, 'name' -- found: " + repr(lines)
+
+
 def test_every_option_on_the_shared_keyword_defaults_to_none():
-    """The invariant getOptionsOfCategory's strip-``None``s rests on."""
+    """The invariant :func:`~edelweissfe.stepactions.options._writtenOptions`'s strip-``None``s
+    rests on."""
     args = _optionsKeywordArgs()
     assert args, "no options were registered at all -- the render must be broken"
 
     offenders = [(module, name, default) for module, name, default, _ in args if default != "None"]
     assert not offenders, (
         "options on the shared 'options' step keyword must default to None, otherwise "
-        "getOptionsOfCategory cannot tell a user's entry from a foreign module's default and would "
-        "silently leak these into every category: " + repr(offenders)
+        "_writtenOptions cannot tell a user's entry from a foreign module's default and would "
+        "silently leak these into every resolved target: " + repr(offenders)
     )
 
 
-def test_registerOptionsArg_is_the_only_registrar_on_the_shared_keyword():
+def test_registerSchemaOptions_is_the_only_registrar_on_the_shared_keyword():
     """What makes the ``None`` default above structural rather than a convention.
 
     A source-level check, deliberately: the failure mode is a *new* call site added years from now,
@@ -105,88 +127,152 @@ def test_registerOptionsArg_is_the_only_registrar_on_the_shared_keyword():
     ).stdout.splitlines()
 
     assert len(hits) == 1 and hits[0].startswith("edelweissfe/stepactions/options.py:"), (
-        "the shared 'options' keyword must only ever be extended through registerOptionsArg, which "
-        "forces the runtime default to None; found other call sites: " + repr(hits)
+        "the shared 'options' keyword must only ever be extended through registerSchemaOptions, "
+        "which forces the runtime default to None; found other call sites: " + repr(hits)
     )
 
 
 def test_documented_default_is_rendered_but_does_not_change_the_runtime_default():
-    """The P3 docs-regression fix: docs show the real default, the parser still sees ``None``."""
+    """The docs show the real (schema) default, the parser still sees ``None``."""
     byName = {name: (default, documented) for _, name, default, documented in _optionsKeywordArgs()}
 
-    # a solver option whose effective default lives in NIST.SolverSpecificOptions
+    # a solver option whose effective default lives in NISTSchema
     assert byName["defaultMaxIter"] == ("None", "10")
     # ... and one whose value is a string, to catch a repr/format slip
     assert byName["linsolver"] == ("None", "'pardiso'")
 
 
-#: A parsed ``>>options, category=NISTSolver, defaultMaxIter=25`` block, as the parser hands it over:
-#: every arg any module registered on the shared keyword is present, ``None`` where unset, plus the
-#: parser's own bookkeeping keys.
-_PARSED_OPTIONS_BLOCK = {
-    "category": "NISTSolver",
-    "defaultMaxIter": "25",
-    "linsolver": None,
-    "inputFile": "/some/path/test.inp",
-    "datalines": [],
-    "explicitlySetArgs": {"defaultmaxiter"},
-}
+def _journal() -> Journal:
+    return Journal()
 
 
-def _optionsAction(name, definition):
-    """Build a real ``options`` step action from a parsed block, through the L4 seam."""
-
-    return OptionsStepAction.fromStepActionDefinition(name, definition, None, None, None, None)
+def _jobInfo() -> dict:
+    return {"fieldCorrectionTolerance": {}, "fluxResidualTolerance": {}, "fluxResidualToleranceAlternative": {}}
 
 
-def test_parsed_options_block_keeps_only_what_the_user_set():
-    """Consumers get the user's entries only -- no ``None``s, no parser internals, no category tag.
+class _FakeModel:
+    """A minimal stand-in for FEModel carrying only what _resolveTarget consults, exercising the
+    same "no InputLanguage/parser involvement needed" property every other ported step action's
+    tests rely on."""
 
-    The stripping is asserted on the L4 seam rather than on ``getOptionsOfCategory``, because that is
-    where it moved in P3(c): the container now stores what a consumer receives. Note that these
-    actions are built with no ``jobInfo``/``model``/``fieldOutputController``/``journal`` at all,
-    which is the property the port bought -- the stand-in class this test used to need existed only
-    because the real one could not be constructed without a parser-shaped dict.
-    """
+    def __init__(self, solvers=None, outputManagers=None):
+        self.solvers = solvers or {}
+        self.outputManagers = outputManagers or {}
 
-    options = getOptionsOfCategory(
-        {"options": {"NISTSolver": _optionsAction("NISTSolver", _PARSED_OPTIONS_BLOCK)}}, "nistsolver"
+
+#: A parsed ``>>options, name=theSolver, extrapolation=off`` block, as the parser hands it over:
+#: every option any module registered on the shared keyword is present, ``None`` where unset, plus
+#: the parser's own bookkeeping keys.
+def _parsedBlock(name: str, **written) -> dict:
+    block = {
+        "name": name,
+        "defaultMaxIter": None,
+        "defaultCriticalIter": None,
+        "defaultMaxGrowingIter": None,
+        "extrapolation": None,
+        "extrapolateAfterModelChange": None,
+        "equilibrateAfterModelChange": None,
+        "linsolver": None,
+        "linsolverConfigFile": None,
+        "inputFile": "/some/path/test.inp",
+        "datalines": [],
+    }
+    block.update(written)
+    return block
+
+
+def test_writtenOptions_keeps_only_what_the_user_set():
+    """No ``None``s, no parser internals, no ``name`` -- what's left is exactly what the user wrote."""
+
+    written = _writtenOptions(_parsedBlock("theSolver", extrapolation="off"))
+    assert written == {"extrapolation": "off"}
+
+
+def test_resolveTarget_finds_a_solver_by_name():
+    solver = NIST(_jobInfo(), _journal())
+    model = _FakeModel(solvers={"theSolver": solver})
+    assert _resolveTarget("theSolver", model) is solver
+
+
+def test_resolveTarget_finds_an_output_manager_by_name():
+    class FakeOutputManager:
+        schema = object()
+
+    manager = FakeOutputManager()
+    model = _FakeModel(outputManagers={"myExport": manager})
+    assert _resolveTarget("myExport", model) is manager
+
+
+def test_resolveTarget_rejects_an_unknown_name():
+    model = _FakeModel()
+    with pytest.raises(ValueError, match="not the name of any declared"):
+        _resolveTarget("nonexistent", model)
+
+
+def test_resolveTarget_rejects_a_name_shared_by_a_solver_and_an_output_manager():
+    """Searched deliberately, rather than returning whichever is found first: silently picking one
+    would apply an override to the wrong object with no diagnostic at all."""
+
+    class FakeOutputManager:
+        schema = object()
+
+    solver = NIST(_jobInfo(), _journal())
+    model = _FakeModel(solvers={"shared": solver}, outputManagers={"shared": FakeOutputManager()})
+    with pytest.raises(ValueError, match="names both a solver and an output manager"):
+        _resolveTarget("shared", model)
+
+
+def test_resolveTarget_rejects_a_target_with_no_schema():
+    class SchemalessTarget:
+        schema = None
+
+    model = _FakeModel(solvers={"bare": SchemalessTarget()})
+    with pytest.raises(ValueError, match="declares no option schema"):
+        _resolveTarget("bare", model)
+
+
+def test_creation_applies_the_written_options_immediately():
+    solver = NIST(_jobInfo(), _journal())
+    model = _FakeModel(solvers={"theSolver": solver})
+
+    StepAction.fromStepActionDefinition(
+        "theSolver", _parsedBlock("theSolver", extrapolation="off"), None, model, None, _journal()
     )
 
-    # a CaseInsensitiveDict stores its keys casefolded, hence the lookup rather than a dict compare
-    assert len(options) == 1
-    assert options["defaultMaxIter"] == "25"
+    assert solver.options["extrapolation"] == "off"
 
 
-def test_a_later_step_replaces_the_options_of_its_category_rather_than_merging():
-    """An option set in an earlier step and omitted in a later one must not leak into it.
+def test_an_override_sticks_across_a_step_that_does_not_repeat_it():
+    """The behavior this whole mechanism replaces was, despite a comment claiming otherwise,
+    empirically sticky: an option set once stays in effect until a later declaration changes it, not
+    just for the step that declared it. This pins that -- now genuinely intentional -- behavior."""
 
-    Pre-port this fell out of the mechanism: ``self.options.update(parsedBlock)`` was handed a
-    mapping carrying *every* declared arg, so an omitted option arrived as ``None`` and was dropped
-    by the read-time strip. Once the strip moves to the seam the mapping is sparse, and a merge would
-    silently carry the earlier value over -- which no simulation test would catch, because the only
-    input that re-declares one category with differing option sets
-    (``testfiles/marmot/IndirectDisplacementControl2``) skips for a missing Marmot material.
-    """
+    solver = NIST(_jobInfo(), _journal())
+    model = _FakeModel(solvers={"theSolver": solver})
 
-    action = _optionsAction("NISTSolver", _PARSED_OPTIONS_BLOCK)
-    assert getOptionsOfCategory({"options": {"NISTSolver": action}}, "NISTSolver")["defaultMaxIter"] == "25"
+    action = StepAction.fromStepActionDefinition(
+        "theSolver", _parsedBlock("theSolver", extrapolation="off"), None, model, None, _journal()
+    )
 
-    laterStep = dict(_PARSED_OPTIONS_BLOCK, defaultMaxIter=None, linsolver="klu")
-    action.updateStepActionFromDefinition(laterStep, None, None, None, None)
+    # A later step's block omits 'extrapolation' entirely and sets an unrelated option only.
+    action.updateStepActionFromDefinition(_parsedBlock("theSolver", linsolver="klu"), None, model, None, _journal())
 
-    options = getOptionsOfCategory({"options": {"NISTSolver": action}}, "NISTSolver")
-    assert options["linsolver"] == "klu"
-    assert "defaultMaxIter" not in options
+    assert solver.options["extrapolation"] == "off"
+    assert solver.options["linsolver"] == "klu"
 
 
-def test_getOptionsOfCategory_rejects_two_blocks_for_one_category():
-    actions = {
-        "options": {
-            "a": _optionsAction("a", {"category": "NISTSolver"}),
-            "b": _optionsAction("b", {"category": "nistsolver"}),
-        }
-    }
+def test_writing_an_option_the_target_does_not_declare_raises():
+    """A typo, or an option meant for a different target, is a loud error -- not a silent no-op."""
 
-    with pytest.raises(ValueError, match="Multiple 'options' step action definitions"):
-        getOptionsOfCategory(actions, "NISTSolver")
+    solver = NIST(_jobInfo(), _journal())
+    model = _FakeModel(solvers={"theSolver": solver})
+
+    with pytest.raises(ValueError, match="not a valid option"):
+        StepAction.fromStepActionDefinition(
+            "theSolver",
+            _parsedBlock("theSolver", **{"runge-kutta-stages": "3"}),
+            None,
+            model,
+            None,
+            _journal(),
+        )

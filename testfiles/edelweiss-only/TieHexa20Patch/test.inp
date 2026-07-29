@@ -70,6 +70,6 @@ fieldOutput=UzSpread
 
 *step, solver=theSolver
 maxInc=0.5, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
->>options, category=NISTSolver, extrapolation=off
+>>options, name=theSolver, extrapolation=off
 >>dirichlet, name=fixBottom, nSet=lower_back, field=displacement, 1=0.0, 2=0.0, 3=0.0
 >>dirichlet, name=pushTop, nSet=upper_front, field=displacement, 3=-0.06

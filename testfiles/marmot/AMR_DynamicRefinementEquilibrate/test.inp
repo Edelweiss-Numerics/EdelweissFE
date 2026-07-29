@@ -28,7 +28,7 @@ maxLevel=1
 
 *step, solver=S
 maxInc=0.5, minInc=1e-4, maxNumInc=50, maxIter=25,
->>options, category=NISTSolver, equilibrateAfterModelChange=True
+>>options, name=S, equilibrateAfterModelChange=True
 >>dirichlet, name=x0, nSet=x0, field=displacement, 1=0.0, 2=0.0, 3=0.0
 >>dirichlet, name=x1, nSet=x1, field=displacement, 3=0.0005
 

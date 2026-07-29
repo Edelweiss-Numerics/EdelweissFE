@@ -917,20 +917,40 @@ Let materials initialize themselves (e.g., state vars depending on material para
     [components] Prescribe values using a numpy ndarray for representation; use 'x' for ignored values. (<class 'str'>, default = None)
     [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
 ===== module documentation: edelweissfe.stepactions.options =====
-This stepaction serves as a simple case insensitive container for
-storing step options for various modules, grouped by a category, e.g.,
+Adjust a solver's or output manager's own options mid-job, by name:
 
 .. code-block:: edelweiss
 
+    *solver, name=mySolver, solver=NIST
     *step, solver=mySolver
-    >>options, category=NISTSolver, extrapolation=linear
+    >>options, name=mySolver, extrapolation=linear
 
-Consumers (e.g., solvers and output managers) declare their available options
-via :func:`registerOptionsArg`, and retrieve the options defined for their
-category via :func:`getOptionsOfCategory`.
-< options > This stepaction serves as a case insensitive container for storing step options for various modules.
+``name`` must be the name of an already-declared ``*solver`` or ``*output`` instance -- the same
+name that block gave it, not a category or type tag. This step action resolves it directly against
+``model.solvers``/``model.outputManagers`` (:func:`_resolveTarget`), validates whichever options are
+actually present against *that instance's own* ``type(target).schema`` (:func:`coercePresentOptions`
+-- only present keys, no missing-required check, since an override is by definition partial), and
+applies them immediately via ``target.applyOptionsOverride(...)``.
+
+This replaces a name-blind, category-string mechanism (``getOptionsOfCategory``, matched against a
+solver's ``self.identification`` or an output manager's own name-or-a-hardcoded-fallback) that let a
+hand-maintained category tag drift from the object it was supposed to identify -- which is exactly
+how ``NISTPArcLength``'s two bespoke options ended up registered, and resolved, under the unrelated
+string ``"NISTArcLength"`` rather than its own ``identification``. A name is already unique and
+already declared; there is no second tag to keep in sync with it.
+
+The ``>>options`` keyword itself still needs every solver's and output manager's option names
+pre-declared on it (:func:`registerSchemaOptions`), because the ``.inp`` grammar is validated
+statically against a keyword's own known arguments (see ``utils/inputlanguage.py``) -- a single
+``>>options, name=X, ...`` line cannot itself carry the information "only validate the keys ``X``'s
+own type declares" at parse time, before ``name`` has even been resolved. What changes is *how* that
+declaration happens: one call per *schema* (:func:`registerSchemaOptions`, called once by each
+solver/output manager module with its own ``schema`` class) instead of one call per *option*
+(the old ``registerOptionsArg``, called by hand once per field) -- so a schema and its grammar
+registration cannot independently drift, because there is only one source now.
+< options > Adjust a solver's or output manager's own options mid-job. 'name' must be the name an already-declared *solver or *output block gave it; every other option is validated against that specific instance's own type.
   required arguments
-    [category] Option category. (<class 'str'>)
+    [name] The name of the already-declared solver or output manager this block configures. (<class 'str'>)
   optional arguments
     [defaultMaxIter] The default maximum number of iterations. (<class 'int'>, default = 10)
     [defaultCriticalIter] The default number of critical iterations. (<class 'int'>, default = 5)
@@ -945,11 +965,17 @@ category via :func:`getOptionsOfCategory`.
     [runge-kutta-stages] The number of Runge-Kutta stages. (<class 'int'>, default = 2)
     [runge-kutta-error-tolerance] The error tolerance for the Runge-Kutta error control. (<class 'float'>, default = 0.001)
     [runge-kutta-error-control] Activate the Runge-Kutta error control (on|off). (<class 'str'>, default = on)
-    [intermediateSaveInterval] Set the intermediate save interval for the Ensight export. (<class 'float'>, default = the value set in the '>>configuration' block)
-    [minDTForOutput] Set the minimum time between two Ensight exports. (<class 'float'>, default = no minimum)
-< options > This stepaction serves as a case insensitive container for storing step options for various modules.
+    [intermediateSaveInterval] Set the intermediate save interval for the Ensight export. Not writing it leaves whatever the '>>configuration' block set (or its own default) in place. (<class 'int'>, default = None)
+    [minDTForOutput] Set the minimum time between two Ensight exports. Not writing it leaves no minimum in place. (<class 'float'>, default = None)
+    [first-order-fields] Fields integrated with a first-order (forward-Euler) time scheme. (<class 'list'>, default = [])
+    [second-order-fields] Fields integrated with a second-order (central-difference) time scheme. (<class 'list'>, default = [])
+    [first-order-scheme] The time integration scheme for first-order fields. (<class 'str'>, default = forward-euler)
+    [second-order-scheme] The time integration scheme for second-order fields. (<class 'str'>, default = central-difference)
+    [courant-number] The fraction of the critical time step actually used. (<class 'float'>, default = 0.8)
+    [output-frequency] The increment interval at which progress is logged. (<class 'int'>, default = 1000)
+< options > Adjust a solver's or output manager's own options mid-job. 'name' must be the name an already-declared *solver or *output block gave it; every other option is validated against that specific instance's own type.
   required arguments
-    [category] Option category. (<class 'str'>)
+    [name] The name of the already-declared solver or output manager this block configures. (<class 'str'>)
   optional arguments
     [defaultMaxIter] The default maximum number of iterations. (<class 'int'>, default = 10)
     [defaultCriticalIter] The default number of critical iterations. (<class 'int'>, default = 5)
@@ -964,8 +990,14 @@ category via :func:`getOptionsOfCategory`.
     [runge-kutta-stages] The number of Runge-Kutta stages. (<class 'int'>, default = 2)
     [runge-kutta-error-tolerance] The error tolerance for the Runge-Kutta error control. (<class 'float'>, default = 0.001)
     [runge-kutta-error-control] Activate the Runge-Kutta error control (on|off). (<class 'str'>, default = on)
-    [intermediateSaveInterval] Set the intermediate save interval for the Ensight export. (<class 'float'>, default = the value set in the '>>configuration' block)
-    [minDTForOutput] Set the minimum time between two Ensight exports. (<class 'float'>, default = no minimum)
+    [intermediateSaveInterval] Set the intermediate save interval for the Ensight export. Not writing it leaves whatever the '>>configuration' block set (or its own default) in place. (<class 'int'>, default = None)
+    [minDTForOutput] Set the minimum time between two Ensight exports. Not writing it leaves no minimum in place. (<class 'float'>, default = None)
+    [first-order-fields] Fields integrated with a first-order (forward-Euler) time scheme. (<class 'list'>, default = [])
+    [second-order-fields] Fields integrated with a second-order (central-difference) time scheme. (<class 'list'>, default = [])
+    [first-order-scheme] The time integration scheme for first-order fields. (<class 'str'>, default = forward-euler)
+    [second-order-scheme] The time integration scheme for second-order fields. (<class 'str'>, default = central-difference)
+    [courant-number] The fraction of the critical time step actually used. (<class 'float'>, default = 0.8)
+    [output-frequency] The increment interval at which progress is logged. (<class 'int'>, default = 1000)
 ===== module documentation: edelweissfe.stepactions.setfield =====
 < setfield > Set a field (via fieldOutput) to a predefined value.
   required arguments

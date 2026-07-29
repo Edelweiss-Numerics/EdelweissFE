@@ -121,12 +121,6 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fil
         e.args = (f"Error during parsing of keyword {keywordIdentifier}{keyword}: " + e.args[0],)
         raise e
 
-    # Remember which args the user actually wrote down, before the defaults of all registered optional
-    # args are merged in below. Keywords shared by several modules (e.g. 'options') need to distinguish
-    # user intent from defaults, since the defaults contributed by foreign modules would otherwise
-    # override settings made elsewhere.
-    explicitlySetArgs = {key.casefold() for key in options.keys()}
-
     if "type" in inputLanguage[topLevelKeyword].argNames:
         module = inputLanguage[topLevelKeyword].getModule(
             inputLanguage[topLevelKeyword].getArg("type").getValueFromKwargs(topLevelOptions)
@@ -192,11 +186,6 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fil
     for opt in kw.optionalArgs:
         if opt.name not in options:
             options[opt.name] = opt.default
-
-    if kw.name == "options":
-        # the 'options' keyword is a shared container: every module registers its own optional args on
-        # it, so consumers must be able to tell the user's entries apart from foreign defaults
-        options["explicitlySetArgs"] = explicitlySetArgs
 
     options["inputFile"] = fileName  # save also the filename of the original inputfile!
 

@@ -45,7 +45,7 @@ from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.dirichlet import applyDirichletToStiffness
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.stepactions.options import getOptionsOfCategory, registerOptionsArg
+from edelweissfe.stepactions.options import registerSchemaOptions
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -154,9 +154,6 @@ class NIST(NonlinearSolverBase):
         # the datalines of the *solver keyword belong exclusively to this solver, so unknown entries
         # are user typos and must not be swallowed
         self._updateOptions(kwargs, journal, strict=True)
-        # baseline (defaults + solver-construction options) to reset to at the start of each step, so
-        # a >>options block in one step does not leak into later steps that omit one
-        self._baseOptions = dict(self.options)
 
     def solveStep(
         self,
@@ -181,14 +178,11 @@ class NIST(NonlinearSolverBase):
             The field output controller.
         """
 
-        # Reset to the baseline so each step's options are independent (no leak across steps), then
-        # apply any >>options block routed to this solver. getOptionsOfCategory matches the block by
-        # its 'category' field (options actions are auto-named, so they cannot be matched by dict key)
-        # and strips unspecified options, so options given in the *solver datalines are not silently
-        # reset by the defaults of foreign modules sharing the 'options' keyword.
-        self.options = dict(self._baseOptions)
-        self._updateOptions(getOptionsOfCategory(step.actions, self.identification), self.journal)
-
+        # self.options already reflects every >>options, name=<this solver's name>, ... block applied
+        # so far: applyOptionsOverride pushes an override the moment such a block is constructed or
+        # re-declared (edelweissfe.stepactions.options.StepAction), rather than this method pulling
+        # one in per step, and an override sticks until changed again -- there is nothing to reset or
+        # re-fetch here.
         extrapolation = self.options["extrapolation"]
         extrapolateAfterModelChange = self.options["extrapolateAfterModelChange"]
         equilibrateAfterModelChange = self.options["equilibrateAfterModelChange"]
@@ -896,34 +890,8 @@ class NIST(NonlinearSolverBase):
         return PExt, K
 
 
-# Registered *after* the class so that every documented default can be read straight out of
-# SolverSpecificOptions, which is where the value that actually takes effect lives. The runtime
-# default on the shared 'options' step keyword stays None regardless -- see registerOptionsArg.
-for _name, _dataType, _description in [
-    ("defaultMaxIter", int, "The default maximum number of iterations."),
-    ("defaultCriticalIter", int, "The default number of critical iterations."),
-    ("defaultMaxGrowingIter", int, "The default number of allowed residual growths."),
-    ("extrapolation", str, "The extrapolation strategy for new increments (off|linear)."),
-    (
-        "extrapolateAfterModelChange",
-        bool,
-        "Whether to extrapolate the predictor on the increment FOLLOWING a model change (adaptive mesh "
-        "refinement). Set False to start that increment from a zero predictor, avoiding extrapolation of "
-        "the one-off warm-start/remesh settling transient.",
-    ),
-    (
-        "equilibrateAfterModelChange",
-        bool,
-        "Whether to insert one constant-load, zero-time re-equilibration increment immediately after an "
-        "adaptive mesh refinement, before advancing the load. When True, the warm-started refined mesh is "
-        "first settled to equilibrium at the last converged load level (no load advance, no Dirichlet "
-        "increment, zero time increment) so the subsequent load-advancing increment starts from an "
-        "equilibrated state. Intended for softening problems where remeshing near the process zone "
-        "otherwise couples the load advance with the warm-start settling transient in one solve. Note: "
-        "the equilibration solve integrates materials with dT=0, which suits rate-independent models; "
-        "rate-dependent materials see no time advance during it (by design).",
-    ),
-    ("linsolver", str, "The linear solver to be used."),
-    ("linsolverConfigFile", str, "A JSON configuration file for the linear solver."),
-]:
-    registerOptionsArg(_name, _description, _dataType, documentedDefault=NIST.SolverSpecificOptions[_name])
+# Registered *after* the class, from the schema itself: registerSchemaOptions reads each field's
+# documented default (its schemaField(..., default=...)) straight off NISTSchema, which is the same
+# object solveStep validates option overrides against -- there is no separate, hand-maintained
+# per-option registration left to drift from it.
+registerSchemaOptions(NISTSchema)
