@@ -75,19 +75,18 @@ NON_OPTION_KEYS = frozenset({"name", "inputfile", "inputFile", "datalines", "exp
 #: entry is a latent bug, recorded rather than fixed because fixing means deciding what the option
 #: should *mean*, which is a product decision and not part of a behaviour-neutral port.
 #:
-#: A schema-based module's genuinely-unread fields -- e.g. `distributedload`'s `field` (never
-#: consumed: `DistributedLoadBase` has no notion of a field) or `bodyforce`'s `delta` (declared for
-#: an incremental update, but unreachable since `bodyforce` offers no `updatebodyforce` keyword, so
-#: a re-declaration is always full and its required `forceVector` always wins) do not need an entry
-#: here any more: `buildSchemaFromOptions`/`coercePresentOptions` still type-validate them even
-#: though their coerced value is then discarded, which is a milder failure mode than this dict
-#: exists to flag -- a value with *no* validation and *no* effect, e.g. `meshplot`'s `legend`/
-#: `axpSec` or `Plotter.plotXYData`'s `c`/`ls`.
-KNOWN_UNREAD_OPTIONS = {
-    # `indirectcontrol` declares `exportCVector` but has never implemented it; only its sibling
-    # `indirectcontractioncontrol`, which computes a c vector worth dumping, does.
-    ("indirectcontrol", "indirectcontrol"): {"exportCVector"},
-}
+#: Empty now that all twelve step actions are ported to L2 schemas: a schema-based module's
+#: genuinely-unread fields -- e.g. `distributedload`'s `field` (never consumed: `DistributedLoadBase`
+#: has no notion of a field), `bodyforce`'s `delta` (declared for an incremental update, but
+#: unreachable since `bodyforce` offers no `updatebodyforce` keyword, so a re-declaration is always
+#: full and its required `forceVector` always wins), or `indirectcontrol`'s `exportCVector` (declared
+#: but never implemented -- only its sibling `indirectcontractioncontrol` does) -- do not need an
+#: entry here: `buildSchemaFromOptions`/`coercePresentOptions` still type-validate them even though
+#: their coerced value is then discarded, which is a milder failure mode than this dict exists to
+#: flag -- a value with *no* validation and *no* effect, e.g. `meshplot`'s `legend`/`axpSec` or
+#: `Plotter.plotXYData`'s `c`/`ls`. Kept as a dict (not deleted) since those two other, unrelated
+#: modules may yet need it.
+KNOWN_UNREAD_OPTIONS = {}
 
 #: Modules exempt from the "every declared option is read" check, with the reason.
 UNREAD_CHECK_EXEMPT_MODULES = {

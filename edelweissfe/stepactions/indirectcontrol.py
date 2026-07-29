@@ -29,6 +29,8 @@
 
 # @author: Matthias Neuner
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.journal.journal import Journal
@@ -36,8 +38,11 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.math import evalModelAccessibleExpression
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 from edelweissfe.variables.fieldvariable import FieldVariable
 
 """
@@ -68,6 +73,39 @@ for module in modules:
     kw.addOptionalArg("absolute", "Use absolute formulation", bool, True)
 
     documentation.append(kw)
+
+
+@dataclass(frozen=True)
+class IndirectControlSchema:
+    """L2: the scalar options of the ``indirectcontrol`` keyword, owned by this module and never
+    mutated from outside it.
+
+    None of ``dof1``/``dof2``/``cVector1``/``cVector2`` is structural in the usual sense (a model
+    dict lookup by a fixed key): each is a model-access *expression*, evaluated by
+    :func:`~edelweissfe.utils.math.evalModelAccessibleExpression`/``eval`` in
+    :meth:`~StepAction._dofFromDefinition`/:meth:`~StepAction._cVectorFromDefinition`, so all four
+    stay plain string schema fields, exactly like ``modelupdate``'s ``update``.
+    """
+
+    dof1: str | None = schemaField(
+        description="Degree of freedom for the constraint (model access expression).",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    dof2: str | None = schemaField(
+        description="Degree of freedom for the constraint (model access expression).",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    cVector1: str | None = schemaField(description="c vector.", dtype=str, default=None, required=True)
+    cVector2: str | None = schemaField(description="c vector.", dtype=str, default=None, required=True)
+    L: float | None = schemaField(
+        description="Final distance (e.g. crack opening)", dtype=float, default=None, required=True
+    )
+    exportCVector: str | None = schemaField(description="File to export the computed c vector", dtype=str, default="")
+    absolute: bool | None = schemaField(description="Use absolute formulation", dtype=bool, default=True)
 
 
 class StepAction(StepActionBase):
@@ -113,6 +151,9 @@ class StepAction(StepActionBase):
 
     identification = "IndirectControl"
 
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = IndirectControlSchema
+
     def __init__(
         self,
         name: str,
@@ -137,18 +178,26 @@ class StepAction(StepActionBase):
     @classmethod
     def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
         """Build this controller from a parsed ``>>indirectcontrol`` definition. See
-        :class:`StepActionBase` for why this is separate from ``__init__``."""
+        :class:`StepActionBase` for why this is separate from ``__init__``.
+
+        ``name`` and the parser's bookkeeping keys are stripped before the remaining options are
+        validated against :class:`IndirectControlSchema`; there is nothing structural to pop, since
+        every option here is an expression string rather than a model dict lookup key."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        configuration = buildSchemaFromOptions(cls.schema, definition)
 
         return cls(
             name,
-            cls._dofFromDefinition(definition, "dof1", model),
-            cls._dofFromDefinition(definition, "dof2", model),
-            cls._cVectorFromDefinition(definition, "cVector1"),
-            cls._cVectorFromDefinition(definition, "cVector2"),
-            definition["L"],
+            cls._dofFromExpression(configuration.dof1, model),
+            cls._dofFromExpression(configuration.dof2, model),
+            cls._cVectorFromExpression(configuration.cVector1),
+            cls._cVectorFromExpression(configuration.cVector2),
+            configuration.L,
             model,
             journal,
-            absolute=definition["absolute"],
+            absolute=configuration.absolute,
         )
 
     def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
@@ -167,16 +216,22 @@ class StepAction(StepActionBase):
         option's value) is a product decision, not part of a behaviour-neutral port. Its sibling
         ``indirectcontractioncontrol`` does declare ``name`` and is not affected.
 
-        ``definition["absolute"]`` is deliberately not re-read: the formulation has always been fixed
-        by the first declaration (see the ``absolute`` entry in the class docstring), and re-reading
-        it would alter the ``L - currentL0`` bookkeeping."""
+        ``absolute`` is deliberately not re-read: the formulation has always been fixed by the first
+        declaration (see the ``absolute`` entry in the class docstring), and re-reading it would
+        alter the ``L - currentL0`` bookkeeping. There is no ``update<keyword>`` grammar for this
+        module (see above), so a re-declaration is always validated against the full
+        ``indirectcontrol`` keyword and ``buildSchemaFromOptions`` is safe here too."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        configuration = buildSchemaFromOptions(self.schema, definition)
 
         self.updateStepAction(
-            self._dofFromDefinition(definition, "dof1", model),
-            self._dofFromDefinition(definition, "dof2", model),
-            self._cVectorFromDefinition(definition, "cVector1"),
-            self._cVectorFromDefinition(definition, "cVector2"),
-            definition["L"],
+            self._dofFromExpression(configuration.dof1, model),
+            self._dofFromExpression(configuration.dof2, model),
+            self._cVectorFromExpression(configuration.cVector1),
+            self._cVectorFromExpression(configuration.cVector2),
+            configuration.L,
         )
 
     def updateStepAction(
@@ -286,15 +341,14 @@ class StepAction(StepActionBase):
         self.currentL0 = self.L
 
     @staticmethod
-    def _dofFromDefinition(definition: dict, key: str, model: FEModel) -> FieldVariable:
-        """Resolve one of a parsed definition's model access expressions into a field variable.
+    def _dofFromExpression(expression: str, model: FEModel) -> FieldVariable:
+        """Resolve a validated schema's model access expression (``dof1`` or ``dof2``) into a field
+        variable.
 
         Parameters
         ----------
-        definition
-            The parsed option mapping defining this step action.
-        key
-            The option holding the model access expression, i.e. ``"dof1"`` or ``"dof2"``.
+        expression
+            The model access expression, e.g. ``'model.nodes[18].fields["displacement"]'``.
         model
             The model tree.
 
@@ -304,18 +358,16 @@ class StepAction(StepActionBase):
             The field variable the expression evaluates to.
         """
 
-        return evalModelAccessibleExpression(definition[key], model)
+        return evalModelAccessibleExpression(expression, model)
 
     @staticmethod
-    def _cVectorFromDefinition(definition: dict, key: str) -> np.ndarray:
-        """Evaluate one of a parsed definition's c vector expressions.
+    def _cVectorFromExpression(expression: str) -> np.ndarray:
+        """Evaluate a validated schema's c vector expression (``cVector1`` or ``cVector2``).
 
         Parameters
         ----------
-        definition
-            The parsed option mapping defining this step action.
-        key
-            The option holding the expression, i.e. ``"cVector1"`` or ``"cVector2"``.
+        expression
+            The c vector expression, e.g. ``'0, -1'``.
 
         Returns
         -------
@@ -325,4 +377,4 @@ class StepAction(StepActionBase):
 
         # An entry of 'x' marks a component as not participating in the controlled quantity, which
         # is expressed as a zero weight.
-        return np.asarray(eval(definition[key].replace("x", "0")), dtype=float)
+        return np.asarray(eval(expression.replace("x", "0")), dtype=float)

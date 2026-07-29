@@ -29,6 +29,8 @@
 
 # @author: Matthias Neuner
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.journal.journal import Journal
@@ -36,7 +38,10 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 Indirect (displacement) controller for the NISTArcLength solver
@@ -68,6 +73,23 @@ for module in modules:
     kw.addOptionalArg("absolute", "Use absolute formulation", bool, True)
 
     documentation.append(kw)
+
+
+@dataclass(frozen=True)
+class IndirectContractionControlSchema:
+    """L2: the scalar options of the ``indirectcontractioncontrol`` keyword, owned by this module
+    and never mutated from outside it.
+
+    ``contractionNSet`` is *not* a schema field: it names an existing model object, resolved by
+    :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
+    category's structural names.
+    """
+
+    L: float | None = schemaField(
+        description="Final distance (e.g. crack opening)", dtype=float, default=None, required=True
+    )
+    exportCVector: str | None = schemaField(description="File to export the computed c vector", dtype=str, default=None)
+    absolute: bool | None = schemaField(description="Use absolute formulation", dtype=bool, default=True)
 
 
 class StepAction(StepActionBase):
@@ -106,6 +128,9 @@ class StepAction(StepActionBase):
 
     identification = "IndirectControl"
 
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = IndirectContractionControlSchema
+
     def __init__(
         self,
         name: str,
@@ -136,19 +161,28 @@ class StepAction(StepActionBase):
         The ``exportCVector`` dump is written here rather than in ``__init__`` because appending
         ``.csv`` to a user-supplied file name is input-file shaping, and a typed constructor should
         not write files as a side effect -- a programmatic caller that wants the dump can
-        ``np.savetxt`` the public ``cVector`` itself."""
+        ``np.savetxt`` the public ``cVector`` itself.
+
+        ``name`` and the parser's bookkeeping keys are stripped, and ``contractionNSet`` is
+        structural (it names a model object), so both are popped before the remaining options are
+        validated against :class:`IndirectContractionControlSchema`."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        contractionNSetName = definition.pop("contractionNSet")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
 
         stepAction = cls(
             name,
-            model.nodeSets[definition["contractionNSet"]],
-            definition["L"],
+            model.nodeSets[contractionNSetName],
+            configuration.L,
             model,
             journal,
-            absolute=definition["absolute"],
+            absolute=configuration.absolute,
         )
 
-        if definition["exportCVector"] is not None:
-            np.savetxt(definition["exportCVector"] + ".csv", stepAction.cVector)
+        if configuration.exportCVector is not None:
+            np.savetxt(configuration.exportCVector + ".csv", stepAction.cVector)
 
         return stepAction
 
@@ -157,11 +191,18 @@ class StepAction(StepActionBase):
         step.
 
         Re-declaring the control target ``L`` per step is the normal way this action is used, so
-        this path is not a corner case. Note that neither ``definition["absolute"]`` nor
-        ``definition["exportCVector"]`` is re-read here: the formulation has always been fixed by
-        the first declaration, and the c vector dump has always been written once, at creation."""
+        this path is not a corner case. Note that neither ``absolute`` nor ``exportCVector`` is
+        re-read here: the formulation has always been fixed by the first declaration, and the c
+        vector dump has always been written once, at creation. There is no ``update<keyword>``
+        grammar for this module, so a re-declaration is always validated against the full
+        ``indirectcontractioncontrol`` keyword and ``buildSchemaFromOptions`` is safe here too."""
 
-        self.updateStepAction(model.nodeSets[definition["contractionNSet"]], definition["L"])
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        contractionNSetName = definition.pop("contractionNSet")
+        configuration = buildSchemaFromOptions(self.schema, definition)
+
+        self.updateStepAction(model.nodeSets[contractionNSetName], configuration.L)
 
     def _getIdcsInDofVector(self, dofManager) -> np.ndarray:
         """Determine the indices of the contraction ring displacements in the dof vector.

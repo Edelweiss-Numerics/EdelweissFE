@@ -29,15 +29,20 @@
 
 # @author: Matthias Neuner
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 
 # from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 Set a field (via fieldOutput) to a predefined value.
@@ -59,6 +64,30 @@ for module in modules:
     kw.addRequiredArg("value", "Scalar value if type 'const'; name of analyticalField if type 'analyticalField'", str)
 
     documentation.append(kw)
+
+
+@dataclass(frozen=True)
+class SetFieldSchema:
+    """L2: the scalar options of the ``setfield`` keyword, owned by this module and never mutated
+    from outside it.
+
+    ``fieldOutput`` is *not* a schema field: it names an existing model object, resolved by
+    :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
+    category's structural names. ``valueType`` is named to avoid shadowing the ``type`` builtin,
+    hence the ``optionName`` indirection; ``value`` stays a plain string regardless of what
+    ``valueType`` says it means -- interpreting it (a numeric vector, or an analytical field name to
+    resolve against the model) is :meth:`_valueFromDefinition`'s job, not the schema's.
+    """
+
+    valueType: str | None = schemaField(
+        description="Either 'uniform' or 'analyticalField'.", dtype=str, default=None, required=True, optionName="type"
+    )
+    value: str | None = schemaField(
+        description="Scalar value if type 'const'; name of analyticalField if type 'analyticalField'",
+        dtype=str,
+        default=None,
+        required=True,
+    )
 
 
 class StepAction(StepActionBase):
@@ -88,6 +117,9 @@ class StepAction(StepActionBase):
     journal
         The journal object for logging.
     """
+
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = SetFieldSchema
 
     def __init__(self, name, fieldOutput, value, model, journal):
         self.name = name
@@ -125,10 +157,15 @@ class StepAction(StepActionBase):
             The constructed step action.
         """
 
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        fieldOutputName = definition.pop("fieldOutput")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+
         return cls(
             name,
-            fieldOutputController.fieldOutputs[definition["fieldOutput"]],
-            cls._valueFromDefinition(definition, model),
+            fieldOutputController.fieldOutputs[fieldOutputName],
+            cls._valueFromDefinition(configuration, model),
             model,
             journal,
         )
@@ -237,13 +274,14 @@ class StepAction(StepActionBase):
         self.fieldOutput.setResults(currentResults)
 
     @staticmethod
-    def _valueFromDefinition(definition: dict, model):
-        """Turn a parsed definition's ``type``/``value`` pair into the prescribed value itself.
+    def _valueFromDefinition(configuration: "SetFieldSchema", model):
+        """Turn a validated ``SetFieldSchema``'s ``valueType``/``value`` pair into the prescribed
+        value itself.
 
         Parameters
         ----------
-        definition
-            The parsed option mapping defining this step action.
+        configuration
+            The validated options of this step action.
         model
             The model tree, against which an analytical field's name is resolved.
 
@@ -254,10 +292,10 @@ class StepAction(StepActionBase):
             ``type=analyticalField``.
         """
 
-        if definition["type"] == "uniform":
-            return np.fromstring(definition["value"], float, sep=",")
+        if configuration.valueType == "uniform":
+            return np.fromstring(configuration.value, float, sep=",")
 
-        if definition["type"] == "analyticalField":
-            return model.analyticalFields[definition["value"]]
+        if configuration.valueType == "analyticalField":
+            return model.analyticalFields[configuration.value]
 
-        raise Exception("Invalid type: {}".format(definition["type"]))
+        raise Exception("Invalid type: {}".format(configuration.valueType))

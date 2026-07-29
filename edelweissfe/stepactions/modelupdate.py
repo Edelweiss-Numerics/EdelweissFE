@@ -29,9 +29,14 @@
 
 # @author: Matthias Neuner
 
+from dataclasses import dataclass
+
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.math import execModelAccessibleExpression
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """This step action may be used for updating something in the model at the beginning
 of a step.
@@ -54,6 +59,16 @@ for module in modules:
     kw.addRequiredArg("update", "Model accessible, executable expression", str)
 
     documentation.append(kw)
+
+
+@dataclass(frozen=True)
+class ModelUpdateSchema:
+    """L2: the scalar options of the ``modelupdate`` keyword, owned by this module and never
+    mutated from outside it."""
+
+    update: str | None = schemaField(
+        description="Model accessible, executable expression", dtype=str, default=None, required=True
+    )
 
 
 class StepAction(StepActionBase):
@@ -81,6 +96,9 @@ class StepAction(StepActionBase):
         The journal object for logging. Accepted for uniformity as well; this action logs with the
         journal handed to :meth:`updateModel`.
     """
+
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = ModelUpdateSchema
 
     def __init__(self, name, updateExpression: str, model, journal):
         self.name = name
@@ -125,7 +143,11 @@ class StepAction(StepActionBase):
             The constructed step action.
         """
 
-        return cls(name, definition["update"], model, journal)
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+
+        return cls(name, configuration.update, model, journal)
 
     def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
         """Update from a parsed ``>>modelupdate`` definition re-declared in a later step.
@@ -144,7 +166,11 @@ class StepAction(StepActionBase):
             The journal object for logging.
         """
 
-        self.updateStepAction(definition["update"])
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        configuration = buildSchemaFromOptions(self.schema, definition)
+
+        self.updateStepAction(configuration.update)
 
     def updateStepAction(self, updateExpression: str):
         """Prescribe a new expression, and set the action active again.
