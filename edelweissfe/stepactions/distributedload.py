@@ -29,7 +29,9 @@
 
 # @author: Matthias Neuner
 
+import dataclasses
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -39,7 +41,14 @@ from edelweissfe.stepactions.base.amplitude import (
 )
 from edelweissfe.stepactions.base.distributedloadbase import DistributedLoadBase
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import (
+    buildSchemaFromOptions,
+    coercePresentOptions,
+    schemaField,
+)
 
 """
 Standard distributed load, applied on a surface set.
@@ -85,6 +94,46 @@ for module in modules:
     documentation.append(kw)
 
 
+@dataclass(frozen=True)
+class DistributedLoadSchema:
+    """L2: the scalar options of the ``distributedload`` keyword, owned by this module and never
+    mutated from outside it.
+
+    ``surface`` is *not* a schema field: it names an existing model object, resolved by
+    :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
+    category's structural names. ``delta`` belongs only to the ``updatedistributedload`` grammar
+    (a full ``distributedload`` declaration never carries it), and ``field`` is accepted purely for
+    backward compatibility -- ``DistributedLoadBase`` has no notion of a field, so a load is applied
+    to whatever field the element's load type implies, and ``configuration.field`` is never read.
+    Both nonetheless belong on one schema rather than two: the module's ``schema`` attribute is a
+    single class, and which grammar accepts which field is already recorded precisely enough by the
+    ``Module`` keyword declarations above.
+    """
+
+    field: str | None = schemaField(
+        description="Field for which the boundary condition is active.", dtype=str, default="displacement"
+    )
+    magnitude: str | None = schemaField(
+        description="Magnitude of the distributed load", dtype=str, default=None, required=True
+    )
+    loadType: str | None = schemaField(
+        description="The load type, e.g., pressure or surface traction; Must be supported by the element type",
+        dtype=str,
+        default=None,
+        required=True,
+        optionName="type",
+    )
+    f_t: str | None = schemaField(
+        description="Define an amplitude in the step progress interval [0...1]",
+        dtype=str,
+        default=None,
+        optionName="f(t)",
+    )
+    delta: str | None = schemaField(
+        description="In subsequent steps only: define the new magnitude incrementally", dtype=str, default=None
+    )
+
+
 class StepAction(DistributedLoadBase):
     """Distributed load, defined on an element-based surface.
 
@@ -117,6 +166,9 @@ class StepAction(DistributedLoadBase):
         magnitude is reached linearly at the end of the step.
     """
 
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = DistributedLoadSchema
+
     def __init__(
         self,
         name,
@@ -143,17 +195,25 @@ class StepAction(DistributedLoadBase):
         """Build this distributed load from a parsed ``>>distributedload`` definition. See
         :class:`StepActionBase` for why this is separate from ``__init__``.
 
-        The keyword's ``field`` option is deliberately not passed on: this class never consumed it,
-        and inventing a meaning for it here would not be a behaviour-neutral port."""
+        ``name`` and the parser's bookkeeping keys are stripped, and ``surface`` is structural (it
+        names a model object), so both are popped before the remaining options are validated
+        against :class:`DistributedLoadSchema`. The keyword's ``field`` option is deliberately not
+        passed on: this class never consumed it, and inventing a meaning for it here would not be a
+        behaviour-neutral port."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        surfaceName = definition.pop("surface")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
 
         return cls(
             name,
-            model.surfaces[definition["surface"]],
-            np.fromstring(definition["magnitude"], sep=","),
-            definition["type"],
+            model.surfaces[surfaceName],
+            np.fromstring(configuration.magnitude, sep=","),
+            configuration.loadType,
             model,
             journal,
-            f_t=amplitudeFromExpression(definition["f(t)"]),
+            f_t=amplitudeFromExpression(configuration.f_t),
         )
 
     def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
@@ -162,31 +222,32 @@ class StepAction(DistributedLoadBase):
         The two magnitude options are mutually exclusive and ``magnitude`` wins, exactly as before:
         ``magnitude`` is a new *total*, ``delta`` an *increment*.
 
-        Which options the definition carries depends on how the re-declaration was written, and the
-        ``elif`` below is load-bearing for that reason. A *full* re-declaration (all required args
-        repeated) is validated against the ``distributedload`` keyword, which declares no ``delta``
-        at all -- reading ``definition["delta"]`` unconditionally would raise a ``KeyError``; it is
-        only safe here because ``magnitude`` is a required arg of that keyword and therefore never
-        None. A *partial* re-declaration (``>>distributedload, name=dlTop, delta=-10.0, f(t)=t``,
-        as in ``testfiles/marmot/GeoStatic/test.inp``) fails that validation, whereupon the parser
-        re-validates it against the ``update`` + keyword-name schema, i.e. ``updatedistributedload``
-        (``utils/inputfileparser.py``, ``parseModuleKeywordLine``); that definition carries
-        ``magnitude=None`` plus ``delta``, so this is how ``delta`` is reached. Note that only the
-        *schema* is live: a ``>>updatedistributedload`` keyword *line* is unroutable, because the
-        parser would look for a step action module of that name (see PLAN_INPUT_SYSTEM.md's P3 row)."""
+        A re-declaration is validated either against the full ``distributedload`` keyword (restating
+        every required arg, including ``surface``) or, if it omits them, against the
+        ``updatedistributedload`` schema instead (``utils/inputfileparser.py``,
+        ``parseModuleKeywordLine``) -- which declares no ``surface``/``type`` of its own at all. So
+        this uses :func:`~edelweissfe.utils.schema.coercePresentOptions`, not
+        :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`: only whatever keys are actually
+        present are validated, which is what makes ``configuration.delta`` safe to read regardless
+        of which of the two the parser matched -- a full re-declaration never carries it, so it
+        stays ``None`` and the ``magnitude`` branch wins, exactly as before."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        configuration = dataclasses.replace(self.schema(), **coercePresentOptions(self.schema, definition))
 
         magnitude = None
         delta = None
 
-        if definition["magnitude"] is not None:
-            magnitude = np.fromstring(definition["magnitude"], sep=",")
-        elif definition["delta"] is not None:
-            delta = np.fromstring(definition["delta"], sep=",")
+        if configuration.magnitude is not None:
+            magnitude = np.fromstring(configuration.magnitude, sep=",")
+        elif configuration.delta is not None:
+            delta = np.fromstring(configuration.delta, sep=",")
 
         self.updateStepAction(
             magnitude=magnitude,
             delta=delta,
-            f_t=amplitudeFromExpression(definition["f(t)"]),
+            f_t=amplitudeFromExpression(configuration.f_t),
         )
 
     def updateStepAction(

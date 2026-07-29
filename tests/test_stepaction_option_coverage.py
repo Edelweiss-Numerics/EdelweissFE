@@ -74,17 +74,16 @@ NON_OPTION_KEYS = frozenset({"name", "inputfile", "inputFile", "datalines", "exp
 #: Options that are declared on a keyword but read by nothing -- i.e. silently ignored today. Every
 #: entry is a latent bug, recorded rather than fixed because fixing means deciding what the option
 #: should *mean*, which is a product decision and not part of a behaviour-neutral port.
+#:
+#: A schema-based module's genuinely-unread fields -- e.g. `distributedload`'s `field` (never
+#: consumed: `DistributedLoadBase` has no notion of a field) or `bodyforce`'s `delta` (declared for
+#: an incremental update, but unreachable since `bodyforce` offers no `updatebodyforce` keyword, so
+#: a re-declaration is always full and its required `forceVector` always wins) do not need an entry
+#: here any more: `buildSchemaFromOptions`/`coercePresentOptions` still type-validate them even
+#: though their coerced value is then discarded, which is a milder failure mode than this dict
+#: exists to flag -- a value with *no* validation and *no* effect, e.g. `meshplot`'s `legend`/
+#: `axpSec` or `Plotter.plotXYData`'s `c`/`ls`.
 KNOWN_UNREAD_OPTIONS = {
-    # `distributedload` has never consumed `field`: DistributedLoadBase has no notion of a field, so
-    # a load is applied to whatever field the element's load type implies. Two running inputs
-    # (`AnalyticalFieldsSolidMaterialParameters`, `AnalyticalFieldsPlaneMaterialParameters`) write
-    # `field=displacement`, which happens to agree with the unused default, so nothing looks wrong.
-    ("distributedload", "distributedload"): {"field"},
-    # `bodyforce` declares `delta` for an incremental update, but declares no `updatebodyforce`
-    # keyword, so a partial re-declaration fails to parse and a full one always carries the required
-    # `forceVector`, which wins. Unreachable rather than merely unread -- see the module's
-    # `updateStepActionFromDefinition`.
-    ("bodyforce", "bodyforce"): {"delta"},
     # `indirectcontrol` declares `exportCVector` but has never implemented it; only its sibling
     # `indirectcontractioncontrol`, which computes a c vector worth dumping, does.
     ("indirectcontrol", "indirectcontrol"): {"exportCVector"},
