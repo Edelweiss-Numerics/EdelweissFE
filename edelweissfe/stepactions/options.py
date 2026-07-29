@@ -46,20 +46,53 @@ from edelweissfe.utils.misc import strCaseCmp, withoutParserBookkeepingKeys
 
 inputLanguage = InputLanguage()
 
-# Register this step action for all available step types. This requires the step type
-# modules to be imported before the step actions, as done in the input file parser.
-modules = inputLanguage["step"].modules if "step" in inputLanguage else []
+#: The description of the ``options`` keyword. A module-level constant because
+#: :func:`_ensureOptionsKeyword` may declare the keyword from either of two call sites, and the two
+#: must not be able to disagree -- the rendered grammar surface would then depend on import order.
+_OPTIONS_KEYWORD_DESCRIPTION = (
+    "This stepaction serves as a case insensitive container for storing step options for various modules."
+)
 
 documentation = []
 
-for module in modules:
-    kw = module.addOptionalKeyword(
-        "options",
-        "This stepaction serves as a case insensitive container for storing step options for various modules.",
-    )
-    kw.addRequiredArg("category", "Option category.", str)
 
-    documentation.append(kw)
+def _ensureOptionsKeyword():
+    """Declare the ``options`` keyword on every registered step type, at most once each.
+
+    Idempotent and safe to call repeatedly, because it has to be called from two places.
+
+    Every other step action declares its keywords in a one-shot ``for module in modules:`` loop at
+    import time, which is only correct if the step type modules are already registered by then -- as
+    they are when the input file parser does the importing. This module cannot rely on that, because
+    it is also imported *indirectly*, by any module calling :func:`registerOptionsArg` at its own
+    import time (``outputmanagers.ensight`` and four solvers do). Reached that way before the step
+    types exist, the one-shot loop declared nothing, and -- since the module was then in
+    ``sys.modules`` -- the parser's later import did not re-run it, so the keyword stayed undeclared
+    and the *next* ``registerOptionsArg`` call died with
+    ``ValueError: options is not a valid argument``. Measured: importing either
+    ``edelweissfe.outputmanagers.ensight`` or this module before
+    ``edelweissfe.utils.inputfileparser`` broke the parser outright, while the reverse order worked.
+
+    Declaring lazily removes the dependence on hitting that window, rather than papering over it: the
+    keyword is declared by whichever of the two call sites first runs at a point where there is a
+    step type to declare it on. ``documentation`` is populated here too, so the rendered grammar
+    surface cannot differ by import order either.
+    """
+
+    if "step" not in inputLanguage:
+        return
+
+    for stepModule in inputLanguage["step"].modules:
+        if "options" in [keyword.name.casefold() for keyword in stepModule.keywords]:
+            continue
+
+        keyword = stepModule.addOptionalKeyword("options", _OPTIONS_KEYWORD_DESCRIPTION)
+        keyword.addRequiredArg("category", "Option category.", str)
+
+        documentation.append(keyword)
+
+
+_ensureOptionsKeyword()
 
 
 def registerOptionsArg(name: str, description: str, dataType: type, documentedDefault=None):
@@ -93,6 +126,10 @@ def registerOptionsArg(name: str, description: str, dataType: type, documentedDe
 
     if "step" not in inputLanguage:
         return
+
+    # The keyword may not exist yet: this module can be imported, indirectly and via this very
+    # function, before any step type is registered. See _ensureOptionsKeyword.
+    _ensureOptionsKeyword()
 
     for stepModule in inputLanguage["step"].modules:
         stepModule.getKeyword("options").addOptionalArg(
