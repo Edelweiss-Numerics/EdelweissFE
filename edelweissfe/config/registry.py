@@ -272,8 +272,8 @@ _addBuiltins(
 # copied by hand from config/solvers.py's solverLibrary, config/steps.py's stepLibrary,
 # modelmodifiers/adaptivity, and config/statetransferstrategies.py's _STRATEGIES respectively. As of
 # P4 those four tables are gone and these entries are the only copy, so there is nothing left to keep
-# in sync. (config/solvers.py still defines a solverLibrary dict, but purely as a rendering target
-# for a Sphinx ``.. pprint::`` directive -- it resolves nothing.)
+# in sync. (config/solvers.py's solverLibrary itself is gone too, as of P5: it was kept only as a
+# rendering target for a Sphinx ``.. pprint::`` directive, which now reads this registry directly.)
 for _solverName, _moduleName in {
     "NIST": "nonlinearimplicitstatic",
     "NEST": "nonlinearexplicitstatic",

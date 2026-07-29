@@ -12,7 +12,7 @@ Relevant module ``edelweissfe.analyticalfields.scalarexpression``
 .. automodule:: edelweissfe.analyticalfields.scalarexpression
     :members: __doc__
 
-.. pprint:: edelweissfe.analyticalfields.scalarexpression.documentation
+.. pprint:: analyticalfield:scalarexpression
     :caption: Options
 
 .. literalinclude:: ../../../testfiles/marmot/AnalyticalFieldsScalarExpression/test.inp
@@ -27,7 +27,7 @@ Relevant module ``edelweissfe.analyticalfields.randomscalar``
 .. automodule:: edelweissfe.analyticalfields.randomscalar
      :members: __doc__
 
-.. pprint:: edelweissfe.analyticalfields.randomscalar.documentation
+.. pprint:: analyticalfield:randomscalar
      :caption: Options
 
 .. literalinclude:: ../../../testfiles/marmot/AnalyticalFieldsRandomScalar/test.inp
@@ -42,7 +42,7 @@ Relevant module ``edelweissfe.analyticalfields.fromvtk``
 .. automodule:: edelweissfe.analyticalfields.fromvtk
      :members: __doc__
 
-.. pprint:: edelweissfe.analyticalfields.fromvtk.documentation
+.. pprint:: analyticalfield:fromvtk
      :caption: Options
 
 Implementing your own fields

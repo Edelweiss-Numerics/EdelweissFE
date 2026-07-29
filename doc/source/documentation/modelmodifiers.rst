@@ -88,7 +88,7 @@ The same field-independent weights apply to every field on the node (equal-order
 single record per hanging node covers displacement and nonlocal damage alike. The constraint itself
 (``*constraint, type=hangingnode``) is documented under :doc:`constraints`.
 
-.. pprint:: edelweissfe.modelmodifiers.adaptivity.hadaptivity.documentation
+.. pprint:: modelmodifier:hadaptivity
     :caption: Options:
 
 .. literalinclude:: ../../../testfiles/marmot/AMR_DynamicRefinement/test.inp

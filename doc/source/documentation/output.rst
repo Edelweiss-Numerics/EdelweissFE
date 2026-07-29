@@ -15,7 +15,7 @@ Outputmanagers
    :members: __doc__
 
 
-.. pprint:: edelweissfe.outputmanagers.ensight.documentation
+.. pprint:: outputmanager:ensight
     :caption: Options:
 
 ``monitor`` - Monitor quantities in the terminal
@@ -25,7 +25,7 @@ Outputmanagers
    :members: __doc__
 
 
-.. pprint:: edelweissfe.outputmanagers.monitor.documentation
+.. pprint:: outputmanager:monitor
     :caption: Options:
 
 
@@ -36,7 +36,7 @@ Outputmanagers
    :members: __doc__
 
 
-.. pprint:: edelweissfe.outputmanagers.meshplot.documentation
+.. pprint:: outputmanager:meshplot
     :caption: Options:
 
 ``fractureenergyintegrator`` - Determine the fracture energy
@@ -45,7 +45,7 @@ Outputmanagers
 .. automodule:: edelweissfe.outputmanagers.fractureenergyintegrator
    :members: __doc__
 
-.. pprint:: edelweissfe.outputmanagers.fractureenergyintegrator.documentation
+.. pprint:: outputmanager:fractureenergyintegrator
     :caption: Options:
 
 ``plotalongpath`` - Plot a result along a line
@@ -55,7 +55,7 @@ Outputmanagers
    :members: __doc__
 
 
-.. pprint:: edelweissfe.outputmanagers.plotalongpath.documentation
+.. pprint:: outputmanager:plotalongpath
     :caption: Options:
 
 ``conditionalstop`` - Conditional stop if expression becomes true
@@ -64,7 +64,7 @@ Outputmanagers
 .. automodule:: edelweissfe.outputmanagers.conditionalstop
    :members: __doc__
 
-.. pprint:: edelweissfe.outputmanagers.conditionalstop.documentation
+.. pprint:: outputmanager:conditionalstop
     :caption: Options:
 
 ``statusfile`` - Write the status of the simulation to a file
@@ -73,7 +73,7 @@ Outputmanagers
 .. automodule:: edelweissfe.outputmanagers.statusfile
    :members: __doc__
 
-.. pprint:: edelweissfe.outputmanagers.statusfile.documentation
+.. pprint:: outputmanager:statusfile
     :caption: Options:
 
 ``meshdatatofile`` - Write the (generated) mesh data to a file
@@ -82,7 +82,7 @@ Outputmanagers
 .. automodule:: edelweissfe.outputmanagers.meshdatatofile
    :members: __doc__
 
-.. pprint:: edelweissfe.outputmanagers.meshdatatofile.documentation
+.. pprint:: outputmanager:meshdatatofile
     :caption: Options:
 
 
@@ -92,6 +92,6 @@ Outputmanagers
 .. automodule:: edelweissfe.outputmanagers.computetimemonitor
    :members: __doc__
 
-.. pprint:: edelweissfe.outputmanagers.computetimemonitor.documentation
+.. pprint:: outputmanager:computetimemonitor
     :caption: Options:
 

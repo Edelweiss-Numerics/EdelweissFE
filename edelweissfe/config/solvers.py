@@ -48,37 +48,21 @@ Choose the solver in the ``*solver`` definition:
 
 from edelweissfe.config import registry
 
-#: Documentation-only listing of the built-in solvers, ``name -> module in edelweissfe.solvers``.
-#: It no longer resolves anything -- :func:`getSolverByName` goes through the L3 registry, whose
-#: ``solver`` category is the authoritative table -- and is retained solely because
-#: ``doc/source/documentation/solvers.rst`` renders it with a ``.. pprint::`` directive, which needs
-#: a module-level object to point at. Retire it together with that directive (e.g. in favour of
-#: :func:`~edelweissfe.config.registry.availableNames`), not before.
-solverLibrary = {
-    "NIST": "nonlinearimplicitstatic",
-    "NEST": "nonlinearexplicitstatic",
-    "NED": "nonlinearexplicitdynamic",
-    "NISTParallel": "nonlinearimplicitstaticparallel",
-    "NESTParallel": "nonlinearexplicitstaticparallel",
-    "NEDParallel": "nonlinearexplicitdynamicparallel",
-    "NISTPArcLength": "nonlinearimplicitstaticparallelarclength",
-}
-
 
 def getSolverByName(name: str) -> type:
     """Get the class type of the requested solver.
 
-    Resolved through the L3 registry (``solver`` category) rather than through this module's own
-    ``solverLibrary`` table. That table could only ever list solvers living *inside* this package, so
-    an external package -- EdelweissMeshfree, a plugin -- had no way to contribute one; going through
-    the registry means a built-in, an entry point and an in-process
+    Resolved through the L3 registry (``solver`` category) rather than through a hand-maintained
+    table private to this module. Such a table could only ever list solvers living *inside* this
+    package, so an external package -- EdelweissMeshfree, a plugin -- had no way to contribute one;
+    going through the registry means a built-in, an entry point and an in-process
     :func:`~edelweissfe.config.registry.register` call are all equally reachable here. An unknown
     name now raises :class:`~edelweissfe.config.registry.RegistryLookupError` naming the available
     solvers, instead of a ``KeyError``.
 
     **Solver names are now case-insensitive, deliberately.** This resolver was the one
-    case-*sensitive* registry in the codebase: it indexed ``solverLibrary`` with CamelCase keys and
-    then read the class off the module under the *same* string, so the name doubled as the class
+    case-*sensitive* registry in the codebase: it indexed a table with CamelCase keys and then read
+    the class off the module under the *same* string, so the name doubled as the class
     attribute name and e.g. ``"nist"`` failed twice over, while 12 of the 13 legacy ``config/*.py``
     registries already casefolded the name at the resolver. ``PLAN_INPUT_SYSTEM.md`` §3 records that
     audit and amends rule (c) to sanction this: a name must not resolve differently depending on
