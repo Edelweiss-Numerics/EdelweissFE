@@ -61,7 +61,7 @@ from edelweissfe.config.materiallibrary import getMaterialClass
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
-from edelweissfe.sections.plane import Section
+from edelweissfe.sections.plane import PlaneSectionSchema, Section
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
@@ -110,11 +110,9 @@ def test_single_cpe4_patch_test_pure_python_no_parser():
     section = Section(
         "section1",
         model,
-        thickness,
         material,
         [model.elementSets["all"]],
-        materialParameterFromFieldDefs=[],
-        writeMaterialPropertiesToFileDefs=[],
+        configuration=PlaneSectionSchema(thickness=thickness),
     )
     model.sections["section1"] = section
     section.assignSectionPropertiesToElement(element)
@@ -290,11 +288,9 @@ def _buildPatchModel(youngsModulus: float, poissonsRatio: float, thickness: floa
     section = Section(
         "section1",
         model,
-        thickness,
         material,
         [model.elementSets["all"]],
-        materialParameterFromFieldDefs=[],
-        writeMaterialPropertiesToFileDefs=[],
+        configuration=PlaneSectionSchema(thickness=thickness),
     )
     model.sections["section1"] = section
     for element in elements.values():

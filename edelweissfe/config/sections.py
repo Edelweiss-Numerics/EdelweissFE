@@ -40,9 +40,9 @@ with properties, such as materials.
     *section, name=mySection, thickness=1.0, material=myMaterial, type=plane
         all
 """
-import importlib
 
-
-def getSectionFactoryByName(name):
-    module = importlib.import_module("edelweissfe.sections." + name.lower())
-    return module.sectionFactory
+# This module deliberately holds no code any more. The L1/L2/L4 split replaced its construction
+# protocol (``getSectionFactoryByName``) with the L3 registry's ``section`` category, see
+# :mod:`edelweissfe.config.registry`. The module survives for the docstring above, which is
+# user-facing prose rendered by ``doc/source/documentation/sections.rst`` via
+# ``.. automodule:: edelweissfe.config.sections``; deleting the file would break that build.

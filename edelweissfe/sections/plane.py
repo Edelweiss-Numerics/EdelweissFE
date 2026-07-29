@@ -30,17 +30,16 @@
 #
 # @author: Matthias Neuner, Paul Hofer
 
+from dataclasses import dataclass
+
 import numpy as np
 
+from edelweissfe.sections.base.sectionbase import MaterialParameterFromFieldSchema
 from edelweissfe.sections.base.sectionbase import Section as SectionBase
+from edelweissfe.sections.base.sectionbase import WriteMaterialPropertiesToFileSchema
 from edelweissfe.sets.elementset import ElementSet
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-    splitLinesAtCommas,
-)
+from edelweissfe.utils.schema import schemaField, subKeywordField
 
 module = Module("plane", "This section represents a classical plane solid materal section.")
 
@@ -71,45 +70,72 @@ optional += [kw.name for kw in module.optionalKeywords]
 documentation = [module]
 
 
-@caseInsensitiveKwargsChecker(required, optional)
-@castKwargsValuesAndAddDefaults(module)
-def sectionFactory(name, FEModel, materialName: str, datalines: list[str], moduleOptions, **kwargs):
-    kwargs = CaseInsensitiveDict(kwargs)
+@dataclass(frozen=True)
+class PlaneSectionSchema:
+    """L2: the options this section accepts, owned by this module and never mutated from outside
+    it.
 
-    thickness = kwargs["thickness"]
+    Mirrors the ``module.addRequiredArg``/``module.addOptionalKeyword(...)`` declarations above
+    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
+    one goes away with the ``InputLanguage`` singleton in P5.
 
-    elementSetNames = splitLinesAtCommas(datalines)
+    ``thickness`` is declared ``required=True`` explicitly, mirroring ``addRequiredArg`` above, but
+    is still given a ``default=None`` so that ``PlaneSectionSchema()`` remains constructible for the
+    L1 constructor's default argument; the L4 adapter (``buildSchemaFromOptions``) still enforces
+    that an ``.inp`` file supplies it.
+    """
 
-    materialParameterFromFieldDefs = moduleOptions.get("materialParameterFromField", [])
-    writeMaterialPropertiesToFileDefs = moduleOptions.get("writeMaterialPropertiesToFile", [])
-
-    return Section(
-        name,
-        FEModel,
-        thickness,
-        FEModel.materials[materialName],
-        [FEModel.elementSets[name] for name in elementSetNames],
-        materialParameterFromFieldDefs,
-        writeMaterialPropertiesToFileDefs,
+    thickness: float | None = schemaField(description="thickness", dtype=float, default=None, required=True)
+    materialParameterFromField: tuple[MaterialParameterFromFieldSchema, ...] = subKeywordField(
+        description="use material properties given by an analytical field",
+        schema=MaterialParameterFromFieldSchema,
+    )
+    writeMaterialPropertiesToFile: tuple[WriteMaterialPropertiesToFileSchema, ...] = subKeywordField(
+        description="export material properties to file",
+        schema=WriteMaterialPropertiesToFileSchema,
     )
 
 
 class Section(SectionBase):
+    """This section represents a classical plane solid material section."""
+
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = PlaneSectionSchema
+
     def __init__(
         self,
         name,
         model,
-        thickness,
         material: dict,
         elementSets: list[ElementSet],
-        materialParameterFromFieldDefs: list[dict],
-        writeMaterialPropertiesToFileDefs: list[dict],
-        # expression: Callable = None,
+        *,
+        configuration: PlaneSectionSchema = PlaneSectionSchema(),
     ):
+        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+
+        Parameters
+        ----------
+        name
+            The name of this section.
+        model
+            The model tree.
+        material
+            The material (or marmot material provider dict) assigned to this section.
+        elementSets
+            The element sets this section is applied to.
+        configuration
+            The options this section accepts; ``thickness`` is still required, see
+            :class:`PlaneSectionSchema`.
+        """
         super().__init__(
-            name, model, material, elementSets, materialParameterFromFieldDefs, writeMaterialPropertiesToFileDefs
+            name,
+            model,
+            material,
+            elementSets,
+            configuration.materialParameterFromField,
+            configuration.writeMaterialPropertiesToFile,
         )
-        self.thickness = thickness
+        self.thickness = configuration.thickness
 
     def assignSectionPropertiesToElement(self, element, **kwargs):
         material = kwargs.get("material", self.material)

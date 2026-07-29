@@ -28,15 +28,14 @@
 #  ---------------------------------------------------------------------
 
 
+from dataclasses import dataclass
+
+from edelweissfe.sections.base.sectionbase import MaterialParameterFromFieldSchema
 from edelweissfe.sections.base.sectionbase import Section as SectionBase
+from edelweissfe.sections.base.sectionbase import WriteMaterialPropertiesToFileSchema
 from edelweissfe.sets.elementset import ElementSet
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-    splitLinesAtCommas,
-)
+from edelweissfe.utils.schema import subKeywordField
 
 module = Module("solid", "This section represents a classical solid materal section.")
 
@@ -66,39 +65,63 @@ optional += [kw.name for kw in module.optionalKeywords]
 documentation = [module]
 
 
-@caseInsensitiveKwargsChecker(required, optional)
-@castKwargsValuesAndAddDefaults(module)
-def sectionFactory(name, FEModel, materialName: str, datalines: list[str], moduleOptions, **kwargs):
-    kwargs = CaseInsensitiveDict(kwargs)
+@dataclass(frozen=True)
+class SolidSectionSchema:
+    """L2: the options this section accepts, owned by this module and never mutated from outside
+    it.
 
-    elementSetNames = splitLinesAtCommas(datalines)
+    Mirrors the ``module.addOptionalKeyword(...)`` declarations above one-for-one. The two
+    declarations coexist while the migration is in progress; the ``Module`` one goes away with the
+    ``InputLanguage`` singleton in P5.
+    """
 
-    materialParameterFromFieldDefs = moduleOptions.get("materialParameterFromField", [])
-    writeMaterialPropertiesToFileDefs = moduleOptions.get("writeMaterialPropertiesToFile", [])
-
-    return Section(
-        name,
-        FEModel,
-        FEModel.materials[materialName],
-        [FEModel.elementSets[name] for name in elementSetNames],
-        materialParameterFromFieldDefs,
-        writeMaterialPropertiesToFileDefs,
+    materialParameterFromField: tuple[MaterialParameterFromFieldSchema, ...] = subKeywordField(
+        description="use material properties given by an analytical field",
+        schema=MaterialParameterFromFieldSchema,
+    )
+    writeMaterialPropertiesToFile: tuple[WriteMaterialPropertiesToFileSchema, ...] = subKeywordField(
+        description="export material properties to file",
+        schema=WriteMaterialPropertiesToFileSchema,
     )
 
 
 class Section(SectionBase):
+    """This section represents a classical solid material section."""
+
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = SolidSectionSchema
+
     def __init__(
         self,
         name,
         model,
         material: dict,
         elementSets: list[ElementSet],
-        materialParameterFromFieldDefs: list[dict],
-        writeMaterialPropertiesToFileDefs: list[dict],
-        # expression: Callable = None,
+        *,
+        configuration: SolidSectionSchema = SolidSectionSchema(),
     ):
+        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+
+        Parameters
+        ----------
+        name
+            The name of this section.
+        model
+            The model tree.
+        material
+            The material (or marmot material provider dict) assigned to this section.
+        elementSets
+            The element sets this section is applied to.
+        configuration
+            The options this section accepts; defaults to all-defaults.
+        """
         super().__init__(
-            name, model, material, elementSets, materialParameterFromFieldDefs, writeMaterialPropertiesToFileDefs
+            name,
+            model,
+            material,
+            elementSets,
+            configuration.materialParameterFromField,
+            configuration.writeMaterialPropertiesToFile,
         )
 
     def assignSectionPropertiesToElement(self, element, material=None):

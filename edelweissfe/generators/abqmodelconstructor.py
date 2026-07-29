@@ -43,12 +43,12 @@ employing an Abaqus-like syntax.
 
 import numpy as np
 
+from edelweissfe.config import registry
 from edelweissfe.config.analyticalfields import getAnalyticalFieldFactoryByName
 from edelweissfe.config.constraints import getConstraintClass
 from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.materiallibrary import getMaterialClass
 from edelweissfe.config.modelmodifiers import getModelModifierClass
-from edelweissfe.config.sections import getSectionFactoryByName
 from edelweissfe.constraints.base.multipointconstraintbase import (
     MultiPointConstraintBase,
 )
@@ -68,7 +68,10 @@ from edelweissfe.utils.misc import (
     convertLinesToStringDictionary,
     isInteger,
     splitLineAtCommas,
+    splitLinesAtCommas,
+    withoutParserBookkeeping,
 )
+from edelweissfe.utils.schema import buildSchemaFromOptions
 
 # isort: off
 from edelweissfe.utils.inputfileparser import inputLanguage  # noqa: F811
@@ -458,15 +461,37 @@ class AbqModelConstructor:
                     f"During parsing of keyword {keywordIdentifier}section: Unexpected keyword arguments. Use module level keyword identifier {moduleLevelKeywordIdentifier} instead."
                 )
 
-            sectionFactory = getSectionFactoryByName(sectionType)
+            sectionClass, sectionSchema = registry.lookup("section", sectionType)
 
+            if sectionSchema is None:
+                raise ValueError(
+                    f"Section '{sectionType}' declares no option schema. Declare one as a `schema` "
+                    "class attribute (see `edelweissfe.utils.schema.OptionSchemaProvider`)."
+                )
+
+            # L4 adapter over the L3 registry: parse -> validate/coerce into the module's own L2
+            # schema -> call its L1 constructor. `moduleOptions` carries the nested `>>` sub-keyword
+            # blocks (`>>materialParameterFromField`, `>>writeMaterialPropertiesToFile`).
             try:
-                section = sectionFactory(name, model, materialName, args, moduleOptions, **sectionKwArgs)
+                configuration = buildSchemaFromOptions(
+                    sectionSchema,
+                    sectionKwArgs,
+                    {name: withoutParserBookkeeping(blocks) for name, blocks in moduleOptions.items()},
+                )
             except ValueError as e:
                 e.args = (
                     f"Error during parsing of keyword {keywordIdentifier}section (type={sectionType}): " + e.args[0],
                 )
                 raise e
+
+            elementSetNames = splitLinesAtCommas(args)
+            section = sectionClass(
+                name,
+                model,
+                model.materials[materialName],
+                [model.elementSets[elSetName] for elSetName in elementSetNames],
+                configuration=configuration,
+            )
 
             model.sections[name] = section
 

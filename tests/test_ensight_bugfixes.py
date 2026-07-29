@@ -54,7 +54,7 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.ensight import OutputManager
 from edelweissfe.outputmanagers.ensight import module as ensightModule
 from edelweissfe.points.node import Node
-from edelweissfe.sections.plane import Section
+from edelweissfe.sections.plane import PlaneSectionSchema, Section
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.misc import asBool, strtobool
@@ -84,11 +84,9 @@ def _buildMinimalGeometryModel() -> FEModel:
     section = Section(
         "section1",
         model,
-        1.0,
         material,
         [model.elementSets["all"]],
-        materialParameterFromFieldDefs=[],
-        writeMaterialPropertiesToFileDefs=[],
+        configuration=PlaneSectionSchema(thickness=1.0),
     )
     section.assignSectionPropertiesToElement(element)
 
