@@ -32,9 +32,10 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.fieldoutput import FieldOutputController
+from edelweissfe.utils.schema import OptionSchemaProvider
 
 
-class StepActionBase(ABC):
+class StepActionBase(OptionSchemaProvider, ABC):
     """This is the base class for all step actions.
     User defined step actions must implement the methods.
 

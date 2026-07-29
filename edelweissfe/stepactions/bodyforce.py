@@ -30,6 +30,7 @@
 # @author: Matthias Neuner
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -39,7 +40,9 @@ from edelweissfe.stepactions.base.amplitude import (
 )
 from edelweissfe.stepactions.base.bodyloadbase import BodyLoadBase
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 Simple body force load.
@@ -63,6 +66,36 @@ for module in modules:
     kw.addOptionalArg("delta", "In subsequent steps only: define the updated force vector incrementally", str, 0)
 
     documentation.append(kw)
+
+
+@dataclass(frozen=True)
+class BodyForceSchema:
+    """L2: the scalar options of the ``bodyforce`` keyword, owned by this module and never mutated
+    from outside it.
+
+    Mirrors the ``module.addRequiredArg``/``addOptionalArg(...)`` declarations above one-for-one.
+    The two declarations coexist while the migration is in progress; the ``Module`` one goes away
+    with the ``InputLanguage`` singleton in P5.
+
+    ``elSet`` is *not* a schema field: it names an existing model object, resolved by
+    :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
+    category's structural names. ``forceVector`` is declared ``required=True`` explicitly, but is
+    still given a ``default=None`` so the schema remains constructible for the L1 constructor's
+    default argument.
+    """
+
+    forceVector: str | None = schemaField(description="The force vector.", dtype=str, default=None, required=True)
+    f_t: str | None = schemaField(
+        description="Define an amplitude in the step progress interval [0...1]",
+        dtype=str,
+        default=None,
+        optionName="f(t)",
+    )
+    delta: str | None = schemaField(
+        description="In subsequent steps only: define the updated force vector incrementally",
+        dtype=str,
+        default=None,
+    )
 
 
 class StepAction(BodyLoadBase):
@@ -95,6 +128,9 @@ class StepAction(BodyLoadBase):
         force vector is reached linearly at the end of the step.
     """
 
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = BodyForceSchema
+
     def __init__(
         self,
         name,
@@ -120,15 +156,22 @@ class StepAction(BodyLoadBase):
     @classmethod
     def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
         """Build this body force from a parsed ``>>bodyforce`` definition. See
-        :class:`StepActionBase` for why this is separate from ``__init__``."""
+        :class:`StepActionBase` for why this is separate from ``__init__``.
+
+        ``elSet`` is structural (it names a model object), so it is resolved directly and popped
+        before the remaining options are validated against :class:`BodyForceSchema`."""
+
+        definition = CaseInsensitiveDict(definition)
+        elSetName = definition.pop("elSet")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
 
         return cls(
             name,
-            model.elementSets[definition["elSet"]],
-            np.fromstring(definition["forceVector"], sep=",", dtype=np.double),
+            model.elementSets[elSetName],
+            np.fromstring(configuration.forceVector, sep=",", dtype=np.double),
             model,
             journal,
-            f_t=amplitudeFromExpression(definition["f(t)"]),
+            f_t=amplitudeFromExpression(configuration.f_t),
         )
 
     def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
@@ -147,18 +190,22 @@ class StepAction(BodyLoadBase):
         ``bodyforce`` grows an update keyword the intended semantics are still written down here.
         """
 
+        definition = CaseInsensitiveDict(definition)
+        definition.pop("elSet")
+        configuration = buildSchemaFromOptions(self.schema, definition)
+
         forceVector = None
         delta = None
 
-        if definition["forceVector"] is not None:
-            forceVector = np.fromstring(definition["forceVector"], sep=",", dtype=np.double)
-        elif definition["delta"] is not None:
-            delta = np.fromstring(definition["delta"], sep=",", dtype=np.double)
+        if configuration.forceVector is not None:
+            forceVector = np.fromstring(configuration.forceVector, sep=",", dtype=np.double)
+        elif configuration.delta is not None:
+            delta = np.fromstring(configuration.delta, sep=",", dtype=np.double)
 
         self.updateStepAction(
             forceVector=forceVector,
             delta=delta,
-            f_t=amplitudeFromExpression(definition["f(t)"]),
+            f_t=amplitudeFromExpression(configuration.f_t),
         )
 
     def updateStepAction(

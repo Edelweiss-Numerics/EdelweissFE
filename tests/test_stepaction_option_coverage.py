@@ -98,6 +98,25 @@ UNREAD_CHECK_EXEMPT_MODULES = {
     "options",
 }
 
+#: The two L2 validation entry points a ported module hands its `definition`/`self.schema` to
+#: (see ``utils/schema.py``). A call to either is a delegate this file's AST walk cannot follow
+#: (the option names it "reads" live in the schema dataclass, in *this* file, not in a
+#: locally-defined function), so it is resolved by name instead of by walking into it.
+SCHEMA_BUILD_FUNCTIONS = frozenset({"buildSchemaFromOptions"})
+
+#: ``coercePresentOptions`` validates only *present* keys and never raises ``KeyError`` for an
+#: absent one (that is its entire purpose -- see its docstring) -- so a call to it carries none of
+#: the "this method requires the key to exist" risk the per-method subset tests below are pinning.
+#: Its reads still count toward "is this option read *anywhere* in the module", just not toward
+#: "does *this* method risk a KeyError for an option its validated keyword doesn't declare".
+SCHEMA_COERCE_FUNCTIONS = frozenset({"coercePresentOptions"})
+
+#: Synthetic method-name key under which module-wide, KeyError-safe reads are recorded (2-arg
+#: `.pop(key, default)` calls, and whatever `coercePresentOptions` validates) -- picked up by the
+#: aggregate "not silently unread" check but invisible to the per-method subset checks, which only
+#: ever look up real method names.
+SCHEMA_LENIENT_READS_KEY = "__lenient_reads__"
+
 
 def _stepActionGrammar() -> dict:
     """Read the declared step-action grammar from a fresh subprocess.
@@ -137,7 +156,7 @@ def _definitionParameters(function: ast.FunctionDef) -> set[str]:
     return {arg.arg for arg in allArgs} & DEFINITION_PARAMETER_NAMES
 
 
-def _readsAndDelegates(function: ast.FunctionDef) -> tuple[set[str], set[str]]:
+def _readsAndDelegates(function: ast.FunctionDef) -> tuple[set[str], set[str], set[str]]:
     """Collect the option keys ``function`` reads, and the helpers it hands the mapping on to.
 
     Parameters
@@ -147,17 +166,20 @@ def _readsAndDelegates(function: ast.FunctionDef) -> tuple[set[str], set[str]]:
 
     Returns
     -------
-    tuple[set[str], set[str]]
-        The string-literal option keys subscripted out of a definition mapping, and the names of the
-        methods called with such a mapping as an argument (so their reads count as this function's).
+    tuple[set[str], set[str], set[str]]
+        The string-literal option keys subscripted (or ``.pop(key)``-ed, with no default) out of a
+        definition mapping; the keys read in a way that cannot ``KeyError`` (``.pop(key, default)``,
+        two-argument form); and the names of the methods called with the mapping as an argument (so
+        their reads count as this function's).
     """
 
     definitionNames = _definitionParameters(function)
     reads: set[str] = set()
+    lenientReads: set[str] = set()
     delegates: set[str] = set()
 
     if not definitionNames:
-        return reads, delegates
+        return reads, lenientReads, delegates
 
     for node in ast.walk(function):
         if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name) and node.value.id in definitionNames:
@@ -172,21 +194,101 @@ def _readsAndDelegates(function: ast.FunctionDef) -> tuple[set[str], set[str]]:
             # A bare `definition[key]` where `key` is a parameter is not guessed at here; the option
             # name is supplied by the caller and is picked up as a literal below.
 
-        if isinstance(node, ast.Call) and any(
-            isinstance(arg, ast.Name) and arg.id in definitionNames for arg in node.args
-        ):
-            if isinstance(node.func, ast.Attribute):
-                delegates.add(node.func.attr)
-            elif isinstance(node.func, ast.Name):
-                delegates.add(node.func.id)
+        if isinstance(node, ast.Call):
+            # `definition.pop("key")` / `definition.pop("key", default)`: a structural option (e.g.
+            # a node/element set name) popped before the rest is validated against a schema. The
+            # one-argument form KeyErrors if `key` is absent -- exactly the risk this audit exists
+            # for -- so it counts as a strict read; the two-argument form cannot, so it is only
+            # ever a lenient one (see `SCHEMA_LENIENT_READS_KEY`).
+            if (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr == "pop"
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id in definitionNames
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                if len(node.args) == 1:
+                    reads.add(node.args[0].value)
+                else:
+                    lenientReads.add(node.args[0].value)
 
-            # A call that hands on the mapping together with a string literal is naming the option
-            # for the callee to read, e.g. `cls._dofFromDefinition(definition, "dof1", model)`.
-            for arg in list(node.args) + [keyword.value for keyword in node.keywords]:
-                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                    reads.add(arg.value)
+            if any(isinstance(arg, ast.Name) and arg.id in definitionNames for arg in node.args):
+                if isinstance(node.func, ast.Attribute):
+                    delegates.add(node.func.attr)
+                elif isinstance(node.func, ast.Name):
+                    delegates.add(node.func.id)
 
-    return reads, delegates
+                # A call that hands on the mapping together with a string literal is naming the
+                # option for the callee to read, e.g. `cls._dofFromDefinition(definition, "dof1",
+                # model)`.
+                for arg in list(node.args) + [keyword.value for keyword in node.keywords]:
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        reads.add(arg.value)
+
+    return reads, lenientReads, delegates
+
+
+def _classAttributeSchemaName(tree: ast.Module) -> str | None:
+    """The dataclass name assigned to a class-level ``schema = ...`` attribute in this module.
+
+    Every ported step action declares exactly one such attribute (``schema = XSchema``, per
+    ``OptionSchemaProvider``); this recovers ``"XSchema"`` so its declared option names can be
+    looked up in the same file.
+
+    Parameters
+    ----------
+    tree
+        The parsed module.
+
+    Returns
+    -------
+    str | None
+        The schema class's name, or ``None`` if the module declares no such attribute.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            for stmt in node.body:
+                if (
+                    isinstance(stmt, ast.Assign)
+                    and len(stmt.targets) == 1
+                    and isinstance(stmt.targets[0], ast.Name)
+                    and stmt.targets[0].id == "schema"
+                    and isinstance(stmt.value, ast.Name)
+                ):
+                    return stmt.value.id
+    return None
+
+
+def _schemaFieldOptionNames(tree: ast.Module, schemaClassName: str) -> set[str]:
+    """The ``.inp``-facing option names declared by a schema dataclass's ``schemaField(...)``
+    class attributes: the ``optionName=`` override if given, else the field's own name.
+
+    Parameters
+    ----------
+    tree
+        The parsed module.
+    schemaClassName
+        The name of the schema dataclass to inspect.
+
+    Returns
+    -------
+    set[str]
+        The option names the schema accepts.
+    """
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == schemaClassName:
+            for stmt in node.body:
+                if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+                    optionName = stmt.target.id
+                    if isinstance(stmt.value, ast.Call):
+                        for keyword in stmt.value.keywords:
+                            if keyword.arg == "optionName" and isinstance(keyword.value, ast.Constant):
+                                optionName = keyword.value.value
+                    names.add(optionName)
+    return names
 
 
 def _optionReadsByMethod(modulePath: Path) -> dict[str, set[str]]:
@@ -194,7 +296,12 @@ def _optionReadsByMethod(modulePath: Path) -> dict[str, set[str]]:
 
     A method that hands the definition mapping to a helper is credited with the helper's reads, so
     that a module which factors its translation into ``_xFromDefinition`` staticmethods -- as the
-    ported ones do -- is audited as a whole.
+    ported ones do -- is audited as a whole. A method that hands the mapping to
+    :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` is credited with every option its own
+    ``schema = XSchema`` class attribute declares, since that is exactly what the function
+    validates; a method using the KeyError-safe
+    :func:`~edelweissfe.utils.schema.coercePresentOptions` instead contributes those same option
+    names only under :data:`SCHEMA_LENIENT_READS_KEY`, not to its own per-method reads (see there).
 
     Parameters
     ----------
@@ -204,28 +311,44 @@ def _optionReadsByMethod(modulePath: Path) -> dict[str, set[str]]:
     Returns
     -------
     dict[str, set[str]]
-        Maps method name to the option keys reachable from it.
+        Maps method name to the option keys reachable from it, plus (if applicable)
+        :data:`SCHEMA_LENIENT_READS_KEY` mapping to the KeyError-safe reads of the whole module.
     """
 
     tree = ast.parse(modulePath.read_text())
 
     directReads: dict[str, set[str]] = {}
+    lenientDirectReads: dict[str, set[str]] = {}
     delegatesOf: dict[str, set[str]] = {}
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            reads, delegates = _readsAndDelegates(node)
+            reads, lenientReads, delegates = _readsAndDelegates(node)
             directReads[node.name] = directReads.get(node.name, set()) | reads
+            lenientDirectReads[node.name] = lenientDirectReads.get(node.name, set()) | lenientReads
             delegatesOf[node.name] = delegatesOf.get(node.name, set()) | delegates
+
+    schemaClassName = _classAttributeSchemaName(tree)
+    schemaOptionNames = _schemaFieldOptionNames(tree, schemaClassName) if schemaClassName else set()
 
     def resolve(name: str, seen: frozenset[str]) -> set[str]:
         if name in seen or name not in directReads:
             return set()
         reads = set(directReads[name])
         for delegate in delegatesOf.get(name, ()):
+            if delegate in SCHEMA_BUILD_FUNCTIONS:
+                reads |= schemaOptionNames
             reads |= resolve(delegate, seen | {name})
         return reads
 
-    return {name: resolve(name, frozenset()) for name in directReads}
+    result = {name: resolve(name, frozenset()) for name in directReads}
+
+    lenientAggregate = {key for reads in lenientDirectReads.values() for key in reads}
+    if any(delegate in SCHEMA_COERCE_FUNCTIONS for delegates in delegatesOf.values() for delegate in delegates):
+        lenientAggregate |= schemaOptionNames
+    if lenientAggregate:
+        result[SCHEMA_LENIENT_READS_KEY] = lenientAggregate
+
+    return result
 
 
 def _moduleNames() -> list[str]:
