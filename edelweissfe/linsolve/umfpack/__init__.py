@@ -26,20 +26,26 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""Registry-facing factory for the KLU (SuiteSparse) solver.
+"""Interface to the UMFPACK sparse LU solver, through SciPy.
 
-The implementation lives in the Cython extension :mod:`edelweissfe.linsolve.klu.klu`, which is
-optional -- it needs SuiteSparse at build time. The factory below therefore imports it lazily; see
-:func:`createSolver`.
+Like its ``superlu`` sibling this subpackage exists only to give the solver a *module* of its own:
+it used to be an inline ``lambda A, b: spsolve(A, b, use_umfpack=True)`` inside
+``config/linsolve.py``'s ``if/elif`` chain, which the L3 registry's ``"module.path:Attr"`` dotted
+strings cannot address (``PLAN_INPUT_SYSTEM.md`` §9).
+
+Note that ``use_umfpack=True`` is a *request*, not a guarantee: SciPy silently falls back to
+SuperLU when ``scikit-umfpack`` is not installed, so this name never fails to produce a working
+solver -- it just may not produce an UMFPACK-backed one. That is pre-existing SciPy behaviour and
+is deliberately left as it was.
 """
 
 from collections.abc import Callable
 
 
 def createSolver(opts) -> Callable:
-    """Create a KLU-backed linear solver.
+    """Create an UMFPACK-backed linear solver.
 
-    The factory the ``linsolver`` registry category resolves for the name ``klu`` (see
+    The factory the ``linsolver`` registry category resolves for the name ``umfpack`` (see
     ``PLAN_INPUT_SYSTEM.md`` §9): every ``linsolve`` subpackage exposes this one signature, so that
     a third party can contribute a linear solver through an entry point.
 
@@ -47,23 +53,18 @@ def createSolver(opts) -> Callable:
     ----------
     opts
         The linear-solver options parsed from the solver's ``linsolverConfigFile``. Not consulted:
-        this backend takes no options. It is still accepted so that every ``createSolver`` presents
-        the identical signature.
+        UMFPACK is used with SciPy's defaults and takes no options here. It is still accepted so
+        that every ``createSolver`` presents the identical signature.
 
     Returns
     -------
     Callable
-        :func:`~edelweissfe.linsolve.klu.klu.kluSolve`, i.e. a stateless ``(A, b) -> x`` function.
-
-    Raises
-    ------
-    ImportError
-        If the optional ``klu`` extension was not built.
+        A callable ``(A, b) -> x`` solving ``A x = b`` via
+        :func:`scipy.sparse.linalg.spsolve` with ``use_umfpack=True``.
     """
 
-    # Imported inside the function body, not at module scope: this extension is optional, so at
-    # module scope its absence would break anyone who merely resolves a `linsolver` registry name
-    # rather than this one.
-    from edelweissfe.linsolve.klu.klu import kluSolve
+    # Imported inside the function body, not at module scope -- see the note in the `superlu`
+    # sibling for why every one of the nine factories does it this way.
+    from scipy.sparse.linalg import spsolve
 
-    return kluSolve
+    return lambda A, b: spsolve(A, b, use_umfpack=True)

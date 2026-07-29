@@ -567,10 +567,34 @@ quadrature data onto 42 new element classes (the right long-term shape, but its 
 inline scipy lambdas (`superlu`, `umfpack`, which have no module at all), an option-constructed class
 (`pardiso`), plain module-level functions (`klu`, `mumps`, `petsclu`, `panuapardiso`), and bound
 methods of option-constructed objects (`gmres`, `amgcl`). Their common denominator is a factory
-`opts -> Callable[[A, b], x]`, so **decision taken: every `linsolve/*` module gets a module-level
-`createSolver(opts)`** for the registry's dotted string to point at, which also means real modules for
-the two that are currently inline lambdas. This is the only option under which a third party can
-contribute a linear solver.
+`opts -> Callable[[A, b], x]`, so **decision taken: every linear solver gets a `createSolver(opts)`**
+for the registry's dotted string to point at, which also means new subpackages for the two that are
+currently inline lambdas. This is the only option under which a third party can contribute a linear
+solver. **Done**, and with one refinement that matters.
+
+The factory goes in each subpackage's **`__init__.py`**, not in the solver module. Four of the nine
+implementations are Cython (`amgcl`, `klu`, `panuapardiso`, `pardiso`), so putting it in the module
+would have meant recompiling extensions; all nine `linsolve/*/__init__.py` files were empty, so this
+was free and no `.pyx` is touched. Each factory imports its backend **inside the function body**, which
+is load-bearing rather than stylistic: these extensions are genuinely optional (only `pardiso` is built
+in this environment, and 5 of the 9 raise `ModuleNotFoundError`), `getDefaultLinSolver` relies on
+catching `ImportError` from the pardiso import to fall back to scipy, and a module-scope import would
+turn "not built" from a graceful fallback into an import error for anyone touching the registry.
+Verified by `sys.modules` diff: resolving a name imports only the subpackage `__init__`, and even
+SciPy stays out until the factory is *called*.
+
+`linsolver` was the last uncovered category, so `registry.py`'s docstring now records that **none
+remain**. What is still outside the registry is not a category: the `provider` namespace axis (by
+design, above), `solverLibrary` and `config/outputmanagers.py` (documentation-only artefacts), and
+`getSectionFactoryByName`/`getAnalyticalFieldFactoryByName`, which reach for a *second* attribute of
+modules the registry already covers and disappear with the L1/L2 split.
+
+Two incidental findings, neither fixed: **`getDefaultLinSolver()` is unreachable from both of its call
+sites** (`NIST` and `NEST` both carry `"linsolver": "pardiso"` in `_baseOptions`, so
+`"linsolver" in self.options` is always true and `NEST`'s `.get("linsolver", "default")` fallback can
+never fire — untangling that is a solver-options change), and **`pardiso` is therefore exercised by
+every non-skipped case in both suites**, with only `gmres` (`edelweiss-only/WallShearHexa8GMRES`) and
+`amgcl` (`marmot/AMGCL`, which skips) named explicitly anywhere the runner reads.
 
 ## Scope of this branch
 

@@ -134,6 +134,7 @@ def test_importing_registry_does_not_import_any_builtin_category_module():
         "edelweissfe.analyticalfields.",
         "edelweissfe.modelmodifiers.",
         "edelweissfe.adaptivity.",
+        "edelweissfe.linsolve.",
     )
     code = (
         "import sys\n"

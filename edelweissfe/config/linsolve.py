@@ -31,79 +31,77 @@ Created on Sat Feb 10 10:27:25 2018
 @author: Matthias Neuner
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable
+
+from edelweissfe.config import registry
 
 
-def getDefaultLinSolver():
+def getDefaultLinSolver() -> Callable:
+    """Get the linear solver to use when a step declares no ``linsolver`` option.
+
+    Returns
+    -------
+    Callable
+        A callable ``(A, b) -> x``: PARDISO if its optional extension was built, else SciPy's own
+        sparse LU (``superlu``).
+    """
+
     try:
-        from edelweissfe.linsolve.pardiso.pardiso import PardisoSolver
-
-        # symbolic-factorization reuse is opt-in only, see getLinSolverByName; the
-        # default here intentionally matches that safe default.
-        return PardisoSolver()
+        # symbolic-factorization reuse is opt-in only, see the pardiso factory; passing an empty
+        # option mapping here intentionally matches that safe default.
+        #
+        # Routed through the same seam as a named request rather than constructing PardisoSolver
+        # directly, so there is exactly one place that knows how a pardiso solver is built. The
+        # ImportError semantics are unchanged: the factory imports the extension inside its own
+        # body, so an install without it still raises ImportError from this call, and still falls
+        # back to scipy -- which is now the `superlu` factory rather than a duplicate lambda.
+        return getLinSolverByName("pardiso", {})
     except ImportError:
-        from scipy.sparse.linalg import spsolve
-
-        return lambda A, b: spsolve(A, b, use_umfpack=False)
+        return getLinSolverByName("superlu", {})
 
 
-def getLinSolverByName(linsolverName, opts):
-    if linsolverName.lower() == "superlu":
-        from scipy.sparse.linalg import spsolve
+def getLinSolverByName(linsolverName: str, opts) -> Callable:
+    """Get the linear solver registered under ``linsolverName``, configured with ``opts``.
 
-        return lambda A, b: spsolve(A, b, use_umfpack=False)
-    elif linsolverName.lower() == "umfpack":
-        from scipy.sparse.linalg import spsolve
+    Resolved through the L3 registry (``linsolver`` category), which replaces a nine-arm ``if/elif``
+    chain of local imports. That chain could only ever name solvers living inside this package, so an
+    external package -- EdelweissMeshfree, a plugin -- had no way to contribute one; and its nine
+    arms had four different shapes (inline SciPy lambdas, an option-constructed class, plain
+    module-level functions, and bound methods of option-constructed objects), which is why this was
+    the last category folded in. The uniform shape they collapse to is a module-level
+    ``createSolver(opts) -> Callable[[A, b], x]`` factory per ``linsolve`` subpackage, which is what
+    the registry's dotted strings point at (``PLAN_INPUT_SYSTEM.md`` §9). Each factory keeps the
+    option handling that used to live in this function's corresponding arm, including the tolerance
+    for a non-mapping ``opts``.
 
-        return lambda A, b: spsolve(A, b, use_umfpack=True)
-    elif linsolverName.lower() == "pardiso":
-        from edelweissfe.linsolve.pardiso.pardiso import PardisoSolver
+    An unknown name now raises :class:`~edelweissfe.config.registry.RegistryLookupError` -- a
+    ``LookupError``, naming the available solvers and suggesting a similar one -- instead of
+    ``AttributeError("invalid linear solver ... requested")``.
 
-        # Symbolic-factorization reuse across solves is only correct if the caller
-        # can guarantee the sparsity pattern stays genuinely stable for the solver
-        # instance's entire lifetime; it has been observed to silently produce wrong
-        # (but not NaN, so undetected by the usual failure check) results for some
-        # coupled-DOF problems. Off by default; opt in explicitly via
-        # opts["reuseSymbolicFactorization"] = True once that has been verified safe
-        # for the problem at hand.
-        reuseSymbolicFactorization = (
-            bool(opts.get("reuseSymbolicFactorization", False)) if isinstance(opts, Mapping) else False
-        )
+    Parameters
+    ----------
+    linsolverName
+        The name of the linear solver, case-insensitively (e.g. ``"pardiso"``, ``"amgcl"``).
+    opts
+        The linear-solver options parsed from the solver's ``linsolverConfigFile``, passed to the
+        factory unchanged. Not necessarily a mapping: the implicit-static solver passes ``""`` when
+        no configuration file is given.
 
-        return PardisoSolver(reuseSymbolicFactorization=reuseSymbolicFactorization)
-    elif linsolverName.lower() == "panuapardiso":
-        from edelweissfe.linsolve.panuapardiso.panuapardiso import panuaPardisoSolve
+    Returns
+    -------
+    Callable
+        A callable ``(A, b) -> x`` solving ``A x = b``.
 
-        return panuaPardisoSolve
-    elif linsolverName.lower() == "klu":
-        from edelweissfe.linsolve.klu.klu import kluSolve
+    Raises
+    ------
+    edelweissfe.config.registry.RegistryLookupError
+        If no linear solver is registered under ``linsolverName``.
+    ImportError
+        If the requested solver's optional backend is not available in this installation. Raised by
+        the factory, not by the lookup, and deliberately not caught here -- see
+        :func:`getDefaultLinSolver`, which relies on it.
+    """
 
-        return kluSolve
-    elif linsolverName.lower() == "petsclu":
-        from edelweissfe.linsolve.petsclu.petsclu import petscluSolve
+    factory, _ = registry.lookup("linsolver", linsolverName)
 
-        return petscluSolve
-    elif linsolverName.lower() == "mumps":
-        from edelweissfe.linsolve.mumps.mumps import mumpsSolve
-
-        return mumpsSolve
-    elif linsolverName.lower() == "gmres":
-        from edelweissfe.linsolve.gmres.gmres import Gmres
-
-        gm = Gmres(opts)
-
-        return gm.gmresSolve
-    elif linsolverName.lower() == "amgcl":
-        from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver
-
-        if isinstance(opts, Mapping):
-            amgcl_opts = dict(opts)
-        else:
-            amgcl_opts = {}
-
-        amgclSolve = PyAMGCLSolver(amgcl_opts)
-
-        return amgclSolve.solve
-
-    else:
-        raise AttributeError("invalid linear solver {:} requested".format(linsolverName))
+    return factory(opts)
