@@ -114,4 +114,14 @@ def renderCurrentInputLanguageSurface() -> str:
 
 
 if __name__ == "__main__":
-    print(renderCurrentInputLanguageSurface(), end="")
+    import sys
+
+    if "--list-modules" in sys.argv:
+        # The names only, as JSON, for tests/test_module_import_independence.py. It shares this
+        # discovery rather than repeating it, so the two cannot disagree about what "a documented
+        # module" is -- if the golden surface covers a module, the import gate must cover it too.
+        import json
+
+        print(json.dumps([name for name, _ in _discoverModulesWithDocumentation()]))
+    else:
+        print(renderCurrentInputLanguageSurface(), end="")

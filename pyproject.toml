@@ -35,3 +35,8 @@ target-version = ["py312"]
 # data directory. Pin testpaths explicitly so a plain `python -m pytest` from the repo root does
 # not also try to collect the many stray ad-hoc `test_*.py` scripts scattered at the repo root.
 testpaths = ["tests"]
+markers = [
+    # Tests that spawn one fresh interpreter per module to check an import-order property, which
+    # cannot be done in-process. Deselect with `-m "not slow"` while iterating.
+    "slow: spawns many subprocesses; seconds rather than milliseconds",
+]
