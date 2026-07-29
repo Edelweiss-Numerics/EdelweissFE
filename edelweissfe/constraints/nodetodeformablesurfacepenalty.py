@@ -26,6 +26,8 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
@@ -34,6 +36,7 @@ from edelweissfe.generators.surfaceelementgenerator import buildContactFacets
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
+from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.facetcontactgeometry import (
@@ -43,11 +46,7 @@ from edelweissfe.utils.facetcontactgeometry import (
     tria3GapGradientHessian,
 )
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-    strtobool,
-)
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 A penalty based unilateral contact constraint between a deformable slave surface and a deformable
@@ -165,6 +164,81 @@ documentation = [module]
 # creases of engineering geometries (45 degree chamfers, 90 degree steps, notch flanks) change it
 # by 45 degrees and more.
 _cosOfSmoothNormalChangeLimit = np.cos(np.deg2rad(30.0))
+
+
+@dataclass(frozen=True)
+class NodeToDeformableSurfacePenaltySchema:
+    """L2: the options this constraint accepts, owned by this module and never mutated from
+    outside it.
+
+    Mirrors the ``module.addRequiredArg``/``module.addOptionalArg(...)`` declarations above
+    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
+    one goes away with the ``InputLanguage`` singleton in P5.
+
+    The update-type option is spelled ``type`` in the input file but the field is named
+    ``contactType`` here -- a dataclass field literally called ``type`` would shadow the builtin,
+    which this project's conventions avoid. ``penalty`` is declared ``required=True`` explicitly,
+    but is still given a ``default=None`` so the schema remains constructible for the L1
+    constructor's default argument; the L4 adapter (``buildSchemaFromOptions``) still enforces
+    that an ``.inp`` file supplies it. ``augmentedLagrange`` is a real ``bool`` field rather than
+    the hand-``strtobool``-cast ``str`` the legacy grammar declared it as (see
+    :func:`edelweissfe.utils.schema.coerceValue`).
+    """
+
+    penalty: float | None = schemaField(
+        description="The numerical penalty value, an interface stiffness modulus per unit slave " "surface area.",
+        dtype=float,
+        default=None,
+        required=True,
+    )
+    contactType: str = schemaField(
+        description="The formulation type: 'linear' (linear force, constant stiffness with jump) "
+        "or 'quadratic' (quadratic force, linear stiffness).",
+        dtype=str,
+        default="linear",
+        optionName="type",
+    )
+    searchDistance: float | None = schemaField(
+        description="An optional broadphase distance for the per-increment candidate-facet "
+        "search. If not given, every slave is always assigned its single closest facet, without a "
+        "distance gate.",
+        dtype=float,
+        default=None,
+    )
+    sliding: str = schemaField(
+        description="The kinematic treatment of the contact geometry: 'finite' (gap, gradient and "
+        "exact Hessian recomputed from the current Newton iterate every iteration) or 'small' "
+        "(Abaqus-style small sliding: the closest-point projection -- facet, clamped local "
+        "coordinates, and normal -- is frozen once per increment from the last converged "
+        "configuration, making the gap linear in the displacement DOFs).",
+        dtype=str,
+        default="finite",
+    )
+    mu: float = schemaField(
+        description="The Coulomb friction coefficient. Requires sliding=small; mu=0 disables "
+        "friction. Strongly recommended in combination with type=quadratic: the quadratic law's "
+        "contact stiffness vanishes continuously at gap activation, keeping the frictional "
+        "tangent continuous for slave nodes lifting off/touching down -- with type=linear, the "
+        "activation stiffness jump scaled by mu makes Newton prone to limit-cycling at such "
+        "events.",
+        dtype=float,
+        default=0.0,
+    )
+    tangentPenalty: float | None = schemaField(
+        description="The tangential penalty stiffness per unit slave surface area for frictional "
+        "stick. Defaults to the normal penalty.",
+        dtype=float,
+        default=None,
+    )
+    augmentedLagrange: bool = schemaField(
+        description="Augment the penalty force with a per-slave normal traction multiplier, "
+        "updated once per increment on acceptance (incremental Uzawa: lambda <- min(0, lambda + "
+        "penalty * A * g)). The multiplier is constant within an increment (zero tangent "
+        "contribution), drives the penetration toward zero over the increments at a fixed "
+        "penalty, and sharpens the friction cone mu * N. Requires sliding=small.",
+        dtype=bool,
+        default=False,
+    )
 
 
 class DeformableSurfaceContactStiffnessView:
@@ -333,21 +407,29 @@ class Constraint(ConstraintBase, MeshDependent):
     whichever facet type populates the given surface element sets.
     """
 
-    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-    @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name: str, model: FEModel, journal: Journal, *args, **kwargs):
-        super().__init__(name, model, *args, **kwargs)
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = NodeToDeformableSurfacePenaltySchema
+
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        slaveSurface: ElementSet,
+        masterSurface: ElementSet,
+        journal: Journal,
+        *,
+        configuration: NodeToDeformableSurfacePenaltySchema = NodeToDeformableSurfacePenaltySchema(),
+    ):
+        super().__init__(name, model)
 
         self.name = name
         self.journal = journal
         self._lastSeenTopologyVersion = model.topologyVersion
 
-        kwargs = CaseInsensitiveDict(kwargs)
-
-        self._slaveSurfaceSetName = kwargs["slaveSurface"]
-        self._masterSurfaceSetName = kwargs["masterSurface"]
-        self.slaveFacetElements = list(model.elementSets[self._slaveSurfaceSetName])
-        self.facetElements = list(model.elementSets[self._masterSurfaceSetName])
+        self._slaveSurfaceSetName = slaveSurface.name
+        self._masterSurfaceSetName = masterSurface.name
+        self.slaveFacetElements = list(slaveSurface)
+        self.facetElements = list(masterSurface)
 
         # The contact points are the unique nodes of the slave surface, each weighted by its
         # tributary area: the sum of its area shares over its incident slave facets (assigned by
@@ -366,23 +448,24 @@ class Constraint(ConstraintBase, MeshDependent):
         masterNodes = {node for el in self.facetElements for node in el.nodes}
         if not masterNodes.isdisjoint(self.slaveNodes):
             raise ValueError(
-                f"Constraint '{name}': slave surface '{kwargs['slaveSurface']}' and master surface "
-                f"'{kwargs['masterSurface']}' share nodes -- self-contact is not supported."
+                f"Constraint '{name}': slave surface '{self._slaveSurfaceSetName}' and master "
+                f"surface '{self._masterSurfaceSetName}' share nodes -- self-contact is not "
+                "supported."
             )
 
-        self.penalty = kwargs["penalty"]
+        self.penalty = configuration.penalty
         if self.penalty <= 0.0:
             raise ValueError("The penalty must be positive: a non-positive penalty silently disables contact.")
-        self.type = kwargs["type"].lower()
+        self.type = configuration.contactType.lower()
         if self.type not in ["linear", "quadratic"]:
             raise ValueError(f"Constraint type '{self.type}' is not supported. Use 'linear' or 'quadratic'.")
-        self.searchDistance = kwargs["searchDistance"]
+        self.searchDistance = configuration.searchDistance
 
-        self.sliding = kwargs["sliding"].lower()
+        self.sliding = configuration.sliding.lower()
         if self.sliding not in ["finite", "small"]:
             raise ValueError(f"Constraint sliding '{self.sliding}' is not supported. Use 'finite' or 'small'.")
 
-        self.mu = kwargs["mu"]
+        self.mu = configuration.mu
         if self.mu < 0.0:
             raise ValueError("The friction coefficient mu must be non-negative.")
         if self.mu > 0.0 and self.sliding != "small":
@@ -390,14 +473,14 @@ class Constraint(ConstraintBase, MeshDependent):
                 "Coulomb friction (mu > 0) requires sliding=small: the frictional predictor/"
                 "corrector operates in the frozen tangent frame of the small-sliding formulation."
             )
-        self.tangentPenalty = kwargs["tangentPenalty"] if kwargs["tangentPenalty"] is not None else self.penalty
+        self.tangentPenalty = configuration.tangentPenalty if configuration.tangentPenalty is not None else self.penalty
         if self.mu > 0.0 and self.tangentPenalty <= 0.0:
             raise ValueError(
                 "The tangential penalty must be positive when mu > 0: a non-positive tangentPenalty "
                 "silently disables the frictional stick response."
             )
 
-        self.augmentedLagrange = strtobool(kwargs["augmentedLagrange"])
+        self.augmentedLagrange = configuration.augmentedLagrange
         if self.augmentedLagrange and self.sliding != "small":
             raise ValueError(
                 "augmentedLagrange requires sliding=small: the multiplier force acts along the "
@@ -442,6 +525,26 @@ class Constraint(ConstraintBase, MeshDependent):
             f"sliding={self.sliding}, type={self.type}, friction={'on' if self.mu > 0.0 else 'off'}, "
             f"augmentedLagrange={self.augmentedLagrange}",
             name,
+        )
+
+    @classmethod
+    def fromConstraintDefinition(
+        cls, name: str, definition: dict, model: FEModel, journal: Journal = None
+    ) -> "Constraint":
+        """Build this constraint from a parsed ``*constraint`` definition. See
+        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
+        separate from ``__init__``."""
+        definition = CaseInsensitiveDict(definition)
+        slaveSurfaceName = definition.pop("slaveSurface")
+        masterSurfaceName = definition.pop("masterSurface")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+        return cls(
+            name,
+            model,
+            model.elementSets[slaveSurfaceName],
+            model.elementSets[masterSurfaceName],
+            journal,
+            configuration=configuration,
         )
 
     @property

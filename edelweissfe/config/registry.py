@@ -74,7 +74,7 @@ for exactly how each list was derived):
 
 ``outputmanager`` (10), ``section`` (3), ``constraint`` (12), ``stepaction`` (13),
 ``generator`` (10), ``analyticalfield`` (3), ``solver`` (7), ``step`` (2), ``modelmodifier`` (1),
-``statetransferstrategy`` (3), ``element`` (42), ``material`` (11), ``linsolver`` (9).
+``statetransferstrategy`` (3), ``element`` (42), ``material`` (7), ``linsolver`` (9).
 
 ``element`` and ``material`` are keyed by *element type* / *material name* and cover exactly the
 ``provider=edelweiss`` namespace of ``config/elementlibrary.py`` and ``config/materiallibrary.py``.

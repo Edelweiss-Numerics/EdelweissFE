@@ -26,16 +26,18 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
+from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.exceptions import WrongDomain
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.schema import buildSchemaFromOptions
 
 module = Module("linearizedrigidbody", "A rigid body constraint tying nodes to a reference point.")
 
@@ -49,6 +51,12 @@ module.addRequiredArg("nSet", "Node set to tie.", str)
 module.addRequiredArg("referencePoint", "Node set containing only the reference point.", str)
 
 documentation = [module]
+
+
+@dataclass(frozen=True)
+class LinearizedRigidBodySchema:
+    """L2: this constraint accepts no options beyond the structural ``nSet``/``referencePoint`` it
+    ties (see :meth:`Constraint.fromConstraintDefinition`)."""
 
 
 class Constraint(ConstraintBase):
@@ -129,34 +137,31 @@ class Constraint(ConstraintBase):
 
     """
 
-    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-    @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name, model, *args, **kwargs):
-        super().__init__(name, model, *args, **kwargs)
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = LinearizedRigidBodySchema
+
+    def __init__(
+        self,
+        name,
+        model: FEModel,
+        nSet: NodeSet,
+        referencePoint: NodeSet,
+        *,
+        configuration: LinearizedRigidBodySchema = LinearizedRigidBodySchema(),
+    ):
+        super().__init__(name, model)
 
         if model.domainSize not in [2, 3]:
             raise WrongDomain("Wrong domain size!")
 
-        # self.name = name
+        if len(referencePoint) > 1:
+            raise Exception(f"node set for reference point '{referencePoint.name}' contains more than one node")
 
-        kwargs = CaseInsensitiveDict(kwargs)
-
-        rbNset = kwargs["nSet"]
-
-        nodeSets = model.nodeSets
-        rpSetName = kwargs["referencePoint"]
-        rpNodeSet = nodeSets[rpSetName]
-
-        if len(rpNodeSet) > 1:
-            raise Exception(f"node set for reference point '{rpSetName}' contains more than one node")
-
-        self.rp = rpNodeSet[0]
+        self.rp = referencePoint[0]
 
         # slave node set may contain the reference point
-        slaveNodeSet = nodeSets[rbNset]
-
         # RP is removed (if present) and node set is converted to list
-        self.slaveNodes = [node for node in slaveNodeSet if not node == self.rp]
+        self.slaveNodes = [node for node in nSet if not node == self.rp]
 
         # list of all nodes including RP at end
         self._nodes = self.slaveNodes + [self.rp]
@@ -243,6 +248,25 @@ class Constraint(ConstraintBase):
         K[-dG_dU.shape[0] :, 0 : dG_dU.shape[1] :] = dG_dU
 
         self.K = K
+
+    @classmethod
+    def fromConstraintDefinition(
+        cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
+    ) -> "Constraint":
+        """Build this constraint from a parsed ``*constraint`` definition. See
+        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
+        separate from ``__init__``."""
+        definition = CaseInsensitiveDict(definition)
+        nSetName = definition.pop("nSet")
+        referencePointName = definition.pop("referencePoint")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+        return cls(
+            name,
+            model,
+            model.nodeSets[nSetName],
+            model.nodeSets[referencePointName],
+            configuration=configuration,
+        )
 
     @property
     def nodes(self) -> list:

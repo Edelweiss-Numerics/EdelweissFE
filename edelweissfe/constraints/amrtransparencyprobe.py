@@ -26,17 +26,18 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.schema import buildSchemaFromOptions
 
 """
 Acceptance test double for the "topological containers have stable identity" contract
@@ -67,6 +68,12 @@ module.addRequiredArg("nSet", "The node set whose growth under AMR this probe ve
 documentation = [module]
 
 
+@dataclass(frozen=True)
+class AmrTransparencyProbeSchema:
+    """L2: this constraint accepts no options beyond the structural ``nSet`` it watches (see
+    :meth:`Constraint.fromConstraintDefinition`)."""
+
+
 class Constraint(ConstraintBase):
     """A zero-DOF constraint that caches a node set reference at construction time and checks,
     lazily at its own :meth:`updateConnectivity` tick, that the reference already reflects any
@@ -80,19 +87,39 @@ class Constraint(ConstraintBase):
     model
         The full finite element model.
     nSet
-        The name of the node set to watch; typically one AMR is expected to grow (e.g. a tracked
-        boundary set).
+        The node set to watch; typically one AMR is expected to grow (e.g. a tracked boundary set).
+    configuration
+        The options this constraint accepts; there are none beyond ``nSet``.
     """
 
-    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-    @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name: str, model: FEModel, *args, **kwargs):
-        super().__init__(name, model, *args, **kwargs)
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = AmrTransparencyProbeSchema
+
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        nSet: NodeSet,
+        *,
+        configuration: AmrTransparencyProbeSchema = AmrTransparencyProbeSchema(),
+    ):
+        super().__init__(name, model)
         self.name = name
-        kwargs = CaseInsensitiveDict(kwargs)
-        self._nodes = model.nodeSets[kwargs["nSet"]]
+        self._nodes = nSet
         self._initialNodeCount = len(self._nodes)
         self._lastSeenTopologyVersion = model.topologyVersion
+
+    @classmethod
+    def fromConstraintDefinition(
+        cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
+    ) -> "Constraint":
+        """Build this constraint from a parsed ``*constraint`` definition. See
+        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
+        separate from ``__init__``."""
+        definition = CaseInsensitiveDict(definition)
+        nSetName = definition.pop("nSet")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+        return cls(name, model, model.nodeSets[nSetName], configuration=configuration)
 
     @property
     def nodes(self) -> list:

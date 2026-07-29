@@ -29,18 +29,19 @@
 
 # @author: Matthias Neuner
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 A penalty based constraint used for constraining nodal values
@@ -66,23 +67,82 @@ module.addRequiredArg("nSet", "The node set to be constrained.", str)
 documentation = [module]
 
 
+@dataclass(frozen=True)
+class EqualValuePenaltySchema:
+    """L2: the options this constraint accepts, owned by this module and never mutated from
+    outside it.
+
+    Mirrors the ``module.addRequiredArg(...)`` declarations above one-for-one. The two declarations
+    coexist while the migration is in progress; the ``Module`` one goes away with the
+    ``InputLanguage`` singleton in P5.
+
+    Each field is declared ``required=True`` explicitly, mirroring ``addRequiredArg`` above, but is
+    still given a ``default=None`` so that ``EqualValuePenaltySchema()`` remains constructible for
+    the L1 constructor's default argument; the L4 adapter (``buildSchemaFromOptions``) still
+    enforces that an ``.inp`` file supplies each.
+    """
+
+    field: str | None = schemaField(
+        description="The field this constraint acts on.", dtype=str, default=None, required=True
+    )
+    component: int | None = schemaField(
+        description="The component of the field.", dtype=int, default=None, required=True
+    )
+    penalty: float | None = schemaField(
+        description="The numerical penalty value.", dtype=float, default=None, required=True
+    )
+
+
 class Constraint(ConstraintBase):
-    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-    @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name: str, model: FEModel, *args, **kwargs):
-        super().__init__(name, model, *args, **kwargs)
+    """A penalty based constraint used for constraining nodal values of a node set to be equal.
 
-        kwargs = CaseInsensitiveDict(kwargs)
+    Parameters
+    ----------
+    name
+        The name of the constraint.
+    model
+        The model tree.
+    nSet
+        The node set to be constrained.
+    configuration
+        The options this constraint accepts; all are still required, see
+        :class:`EqualValuePenaltySchema`.
+    """
 
-        self.theField = kwargs["field"]
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = EqualValuePenaltySchema
+
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        nSet: NodeSet,
+        *,
+        configuration: EqualValuePenaltySchema = EqualValuePenaltySchema(),
+    ):
+        super().__init__(name, model)
+
+        self.theField = configuration.field
         self.sizeField = getFieldSize(self.theField, model.domainSize)
-        self.component = kwargs["component"]
-        self.penalty = kwargs["penalty"]
-        self._nodes = model.nodeSets[kwargs["nSet"]]
+        self.component = configuration.component
+        self.penalty = configuration.penalty
+        self._nodes = nSet
 
         self.active = True
 
         self._rebuildDerivedState()
+
+    @classmethod
+    def fromConstraintDefinition(
+        cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
+    ) -> "Constraint":
+        """Build this constraint from a parsed ``*constraint`` definition. See
+        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
+        separate from ``__init__``."""
+        definition = CaseInsensitiveDict(definition)
+        nSetName = definition.pop("nSet")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+        return cls(name, model, model.nodeSets[nSetName], configuration=configuration)
 
     def _rebuildDerivedState(self):
         """(Re)derive every quantity sized to the constrained node set -- the node count, ``nDof``,

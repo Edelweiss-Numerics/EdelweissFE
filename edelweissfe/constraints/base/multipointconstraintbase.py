@@ -28,10 +28,12 @@
 
 from abc import ABC, abstractmethod
 
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.utils.schema import OptionSchemaProvider
 
 
-class MultiPointConstraintBase(ABC):
+class MultiPointConstraintBase(OptionSchemaProvider, ABC):
     """Base class for linear multi-point constraints (MPCs) enforced by degree-of-freedom
     elimination (master-slave condensation), Abaqus-style.
 
@@ -62,6 +64,31 @@ class MultiPointConstraintBase(ABC):
     #: here so :meth:`claimedSlaveNodes` has a meaningful default for every subclass; subclasses
     #: storing their records elsewhere override :meth:`claimedSlaveNodes` instead.
     _records: list = []
+
+    @classmethod
+    def fromConstraintDefinition(
+        cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
+    ) -> "MultiPointConstraintBase":
+        """Create this constraint from a parsed ``.inp`` constraint definition.
+
+        See :meth:`edelweissfe.constraints.base.constraintbase.ConstraintBase.fromConstraintDefinition`
+        for the rationale; this is the same L4 seam for the multi-point-constraint hierarchy.
+
+        Parameters
+        ----------
+        name
+            The name of the constraint.
+        definition
+            The parsed option mapping for this constraint (the datalines-derived ``kwargs``).
+        model
+            The model tree.
+
+        Returns
+        -------
+        MultiPointConstraintBase
+            The constructed constraint.
+        """
+        return cls(name, model, **definition)
 
     @abstractmethod
     def __init__(self, name: str, model: FEModel, *args, **kwargs):

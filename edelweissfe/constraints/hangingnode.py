@@ -46,16 +46,15 @@ records file, one line per slave node::
     <slaveLabel>  <masterLabel> <weight>  <masterLabel> <weight>  ...
 """
 
+from dataclasses import dataclass
+
 from edelweissfe.constraints.base.multipointconstraintbase import (
     MultiPointConstraintBase,
 )
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 module = Module(
     "hangingnode",
@@ -80,26 +79,55 @@ module.addOptionalArg(
 documentation = [module]
 
 
+@dataclass(frozen=True)
+class HangingNodeSchema:
+    """L2: the options this constraint accepts, owned by this module and never mutated from
+    outside it.
+
+    Mirrors the ``module.addOptionalArg(...)`` declaration above. The two declarations coexist
+    while the migration is in progress; the ``Module`` one goes away with the ``InputLanguage``
+    singleton in P5.
+    """
+
+    recordsFile: str | None = schemaField(
+        description="Path (relative to the input file) to the flattened hanging-node records: one "
+        "line per slave '<slaveLabel> <masterLabel> <weight> ...' with independent masters. Omit "
+        "for dynamic AMR, where the adaptivity manager sets the records in memory via "
+        "updateRecords().",
+        dtype=str,
+        default=None,
+    )
+
+
 class Constraint(MultiPointConstraintBase):
     """Hanging-node multi-point constraint enforced by DOF elimination.
 
     Constrains ALL fields active on each slave node (auto-detected), which is required: every field
     must stay continuous across a hanging node. Weights are field-independent (equal-order
     interpolation), so the same coarse-trace weights apply to each field's components.
+
+    Parameters
+    ----------
+    name
+        The name of the constraint.
+    model
+        The model tree.
+    configuration
+        The options this constraint accepts; defaults to all-defaults.
     """
 
-    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-    @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name: str, model: FEModel, *args, **kwargs):
-        kwargs = CaseInsensitiveDict(kwargs)
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = HangingNodeSchema
+
+    def __init__(self, name: str, model: FEModel, *, configuration: HangingNodeSchema = HangingNodeSchema()):
         self._name = name
         self._model = model
 
         # (slaveNode, [(masterNode, weight), ...]); slave node first, so the base class'
         # claimedSlaveNodes() accessor works unmodified for this constraint
         self._records = []
-        if kwargs["recordsFile"] is not None:
-            with open(kwargs["recordsFile"]) as f:
+        if configuration.recordsFile is not None:
+            with open(configuration.recordsFile) as f:
                 for line in f:
                     line = line.strip()
                     if not line or line.startswith("#"):
@@ -107,6 +135,16 @@ class Constraint(MultiPointConstraintBase):
                     tok = line.split()
                     records = {int(tok[0]): [(int(tok[i]), float(tok[i + 1])) for i in range(1, len(tok), 2)]}
                     self.updateRecords(records)
+
+    @classmethod
+    def fromConstraintDefinition(
+        cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
+    ) -> "Constraint":
+        """Build this constraint from a parsed ``*constraint`` definition. See
+        :class:`~edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase`
+        for why this is separate from ``__init__``."""
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+        return cls(name, model, configuration=configuration)
 
     def updateRecords(self, records: dict):
         """(Re)set the hanging-node records from a {slaveLabel: [(masterLabel, weight), ...]} dict of

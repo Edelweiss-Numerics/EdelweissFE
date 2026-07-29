@@ -365,7 +365,7 @@ class AbqModelConstructor:
             args, kwargs = module.parseDatalines(data)
 
             constraintClass = getConstraintClass(constraintType)
-            constraint = constraintClass(name, model, self.journal, **kwargs)
+            constraint = constraintClass.fromConstraintDefinition(name, kwargs, model, journal=self.journal)
 
             # Multi-point (DOF-elimination) constraints contribute nothing to the load vector or
             # system matrix and must stay outside the DofManager/assembly machinery.
