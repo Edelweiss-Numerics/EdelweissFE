@@ -475,6 +475,103 @@ skips for a missing Marmot material — hence the dedicated, falsified unit test
 `__contains__`/`__getitem__`/`__setitem__`/`get` wrappers went too: every consumer reaches these
 options through `getOptionsOfCategory`, in both repos.
 
+## 9. P4 progress: the safety net, the registry fold, and the two design calls
+
+P4 splits into a decision-free part (this section) and the L1/L2/L4 split for
+`constraints`/`sections`/`analyticalfields`/`generators`/`solvers`, which is ~35 modules and the
+largest single piece of the whole redesign. Call sites turned out to be few and concentrated: only
+~11 outside `config/`, almost all in `generators/abqmodelconstructor.py`,
+`helpers/inputfilehelpers.py`, `steps/stepmanager.py` and `modelmodifiers/adaptivity/hadaptivity.py`.
+
+### The safety net came first, and it was red
+
+`tests/test_module_import_independence.py` spawns one fresh interpreter per documented module (53 of
+them) and asserts two properties. Every module imports standalone — the P4 checkpoint's wording, and
+already true. And **no module poisons the parser by being imported first** — which was **red for
+exactly two**, `outputmanagers.ensight` and `stepactions.options`, both raising
+`ValueError: options is not a valid argument`.
+
+One cause. `options.py` declared the shared `options` keyword in the same one-shot
+`for module in modules:` loop every step action uses, but unlike the others it is also imported
+*indirectly*, by anything calling `registerOptionsArg` at its own import time (`ensight` plus four
+solvers). Reached that way before any step type is registered, the loop declared nothing;
+`sys.modules` then denied it a second chance when the parser imported it properly; and the next
+`registerOptionsArg` call died looking for a keyword nothing had declared. Fixed by declaring that
+keyword **lazily and idempotently** (`_ensureOptionsKeyword`), by whichever call site first runs when
+there is a step type to declare it on. Worth recording that the obvious alternative is wrong:
+narrowing `registerOptionsArg`'s guard would have made the solvers' options *silently vanish* in that
+import order instead — trading a loud failure for a quiet one. `documentation` is populated in the
+same place, so the rendered grammar surface cannot differ by import order either.
+
+### Registry fold: six getters converted, three deleted, two blocked
+
+Converted to thin `registry.lookup` wrappers, following the shape `config/stepactions.py` established
+in P3(b): `getConstraintClass`, `getGeneratorFunction`, `getModelModifierClass`, `getSolverByName`,
+`getStateTransferStrategyClass`, `getStepClassByType`. The `stepLibrary` and `_STRATEGIES` tables are
+deleted. Verified by resolving all 35 names through both the new and the pre-fold implementations and
+asserting object *identity* — the check that matters, since a wrong dotted string is invisible to a
+test written by the same author as the table.
+
+Three getters had **zero** callers and are deleted: `getAnalyticalFieldByName`, `getSectionClass`,
+`getOutputManagerClass`.
+
+Three findings worth keeping:
+
+- **`getModelModifierClass` was guessing its subpackage.** It tried
+  `edelweissfe.modelmodifiers.<name>` and fell back to `...adaptivity.<name>` on
+  `ModuleNotFoundError` — so a modifier whose own module raised `ModuleNotFoundError` for an
+  unrelated missing dependency was silently re-looked-up in the wrong package and then reported as
+  absent. The registry names the module explicitly: nothing to guess, no exception to swallow.
+- **`config/statetransferstrategies.py` was paying an eager import** to hold its three classes in
+  `_STRATEGIES`. Anything importing that config module — including code that only wanted to know
+  whether a name is *valid* — pulled in the whole `adaptivity.statetransfer` subpackage. Measured:
+  importing it now brings in 8 `edelweissfe` modules instead of 10, with the 6-module `statetransfer`
+  subpackage no longer among them.
+- **`solverLibrary` and `config/outputmanagers.py` could not be deleted, and only the *docs* say
+  why.** `doc/source/documentation/solvers.rst:7` renders `solverLibrary` through a real
+  `.. pprint::` directive (`doc/source/conf.py:269`), and `output.rst:4` renders
+  `config.outputmanagers`'s module docstring through `.. automodule::`. Both survive as
+  documentation-only artefacts, annotated as such. This is a reminder that a `.py`-only grep is not
+  sufficient evidence for deleting anything in this repo, and that no test covers the docs build —
+  retiring either is a docs change (repoint at `registry.availableNames`, or move the prose into the
+  `.rst`), not a refactor.
+
+Two are **not separable** from the L1/L2 split and were left alone: `getSectionFactoryByName` and
+`getAnalyticalFieldFactoryByName` return the `sectionFactory`/`analyticalFieldFactory` module
+attribute, i.e. the *same pre-schema construction protocol P2 deleted for output managers*.
+
+The one sanctioned behavioural delta is the expected one: **solver names are now case-insensitive**
+(`solvers.py` was the lone case-sensitive registry of the 13; see §3's audit), and an unknown name
+raises `RegistryLookupError` — a `LookupError`, with a "did you mean" suggestion — rather than a bare
+`KeyError`/`ModuleNotFoundError`. No call site wraps these lookups, so nothing catches the old type.
+
+### The two design calls, settled
+
+**`element`/`material`: `provider` selects a namespace, not a variant of one lookup.** Only
+`edelweiss` addresses anything *by name*; `marmot`/`marmotsingleqpelement` ignore the name and return
+one wrapper class; `marmotmaterial` returns `None` outright. So the provider dispatch stays an
+explicit table — it is not a registry — and only the `edelweiss` branch moves into L3.
+
+Scoping it turned up a fact the plan's original note missed: on the element side, **42 element types
+resolve to just 2 classes**, through `eval(elLibrary[elType]["elClass"])` — which is why
+`config/elementlibrary.py`'s two `# noqa: F401` "unused" imports are load-bearing, existing purely to
+be in that `eval`'s scope. **Decision taken: key the registry by element type and delete the
+`elClass` field from `elLibrary`**, so the registry becomes the single source of truth for
+type → class, the `eval` and its phantom imports go, and a third party can contribute an element type
+through an entry point (the §4 hard requirement). `elLibrary` keeps the per-type numeric parameters.
+The considered alternatives were keying by formulation class instead (registry stays at 2 entries, but
+a third party still has to edit `elLibrary`, so the hard requirement fails) and moving the per-type
+quadrature data onto 42 new element classes (the right long-term shape, but its own phase).
+
+**`linsolver`: a `createSolver(opts)` factory per module.** The 9 entries come in 4 shapes today —
+inline scipy lambdas (`superlu`, `umfpack`, which have no module at all), an option-constructed class
+(`pardiso`), plain module-level functions (`klu`, `mumps`, `petsclu`, `panuapardiso`), and bound
+methods of option-constructed objects (`gmres`, `amgcl`). Their common denominator is a factory
+`opts -> Callable[[A, b], x]`, so **decision taken: every `linsolve/*` module gets a module-level
+`createSolver(opts)`** for the registry's dotted string to point at, which also means real modules for
+the two that are currently inline lambdas. This is the only option under which a third party can
+contribute a linear solver.
+
 ## Scope of this branch
 
 This branch implements **P0 and P1**. P0 (safety net): the golden test, the programmatic-build
