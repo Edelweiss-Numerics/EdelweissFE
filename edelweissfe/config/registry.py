@@ -256,10 +256,12 @@ _addBuiltins(
     "edelweissfe.analyticalfields",
 )
 
-# solver / step / modelmodifier / statetransferstrategy are not "one module per name" -- copied
-# by hand from config/solvers.py's solverLibrary, config/steps.py's stepLibrary,
-# modelmodifiers/adaptivity, and config/statetransferstrategies.py's _STRATEGIES respectively.
-# Kept in sync manually for now; P4 removes the duplication when config/*.py folds into this file.
+# solver / step / modelmodifier / statetransferstrategy are not "one module per name" -- originally
+# copied by hand from config/solvers.py's solverLibrary, config/steps.py's stepLibrary,
+# modelmodifiers/adaptivity, and config/statetransferstrategies.py's _STRATEGIES respectively. As of
+# P4 those four tables are gone and these entries are the only copy, so there is nothing left to keep
+# in sync. (config/solvers.py still defines a solverLibrary dict, but purely as a rendering target
+# for a Sphinx ``.. pprint::`` directive -- it resolves nothing.)
 for _solverName, _moduleName in {
     "NIST": "nonlinearimplicitstatic",
     "NEST": "nonlinearexplicitstatic",

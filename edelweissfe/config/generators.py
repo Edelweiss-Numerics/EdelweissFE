@@ -43,21 +43,35 @@ Keyword: ``*generator``
         multiple lines of defintion ...
 """
 
-import importlib
+from edelweissfe.config import registry
 
 
 def getGeneratorFunction(name: str) -> type:
     """Get the function type of the requested generator.
 
+    Resolved through the L3 registry (``generator`` category) rather than by importing
+    ``edelweissfe.generators.<name>`` directly. That import-by-convention could only ever find
+    generators living *inside* this package, so an external package -- EdelweissMeshfree, a plugin
+    -- had no way to contribute one; going through the registry means a built-in, an entry point and
+    an in-process :func:`~edelweissfe.config.registry.register` call are all equally reachable here.
+    An unknown name now raises :class:`~edelweissfe.config.registry.RegistryLookupError` naming the
+    available generators, instead of a bare ``ModuleNotFoundError``.
+
+    Note that the registry target here is the module-level *function* ``generateModelData``, not a
+    class, so the schema :func:`~edelweissfe.config.registry.lookup` returns alongside it is
+    structurally always ``None`` until generators grow class-based L1 targets.
+
     Parameters
     ----------
     name
         The name of the generator class type to load.
+
     Returns
     -------
     type
         The generator function type.
     """
 
-    module = importlib.import_module("edelweissfe.generators." + name.lower())
-    return module.generateModelData
+    generatorFunction, _ = registry.lookup("generator", name)
+
+    return generatorFunction

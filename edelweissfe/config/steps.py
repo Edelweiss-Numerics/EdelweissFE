@@ -34,19 +34,20 @@ via the ``type`` option:
     *step, solver=mySolver, type=adaptive
 """
 
-import importlib
-
-stepLibrary = {
-    "adaptive": ("edelweissfe.steps.adaptivestep", "AdaptiveStep"),
-    "adaptiveForExplicitSimulations": (
-        "edelweissfe.steps.adaptivestepforexplicitsimulations",
-        "AdaptiveStepForExplicitSimulations",
-    ),
-}
+from edelweissfe.config import registry
 
 
 def getStepClassByType(stepType: str) -> type:
     """Get the class type of the requested step type.
+
+    Resolved through the L3 registry (``step`` category) rather than through this module's own
+    ``stepLibrary`` table of ``(module, class)`` pairs. That table could only ever list steps living
+    *inside* this package, so an external package -- EdelweissMeshfree, a plugin -- had no way to
+    contribute one; going through the registry means a built-in, an entry point and an in-process
+    :func:`~edelweissfe.config.registry.register` call are all equally reachable here. Names remain
+    case-insensitive, as ``stepLibrary`` already made them by casefolding its keys per call. An
+    unknown type now raises :class:`~edelweissfe.config.registry.RegistryLookupError` naming the
+    available step types, instead of a ``KeyError``.
 
     Parameters
     ----------
@@ -59,14 +60,6 @@ def getStepClassByType(stepType: str) -> type:
         The step class type.
     """
 
-    casefoldedStepLibrary = {key.casefold(): value for key, value in stepLibrary.items()}
+    stepClass, _ = registry.lookup("step", stepType)
 
-    try:
-        moduleName, className = casefoldedStepLibrary[stepType.casefold()]
-    except KeyError:
-        raise KeyError(
-            f"Step type {stepType} not found in library. Available step types: " + ", ".join(stepLibrary.keys())
-        )
-
-    module = importlib.import_module(moduleName)
-    return getattr(module, className)
+    return stepClass

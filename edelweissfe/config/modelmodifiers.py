@@ -29,11 +29,22 @@
 """ModelModifiers dynamically alter mesh topology, element/node sets, material states,
 or field allocations during an analysis step.
 """
-import importlib
+from edelweissfe.config import registry
 
 
 def getModelModifierClass(name: str) -> type:
     """Get the class type of the requested model modifier.
+
+    Resolved through the L3 registry (``modelmodifier`` category) rather than by importing
+    ``edelweissfe.modelmodifiers.<name>`` directly. Besides being unreachable for an external package
+    -- EdelweissMeshfree, a plugin -- that import-by-convention had to *guess* the subpackage: it
+    tried ``edelweissfe.modelmodifiers.<name>`` and fell back to
+    ``edelweissfe.modelmodifiers.adaptivity.<name>`` on ``ModuleNotFoundError``, so a modifier whose
+    own module raised ``ModuleNotFoundError`` for an unrelated missing dependency was silently
+    re-looked-up in the wrong package and then reported as absent. The registry names the module
+    explicitly, so there is nothing to guess and no exception to swallow. An unknown name now raises
+    :class:`~edelweissfe.config.registry.RegistryLookupError` naming the available model modifiers,
+    instead of a bare ``ModuleNotFoundError``.
 
     Parameters
     ----------
@@ -45,9 +56,7 @@ def getModelModifierClass(name: str) -> type:
     type
         The model modifier class type.
     """
-    name_lower = name.lower()
-    try:
-        module = importlib.import_module("edelweissfe.modelmodifiers." + name_lower)
-    except ModuleNotFoundError:
-        module = importlib.import_module("edelweissfe.modelmodifiers.adaptivity." + name_lower)
-    return module.ModelModifier
+
+    modelModifierClass, _ = registry.lookup("modelmodifier", name)
+
+    return modelModifierClass

@@ -33,21 +33,26 @@ is handed down to its children. Selectable by name from the ``*modelModifier`` i
 :mod:`edelweissfe.adaptivity.statetransfer`.
 """
 
-from edelweissfe.adaptivity.statetransfer import (
-    NearestQuadraturePointCopy,
-    PolynomialProjection,
-    VirginState,
-)
-
-_STRATEGIES = {
-    "nearestqp": NearestQuadraturePointCopy,
-    "projection": PolynomialProjection,
-    "virgin": VirginState,
-}
+from edelweissfe.config import registry
 
 
 def getStateTransferStrategyClass(name: str) -> type:
     """Get the class of the requested state-transfer strategy.
+
+    Resolved through the L3 registry (``statetransferstrategy`` category) rather than through this
+    module's own ``_STRATEGIES`` table. That table could only ever list strategies living *inside*
+    this package, so an external package -- EdelweissMeshfree, a plugin -- had no way to contribute
+    one; going through the registry means a built-in, an entry point and an in-process
+    :func:`~edelweissfe.config.registry.register` call are all equally reachable here. An unknown
+    name now raises :class:`~edelweissfe.config.registry.RegistryLookupError` naming the available
+    strategies, instead of a ``KeyError``.
+
+    It also removes an eager import that had nothing to do with resolving a name: ``_STRATEGIES``
+    held the three classes themselves, so it had to ``from edelweissfe.adaptivity.statetransfer
+    import ...`` at module scope, and every importer of this config module -- including anything that
+    merely wanted to know *whether* a strategy name is valid -- paid for importing the whole
+    ``statetransfer`` subpackage. The registry holds dotted strings instead and imports the one
+    strategy actually asked for, on first use.
 
     Parameters
     ----------
@@ -59,9 +64,7 @@ def getStateTransferStrategyClass(name: str) -> type:
     type
         The :class:`~edelweissfe.adaptivity.statetransfer.base.StateTransferStrategy` subclass.
     """
-    key = name.lower()
-    if key not in _STRATEGIES:
-        raise KeyError(
-            "unknown state-transfer strategy '{:}'; available: {:}".format(name, ", ".join(sorted(_STRATEGIES)))
-        )
-    return _STRATEGIES[key]
+
+    strategyClass, _ = registry.lookup("statetransferstrategy", name)
+
+    return strategyClass

@@ -43,24 +43,6 @@ with properties, such as materials.
 import importlib
 
 
-def getSectionClass(name: str) -> type:
-    """Get the class type of the requested section.
-
-    Parameters
-    ----------
-    name
-        The name of the section class type to load.
-
-    Returns
-    -------
-    type
-        The section class type.
-    """
-
-    module = importlib.import_module("edelweissfe.sections." + name.lower())
-    return module.Section
-
-
 def getSectionFactoryByName(name):
     module = importlib.import_module("edelweissfe.sections." + name.lower())
     return module.sectionFactory

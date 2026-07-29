@@ -41,11 +41,19 @@ Example syntax:
         nSet=right
         referencePoint=rBottom
 """
-import importlib
+from edelweissfe.config import registry
 
 
 def getConstraintClass(name: str) -> type:
     """Get the class type of the requested constraint.
+
+    Resolved through the L3 registry (``constraint`` category) rather than by importing
+    ``edelweissfe.constraints.<name>`` directly. That import-by-convention could only ever find
+    constraints living *inside* this package, so an external package -- EdelweissMeshfree, a plugin
+    -- had no way to contribute one; going through the registry means a built-in, an entry point and
+    an in-process :func:`~edelweissfe.config.registry.register` call are all equally reachable here.
+    An unknown name now raises :class:`~edelweissfe.config.registry.RegistryLookupError` naming the
+    available constraints, instead of a bare ``ModuleNotFoundError``.
 
     Parameters
     ----------
@@ -58,5 +66,6 @@ def getConstraintClass(name: str) -> type:
         The constraint class type.
     """
 
-    module = importlib.import_module("edelweissfe.constraints." + name.lower())
-    return module.Constraint
+    constraintClass, _ = registry.lookup("constraint", name)
+
+    return constraintClass
