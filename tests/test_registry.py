@@ -198,6 +198,29 @@ def test_builtin_lookup_matches_direct_import(category, name, moduleName, attrNa
     assert schema is schemaOf(expected)
 
 
+def test_element_category_covers_every_element_type_exactly():
+    """The ``element`` category's two name lists must equal ``elLibrary``'s key set, both ways.
+
+    The registry holds those 42 element types as plain string literals, deliberately: importing
+    ``elements.library`` to build the table would break the zero-eager-import property (a
+    ``CaseInsensitiveDict`` of numpy arrays is not free either). The cost of that choice is that a
+    mistyped or forgotten type is invisible until someone uses it, so the two tables are pinned
+    against each other here -- in the test, where importing ``elements.library`` is harmless.
+
+    Asserted in *both* directions: a type missing from the registry is unreachable via
+    ``getElementClass(..., "edelweiss")``, and a type in the registry that ``elLibrary`` has no
+    quadrature data for would resolve to a formulation class whose ``__init__`` then raises.
+    """
+    from edelweissfe.elements.library import elLibrary
+
+    registeredTypes = {name for (category, name) in registry._BUILTINS if category == "element"}
+    libraryTypes = {elType.casefold() for elType in elLibrary}
+
+    assert registeredTypes - libraryTypes == set(), "registered element types absent from elLibrary"
+    assert libraryTypes - registeredTypes == set(), "elLibrary element types absent from the registry"
+    assert len(registeredTypes) == 42
+
+
 def test_case_insensitive_lookup():
     target_lower, _ = registry.lookup("outputmanager", "ensight")
     target_mixed, _ = registry.lookup("OutputManager", "EnSight")

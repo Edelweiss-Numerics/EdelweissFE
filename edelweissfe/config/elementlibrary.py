@@ -40,18 +40,31 @@ In future, elements by other providers or elements directly implemented in Edelw
         1000,        1,     2,     3,     4,     ...
 """
 
-from edelweissfe.elements.displacementelement.element import (  # noqa: F401
-    DisplacementElement,
-)
-from edelweissfe.elements.displacementtlelement.element import (  # noqa: F401
-    DisplacementTLElement,
-)
-from edelweissfe.elements.library import elLibrary
+from edelweissfe.config import registry
 from edelweissfe.utils.misc import strCaseCmp
 
 
 def getElementClass(elType: str, provider: str = None) -> type:
     """Get the class type of the requested element provider.
+
+    The ``provider`` dispatch below is deliberately an explicit table and **not** a registry
+    lookup: a provider selects a *namespace*, not a variant of one lookup. Only ``edelweiss``
+    addresses anything by name -- ``marmot`` and ``marmotsingleqpelement`` ignore ``elType``
+    entirely and return a single wrapper class that then reads the type at the Marmot boundary. There
+    is nothing per-name to register for those two, so folding them in would mean inventing 42
+    identical entries per provider (see ``PLAN_INPUT_SYSTEM.md`` §9).
+
+    The ``edelweiss`` branch *is* resolved through the L3 registry (``element`` category), keyed by
+    element type. It used to read a class *name* out of
+    :data:`~edelweissfe.elements.library.elLibrary`'s ``elClass`` field and ``eval`` it -- which is
+    why this module used to import ``DisplacementElement`` and ``DisplacementTLElement`` behind
+    ``# noqa: F401``: the imports looked unused but were load-bearing as the ``eval``'s scope. Both
+    the ``eval`` and the ``elClass`` field are now gone, so those two imports were genuinely dead and
+    have been deleted -- do not "restore" them. The registry is the single source of truth for
+    type -> class, which also means a third party can contribute an element type through an entry
+    point instead of having to edit ``elLibrary``. An unknown type now raises
+    :class:`~edelweissfe.config.registry.RegistryLookupError` naming the available types, instead of
+    ``Exception("Edelweiss element not found in library.")``.
 
     Parameters
     ----------
@@ -71,10 +84,9 @@ def getElementClass(elType: str, provider: str = None) -> type:
 
     if strCaseCmp(provider, "edelweiss"):
 
-        try:
-            return eval(elLibrary[elType]["elClass"])
-        except KeyError:
-            raise Exception("Edelweiss element not found in library.")
+        elementClass, _ = registry.lookup("element", elType)
+
+        return elementClass
 
     elif provider.lower() == "marmot":
         from edelweissfe.elements.marmotelement.element import MarmotElementWrapper

@@ -29,6 +29,7 @@
 import numpy as np
 import numpy.linalg as lin
 
+from edelweissfe.config import registry
 from edelweissfe.elements.base.baseelement import BaseElement
 from edelweissfe.elements.displacementelement._elementcomputationmatrices import (
     computeBOperator,
@@ -140,7 +141,14 @@ class DisplacementElement(BaseElement):
     def __init__(self, elementType: str, elNumber: int):
         self._elType = elementType
         properties = elLibrary[elementType]
-        if eval(properties["elClass"]) is not DisplacementElement:
+        # Guard against being handed an element type belonging to a *different* formulation, e.g.
+        # `DisplacementElement("CPE4TL", 1)`: `elLibrary` supplies quadrature data for both
+        # formulations, so nothing else here would notice. The type -> class mapping is the L3
+        # registry's `element` category (previously an `elClass` name string in `elLibrary`, resolved
+        # by an `eval` -- which raised `NameError` rather than this message whenever the answer was
+        # the other class, i.e. in exactly the case the guard exists for, since neither element
+        # module imports the other's class).
+        if registry.lookup("element", elementType)[0] is not DisplacementElement:
             raise Exception("Something went wrong with the element initialization!")
         self._elNumber = elNumber
         self._nNodes = properties["nNodes"]

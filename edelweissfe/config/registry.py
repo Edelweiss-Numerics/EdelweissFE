@@ -72,24 +72,30 @@ The ``_BUILTINS`` table below currently covers these categories, enumerated by h
 corresponding ``edelweissfe`` subpackage (see the module docstring history / this branch's report
 for exactly how each list was derived):
 
-``outputmanager``, ``section``, ``constraint``, ``stepaction``, ``generator``,
-``analyticalfield``, ``solver``, ``step``, ``modelmodifier``, ``statetransferstrategy``.
+``outputmanager`` (10), ``section`` (3), ``constraint`` (12), ``stepaction`` (13),
+``generator`` (10), ``analyticalfield`` (3), ``solver`` (7), ``step`` (2), ``modelmodifier`` (1),
+``statetransferstrategy`` (3), ``element`` (42), ``material`` (11).
+
+``element`` and ``material`` are keyed by *element type* / *material name* and cover exactly the
+``provider=edelweiss`` namespace of ``config/elementlibrary.py`` and ``config/materiallibrary.py``.
+The ``provider`` axis those two modules also dispatch on is **not** part of this registry, by
+decision (``PLAN_INPUT_SYSTEM.md`` §9): ``provider`` selects a namespace rather than a variant of
+one lookup, and only ``edelweiss`` addresses anything by name at all -- ``marmot`` and
+``marmotsingleqpelement`` ignore the name and return a single wrapper class, ``marmotmaterial``
+returns ``None``. So those branches stay an explicit table in their own module and nothing about
+them is registrable.
 
 It deliberately does **not** yet cover:
 
-- ``element`` and ``material`` -- ``config/elementlibrary.py`` and ``config/materiallibrary.py``
-  dispatch on a *second* axis (``provider``: ``edelweiss`` vs. ``marmot`` vs.
-  ``marmotsingleqpelement``) that changes the lookup semantics entirely (e.g. ``marmot`` ignores
-  ``name`` and always returns the same wrapper class). Folding that into a flat ``(category,
-  name)`` registry requires a design decision (does ``name`` encode the provider too?) that is out
-  of scope for P1 and left to P4, alongside the other 11 ``config/*.py`` registries.
 - ``linsolver`` -- ``config/linsolve.py``'s entries are not uniformly "a dotted string to a plain
   class/callable": ``superlu``/``umfpack`` are inline ``lambda`` closures with no module-level
   name to point a dotted string at, and ``gmres``/``amgcl`` require constructing a wrapper object
-  with call-site-specific options before the usable callable exists. Left to P4.
+  with call-site-specific options before the usable callable exists. Being folded in separately,
+  once every ``linsolve/*`` module has grown the ``createSolver(opts)`` factory ``PLAN_INPUT_SYSTEM``
+  §9 settled on.
 
 This is a genuine subset, not full coverage dressed up -- do not extend call sites to assume every
-category is present until P4 actually finishes the fold-in.
+category is present until the fold-in actually finishes.
 """
 
 from __future__ import annotations
@@ -283,6 +289,91 @@ _BUILTINS[("modelmodifier", "hadaptivity")] = "edelweissfe.modelmodifiers.adapti
 _BUILTINS[("statetransferstrategy", "nearestqp")] = "edelweissfe.adaptivity.statetransfer:NearestQuadraturePointCopy"
 _BUILTINS[("statetransferstrategy", "projection")] = "edelweissfe.adaptivity.statetransfer:PolynomialProjection"
 _BUILTINS[("statetransferstrategy", "virgin")] = "edelweissfe.adaptivity.statetransfer:VirginState"
+
+# The element category is keyed by element *type*, and 42 types share just 2 formulation classes, so
+# `_addBuiltins`'s "one module per name, fixed attribute name" convention does not apply -- hence two
+# explicit lists. This table is the single source of truth for type -> class: `elements/library.py`'s
+# `elLibrary` used to carry an `elClass` field naming the class as a *string*, resolved by an `eval`
+# in `config/elementlibrary.py`, and that field is deleted. Both lists were derived programmatically
+# from `elLibrary` and are pinned against it by
+# `tests/test_registry.py::test_element_category_covers_every_element_type_exactly`; they are written
+# out as literals rather than imported from `elements.library` so that this module keeps importing
+# nothing (property 1 above).
+for _elementTypeName in [
+    "CPE4",
+    "CPE4R",
+    "CPE4E",
+    "CPE4N",
+    "CPE8",
+    "CPE8R",
+    "CPE8N",
+    "CPS4",
+    "CPS4R",
+    "CPS4E",
+    "CPS4N",
+    "CPS8",
+    "CPS8R",
+    "CPS8N",
+    "C3D8",
+    "C3D8R",
+    "C3D8E",
+    "C3D8N",
+    "C3D20",
+    "C3D20R",
+    "C3D20N",
+]:
+    _BUILTINS[("element", _elementTypeName.casefold())] = (
+        "edelweissfe.elements.displacementelement.element:DisplacementElement"
+    )
+
+for _elementTypeName in [
+    "CPE4TL",
+    "CPE4RTL",
+    "CPE4ETL",
+    "CPE4NTL",
+    "CPE8TL",
+    "CPE8RTL",
+    "CPE8NTL",
+    "CPS4TL",
+    "CPS4RTL",
+    "CPS4ETL",
+    "CPS4NTL",
+    "CPS8TL",
+    "CPS8RTL",
+    "CPS8NTL",
+    "C3D8TL",
+    "C3D8RTL",
+    "C3D8ETL",
+    "C3D8NTL",
+    "C3D20TL",
+    "C3D20RTL",
+    "C3D20NTL",
+]:
+    _BUILTINS[("element", _elementTypeName.casefold())] = (
+        "edelweissfe.elements.displacementtlelement.element:DisplacementTLElement"
+    )
+
+# The material category covers the `provider=edelweiss` materials, one module and one class name per
+# material -- so neither `_addBuiltins` variant fits and each entry names its own target. Originally
+# transcribed from `config/materiallibrary.py`'s if/elif chain, which is now gone, so these are the
+# only copy.
+for _materialName, _materialDotted in {
+    "linearelastic": "edelweissfe.materials.linearelastic.linearelastic:LinearElasticMaterial",
+    "vonmises": "edelweissfe.materials.vonmises.vonmises:VonMisesMaterial",
+    "neohooke": "edelweissfe.materials.neohooke.neohooke:NeoHookeanMaterial",
+    "neohookeplastic": "edelweissfe.materials.neohookeplastic.neohookeplastic:NeoHookeanPlasticMaterial",
+    "hyperelasticadvanced": (
+        "edelweissfe.materials.hyperelasticadvanced.hyperelasticadvanced:HyperelasticAdvancedMaterial"
+    ),
+    "hyperelasticadvancedi2extended": (
+        "edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended"
+        ":HyperelasticAdvancedI2ExtendedMaterial"
+    ),
+    "hyperplasticadvanced": (
+        "edelweissfe.materials.hyperplasticadvanced.hyperplasticadvanced:HyperplasticAdvancedMaterial"
+    ),
+}.items():
+    _BUILTINS[("material", _materialName)] = _materialDotted
 
 
 #: Resolved-object memo cache: ``(category, name)`` (casefolded) -> ``(target, schema)``. Guarded

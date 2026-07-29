@@ -26,33 +26,31 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-from importlib import import_module
-
+from edelweissfe.config import registry
 from edelweissfe.utils.misc import strCaseCmp
-
-# materialName (lowercase) -> (module path, class name)
-_EDELWEISS_MATERIALS = {
-    "linearelastic": ("edelweissfe.materials.linearelastic.linearelastic", "LinearElasticMaterial"),
-    "vonmises": ("edelweissfe.materials.vonmises.vonmises", "VonMisesMaterial"),
-    "neohooke": ("edelweissfe.materials.neohooke.neohooke", "NeoHookeanMaterial"),
-    "hyperelasticadvanced": (
-        "edelweissfe.materials.hyperelasticadvanced.hyperelasticadvanced",
-        "HyperelasticAdvancedMaterial",
-    ),
-    "hyperelasticadvancedi2extended": (
-        "edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended",
-        "HyperelasticAdvancedI2ExtendedMaterial",
-    ),
-    "neohookeplastic": ("edelweissfe.materials.neohookeplastic.neohookeplastic", "NeoHookeanPlasticMaterial"),
-    "hyperplasticadvanced": (
-        "edelweissfe.materials.hyperplasticadvanced.hyperplasticadvanced",
-        "HyperplasticAdvancedMaterial",
-    ),
-}
 
 
 def getMaterialClass(materialName: str, provider: str = None) -> type:
     """Get the the requested material class.
+
+    The ``provider`` dispatch below is deliberately an explicit table and **not** a registry lookup:
+    a provider selects a *namespace*, not a variant of one lookup. Only ``edelweiss`` addresses
+    anything by name; ``marmotmaterial`` ignores ``materialName`` and returns ``None`` (see below).
+    There is nothing per-name to register for it, so it stays here (``PLAN_INPUT_SYSTEM.md`` §9).
+
+    **Returning ``None`` for the ``marmotmaterial`` provider is deliberate, not a missing case.** A
+    Marmot material has no Python class at all -- it is instantiated inside the C++/Cython element
+    wrapper from its name plus its property array -- so there is nothing for this function to hand
+    back. ``None`` is the caller's signal to keep the material as a ``{"name": ..., "properties":
+    ...}`` record instead of constructing an object -- see
+    ``AbqModelConstructor.createMaterialsFromInputFile``, which branches on exactly that.
+
+    The ``edelweiss`` branch is resolved through the L3 registry (``material`` category), which
+    replaces an eleven-arm ``if/elif`` chain of local imports. Besides being one table instead of
+    eleven branches, that chain could only ever name materials living *inside* this package, so an
+    external package -- EdelweissMeshfree, a plugin -- had no way to contribute one. An unknown name
+    now raises :class:`~edelweissfe.config.registry.RegistryLookupError` naming the available
+    materials, instead of ``Exception("This material type doesn't exist (yet)...")``.
 
     Parameters
     ----------
@@ -64,7 +62,7 @@ def getMaterialClass(materialName: str, provider: str = None) -> type:
     Returns
     -------
     type
-        The material provider class type.
+        The material provider class type, or ``None`` for the ``marmotmaterial`` provider.
     """
 
     if provider is None:
@@ -75,8 +73,7 @@ def getMaterialClass(materialName: str, provider: str = None) -> type:
         return None
 
     if strCaseCmp(provider, "edelweiss"):
-        modulePath, className = _EDELWEISS_MATERIALS.get(materialName.lower(), (None, None))
-        if modulePath is None:
-            raise Exception("This material type doesn't exist (yet). Chosen material was: " + materialName)
 
-        return getattr(import_module(modulePath), className)
+        materialClass, _ = registry.lookup("material", materialName)
+
+        return materialClass
