@@ -598,6 +598,15 @@ every non-skipped case in both suites**, with only `gmres` (`edelweiss-only/Wall
 
 ## Scope of this branch
 
+**Current as of 2026-07-29:** this branch implements **P0, P1, P2, P3 and P4's registry-coverage
+checkpoint**. What remains of P4 is the L1/L2/L4 split for
+`constraints`/`sections`/`analyticalfields`/`generators`/`solvers` (~35 modules); P5 and P6 are
+untouched. See §7 (P1), §8 (P3(c)) and §9 (P4) for the per-phase outcome records, and the untracked
+`HANDOFF_INPUT_SYSTEM.md` for the resumption brief: branch stack, verification baselines, the
+deviation-fingerprint technique, and the per-category briefing for the remaining split.
+
+The paragraph below describes the branch as it stood at the end of P1, and is retained for context.
+
 This branch implements **P0 and P1**. P0 (safety net): the golden test, the programmatic-build
 test (and its gap report above), and the two independently-verifiable bug fixes. P1 (new,
 additive-only primitives, see §7 for the full account): `edelweissfe/utils/schema.py`,
