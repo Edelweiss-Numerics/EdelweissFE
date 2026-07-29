@@ -32,10 +32,15 @@
 Let materials initialize themselves (e.g., state vars depending on material parameters...) !
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import buildSchemaFromOptions
 
 inputLanguage = InputLanguage()
 
@@ -51,6 +56,19 @@ for module in modules:
     kw.addOptionalArg("elSet", "The element set for application of the boundary condition.", str, "all")
 
     documentation.append(kw)
+
+
+@dataclass(frozen=True)
+class InitializeMaterialSchema:
+    """L2: the scalar options of the ``initializematerial`` keyword, owned by this module and never
+    mutated from outside it.
+
+    Declares no fields at all: ``elSet`` is the keyword's only option, and it is *not* a schema
+    field -- it names an existing model object, resolved by :meth:`fromStepActionDefinition` before
+    the schema is even built, exactly like every other category's structural names. The empty
+    schema is still built (rather than skipped) so a misspelled option is rejected the same way as
+    for every other module.
+    """
 
 
 class StepAction(StepActionBase):
@@ -69,6 +87,9 @@ class StepAction(StepActionBase):
         The element set whose materials are initialized.
     """
 
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = InitializeMaterialSchema
+
     def __init__(self, name: str, elementSet):
         self.name = name
 
@@ -79,9 +100,18 @@ class StepAction(StepActionBase):
     @classmethod
     def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
         """Build this step action from a parsed ``>>initializematerial`` definition. See
-        :class:`StepActionBase` for why this is separate from ``__init__``."""
+        :class:`StepActionBase` for why this is separate from ``__init__``.
 
-        return cls(name, model.elementSets[definition["elSet"]])
+        ``name`` and the parser's bookkeeping keys are stripped, and ``elSet`` is structural (it
+        names a model object), so both are popped before the (empty) remainder is validated
+        against :class:`InitializeMaterialSchema`."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        elSetName = definition.pop("elSet")
+        buildSchemaFromOptions(cls.schema, definition)
+
+        return cls(name, model.elementSets[elSetName])
 
     def applyAtStepEnd(self, model, stepMagnitude=None):
         self.active = False

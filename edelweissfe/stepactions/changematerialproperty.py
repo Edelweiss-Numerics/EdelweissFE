@@ -27,12 +27,15 @@
 #  ---------------------------------------------------------------------
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from edelweissfe.stepactions.base.amplitude import amplitudeFromExpression
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 Stepaction to change material properties.
@@ -56,6 +59,30 @@ for module in modules:
     kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
 
     documentation.append(kw)
+
+
+@dataclass(frozen=True)
+class ChangeMaterialPropertySchema:
+    """L2: the scalar options of the ``changematerialproperty`` keyword, owned by this module and
+    never mutated from outside it.
+
+    ``material`` is *not* a schema field: it names an existing model object, resolved by
+    :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
+    category's structural names.
+    """
+
+    index: int | None = schemaField(
+        description="The index of the property in the material properties vector",
+        dtype=int,
+        default=None,
+        required=True,
+    )
+    f_t: str | None = schemaField(
+        description="Define an amplitude in the step progress interval [0...1]",
+        dtype=str,
+        default=None,
+        optionName="f(t)",
+    )
 
 
 class StepAction(StepActionBase):
@@ -91,6 +118,9 @@ class StepAction(StepActionBase):
     journal
         The journal object for logging.
     """
+
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = ChangeMaterialPropertySchema
 
     def __init__(self, name, material, index: int, f_t: Callable[[float], float], model, journal):
         self.name = name
@@ -128,7 +158,12 @@ class StepAction(StepActionBase):
             The constructed step action.
         """
 
-        f_t = amplitudeFromExpression(definition["f(t)"])
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        materialName = definition.pop("material")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+
+        f_t = amplitudeFromExpression(configuration.f_t)
 
         if f_t is None:
             raise ValueError(
@@ -138,8 +173,8 @@ class StepAction(StepActionBase):
 
         return cls(
             name,
-            CaseInsensitiveDict(model.materials)[definition["material"]],
-            int(definition["index"]),
+            CaseInsensitiveDict(model.materials)[materialName],
+            configuration.index,
             f_t,
             model,
             journal,
@@ -165,7 +200,12 @@ class StepAction(StepActionBase):
             The journal object for logging.
         """
 
-        self.updateStepAction(amplitudeFromExpression(definition["f(t)"]))
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        definition.pop("material")
+        configuration = buildSchemaFromOptions(self.schema, definition)
+
+        self.updateStepAction(amplitudeFromExpression(configuration.f_t))
 
     def updateStepAction(self, f_t: Callable[[float], float] = None):
         """Prescribe a new property function, and set the action active again.

@@ -34,10 +34,15 @@
 Initialize materials to an geostatic stress state
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 inputLanguage = InputLanguage()
 
@@ -59,6 +64,26 @@ for module in modules:
     kw.addOptionalArg("elSet", "The element set for which the initaliziation is performed", str, "all")
 
     documentation.append(kw)
+
+
+@dataclass(frozen=True)
+class GeostaticSchema:
+    """L2: the scalar options of the ``geostatic`` keyword, owned by this module and never mutated
+    from outside it.
+
+    ``elSet`` is *not* a schema field: it names an existing model object, resolved by
+    :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
+    category's structural names.
+    """
+
+    p1: float | None = schemaField(
+        description="sig_x=sig_y=sig_z in first point.", dtype=float, default=None, required=True
+    )
+    p2: float | None = schemaField(description="sig_x=sig_y=sig_z in second point.", dtype=float, default=None)
+    h1: float | None = schemaField(description="y coordinate of first point", dtype=float, default=1.0)
+    h2: float | None = schemaField(description="y coordinate of second point", dtype=float, default=-1.0)
+    xLateral: float | None = schemaField(description="ratio of sig_x/sig_y, default=1.0", dtype=float, default=1.0)
+    zLateral: float | None = schemaField(description="ratio of sig_z/sig_y, default=1.0", dtype=float, default=1.0)
 
 
 class StepAction(StepActionBase):
@@ -91,6 +116,9 @@ class StepAction(StepActionBase):
     journal
         The journal object for logging.
     """
+
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = GeostaticSchema
 
     def __init__(
         self,
@@ -134,20 +162,28 @@ class StepAction(StepActionBase):
         """Build this step action from a parsed ``>>geostatic`` definition. See
         :class:`StepActionBase` for why this is separate from ``__init__``.
 
-        An omitted ``p2`` defaults to ``p1`` -- this is input-file convenience, so the defaulting
-        happens here rather than in ``__init__``, which requires both to be passed explicitly."""
+        ``name`` and the parser's bookkeeping keys are stripped, and ``elSet`` is structural (it
+        names a model object), so both are popped before the remaining options are validated
+        against :class:`GeostaticSchema`. An omitted ``p2`` defaults to ``p1`` -- this is
+        input-file convenience, so the defaulting happens here rather than in ``__init__``, which
+        requires both to be passed explicitly."""
 
-        p2 = definition["p2"] if definition["p2"] is not None else definition["p1"]
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        elSetName = definition.pop("elSet")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+
+        p2 = configuration.p2 if configuration.p2 is not None else configuration.p1
 
         return cls(
             name,
-            model.elementSets[definition["elSet"]],
-            definition["p1"],
+            model.elementSets[elSetName],
+            configuration.p1,
             p2,
-            definition["h1"],
-            definition["h2"],
-            definition["xLateral"],
-            definition["zLateral"],
+            configuration.h1,
+            configuration.h2,
+            configuration.xLateral,
+            configuration.zLateral,
             journal,
         )
 

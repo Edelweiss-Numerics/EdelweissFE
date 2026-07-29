@@ -32,10 +32,15 @@
 Pass initial conditions to elements.
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 inputLanguage = InputLanguage()
 
@@ -53,6 +58,29 @@ for module in modules:
     kw.addOptionalArg("elSet", "The element set for which the initaliziation is performed", str, "all")
 
     documentation.append(kw)
+
+
+@dataclass(frozen=True)
+class SetInitialConditionsSchema:
+    """L2: the scalar options of the ``setinitialconditions`` keyword, owned by this module and
+    never mutated from outside it.
+
+    ``elSet`` is *not* a schema field: it names an existing model object, resolved by
+    :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
+    category's structural names. The field is called ``propertyName`` rather than ``property`` to
+    avoid shadowing the ``property`` builtin, hence the ``optionName`` indirection.
+    """
+
+    propertyName: str | None = schemaField(
+        description="The name of the property to be initialized",
+        dtype=str,
+        default=None,
+        required=True,
+        optionName="property",
+    )
+    values: str | None = schemaField(
+        description="Comma separated property values.", dtype=str, default=None, required=True
+    )
 
 
 class StepAction(StepActionBase):
@@ -80,6 +108,9 @@ class StepAction(StepActionBase):
         The property values.
     """
 
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = SetInitialConditionsSchema
+
     def __init__(self, name: str, elementSet, propertyName: str, values: np.ndarray):
         self.name = name
 
@@ -91,13 +122,22 @@ class StepAction(StepActionBase):
     @classmethod
     def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
         """Build this step action from a parsed ``>>setinitialconditions`` definition. See
-        :class:`StepActionBase` for why this is separate from ``__init__``."""
+        :class:`StepActionBase` for why this is separate from ``__init__``.
+
+        ``name`` and the parser's bookkeeping keys are stripped, and ``elSet`` is structural (it
+        names a model object), so both are popped before the remaining options are validated
+        against :class:`SetInitialConditionsSchema`."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        elSetName = definition.pop("elSet")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
 
         return cls(
             name,
-            model.elementSets[definition["elSet"]],
-            definition["property"],
-            np.fromstring(definition["values"], dtype=float, sep=","),
+            model.elementSets[elSetName],
+            configuration.propertyName,
+            np.fromstring(configuration.values, dtype=float, sep=","),
         )
 
     def applyAtStepEnd(self, model, stepMagnitude=None):
