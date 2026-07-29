@@ -98,13 +98,10 @@ resolves here. What is still outside the registry is *not* a category:
 
 - The ``provider`` axis of ``config/elementlibrary.py``/``config/materiallibrary.py`` -- a namespace
   selector rather than a name lookup, see the paragraph above.
-- ``config/solvers.py``'s ``solverLibrary`` and ``config/outputmanagers.py``, which survive purely as
-  Sphinx rendering targets and resolve nothing.
-- ``config/sections.py``'s ``getSectionFactoryByName`` and ``config/analyticalfields.py``'s
-  ``getAnalyticalFieldFactoryByName``, which still ``importlib`` their module by hand -- but to reach
-  a *second* attribute (``sectionFactory`` / ``analyticalFieldFactory``, the pre-schema construction
-  protocol P2 deleted for output managers), not to resolve the ``Section`` /``AnalyticalField`` class
-  this table already covers. They go away with the L1/L2 split, not with a registry entry.
+- ``config/solvers.py``'s ``solverLibrary``, ``config/outputmanagers.py``, ``config/sections.py``
+  and ``config/analyticalfields.py``, which survive purely as Sphinx rendering targets and resolve
+  nothing (the pre-schema ``sectionFactory``/``analyticalFieldFactory`` construction protocol was
+  deleted along with the ``section``/``analyticalfield`` L1/L2 split).
 """
 
 from __future__ import annotations

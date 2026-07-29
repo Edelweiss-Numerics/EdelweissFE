@@ -32,9 +32,8 @@
 Analytical fields define values for spatial coordinates, e.g., for spatially varying material properties.
 """
 
-import importlib
-
-
-def getAnalyticalFieldFactoryByName(name):
-    module = importlib.import_module("edelweissfe.analyticalfields." + name.lower())
-    return module.analyticalFieldFactory
+# This module deliberately holds no code any more. The L1/L2/L4 split replaced its construction
+# protocol (``getAnalyticalFieldFactoryByName``) with the L3 registry's ``analyticalfield``
+# category, see :mod:`edelweissfe.config.registry`. The module survives for the docstring above,
+# which is user-facing prose rendered by ``doc/source/documentation/analyticalfields.rst`` via
+# ``.. automodule:: edelweissfe.config.analyticalfields``; deleting the file would break that build.

@@ -44,7 +44,6 @@ employing an Abaqus-like syntax.
 import numpy as np
 
 from edelweissfe.config import registry
-from edelweissfe.config.analyticalfields import getAnalyticalFieldFactoryByName
 from edelweissfe.config.constraints import getConstraintClass
 from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.materiallibrary import getMaterialClass
@@ -524,8 +523,25 @@ class AbqModelConstructor:
             # analytical fields accept no module level keywords
             analyticalFieldKwargs = convertLinesToStringDictionary(data)
 
-            analyticalFieldFactory = getAnalyticalFieldFactoryByName(analyticalFieldType)
-            analyticalField = analyticalFieldFactory(analyticalFieldName, model, **analyticalFieldKwargs)
+            analyticalFieldClass, analyticalFieldSchema = registry.lookup("analyticalfield", analyticalFieldType)
+
+            if analyticalFieldSchema is None:
+                raise ValueError(
+                    f"Analytical field '{analyticalFieldType}' declares no option schema. Declare "
+                    "one as a `schema` class attribute (see "
+                    "`edelweissfe.utils.schema.OptionSchemaProvider`)."
+                )
+
+            try:
+                configuration = buildSchemaFromOptions(analyticalFieldSchema, analyticalFieldKwargs)
+            except ValueError as e:
+                e.args = (
+                    f"Error during parsing of keyword {keywordIdentifier}analyticalField "
+                    f"(type={analyticalFieldType}): " + e.args[0],
+                )
+                raise e
+
+            analyticalField = analyticalFieldClass(analyticalFieldName, model, configuration=configuration)
 
             model.analyticalFields[analyticalFieldName] = analyticalField
 
