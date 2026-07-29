@@ -29,7 +29,9 @@
 
 # @author: Matthias Neuner
 
+import dataclasses
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -41,7 +43,14 @@ from edelweissfe.stepactions.base.amplitude import (
 )
 from edelweissfe.stepactions.base.nodalloadbase import NodalLoadBase
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import (
+    buildSchemaFromOptions,
+    coercePresentOptions,
+    schemaField,
+)
 
 """
 Apply node forces on a nSet.
@@ -102,6 +111,53 @@ for module in modules:
     documentation.append(kw)
 
 
+@dataclass(frozen=True)
+class NodeForcesSchema:
+    """L2: the scalar options of the ``nodeforces`` keyword, owned by this module and never mutated
+    from outside it.
+
+    ``nSet`` is *not* a schema field: it names an existing model object, resolved by
+    :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
+    category's structural names. ``field`` stays a schema field -- it is used as a plain string tag
+    (to compute the field size), never looked up in a model dict. The numbered components ``1``..
+    ``6`` are not valid Python identifiers, hence the ``optionName`` indirection on
+    ``component1``..``component6``.
+    """
+
+    field: str | None = schemaField(
+        description="Field for which the boundary condition is active.", dtype=str, default=None, required=True
+    )
+    component1: float | None = schemaField(
+        description="Prescribe first component of field.", dtype=float, default=None, optionName="1"
+    )
+    component2: float | None = schemaField(
+        description="Prescribe second component of field.", dtype=float, default=None, optionName="2"
+    )
+    component3: float | None = schemaField(
+        description="Prescribe third component of field.", dtype=float, default=None, optionName="3"
+    )
+    component4: float | None = schemaField(
+        description="Prescribe fourth component of field.", dtype=float, default=None, optionName="4"
+    )
+    component5: float | None = schemaField(
+        description="Prescribe fifth component of field.", dtype=float, default=None, optionName="5"
+    )
+    component6: float | None = schemaField(
+        description="Prescribe sixth component of field.", dtype=float, default=None, optionName="6"
+    )
+    components: str | None = schemaField(
+        description="Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
+        dtype=str,
+        default=None,
+    )
+    f_t: str | None = schemaField(
+        description="Define an amplitude in the step progress interval [0...1]",
+        dtype=str,
+        default=None,
+        optionName="f(t)",
+    )
+
+
 class StepAction(NodalLoadBase):
     """Defines node based load, defined on a nodeset.
 
@@ -132,6 +188,9 @@ class StepAction(NodalLoadBase):
         The amplitude over the step progress interval ``[0...1]``. Defaults to the identity, i.e. the
         forces are reached linearly at the end of the step.
     """
+
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    schema = NodeForcesSchema
 
     def __init__(
         self,
@@ -164,37 +223,47 @@ class StepAction(NodalLoadBase):
     @classmethod
     def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
         """Build these node forces from a parsed ``>>nodeforces`` definition. See
-        :class:`StepActionBase` for why this is separate from ``__init__``."""
+        :class:`StepActionBase` for why this is separate from ``__init__``.
 
-        field = definition["field"]
+        ``name`` and the parser's bookkeeping keys are stripped, and ``nSet`` is structural (it
+        names a model object), so both are popped before the remaining options are validated
+        against :class:`NodeForcesSchema`."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        nSetName = definition.pop("nSet")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
 
         return cls(
             name,
-            model.nodeSets[definition["nSet"]],
-            field,
-            cls._nodeForcesFromDefinition(definition, getFieldSize(field, model.domainSize)),
+            model.nodeSets[nSetName],
+            configuration.field,
+            cls._nodeForcesFromDefinition(configuration, getFieldSize(configuration.field, model.domainSize)),
             model,
             journal,
-            f_t=amplitudeFromExpression(definition["f(t)"]),
+            f_t=amplitudeFromExpression(configuration.f_t),
         )
 
     def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
         """Update from a parsed ``>>nodeforces`` definition re-declared in a later step.
 
-        Neither ``nSet`` nor ``field`` may be read here: a *partial* re-declaration
-        (``>>nodeforces, name=cloadTop, 2=-10, f(t)=sin(t*2*pi)``, as in
-        ``testfiles/marmot/NodeForces/test.inp``) omits them, and the parser then validates the line
-        against the ``update`` + keyword-name schema, i.e. the ``updateNodeforces`` keyword declared
-        above (``utils/inputfileparser.py``, ``parseModuleKeywordLine``), whose definition contains
-        no ``nSet``/``field`` keys at all. The field size therefore comes from the instance -- which
-        is also the right source, since the node set a load acts on cannot change. Note that only
-        the *schema* is live: a ``>>updateNodeforces`` keyword *line* is unroutable, because the
-        parser would look for a step action module of that name (see PLAN_INPUT_SYSTEM.md's P3
-        row)."""
+        A re-declaration is validated either against the full ``nodeforces`` keyword (restating
+        every required arg, including ``nSet``/``field``) or, if it omits them, against the
+        ``updateNodeforces`` schema instead (``utils/inputfileparser.py``,
+        ``parseModuleKeywordLine``) -- which declares no ``nSet``/``field`` of its own at all. So
+        this uses :func:`~edelweissfe.utils.schema.coercePresentOptions`, not
+        :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`: only whatever keys are actually
+        present are validated, and ``field`` is never read here regardless of which of the two the
+        parser matched -- the field size comes from the instance instead, which is also the right
+        source, since the node set a load acts on cannot change."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        configuration = dataclasses.replace(self.schema(), **coercePresentOptions(self.schema, definition))
 
         self.updateStepAction(
-            self._nodeForcesFromDefinition(definition, self._fieldSize),
-            f_t=amplitudeFromExpression(definition["f(t)"]),
+            self._nodeForcesFromDefinition(configuration, self._fieldSize),
+            f_t=amplitudeFromExpression(configuration.f_t),
         )
 
     def _reconcileIfSetChanged(self):
@@ -271,9 +340,9 @@ class StepAction(NodalLoadBase):
         return self._nSet
 
     @staticmethod
-    def _nodeForcesFromDefinition(definition: dict, fieldSize: int) -> np.ndarray:
-        """Collect the per-node force vector from a parsed definition's ``1``..``6`` and
-        ``components``.
+    def _nodeForcesFromDefinition(configuration: "NodeForcesSchema", fieldSize: int) -> np.ndarray:
+        """Collect the per-node force vector from a validated ``NodeForcesSchema``'s ``component1``..
+        ``component6`` and ``components`` fields.
 
         Note the deliberate difference to ``dirichlet``, which offers options of the same names: an
         entry of ``x`` means *free* to a boundary condition, so dirichlet maps it to ``np.nan`` and
@@ -282,8 +351,8 @@ class StepAction(NodalLoadBase):
 
         Parameters
         ----------
-        definition
-            The parsed option mapping defining this step action.
+        configuration
+            The validated options of this step action.
         fieldSize
             The number of components the field has.
 
@@ -293,14 +362,23 @@ class StepAction(NodalLoadBase):
             The force applied to every node of the set, one entry per field component.
         """
 
-        if definition["components"] is not None:
-            return np.asarray(eval(definition["components"].replace("x", "0")), dtype=float)
+        if configuration.components is not None:
+            return np.asarray(eval(configuration.components.replace("x", "0")), dtype=float)
+
+        numberedComponents = (
+            configuration.component1,
+            configuration.component2,
+            configuration.component3,
+            configuration.component4,
+            configuration.component5,
+            configuration.component6,
+        )
 
         nodeForces = np.zeros(fieldSize)
 
         for index in range(fieldSize):
-            if definition[str(index + 1)] is not None:
-                nodeForces[index] = float(definition[str(index + 1)])
+            if numberedComponents[index] is not None:
+                nodeForces[index] = numberedComponents[index]
 
         return nodeForces
 
