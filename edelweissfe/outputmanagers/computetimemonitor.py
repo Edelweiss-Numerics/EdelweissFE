@@ -33,7 +33,6 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.utils.fieldoutput import FieldOutputController
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.performancetiming import extractIncrementTimes
 from edelweissfe.utils.plotter import Plotter
 from edelweissfe.utils.schema import schemaField
@@ -48,36 +47,11 @@ Prints the compute times per increment to the screen and writes them into a file
         export=myComputeTimes
 """
 
-module = Module(
-    "computetimemonitor", "A simple monitor to observe results (fieldOutputs) in the console during analysis."
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "output"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addOptionalArg("export", "Provide a filename to export the results.", str, None)
-
-documentation = [module]
-
-required = [kw.name for kw in module.requiredArgs]
-required += [kw.name for kw in module.requiredKeywords]
-
-optional = [kw.name for kw in module.optionalArgs]
-optional += [kw.name for kw in module.optionalKeywords]
-
 
 @dataclass(frozen=True)
 class ComputeTimeMonitorSchema:
     """L2: the options this output manager accepts, owned by this module and never mutated from
     outside it.
-
-    Mirrors the ``module.addOptionalArg(...)`` declaration above one-for-one, including the default,
-    and is the schema the L3 registry hands out for ``("outputmanager", "computetimemonitor")``. The
-    two declarations coexist while the migration is in progress; the ``Module`` one goes away with
-    the ``InputLanguage`` singleton in P5.
     """
 
     export: str | None = schemaField(description="Provide a filename to export the results.", dtype=str, default=None)
@@ -99,7 +73,7 @@ class OutputManager(OutputManagerBase):
         *,
         configuration: ComputeTimeMonitorSchema = ComputeTimeMonitorSchema(),
     ):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement and
+        """L1: constructible standalone, with no parser involvement and
         no ``moduleOptions``. Options arrive as an already-validated, already-typed schema instance,
         so nothing here coerces strings or inspects dictionaries.
 

@@ -48,9 +48,8 @@ class does to itself. :func:`coercePresentOptions` is the partial-application si
 :func:`buildSchemaFromOptions`, for *overriding* a subset of an already-constructed instance's
 fields (via ``dataclasses.replace``) rather than building a fresh, fully-defaulted one.
 
-The coercion logic mirrors, rather than reinvents, the casting already performed by
-``edelweissfe.utils.inputlanguage.KeywordArg.getValueFromKwargs`` and
-``castKwargsValuesAndAddDefaults``: a value destined for a ``bool`` field goes through
+The coercion logic mirrors, rather than reinvents, the casting performed by the (now-removed)
+pre-schema mechanism it replaced: a value destined for a ``bool`` field goes through
 :func:`edelweissfe.utils.misc.asBool` (tolerant of a real ``bool``, otherwise
 ``strtobool``-parsed), and any other value is passed through unchanged if it is already an
 instance of the target type, otherwise coerced via ``dtype(value)``. Nothing here changes what a
@@ -758,12 +757,11 @@ def buildSchemaFromOptions(
 ) -> Any:
     """Build an instance of a schema dataclass from a (possibly mis-cased, string-valued) mapping.
 
-    This is the L4-facing counterpart of ``castKwargsValuesAndAddDefaults`` /
-    ``caseInsensitiveKwargsChecker`` in ``inputlanguage.py``: resolve case-insensitive keys
-    (:func:`resolveCaseInsensitiveOptions`), coerce each present value to its field's declared
-    ``dtype`` (:func:`coerceValue`), and let the dataclass constructor fill in defaults for any
-    field that was not present in ``options`` -- exactly as ``OptionalKeywordArg.default`` does
-    today, just expressed as an ordinary Python default value instead of a side object.
+    This is the L4-facing counterpart of the pre-schema cast-and-default/kwargs-check mechanism it
+    replaced: resolve case-insensitive keys (:func:`resolveCaseInsensitiveOptions`), coerce each
+    present value to its field's declared ``dtype`` (:func:`coerceValue`), and let the dataclass
+    constructor fill in defaults for any field that was not present in ``options``, expressed as an
+    ordinary Python default value.
 
     An option whose value is ``None`` is treated as **not supplied**, so the field's default
     applies. This is deliberate and is decided here, once, rather than in each L4 adapter. The
@@ -772,10 +770,10 @@ def buildSchemaFromOptions(
     test), and coercing that ``None`` would be actively harmful rather than merely useless: for a
     ``str``-typed option, ``coerceValue(None, str)`` yields the *string* ``"None"``, which is
     truthy, so "the user said nothing" would silently become a real value -- an export filename
-    literally called ``None``, for instance. Legacy avoided this only by construction, coercing
-    exclusively the keys actually present in the kwargs
-    (``utils/misc.py``'s ``castKwargsValuesAndAddDefaults``); stating the rule explicitly here
-    means an adapter cannot reintroduce the trap by passing definition-level keys straight in.
+    literally called ``None``, for instance. The pre-schema mechanism avoided this only by
+    construction, coercing exclusively the keys actually present in the kwargs; stating the rule
+    explicitly here means an adapter cannot reintroduce the trap by passing definition-level keys
+    straight in.
 
     Key *names* are still validated before values are examined, so a misspelled option raises even
     if its value happens to be ``None``, and a required field given ``None`` is reported as missing

@@ -33,7 +33,6 @@ from dataclasses import dataclass
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.math import execModelAccessibleExpression
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
@@ -41,24 +40,6 @@ from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 """This step action may be used for updating something in the model at the beginning
 of a step.
 """
-
-
-inputLanguage = InputLanguage()
-
-# Register this step action for all available step types. This requires the step type
-# modules to be imported before the step actions, as done in the input file parser.
-modules = inputLanguage["step"].modules if "step" in inputLanguage else []
-
-documentation = []
-
-for module in modules:
-    kw = module.addOptionalKeyword(
-        "modelupdate", "This step action may be used for updating the model at the beginning of a step."
-    )
-    # kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("update", "Model accessible, executable expression", str)
-
-    documentation.append(kw)
 
 
 @dataclass(frozen=True)

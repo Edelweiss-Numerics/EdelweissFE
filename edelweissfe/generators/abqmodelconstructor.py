@@ -57,7 +57,7 @@ from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.surfaces.entitybasedsurface import EntityBasedSurface
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import (
+from edelweissfe.utils.inputfileparser import (
     keywordIdentifier,
     moduleLevelKeywordIdentifier,
 )
@@ -66,23 +66,12 @@ from edelweissfe.utils.misc import (
     convertLinesToMixedDictionary,
     convertLinesToStringDictionary,
     isInteger,
+    parseDatalinesToArgsAndKwargs,
     splitLineAtCommas,
     splitLinesAtCommas,
     withoutParserBookkeeping,
 )
 from edelweissfe.utils.schema import buildSchemaFromOptions
-
-# isort: off
-from edelweissfe.utils.inputfileparser import inputLanguage  # noqa: F811
-
-from edelweissfe.analyticalfields.randomscalar import inputLanguage  # noqa: F811
-from edelweissfe.analyticalfields.fromvtk import inputLanguage  # noqa: F811
-from edelweissfe.analyticalfields.scalarexpression import inputLanguage  # noqa: F811
-
-from edelweissfe.sections.solid import inputLanguage  # noqa: F811
-from edelweissfe.sections.plane import inputLanguage  # noqa: F811
-
-# isort: on
 
 
 class AbqModelConstructor:
@@ -360,9 +349,7 @@ class AbqModelConstructor:
             constraintType = constraintKwArgs.pop("type")
             data = constraintKwArgs.pop("datalines")
 
-            module = inputLanguage["constraint"].getModule(constraintType)
-
-            args, kwargs = module.parseDatalines(data)
+            args, kwargs = parseDatalinesToArgsAndKwargs(data)
 
             constraintClass = getConstraintClass(constraintType)
             constraint = constraintClass.fromConstraintDefinition(name, kwargs, model, journal=self.journal)
@@ -399,9 +386,7 @@ class AbqModelConstructor:
             modifierType = modifierKwArgs.pop("type")
             data = modifierKwArgs.pop("datalines")
 
-            module = inputLanguage["modelModifier"].getModule(modifierType)
-
-            args, kwargs = module.parseDatalines(data)
+            args, kwargs = parseDatalinesToArgsAndKwargs(data)
             if "moduleOptions" in modifierKwArgs:
                 kwargs["moduleOptions"] = modifierKwArgs["moduleOptions"]
 
@@ -444,9 +429,7 @@ class AbqModelConstructor:
             if name in model.sections:
                 raise Exception(f"Section with name {name} already exists")
 
-            module = inputLanguage["section"].getModule(sectionType)
-
-            args, kwargs = module.parseDatalines(data)
+            args, kwargs = parseDatalinesToArgsAndKwargs(data)
             # sectionKwArgs.update(kwargs)
 
             for elSet in args:

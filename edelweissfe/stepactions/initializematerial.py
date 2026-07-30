@@ -38,24 +38,8 @@ import numpy as np
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
-
-inputLanguage = InputLanguage()
-
-# Register this step action for all available step types. This requires the step type
-# modules to be imported before the step actions, as done in the input file parser.
-modules = inputLanguage["step"].modules if "step" in inputLanguage else []
-
-documentation = []
-
-for module in modules:
-    kw = module.addOptionalKeyword("initializematerial", "Standard distributed load, applied on a surface set.")
-    kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addOptionalArg("elSet", "The element set for application of the boundary condition.", str, "all")
-
-    documentation.append(kw)
 
 
 @dataclass(frozen=True)

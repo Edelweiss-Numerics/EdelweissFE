@@ -39,7 +39,6 @@ from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.fieldoutput import FieldOutputController
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.math import createMathExpression
 from edelweissfe.utils.plotter import Plotter
 from edelweissfe.utils.schema import schemaField
@@ -49,48 +48,13 @@ Plot result for a nodeSet or an elementSet along the true geometrical distance.
 Corresponds to the plot along path functionality in Abaqus.
 """
 
-module = Module(
-    "plotAlongPath",
-    "Plot result for a nodeSet or an elementSet along the true geometrical distance.",
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "output"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg("fieldOutput", "Name of the field output.", str)
-
-module.addOptionalArg("figure", "Figure of the plotter.", int, 1)
-module.addOptionalArg("axSpec", "AxSpec (MATLAB syntax) in the figure.", int, 111)
-module.addOptionalArg("normalize", "Normalize results.", int, 111)
-module.addOptionalArg("label", "Label.", str, None)
-
-module.addOptionalArg("f(x)", "Function to apply in each increment.", str, None)
-module.addOptionalArg("nStages", "", int, 1)
-module.addOptionalArg("export", "Export the field output to a file at the end of the job.", str, None)
-
-documentation = [module]
-
-required = [kw.name for kw in module.requiredArgs]
-required += [kw.name for kw in module.requiredKeywords]
-
-optional = [kw.name for kw in module.optionalArgs]
-optional += [kw.name for kw in module.optionalKeywords]
-
 
 @dataclass(frozen=True)
 class PlotAlongPathSchema:
     """L2: the options this output manager accepts, owned by this module and never mutated from
     outside it.
 
-    Mirrors the ``module.addRequiredArg(...)``/``module.addOptionalArg(...)`` declarations above
-    one-for-one, including defaults, and is the schema the L3 registry hands out for
-    ``("outputmanager", "plotalongpath")``. The two declarations coexist while the migration is in
-    progress; the ``Module`` one goes away with the ``InputLanguage`` singleton in P5.
-
-    ``fieldOutput`` is declared ``required=True`` explicitly, mirroring ``addRequiredArg`` above,
+    ``fieldOutput`` is declared ``required=True`` explicitly,
     but is still given ``default=None`` -- purely so that ``PlotAlongPathSchema()`` (the fixed L1
     constructor-default shape used by every ported output manager) is constructible without an
     argument at import time. A caller going through the L4 adapter still must supply
@@ -136,7 +100,7 @@ class OutputManager(OutputManagerBase):
         *,
         configuration: PlotAlongPathSchema = PlotAlongPathSchema(),
     ):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement and
+        """L1: constructible standalone, with no parser involvement and
         no ``moduleOptions``. Options arrive as an already-validated, already-typed schema instance,
         so nothing here coerces strings or inspects dictionaries.
 

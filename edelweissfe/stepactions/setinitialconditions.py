@@ -38,26 +38,8 @@ import numpy as np
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
-
-inputLanguage = InputLanguage()
-
-# Register this step action for all available step types. This requires the step type
-# modules to be imported before the step actions, as done in the input file parser.
-modules = inputLanguage["step"].modules if "step" in inputLanguage else []
-
-documentation = []
-
-for module in modules:
-    kw = module.addOptionalKeyword("setinitialconditions", "Pass initial conditions to elements.")
-    # kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("property", "The name of the property to be initialized", str)
-    kw.addRequiredArg("values", "Comma separated property values.", str)
-    kw.addOptionalArg("elSet", "The element set for which the initaliziation is performed", str, "all")
-
-    documentation.append(kw)
 
 
 @dataclass(frozen=True)
@@ -69,9 +51,9 @@ class SetInitialConditionsSchema:
     :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
     category's structural names, declared here purely so the rendered grammar surface documents it
     -- :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` never actually sees the key. Unlike
-    every other step action, ``setinitialconditions`` declares no ``name`` argument at all (see the
-    commented-out ``addRequiredArg`` above). The field is called ``propertyName`` rather than
-    ``property`` to avoid shadowing the ``property`` builtin, hence the ``optionName`` indirection.
+    every other step action, ``setinitialconditions`` declares no ``name`` argument at all. The
+    field is called ``propertyName`` rather than ``property`` to avoid shadowing the ``property``
+    builtin, hence the ``optionName`` indirection.
     """
 
     propertyName: str | None = schemaField(

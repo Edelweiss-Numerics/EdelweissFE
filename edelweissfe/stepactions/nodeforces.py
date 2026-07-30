@@ -44,7 +44,6 @@ from edelweissfe.stepactions.base.amplitude import (
 from edelweissfe.stepactions.base.nodalloadbase import NodalLoadBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
 from edelweissfe.utils.schema import (
     buildSchemaFromOptions,
@@ -55,60 +54,6 @@ from edelweissfe.utils.schema import (
 """
 Apply node forces on a nSet.
 """
-
-
-inputLanguage = InputLanguage()
-
-# Register this step action for all available step types. This requires the step type
-# modules to be imported before the step actions, as done in the input file parser.
-modules = inputLanguage["step"].modules if "step" in inputLanguage else []
-
-documentation = []
-
-for module in modules:
-    kw = module.addOptionalKeyword("nodeforces", "Apply node forces on node sets.")
-    kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("nSet", "The node set for application of the boundary condition.", str)
-    kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
-
-    kw.addOptionalArg("1", "Prescribe first component of field.", float, None)
-    kw.addOptionalArg("2", "Prescribe second component of field.", float, None)
-    kw.addOptionalArg("3", "Prescribe third component of field.", float, None)
-    kw.addOptionalArg("4", "Prescribe fourth component of field.", float, None)
-    kw.addOptionalArg("5", "Prescribe fifth component of field.", float, None)
-    kw.addOptionalArg("6", "Prescribe sixth component of field.", float, None)
-
-    kw.addOptionalArg(
-        "components",
-        "Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
-        str,
-        None,
-    )
-    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
-
-    documentation.append(kw)
-
-    kw = module.addOptionalKeyword("updateNodeforces", "Update a previously defined nodeforces definition.")
-    kw.addRequiredArg("name", "Name of the step action to update.", str)
-    # kw.addRequiredArg("nSet", "The node set for application of the boundary condition.", str)
-    # kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
-
-    kw.addOptionalArg("1", "Prescribe first component of field.", float, None)
-    kw.addOptionalArg("2", "Prescribe second component of field.", float, None)
-    kw.addOptionalArg("3", "Prescribe third component of field.", float, None)
-    kw.addOptionalArg("4", "Prescribe fourth component of field.", float, None)
-    kw.addOptionalArg("5", "Prescribe fifth component of field.", float, None)
-    kw.addOptionalArg("6", "Prescribe sixth component of field.", float, None)
-
-    kw.addOptionalArg(
-        "components",
-        "Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
-        str,
-        None,
-    )
-    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
-
-    documentation.append(kw)
 
 
 @dataclass(frozen=True)

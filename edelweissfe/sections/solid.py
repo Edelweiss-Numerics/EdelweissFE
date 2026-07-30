@@ -34,45 +34,13 @@ from edelweissfe.sections.base.sectionbase import MaterialParameterFromFieldSche
 from edelweissfe.sections.base.sectionbase import Section as SectionBase
 from edelweissfe.sections.base.sectionbase import WriteMaterialPropertiesToFileSchema
 from edelweissfe.sets.elementset import ElementSet
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import datalineField, subKeywordField
-
-module = Module("solid", "This section represents a classical solid materal section.")
-
-inputLanguage = InputLanguage()
-
-keyword = "section"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredDatalines("elementSets as comma separated list of element sets for this section", str)
-
-kw = module.addOptionalKeyword("materialParameterFromField", "use material properties given by an analytical field")
-kw.addRequiredArg("index", "index of material parameter", int)
-kw.addRequiredArg("field", "name of analytical field", str)
-kw.addRequiredArg("type", "either 'setToValue' or 'scale'", str)
-kw.addOptionalArg("f(p,f)", "p...value of parameter from material definition; f...value of analytical field", str, "f")
-
-kw = module.addOptionalKeyword("writeMaterialPropertiesToFile", "export material properties to file")
-kw.addRequiredArg("filename", "file name for material property export", str)
-
-required = [kw.name for kw in module.requiredArgs]
-required += [kw.name for kw in module.requiredKeywords]
-
-optional = [kw.name for kw in module.optionalArgs]
-optional += [kw.name for kw in module.optionalKeywords]
-
-documentation = [module]
 
 
 @dataclass(frozen=True)
 class SolidSectionSchema:
     """L2: the options this section accepts, owned by this module and never mutated from outside
     it.
-
-    Mirrors the ``module.addOptionalKeyword(...)``/``module.addRequiredDatalines(...)``
-    declarations above one-for-one. The two declarations coexist while the migration is in
-    progress; the ``Module`` one goes away with the ``InputLanguage`` singleton in P5.
 
     ``elementSets`` is a :func:`~edelweissfe.utils.schema.datalineField`, additive-only: it
     documents the dataline payload's presence for the grammar surface, but is excluded from
@@ -109,7 +77,7 @@ class Section(SectionBase):
         *,
         configuration: SolidSectionSchema = SolidSectionSchema(),
     ):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        """L1: constructible standalone, with no parser involvement.
 
         Parameters
         ----------

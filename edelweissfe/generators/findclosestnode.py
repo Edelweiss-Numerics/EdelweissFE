@@ -41,34 +41,13 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.exceptions import WrongDomain
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import schemaField
-
-inputLanguage = InputLanguage()
-module = Module(
-    "findclosestnode", "Find the node closest to a given spatial position, and store it in an existing or new node set."
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "modelGenerator"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg("location", "Query point.", str)
-module.addRequiredArg("storeIn", "Node set to store closest node in.", str)
-
-documentation = [module]
 
 
 @dataclass(frozen=True)
 class FindClosestNodeSchema:
     """L2: the options this generator accepts, owned by this module and never mutated from outside
     it.
-
-    Mirrors the ``module.addRequiredArg(...)`` declarations above one-for-one. The two declarations
-    coexist while the migration is in progress; the ``Module`` one goes away with the
-    ``InputLanguage`` singleton in P5.
 
     Both fields are declared ``required=True`` explicitly, but are still given a ``default=None``
     so the schema remains constructible for the L1 constructor's default argument.
@@ -95,7 +74,7 @@ class Generator(GeneratorBase):
         *,
         configuration: FindClosestNodeSchema = FindClosestNodeSchema(),
     ):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        """L1: constructible standalone, with no parser involvement.
         Populates ``model`` directly; construction *is* the generation.
 
         Parameters

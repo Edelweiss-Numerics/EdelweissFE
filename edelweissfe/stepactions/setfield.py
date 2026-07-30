@@ -38,32 +38,12 @@ from edelweissfe.analyticalfields.base.analyticalfieldbase import (
 )
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-
-# from edelweissfe.utils.inputlanguage import InputLanguage
-from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 Set a field (via fieldOutput) to a predefined value.
 """
-
-inputLanguage = InputLanguage()
-
-# Register this step action for all available step types. This requires the step type
-# modules to be imported before the step actions, as done in the input file parser.
-modules = inputLanguage["step"].modules if "step" in inputLanguage else []
-
-documentation = []
-
-for module in modules:
-    kw = module.addOptionalKeyword("setfield", "Set a field (via fieldOutput) to a predefined value.")
-    kw.addOptionalArg("name", "Name of the step action.", str, "setfield")
-    kw.addRequiredArg("fieldOutput", "Field output to be set.", str)
-    kw.addRequiredArg("type", "Either 'uniform' or 'analyticalField'.", str)
-    kw.addRequiredArg("value", "Scalar value if type 'const'; name of analyticalField if type 'analyticalField'", str)
-
-    documentation.append(kw)
 
 
 @dataclass(frozen=True)
@@ -77,8 +57,7 @@ class SetFieldSchema:
     ``helpers/inputfilehelpers.py``. Both are declared here purely so the rendered grammar surface
     documents them -- :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` never actually sees
     either key. Unlike every other step action, ``name`` is *optional* here (it defaults to
-    ``"setfield"``), matching the legacy ``Module`` declaration's ``addOptionalArg`` rather than
-    ``addRequiredArg``. ``valueType`` is named to avoid shadowing the ``type`` builtin, hence the
+    ``"setfield"``). ``valueType`` is named to avoid shadowing the ``type`` builtin, hence the
     ``optionName`` indirection; ``value`` stays a plain string regardless of what ``valueType``
     says it means -- interpreting it (a numeric vector, or an analytical field name to resolve
     against the model) is :meth:`_valueFromDefinition`'s job, not the schema's.

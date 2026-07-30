@@ -40,39 +40,7 @@ from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.surfaces.entitybasedsurface import EntityBasedSurface
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import schemaField
-
-module = Module("pipegen", "A structured hex mesh generator for pipe geometries.")
-
-inputLanguage = InputLanguage()
-
-keyword = "modelGenerator"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addOptionalArg("x0", "Origin along the x axis.", float, 0.0)
-module.addOptionalArg("y0", "Origin along the y axis.", float, 0.0)
-module.addOptionalArg("z0", "Origin along the z axis.", float, 0.0)
-
-module.addOptionalArg("Ro(y)", "Outer radius of the pipe as a function of height.", str, "1.0")
-module.addOptionalArg("Ri(y)", "Inner radius of the pipe as a function of height.", str, "1.0")
-
-module.addOptionalArg("lT", "Thickness of the pipe.", float, 0.5)
-module.addOptionalArg("lY", "Height of the pipe.", float, 1.0)
-
-module.addOptionalArg("phi", "Total angle for the pipe sector.", float, 360.0)
-
-module.addOptionalArg("nT", "Number of elements along radial direction.", int, 1)
-module.addOptionalArg("nC", "Number of elements along circumferential direction.", int, 4)
-module.addOptionalArg("nY", "Number of elements along longitudinal direction.", int, 4)
-
-module.addOptionalArg("exG", "Flag to place nodes on exact geometry.", bool, True)
-
-module.addRequiredArg("elType", "Element type.", str)
-module.addOptionalArg("elProvider", "Element provider.", str, None)
-
-documentation = [module]
 
 
 @dataclass(frozen=True)
@@ -80,13 +48,9 @@ class PipegenSchema:
     """L2: the options this generator accepts, owned by this module and never mutated from
     outside it.
 
-    Mirrors the ``module.addOptionalArg``/``module.addRequiredArg(...)`` declarations above
-    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
-    one goes away with the ``InputLanguage`` singleton in P5.
-
     ``Ro(y)``/``Ri(y)`` are not valid Python identifiers, hence the ``optionName`` indirection --
     see ``optionName`` on :func:`~edelweissfe.utils.schema.schemaField`. ``elType`` is declared
-    ``required=True`` explicitly, mirroring ``addRequiredArg`` above, but is still given a
+    ``required=True`` explicitly, but is still given a
     ``default=None`` so the schema remains constructible for the L1 constructor's default argument.
     """
 
@@ -117,7 +81,7 @@ class Generator(GeneratorBase):
     schema = PipegenSchema
 
     def __init__(self, name: str, model: FEModel, journal: Journal, *, configuration: PipegenSchema = PipegenSchema()):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        """L1: constructible standalone, with no parser involvement.
         Populates ``model`` directly; construction *is* the generation.
 
         Parameters

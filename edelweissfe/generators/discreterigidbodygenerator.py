@@ -48,52 +48,8 @@ from edelweissfe.points.node import Node
 from edelweissfe.rigidbodies.discreterigidbody import DiscreteRigidBody
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.exceptions import WrongDomain
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.polyhedronmassproperties import computePolyhedronMassProperties
 from edelweissfe.utils.schema import schemaField
-
-module = Module(
-    "discreteRigidBodyGenerator",
-    "Generates a discrete rigid body from a surface mesh file (Exodus, STL, OBJ, or any other format readable by PyVista).",
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "modelGenerator"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg("filename", "The file path to the surface mesh (e.g., Exodus, STL, OBJ).", str)
-
-module.addOptionalArg(
-    "translation",
-    "A comma-separated 3D vector to translate the mesh globally upon initialization.",
-    str,
-    None,
-)
-module.addOptionalArg(
-    "density",
-    "The (uniform) mass density of the rigid body; if given, mass and rotary inertia are computed exactly "
-    "from the mesh geometry.",
-    float,
-    None,
-)
-module.addOptionalArg("mass", "The total mass of the rigid body. Overrides the density-based computation.", float, None)
-module.addOptionalArg(
-    "inertia",
-    "A comma-separated diagonal rotary inertia [Ixx, Iyy, Izz]. Overrides the density-based computation.",
-    str,
-    None,
-)
-module.addOptionalArg(
-    "rpCoordinate",
-    "A comma-separated explicit global coordinate for the reference point. Defaults to the (exact or "
-    "approximate) center of mass.",
-    str,
-    None,
-)
-
-documentation = [module]
 
 
 def _parseVector(value: str):
@@ -105,11 +61,7 @@ class DiscreteRigidBodyGeneratorSchema:
     """L2: the options this generator accepts, owned by this module and never mutated from
     outside it.
 
-    Mirrors the ``module.addRequiredArg``/``module.addOptionalArg(...)`` declarations above
-    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
-    one goes away with the ``InputLanguage`` singleton in P5.
-
-    ``filename`` is declared ``required=True`` explicitly, mirroring ``addRequiredArg`` above, but
+    ``filename`` is declared ``required=True`` explicitly, but
     is still given a ``default=None`` so the schema remains constructible for the L1 constructor's
     default argument. The comma-separated vector options stay ``str`` here, as they did in the
     legacy grammar -- parsing them (:func:`_parseVector`) is the L1 constructor's job, not the
@@ -174,7 +126,7 @@ class Generator(GeneratorBase):
         *,
         configuration: DiscreteRigidBodyGeneratorSchema = DiscreteRigidBodyGeneratorSchema(),
     ):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        """L1: constructible standalone, with no parser involvement.
         Populates ``model`` directly (via :func:`generateDiscreteRigidBodyFromMeshFile`);
         construction *is* the generation.
 

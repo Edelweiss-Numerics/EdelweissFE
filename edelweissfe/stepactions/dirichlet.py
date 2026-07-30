@@ -40,7 +40,6 @@ from edelweissfe.stepactions.base.amplitude import amplitudeFromExpression
 from edelweissfe.stepactions.base.dirichletbase import DirichletBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
 from edelweissfe.utils.schema import (
     buildSchemaFromOptions,
@@ -53,60 +52,11 @@ Standard Dirichlet boundary condition.
 If not modified in subsequent steps, the BC is held constant.
 """
 
-inputLanguage = InputLanguage()
-
-# Register this step action for all available step types. This requires the step type
-# modules to be imported before the step actions, as done in the input file parser.
-modules = inputLanguage["step"].modules if "step" in inputLanguage else []
-
-documentation = []
-
-
-def _addPrescriptionArgs(kw):
-    """Register the value prescription arguments, which are shared by the
-    'dirichlet' and 'updateDirichlet' keywords."""
-
-    kw.addOptionalArg("1", "Prescribe first component of field.", float, None)
-    kw.addOptionalArg("2", "Prescribe second component of field.", float, None)
-    kw.addOptionalArg("3", "Prescribe third component of field.", float, None)
-    kw.addOptionalArg("4", "Prescribe fourth component of field.", float, None)
-    kw.addOptionalArg("5", "Prescribe fifth component of field.", float, None)
-    kw.addOptionalArg("6", "Prescribe sixth component of field.", float, None)
-
-    kw.addOptionalArg(
-        "components",
-        "Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
-        str,
-        None,
-    )
-    kw.addOptionalArg("analyticalField", "Scales the defined boundary condition", str, None)
-    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
-
-
-for module in modules:
-    kw = module.addOptionalKeyword("dirichlet", "Standard Dirichlet boundary condition.")
-    kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("nSet", "The node set for application of the boundary condition.", str)
-    kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
-    _addPrescriptionArgs(kw)
-
-    documentation.append(kw)
-
-    kw = module.addOptionalKeyword("updateDirichlet", "Update a previously defined dirichlet definition.")
-    kw.addRequiredArg("name", "Name of the step action to update.", str)
-    _addPrescriptionArgs(kw)
-
-    documentation.append(kw)
-
 
 @dataclass(frozen=True)
 class DirichletSchema:
     """L2: the scalar options of the ``dirichlet`` keyword, owned by this module and never mutated
     from outside it.
-
-    Mirrors ``_addPrescriptionArgs`` (plus ``name``/``nSet``/``field``) one-for-one. The two
-    declarations coexist while the migration is in progress; the ``Module`` one goes away with the
-    ``InputLanguage`` singleton in P5.
 
     ``name``, ``nSet`` and ``analyticalField`` are ``structuralOnly`` fields: ``nSet`` and
     ``analyticalField`` each name an existing model object (a node set, an analytical field)

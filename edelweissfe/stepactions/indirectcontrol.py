@@ -39,7 +39,6 @@ from edelweissfe.numerics.dofmanager import DofManager
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.math import evalModelAccessibleExpression
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
@@ -48,31 +47,6 @@ from edelweissfe.variables.fieldvariable import FieldVariable
 """
 Indirect (displacement) controller for the NISTArcLength solver
 """
-
-
-inputLanguage = InputLanguage()
-
-# Register this step action for all available step types. This requires the step type
-# modules to be imported before the step actions, as done in the input file parser.
-modules = inputLanguage["step"].modules if "step" in inputLanguage else []
-
-documentation = []
-
-for module in modules:
-    kw = module.addOptionalKeyword(
-        "indirectcontrol",
-        "Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.",
-    )
-    # kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("dof1", "Degree of freedom for the constraint (model access expression).", str)
-    kw.addRequiredArg("dof2", "Degree of freedom for the constraint (model access expression).", str)
-    kw.addRequiredArg("cVector1", "c vector.", str)
-    kw.addRequiredArg("cVector2", "c vector.", str)
-    kw.addRequiredArg("L", "Final distance (e.g. crack opening)", float)
-    kw.addOptionalArg("exportCVector", "File to export the computed c vector", str, "")
-    kw.addOptionalArg("absolute", "Use absolute formulation", bool, True)
-
-    documentation.append(kw)
 
 
 @dataclass(frozen=True)

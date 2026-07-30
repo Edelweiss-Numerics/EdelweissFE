@@ -27,33 +27,6 @@ from sphinx.directives.code import (  # noqa: F401
 )
 from sphinx.highlighting import lexers
 
-# Populate the input file language (all keywords and their registered modules) once, eagerly,
-# from this clean import context -- before Sphinx starts reading doc sources and
-# autodoc/automodule directives start importing individual edelweissfe modules directly.
-#
-# PrettyPrintDirective itself no longer needs this: since P5, it renders a ported module's own
-# options from its L2 schema via the L3 registry (registry.lookup), not by walking a
-# fully-populated InputLanguage singleton, and every remaining InputLanguage-consuming code path
-# inside it (_declaredArgsFor, _updateKeywordFor, and the legacy dotted-path branch for the
-# handful of keywords -- plotter's >>configurePlots/>>exportPlots, *fieldOutput -- that are not
-# one-of-many registry entries at all) calls InputLanguage().ensureParserLoaded() itself, lazily,
-# on first use.
-#
-# What this eager call still guards against is a different, pre-existing hazard, unrelated to
-# rendering: a module's own Module/Keyword *registration* is itself conditional on its top-level
-# keyword already existing (e.g. dirichlet.py's `if "step" in inputLanguage else []`), so a plain
-# `automodule::` importing that module standalone -- before anything has imported
-# inputfileparser and populated "step" -- makes that registration silently no-op instead of
-# failing loudly. _declaredArgsFor would then find no legacy declaration to recover structural
-# args from, and the rendered docs would quietly drop a required option (e.g. dirichlet's own
-# `nSet`) rather than error -- exactly the kind of silent regression this port is not supposed to
-# introduce. Removing this call would only be safe once every ``automodule::``'d module's own
-# registration guard no longer depends on import order, which is a pre-existing L4 fragility this
-# phase does not touch.
-from edelweissfe.utils.inputlanguage import InputLanguage
-
-InputLanguage().ensureParserLoaded()
-
 project = "EdelweissFE"
 copyright = "2022, Matthias Neuner"
 author = "Matthias Neuner"
@@ -135,95 +108,19 @@ lexers["edelweiss"] = EdelweissFELexer(startinline=True)
 pygments_style = "nord"
 
 
-#: Maps a schema-bearing registry category to the legacy top-level ``.inp`` keyword its modules
-#: register a ``Module`` under -- needed only to recover *structural* args (see
-#: ``_declaredArgsFor``), never to render options an L2 schema already describes.
-_TOP_LEVEL_KEYWORD_BY_CATEGORY = {
-    "generator": "modelGenerator",
-    "constraint": "constraint",
-    "analyticalfield": "analyticalField",
-    "modelmodifier": "modelModifier",
-    "outputmanager": "output",
-}
+def _updateSchemaFor(category: str, name: str):
+    """The ``update<name>`` companion schema, for the three step actions that declare one
+    (``dirichlet``, ``distributedload``, ``nodeforces``), or ``None``.
 
-
-def _declaredArgsFor(category: str, name: str):
-    """The legacy ``Module``/``Keyword`` declaration's required and optional args for
-    ``(category, name)``, or ``([], [])`` if there is none to consult.
-
-    This is the *only* remaining consumer, in documentation generation, of the ``Module``/
-    ``Keyword`` grammar objects: not because they still describe what a target accepts (its L2
-    schema, via the registry, is the source of truth for that now), but because a schema
-    deliberately omits *structural* options -- ones that name an existing model object (a node
-    set, an element set, the step action's own ``name``) and are resolved by the L4 adapter
-    before the schema is even built (see e.g. ``stepactions/dirichlet.py``'s ``DirichletSchema``
-    docstring). Those options were still part of the documented grammar under the old renderer,
-    so recovering them here is what keeps the new one from silently dropping them.
-
-    ``stepaction`` is nested one level deeper than every other category: a step action registers
-    a ``Keyword`` on *each* step-type ``Module`` (identically on all of them), rather than a
-    ``Module`` directly on its own top-level keyword, so it needs ``getKeyword`` instead of
-    ``getModule``. ``solver`` has no entry at all: a solver's own grammar lives entirely in its
-    schema, validated dynamically against a resolved ``*solver``/``*output`` instance by an
-    ``>>options`` block (``stepactions/options.py``), not under any keyword of its own.
-
-    Parameters
-    ----------
-    category
-        The registry category (e.g. ``"stepaction"``, ``"constraint"``).
-    name
-        The name within that category.
-
-    Returns
-    -------
-    tuple[list, list]
-        The declaration's ``requiredArgs`` and ``optionalArgs`` (``KeywordArg`` objects), empty
-        if this category/name has no legacy declaration to consult.
+    Reuses ``inputfileparser._updateStepActionSchema`` -- the parser's own lookup for the same
+    schema, used to validate a partial re-declaration of an already-defined step action in a
+    later step -- rather than re-declaring the ``{name: schema}`` mapping a second time here.
     """
-    from edelweissfe.utils.inputlanguage import InputLanguage
+    from edelweissfe.utils.inputfileparser import _updateStepActionSchema
 
-    il = InputLanguage()
-    il.ensureParserLoaded()
-
-    if category == "stepaction":
-        if "step" not in il or not il["step"].modules:
-            return [], []
-        try:
-            kw = il["step"].modules[0].getKeyword(name)
-        except ValueError:
-            return [], []
-        return kw.requiredArgs, kw.optionalArgs
-
-    topLevelKeyword = _TOP_LEVEL_KEYWORD_BY_CATEGORY.get(category)
-    if topLevelKeyword is None or topLevelKeyword not in il:
-        return [], []
-    try:
-        module = il[topLevelKeyword].getModule(name)
-    except ValueError:
-        return [], []
-    return module.requiredArgs, module.optionalArgs
-
-
-def _updateKeywordFor(category: str, name: str):
-    """The legacy ``update<name>`` companion ``Keyword``, for the three step actions that
-    declare one (``dirichlet``, ``distributedload``, ``nodeforces``), or ``None``.
-
-    There is no schema for the update variant -- the L4 adapter revalidates a partial
-    re-declaration against this same-named-but-smaller keyword and applies whichever of the
-    *same* schema's fields turned out to be present (``coercePresentOptions``) -- so this is
-    rendered straight from the legacy declaration, same as before this port.
-    """
-    from edelweissfe.utils.inputlanguage import InputLanguage
-
-    il = InputLanguage()
-    il.ensureParserLoaded()
-
-    if category != "stepaction" or "step" not in il or not il["step"].modules:
+    if category != "stepaction":
         return None
-    try:
-        return il["step"].modules[0].getKeyword("update" + name)
-    except ValueError:
-        return None
+    return _updateStepActionSchema(name)
 
 
 class PrettyPrintDirective(CodeBlock):
@@ -273,10 +170,15 @@ class PrettyPrintDirective(CodeBlock):
         return [table]
 
     def _render_inputlanguage(self, member_data, caption):
-        """Render new-style InputLanguage list documentation."""
+        """Render a list of legacy grammar-declaration objects. Dead in practice since U4 (no
+        remaining ``.rst`` source passes a list-shaped dotted path -- every former
+        ``documentation = [module]`` list was deleted along with the mechanism that built it) --
+        kept only as a defensive fallback for :meth:`run`'s legacy dotted-path branch, whose only
+        live callers are dict-shaped.
+        """
         result = []
         for item in member_data:
-            # Each item is a Module or InputFileKeyword
+            # Duck-typed: whatever `item` is, only `.name`/`.requiredArgs`/etc, if present, matter.
             item_caption = (
                 caption if len(member_data) == 1 else f"{caption} [{item.name}]" if caption else f"[{item.name}]"
             )
@@ -344,119 +246,77 @@ class PrettyPrintDirective(CodeBlock):
 
         return result
 
-    def _render_args_table(self, caption, requiredArgs, optionalArgs):
-        """A single Option/Type-Default/Description table from plain ``KeywordArg`` lists --
-        the legacy shape, reused for both the entirely-unported fallback (``schema is None``)
-        and the ``update<keyword>`` companion table, neither of which has a schema to read."""
+    def _render_scalar_fields_table(self, caption, fields):
+        """A single Option/Type-Default/Description table from a ``{optionName: Field}`` mapping
+        (as returned by ``optionNames``/``scalarOptionNames``) -- shared by the top-level table and
+        every ``>>`` sub-keyword's own table, and by the ``update<name>`` companion schema's table.
+        """
+        import dataclasses
+
+        from edelweissfe.utils.schema import fieldSchemaMeta
+
         table, head, body = self._make_table(caption, ncols=3)
         row = nodes.row()
         row += nodes.entry("", nodes.paragraph("", nodes.Text("Option")))
         row += nodes.entry("", nodes.paragraph("", nodes.Text("Type / Default")))
         row += nodes.entry("", nodes.paragraph("", nodes.Text("Description")))
         head += row
-        for arg in requiredArgs:
-            self._add_literal_row(body, arg.name, f"{arg.dtype.__name__} (required)", arg.description)
-        for arg in optionalArgs:
-            default = getattr(arg, "default", None)
-            self._add_literal_row(body, arg.name, f"{arg.dtype.__name__}, default={default!r}", arg.description)
+
+        for optionName, field in fields.items():
+            meta = fieldSchemaMeta(field)
+            if meta.required:
+                self._add_literal_row(body, optionName, f"{meta.dtype.__name__} (required)", meta.description)
+                continue
+            if field.default is not dataclasses.MISSING:
+                default = field.default
+            elif field.default_factory is not dataclasses.MISSING:
+                default = field.default_factory()
+            else:
+                default = None
+            self._add_literal_row(body, optionName, f"{meta.dtype.__name__}, default={default!r}", meta.description)
         return table
 
     def _render_registry_entry(self, category, name, caption):
-        """Render ``category:name`` from the L3 registry and its L2 schema (the source of truth
-        for a ported module's options), falling back to the legacy ``Module``/``Keyword``
-        declaration for structural args a schema deliberately omits, or entirely for a target
-        that declares no schema yet. See ``_declaredArgsFor``'s docstring for why either is
-        needed at all.
+        """Render ``category:name`` from the L3 registry and its L2 schema -- the sole source of
+        truth for what a target accepts (``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U4). ``optionNames``
+        (rather than ``scalarOptionNames``) is used for the top-level table so that a
+        ``structuralOnly`` field (one an L4 adapter resolves and pops before the schema is built,
+        e.g. a constraint's ``nSet``) still renders -- it is real, documented grammar, not an
+        implementation detail.
         """
-        import dataclasses
-
         from edelweissfe.config import registry
         from edelweissfe.utils.schema import (
-            fieldSchemaMeta,
+            optionNames,
             scalarOptionNames,
             subKeywordFieldNames,
         )
 
         cls, schema = registry.lookup(category, name)
-        requiredDeclared, optionalDeclared = _declaredArgsFor(category, name)
         itemCaption = caption or name
 
         if schema is None:
-            # Not yet ported to L2 (e.g. generator:executepythoncode, modelmodifier:hadaptivity):
-            # the legacy declaration is still the only description of what this target accepts.
-            return [self._render_args_table(itemCaption, requiredDeclared, optionalDeclared)]
+            # No L2 schema at all (e.g. generator:executepythoncode, whose datalines are raw
+            # Python source with no flat option mapping to describe): nothing to render here, see
+            # the target class's own docstring instead.
+            table, head, body = self._make_table(itemCaption, ncols=1)
+            row = nodes.row()
+            row += nodes.entry("", nodes.paragraph("", nodes.Text("Option")))
+            head += row
+            self._add_row(body, f"{name} declares no option schema -- see its own class docstring.")
+            return [table]
 
-        scalarFields = scalarOptionNames(schema)
-        structuralRequired = [arg for arg in requiredDeclared if arg.name not in scalarFields]
-        structuralOptional = [arg for arg in optionalDeclared if arg.name not in scalarFields]
-
-        table, head, body = self._make_table(itemCaption, ncols=3)
-        row = nodes.row()
-        row += nodes.entry("", nodes.paragraph("", nodes.Text("Option")))
-        row += nodes.entry("", nodes.paragraph("", nodes.Text("Type / Default")))
-        row += nodes.entry("", nodes.paragraph("", nodes.Text("Description")))
-        head += row
-
-        for arg in structuralRequired:
-            self._add_literal_row(body, arg.name, f"{arg.dtype.__name__} (required)", arg.description)
-
-        for optionName, field in scalarFields.items():
-            meta = fieldSchemaMeta(field)
-            if meta.required:
-                self._add_literal_row(body, optionName, f"{meta.dtype.__name__} (required)", meta.description)
-            else:
-                if field.default is not dataclasses.MISSING:
-                    default = field.default
-                elif field.default_factory is not dataclasses.MISSING:
-                    default = field.default_factory()
-                else:
-                    default = None
-                self._add_literal_row(body, optionName, f"{meta.dtype.__name__}, default={default!r}", meta.description)
-
-        for arg in structuralOptional:
-            default = getattr(arg, "default", None)
-            self._add_literal_row(body, arg.name, f"{arg.dtype.__name__}, default={default!r}", arg.description)
-
-        result = [table]
+        result = [self._render_scalar_fields_table(itemCaption, optionNames(schema))]
 
         for optionName, field in subKeywordFieldNames(schema).items():
+            from edelweissfe.utils.schema import fieldSchemaMeta
+
             meta = fieldSchemaMeta(field)
             subCaption = f"Keyword: {optionName}" + (" (required)" if meta.required else "")
-            subScalarFields = scalarOptionNames(meta.subSchema)
-            subTable, subHead, subBody = self._make_table(subCaption, ncols=3)
-            subRow = nodes.row()
-            subRow += nodes.entry("", nodes.paragraph("", nodes.Text("Option")))
-            subRow += nodes.entry("", nodes.paragraph("", nodes.Text("Type / Default")))
-            subRow += nodes.entry("", nodes.paragraph("", nodes.Text("Description")))
-            subHead += subRow
-            for subOptionName, subField in subScalarFields.items():
-                subMeta = fieldSchemaMeta(subField)
-                if subMeta.required:
-                    self._add_literal_row(
-                        subBody, subOptionName, f"{subMeta.dtype.__name__} (required)", subMeta.description
-                    )
-                else:
-                    if subField.default is not dataclasses.MISSING:
-                        subDefault = subField.default
-                    elif subField.default_factory is not dataclasses.MISSING:
-                        subDefault = subField.default_factory()
-                    else:
-                        subDefault = None
-                    self._add_literal_row(
-                        subBody,
-                        subOptionName,
-                        f"{subMeta.dtype.__name__}, default={subDefault!r}",
-                        subMeta.description,
-                    )
-            result.append(subTable)
+            result.append(self._render_scalar_fields_table(subCaption, scalarOptionNames(meta.subSchema)))
 
-        updateKeyword = _updateKeywordFor(category, name)
-        if updateKeyword is not None:
-            result.append(
-                self._render_args_table(
-                    f"Keyword: {updateKeyword.name}", updateKeyword.requiredArgs, updateKeyword.optionalArgs
-                )
-            )
+        updateSchema = _updateSchemaFor(category, name)
+        if updateSchema is not None:
+            result.append(self._render_scalar_fields_table(f"Keyword: update{name}", optionNames(updateSchema)))
 
         return result
 
@@ -470,14 +330,11 @@ class PrettyPrintDirective(CodeBlock):
             category, name = self.arguments[0].split(":", 1)
             return self._render_registry_entry(category, name, caption)
 
-        # Legacy syntax, a dotted path to a module-level ``documentation`` list/dict -- still
-        # used by the handful of keywords that are not one-of-many registry entries at all
-        # (e.g. plotter's ``>>configurePlots``/``>>exportPlots``, the top-level ``*fieldOutput``
-        # keyword), so there is no ``category:name`` to look up in the first place.
-        from edelweissfe.utils.inputlanguage import InputLanguage
-
-        InputLanguage().ensureParserLoaded()
-
+        # Legacy syntax, a dotted path to a module-level ``documentation`` dict -- still used by
+        # the two keywords that are hand-maintained placeholders with no registry entry/schema of
+        # their own at all (plotter's ``>>configurePlots``/``>>exportPlots``), so there is no
+        # ``category:name`` to look up in the first place. The list-of-items shape this branch
+        # used to also handle (every ``documentation = [module]`` module) no longer exists.
         module_path, member_name = self.arguments[0].rsplit(".", 1)
         member_data = getattr(import_module(module_path), member_name)
 

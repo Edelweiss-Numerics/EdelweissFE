@@ -140,10 +140,10 @@ ENTRY_POINT_GROUP = "edelweissfe.plugins"
 class RegistryLookupError(LookupError):
     """Raised by :func:`lookup` when no implementation is registered for a requested name.
 
-    Unlike the legacy ``InputLanguage``/``findSimilarString`` combination (which raises a bare
-    ``Exception`` with the message "You tried to find a string similar to ... in an empty list."
-    when the candidate list happens to be empty), this always produces a message naming the
-    category and, whenever at least one name is registered for it, a "did you mean" suggestion.
+    Unlike a bare ``findSimilarString`` call (which raises a plain ``Exception`` with the message
+    "You tried to find a string similar to ... in an empty list." when the candidate list happens
+    to be empty), this always produces a message naming the category and, whenever at least one
+    name is registered for it, a "did you mean" suggestion.
     """
 
 

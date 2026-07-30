@@ -63,34 +63,7 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import schemaField
-
-module = Module(
-    "surfaceElementGenerator",
-    "Generates flat contact facet elements (Tria3ContactFacet/Line2ContactFacet) from an "
-    "existing *surface definition.",
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "modelGenerator"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg("surface", "The name of an existing *surface definition.", str)
-module.addRequiredArg("name", "The prefix for the generated element/node sets.", str)
-module.addOptionalArg(
-    "triangulation",
-    "The facet triangulation of higher-order element faces: 'corner' (linear corner-node subset "
-    "only; exact for straight-edged meshes) or 'midside' (triangulation of the full face boundary "
-    "including midside nodes; strictly more accurate for curved faces). Linear element faces are "
-    "unaffected by this option.",
-    str,
-    "corner",
-)
-
-documentation = [module]
 
 # Face-node-ordering tables, 0-indexed, reduced to each element type's linear corner nodes. Each
 # face maps to a tuple of node-index groups: a 3-tuple is a Tria3 facet, a 2-tuple is a Line2 facet.
@@ -364,10 +337,6 @@ class SurfaceElementGeneratorSchema:
     """L2: the options this generator accepts, owned by this module and never mutated from
     outside it.
 
-    Mirrors the ``module.addRequiredArg``/``module.addOptionalArg(...)`` declarations above
-    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
-    one goes away with the ``InputLanguage`` singleton in P5.
-
     Unlike every other generator, ``name`` here is a *required scalar option* (the facet-set name
     prefix), independent of the ``*modelGenerator`` keyword's own top-line ``name`` argument (which
     this generator, uniquely among the built-ins, never reads).
@@ -407,7 +376,7 @@ class Generator(GeneratorBase):
         *,
         configuration: SurfaceElementGeneratorSchema = SurfaceElementGeneratorSchema(),
     ):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        """L1: constructible standalone, with no parser involvement.
         Populates ``model`` directly (via :func:`buildContactFacets`); construction *is* the
         generation.
 

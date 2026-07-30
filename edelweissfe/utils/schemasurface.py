@@ -26,21 +26,15 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``renderSchemaSurface``: render the ``.inp`` grammar surface directly from L2 schemas (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U1/§4 gate (A)).
+"""``renderSchemaSurface``: render the ``.inp`` grammar surface directly from L2 schemas -- the sole
+grammar-rendering mechanism (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``).
 
-Today, ``tests/golden/inputlanguage_surface.txt`` is produced by
-``edelweissfe.utils.inputlanguage.Module.__doc__``/``InputFileKeyword.__doc__``/
-``OptionalKeywordArg.__doc__`` (the bracket-and-indent format every ``documentation = [module]``
-module renders through) plus ``inputfileparser.printKeywords()`` (a second, unrelated format for
-the hand-declared structural/type keywords). This module reproduces the *first* of those two
-formats -- the one every ``KeywordBase``-based module will use once ported -- from a schema
-directly, with no dependency on :mod:`edelweissfe.utils.inputlanguage` at all.
-
-U1 builds and unit-tests this renderer against hand-built fixtures only; U2 drives it over the
-whole grammar and asserts byte-identical output against the committed golden file. Nothing in this
-module is wired into the running parser or into any existing module -- see the phase's "additive,
-nothing wired" gate.
+``tests/golden/inputlanguage_surface.txt`` is the frozen reference for that surface. This module
+implements two related bracket-and-indent formats: one keyed on a keyword's own name/description
+(rendered by :func:`renderSchemaSurface`, used for every ``KeywordBase``-based module's "module
+documentation" section) and a second, unrelated one used only for the top-level structural/
+type-dispatch keywords' summary block (:func:`renderPrintKeywordsBlock`). Both are driven entirely
+by a schema and a name/description pair -- there is no other grammar representation left to consult.
 """
 
 from __future__ import annotations
@@ -57,16 +51,13 @@ from edelweissfe.utils.schema import (
     schemaFields,
 )
 
-#: Matches ``edelweissfe.utils.inputlanguage.indent1``/``indent2`` exactly -- the two indentation
-#: levels the legacy renderer uses (a "required/optional arguments|keywords|datalines" section
-#: header, and the entries within it).
+#: The two indentation levels used throughout: a "required/optional arguments|keywords|datalines"
+#: section header, and the entries within it.
 _INDENT1 = "  "
 _INDENT2 = "    "
 
-#: Matches ``edelweissfe.utils.inputfileparser.printKeywords``'s ``kwString``/``kwDataString``
-#: exactly -- the format used for the top-level structural/type-dispatch keywords hand-declared
-#: directly in ``inputfileparser.py`` (as opposed to the ``Module.__doc__`` format above, used by
-#: every keyword ported to a ``documentation = [module]`` block).
+#: The format used for the top-level structural/type-dispatch keywords' summary block (as opposed
+#: to the per-module "module documentation" format above).
 _PRINT_KEYWORDS_HEADER = "    {:}    "
 _PRINT_KEYWORDS_ARG = "        {:22}{:20}"
 
@@ -133,7 +124,7 @@ def specFromKeywordClass(keywordClass: type) -> KeywordSurfaceSpec:
 
 
 def renderSchemaSurface(specs: Iterable[KeywordSurfaceSpec], *, bracket: str = "[", joiner: str = "\n\n") -> str:
-    """Render a sequence of top-level keyword specs in the legacy ``Module.__doc__`` format.
+    """Render a sequence of top-level keyword specs in the "module documentation" format.
 
     Parameters
     ----------
@@ -141,20 +132,17 @@ def renderSchemaSurface(specs: Iterable[KeywordSurfaceSpec], *, bracket: str = "
         One :class:`KeywordSurfaceSpec` per top-level keyword to render, in the order they should
         appear.
     bracket
-        The header bracket style: ``"["`` (the default) renders ``[name] ...``, matching a
-        ``Module``'s own header (every keyword this renderer originally covered); ``"<"`` renders
-        ``< name > ...``, matching an ``InputFileKeyword``'s header -- the shape a step action's
+        The header bracket style: ``"["`` (the default) renders ``[name] ...``, the shape most
+        keywords are documented with; ``"<"`` renders ``< name > ...``, the shape a step action's
         keyword (and its ``update<keyword>`` partial-redeclaration counterpart) is documented with,
-        since ``for module in modules: kw = module.addOptionalKeyword(...)`` builds one of *those*,
-        not a ``Module``, per step type.
+        since it is registered once per step type rather than once overall.
     joiner
         The separator between consecutive blocks. The default, a blank line, matches how multiple
         *independent* top-level keywords are joined. A step action's documentation instead repeats
         its (main, optional update) block pair once per registered step type and joins every block
         with a single newline, no blank line in between -- pass ``specs`` pre-built with that
         repetition and ``joiner="\\n"`` to reproduce it; see
-        ``tests/_inputlanguage_snapshot.py::_renderDocumentation``'s non-dict branch, which this
-        mirrors (``"\\n".join(str(item.__doc__()) for item in documentation)``).
+        ``tests/_inputlanguage_snapshot.py``'s step-action rendering, which does exactly this.
 
     Returns
     -------
@@ -199,8 +187,8 @@ def _renderScalarEntry(optionName: str, meta: SchemaFieldMeta, field: dataclasse
 
 def _renderKeywordLines(spec: KeywordSurfaceSpec, bracket: str) -> list[str]:
     """The line-by-line rendering of one keyword/sub-keyword spec, unindented (the caller is
-    responsible for indenting every line when nesting this under a parent, exactly as
-    ``Module.__doc__``'s ``optional keywords`` branch does with ``indent2``).
+    responsible for indenting every line when nesting this under a parent -- see
+    :func:`_renderSubKeywordLines`, which prepends ``_INDENT2`` to every such line).
     """
     header = f"[{spec.name}]" if bracket == "[" else f"< {spec.name} >"
     lines = [f"{header} {spec.description}" if spec.description else header]
@@ -273,17 +261,13 @@ def _printKeywordsTypeString(dtype: type) -> str:
 
 
 def renderPrintKeywordsBlock(spec: KeywordSurfaceSpec) -> str:
-    """Render one top-level keyword in the legacy ``inputfileparser.printKeywords()`` format.
+    """Render one top-level keyword's summary block, over the 21 structural/type-dispatch keywords.
 
-    This is the *second* legacy rendering format (see the module docstring) -- the one used for the
-    structural/type-dispatch keywords hand-declared directly in ``inputfileparser.py`` via
-    ``inputLanguage.addKeyword(...)``, rather than the ``Module.__doc__`` format
-    :func:`renderSchemaSurface` reproduces. It differs in three respects, matching
-    ``printKeywords()`` precisely: required arguments are listed before optional ones with no
-    section header separating them, no default value is ever shown (even for an optional
-    argument), and neither ``>>`` sub-keyword blocks nor the dataline payload are rendered at all
-    -- ``printKeywords()`` only ever iterates ``kw.requiredArgs``/``kw.optionalArgs``, which have no
-    sub-keyword or dataline concept.
+    This is the *second* rendering format (see the module docstring), distinct from the
+    "module documentation" format :func:`renderSchemaSurface` produces. It differs in three
+    respects: required arguments are listed before optional ones with no section header separating
+    them, no default value is ever shown (even for an optional argument), and neither ``>>``
+    sub-keyword blocks nor the dataline payload are rendered at all.
 
     Uses :mod:`textwrap` with the exact same ``TextWrapper(width=80, replace_whitespace=False)``
     configuration and ``kwString``/``kwDataString`` indent templates as ``printKeywords()``, so a
@@ -330,9 +314,8 @@ def renderPrintKeywordsBlock(spec: KeywordSurfaceSpec) -> str:
 
 def _renderSubKeywordLines(optionName: str, fieldMeta: SchemaFieldMeta) -> list[str]:
     """Render one ``>>`` sub-keyword block, indented one level under its ``required``/``optional
-    keywords`` section header -- matching ``Module.__doc__``'s ``optional keywords`` branch, which
-    prepends ``indent2`` to *every* line of the block's own rendering (including its header line),
-    not only to the block as a whole.
+    keywords`` section header -- ``_INDENT2`` is prepended to *every* line of the block's own
+    rendering (including its header line), not only to the block as a whole.
     """
     subSpec = KeywordSurfaceSpec(name=optionName, description=fieldMeta.description, schema=fieldMeta.subSchema)
     return [_INDENT2 + line for line in _renderKeywordLines(subSpec, bracket="<")]

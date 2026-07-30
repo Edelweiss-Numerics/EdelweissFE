@@ -32,7 +32,6 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.utils.fieldoutput import FieldOutputController
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.plotter import Plotter
 from edelweissfe.utils.schema import schemaField
 
@@ -46,34 +45,11 @@ Writes the (generated) mesh data to a file.
         filename=myMesh.inc
 """
 
-module = Module("meshdatatofile", "Writes the (generated) mesh data to a file.")
-
-inputLanguage = InputLanguage()
-
-keyword = "output"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addOptionalArg("filename", "Name of file for writing output.", str, None)
-
-documentation = [module]
-
-required = [kw.name for kw in module.requiredArgs]
-required += [kw.name for kw in module.requiredKeywords]
-
-optional = [kw.name for kw in module.optionalArgs]
-optional += [kw.name for kw in module.optionalKeywords]
-
 
 @dataclass(frozen=True)
 class MeshDataToFileSchema:
     """L2: the options this output manager accepts, owned by this module and never mutated from
     outside it.
-
-    Mirrors the ``module.addOptionalArg(...)`` declaration above one-for-one, including the
-    default, and is the schema the L3 registry hands out for ``("outputmanager",
-    "meshdatatofile")``. The two declarations coexist while the migration is in progress; the
-    ``Module`` one goes away with the ``InputLanguage`` singleton in P5.
     """
 
     filename: str | None = schemaField(description="Name of file for writing output.", dtype=str, default=None)
@@ -98,7 +74,7 @@ class OutputManager(OutputManagerBase):
         *,
         configuration: MeshDataToFileSchema = MeshDataToFileSchema(),
     ):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement and
+        """L1: constructible standalone, with no parser involvement and
         no ``moduleOptions``. Options arrive as an already-validated, already-typed schema
         instance, so nothing here coerces strings or inspects dictionaries.
 

@@ -33,7 +33,6 @@ from edelweissfe.stepactions.base.amplitude import amplitudeFromExpression
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
@@ -41,24 +40,6 @@ from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 Stepaction to change material properties.
 
 """
-
-
-inputLanguage = InputLanguage()
-
-# Register this step action for all available step types. This requires the step type
-# modules to be imported before the step actions, as done in the input file parser.
-modules = inputLanguage["step"].modules if "step" in inputLanguage else []
-
-documentation = []
-
-for module in modules:
-    kw = module.addOptionalKeyword("changematerialproperty", "Stepaction to change material properties.")
-    kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("material", "The id of the material to be changed", str)
-    kw.addRequiredArg("index", "The index of the property in the material properties vector", int)
-    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
-
-    documentation.append(kw)
 
 
 @dataclass(frozen=True)

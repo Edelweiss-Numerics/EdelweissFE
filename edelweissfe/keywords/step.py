@@ -42,7 +42,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from edelweissfe.keywords.base.keywordbase import KeywordBase
-from edelweissfe.utils.inputcontext import InputContext
 from edelweissfe.utils.schema import schemaField
 
 
@@ -67,15 +66,3 @@ class StepKeyword(KeywordBase):
 
     keywordName = "step"
     keywordDescription = "define steps"
-
-    @classmethod
-    def fromKeywordDefinition(cls, name: str, definition: dict, context: InputContext) -> "KeywordBase | None":
-        """Not yet implemented -- U2b only mirrors the grammar as a schema.
-
-        Raises
-        ------
-        NotImplementedError
-            Always. Construction from a parsed ``*step`` definition is wired in U3, once the
-            runtime parser is swapped over (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U3).
-        """
-        raise NotImplementedError("StepKeyword.fromKeywordDefinition is wired in U3, not U2b.")

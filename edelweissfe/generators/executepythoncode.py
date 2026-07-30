@@ -35,19 +35,6 @@ Directly execute Python code to create the model tree.
 from edelweissfe.generators.base.generatorbase import GeneratorBase
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-
-module = Module("executePythoncode", "Directly execute Python code to create the model tree.")
-
-inputLanguage = InputLanguage()
-
-keyword = "modelGenerator"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredDatalines("Python code to run", str)
-
-documentation = [module]
 
 
 class Generator(GeneratorBase):
@@ -59,7 +46,7 @@ class Generator(GeneratorBase):
     schema = None
 
     def __init__(self, name: str, model: FEModel, journal: Journal, *, codeLines: str = ""):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        """L1: constructible standalone, with no parser involvement.
         Populates ``model`` directly; construction *is* the generation.
 
         Parameters

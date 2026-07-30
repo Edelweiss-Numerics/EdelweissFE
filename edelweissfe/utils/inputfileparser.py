@@ -31,24 +31,17 @@ Inputfileparser for inputfiles employing an Abaqus-like syntax.
 """
 
 import dataclasses
-import textwrap
 from os.path import dirname, join
 
 from edelweissfe.config import registry
 from edelweissfe.config.registry import RegistryLookupError
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import (
-    InputLanguage,
-    keywordIdentifier,
-    moduleLevelKeywordIdentifier,
-)
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     caseInsensitiveRequiredArgsChecker,
     convertAssignmentsToCaseInsensitiveStringDictionary,
     splitLineAtCommas,
     strCaseCmp,
-    typeString,
 )
 from edelweissfe.utils.schema import (
     coerceValue,
@@ -56,6 +49,13 @@ from edelweissfe.utils.schema import (
     fieldSchemaMeta,
     subKeywordFieldNames,
 )
+
+#: The ``.inp`` syntax markers: a top-level keyword line starts with ``*``, a ``>>`` sub-keyword
+#: line with ``>>``. The single source of truth now that ``utils/inputlanguage.py`` (which used to
+#: own these two constants) is deleted (``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U4) -- imported from
+#: here by every other module that needs to spell an error message with the right marker.
+keywordIdentifier = "*"
+moduleLevelKeywordIdentifier = ">>"
 
 #: Top-level keywords whose grammar is completed by a further name/generator-dispatched target's
 #: own schema (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U3d-1) -- maps the keyword's casefolded
@@ -122,9 +122,8 @@ def _allScalarFields(schemaCls: type | None) -> dict:
 
     Deliberately **not** :func:`~edelweissfe.utils.schema.scalarOptionNames`: that function excludes
     ``structuralOnly`` fields (an L4 adapter pops them before ``buildSchemaFromOptions`` ever sees
-    them), but the *parser* must still recognize and require them exactly as the legacy
-    ``InputFileKeyword``/``Module`` flat ``requiredArgs``/``optionalArgs`` lists did -- those drew no
-    such distinction at all (``structuralOnly``/``optionsOverrideOnly``/``updateOnly`` are new,
+    them), but the *parser* must still recognize and require every scalar option a schema declares,
+    with no such distinction at all (``structuralOnly``/``optionsOverrideOnly``/``updateOnly`` are
     schema-only rendering/construction concerns, see ``utils/schema.py``'s ``SchemaFieldMeta``).
 
     Parameters
@@ -151,8 +150,8 @@ def _allScalarFields(schemaCls: type | None) -> dict:
 def _realScalarFields(schemaCls: type | None) -> dict:
     """Like :func:`_allScalarFields`, but excluding ``optionsOverrideOnly``/``updateOnly`` fields --
     the ones that exist purely for the ``>>options`` override mechanism or the ``update<keyword>``
-    grammar and were never declared as a real ``Module.addRequiredArg``/``addOptionalArg`` (whose
-    presence is what implies a dispatch target actually expects plain datalines, see
+    grammar and were never part of a keyword's own real line/dataline grammar (whose presence is
+    what implies a dispatch target actually expects plain datalines, see
     :func:`_expectsPlainDatalines`).
 
     Parameters
@@ -195,8 +194,7 @@ def _requiredAndOptionalNames(schemaCls: type | None) -> tuple[list, list]:
 
 def _coerceKnownFields(schemaCls: type | None, options: dict) -> CaseInsensitiveDict:
     """Coerce and default the keys of ``options`` that match one of ``schemaCls``'s own scalar
-    fields; every other key is left untouched, as a raw string -- mirroring
-    ``castKwargsValuesAndAddDefaults``'s behaviour of only ever touching the keys it knows about.
+    fields; every other key is left untouched, as a raw string.
 
     Parameters
     ----------
@@ -319,11 +317,10 @@ def _resolveModuleKeywordSchema(topLevelKeyword: str, topLevelOptions: dict, mod
 
 def _dispatchTargetExpectsPlainDatalines(schemaCls: type | None) -> bool:
     """Whether a resolved dispatch target (a section type, output-manager type, generator, ...)
-    accepts plain (non-``>>``) datalines, mirroring the legacy ``Module``'s
-    ``expectsRequiredDatalines``/``expectsOptionalDatalines`` -- which ``Module.addRequiredArg``/
-    ``addOptionalArg`` set as a side effect (a module's *own* options, unlike a top-level keyword's,
-    are conventionally supplied via datalines) alongside ``addRequiredDatalines``/
-    ``addOptionalDatalines`` proper.
+    accepts plain (non-``>>``) datalines: a dispatch target's *own* scalar options, unlike a
+    top-level keyword's, are conventionally supplied via datalines rather than on the keyword line
+    itself, so a schema with any real scalar field or a dedicated dataline payload of its own both
+    count.
 
     Parameters
     ----------
@@ -345,9 +342,7 @@ def _dispatchTargetExpectsPlainDatalines(schemaCls: type | None) -> bool:
 
 def _expectsPlainDatalines(keyword: str, options: dict) -> bool:
     """Whether a plain (non-``>>``) line following a ``*keyword`` block's own line is a valid
-    dataline for it, mirroring ``InputFileKeyword``/``Module``'s
-    ``expectsRequiredDatalines``/``expectsOptionalDatalines`` flags (U3d-1,
-    ``PLAN_INPUT_SYSTEM_UNIFICATION.md``).
+    dataline for it, resolved from the keyword's (or its dispatch target's) own schema.
 
     Parameters
     ----------
@@ -370,11 +365,12 @@ def _expectsPlainDatalines(keyword: str, options: dict) -> bool:
         return keywordSchema is not None and datalineFieldMeta(keywordSchema) is not None
 
     if strCaseCmp(keyword, "step"):
-        # Neither step type (`adaptive`/`adaptiveForExplicitSimulations`) has an L2 schema yet
-        # (PLAN_INPUT_SYSTEM_UNIFICATION.md's U2 recon notes) -- both declare their incrementation
-        # options via `Module.addOptionalArg`, which always implies `expectsOptionalDatalines=True`
-        # regardless of type, so mirror that directly rather than rejecting every real .inp file
-        # that writes step incrementation options (maxInc=..., ...) as plain datalines.
+        # Every step type shares one schema (`steps.base.stepbase.StepIncrementationSchema`,
+        # PLAN_INPUT_SYSTEM_UNIFICATION.md, U4) with only optional fields, so this could dispatch
+        # through `dispatchSchema`/`_dispatchTargetExpectsPlainDatalines` like every other keyword
+        # -- kept as an unconditional `True` anyway since the outcome is identical for both
+        # registered step types and this avoids a resolve-then-recompute round trip on the hottest
+        # keyword in a typical input file.
         return True
 
     category, optionName = dispatch
@@ -527,294 +523,13 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fil
     options["inputFile"] = fileName  # save also the filename of the original inputfile!
 
     # Unlike a top-level keyword, no `>>` sub-keyword in the whole grammar ever expects its own
-    # plain datalines: `Module.addRequiredArg`/`addOptionalArg` (whose side effect is what makes a
-    # *module*'s `expectsRequiredDatalines`/`expectsOptionalDatalines` True) is not how a `>>`
-    # sub-keyword's own args are declared -- those go through
-    # `InputFileKeyword.addRequiredArg`/`addOptionalArg` instead (via `Module.addOptionalKeyword`),
-    # which sets no such flag. So legacy never added a `datalines` key here for any `>>` block, and
-    # this must not either -- doing so unconditionally regressed e.g. `>>bodyforce`, whose
+    # plain datalines -- a sub-keyword's own scalar options are declared on its schema's regular
+    # fields, never on a dataline payload of its own. So a `datalines` key must never be added here
+    # for any `>>` block -- doing so unconditionally regressed e.g. `>>bodyforce`, whose
     # `fromStepActionDefinition` hands the whole definition dict to `buildSchemaFromOptions` without
     # stripping parser bookkeeping keys first.
 
     return keyword, options
-
-
-inputLanguage = InputLanguage()
-
-kw = inputLanguage.addKeyword("element", "definition of element(s)")
-kw.addRequiredArg("type", "assign one of the types defined in the elementlibrary", str)
-kw.addOptionalArg("elSet", "name of elSet to be created", str, None)
-kw.addOptionalArg(
-    "provider",
-    "provider (library) for the element type. Default: Marmot",
-    str,
-    "Marmot",
-)
-kw.addRequiredDatalines("Abaqus like element definition lines", "")
-
-kw = inputLanguage.addKeyword("elSet", "definition of an element set")
-kw.addRequiredArg("elSet", "name", str)
-kw.addOptionalArg(
-    "generate",
-    "set True to generate from data line 1: start-element, end-element, step",
-    bool,
-    False,
-)
-kw.addRequiredDatalines("Abaqus like element set definition lines", "")
-
-kw = inputLanguage.addKeyword("node", "definition of nodes")
-kw.addOptionalArg("nSet", "name of nSet to be created", str, None)
-kw.addRequiredDatalines("Abaqus like node definition lines: label, x, [y], [z]", "")
-
-kw = inputLanguage.addKeyword("nSet", "definition of an element set")
-kw.addRequiredArg("nSet", "name", str)
-kw.addOptionalArg(
-    "generate",
-    "set True to generate from data line 1: start-node, end-node, step",
-    bool,
-    False,
-)
-kw.addRequiredDatalines("Abaqus like node set definition lines", "")
-
-kw = inputLanguage.addKeyword("surface", "definition of surface set")
-kw.addRequiredArg("name", "name", str)
-kw.addRequiredArg("type", "type of surface (currently 'element' only)", str)
-kw.addRequiredDatalines("Abaqus like definition. Type 'element': elSet, faceID", "")
-
-"""
-*section
-"""
-kw = inputLanguage.addKeyword("section", "definition of a section")
-kw.addRequiredArg("name", "name", str)
-kw.addRequiredArg("material", "associated id of defined material", str)
-kw.addRequiredArg("type", "type of the section", str)
-kw.addRequiredDatalines("list of associated element sets", "")
-
-# kw.addOptionalArg("thickness", "associated element thickness", float, 1.0)
-# kw.addOptionalArg("density", "associated element density", float, 1.0)
-
-# isort: off
-from edelweissfe.sections.solid import inputLanguage  # noqa: F811,E402
-from edelweissfe.sections.plane import inputLanguage  # noqa: F811,E402
-
-# isort: on
-
-"""
-*elementproperty
-"""
-kw = inputLanguage.addKeyword("elementproperty", "define element property values")
-kw.addRequiredArg("elSet", "name of element set", str)
-kw.addRequiredArg("propertyName", "name of the property", str)
-kw.addRequiredDatalines("value(s) of the property", "")
-
-"""
-*material
-"""
-kw = inputLanguage.addKeyword("material", "definition of a material")
-kw.addRequiredArg("name", "name of material", str)
-kw.addRequiredArg("id", "id of material", str)
-kw.addOptionalArg("provider", "material provider", str, "marmotmaterial")
-kw.addRequiredDatalines("material properties", "")
-# kw.addOptionalArg("statevars", , , None)
-
-"""
-*advancedmaterial
-"""
-kw = inputLanguage.addKeyword("advancedmaterial", "definition of an advanced material")
-kw.addRequiredArg("name", "name of material", str)
-kw.addRequiredArg("id", "id of material", str)
-kw.addOptionalArg("provider", "material provider", str, "marmotmaterial")
-kw.addRequiredDatalines("material properties", "")
-
-"""
-*fieldOutput
-"""
-kw = inputLanguage.addKeyword("fieldOutput", "define fieldoutput, which is used by outputmanagers")
-
-# isort: off
-from edelweissfe.utils.fieldoutput import inputLanguage  # noqa: F811,E402
-
-# isort: on
-
-"""
-*analyticalField
-"""
-kw = inputLanguage.addKeyword("analyticalField", "define an analytical field")
-kw.addRequiredArg("name", "name of analytical field", str)
-kw.addRequiredArg("type", "type of analytical field", str)
-# kw.addRequiredDatalines("definition lines", "")
-
-# isort: off
-from edelweissfe.analyticalfields.randomscalar import inputLanguage  # noqa: F811,E402
-from edelweissfe.analyticalfields.fromvtk import inputLanguage  # noqa: F811,E402
-from edelweissfe.analyticalfields.scalarexpression import inputLanguage  # noqa: F811,E402
-
-# isort: on
-
-"""
-*job
-"""
-kw = inputLanguage.addKeyword("job", "definition of an analysis job")
-kw.addRequiredArg("domain", "define spatial domain: 1d, 2d, 3d", str)
-kw.addOptionalArg("startTime", "(optional) start time of job", float, 0.0)
-kw.addOptionalArg("name", "Name of job.", str, "defaultJob")
-kw.addOptionalArg("solver", "(deprecated) define the solver to be used", str, "NIST")
-
-"""
-*solver
-"""
-kw = inputLanguage.addKeyword("solver", "define a solver")
-kw.addRequiredArg("name", "solver name", str)
-kw.addRequiredArg("solver", "solver type", str)
-kw.addOptionalDatalines("define options which are passed to the respective solver instance.", "")
-
-"""
-*step
-"""
-kw = inputLanguage.addKeyword("step", "define steps")
-kw.addRequiredArg("solver", "solver to be used", str)
-kw.addOptionalArg("type", "step type", str, "adaptive")
-
-# isort: off
-from edelweissfe.steps.adaptivestep import inputLanguage  # noqa: F811,E402
-from edelweissfe.steps.adaptivestepforexplicitsimulations import inputLanguage  # noqa: F811,E402
-
-from edelweissfe.stepactions.bodyforce import inputLanguage  # noqa: F811,E402
-from edelweissfe.stepactions.changematerialproperty import inputLanguage  # noqa: F811,E402
-from edelweissfe.stepactions.dirichlet import inputLanguage  # noqa: F811,E402
-from edelweissfe.stepactions.distributedload import inputLanguage  # noqa: F811,E402
-from edelweissfe.stepactions.geostatic import inputLanguage  # noqa: F811,E402
-from edelweissfe.stepactions.indirectcontractioncontrol import inputLanguage  # noqa: F811,E402
-from edelweissfe.stepactions.indirectcontrol import inputLanguage  # noqa: F811,E402
-from edelweissfe.stepactions.initializematerial import inputLanguage  # noqa: F811,E402
-from edelweissfe.stepactions.modelupdate import inputLanguage  # noqa: F811,E402
-from edelweissfe.stepactions.nodeforces import inputLanguage  # noqa: F811,E402
-from edelweissfe.stepactions.setfield import inputLanguage  # noqa: F811,E402
-from edelweissfe.stepactions.setinitialconditions import inputLanguage  # noqa: F811,E402
-
-from edelweissfe.stepactions.options import _ensureOptionsKeyword, inputLanguage  # noqa: F811,E402
-
-# Guarantees the 'options' keyword is declared on every step type at this exact point in the
-# import sequence (every step type + step action module above is already loaded), regardless of
-# whether 'edelweissfe.stepactions.options' happened to be imported earlier by some other caller
-# before 'step' existed -- in which case its own module-level call above already ran and no-opped,
-# and would otherwise never get a second chance (the module is cached in sys.modules by then, so
-# the 'from ... import' above does not re-run its body). See _ensureOptionsKeyword's docstring.
-_ensureOptionsKeyword()
-
-# isort: on
-
-"""
-*output
-"""
-kw = inputLanguage.addKeyword("output", "define an output module")
-kw.addRequiredArg("type", "output module", str)
-kw.addOptionalArg("name", "name of output manager", str, None)
-# kw.addOptionalDatalines("definition lines", "")
-
-# isort: off
-from edelweissfe.outputmanagers.computetimemonitor import inputLanguage  # noqa: F811,E402
-from edelweissfe.outputmanagers.conditionalstop import inputLanguage  # noqa: F811,E402
-from edelweissfe.outputmanagers.ensight import inputLanguage  # noqa: F811,E402
-from edelweissfe.outputmanagers.fractureenergyintegrator import inputLanguage  # noqa: F811,E402
-from edelweissfe.outputmanagers.meshdatatofile import inputLanguage  # noqa: F811,E402
-from edelweissfe.outputmanagers.meshplot import inputLanguage  # noqa: F811,E402
-from edelweissfe.outputmanagers.monitor import inputLanguage  # noqa: F811,E402
-from edelweissfe.outputmanagers.plotalongpath import inputLanguage  # noqa: F811,E402
-from edelweissfe.outputmanagers.statusfile import inputLanguage  # noqa: F811,E402
-from edelweissfe.outputmanagers.timemonitor import inputLanguage  # noqa: F811,E402
-
-# isort: on
-
-"""
-*updateConfiguration
-"""
-kw = inputLanguage.addKeyword("updateConfiguration", "update a configuration")
-kw.addRequiredArg("configuration", "name of configuration to be changed", str)
-kw.addRequiredDatalines("keyword arguments", "")
-
-"""
-*modelGenerator
-"""
-kw = inputLanguage.addKeyword("modelGenerator", "define a model generator, loaded from a module")
-kw.addRequiredArg("name", "name of the generator", str)
-kw.addRequiredArg("generator", "name of generator module", str)
-kw.addOptionalArg(
-    "executeAfterManualGeneration",
-    "Delay the execution of the generator after model generation",
-    bool,
-    False,
-)
-# kw.addRequiredDatalines("keyword arguments", "")
-
-# isort: off
-# from edelweissfe.generators.abqmodelconstructor import inputLanguage  # noqa: F811,E402
-from edelweissfe.generators.boxgen import inputLanguage  # noqa: F811,E402
-from edelweissfe.generators.cubit import inputLanguage  # noqa: F811,E402
-from edelweissfe.generators.executepythoncode import inputLanguage  # noqa: F811,E402
-from edelweissfe.generators.findclosestnode import inputLanguage  # noqa: F811,E402
-from edelweissfe.generators.pipegen import inputLanguage  # noqa: F811,E402
-from edelweissfe.generators.planerectquad import inputLanguage  # noqa: F811,E402
-from edelweissfe.generators.cuboidlatticegenerator import inputLanguage  # noqa: F811,E402
-from edelweissfe.generators.discreterigidbodygenerator import inputLanguage  # noqa: F811,E402
-from edelweissfe.generators.surfaceelementgenerator import inputLanguage  # noqa: F811,E402
-
-# isort: on
-
-"""
-*constraint
-"""
-kw = inputLanguage.addKeyword("constraint", "define a constraint")
-kw.addRequiredArg("type", "constraint type", str)
-kw.addRequiredDatalines("definition of the constraint", "")
-kw.addOptionalArg("name", "name of the constraint", str, None)
-
-# isort: off
-from edelweissfe.constraints.equalvaluelagrangian import inputLanguage  # noqa: F811,E402
-from edelweissfe.constraints.equalvaluepenalty import inputLanguage  # noqa: F811,E402
-from edelweissfe.constraints.linearizedrigidbody import inputLanguage  # noqa: F811,E402
-from edelweissfe.constraints.penaltyindirectcontrol import inputLanguage  # noqa: F811,E402
-from edelweissfe.constraints.rigidbody import inputLanguage  # noqa: F811,E402
-from edelweissfe.constraints.directionalspringpenalty import inputLanguage  # noqa: F811,E402
-from edelweissfe.constraints.nodetorigidsurfacepenalty import inputLanguage  # noqa: F811,E402
-from edelweissfe.constraints.nodetodiscreterigidbodypenalty import inputLanguage  # noqa: F811,E402
-from edelweissfe.constraints.nodetodeformablesurfacepenalty import inputLanguage  # noqa: F811,E402
-from edelweissfe.constraints.tie import inputLanguage  # noqa: F811,E402
-from edelweissfe.constraints.hangingnode import inputLanguage  # noqa: F811,E402
-from edelweissfe.constraints.amrtransparencyprobe import inputLanguage  # noqa: F811,E402
-
-# isort: on
-
-"""
-*modelModifier
-"""
-kw = inputLanguage.addKeyword("modelModifier", "define a model modifier")
-kw.addRequiredArg("type", "model modifier type", str)
-kw.addRequiredDatalines("definition of the model modifier", "")
-kw.addOptionalArg("name", "name of the model modifier", str, None)
-
-# isort: off
-from edelweissfe.modelmodifiers.adaptivity.hadaptivity import inputLanguage  # noqa: F811,E402
-
-# isort: on
-
-"""
-*configurePlots
-"""
-kw = inputLanguage.addKeyword("configurePlots", "customize the figures and axes")
-kw.addRequiredDatalines("key=value pairs for configuration of figures and axes", "")
-
-"""
-*exportPlots
-"""
-kw = inputLanguage.addKeyword("exportPlots", "export your figures")
-kw.addRequiredDatalines("key=value pairs for exporting of figures and axes", "")
-
-"""
-*include
-"""
-kw = inputLanguage.addKeyword("include", "load contents of extra file")
-kw.addRequiredArg("input", "path to file (use relative path to current .inp)", str)
 
 
 def parseInputFile(
@@ -841,7 +556,7 @@ def parseInputFile(
     """
 
     if not existingFileDict:
-        fileDict = CaseInsensitiveDict({kw.name: [] for kw in inputLanguage})
+        fileDict = CaseInsensitiveDict({name: [] for name in registry.availableNames("keyword")})
     else:
         fileDict = existingFileDict
 
@@ -887,27 +602,3 @@ def parseInputFile(
                 fileDict[keyword][-1]["datalines"].append(line)
 
     return fileDict
-
-
-def printKeywords():
-    """Print the input file language set."""
-
-    kwString = "    {:}    "
-    kwDataString = "        {:22}{:20}"
-
-    wrapper = textwrap.TextWrapper(width=80, replace_whitespace=False)
-    # for kw, (kwDoc, optiondict) in sorted(inputLanguage.items()):
-    for kw in inputLanguage:
-        wrapper.initial_indent = kwString.format(kw.name)
-        wrapper.subsequent_indent = " " * len(wrapper.initial_indent)
-        print(wrapper.fill(kw.description))
-        # print("")
-        for arg in kw.requiredArgs:
-            wrapper.initial_indent = kwDataString.format(arg.name, typeString(arg.dtype))
-            wrapper.subsequent_indent = " " * len(wrapper.initial_indent)
-            print(wrapper.fill(arg.description))
-        for arg in kw.optionalArgs:
-            wrapper.initial_indent = kwDataString.format(arg.name, typeString(arg.dtype))
-            wrapper.subsequent_indent = " " * len(wrapper.initial_indent)
-            print(wrapper.fill(arg.description))
-        print("\n")

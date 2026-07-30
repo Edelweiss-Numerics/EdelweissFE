@@ -50,10 +50,10 @@ already declared; there is no second tag to keep in sync with it.
 
 The ``>>options`` keyword's own grammar is validated **dynamically**, not against a statically
 pre-declared list of every solver's and output manager's option names: at parse time, before
-``name`` has even been resolved, the keyword only enforces that ``name`` itself is present
-(:meth:`~edelweissfe.utils.inputlanguage.InputFileKeyword.allowArbitraryOptionalArgs`, set by
-:func:`_ensureOptionsKeyword`) -- every other ``key=value`` pair is accepted unvalidated and handed
-on raw. Real validation happens once ``name`` resolves to a concrete object, against *that object's
+``name`` has even been resolved, the parser's dedicated ``isDynamicOptionsKeyword`` branch (see
+``utils/inputfileparser.py::parseModuleKeywordLine``) only enforces that ``name`` itself is present
+-- every other ``key=value`` pair is accepted unvalidated and handed on raw. Real validation happens
+once ``name`` resolves to a concrete object, against *that object's
 own* ``type(target).schema`` (:func:`coercePresentOptions`, in :meth:`StepAction.fromStepActionDefinition`
 below). There is therefore no shared, hand-synchronized aggregate of every solver's and output
 manager's option names to keep from drifting: each schema is consulted directly, once, exactly when
@@ -61,59 +61,16 @@ it is needed.
 """
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
 from edelweissfe.utils.schema import coercePresentOptions
 
-inputLanguage = InputLanguage()
-
-#: The description of the ``options`` keyword. A module-level constant so it cannot drift from one
-#: call to :func:`_ensureOptionsKeyword` to the next.
+#: The description of the ``options`` keyword, quoted by ``tests/_inputlanguage_snapshot.py`` for
+#: the rendered grammar surface. A module-level constant so it cannot drift between the two.
 _OPTIONS_KEYWORD_DESCRIPTION = (
     "Adjust a solver's or output manager's own options mid-job. 'name' must be the name an "
     "already-declared *solver or *output block gave it; every other option is validated against "
     "that specific instance's own type."
 )
-
-documentation = []
-
-
-def _ensureOptionsKeyword():
-    """Declare the ``options`` keyword on every registered step type, at most once each.
-
-    Idempotent and safe to call repeatedly. Declared lazily, from a function called at the bottom
-    of this module rather than in a one-shot ``for module in modules:`` loop at plain import time
-    (as every other step action does): this module has historically been reachable before every
-    step type module was registered, in which case a one-shot loop would declare nothing and never
-    get a second chance (``sys.modules`` caching this module against later re-import). Calling this
-    lazily and idempotently removes the dependence on import order entirely.
-
-    The declared keyword accepts only ``name`` statically
-    (:meth:`~edelweissfe.utils.inputlanguage.InputFileKeyword.allowArbitraryOptionalArgs`): unlike
-    every other step action, this one has no fixed option set of its own to pre-declare -- what a
-    given ``>>options`` block may write depends on what its ``name`` resolves to, which is not known
-    until :meth:`StepAction.fromStepActionDefinition` runs, long after the static parse-time grammar
-    check. ``documentation`` is populated here too, so the rendered grammar surface cannot differ by
-    import order either.
-    """
-
-    if "step" not in inputLanguage:
-        return
-
-    for stepModule in inputLanguage["step"].modules:
-        if "options" in [keyword.name.casefold() for keyword in stepModule.keywords]:
-            continue
-
-        keyword = stepModule.addOptionalKeyword("options", _OPTIONS_KEYWORD_DESCRIPTION)
-        keyword.addRequiredArg(
-            "name", "The name of the already-declared solver or output manager this block configures.", str
-        )
-        keyword.allowArbitraryOptionalArgs()
-
-        documentation.append(keyword)
-
-
-_ensureOptionsKeyword()
 
 
 def _writtenOptions(definition: dict) -> dict:

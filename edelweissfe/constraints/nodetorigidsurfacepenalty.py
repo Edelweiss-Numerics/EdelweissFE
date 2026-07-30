@@ -40,7 +40,6 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
@@ -51,49 +50,11 @@ adds nodes to the watched ``nSet``, the new nodes are picked up and protected fr
 boundary at the constraint's own next :meth:`updateConnectivity` tick -- no separate wiring needed.
 """
 
-module = Module(
-    "nodeToRigidSurfacePenalty",
-    "A penalty based unilateral constraint used for preventing the nodes of a node set from penetrating a defined rigid boundary.",
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg("field", "The field this constraint acts on.", str)
-module.addRequiredArg("component", "The component of the field.", int)
-module.addRequiredArg("penalty", "The numerical penalty value.", float)
-module.addRequiredArg("nSet", "The node set to be constrained.", str)
-
-module.addOptionalArg(
-    "value",
-    "The prescribed distance to the rigid boundary. A value of 0.0 implies no initial gap between the node set and the boundary.",
-    float,
-    0.0,
-)
-module.addOptionalArg(
-    "direction", "The normal direction outward from the continuum towards the boundary (1.0 or -1.0).", float, 1.0
-)
-module.addOptionalArg(
-    "type",
-    "The formulation type: 'linear' (linear force, constant stiffness with jump) or 'quadratic' (quadratic force, linear stiffness).",
-    str,
-    "linear",
-)
-
-documentation = [module]
-
 
 @dataclass(frozen=True)
 class NodeToRigidSurfacePenaltySchema:
     """L2: the options this constraint accepts, owned by this module and never mutated from
     outside it.
-
-    Mirrors the ``module.addRequiredArg``/``module.addOptionalArg(...)`` declarations above
-    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
-    one goes away with the ``InputLanguage`` singleton in P5.
 
     The update-type option is spelled ``type`` in the input file but the field is named
     ``contactType`` here -- a dataclass field literally called ``type`` would shadow the builtin,

@@ -37,21 +37,7 @@ from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
-
-module = Module("rigidbody", "A rigid body constraint tying nodes to a reference point.")
-
-inputLanguage = InputLanguage()
-
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg("nSet", "Node set to tie.", str)
-module.addRequiredArg("referencePoint", "Node set containing only the reference point.", str)
-
-documentation = [module]
 
 
 class RigidBodyStiffnessView:

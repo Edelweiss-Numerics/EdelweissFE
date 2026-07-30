@@ -25,40 +25,22 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""U1 tests (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``) for
-``edelweissfe/keywords/base/keywordbase.py``.
+"""Tests for ``edelweissfe/keywords/base/keywordbase.py`` (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``,
+U4).
 
-Nothing here is wired into the running parser or the registry's ``"keyword"`` category -- U1 is
-purely additive. These tests only pin the shape :class:`KeywordBase` itself must offer to a future
-concrete subclass (U2): the abstract ``fromKeywordDefinition`` seam, and that it is discoverable as
-an :class:`~edelweissfe.utils.schema.OptionSchemaProvider`, mirroring
+``KeywordBase`` is not an ABC: construction from a parsed ``.inp`` definition happens in the
+existing per-category L4 adapters (``abqmodelconstructor``/``inputfilehelpers``/``StepManager``),
+not on this class (the ``fromKeywordDefinition`` seam U1-U3 explored was never wired to anything and
+was deleted in U4 -- see the plan's "U3d-2 -- SKIPPED" note). ``KeywordBase`` is therefore just an
+``OptionSchemaProvider`` that additionally owns a keyword's own spelling/description, mirroring
 ``tests/test_registry.py``'s and ``test_schema.py``'s coverage of the equivalent property for
 ``GeneratorBase``/``StepActionBase``.
 """
 
 from dataclasses import dataclass
 
-import pytest
-
 from edelweissfe.keywords.base.keywordbase import KeywordBase
-from edelweissfe.utils.inputcontext import InputContext
 from edelweissfe.utils.schema import OptionSchemaProvider, schemaField, schemaOf
-
-
-def test_keywordbase_cannot_be_instantiated_directly():
-    """``fromKeywordDefinition`` is declared abstract -- a bare ``KeywordBase()`` (or a subclass
-    that forgets to override it) must be rejected by the ABC machinery, not silently constructible
-    with a no-op seam."""
-    with pytest.raises(TypeError, match="abstract"):
-        KeywordBase()
-
-
-def test_a_subclass_that_does_not_override_fromKeywordDefinition_stays_abstract():
-    class _IncompleteKeyword(KeywordBase):
-        pass
-
-    with pytest.raises(TypeError, match="abstract"):
-        _IncompleteKeyword()
 
 
 def test_keywordbase_is_an_option_schema_provider_with_no_schema_by_default():
@@ -68,21 +50,25 @@ def test_keywordbase_is_an_option_schema_provider_with_no_schema_by_default():
     assert KeywordBase.schema is None
 
 
+def test_keywordbase_is_directly_instantiable():
+    """No abstract seam is left on the base class -- a bare ``KeywordBase()`` is legal, unlike
+    ``GeneratorBase``/``StepActionBase``, which still declare a real abstract construction seam."""
+    keyword = KeywordBase()
+    assert isinstance(keyword, KeywordBase)
+
+
 @dataclass(frozen=True)
 class _FindClosestNodeLikeSchema:
     location: str = schemaField(description="Query point.", dtype=str, required=True, default="unset")
 
 
 class _FindClosestNodeLikeKeyword(KeywordBase):
-    """A minimal structural-keyword-shaped subclass: mutates nothing here (no model is threaded
-    through this fixture), just proves the seam is callable and returns whatever the override
-    decides to -- ``None`` for a structural keyword, per the base class's own contract."""
+    """A minimal concrete subclass: only ``schema``/``keywordName``/``keywordDescription``, exactly
+    what every real ``keywords/*.py`` module declares."""
 
     schema = _FindClosestNodeLikeSchema
-
-    @classmethod
-    def fromKeywordDefinition(cls, name, definition, context):
-        return None
+    keywordName = "findclosestnode"
+    keywordDescription = "Find the node closest to a given spatial position."
 
 
 def test_a_concrete_subclass_is_instantiable_and_exposes_its_schema_via_schemaOf():
@@ -91,11 +77,6 @@ def test_a_concrete_subclass_is_instantiable_and_exposes_its_schema_via_schemaOf
     assert schemaOf(_FindClosestNodeLikeKeyword) is _FindClosestNodeLikeSchema
 
 
-def test_fromKeywordDefinition_is_the_declared_L4_seam_and_may_return_None():
-    """Structural keywords (``*element``, ``*node``, ...) mutate ``context.model`` directly and
-    return ``None`` -- there is nothing further to hand back to a caller by name (see the base
-    class's docstring). This fixture does not touch ``context.model`` (no model is constructed
-    here), it only pins that returning ``None`` is a legitimate, type-annotated outcome."""
-    context = InputContext(model=None, journal=None)
-    result = _FindClosestNodeLikeKeyword.fromKeywordDefinition("myKeyword", {"location": "0,0,0"}, context)
-    assert result is None
+def test_a_concrete_subclass_exposes_its_name_and_description():
+    assert _FindClosestNodeLikeKeyword.keywordName == "findclosestnode"
+    assert _FindClosestNodeLikeKeyword.keywordDescription == "Find the node closest to a given spatial position."

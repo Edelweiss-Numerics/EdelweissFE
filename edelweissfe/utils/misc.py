@@ -134,6 +134,43 @@ def convertAssignmentsToStringDictionary(assignments: list) -> dict:
     return resultDict
 
 
+def parseDatalinesToArgsAndKwargs(datalines: list | str) -> tuple[list, "CaseInsensitiveDict"]:
+    """Split a keyword's plain (non-``>>``) datalines into positional args and ``key=value`` kwargs.
+
+    Every ``key=value``-shaped, comma-split token becomes a kwarg; every other token is a plain
+    positional arg (e.g. an element set name in a ``*section``'s datalines). This is a free
+    function, not a method on any resolved grammar object: the split it performs consults no
+    declared grammar at all, so there was never a reason to route it through one.
+
+    Parameters
+    ----------
+    datalines
+        One dataline string, or a list of them.
+
+    Returns
+    -------
+    tuple[list, CaseInsensitiveDict]
+        The positional args (in order) and the ``key=value`` kwargs.
+    """
+    if not isinstance(datalines, list):
+        datalines = [datalines]
+
+    args = []
+    kwargs = CaseInsensitiveDict()
+
+    datalineOptions = []
+    for line in datalines:
+        datalineOptions += splitLineAtCommas(line)
+
+    for option in datalineOptions:
+        if "=" in option:
+            kwargs.update(convertAssignmentsToStringDictionary([option]))
+        else:
+            args.append(option)
+
+    return args, kwargs
+
+
 def convertAssignmentsToCaseInsensitiveStringDictionary(assignments: list) -> dict:
     """Create a case insensitive dictionary from a list of assignments in
     the form a=b.
@@ -454,26 +491,6 @@ def caseInsensitiveRequiredArgsChecker(kwargsRequired: list[str]):
                 )
 
             return fun(*args, **casefoldedKwargs)
-
-        return wrapped
-
-    return wrapper
-
-
-def castKwargsValuesAndAddDefaults(module):
-    def wrapper(fun, *args, **kwargs):
-        def wrapped(*args, **kwargs):
-            kwargs = CaseInsensitiveDict(kwargs)
-            for arg in module.requiredArgs:
-                if arg.name in kwargs:
-                    kwargs[arg.name] = arg.getValueFromKwargs(kwargs)
-            for arg in module.optionalArgs:
-                if arg.name in kwargs:
-                    kwargs[arg.name] = arg.getValueFromKwargs(kwargs)
-                else:
-                    kwargs[arg.name] = arg.default
-
-            return fun(*args, **kwargs)
 
         return wrapped
 

@@ -30,63 +30,50 @@ have a distinct (physical) runtime, and may contain multiple StepActions.
 Subsequent Steps inherit StepActions, and they may be updated."""
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.base.timestepperbase import TimeStepperBase
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.fieldoutput import FieldOutputController
-from edelweissfe.utils.inputlanguage import Module
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 
-def addIncrementationOptionsToModule(module: Module):
-    """Register the standard incrementation options, which are common to all step types,
-    for the given input language module.
+@dataclass(frozen=True)
+class StepIncrementationSchema:
+    """L2: the standard incrementation options common to every step type (``*step`` keyword
+    datalines), owned by this module and never mutated from outside it.
 
-    Parameters
-    ----------
-    module
-        The input language module describing the step type.
+    Every concrete :class:`StepBase` subclass shares exactly this option set -- there is no
+    per-step-type variation -- so it is declared once here rather than once per step type.
     """
 
-    module.addOptionalArg("stepLength", "The duration of the step.", float, 1.0)
-    module.addOptionalArg("startInc", "The initial fraction of the step to be computed.", float, 1.0)
-    module.addOptionalArg("maxInc", "The maximal fraction of the step to be computed.", float, 1.0)
-    module.addOptionalArg("minInc", "The minimal fraction of the step to be computed.", float, 1e-4)
-    module.addOptionalArg("maxNumInc", "The maximal number of increments allowed.", int, 1000)
-    module.addOptionalArg("maxIter", "The maximal number of iterations allowed.", int, 10)
-    module.addOptionalArg(
-        "criticalIter", "The number of critical iterations after which the next increment is reduced.", int, 5
+    stepLength: float = schemaField(description="The duration of the step.", dtype=float, default=1.0)
+    startInc: float = schemaField(
+        description="The initial fraction of the step to be computed.", dtype=float, default=1.0
     )
-    module.addOptionalArg("maxGrowIter", "The number of residual growths before the increment is discarded.", int, 10)
-    module.addOptionalArg(
-        "cutbackFactor", "Factor by which the increment size is reduced if no convergence was achieved.", float, 0.25
+    maxInc: float = schemaField(
+        description="The maximal fraction of the step to be computed.", dtype=float, default=1.0
     )
-
-
-def getModuleArgNames(module: Module) -> tuple[list[str], list[str]]:
-    """Collect the required and optional argument names of an input language module,
-    e.g., for use with the kwargs checking decorators.
-
-    Parameters
-    ----------
-    module
-        The input language module describing the step type.
-
-    Returns
-    -------
-    tuple[list[str], list[str]]
-        The lists of required and optional argument names.
-    """
-
-    required = [arg.name for arg in module.requiredArgs]
-    required += [kw.name for kw in module.requiredKeywords]
-
-    optional = [arg.name for arg in module.optionalArgs]
-    optional += [kw.name for kw in module.optionalKeywords]
-
-    return required, optional
+    minInc: float = schemaField(
+        description="The minimal fraction of the step to be computed.", dtype=float, default=1e-4
+    )
+    maxNumInc: int = schemaField(description="The maximal number of increments allowed.", dtype=int, default=1000)
+    maxIter: int = schemaField(description="The maximal number of iterations allowed.", dtype=int, default=10)
+    criticalIter: int = schemaField(
+        description="The number of critical iterations after which the next increment is reduced.",
+        dtype=int,
+        default=5,
+    )
+    maxGrowIter: int = schemaField(
+        description="The number of residual growths before the increment is discarded.", dtype=int, default=10
+    )
+    cutbackFactor: float = schemaField(
+        description="Factor by which the increment size is reduced if no convergence was achieved.",
+        dtype=float,
+        default=0.25,
+    )
 
 
 class StepBase(ABC):
@@ -130,7 +117,7 @@ class StepBase(ABC):
         stepActions: dict,
         **kwargs,
     ):
-        kwargs = CaseInsensitiveDict(kwargs)
+        options = buildSchemaFromOptions(StepIncrementationSchema, kwargs)
 
         self.number = number  #: The (unique) number of the step.
         self.model = model
@@ -140,15 +127,15 @@ class StepBase(ABC):
         self.outputManagers = outputManagers
         self.actions = stepActions
 
-        self.length = kwargs["stepLength"]  #: The duration of the step.
-        self.startIncrementSize = kwargs["startInc"]
-        self.maxIncrementSize = kwargs["maxInc"]
-        self.minIncrementSize = kwargs["minInc"]
-        self.maxNumberIncrements = kwargs["maxNumInc"]
-        self.maxIter = kwargs["maxIter"]
-        self.criticalIter = kwargs["criticalIter"]
-        self.maxGrowIter = kwargs["maxGrowIter"]
-        self.cutbackFactor = kwargs["cutbackFactor"]
+        self.length = options.stepLength  #: The duration of the step.
+        self.startIncrementSize = options.startInc
+        self.maxIncrementSize = options.maxInc
+        self.minIncrementSize = options.minInc
+        self.maxNumberIncrements = options.maxNumInc
+        self.maxIter = options.maxIter
+        self.criticalIter = options.criticalIter
+        self.maxGrowIter = options.maxGrowIter
+        self.cutbackFactor = options.cutbackFactor
 
         self.timeStepper = self._createTimeStepper()
 

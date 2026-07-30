@@ -48,7 +48,6 @@ from edelweissfe.utils.fieldoutput import (
     NodeFieldOutput,
     _FieldOutputBase,
 )
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.meshtools import disassembleElsetToEnsightShapes
 from edelweissfe.utils.misc import asBool
 from edelweissfe.utils.schema import schemaField, subKeywordField
@@ -59,37 +58,6 @@ If loaded, it automatically exports all elSets as Ensight parts.
 For each part, perNode and perElement results can be exported, which are imported from fieldOutputs.
 
 """
-
-module = Module("ensight", "Ensight export.")
-
-inputLanguage = InputLanguage()
-
-keyword = "output"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-kw = module.addOptionalKeyword("perNode", "Node-based Ensight export.")
-kw.addRequiredArg(
-    "fieldOutput",
-    "Name of the result, defined on an elSet (also for perNode results!)",
-    str,
-)
-
-kw = module.addOptionalKeyword("perElement", "Element-based Ensight export.")
-kw.addRequiredArg(
-    "fieldOutput",
-    "Name of the result, defined on an elSet (also for perNode results!)",
-    str,
-)
-
-kw = module.addOptionalKeyword("configuration", "")
-kw.addOptionalArg("overwrite", "Overwrite results.", bool, False)
-kw.addOptionalArg("intermediateSaveInterval", "Set intermediate save interval.", int, 10)
-kw.addOptionalArg("elSet", "Element set.", str, None)
-kw.addOptionalArg("nSet", "Node set.", str, None)
-kw.addOptionalArg("transient", "Set transient ensight output.", bool, True)
-
-documentation = [module]
 
 
 @dataclass(frozen=True)
@@ -121,10 +89,8 @@ class EnsightConfigurationSchema:
     """L2: the options of a single ``>>configuration`` block.
 
     These defaults are the single source of truth for what an ensight export does when no
-    ``>>configuration`` block is given at all. Previously the constructor read them back out of the
-    ``Module`` declaration (``module.getKeyword("configuration")["overwrite"].default`` and friends),
-    which is precisely the L1-depends-on-the-input-language coupling this migration removes: it made
-    the class unconstructible without the ``InputLanguage`` singleton being populated first.
+    ``>>configuration`` block is given at all -- read directly from this schema's own field
+    defaults, with no dependency on the input-language machinery being loaded first.
 
     Note that ``overwrite`` defaults to ``False``, i.e. an export directory is by default suffixed
     with a timestamp rather than overwritten -- despite the "ensight output is overwritten by
@@ -874,13 +840,6 @@ def createUnstructuredPartFromRigidBody(bodyName, rigidBody, partID: int):
     return EnsightUnstructuredPart("RIGIDBODY_" + bodyName, partID, visualizationNodes, elementDict)
 
 
-required = [kw.name for kw in module.requiredArgs]
-required += [kw.name for kw in module.requiredKeywords]
-
-optional = [kw.name for kw in module.optionalArgs]
-optional += [kw.name for kw in module.optionalKeywords]
-
-
 class OutputManager(OutputManagerBase):
     identification = "Ensight Export"
 
@@ -897,7 +856,7 @@ class OutputManager(OutputManagerBase):
         *,
         configuration: EnsightSchema = EnsightSchema(),
     ):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement and
+        """L1: constructible standalone, with no parser involvement and
         no ``moduleOptions``. Options arrive as an already-validated, already-typed schema instance,
         so nothing here coerces strings, reads defaults out of the input language, or inspects
         dictionaries.
@@ -948,8 +907,7 @@ class OutputManager(OutputManagerBase):
 
         self.geometryParts = self._createGeometryParts(1)
 
-        # Defaults now come from the L2 schema rather than from the Module declaration, which is
-        # what decouples this constructor from the InputLanguage singleton.
+        # Defaults come directly from the L2 schema, with no input-language dependency.
         defaults = EnsightConfigurationSchema()
         val = defaults.intermediateSaveInterval
         self.intermediateSaveInterval = int(val) if val is not None else None

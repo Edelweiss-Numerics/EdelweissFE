@@ -44,7 +44,6 @@ from edelweissfe.utils.facetcontactgeometry import (
     tria3ClosestPoint,
     tria3GapGradientHessian,
 )
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
@@ -65,92 +64,6 @@ identity) keeps its frictional history and augmented-Lagrange multiplier; a newl
 starts at rest.
 """
 
-module = Module(
-    "nodeToDeformableSurfacePenalty",
-    "A penalty based unilateral contact constraint preventing the nodes of a slave surface from "
-    "penetrating a deformable master surface, both represented by contact facet elements.",
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg(
-    "slaveSurface",
-    "The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) forming the "
-    "slave surface; its nodes act as the contact points, penalty-weighted by their tributary areas.",
-    str,
-)
-module.addRequiredArg(
-    "masterSurface",
-    "The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) forming the " "master surface.",
-    str,
-)
-module.addRequiredArg(
-    "penalty",
-    "The numerical penalty value, an interface stiffness modulus per unit slave surface area.",
-    float,
-)
-
-module.addOptionalArg(
-    "type",
-    "The formulation type: 'linear' (linear force, constant stiffness with jump) or 'quadratic' (quadratic "
-    "force, linear stiffness).",
-    str,
-    "linear",
-)
-module.addOptionalArg(
-    "searchDistance",
-    "An optional broadphase distance for the per-increment candidate-facet search. If not given, "
-    "every slave is always assigned its single closest facet, without a distance gate.",
-    float,
-    None,
-)
-module.addOptionalArg(
-    "sliding",
-    "The kinematic treatment of the contact geometry: 'finite' (gap, gradient and exact Hessian "
-    "recomputed from the current Newton iterate every iteration) or 'small' (Abaqus-style small "
-    "sliding: the closest-point projection -- facet, clamped local coordinates, and normal -- is "
-    "frozen once per increment from the last converged configuration, making the gap linear in "
-    "the displacement DOFs).",
-    str,
-    "finite",
-)
-module.addOptionalArg(
-    "mu",
-    "The Coulomb friction coefficient. Requires sliding=small; mu=0 disables friction. Strongly "
-    "recommended in combination with type=quadratic: the quadratic law's contact stiffness "
-    "vanishes continuously at gap activation, keeping the frictional tangent continuous for "
-    "slave nodes lifting off/touching down -- with type=linear, the activation stiffness jump "
-    "scaled by mu makes Newton prone to limit-cycling at such events.",
-    float,
-    0.0,
-)
-module.addOptionalArg(
-    "tangentPenalty",
-    "The tangential penalty stiffness per unit slave surface area for frictional stick. "
-    "Defaults to the normal penalty.",
-    float,
-    None,
-)
-module.addOptionalArg(
-    "augmentedLagrange",
-    "Augment the penalty force with a per-slave normal traction multiplier, updated once per "
-    "increment on acceptance (incremental Uzawa: lambda <- min(0, lambda + converged penalty "
-    "force part); the update is law-dependent -- penalty * A * g for the linear law, "
-    "-0.5 * penalty * A * g**2 for the quadratic law, since the textbook penalty * A * g rule "
-    "overshoots grossly for the quadratic one). "
-    "The multiplier is constant within an increment (zero tangent contribution), drives the "
-    "penetration toward zero over the increments at a fixed penalty, and sharpens the friction "
-    "cone mu * N. Requires sliding=small.",
-    bool,
-    False,
-)
-
-documentation = [module]
-
 # Angular threshold separating a *continuous* drift of the frozen contact frame between two
 # increments (the slave staying on its facet, or crossing onto a smoothly adjacent one of a curved
 # but adequately resolved master surface) from a genuine *crease* of the master surface, used in
@@ -169,10 +82,6 @@ _cosOfSmoothNormalChangeLimit = np.cos(np.deg2rad(30.0))
 class NodeToDeformableSurfacePenaltySchema:
     """L2: the options this constraint accepts, owned by this module and never mutated from
     outside it.
-
-    Mirrors the ``module.addRequiredArg``/``module.addOptionalArg(...)`` declarations above
-    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
-    one goes away with the ``InputLanguage`` singleton in P5.
 
     The update-type option is spelled ``type`` in the input file but the field is named
     ``contactType`` here -- a dataclass field literally called ``type`` would shadow the builtin,

@@ -41,7 +41,6 @@ from edelweissfe.stepactions.base.amplitude import (
 from edelweissfe.stepactions.base.bodyloadbase import BodyLoadBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
@@ -50,32 +49,10 @@ If not modified in subsequent steps, the load held constant.
 """
 
 
-inputLanguage = InputLanguage()
-# Register this step action for all available step types. This requires the step type
-# modules to be imported before the step actions, as done in the input file parser.
-modules = inputLanguage["step"].modules if "step" in inputLanguage else []
-
-documentation = []
-
-for module in modules:
-    kw = module.addOptionalKeyword("bodyforce", "Apply body forces on element sets.")
-    kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("elSet", "The element set for application of the boundary condition.", str)
-    kw.addRequiredArg("forceVector", "The force vector.", str)
-    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
-    kw.addOptionalArg("delta", "In subsequent steps only: define the updated force vector incrementally", str, 0)
-
-    documentation.append(kw)
-
-
 @dataclass(frozen=True)
 class BodyForceSchema:
     """L2: the scalar options of the ``bodyforce`` keyword, owned by this module and never mutated
     from outside it.
-
-    Mirrors the ``module.addRequiredArg``/``addOptionalArg(...)`` declarations above one-for-one.
-    The two declarations coexist while the migration is in progress; the ``Module`` one goes away
-    with the ``InputLanguage`` singleton in P5.
 
     ``name`` and ``elSet`` are ``structuralOnly`` fields: ``elSet`` names an existing model object,
     resolved by :meth:`fromStepActionDefinition` before the schema is even built, exactly like

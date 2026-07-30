@@ -54,27 +54,7 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import schemaField
-
-module = Module("microstructuregenerator", "A mesh generator for generating a structure from a single unit cell mesh.")
-
-inputLanguage = InputLanguage()
-
-keyword = "modelGenerator"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addOptionalArg("unitCellMeshFile", "Path to the unit cell mesh file.", str, None)
-
-module.addOptionalArg("nX", "Number of cells along the x axis.", int, 1)
-module.addOptionalArg("nY", "Number of cells along the y axis.", int, 1)
-module.addOptionalArg("nZ", "Number of cells along the z axis.", int, 1)
-
-module.addRequiredArg("elType", "Element type.", str)
-module.addOptionalArg("elProvider", "Element provider.", str, None)
-
-documentation = [module]
 
 identification = "microgen"
 
@@ -84,11 +64,7 @@ class MicrostructureGeneratorSchema:
     """L2: the options this generator accepts, owned by this module and never mutated from
     outside it.
 
-    Mirrors the ``module.addOptionalArg``/``module.addRequiredArg(...)`` declarations above
-    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
-    one goes away with the ``InputLanguage`` singleton in P5.
-
-    ``elType`` is declared ``required=True`` explicitly, mirroring ``addRequiredArg`` above, but is
+    ``elType`` is declared ``required=True`` explicitly, but is
     still given a ``default=None`` so the schema remains constructible for the L1 constructor's
     default argument.
     """
@@ -115,7 +91,7 @@ class Generator(GeneratorBase):
         *,
         configuration: MicrostructureGeneratorSchema = MicrostructureGeneratorSchema(),
     ):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        """L1: constructible standalone, with no parser involvement.
         Populates ``model`` directly; construction *is* the generation.
 
         Parameters

@@ -36,36 +36,14 @@ import numpy as np
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import strCaseCmp
 from edelweissfe.utils.schema import schemaField
-
-module = Module("randomScalar", "Define a random field using the GSTools library.")
-
-inputLanguage = InputLanguage()
-
-keyword = "analyticalField"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addOptionalArg("model", "Covariance Model of the spatial random field", str, "Gaussian")
-module.addOptionalArg("mean", "Mean of the spatial random field", float, 0.0)
-module.addOptionalArg("variance", "Variance of the model", float, 1.0)
-module.addOptionalArg("lengthScale", "Length scale of the model", float, 10.0)
-module.addOptionalArg("nu", "Smoothness parameter for Matern covariance function", float, 1.0)
-module.addOptionalArg("seed", "Seed of the random number generator", int, 0)
-
-documentation = [module]
 
 
 @dataclass(frozen=True)
 class RandomScalarSchema:
     """L2: the options this analytical field accepts, owned by this module and never mutated from
     outside it.
-
-    Mirrors the ``module.addOptionalArg(...)`` declarations above one-for-one. The two declarations
-    coexist while the migration is in progress; the ``Module`` one goes away with the
-    ``InputLanguage`` singleton in P5.
     """
 
     model: str = schemaField(description="Covariance Model of the spatial random field", dtype=str, default="Gaussian")
@@ -83,7 +61,7 @@ class AnalyticalField(AnalyticalFieldBase):
     schema = RandomScalarSchema
 
     def __init__(self, name: str, FEModel, *, configuration: RandomScalarSchema = RandomScalarSchema()):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        """L1: constructible standalone, with no parser involvement.
 
         Parameters
         ----------

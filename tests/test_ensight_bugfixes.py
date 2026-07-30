@@ -30,11 +30,11 @@ P0.3 focused regression tests (see PLAN_INPUT_SYSTEM.md) for two standing bugs i
 ``edelweissfe/outputmanagers/ensight.py``:
 
 Bug 1
-    ``self.intermediateSaveInterval`` used to be assigned from
-    ``module.getKeyword("configuration")["overwrite"].default`` instead of
-    ``["intermediateSaveInterval"].default``. This has *already been fixed* upstream (found while
-    verifying this branch's diagnosis against the current code -- see PLAN_INPUT_SYSTEM.md), but
-    the test below still pins the correct behavior down so a regression is caught immediately.
+    ``self.intermediateSaveInterval`` used to be assigned from the legacy ``Module`` declaration's
+    ``overwrite`` default instead of its own ``intermediateSaveInterval`` default. This has
+    *already been fixed* upstream (found while verifying this branch's diagnosis against the
+    current code -- see PLAN_INPUT_SYSTEM.md), but the test below still pins the correct behavior
+    down so a regression is caught immediately.
 
 Bug 2
     ``strtobool()`` (``edelweissfe/utils/misc.py``) calls ``.lower()`` on its argument, so a
@@ -51,8 +51,7 @@ from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.materiallibrary import getMaterialClass
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.outputmanagers.ensight import OutputManager
-from edelweissfe.outputmanagers.ensight import module as ensightModule
+from edelweissfe.outputmanagers.ensight import EnsightConfigurationSchema, OutputManager
 from edelweissfe.points.node import Node
 from edelweissfe.sections.plane import PlaneSectionSchema, Section
 from edelweissfe.sets.elementset import ElementSet
@@ -102,10 +101,9 @@ def _buildEnsightOutputManager() -> OutputManager:
 def test_intermediateSaveInterval_reads_its_own_default_not_overwrites():
     """Bug 1: intermediateSaveInterval (schema default 10) must not silently pick up
     overwrite's default (False -> 0)."""
-    intermediateSaveIntervalArg = ensightModule.getKeyword("configuration")["intermediateSaveInterval"]
-    overwriteArg = ensightModule.getKeyword("configuration")["overwrite"]
-    assert intermediateSaveIntervalArg.default == 10
-    assert overwriteArg.default is False
+    defaults = EnsightConfigurationSchema()
+    assert defaults.intermediateSaveInterval == 10
+    assert defaults.overwrite is False
 
     manager = _buildEnsightOutputManager()
 

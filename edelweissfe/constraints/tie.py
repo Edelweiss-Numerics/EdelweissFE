@@ -41,7 +41,6 @@ from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.facetcontactgeometry import line2ClosestPoint, tria3ClosestPoint
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
@@ -69,86 +68,6 @@ for removing an initial geometric gap, not something to repeat on an already-loa
 node.
 """
 
-module = Module(
-    "tie",
-    "An Abaqus-style tie constraint, bonding a slave surface rigidly to a deformable master "
-    "surface via master-slave DOF elimination.",
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg(
-    "slaveSurface",
-    "The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) forming the "
-    "slave surface; its nodes are tied. For quadratic (hexa20/quad8) faces, generate the facets "
-    "with triangulation=midside on BOTH surfaces -- the corner triangulation excludes the midside "
-    "nodes from the facet node list entirely, leaving them untied.",
-    str,
-)
-module.addRequiredArg(
-    "masterSurface",
-    "The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) forming the " "master surface.",
-    str,
-)
-module.addOptionalArg(
-    "positionTolerance",
-    "Whether a slave node is tied at all: nodes whose reference-configuration closest-point "
-    "distance to the master surface exceeds this tolerance are left untied (recorded in the "
-    "constraint's untiedSlaveNodes), matching Abaqus' *TIE default behavior of silently dropping "
-    "out-of-range slave nodes. Applies independently of adjust -- whether a tied node's "
-    "coordinates additionally get snapped onto the master is a separate decision, see "
-    "adjust/adjustTolerance. If not given (the default), a tolerance is computed as "
-    "positionToleranceFactor times the master surface's characteristic facet size -- see "
-    "positionToleranceFactor. Set this explicitly to an absolute distance to override that.",
-    float,
-    None,
-)
-module.addOptionalArg(
-    "positionToleranceFactor",
-    "Used only when positionTolerance is not given: the default tolerance is this fraction of the "
-    "master surface's characteristic (mean, over all its facets) edge length, computed once and "
-    "used for every slave node. 0.25 comfortably exceeds the sub-percent gaps expected between two "
-    "compatible discretizations of the same surface (mismatched density, curvature/interpolation "
-    "error), while remaining well below the facet-size-or-larger gaps that indicate the surfaces "
-    "don't actually correspond (e.g. a slave surface extending beyond the master surface's actual "
-    "extent -- a partial-bond-length or otherwise partially-overlapping pair of surfaces).",
-    float,
-    0.25,
-)
-module.addOptionalArg(
-    "adjust",
-    "Whether a TIED node's coordinates additionally get snapped onto its projected master point "
-    "at construction (Abaqus-like default) -- a separate decision from whether the node is tied "
-    "at all (see positionTolerance). If False, no tied node is ever snapped: any initial geometric "
-    "gap is preserved rigidly (the displacements are tied, not the positions), regardless of size. "
-    "If True, a tied node is snapped only if its distance is also within adjustTolerance (default: "
-    "unconditionally, i.e. every tied node is snapped, matching plain Abaqus ADJUST=YES) -- see "
-    "adjustTolerance to snap away only small, effectively-numerical gaps while still tying "
-    "(without snapping) across larger, deliberate ones. Note that adjusting modifies the nodal "
-    "coordinates before the element geometry is initialized; avoid adjusting nodes that also "
-    "belong to an already-generated contact surface of another constraint.",
-    bool,
-    True,
-)
-module.addOptionalArg(
-    "adjustTolerance",
-    "Used only when adjust=True: a tied node's coordinates are snapped onto the master only if "
-    "its closest-point distance is also within this tolerance; beyond it, the node stays tied "
-    "(kinematically) but its position is left as found, preserving the gap. Independent of "
-    "positionTolerance -- a node can be tied across a fairly generous distance while only "
-    "genuinely small (e.g. sub-percent, mesh-discretization-scale) gaps within that get snapped "
-    "away. If not given (the default), any tied node is snapped, matching plain Abaqus ADJUST=YES "
-    "and this constraint's behavior before this option existed.",
-    float,
-    None,
-)
-
-documentation = [module]
-
 
 def _facetCharacteristicSize(facetCoords: np.ndarray) -> float:
     """Mean edge length of a facet (Line2: its one edge; Tria3: its three edges) -- the local
@@ -174,12 +93,6 @@ def _facetCharacteristicSize(facetCoords: np.ndarray) -> float:
 class TieSchema:
     """L2: the options this constraint accepts, owned by this module and never mutated from
     outside it.
-
-    Mirrors the ``module.addOptionalArg(...)`` declarations above one-for-one. The two
-    declarations coexist while the migration is in progress; the ``Module`` one goes away with the
-    ``InputLanguage`` singleton in P5. ``adjust`` is a real ``bool`` field rather than the
-    hand-``strtobool``-cast ``str`` the legacy grammar declared it as (see
-    :func:`edelweissfe.utils.schema.coerceValue`).
     """
 
     slaveSurface: str | None = schemaField(

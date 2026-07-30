@@ -39,7 +39,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from edelweissfe.keywords.base.keywordbase import KeywordBase
-from edelweissfe.utils.inputcontext import InputContext
 from edelweissfe.utils.schema import datalineField, schemaField
 
 
@@ -61,15 +60,3 @@ class UpdateConfigurationKeyword(KeywordBase):
 
     keywordName = "updateConfiguration"
     keywordDescription = "update a configuration"
-
-    @classmethod
-    def fromKeywordDefinition(cls, name: str, definition: dict, context: InputContext) -> "KeywordBase | None":
-        """Not yet implemented -- U2b only mirrors the grammar as a schema.
-
-        Raises
-        ------
-        NotImplementedError
-            Always. Construction from a parsed ``*updateConfiguration`` definition is wired in U3,
-            once the runtime parser is swapped over (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U3).
-        """
-        raise NotImplementedError("UpdateConfigurationKeyword.fromKeywordDefinition is wired in U3, not U2b.")

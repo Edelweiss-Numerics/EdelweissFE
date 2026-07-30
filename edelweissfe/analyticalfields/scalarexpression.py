@@ -34,25 +34,8 @@ import numpy as np
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.math import createModelAccessibleFunction
 from edelweissfe.utils.schema import schemaField
-
-module = Module("scalarExpression", "Define an analytical field using a scalar expression.")
-
-inputLanguage = InputLanguage()
-
-keyword = "analyticalField"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg(
-    "f(x,y,z)",
-    "Python expression using variables x, y, z (coordinates); dictionaries contained in model can be accessed",
-    str,
-)
-
-documentation = [module]
 
 
 @dataclass(frozen=True)
@@ -60,11 +43,7 @@ class ScalarExpressionSchema:
     """L2: the options this analytical field accepts, owned by this module and never mutated from
     outside it.
 
-    Mirrors the ``module.addRequiredArg(...)`` declaration above. The two declarations coexist
-    while the migration is in progress; the ``Module`` one goes away with the ``InputLanguage``
-    singleton in P5.
-
-    ``f_x_y_z`` is declared ``required=True`` explicitly, mirroring ``addRequiredArg`` above, but is
+    ``f_x_y_z`` is declared ``required=True`` explicitly, but is
     still given a ``default=None`` so that ``ScalarExpressionSchema()`` remains constructible for
     the L1 constructor's default argument; the L4 adapter (``buildSchemaFromOptions``) still
     enforces that an ``.inp`` file supplies it.
@@ -87,7 +66,7 @@ class AnalyticalField(AnalyticalFieldBase):
     schema = ScalarExpressionSchema
 
     def __init__(self, name: str, FEModel, *, configuration: ScalarExpressionSchema = ScalarExpressionSchema()):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        """L1: constructible standalone, with no parser involvement.
 
         Parameters
         ----------

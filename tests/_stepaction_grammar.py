@@ -28,15 +28,36 @@
 
 """Dump the declared step-action grammar as JSON, for ``tests/test_stepaction_option_coverage.py``.
 
-Runs as a **fresh subprocess** for the same reason ``tests/_inputlanguage_snapshot.py`` does:
-``InputLanguage`` registration is import-order dependent, so reading the grammar inside the shared
-pytest process would make the result depend on which other test module imported what first.
+Sourced entirely from the registry's ``"stepaction"`` category and each module's own L2 schema
+(``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U4) -- there is no other grammar representation left to read.
+Still runs as a **fresh subprocess**, matching ``tests/_inputlanguage_snapshot.py``: this keeps the
+grammar dump isolated from whatever else the shared pytest session happens to have imported, even
+though nothing about the registry is import-order dependent any more.
 """
 
+import dataclasses
 import json
 
-from edelweissfe.config.registry import _BUILTINS
-from edelweissfe.utils.inputlanguage import InputLanguage
+from edelweissfe.config.registry import _BUILTINS, lookup
+from edelweissfe.utils.inputfileparser import _updateStepActionSchema
+from edelweissfe.utils.schema import fieldSchemaMeta
+
+
+def _declaredArgNames(schemaCls: type | None) -> list[str]:
+    """Every option name a schema declares on its own line/dataline-less grammar -- scalar fields
+    only (no dataline payload, no ``>>`` sub-keyword), including ``structuralOnly``/
+    ``optionsOverrideOnly``/``updateOnly`` ones: all of these are names a step action's own code may
+    legitimately read from a parsed definition dict, exactly like every other declared option.
+    """
+    if schemaCls is None:
+        return []
+    names = []
+    for field in dataclasses.fields(schemaCls):
+        meta = fieldSchemaMeta(field)
+        if meta.isDataline or meta.subSchema is not None:
+            continue
+        names.append(meta.optionName or field.name)
+    return sorted(names)
 
 
 def dumpStepActionGrammar() -> dict:
@@ -51,19 +72,18 @@ def dumpStepActionGrammar() -> dict:
         of an already-defined step action in a later step.
     """
 
-    inputLanguage = InputLanguage()
-    inputLanguage.ensureParserLoaded()
-
     moduleNames = sorted(name for category, name in _BUILTINS if category == "stepaction")
 
     grammar = {}
     for moduleName in moduleNames:
-        keywords = {}
-        # every step type registers the same keywords, so the first match per name is representative
-        for stepModule in inputLanguage["step"].modules:
-            for keyword in stepModule.keywords:
-                if keyword.name.casefold() in (moduleName, "update" + moduleName):
-                    keywords.setdefault(keyword.name, sorted({arg.name for arg in keyword.args}))
+        _target, schema = lookup("stepaction", moduleName)
+        keywords = {moduleName: _declaredArgNames(schema)}
+
+        updateSchema = _updateStepActionSchema(moduleName)
+        if updateSchema is not None:
+            updateName = "update" + moduleName
+            keywords[updateName] = _declaredArgNames(updateSchema)
+
         grammar[moduleName] = keywords
 
     return grammar

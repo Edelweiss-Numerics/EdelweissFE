@@ -37,7 +37,6 @@ from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.rigidbodies.discreterigidbody import DiscreteRigidBody
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
@@ -53,48 +52,11 @@ deformable-surface/tie facet constraints): every quantity is recomputed fresh fr
 geometry every Newton iteration.
 """
 
-module = Module(
-    "nodeToDiscreteRigidBodyPenalty",
-    "A penalty based unilateral contact constraint preventing nodes of a node set from penetrating "
-    "the surface of a discrete rigid body.",
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg("nSet", "The (slave) node set to be protected from penetrating the rigid body.", str)
-module.addRequiredArg("rigidBody", "The name of the discrete rigid body (as registered in model.rigidBodies).", str)
-module.addRequiredArg("penalty", "The numerical penalty value.", float)
-
-module.addOptionalArg(
-    "type",
-    "The formulation type: 'linear' (linear force, constant stiffness with jump) or 'quadratic' (quadratic "
-    "force, linear stiffness).",
-    str,
-    "linear",
-)
-module.addOptionalArg(
-    "searchDistance",
-    "An optional broadphase distance (passed on to the rigid body's surface query) for culling nodes far "
-    "away from the rigid body. If not given, every slave node is queried exactly every iteration.",
-    float,
-    None,
-)
-
-documentation = [module]
-
 
 @dataclass(frozen=True)
 class NodeToDiscreteRigidBodyPenaltySchema:
     """L2: the options this constraint accepts, owned by this module and never mutated from
     outside it.
-
-    Mirrors the ``module.addRequiredArg``/``module.addOptionalArg(...)`` declarations above
-    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
-    one goes away with the ``InputLanguage`` singleton in P5.
 
     The update-type option is spelled ``type`` in the input file but the field is named
     ``contactType`` here -- a dataclass field literally called ``type`` would shadow the builtin,

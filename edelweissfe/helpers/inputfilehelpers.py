@@ -39,8 +39,7 @@ from edelweissfe.steps.stepmanager import (
 )
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.fieldoutput import FieldOutputController
-from edelweissfe.utils.inputfileparser import inputLanguage
-from edelweissfe.utils.inputlanguage import (
+from edelweissfe.utils.inputfileparser import (
     keywordIdentifier,
     moduleLevelKeywordIdentifier,
 )
@@ -49,6 +48,7 @@ from edelweissfe.utils.misc import (
     convertLinesToStringDictionary,
     convertLineToStringDictionary,
     isInteger,
+    parseDatalinesToArgsAndKwargs,
     strCaseCmp,
     strToRange,
     withoutParserBookkeeping,
@@ -249,14 +249,12 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
 
         generatorType = generatorDefinition.pop("generator")
         data = generatorDefinition.pop("datalines")
-        module = inputLanguage["modelGenerator"].getModule(generatorType)
-
-        args, kwargs = module.parseDatalines(data)
+        args, kwargs = parseDatalinesToArgsAndKwargs(data)
 
         # raw code lines must not be comma-split -- same special case as in the
         # executeAfterManualGeneration loop below, which previously was the only place with it
         # (executePythonCode was broken in this phase)
-        if strCaseCmp(module.name, "executePythoncode"):
+        if strCaseCmp(generatorType, "executePythoncode"):
             args = data
 
         generatorClass = getGeneratorClass(generatorType)
@@ -279,11 +277,9 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
 
         generatorType = generatorDefinition.pop("generator")
         data = generatorDefinition.pop("datalines")
-        module = inputLanguage["modelGenerator"].getModule(generatorType)
+        args, kwargs = parseDatalinesToArgsAndKwargs(data)
 
-        args, kwargs = module.parseDatalines(data)
-
-        if strCaseCmp(module.name, "executePythoncode"):
+        if strCaseCmp(generatorType, "executePythoncode"):
             args = data
 
         generatorClass = getGeneratorClass(generatorType)
@@ -321,8 +317,7 @@ def createStepManagerFromInputFile(inputfile: dict):
 
         stepActionDefinitions = []
 
-        stepModule = inputLanguage["step"].getModule(stepType)
-        args, kwargs = stepModule.parseDatalines(data)
+        args, kwargs = parseDatalinesToArgsAndKwargs(data)
 
         if args:
             raise ValueError(
@@ -483,10 +478,8 @@ def createOutputManagersFromInputFile(
         # sub-keyword source; for a schema that declares no sub-keyword fields it is `{}`, and a
         # stray block under such a keyword is rejected by `buildSchemaFromOptions` rather than
         # silently dropped.
-        module = inputLanguage["output"].getModule(outputManagerType)
-
         for optionsForOneManager in [datalines] if len(datalines) == 0 else datalines:
-            args, kwargs = module.parseDatalines(optionsForOneManager)
+            args, kwargs = parseDatalinesToArgsAndKwargs(optionsForOneManager)
 
             try:
                 configuration = buildSchemaFromOptions(

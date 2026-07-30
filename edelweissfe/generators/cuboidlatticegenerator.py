@@ -88,41 +88,7 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import schemaField
-
-module = Module("cuboidlatticegenerator", "A mesh generator for generating cuboid lattice structure.")
-
-inputLanguage = InputLanguage()
-
-keyword = "modelGenerator"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-# module.addOptionalArg("x0", "Origin along the x axis.", float, 0.0)
-# module.addOptionalArg("y0", "Origin along the y axis.", float, 0.0)
-# module.addOptionalArg("z0", "Origin along the z axis.", float, 0.0)
-
-module.addOptionalArg("lX", "Length of the body along the x axis.", float, 1.0)
-module.addOptionalArg("lY", "Length of the body along the y axis.", float, 1.0)
-module.addOptionalArg("lZ", "Length of the body along the z axis.", float, 1.0)
-
-module.addOptionalArg("nEleX", "Number of elements along the x axis.", int, 1)
-module.addOptionalArg("nEleY", "Number of elements along the y axis.", int, 1)
-module.addOptionalArg("nEleZ", "Number of elements along the z axis.", int, 1)
-
-module.addOptionalArg("nEleStrutX", "Number of in struts along the x axis.", int, 1)
-module.addOptionalArg("nEleStrutY", "Number of in struts along the y axis.", int, 1)
-module.addOptionalArg("nEleStrutZ", "Number of in struts along the z axis.", int, 1)
-
-module.addOptionalArg("nX", "Number of replications along the x axis.", int, 1)
-module.addOptionalArg("nY", "Number of replications along the y axis.", int, 1)
-module.addOptionalArg("nZ", "Number of replications along the z axis.", int, 1)
-
-module.addRequiredArg("elType", "Element type.", str)
-module.addOptionalArg("elProvider", "Element provider.", str, None)
-
-documentation = [module]
 
 
 @dataclass(frozen=True)
@@ -130,11 +96,7 @@ class CuboidLatticeGeneratorSchema:
     """L2: the options this generator accepts, owned by this module and never mutated from
     outside it.
 
-    Mirrors the ``module.addOptionalArg``/``module.addRequiredArg(...)`` declarations above
-    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
-    one goes away with the ``InputLanguage`` singleton in P5.
-
-    ``elType`` is declared ``required=True`` explicitly, mirroring ``addRequiredArg`` above, but is
+    ``elType`` is declared ``required=True`` explicitly, but is
     still given a ``default=None`` so the schema remains constructible for the L1 constructor's
     default argument.
     """
@@ -169,7 +131,7 @@ class Generator(GeneratorBase):
         *,
         configuration: CuboidLatticeGeneratorSchema = CuboidLatticeGeneratorSchema(),
     ):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        """L1: constructible standalone, with no parser involvement.
         Populates ``model`` directly; construction *is* the generation.
 
         Parameters

@@ -26,107 +26,40 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-from abc import ABC, abstractmethod
 from typing import ClassVar
 
-from edelweissfe.utils.inputcontext import InputContext
 from edelweissfe.utils.schema import OptionSchemaProvider
 
 
-class KeywordBase(OptionSchemaProvider, ABC):
-    """Base class for top-level ``.inp`` keywords (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U1).
+class KeywordBase(OptionSchemaProvider):
+    """Base class for top-level ``.inp`` keywords, discovered via the registry's ``"keyword"``
+    category (see ``config/registry.py``).
 
-    This generalizes the shape already proven by :class:`~edelweissfe.generators.base.
-    generatorbase.GeneratorBase` (structural, no further interface beyond populating the model) and
-    :class:`~edelweissfe.stepactions.base.stepactionbase.StepActionBase` (an object with further
-    behaviour, heterogeneous per-module structural arguments) to cover the *keyword* level itself --
-    the structural mesh/job keywords (``*element``, ``*node``, ``*nSet``, ``*elSet``, ``*surface``,
-    ``*job``), the pluggable-module keywords (``*output``, ``*section``, ``*analyticalField``,
-    ``*constraint``, ``*modelGenerator``, ``*step``), and the provider-dispatched type keywords
-    (``*element``, ``*material``). It is not a new pattern, only the same one pushed one level up,
-    discovered via the reserved ``"keyword"`` category of
-    :mod:`edelweissfe.config.registry` rather than being hand-declared in
-    ``inputfileparser.py``.
-
-    A keyword is reached either from Python or from an ``.inp`` file, and the input file is a
-    *serialization* of the Python path, not a second way of building whatever the keyword
-    constructs. A ``KeywordBase`` subclass therefore carries an L2 :attr:`schema` -- the grammar's
-    single source of truth, built from :func:`~edelweissfe.utils.schema.schemaField`,
+    A ``KeywordBase`` subclass carries the L2 :attr:`schema` -- the grammar's single source of
+    truth, built from :func:`~edelweissfe.utils.schema.schemaField`,
     :func:`~edelweissfe.utils.schema.subKeywordField` and
-    :func:`~edelweissfe.utils.schema.datalineField` -- plus one L4 seam,
-    :meth:`fromKeywordDefinition`, the only place the ``.inp`` front-end's string-typed shape is
-    turned into whatever this keyword produces.
-
-    Unlike :class:`GeneratorBase`, ``KeywordBase`` declares no constructor shape at all: a
-    structural keyword mutates ``context.model`` directly and returns ``None`` (nothing further is
-    ever looked up by name), while a pluggable-module keyword resolves a further ``type``/
-    ``provider`` value via the registry and constructs (or looks up) an object of some other,
-    unrelated base class entirely (a ``Section``, a ``Solver``, an ``OutputManager``, ...). The one
-    thing every keyword has in common is the seam below, not a shared runtime interface -- so this
-    class declares no ``__init__``, abstract or otherwise.
+    :func:`~edelweissfe.utils.schema.datalineField` -- plus its own spelling and description
+    (:attr:`keywordName`/:attr:`keywordDescription`), consumed by
+    :mod:`edelweissfe.utils.inputfileparser` for lexing/validation and by
+    :mod:`edelweissfe.utils.schemasurface` for the rendered grammar surface. Construction from a
+    parsed ``.inp`` definition happens in the existing per-category L4 adapters
+    (``abqmodelconstructor``/``inputfilehelpers``/``StepManager``), not on this class: a keyword's
+    grammar and its construction are two separate concerns, and only the former needed unifying
+    across every keyword.
     """
 
     #: The L2 schema dataclass describing this keyword's own line options, dataline payload, and
-    #: ``>>`` sub-blocks, or ``None`` if it declares none (yet). See
+    #: ``>>`` sub-blocks, or ``None`` if it declares none. See
     #: :class:`~edelweissfe.utils.schema.OptionSchemaProvider`.
     schema: ClassVar[type | None] = None
 
     #: The keyword's identifier as written in the ``.inp`` file, in its exact display case (e.g.
     #: ``"elSet"``, ``"analyticalField"`` -- NOT the casefolded registry key ``"elset"``). This is
-    #: the single source of truth for the keyword's spelling: the grammar surface renders it and the
-    #: U3 parser resolves it, so it must not be re-transcribed anywhere else. Distinct from the
-    #: ``name`` argument of :meth:`fromKeywordDefinition`, which is the per-*occurrence* ``name=``
-    #: option, not the keyword type. Declared (annotation only) on the base; every concrete subclass
-    #: sets it.
+    #: the single source of truth for the keyword's spelling: the grammar surface renders it and
+    #: the parser resolves it, so it must not be re-transcribed anywhere else. Declared (annotation
+    #: only) on the base; every concrete subclass sets it.
     keywordName: ClassVar[str]
 
-    #: The keyword's human-readable description, transcribed verbatim from the legacy grammar
-    #: (bugs included). Rendered by the grammar surface; the single source of truth, never
-    #: re-typed in a test or spec.
+    #: The keyword's human-readable description. Rendered by the grammar surface; the single
+    #: source of truth, never re-typed in a test or spec.
     keywordDescription: ClassVar[str]
-
-    @classmethod
-    @abstractmethod
-    def fromKeywordDefinition(cls, name: str, definition: dict, context: InputContext) -> "KeywordBase | None":
-        """Create (or apply) this keyword from a parsed ``.inp`` keyword definition.
-
-        This is the L4 seam: the one place a single occurrence of this keyword's input-file shape
-        (line options + datalines + ``>>`` sub-blocks) is turned into typed arguments, validated
-        and coerced against :attr:`schema` (typically via
-        :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`, or
-        ``schema.fromDatalines(...)`` for a :class:`~edelweissfe.utils.schema.
-        DatalineAggregatingSchema`-shaped payload), resolves any further ``type``/``provider``
-        dispatch through the registry, and constructs or applies the resulting object.
-
-        A structural keyword (``*element``, ``*node``, ``*nSet``, ``*elSet``, ``*surface``,
-        ``*job``) mutates ``context.model`` directly, like a
-        :meth:`~edelweissfe.generators.base.generatorbase.GeneratorBase.fromGeneratorDefinition`
-        call, and returns ``None`` -- there is nothing further for a caller to hold onto by name. A
-        pluggable-module keyword (``*output``, ``*section``, ...) instead returns the object it
-        constructed (or looked up), for the caller to register wherever that kind of object lives
-        (an output-manager list, ``context.model``'s sections, ...).
-
-        Parameters
-        ----------
-        name
-            The name of this keyword occurrence (the keyword's own ``name=`` option, where one is
-            declared; some structural keywords are unnamed and this may be a parser-assigned
-            placeholder instead).
-        definition
-            The raw parsed block for *one* occurrence of this keyword: its line options, its
-            datalines, and its ``>>`` sub-blocks, in whatever shape the ``.inp`` parser produces
-            (mirroring the ``definition`` parameter of
-            :meth:`~edelweissfe.stepactions.base.stepactionbase.StepActionBase.
-            fromStepActionDefinition` and
-            :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.
-            fromConstraintDefinition`).
-        context
-            The :class:`~edelweissfe.utils.inputcontext.InputContext` carrying the collaborators
-            (model, journal, field-output controller, plotter) an L4 adapter needs.
-
-        Returns
-        -------
-        KeywordBase | None
-            The constructed (or looked-up) object, or ``None`` for a structural keyword that only
-            mutates ``context.model`` in place.
-        """

@@ -39,7 +39,6 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
@@ -47,35 +46,13 @@ A penalty based constraint used for constraining nodal values
 of a node set to be equal.
 """
 
-module = Module(
-    "equalvaluepenalty",
-    "A lagrangian multiplier based constraint used for constraining nodal values of a node set to be equal.",
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg("field", "The field this constraint acts on.", str)
-module.addRequiredArg("component", "The component of the field.", int)
-module.addRequiredArg("penalty", "The numerical penalty value.", float)
-module.addRequiredArg("nSet", "The node set to be constrained.", str)
-
-documentation = [module]
-
 
 @dataclass(frozen=True)
 class EqualValuePenaltySchema:
     """L2: the options this constraint accepts, owned by this module and never mutated from
     outside it.
 
-    Mirrors the ``module.addRequiredArg(...)`` declarations above one-for-one. The two declarations
-    coexist while the migration is in progress; the ``Module`` one goes away with the
-    ``InputLanguage`` singleton in P5.
-
-    Each field is declared ``required=True`` explicitly, mirroring ``addRequiredArg`` above, but is
+    Each field is declared ``required=True`` explicitly, but is
     still given a ``default=None`` so that ``EqualValuePenaltySchema()`` remains constructible for
     the L1 constructor's default argument; the L4 adapter (``buildSchemaFromOptions``) still
     enforces that an ``.inp`` file supplies each.

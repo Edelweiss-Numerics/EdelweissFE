@@ -39,7 +39,6 @@ from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
@@ -51,28 +50,6 @@ Currently 2D only!
 
 The center is autotically computed from the bounding node coordinates.
 """
-
-
-inputLanguage = InputLanguage()
-
-# Register this step action for all available step types. This requires the step type
-# modules to be imported before the step actions, as done in the input file parser.
-modules = inputLanguage["step"].modules if "step" in inputLanguage else []
-
-documentation = []
-
-for module in modules:
-    kw = module.addOptionalKeyword(
-        "indirectcontractioncontrol",
-        "Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.",
-    )
-    kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("contractionNSet", "The node set defining the contraction ring", str)
-    kw.addRequiredArg("L", "Final distance (e.g. crack opening)", float)
-    kw.addOptionalArg("exportCVector", "File to export the computed c vector", str, None)
-    kw.addOptionalArg("absolute", "Use absolute formulation", bool, True)
-
-    documentation.append(kw)
 
 
 @dataclass(frozen=True)

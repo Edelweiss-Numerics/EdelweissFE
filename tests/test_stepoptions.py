@@ -34,10 +34,11 @@ Four concerns, mirrored by four groups of tests below:
   statically; no solver's or output manager's option names are pre-declared on it at all (unlike the
   mechanism this one replaces, which required a static, hand-synchronized aggregate -- see U3c of
   ``PLAN_INPUT_SYSTEM_UNIFICATION.md``). Any other ``key=value`` pair is accepted unvalidated by the
-  parser (:meth:`~edelweissfe.utils.inputlanguage.InputFileKeyword.allowArbitraryOptionalArgs`) and
-  handed on raw for :func:`~edelweissfe.stepactions.options._writtenOptions` to recover.
-- **The keyword is declared in exactly one place.** A source-level guard against a future call site
-  reintroducing a static, pre-declared aggregate.
+  parser's dedicated ``isDynamicOptionsKeyword`` branch (``utils/inputfileparser.py``'s
+  ``parseModuleKeywordLine``) and handed on raw for
+  :func:`~edelweissfe.stepactions.options._writtenOptions` to recover.
+- **The dynamic-validation branch is declared in exactly one place.** A source-level guard against a
+  future call site reintroducing a static, pre-declared aggregate.
 - **The override itself.** Only what the user actually wrote is validated against the resolved
   target's own schema and applied, and an override sticks until changed again -- confirmed empirically
   (this module used to claim otherwise) against the pre-existing mechanism this one replaces: a step
@@ -58,105 +59,33 @@ from edelweissfe.stepactions.options import StepAction, _resolveTarget, _written
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _optionsKeywordShape() -> list:
-    """The required/optional arg names, and the ``acceptsArbitraryArgs`` flag, of the shared
-    ``options`` keyword, across all step types.
-
-    Rendered in a subprocess for the same reason as the golden grammar surface: the full input
-    language is only populated once the parser has imported every module, and doing that in-process
-    would depend on what other test modules have already imported.
-    """
-    script = (
-        "from edelweissfe.utils.inputlanguage import InputLanguage\n"
-        "language = InputLanguage()\n"
-        "language.ensureParserLoaded()\n"
-        "for module in language['step'].modules:\n"
-        "    kw = module.getKeyword('options')\n"
-        "    required = ','.join(arg.name for arg in kw.requiredArgs)\n"
-        "    optional = ','.join(arg.name for arg in kw.optionalArgs)\n"
-        "    print(f'{module.name}|{required}|{optional}|{kw.acceptsArbitraryArgs}')\n"
-    )
-    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, cwd=_REPO_ROOT, check=False)
-    if result.returncode != 0:
-        pytest.fail(f"Could not render the 'options' keyword:\n{result.stderr}")
-    return [line.split("|", 3) for line in result.stdout.splitlines() if line]
-
-
-def test_name_is_the_only_required_arg_on_the_shared_keyword():
-    """Every other option is target-specific and therefore not declared at the keyword level at
-    all; only ``name`` -- which every ``>>options`` block needs regardless of what it resolves to --
-    is."""
-
-    shape = _optionsKeywordShape()
-    assert shape, "no step type registers the 'options' keyword at all -- the render must be broken"
-    assert all(
-        required == "name" for _, required, _, _ in shape
-    ), "the 'options' keyword must declare exactly one required arg, 'name' -- found: " + repr(shape)
-
-
-def test_the_shared_keyword_declares_no_optional_args_and_accepts_arbitrary_ones():
-    """The shared keyword pre-declares nothing beyond ``name``: every solver's/output manager's
-    option is validated dynamically, downstream, once ``name`` has resolved -- never against a
-    static list here. ``acceptsArbitraryArgs`` is what lets the parser's static grammar check accept
-    an option it does not itself know the name of (see
-    :meth:`~edelweissfe.utils.inputlanguage.InputFileKeyword.allowArbitraryOptionalArgs`)."""
-
-    shape = _optionsKeywordShape()
-    assert shape, "no step type registers the 'options' keyword at all -- the render must be broken"
-
-    offenders = [(module, optional) for module, _, optional, _ in shape if optional]
-    assert not offenders, (
-        "the shared 'options' keyword must declare no optional args at all -- found some "
-        "pre-declared, i.e. a static aggregate crept back in: " + repr(offenders)
-    )
-
-    notArbitrary = [module for module, _, _, arbitrary in shape if arbitrary != "True"]
-    assert not notArbitrary, (
-        "every step type's 'options' keyword must accept arbitrary optional args (the dynamic "
-        "validation this mechanism relies on) -- these do not: " + repr(notArbitrary)
-    )
-
-
-def test_the_options_keyword_is_declared_in_exactly_one_place():
+def test_the_dynamic_options_branch_is_declared_in_exactly_one_place():
     """A source-level guard, deliberately: the failure mode is a *new* call site added years from
-    now that pre-declares options on this keyword again -- statically -- which no amount of
+    now that pre-declares options on ``>>options`` again -- statically -- which no amount of
     exercising today's inputs would catch, since a static declaration is a strict superset of what
-    dynamic validation already accepts.
+    dynamic validation already accepts. ``test_name_is_the_only_required_arg_on_the_shared_keyword``/
+    ``test_the_shared_keyword_declares_no_optional_args_and_accepts_arbitrary_ones`` (removed in
+    U4) tested the equivalent invariant against the now-deleted ``InputFileKeyword`` object;
+    :func:`test_an_option_belonging_to_no_pre_declared_list_still_parses_statically`/
+    :func:`test_missing_name_still_raises_at_parse_time` below cover the same behaviour end-to-end
+    through the real parser entry point instead.
     """
-    declarationHits = subprocess.run(
-        ["grep", "-rn", "--include=*.py", 'addOptionalKeyword("options"', "edelweissfe"],
+    hits = subprocess.run(
+        ["grep", "-rn", "--include=*.py", "isDynamicOptionsKeyword = ", "edelweissfe"],
         capture_output=True,
         text=True,
         cwd=_REPO_ROOT,
         check=False,
     ).stdout.splitlines()
-    assert len(declarationHits) == 1 and declarationHits[0].startswith(
-        "edelweissfe/stepactions/options.py:"
-    ), "the shared 'options' keyword must be declared in exactly one place: " + repr(declarationHits)
-
-    extensionHits = subprocess.run(
-        ["grep", "-rn", "--include=*.py", 'getKeyword("options")', "edelweissfe"],
-        capture_output=True,
-        text=True,
-        cwd=_REPO_ROOT,
-        check=False,
-    ).stdout.splitlines()
-    assert extensionHits == [], (
-        "no module may reach back into the shared 'options' keyword to add options onto it "
-        "statically -- its grammar is deliberately minimal and its options are resolved "
-        "dynamically at runtime instead: found " + repr(extensionHits)
-    )
+    assert len(hits) == 1 and hits[0].startswith(
+        "edelweissfe/utils/inputfileparser.py:"
+    ), "the dynamic '>>options' validation branch must be declared in exactly one place: " + repr(hits)
 
 
-#: Both remaining tests drive the real parser entry point end-to-end, which requires the full
-#: 'step' grammar (every step type + step action module) to already be loaded via
-#: 'edelweissfe.utils.inputfileparser' -- exactly the import-order-sensitive state every other
-#: grammar-surface test in this suite renders in a **fresh subprocess** rather than in-process (see
-#: ``tests/test_inputlanguage_golden.py``'s module docstring): another test module importing e.g.
-#: ``edelweissfe.steps.adaptivestep`` standalone earlier in the same shared pytest session would
-#: otherwise leave that step type's ``Module`` built but never attached to the ``InputLanguage``
-#: singleton's ``'step'`` keyword (the very "if keyword in inputLanguage: silently no-op" hazard
-#: this whole redesign exists to remove), making these two tests' outcome depend on test order.
+#: Both remaining tests drive the real parser entry point end-to-end. Rendered in a fresh subprocess
+#: like every other grammar test in this suite, though the schema/registry-driven parser is no
+#: longer import-order sensitive the way the deleted ``Module`` tree was -- kept for isolation from
+#: whatever else the shared pytest session happens to have imported, not out of necessity.
 _PARSE_OPTIONS_SNIPPET = (
     "import sys\n"
     "from edelweissfe.utils.inputfileparser import parseModuleKeywordLine\n"
@@ -213,8 +142,7 @@ def _jobInfo() -> dict:
 
 class _FakeModel:
     """A minimal stand-in for FEModel carrying only what _resolveTarget consults, exercising the
-    same "no InputLanguage/parser involvement needed" property every other ported step action's
-    tests rely on."""
+    same "no parser involvement needed" property every other ported step action's tests rely on."""
 
     def __init__(self, solvers=None, outputManagers=None):
         self.solvers = solvers or {}

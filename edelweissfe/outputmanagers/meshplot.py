@@ -48,7 +48,6 @@ from matplotlib import colors
 
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.sets.elementset import ElementSet
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.math import createMathExpression
 from edelweissfe.utils.meshtools import (
     extractNodeCoordinatesFromElset,
@@ -68,23 +67,6 @@ documentation = {
     "create=meshOnly": "plot the mesh only",
     "create=xyData": "2D Plot of results",
 }
-
-module = Module("meshplot", "Create plots using Matplotlib.")
-
-inputLanguage = InputLanguage()
-
-keyword = "output"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addOptionalArg("dummyArg", "Mesh plot uses old input file parsing.", str, None)
-
-# The `Module` declaration above is deliberately left as-is: meshplot never declared its real
-# grammar to the input language (only this placeholder), so the L2 schemas below are the first
-# machine-readable description of what it accepts. Replacing the placeholder with the real options
-# would change the generated-documentation surface, which is P5's job (render docs from L2 schemas);
-# this port stays grammar-neutral like the other nine, and the schemas below are already the single
-# source of truth for validation.
 
 
 @dataclass(frozen=True)

@@ -941,10 +941,10 @@ already declared; there is no second tag to keep in sync with it.
 
 The ``>>options`` keyword's own grammar is validated **dynamically**, not against a statically
 pre-declared list of every solver's and output manager's option names: at parse time, before
-``name`` has even been resolved, the keyword only enforces that ``name`` itself is present
-(:meth:`~edelweissfe.utils.inputlanguage.InputFileKeyword.allowArbitraryOptionalArgs`, set by
-:func:`_ensureOptionsKeyword`) -- every other ``key=value`` pair is accepted unvalidated and handed
-on raw. Real validation happens once ``name`` resolves to a concrete object, against *that object's
+``name`` has even been resolved, the parser's dedicated ``isDynamicOptionsKeyword`` branch (see
+``utils/inputfileparser.py::parseModuleKeywordLine``) only enforces that ``name`` itself is present
+-- every other ``key=value`` pair is accepted unvalidated and handed on raw. Real validation happens
+once ``name`` resolves to a concrete object, against *that object's
 own* ``type(target).schema`` (:func:`coercePresentOptions`, in :meth:`StepAction.fromStepActionDefinition`
 below). There is therefore no shared, hand-synchronized aggregate of every solver's and output
 manager's option names to keep from drifting: each schema is consulted directly, once, exactly when

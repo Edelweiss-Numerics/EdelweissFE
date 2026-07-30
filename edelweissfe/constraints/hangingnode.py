@@ -53,40 +53,13 @@ from edelweissfe.constraints.base.multipointconstraintbase import (
 )
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
-
-module = Module(
-    "hangingnode",
-    "Hanging-node MPC (DOF elimination) tying refined-side nodes to the coarse serendipity trace.",
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addOptionalArg(
-    "recordsFile",
-    "Path (relative to the input file) to the flattened hanging-node records: one line per slave "
-    "'<slaveLabel> <masterLabel> <weight> ...' with independent masters. Omit for dynamic AMR, where "
-    "the adaptivity manager sets the records in memory via updateRecords().",
-    str,
-    None,
-)
-
-documentation = [module]
 
 
 @dataclass(frozen=True)
 class HangingNodeSchema:
     """L2: the options this constraint accepts, owned by this module and never mutated from
     outside it.
-
-    Mirrors the ``module.addOptionalArg(...)`` declaration above. The two declarations coexist
-    while the migration is in progress; the ``Module`` one goes away with the ``InputLanguage``
-    singleton in P5.
     """
 
     recordsFile: str | None = schemaField(

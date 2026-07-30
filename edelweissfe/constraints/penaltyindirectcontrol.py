@@ -42,52 +42,17 @@ from edelweissfe.stepactions.base.amplitude import (
     linearAmplitude,
 )
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 A penalty based constraint used for indirect (displacement) control.
 """
 
-module = Module("penaltyindirectcontrol", "A penalty based constraint used for indirect (displacement) control.")
-
-inputLanguage = InputLanguage()
-
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addOptionalArg("field", "The field this constraint acts on.", str, "displacement")
-module.addRequiredArg("cVector", "The projection vector for the constrained nodes (e.g., CMOD).", str)
-module.addRequiredArg("constrainedNSet", "The node set for determining the constraint (e.g., CMOD).", str)
-module.addRequiredArg("loadNSet", "The node set for application of the controlled load.", str)
-module.addRequiredArg(
-    "loadVector", "The vector (in correct) dimensions and tensorial order  determining the load.", str
-)
-module.addRequiredArg("length", "The value of the constraint (e.g., CMOD).", float)
-module.addRequiredArg("penaltyStiffness", "The stiffness for formulating the constraint.", float)
-module.addOptionalArg(
-    "offset", "A correction value for the computation of the constraint (e.g, initial displacement).", float, 0.0
-)
-module.addOptionalArg(
-    "normalizeLoad",
-    "Normalize the applied force per node w. r. t. the number of nodes, i.e., apply a load irrespective of the total number of nodes in ``loadNSet``.",
-    bool,
-    True,
-)
-module.addOptionalArg("f(t)", "Amplitude function.", str, None)
-
-documentation = [module]
-
 
 @dataclass(frozen=True)
 class PenaltyIndirectControlSchema:
     """L2: the options this constraint accepts, owned by this module and never mutated from
     outside it.
-
-    Mirrors the ``module.addRequiredArg``/``module.addOptionalArg(...)`` declarations above
-    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
-    one goes away with the ``InputLanguage`` singleton in P5.
 
     ``f_t`` is spelled ``f(t)`` in the input file, which is not a valid Python identifier -- hence
     the ``optionName`` indirection, see :func:`edelweissfe.utils.schema.schemaField`. Each required

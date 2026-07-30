@@ -27,18 +27,20 @@
 #  ---------------------------------------------------------------------
 """P1 tests (see PLAN_INPUT_SYSTEM.md) for ``edelweissfe/utils/schema.py``, the L2 primitives.
 
-Covers frozen-ness, field-metadata round-trip, and coercion parity against
-``edelweissfe.utils.inputlanguage``'s existing (pre-P1, still-in-production) casting logic for a
-representative set of types (``int``, ``float``, ``str``, ``bool``), including the
-already-correct-type passthrough case that the legacy code only got right for ``bool`` (via the
-P0 ``asBool`` fix) and relied on constructor idempotence for everywhere else.
+Covers frozen-ness, field-metadata round-trip, and coercion parity against the pre-P1 casting logic
+it replaced (``edelweissfe.utils.inputlanguage.KeywordArg.getValueFromKwargs``, deleted in
+``PLAN_INPUT_SYSTEM_UNIFICATION.md``'s U4 -- :func:`_legacyGetValueFromKwargs` below is a frozen,
+literal copy of its body, kept only so this parity pin survives the deletion) for a representative
+set of types (``int``, ``float``, ``str``, ``bool``), including the already-correct-type passthrough
+case that the legacy code only got right for ``bool`` (via the P0 ``asBool`` fix) and relied on
+constructor idempotence for everywhere else.
 """
 
 import dataclasses
 
 import pytest
 
-from edelweissfe.utils.inputlanguage import KeywordArg
+from edelweissfe.utils.misc import strtobool
 from edelweissfe.utils.schema import (
     SchemaFieldMeta,
     buildSchemaFromOptions,
@@ -144,7 +146,18 @@ def test_coerceValue_raises_ValueError_on_bad_conversion():
         coerceValue("not-a-number", int)
 
 
-# --- coercion parity with inputlanguage.py's existing casting ------------------------------------
+# --- coercion parity with the pre-P1 casting logic it replaced -----------------------------------
+
+
+def _legacyGetValueFromKwargs(kwargs: dict, dtype: type):
+    """Frozen, literal copy of ``edelweissfe.utils.inputlanguage.KeywordArg.getValueFromKwargs``'s
+    body (deleted in U4) -- kept solely so the parity tests below survive that deletion. Must never
+    be "improved": its entire purpose is to keep failing exactly like the deleted code did.
+    """
+    if dtype == bool:
+        return strtobool(kwargs["value"])
+    else:
+        return dtype(kwargs["value"])
 
 
 @pytest.mark.parametrize(
@@ -161,11 +174,10 @@ def test_coerceValue_raises_ValueError_on_bad_conversion():
 )
 def test_coerceValue_matches_legacy_KeywordArg_casting_for_string_input(dtype, rawValue):
     """For genuinely string-valued input (the only case the legacy code ever had to handle), the
-    new coercion must agree exactly with ``KeywordArg.getValueFromKwargs`` -- P1 factors the
-    logic out, it does not change what a given ``.inp`` file produces.
+    new coercion must agree exactly with the deleted ``KeywordArg.getValueFromKwargs`` -- P1
+    factors the logic out, it does not change what a given ``.inp`` file produces.
     """
-    legacyArg = KeywordArg("value", "a test arg", dtype)
-    legacyResult = legacyArg.getValueFromKwargs({"value": rawValue})
+    legacyResult = _legacyGetValueFromKwargs({"value": rawValue}, dtype)
 
     assert coerceValue(rawValue, dtype) == legacyResult
 
@@ -176,9 +188,8 @@ def test_coerceValue_deliberately_diverges_from_legacy_for_an_already_bool_value
     (this was P0's bugfix, see ``tests/test_ensight_bugfixes.py``). ``coerceValue`` must not
     reproduce that crash -- it is a bug, not a "surprise" worth preserving for parity.
     """
-    legacyArg = KeywordArg("value", "a test arg", bool)
     with pytest.raises(AttributeError):
-        legacyArg.getValueFromKwargs({"value": True})
+        _legacyGetValueFromKwargs({"value": True}, bool)
 
     assert coerceValue(True, bool) is True
 

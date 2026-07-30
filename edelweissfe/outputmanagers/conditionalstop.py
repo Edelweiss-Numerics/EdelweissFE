@@ -36,7 +36,6 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.utils.exceptions import ConditionalStop
 from edelweissfe.utils.fieldoutput import FieldOutputController
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.math import createModelAccessibleFunction
 from edelweissfe.utils.plotter import Plotter
 from edelweissfe.utils.schema import schemaField
@@ -53,36 +52,13 @@ Useful, e.g., for indirect displacement control.
         stop='fieldOutputs["displacement"]  < -5'
 """
 
-module = Module("ConditionalStop", "A simple monitor to observe results (fieldOutputs) in the console during analysis.")
-
-inputLanguage = InputLanguage()
-
-keyword = "output"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg("stop", "Model accessible function describing the stop condition.", str)
-
-documentation = [module]
-
-required = [kw.name for kw in module.requiredArgs]
-required += [kw.name for kw in module.requiredKeywords]
-
-optional = [kw.name for kw in module.optionalArgs]
-optional += [kw.name for kw in module.optionalKeywords]
-
 
 @dataclass(frozen=True)
 class ConditionalStopSchema:
     """L2: the options this output manager accepts, owned by this module and never mutated from
     outside it.
 
-    Mirrors the ``module.addRequiredArg(...)`` declaration above one-for-one, and is the schema the
-    L3 registry hands out for ``("outputmanager", "conditionalstop")``. The two declarations coexist
-    while the migration is in progress; the ``Module`` one goes away with the ``InputLanguage``
-    singleton in P5.
-
-    ``stop`` is declared ``required=True`` explicitly, mirroring ``addRequiredArg`` above, but is
+    ``stop`` is declared ``required=True`` explicitly, but is
     still given ``default=None`` -- purely so that ``ConditionalStopSchema()`` (the fixed L1
     constructor-default shape used by every ported output manager) is constructible without an
     argument at import time. A caller going through the L4 adapter still must supply ``stop``
@@ -116,7 +92,7 @@ class OutputManager(OutputManagerBase):
         *,
         configuration: ConditionalStopSchema = ConditionalStopSchema(),
     ):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement and
+        """L1: constructible standalone, with no parser involvement and
         no ``moduleOptions``. Options arrive as an already-validated, already-typed schema instance,
         so nothing here coerces strings or inspects dictionaries.
 

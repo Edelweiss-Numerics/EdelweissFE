@@ -26,29 +26,20 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*fieldOutput``: the pluggable-module keyword defining a field output (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2b/U3d-1).
+"""``*fieldOutput``: the pluggable-module keyword defining a field output.
 
-Verbatim transcription of ``inputLanguage.addKeyword("fieldOutput", ...)`` in
-``edelweissfe/utils/inputfileparser.py:280`` -- unlike every other keyword ported so far,
-``*fieldOutput`` declares **no** ``addRequiredArg``/``addOptionalArg``/``addRequiredDatalines`` call
-of its own at all; its entire grammar lives in the hosted ``edelweissfe.utils.fieldoutput`` module
-(reached via ``inputLanguage["fieldOutput"].addModule(...)``). U2b left this schema ``None``, since
-it scoped only a keyword's own line args, never a hosted module's (see
-``edelweissfe.keywords.element`` for that general note). U3d-1 needs the ``>>perNode``/
-``>>perElement``/``>>fromExpression`` grammar to be schema-described so the parser can validate it
-without consulting the ``Module`` tree, so it is filled in here via
-``edelweissfe.utils.fieldoutput.FieldOutputSchema`` -- the same repeatable-``>>``-blocks shape as
-e.g. ``edelweissfe.outputmanagers.ensight.EnsightSchema``. Construction is untouched:
-``abqmodelconstructor``/``inputfilehelpers`` still build ``_FieldOutputBase`` instances from the raw
-parsed dict.
+Unlike every other top-level keyword, ``*fieldOutput`` declares no line options of its own at all;
+its entire grammar is the ``>>perNode``/``>>perElement``/``>>fromExpression`` repeatable sub-keyword
+blocks, described by ``edelweissfe.utils.fieldoutput.FieldOutputSchema`` -- the same
+repeatable-``>>``-blocks shape as e.g. ``edelweissfe.outputmanagers.ensight.EnsightSchema``.
+Construction is unrelated to this schema: ``abqmodelconstructor``/``inputfilehelpers`` still build
+``_FieldOutputBase`` instances from the raw parsed dict.
 """
 
 from __future__ import annotations
 
 from edelweissfe.keywords.base.keywordbase import KeywordBase
 from edelweissfe.utils.fieldoutput import FieldOutputSchema
-from edelweissfe.utils.inputcontext import InputContext
 
 
 class FieldOutputKeyword(KeywordBase):
@@ -60,15 +51,3 @@ class FieldOutputKeyword(KeywordBase):
 
     keywordName = "fieldOutput"
     keywordDescription = "define fieldoutput, which is used by outputmanagers"
-
-    @classmethod
-    def fromKeywordDefinition(cls, name: str, definition: dict, context: InputContext) -> "KeywordBase | None":
-        """Not yet implemented -- U2b only mirrors the grammar as a schema.
-
-        Raises
-        ------
-        NotImplementedError
-            Always. Construction from a parsed ``*fieldOutput`` definition is wired in U3, once the
-            runtime parser is swapped over (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U3).
-        """
-        raise NotImplementedError("FieldOutputKeyword.fromKeywordDefinition is wired in U3, not U2b.")

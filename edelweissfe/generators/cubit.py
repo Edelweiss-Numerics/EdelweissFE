@@ -39,32 +39,7 @@ from dataclasses import dataclass
 from edelweissfe.generators.base.generatorbase import GeneratorBase
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import schemaField
-
-module = Module("cubit", "Interface to Cubit. Generate mesh using Cubit .jou files.")
-
-inputLanguage = InputLanguage()
-
-keyword = "modelGenerator"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addOptionalArg("cubitCmd", "Cubit executable.", str, "cubit")
-module.addRequiredArg("jouFile", "Path to Cubit journal (.jou) file.", str)
-module.addOptionalArg("outFile", "Path to output mesh file.", str, "mesh.inc")
-module.addOptionalArg("APREPROVars", "APREPRO variables as comma-separated <key>=<value> pairs.", str, None)
-module.addOptionalArg("overwrite", "Overwrite existing output files.", bool, True)
-module.addOptionalArg("runCubit", "Run Cubit GUI for debugging purposes.", bool, False)
-module.addOptionalArg("silent", "Hide Cubit output.", bool, False)
-
-module.addOptionalArg("elType", "Specify element type for all sections.", str, None)
-module.addOptionalArg(
-    "elTypePerBlock", "Specify element type per block as comma-separated <key>=<value> pairs.", str, None
-)
-module.addOptionalArg("elProvider", "Element provider.", str, None)
-
-documentation = [module]
 
 
 @dataclass(frozen=True)
@@ -72,11 +47,7 @@ class CubitSchema:
     """L2: the options this generator accepts, owned by this module and never mutated from
     outside it.
 
-    Mirrors the ``module.addOptionalArg``/``module.addRequiredArg(...)`` declarations above
-    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
-    one goes away with the ``InputLanguage`` singleton in P5.
-
-    ``jouFile`` is declared ``required=True`` explicitly, mirroring ``addRequiredArg`` above, but
+    ``jouFile`` is declared ``required=True`` explicitly, but
     is still given a ``default=None`` so the schema remains constructible for the L1 constructor's
     default argument.
     """
@@ -108,7 +79,7 @@ class Generator(GeneratorBase):
     schema = CubitSchema
 
     def __init__(self, name: str, model: FEModel, journal: Journal, *, configuration: CubitSchema = CubitSchema()):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        """L1: constructible standalone, with no parser involvement.
         Populates ``model`` directly; construction *is* the generation.
 
         Parameters

@@ -35,21 +35,7 @@ import pyvista
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import schemaField
-
-module = Module("fromVtk", "Use PyVista to interpolate from vtk data.")
-
-inputLanguage = InputLanguage()
-
-keyword = "analyticalField"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg("file", "path to database file", str)
-module.addRequiredArg("result", "result name in database", str)
-
-documentation = [module]
 
 
 @dataclass(frozen=True)
@@ -57,11 +43,7 @@ class FromVtkSchema:
     """L2: the options this analytical field accepts, owned by this module and never mutated from
     outside it.
 
-    Mirrors the ``module.addRequiredArg(...)`` declarations above one-for-one. The two declarations
-    coexist while the migration is in progress; the ``Module`` one goes away with the
-    ``InputLanguage`` singleton in P5.
-
-    Both fields are ``required=True``, mirroring ``addRequiredArg`` above, but are still given a
+    Both fields are ``required=True``, but are still given a
     ``default=None``/``default=""`` so that ``FromVtkSchema()`` remains constructible for the L1
     constructor's default argument; the L4 adapter (``buildSchemaFromOptions``) still enforces that
     an ``.inp`` file supplies ``file``. ``result`` may legitimately be supplied empty (see
@@ -80,7 +62,7 @@ class AnalyticalField(AnalyticalFieldBase):
     schema = FromVtkSchema
 
     def __init__(self, name: str, FEModel, *, configuration: FromVtkSchema = FromVtkSchema()):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        """L1: constructible standalone, with no parser involvement.
 
         Parameters
         ----------

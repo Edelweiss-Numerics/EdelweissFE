@@ -42,7 +42,6 @@ from edelweissfe.stepactions.base.amplitude import (
 from edelweissfe.stepactions.base.distributedloadbase import DistributedLoadBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
 from edelweissfe.utils.schema import (
     buildSchemaFromOptions,
@@ -54,44 +53,6 @@ from edelweissfe.utils.schema import (
 Standard distributed load, applied on a surface set.
 If not modified in subsequent steps, the load held constant.
 """
-
-inputLanguage = InputLanguage()
-
-# Register this step action for all available step types. This requires the step type
-# modules to be imported before the step actions, as done in the input file parser.
-modules = inputLanguage["step"].modules if "step" in inputLanguage else []
-
-
-documentation = []
-
-for module in modules:
-    kw = module.addOptionalKeyword("distributedload", "Standard distributed load, applied on a surface set.")
-    kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("surface", "Surface for application of the distributed load", str)
-    # kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
-    kw.addOptionalArg("field", "Field for which the boundary condition is active.", str, "displacement")
-    kw.addRequiredArg("magnitude", "Magnitude of the distributed load", str)
-    # kw.addOptionalArg("delta", "In subsequent steps only: define the new magnitude incrementally", str, 0)
-    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
-    kw.addRequiredArg(
-        "type", "The load type, e.g., pressure or surface traction; Must be supported by the element type", str
-    )
-
-    documentation.append(kw)
-
-    kw = module.addOptionalKeyword("updatedistributedload", "Update a previously defined distributedload definition.")
-    kw.addRequiredArg("name", "Name of the step action to update.", str)
-    # kw.addRequiredArg("surface", "Surface for application of the distributed load", str)
-    # kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
-    # kw.addOptionalArg("field", "Field for which the boundary condition is active.", str, "displacement")
-    kw.addOptionalArg("magnitude", "Magnitude of the distributed load", str, None)
-    kw.addOptionalArg("delta", "In subsequent steps only: define the new magnitude incrementally", str, None)
-    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
-    # kw.addRequiredArg(
-    #     "type", "The load type, e.g., pressure or surface traction; Must be supported by the element type", str
-    # )
-
-    documentation.append(kw)
 
 
 @dataclass(frozen=True)

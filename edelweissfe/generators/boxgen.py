@@ -76,33 +76,7 @@ from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.surfaces.entitybasedsurface import EntityBasedSurface
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import schemaField
-
-module = Module("boxgen", "A mesh generator for cuboid geometries and structured hex meshes.")
-
-inputLanguage = InputLanguage()
-
-keyword = "modelGenerator"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addOptionalArg("x0", "Origin along the x axis.", float, 0.0)
-module.addOptionalArg("y0", "Origin along the y axis.", float, 0.0)
-module.addOptionalArg("z0", "Origin along the z axis.", float, 0.0)
-
-module.addOptionalArg("lX", "Length of the body along the x axis.", float, 1.0)
-module.addOptionalArg("lY", "Length of the body along the y axis.", float, 1.0)
-module.addOptionalArg("lZ", "Length of the body along the z axis.", float, 1.0)
-
-module.addOptionalArg("nX", "Number of elements along the x axis.", int, 1)
-module.addOptionalArg("nY", "Number of elements along the y axis.", int, 1)
-module.addOptionalArg("nZ", "Number of elements along the z axis.", int, 1)
-
-module.addRequiredArg("elType", "Element type.", str)
-module.addOptionalArg("elProvider", "Element provider.", str, None)
-
-documentation = [module]
 
 
 @dataclass(frozen=True)
@@ -110,11 +84,7 @@ class BoxgenSchema:
     """L2: the options this generator accepts, owned by this module and never mutated from
     outside it.
 
-    Mirrors the ``module.addOptionalArg``/``module.addRequiredArg(...)`` declarations above
-    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
-    one goes away with the ``InputLanguage`` singleton in P5.
-
-    ``elType`` is declared ``required=True`` explicitly, mirroring ``addRequiredArg`` above, but is
+    ``elType`` is declared ``required=True`` explicitly, but is
     still given a ``default=None`` so the schema remains constructible for the L1 constructor's
     default argument.
     """
@@ -139,7 +109,7 @@ class Generator(GeneratorBase):
     schema = BoxgenSchema
 
     def __init__(self, name: str, model: FEModel, journal: Journal, *, configuration: BoxgenSchema = BoxgenSchema()):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement.
+        """L1: constructible standalone, with no parser involvement.
         Populates ``model`` directly; construction *is* the generation.
 
         Parameters

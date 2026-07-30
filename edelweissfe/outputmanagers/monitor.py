@@ -35,7 +35,6 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.utils.fieldoutput import FieldOutputController
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.math import createMathExpression
 from edelweissfe.utils.plotter import Plotter
 from edelweissfe.utils.schema import schemaField
@@ -50,41 +49,13 @@ A simple monitor to observe results (fieldOutputs) in the console during analysi
         fieldOutput=omega, f(x)='max(x)'
 """
 
-module = Module(
-    "monitor",
-    "A simple monitor to observe results (fieldOutputs) in the console during analysis.",
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "output"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg("fieldOutput", "Name of the field output to monitor.", str)
-module.addOptionalArg("label", "Name of the output manager.", str, "Monitor")
-module.addOptionalArg("f(x)", "Apply a model accessible function on the result.", str, None)
-
-documentation = [module]
-
-required = [kw.name for kw in module.requiredArgs]
-required += [kw.name for kw in module.requiredKeywords]
-
-optional = [kw.name for kw in module.optionalArgs]
-optional += [kw.name for kw in module.optionalKeywords]
-
 
 @dataclass(frozen=True)
 class MonitorSchema:
     """L2: the options this output manager accepts, owned by this module and never mutated from
     outside it.
 
-    Mirrors the ``module.addRequiredArg``/``module.addOptionalArg(...)`` declarations above
-    one-for-one, including defaults, and is the schema the L3 registry hands out for
-    ``("outputmanager", "monitor")``. The two declarations coexist while the migration is in
-    progress; the ``Module`` one goes away with the ``InputLanguage`` singleton in P5.
-
-    ``fieldOutput`` is declared ``required=True`` explicitly, mirroring ``addRequiredArg`` above,
+    ``fieldOutput`` is declared ``required=True`` explicitly,
     but is still given a ``default=None`` so that ``MonitorSchema()`` remains constructible for the
     L1 constructor's default argument; the L4 adapter (``buildSchemaFromOptions``) still enforces
     that an ``.inp`` file supplies it, exactly as ``caseInsensitiveKwargsChecker`` did against the
@@ -124,7 +95,7 @@ class OutputManager(OutputManagerBase):
         *,
         configuration: MonitorSchema = MonitorSchema(),
     ):
-        """L1: constructible standalone, with no ``InputLanguage``/``Module``/parser involvement and
+        """L1: constructible standalone, with no parser involvement and
         no ``moduleOptions``. Options arrive as an already-validated, already-typed schema instance,
         so nothing here coerces strings or inspects dictionaries.
 

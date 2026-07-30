@@ -26,29 +26,8 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-from edelweissfe.steps.base.stepbase import (
-    StepBase,
-    addIncrementationOptionsToModule,
-    getModuleArgNames,
-)
+from edelweissfe.steps.base.stepbase import StepBase, StepIncrementationSchema
 from edelweissfe.timesteppers.adaptivetimestepper import AdaptiveTimeStepper
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
-
-module = Module("adaptive", "An adaptive incremental step for nonlinear simulations with implicit time integration.")
-
-inputLanguage = InputLanguage()
-
-keyword = "step"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-addIncrementationOptionsToModule(module)
-
-required, optional = getModuleArgNames(module)
 
 
 class AdaptiveStep(StepBase):
@@ -56,10 +35,12 @@ class AdaptiveStep(StepBase):
     An adaptive incremental step to be used in nonlinear simulations with implicit time integration.
     """
 
-    @caseInsensitiveKwargsChecker(required, optional)
-    @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider. Shared with
+    #: :class:`~edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations`
+    #: -- every step type accepts exactly the same incrementation options (see
+    #: :meth:`~edelweissfe.steps.base.stepbase.StepBase.__init__`, which validates/coerces against
+    #: it directly; no further construction happens here).
+    schema = StepIncrementationSchema
 
     def _createTimeStepper(self) -> AdaptiveTimeStepper:
         return AdaptiveTimeStepper(

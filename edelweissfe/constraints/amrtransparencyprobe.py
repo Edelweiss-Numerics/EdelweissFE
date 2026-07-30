@@ -35,7 +35,6 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
@@ -49,22 +48,6 @@ purpose is to raise if its cached node set ever fails to reflect a mid-run mesh 
 would mean AMR silently reintroduced replacing a set instead of mutating it in place. It has no use
 outside test suites and is not intended as a template for an actual boundary condition.
 """
-
-module = Module(
-    "amrtransparencyprobe",
-    "Test-only acceptance double verifying that a cached NodeSet reference survives AMR without "
-    "any observer registration.",
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg("nSet", "The node set whose growth under AMR this probe verifies.", str)
-
-documentation = [module]
 
 
 @dataclass(frozen=True)

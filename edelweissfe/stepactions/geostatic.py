@@ -40,30 +40,8 @@ import numpy as np
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
-
-inputLanguage = InputLanguage()
-
-# Register this step action for all available step types. This requires the step type
-# modules to be imported before the step actions, as done in the input file parser.
-modules = inputLanguage["step"].modules if "step" in inputLanguage else []
-
-documentation = []
-
-for module in modules:
-    kw = module.addOptionalKeyword("geostatic", "Initialize materials to an geostatic stress state.")
-    kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("p1", "sig_x=sig_y=sig_z in first point.", float)
-    kw.addOptionalArg("p2", "sig_x=sig_y=sig_z in second point.", float, None)
-    kw.addOptionalArg("h1", "y coordinate of first point", float, 1.0)
-    kw.addOptionalArg("h2", "y coordinate of second point", float, -1.0)
-    kw.addOptionalArg("xLateral", "ratio of sig_x/sig_y, default=1.0", float, 1.0)
-    kw.addOptionalArg("zLateral", "ratio of sig_z/sig_y, default=1.0", float, 1.0)
-    kw.addOptionalArg("elSet", "The element set for which the initaliziation is performed", str, "all")
-
-    documentation.append(kw)
 
 
 @dataclass(frozen=True)
