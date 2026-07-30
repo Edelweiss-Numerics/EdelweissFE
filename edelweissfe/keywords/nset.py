@@ -70,6 +70,10 @@ class NSetKeyword(KeywordBase):
     #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
     schema = NSetSchema
 
+    keywordName = "nSet"
+    # Verbatim from the legacy grammar, copy-paste bug included (it says "element set").
+    keywordDescription = "definition of an element set"
+
     @classmethod
     def fromKeywordDefinition(cls, name: str, definition: dict, context: InputContext) -> "KeywordBase | None":
         """Not yet implemented -- U2a only mirrors the grammar as a schema.

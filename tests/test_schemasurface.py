@@ -47,6 +47,7 @@ from edelweissfe.utils.schemasurface import (
     KeywordSurfaceSpec,
     renderPrintKeywordsBlock,
     renderSchemaSurface,
+    specFromKeywordClass,
 )
 
 # --- scalar-only shape (mirrors edelweissfe.generators.findclosestnode) -------------------------
@@ -306,37 +307,30 @@ def _printKeywordsBlocksByName() -> dict[str, str]:
 _PRINT_KEYWORDS_GOLDEN_BLOCKS = _printKeywordsBlocksByName()
 
 
-def _structuralKeywordSpec(keywordName: str, description: str) -> KeywordSurfaceSpec:
+def _structuralKeywordSpec(keywordName: str) -> KeywordSurfaceSpec:
     """Build the :class:`KeywordSurfaceSpec` for one of the six U2a structural keywords from its
-    real, registered ``KeywordBase`` subclass -- not a synthetic stand-in -- so this test also
-    exercises :func:`edelweissfe.config.registry.lookup`."""
+    real, registered ``KeywordBase`` subclass -- name, description and schema all sourced from the
+    class via :func:`specFromKeywordClass` (no hand-typed spelling/description), so this test proves
+    the *class* encodes the legacy grammar, and also exercises
+    :func:`edelweissfe.config.registry.lookup`."""
     from edelweissfe.config import registry
 
-    target, schema = registry.lookup("keyword", keywordName)
-    return KeywordSurfaceSpec(name=keywordName, description=description, schema=schema)
+    target, _schema = registry.lookup("keyword", keywordName)
+    return specFromKeywordClass(target)
 
 
 @pytest.mark.parametrize(
-    "keywordName,description",
-    [
-        ("element", "definition of element(s)"),
-        ("elSet", "definition of an element set"),
-        ("node", "definition of nodes"),
-        # Yes, "definition of an element set" again -- the legacy grammar's *nSet* keyword
-        # description is copy-pasted from *elSet* (PLAN_INPUT_SYSTEM_UNIFICATION.md's mandate to
-        # transcribe bugs verbatim). See edelweissfe.keywords.nset's module docstring.
-        ("nSet", "definition of an element set"),
-        ("surface", "definition of surface set"),
-        ("job", "definition of an analysis job"),
-    ],
+    "keywordName",
+    ["element", "elSet", "node", "nSet", "surface", "job"],
 )
-def test_structural_keyword_printKeywords_block_matches_golden_byte_for_byte(keywordName, description):
+def test_structural_keyword_printKeywords_block_matches_golden_byte_for_byte(keywordName):
     """U2a's gate (A): ``renderPrintKeywordsBlock`` over each structural keyword's real, registered
-    schema reproduces the corresponding golden ``printKeywords()`` block exactly -- proving the
-    schema encodes the legacy grammar (descriptions, types, required/optional-ness, textwrap-80
-    wrapping) with zero drift, without touching the running parser at all.
+    class (name + description + schema all from the class) reproduces the corresponding golden
+    ``printKeywords()`` block exactly -- proving the class encodes the legacy grammar (spelling in
+    exact display case, descriptions incl. the *nSet* copy-paste bug, types, required/optional-ness,
+    textwrap-80 wrapping) with zero drift, without touching the running parser at all.
     """
-    spec = _structuralKeywordSpec(keywordName, description)
+    spec = _structuralKeywordSpec(keywordName)
     rendered = renderPrintKeywordsBlock(spec)
     assert rendered == _PRINT_KEYWORDS_GOLDEN_BLOCKS[keywordName]
 

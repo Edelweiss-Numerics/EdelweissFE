@@ -71,6 +71,20 @@ class KeywordBase(OptionSchemaProvider, ABC):
     #: :class:`~edelweissfe.utils.schema.OptionSchemaProvider`.
     schema: ClassVar[type | None] = None
 
+    #: The keyword's identifier as written in the ``.inp`` file, in its exact display case (e.g.
+    #: ``"elSet"``, ``"analyticalField"`` -- NOT the casefolded registry key ``"elset"``). This is
+    #: the single source of truth for the keyword's spelling: the grammar surface renders it and the
+    #: U3 parser resolves it, so it must not be re-transcribed anywhere else. Distinct from the
+    #: ``name`` argument of :meth:`fromKeywordDefinition`, which is the per-*occurrence* ``name=``
+    #: option, not the keyword type. Declared (annotation only) on the base; every concrete subclass
+    #: sets it.
+    keywordName: ClassVar[str]
+
+    #: The keyword's human-readable description, transcribed verbatim from the legacy grammar
+    #: (bugs included). Rendered by the grammar surface; the single source of truth, never
+    #: re-typed in a test or spec.
+    keywordDescription: ClassVar[str]
+
     @classmethod
     @abstractmethod
     def fromKeywordDefinition(cls, name: str, definition: dict, context: InputContext) -> "KeywordBase | None":

@@ -64,6 +64,9 @@ class JobKeyword(KeywordBase):
     #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
     schema = JobSchema
 
+    keywordName = "job"
+    keywordDescription = "definition of an analysis job"
+
     @classmethod
     def fromKeywordDefinition(cls, name: str, definition: dict, context: InputContext) -> "KeywordBase | None":
         """Not yet implemented -- U2a only mirrors the grammar as a schema.

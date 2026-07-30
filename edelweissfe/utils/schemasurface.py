@@ -100,6 +100,33 @@ class KeywordSurfaceSpec:
     schema: type | None = None
 
 
+def specFromKeywordClass(keywordClass: type) -> KeywordSurfaceSpec:
+    """Build the :class:`KeywordSurfaceSpec` for a top-level keyword from its
+    :class:`~edelweissfe.keywords.base.keywordbase.KeywordBase` subclass.
+
+    The keyword's spelling (:attr:`~edelweissfe.keywords.base.keywordbase.KeywordBase.keywordName`,
+    in exact display case), its description, and its schema all come from the class -- the single
+    source of truth -- so the grammar surface, the U3 parser, and any test all agree by construction
+    rather than re-transcribing the name/description anywhere. Use this in preference to constructing
+    a :class:`KeywordSurfaceSpec` by hand for a registered keyword.
+
+    Parameters
+    ----------
+    keywordClass
+        A concrete ``KeywordBase`` subclass.
+
+    Returns
+    -------
+    KeywordSurfaceSpec
+        The spec rendering that keyword's ``printKeywords`` block / module documentation.
+    """
+    return KeywordSurfaceSpec(
+        name=keywordClass.keywordName,
+        description=keywordClass.keywordDescription,
+        schema=keywordClass.schema,
+    )
+
+
 def renderSchemaSurface(specs: Iterable[KeywordSurfaceSpec]) -> str:
     """Render a sequence of top-level keyword specs in the legacy ``Module.__doc__`` format.
 

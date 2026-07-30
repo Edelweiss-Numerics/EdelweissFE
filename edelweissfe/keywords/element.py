@@ -77,6 +77,9 @@ class ElementKeyword(KeywordBase):
     #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
     schema = ElementSchema
 
+    keywordName = "element"
+    keywordDescription = "definition of element(s)"
+
     @classmethod
     def fromKeywordDefinition(cls, name: str, definition: dict, context: InputContext) -> "KeywordBase | None":
         """Not yet implemented -- U2a only mirrors the grammar as a schema.

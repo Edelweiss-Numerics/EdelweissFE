@@ -59,6 +59,9 @@ class NodeKeyword(KeywordBase):
     #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
     schema = NodeSchema
 
+    keywordName = "node"
+    keywordDescription = "definition of nodes"
+
     @classmethod
     def fromKeywordDefinition(cls, name: str, definition: dict, context: InputContext) -> "KeywordBase | None":
         """Not yet implemented -- U2a only mirrors the grammar as a schema.

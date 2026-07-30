@@ -62,6 +62,9 @@ class ElSetKeyword(KeywordBase):
     #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
     schema = ElSetSchema
 
+    keywordName = "elSet"
+    keywordDescription = "definition of an element set"
+
     @classmethod
     def fromKeywordDefinition(cls, name: str, definition: dict, context: InputContext) -> "KeywordBase | None":
         """Not yet implemented -- U2a only mirrors the grammar as a schema.

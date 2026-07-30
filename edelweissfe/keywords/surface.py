@@ -71,6 +71,9 @@ class SurfaceKeyword(KeywordBase):
     #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
     schema = SurfaceSchema
 
+    keywordName = "surface"
+    keywordDescription = "definition of surface set"
+
     @classmethod
     def fromKeywordDefinition(cls, name: str, definition: dict, context: InputContext) -> "KeywordBase | None":
         """Not yet implemented -- U2a only mirrors the grammar as a schema.
