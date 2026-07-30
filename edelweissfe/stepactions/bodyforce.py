@@ -77,13 +77,27 @@ class BodyForceSchema:
     The two declarations coexist while the migration is in progress; the ``Module`` one goes away
     with the ``InputLanguage`` singleton in P5.
 
-    ``elSet`` is *not* a schema field: it names an existing model object, resolved by
-    :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
-    category's structural names. ``forceVector`` is declared ``required=True`` explicitly, but is
-    still given a ``default=None`` so the schema remains constructible for the L1 constructor's
-    default argument.
+    ``name`` and ``elSet`` are ``structuralOnly`` fields: ``elSet`` names an existing model object,
+    resolved by :meth:`fromStepActionDefinition` before the schema is even built, exactly like
+    every other category's structural names, and ``name`` is popped even earlier, by
+    ``helpers/inputfilehelpers.py``. Both are declared here purely so the rendered grammar surface
+    documents them -- :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` never actually sees
+    either key, since both are already gone from the definition mapping by the time it runs; see
+    :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.structuralOnly`. ``forceVector`` is declared
+    ``required=True`` explicitly, but is still given a ``default=None`` so the schema remains
+    constructible for the L1 constructor's default argument.
     """
 
+    name: str | None = schemaField(
+        description="Name of the step action.", dtype=str, default=None, required=True, structuralOnly=True
+    )
+    elSet: str | None = schemaField(
+        description="The element set for application of the boundary condition.",
+        dtype=str,
+        default=None,
+        required=True,
+        structuralOnly=True,
+    )
     forceVector: str | None = schemaField(description="The force vector.", dtype=str, default=None, required=True)
     f_t: str | None = schemaField(
         description="Define an amplitude in the step progress interval [0...1]",
@@ -95,6 +109,11 @@ class BodyForceSchema:
         description="In subsequent steps only: define the updated force vector incrementally",
         dtype=str,
         default=None,
+        # The legacy `Module` documented this as `0`; the real runtime default is `None` (the
+        # sentinel `fromStepActionDefinition` needs -- see its docstring: this module's `delta` is
+        # unreachable via an input file anyway). Keep both: `documentedDefault` reproduces the
+        # golden text without changing behavior. See SchemaFieldMeta.documentedDefault.
+        documentedDefault=0,
     )
 
 

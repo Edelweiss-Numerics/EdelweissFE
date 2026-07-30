@@ -120,6 +120,43 @@ class SchemaFieldMeta:
         :func:`registerSchemaOptions`/:func:`buildSchemaFromOptions`) deliberately still include
         them -- they legitimately remain reachable through ``>>options``, so excluding them there
         would change the runtime ``>>options`` grammar.
+    structuralOnly
+        The mirror image of ``optionsOverrideOnly``: marks a field that documents a *structural*
+        argument -- one naming an existing model object (an element/node set, a material, a
+        surface, the step action's own ``name``) -- which an L4 adapter such as
+        :meth:`~edelweissfe.stepactions.base.stepactionbase.StepActionBase.fromStepActionDefinition`
+        resolves and pops from the raw definition *before* the remaining options ever reach
+        :func:`buildSchemaFromOptions`. Such a field is therefore never actually present in the
+        mapping :func:`buildSchemaFromOptions`/:func:`coercePresentOptions` validate, so it is
+        excluded from :func:`optionNames` (and therefore from :func:`scalarOptionNames`,
+        :func:`resolveCaseInsensitiveOptions`'s valid-key set, and the missing-required check) --
+        the opposite exclusion from ``optionsOverrideOnly``, which stays *in* those but is excluded
+        from rendering. A ``structuralOnly`` field remains fully rendered by
+        :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface` (in its required/optional
+        arguments section, ordered like any other field): the whole point is to let a schema
+        document a structural argument's name/description/required-ness without the adapter code
+        that pops it having to change at all.
+    updateOnly
+        Marks a scalar field that belongs only to a keyword's ``update<keyword>`` partial
+        re-declaration grammar, not to the base keyword's own line grammar -- e.g.
+        ``distributedload``'s ``delta``, which only ``updatedistributedload`` ever declared.
+        Affects rendering only, exactly like ``optionsOverrideOnly``: excluded from the *base*
+        keyword's :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface` block, but left in
+        :func:`optionNames`/:func:`scalarOptionNames` since the field is a real, validated part of
+        the (single, shared) runtime schema either way.
+    documentedDefault
+        Overrides the default value shown by :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface`
+        for an optional field, when it differs from the dataclass field's own (runtime) default --
+        mirroring ``edelweissfe.utils.inputlanguage.OptionalKeywordArg.documentedDefault`` /
+        ``stepactions/options.py``'s ``registerSchemaOptions``, the existing precedent for this
+        exact split. The one real case today is ``bodyforce.delta``: the legacy ``Module``
+        documented its default as ``0``, but the field's actual runtime default is ``None`` (the
+        sentinel :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` needs to tell "not
+        given" apart from a real value) -- changing the runtime default to match the stale
+        documented one would be a behavior change, and changing the documented one would be an
+        undiscussed golden edit, so the two are recorded separately instead. :data:`MISSING` (the
+        default) means "no override -- render the field's own default", which is the overwhelming
+        common case.
     """
 
     description: str
@@ -129,6 +166,15 @@ class SchemaFieldMeta:
     subSchema: type | None = None
     isDataline: bool = False
     optionsOverrideOnly: bool = False
+    structuralOnly: bool = False
+    updateOnly: bool = False
+    # Stored via a `default_factory`, not a plain `= MISSING` field default: assigning
+    # `dataclasses.MISSING` (an alias of which `MISSING` is) as a field's *default value* is
+    # indistinguishable, to the dataclasses machinery itself, from that field having no default at
+    # all -- which would raise "non-default argument follows default argument" the moment a later
+    # field of this dataclass does have a plain default. A factory returning the sentinel sidesteps
+    # that special-casing entirely.
+    documentedDefault: Any = dataclasses.field(default_factory=lambda: MISSING)
 
 
 def schemaField(
@@ -141,6 +187,9 @@ def schemaField(
     optionName: str | None = None,
     subSchema: type | None = None,
     optionsOverrideOnly: bool = False,
+    structuralOnly: bool = False,
+    updateOnly: bool = False,
+    documentedDefault: Any = MISSING,
 ) -> dataclasses.Field:
     """Declare one field of an L2 option schema dataclass.
 
@@ -183,6 +232,20 @@ def schemaField(
         Marks this field as reachable only through a later ``>>options`` override, not through the
         keyword's own line/``>>``-block grammar -- see :class:`SchemaFieldMeta`. Affects rendering
         only.
+    structuralOnly
+        Marks this field as documenting a structural argument that an L4 adapter resolves and pops
+        before the schema is built, so it is never actually validated by
+        :func:`buildSchemaFromOptions` -- see :class:`SchemaFieldMeta`. Affects
+        :func:`optionNames`/construction-time validation only; rendering is unaffected (the field
+        still appears in its required/optional arguments section).
+    updateOnly
+        Marks this field as belonging only to a keyword's ``update<keyword>`` grammar, not its base
+        keyword's own line grammar -- see :class:`SchemaFieldMeta`. Affects rendering of the base
+        keyword only.
+    documentedDefault
+        Overrides the default value shown in the rendered grammar surface for this field, when it
+        differs from ``default`` -- see :class:`SchemaFieldMeta`. Affects rendering only; the
+        dataclass field's real, runtime default is still ``default``.
 
     Returns
     -------
@@ -202,6 +265,9 @@ def schemaField(
         optionName=optionName,
         subSchema=subSchema,
         optionsOverrideOnly=optionsOverrideOnly,
+        structuralOnly=structuralOnly,
+        updateOnly=updateOnly,
+        documentedDefault=documentedDefault,
     )
 
     fieldKwargs: dict[str, Any] = {"metadata": {_METADATA_KEY: meta}}
@@ -368,7 +434,10 @@ def optionNames(schemaCls: type) -> dict[str, dataclasses.Field]:
 
     A field declared via :func:`datalineField` is excluded: it is filled by the owning class's own
     dataline interpretation, not by a ``key=value``/`` >>`` name the parser resolves here -- see
-    that function's docstring.
+    that function's docstring. A field declared with ``structuralOnly=True`` is excluded too: it
+    documents a structural argument an L4 adapter already resolves and pops before the schema is
+    built, so it is never actually present in the mapping this function's callers validate -- see
+    :class:`SchemaFieldMeta`.
 
     Parameters
     ----------
@@ -384,7 +453,7 @@ def optionNames(schemaCls: type) -> dict[str, dataclasses.Field]:
     return {
         (fieldSchemaMeta(field).optionName or field.name): field
         for field in fields
-        if not fieldSchemaMeta(field).isDataline
+        if not fieldSchemaMeta(field).isDataline and not fieldSchemaMeta(field).structuralOnly
     }
 
 

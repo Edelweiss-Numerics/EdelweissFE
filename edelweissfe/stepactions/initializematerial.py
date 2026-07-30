@@ -40,7 +40,7 @@ from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
-from edelweissfe.utils.schema import buildSchemaFromOptions
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 inputLanguage = InputLanguage()
 
@@ -63,12 +63,25 @@ class InitializeMaterialSchema:
     """L2: the scalar options of the ``initializematerial`` keyword, owned by this module and never
     mutated from outside it.
 
-    Declares no fields at all: ``elSet`` is the keyword's only option, and it is *not* a schema
-    field -- it names an existing model object, resolved by :meth:`fromStepActionDefinition` before
-    the schema is even built, exactly like every other category's structural names. The empty
-    schema is still built (rather than skipped) so a misspelled option is rejected the same way as
-    for every other module.
+    Declares only ``structuralOnly`` fields: ``name`` and ``elSet`` are the keyword's only options,
+    and neither is an ordinary schema field -- ``elSet`` names an existing model object, resolved
+    by :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
+    category's structural names, and ``name`` is popped even earlier, by
+    ``helpers/inputfilehelpers.py``. Both are declared here purely so the rendered grammar surface
+    documents them; :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` still validates the
+    (now-empty, since both keys are ``structuralOnly``) remainder, so a misspelled option is
+    rejected the same way as for every other module.
     """
+
+    name: str | None = schemaField(
+        description="Name of the step action.", dtype=str, default=None, required=True, structuralOnly=True
+    )
+    elSet: str | None = schemaField(
+        description="The element set for application of the boundary condition.",
+        dtype=str,
+        default="all",
+        structuralOnly=True,
+    )
 
 
 class StepAction(StepActionBase):

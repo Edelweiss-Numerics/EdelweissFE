@@ -48,9 +48,14 @@ from __future__ import annotations
 import dataclasses
 import textwrap
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Mapping
 
-from edelweissfe.utils.schema import SchemaFieldMeta, datalineFieldMeta, schemaFields
+from edelweissfe.utils.schema import (
+    MISSING,
+    SchemaFieldMeta,
+    datalineFieldMeta,
+    schemaFields,
+)
 
 #: Matches ``edelweissfe.utils.inputlanguage.indent1``/``indent2`` exactly -- the two indentation
 #: levels the legacy renderer uses (a "required/optional arguments|keywords|datalines" section
@@ -127,7 +132,7 @@ def specFromKeywordClass(keywordClass: type) -> KeywordSurfaceSpec:
     )
 
 
-def renderSchemaSurface(specs: Iterable[KeywordSurfaceSpec]) -> str:
+def renderSchemaSurface(specs: Iterable[KeywordSurfaceSpec], *, bracket: str = "[", joiner: str = "\n\n") -> str:
     """Render a sequence of top-level keyword specs in the legacy ``Module.__doc__`` format.
 
     Parameters
@@ -135,14 +140,28 @@ def renderSchemaSurface(specs: Iterable[KeywordSurfaceSpec]) -> str:
     specs
         One :class:`KeywordSurfaceSpec` per top-level keyword to render, in the order they should
         appear.
+    bracket
+        The header bracket style: ``"["`` (the default) renders ``[name] ...``, matching a
+        ``Module``'s own header (every keyword this renderer originally covered); ``"<"`` renders
+        ``< name > ...``, matching an ``InputFileKeyword``'s header -- the shape a step action's
+        keyword (and its ``update<keyword>`` partial-redeclaration counterpart) is documented with,
+        since ``for module in modules: kw = module.addOptionalKeyword(...)`` builds one of *those*,
+        not a ``Module``, per step type.
+    joiner
+        The separator between consecutive blocks. The default, a blank line, matches how multiple
+        *independent* top-level keywords are joined. A step action's documentation instead repeats
+        its (main, optional update) block pair once per registered step type and joins every block
+        with a single newline, no blank line in between -- pass ``specs`` pre-built with that
+        repetition and ``joiner="\\n"`` to reproduce it; see
+        ``tests/_inputlanguage_snapshot.py::_renderDocumentation``'s non-dict branch, which this
+        mirrors (``"\\n".join(str(item.__doc__()) for item in documentation)``).
 
     Returns
     -------
     str
-        The rendered surface: one keyword's block per spec, separated by a blank line -- matching
-        how ``tests/_inputlanguage_snapshot.py`` joins per-module documentation blocks today.
+        The rendered surface: one keyword's block per spec, joined by ``joiner``.
     """
-    return "\n\n".join(_renderKeywordBlock(spec, bracket="[") for spec in specs)
+    return joiner.join(_renderKeywordBlock(spec, bracket=bracket) for spec in specs)
 
 
 def _renderKeywordBlock(spec: KeywordSurfaceSpec, bracket: str) -> str:
@@ -150,11 +169,18 @@ def _renderKeywordBlock(spec: KeywordSurfaceSpec, bracket: str) -> str:
     return "\n".join(_renderKeywordLines(spec, bracket))
 
 
-def _fieldDefault(field: dataclasses.Field):
-    """The value that applies when this (optional) field is not supplied, mirroring
+def _fieldDefault(field: dataclasses.Field, meta: SchemaFieldMeta):
+    """The value shown as this (optional) field's default, mirroring
     ``OptionalKeywordArg.documentedDefault`` -- rendered via ``str()``, not ``repr()``, which is why
     a string default such as ``"Monitor"`` prints unquoted in the golden format.
+
+    ``meta.documentedDefault`` wins when set: it exists precisely for the rare field whose
+    documented default legitimately differs from its runtime one (see
+    :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.documentedDefault`). Otherwise this falls back
+    to the dataclass field's own default/``default_factory``, exactly as before.
     """
+    if meta.documentedDefault is not MISSING:
+        return meta.documentedDefault
     if field.default is not dataclasses.MISSING:
         return field.default
     if field.default_factory is not dataclasses.MISSING:  # pragma: no cover -- no scalar field uses this today
@@ -167,7 +193,7 @@ def _renderScalarEntry(optionName: str, meta: SchemaFieldMeta, field: dataclasse
     ``KeywordArg.__doc__``/``OptionalKeywordArg.__doc__`` exactly."""
     if meta.required:
         return f"[{optionName}] {meta.description} ({meta.dtype!r})"
-    default = _fieldDefault(field) if field is not None else None
+    default = _fieldDefault(field, meta) if field is not None else meta.documentedDefault
     return f"[{optionName}] {meta.description} ({meta.dtype!r}, default = {default})"
 
 
@@ -200,6 +226,12 @@ def _renderKeywordLines(spec: KeywordSurfaceSpec, bracket: str) -> list[str]:
             # line/">>"-block grammar -- see SchemaFieldMeta.optionsOverrideOnly. Rendering-only
             # exclusion: scalarOptionNames/optionNames (and therefore registerSchemaOptions) still
             # include it, so ">>options" itself is unaffected.
+            continue
+        elif fieldMeta.updateOnly:
+            # Belongs only to this schema's "update<keyword>" grammar (e.g. distributedload's
+            # "delta"), not to the base keyword's own line grammar -- see
+            # SchemaFieldMeta.updateOnly. Rendering-only exclusion, from the *base* keyword's block;
+            # a dedicated update-keyword spec built with its own schema renders it normally.
             continue
         else:
             (scalarRequired if fieldMeta.required else scalarOptional).append((optionName, fieldName))
@@ -304,3 +336,31 @@ def _renderSubKeywordLines(optionName: str, fieldMeta: SchemaFieldMeta) -> list[
     """
     subSpec = KeywordSurfaceSpec(name=optionName, description=fieldMeta.description, schema=fieldMeta.subSchema)
     return [_INDENT2 + line for line in _renderKeywordLines(subSpec, bracket="<")]
+
+
+def renderDictDocumentation(documentation: Mapping[str, str]) -> str:
+    """Render a legacy dict-style ``documentation = {optionName: description}`` module attribute.
+
+    This is the *third* legacy rendering format (see the module docstring for the other two):
+    ``edelweissfe.outputmanagers.meshplot`` never declared its real grammar to the input language
+    (only a placeholder keyword, kept as-is -- see that module's own docstring), so its
+    "module documentation" golden section is not derived from any keyword/schema at all, just this
+    hand-maintained ``{name: description}`` mapping, rendered by
+    ``tests/_inputlanguage_snapshot.py::_renderDocumentation``'s dict branch:
+    ``"\\n".join(f"  {key}: {documentation[key]}" for key in sorted(documentation))``. This
+    function reproduces that exact format, so a caller need not special-case meshplot's own
+    ``documentation`` dict to render it identically. There is no schema-driven equivalent to build
+    this from: the dict itself remains the single source of truth for this one module.
+
+    Parameters
+    ----------
+    documentation
+        The module's ``documentation`` dict, mapping an option name (or ``"tag=value"`` spelling,
+        e.g. ``"create=perNode"``) to its human-readable description.
+
+    Returns
+    -------
+    str
+        One ``  key: description`` line per entry, sorted by key.
+    """
+    return "\n".join(f"  {key}: {documentation[key]}" for key in sorted(documentation))

@@ -36,6 +36,7 @@ running; U2 drives it over the whole grammar and asserts byte-identical output a
 file.
 """
 
+import importlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,6 +46,7 @@ import pytest
 from edelweissfe.utils.schema import datalineField, schemaField, subKeywordField
 from edelweissfe.utils.schemasurface import (
     KeywordSurfaceSpec,
+    renderDictDocumentation,
     renderPrintKeywordsBlock,
     renderSchemaSurface,
     specFromKeywordClass,
@@ -411,13 +413,37 @@ _MODULE_SECTION_CATEGORIES = [
 ]
 
 
-def _moduleDocGoldenBodies() -> dict[str, str]:
-    """Parse the golden file's "module documentation" sections into one body of text per module,
-    keyed by the module's dotted import path -- extracted from the golden file itself, never
-    hand-retyped, mirroring :func:`_printKeywordsBlocksByName`.
+def _rawModuleDocGoldenSections() -> dict[str, str]:
+    """Parse the golden file's "module documentation" sections into one *raw* body of text per
+    module, keyed by the module's dotted import path -- extracted from the golden file itself,
+    never hand-retyped, mirroring :func:`_printKeywordsBlocksByName`.
 
-    A section's raw content (between its own ``===== module documentation: X =====`` marker and
-    the next one, or end of file) sometimes carries a leading line or two that is **not** part of
+    "Raw" means no assumption about header shape at all: the full text between a module's own
+    ``===== module documentation: X =====`` marker and the next one (or end of file), rstripped of
+    trailing newlines. :func:`_moduleDocGoldenBodies` narrows this down further, for the
+    ``[name] ...``-headed subset only; the step-action (``< name >``-headed, possibly repeated) and
+    meshplot (legacy dict-style) sections use this raw form directly instead, since they have no
+    ``[name] ...`` line to anchor a header-stripping extraction on.
+    """
+    golden = _GOLDEN_PATH.read_text()
+    marker = re.compile(r"===== module documentation: (\S+) =====\n")
+    boundaries = list(marker.finditer(golden))
+    sections: dict[str, str] = {}
+    for i, m in enumerate(boundaries):
+        start = m.end()
+        end = boundaries[i + 1].start() if i + 1 < len(boundaries) else len(golden)
+        sections[m.group(1)] = golden[start:end].rstrip("\n")
+    return sections
+
+
+_RAW_MODULE_DOC_GOLDEN_SECTIONS = _rawModuleDocGoldenSections()
+
+
+def _moduleDocGoldenBodies() -> dict[str, str]:
+    """Narrow :data:`_RAW_MODULE_DOC_GOLDEN_SECTIONS` to one body of text per ``[name] ...``-headed
+    module.
+
+    A section's raw content sometimes carries a leading line or two that is **not** part of
     ``Module.__doc__``'s own rendering at all: ``tests/_inputlanguage_snapshot.py`` additionally
     prints the *Python* module's own docstring (``mod.__doc__.strip()``), when non-empty, directly
     above it -- e.g. ``edelweissfe.generators.findclosestnode``'s golden section starts with its
@@ -427,21 +453,17 @@ def _moduleDocGoldenBodies() -> dict[str, str]:
     first line matching ``^\\[`` (the ``[name] ...`` header ``KeywordSurfaceSpec`` produces),
     discarding everything before it, exactly as the U2c spec's "the lines AFTER the ``[name]``
     header line" phrasing describes. A module documented instead with a ``< name >`` header (the
-    step actions) or the legacy dict style (``meshplot``) -- see
-    ``_NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION`` -- has no such line, so it is not usable as a golden
-    body here at all; those modules are tracked for their (deferred) status only, never compared.
+    step actions) or the legacy dict style (``meshplot``) has no such line, so it is not usable as
+    a golden body here at all -- see :func:`_stepActionExpectedSection`/
+    :func:`_meshplotExpectedSection` below, which compare against
+    :data:`_RAW_MODULE_DOC_GOLDEN_SECTIONS` directly instead.
     """
-    golden = _GOLDEN_PATH.read_text()
-    marker = re.compile(r"===== module documentation: (\S+) =====\n")
-    boundaries = list(marker.finditer(golden))
     bodies: dict[str, str] = {}
-    for i, m in enumerate(boundaries):
-        start = m.end()
-        end = boundaries[i + 1].start() if i + 1 < len(boundaries) else len(golden)
-        lines = golden[start:end].rstrip("\n").split("\n")
+    for modpath, section in _RAW_MODULE_DOC_GOLDEN_SECTIONS.items():
+        lines = section.split("\n")
         headerIndex = next((idx for idx, line in enumerate(lines) if re.match(r"^\[\S", line)), None)
         if headerIndex is not None:
-            bodies[m.group(1)] = "\n".join(lines[headerIndex + 1 :])
+            bodies[modpath] = "\n".join(lines[headerIndex + 1 :])
     return bodies
 
 
@@ -569,37 +591,24 @@ _SCHEMA_NONE_WITH_GOLDEN_SECTION = frozenset(
 
 #: Modules that DO have a real schema and a golden "module documentation:" marker, but whose golden
 #: content is not headed by a ``[name] ...`` line at all -- a fundamentally different rendering
-#: *shape* than :func:`renderSchemaSurface` produces, discovered while extending this test beyond
-#: the categories the U2 recon explicitly measured (``stepaction``, ``outputmanager``). Because
-#: :func:`_moduleDocGoldenBodies` only extracts a body for a ``[name] ...``-headed section, none of
-#: these ever enter :data:`_REGISTRY_SCHEMA_ENTRIES` in the first place, so they are tracked here
-#: rather than in ``_DEFERRED_TO_U3`` (which is exclusively "in `_REGISTRY_SCHEMA_ENTRIES`, differs"):
+#: *shape* than :func:`renderSchemaSurface` produces as a single top-level spec, discovered while
+#: extending this test beyond the categories the U2 recon explicitly measured (``stepaction``,
+#: ``outputmanager``). Because :func:`_moduleDocGoldenBodies` only extracts a body for a
+#: ``[name] ...``-headed section, none of these ever enter :data:`_REGISTRY_SCHEMA_ENTRIES` at all.
 #:
-#: - The 12 step actions (`stepactions/options`, the thirteenth registered one, is `schema=None`
-#:   instead -- see above): each golden section documents TWO ``< name >``/``< updateName >``
-#:   sub-keyword-style blocks (repeated twice over, a legacy ``documentation = [module, module]``
-#:   artifact) rather than one top-level ``[name] ...`` block -- registry-shape/construction-path
-#:   rework for U3, not a U2c renderer gap.
-#: - ``outputmanagers/meshplot``: golden documents it via the legacy *dict*-style
-#:   ``documentation = {...}`` rendering (plain ``key: description`` lines, no ``[``/``<`` header at
-#:   all) while its L2 schema declares a scalar ``jobs`` field -- another rendering-shape mismatch.
-_NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION = frozenset(
-    {
-        "edelweissfe.stepactions.bodyforce",
-        "edelweissfe.stepactions.changematerialproperty",
-        "edelweissfe.stepactions.dirichlet",
-        "edelweissfe.stepactions.distributedload",
-        "edelweissfe.stepactions.geostatic",
-        "edelweissfe.stepactions.indirectcontractioncontrol",
-        "edelweissfe.stepactions.indirectcontrol",
-        "edelweissfe.stepactions.initializematerial",
-        "edelweissfe.stepactions.modelupdate",
-        "edelweissfe.stepactions.nodeforces",
-        "edelweissfe.stepactions.setfield",
-        "edelweissfe.stepactions.setinitialconditions",
-        "edelweissfe.outputmanagers.meshplot",
-    }
-)
+#: U3b closed both shapes that used to populate this set (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``,
+#: U3b): the 12 step actions (`stepactions/options`, the thirteenth registered one, stays
+#: `schema=None` -- entangled with the U3c ``>>options`` rework, see
+#: :data:`_SCHEMA_NONE_WITH_GOLDEN_SECTION`) render their ``< name >``/``< updateName >`` pair,
+#: repeated once per registered step type, via :func:`_stepActionExpectedSection` below; and
+#: ``outputmanagers/meshplot``'s legacy dict-style ``documentation = {...}`` renders via
+#: :func:`~edelweissfe.utils.schemasurface.renderDictDocumentation`
+#: (:func:`_meshplotExpectedSection`). Neither shape fits the single-``[name]``-spec machinery
+#: above, so both are verified by their own dedicated tests rather than folded into
+#: :data:`_EXPECTED_BYTE_IDENTICAL_MODULES`; this set is kept (empty) to record that no
+#: non-bracket-format module remains unaccounted for, following the same "keep it, note why it's
+#: empty" convention as :data:`_DEFERRED_TO_U3`.
+_NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION = frozenset()
 
 
 def _moduleSectionBody(schema: type) -> str:
@@ -703,3 +712,259 @@ def test_module_doc_golden_extraction_is_not_vacuous():
     """
     assert len(_MODULE_DOC_GOLDEN_BODIES) >= len(_PREVIOUSLY_BYTE_IDENTICAL_MODULES) + 1
     assert _PREVIOUSLY_BYTE_IDENTICAL_MODULES <= set(_MODULE_DOC_GOLDEN_BODIES)
+
+
+# --- U3b: the 12 step actions' `< name >`/`< updateName >` sections, and meshplot's dict-style ----
+# section -- the two non-bracket-format shapes `_NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION` used to
+# track (PLAN_INPUT_SYSTEM_UNIFICATION.md, U3b). Neither fits `_moduleSectionBody`'s "one `[name]`
+# spec, header line discarded" comparison above, so each gets its own reconstruction mirroring
+# `tests/_inputlanguage_snapshot.py::renderCurrentInputLanguageSurface`'s own per-module assembly
+# (the module's real `__doc__`, if any, then the rendered grammar, joined by one newline) and is
+# compared against the *raw*, unstripped golden section from `_RAW_MODULE_DOC_GOLDEN_SECTIONS`.
+
+
+def _expectedModuleSection(modpath: str, renderedGrammar: str) -> str:
+    """Reconstruct the full expected "module documentation" section text for `modpath`.
+
+    Mirrors ``tests/_inputlanguage_snapshot.py::renderCurrentInputLanguageSurface``'s per-module
+    assembly exactly: ``mod.__doc__.strip()`` (only if the module actually has one -- see that
+    function's own ``if mod.__doc__:`` guard) followed by the rendered grammar, joined by a single
+    newline. Reconstructing the *whole* section this way -- rather than guessing how many leading
+    lines a docstring spans, the way :func:`_moduleDocGoldenBodies` strips up to a ``[name] ...``
+    anchor -- means this helper needs no bracket-shaped header to anchor on, which is exactly why
+    it is used for the ``< name >``-headed step actions and the header-less meshplot dict section.
+
+    Parameters
+    ----------
+    modpath
+        The dotted module path, imported to read its real ``__doc__``.
+    renderedGrammar
+        The grammar rendering to append (from :func:`renderSchemaSurface`/
+        :func:`~edelweissfe.utils.schemasurface.renderDictDocumentation`).
+
+    Returns
+    -------
+    str
+        The reconstructed section text, comparable byte-for-byte against
+        ``_RAW_MODULE_DOC_GOLDEN_SECTIONS[modpath]``.
+    """
+    mod = importlib.import_module(modpath)
+    parts = []
+    if mod.__doc__:
+        parts.append(mod.__doc__.strip())
+    parts.append(renderedGrammar)
+    return "\n".join(parts)
+
+
+@dataclass(frozen=True)
+class _StepActionRenderSpec:
+    """Everything needed to reconstruct one step action's expected golden section: the keyword's
+    own name/description (transcribed verbatim from the golden ``< name > description`` header --
+    step actions carry no ``keywordName``/``keywordDescription`` class attributes the way the U2a/
+    U2b top-level ``KeywordBase`` subclasses do, so unlike :func:`_structuralKeywordSpec` these
+    cannot be read off the class), and -- only for the 3 modules with an ``update<keyword>``
+    partial-redeclaration pair -- the same for the update keyword and its documentation-only schema
+    attribute name.
+    """
+
+    modpath: str
+    name: str
+    description: str
+    schemaAttr: str
+    updateName: str | None = None
+    updateDescription: str | None = None
+    updateSchemaAttr: str | None = None
+
+
+#: One entry per U3b-closed step action (`stepactions/options`, the 13th registered one, is not
+#: here -- see :data:`_SCHEMA_NONE_WITH_GOLDEN_SECTION`). Every schema is real code, imported by
+#: attribute name from the actual module below, not re-declared here.
+_U3B_STEP_ACTION_SPECS = [
+    _StepActionRenderSpec(
+        "edelweissfe.stepactions.bodyforce",
+        "bodyforce",
+        "Apply body forces on element sets.",
+        "BodyForceSchema",
+    ),
+    _StepActionRenderSpec(
+        "edelweissfe.stepactions.changematerialproperty",
+        "changematerialproperty",
+        "Stepaction to change material properties.",
+        "ChangeMaterialPropertySchema",
+    ),
+    _StepActionRenderSpec(
+        "edelweissfe.stepactions.dirichlet",
+        "dirichlet",
+        "Standard Dirichlet boundary condition.",
+        "DirichletSchema",
+        "updateDirichlet",
+        "Update a previously defined dirichlet definition.",
+        "UpdateDirichletSchema",
+    ),
+    _StepActionRenderSpec(
+        "edelweissfe.stepactions.distributedload",
+        "distributedload",
+        "Standard distributed load, applied on a surface set.",
+        "DistributedLoadSchema",
+        "updatedistributedload",
+        "Update a previously defined distributedload definition.",
+        "UpdateDistributedloadSchema",
+    ),
+    _StepActionRenderSpec(
+        "edelweissfe.stepactions.geostatic",
+        "geostatic",
+        "Initialize materials to an geostatic stress state.",
+        "GeostaticSchema",
+    ),
+    _StepActionRenderSpec(
+        "edelweissfe.stepactions.indirectcontractioncontrol",
+        "indirectcontractioncontrol",
+        "Indirect (displacement) controller for the NISTArcLength solver using a ring to control "
+        "the contraction, e.g., for tunneling simulations.",
+        "IndirectContractionControlSchema",
+    ),
+    _StepActionRenderSpec(
+        "edelweissfe.stepactions.indirectcontrol",
+        "indirectcontrol",
+        "Indirect (displacement) controller for the NISTArcLength solver using a ring to control "
+        "the contraction, e.g., for tunneling simulations.",
+        "IndirectControlSchema",
+    ),
+    _StepActionRenderSpec(
+        "edelweissfe.stepactions.initializematerial",
+        "initializematerial",
+        "Standard distributed load, applied on a surface set.",
+        "InitializeMaterialSchema",
+    ),
+    _StepActionRenderSpec(
+        "edelweissfe.stepactions.modelupdate",
+        "modelupdate",
+        "This step action may be used for updating the model at the beginning of a step.",
+        "ModelUpdateSchema",
+    ),
+    _StepActionRenderSpec(
+        "edelweissfe.stepactions.nodeforces",
+        "nodeforces",
+        "Apply node forces on node sets.",
+        "NodeForcesSchema",
+        "updateNodeforces",
+        "Update a previously defined nodeforces definition.",
+        "UpdateNodeforcesSchema",
+    ),
+    _StepActionRenderSpec(
+        "edelweissfe.stepactions.setfield",
+        "setfield",
+        "Set a field (via fieldOutput) to a predefined value.",
+        "SetFieldSchema",
+    ),
+    _StepActionRenderSpec(
+        "edelweissfe.stepactions.setinitialconditions",
+        "setinitialconditions",
+        "Pass initial conditions to elements.",
+        "SetInitialConditionsSchema",
+    ),
+]
+assert len(_U3B_STEP_ACTION_SPECS) == 12
+
+
+#: The number of step types (registry category "step") every step action's keyword is registered
+#: under -- and therefore how many times its ``< name >``/``< updateName >`` block pair repeats in
+#: the golden section (``for module in modules: ...`` in every step action's now-frozen ``Module``
+#: block). Sourced from the registry, not hand-counted, so a third step type would be caught here
+#: rather than silently under-repeating every step action's expected section.
+def _stepTypeCount() -> int:
+    from edelweissfe.config import registry
+
+    return len(registry.availableNames("step"))
+
+
+def _stepActionRenderedGrammar(spec: _StepActionRenderSpec) -> str:
+    """Build the expected ``< name >``/``< updateName >`` rendering for one step action, repeated
+    once per registered step type -- see :func:`_stepTypeCount`."""
+    mod = importlib.import_module(spec.modpath)
+    schema = getattr(mod, spec.schemaAttr)
+    updateSchema = getattr(mod, spec.updateSchemaAttr) if spec.updateSchemaAttr else None
+
+    specs = []
+    for _ in range(_stepTypeCount()):
+        specs.append(KeywordSurfaceSpec(name=spec.name, description=spec.description, schema=schema))
+        if updateSchema is not None:
+            specs.append(
+                KeywordSurfaceSpec(name=spec.updateName, description=spec.updateDescription, schema=updateSchema)
+            )
+    return renderSchemaSurface(specs, bracket="<", joiner="\n")
+
+
+@pytest.mark.parametrize("spec", _U3B_STEP_ACTION_SPECS, ids=[s.modpath for s in _U3B_STEP_ACTION_SPECS])
+def test_stepaction_module_section_matches_golden_byte_for_byte(spec):
+    """U3b's gate (A) for step actions: reconstructing the ``< name > .../< updateName > ...``
+    section from each step action's real (registry-backed) schema -- and, where one exists, its
+    documentation-only ``Update<Keyword>Schema`` companion -- reproduces the golden section
+    byte-for-byte, including the python-docstring-then-grammar assembly and the once-per-step-type
+    repetition.
+    """
+    from edelweissfe.config import registry
+
+    registeredSchema = registry.lookup("stepaction", spec.name)[1]
+    mod = importlib.import_module(spec.modpath)
+    assert registeredSchema is getattr(mod, spec.schemaAttr), (
+        f"{spec.modpath}: the registered 'stepaction' schema is not the same object as "
+        f"'{spec.schemaAttr}' -- the test would silently validate the wrong class."
+    )
+
+    rendered = _stepActionRenderedGrammar(spec)
+    assert _expectedModuleSection(spec.modpath, rendered) == _RAW_MODULE_DOC_GOLDEN_SECTIONS[spec.modpath]
+
+
+def test_stepaction_render_specs_cover_every_registered_stepaction_except_options():
+    """Falsifies :data:`_U3B_STEP_ACTION_SPECS` against drift: it names exactly the built-in
+    ``stepaction`` table minus ``options`` (still ``schema=None``, deferred to U3c -- see
+    :data:`_SCHEMA_NONE_WITH_GOLDEN_SECTION`), so a 14th step action or a renamed one would be
+    caught here rather than silently missing from the parametrized test above.
+
+    Deliberately reads ``registry._BUILTINS`` rather than ``registry.availableNames("stepaction")``:
+    ``test_registry.py::test_isRegistered_sees_all_three_registration_mechanisms`` in-process
+    ``register()``s a throwaway ``"inprocessaction"`` stepaction into the shared registry singleton
+    and never un-registers it, so ``availableNames`` picks up test pollution once that test has run
+    in the same session -- the built-in table itself is unaffected by that, and is what this test
+    actually means to enumerate.
+    """
+    from edelweissfe.config import registry
+
+    builtinNames = {name for (category, name) in registry._BUILTINS if category == "stepaction"}
+    specNames = {spec.name for spec in _U3B_STEP_ACTION_SPECS}
+    assert specNames == builtinNames - {"options"}
+
+
+def _meshplotExpectedSection() -> str:
+    """Build the expected meshplot section: its real ``__doc__`` then its ``documentation`` dict
+    rendered via :func:`~edelweissfe.utils.schemasurface.renderDictDocumentation` -- the dict itself
+    is untouched by U3b (see that module's own docstring on why it stays a placeholder), so this
+    reconstructs the section from the exact same object the legacy renderer already used.
+    """
+    import edelweissfe.outputmanagers.meshplot as meshplot
+
+    return _expectedModuleSection(
+        "edelweissfe.outputmanagers.meshplot", renderDictDocumentation(meshplot.documentation)
+    )
+
+
+def test_meshplot_dict_style_section_matches_golden_byte_for_byte():
+    """U3b's gate (A) for meshplot: :func:`renderDictDocumentation` over the module's own,
+    untouched ``documentation`` dict reproduces the golden section byte-for-byte."""
+    assert _meshplotExpectedSection() == _RAW_MODULE_DOC_GOLDEN_SECTIONS["edelweissfe.outputmanagers.meshplot"]
+
+
+def test_non_bracket_format_golden_section_is_now_fully_covered():
+    """End-to-end U3b assertion mirroring
+    ``test_deferred_and_matching_module_sections_partition_every_schema_bearing_entry`` for the
+    non-bracket-format shapes: every module the (now empty)
+    :data:`_NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION` used to list is covered by one of the two
+    dedicated checks above, so U3b really did close every entry rather than the set having been
+    emptied by mistake.
+    """
+    coveredByStepActionTest = {spec.modpath for spec in _U3B_STEP_ACTION_SPECS}
+    coveredByMeshplotTest = {"edelweissfe.outputmanagers.meshplot"}
+    formerlyNonBracketFormat = coveredByStepActionTest | coveredByMeshplotTest
+    assert len(formerlyNonBracketFormat) == 13
+    assert _NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION == frozenset()

@@ -80,11 +80,24 @@ class IndirectContractionControlSchema:
     """L2: the scalar options of the ``indirectcontractioncontrol`` keyword, owned by this module
     and never mutated from outside it.
 
-    ``contractionNSet`` is *not* a schema field: it names an existing model object, resolved by
-    :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
-    category's structural names.
+    ``name`` and ``contractionNSet`` are ``structuralOnly`` fields: ``contractionNSet`` names an
+    existing model object, resolved by :meth:`fromStepActionDefinition` before the schema is even
+    built, exactly like every other category's structural names, and ``name`` is popped even
+    earlier, by ``helpers/inputfilehelpers.py``. Both are declared here purely so the rendered
+    grammar surface documents them -- :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`
+    never actually sees either key; see :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.structuralOnly`.
     """
 
+    name: str | None = schemaField(
+        description="Name of the step action.", dtype=str, default=None, required=True, structuralOnly=True
+    )
+    contractionNSet: str | None = schemaField(
+        description="The node set defining the contraction ring",
+        dtype=str,
+        default=None,
+        required=True,
+        structuralOnly=True,
+    )
     L: float | None = schemaField(
         description="Final distance (e.g. crack opening)", dtype=float, default=None, required=True
     )

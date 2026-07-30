@@ -65,10 +65,13 @@ class SetInitialConditionsSchema:
     """L2: the scalar options of the ``setinitialconditions`` keyword, owned by this module and
     never mutated from outside it.
 
-    ``elSet`` is *not* a schema field: it names an existing model object, resolved by
+    ``elSet`` is a ``structuralOnly`` field: it names an existing model object, resolved by
     :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
-    category's structural names. The field is called ``propertyName`` rather than ``property`` to
-    avoid shadowing the ``property`` builtin, hence the ``optionName`` indirection.
+    category's structural names, declared here purely so the rendered grammar surface documents it
+    -- :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` never actually sees the key. Unlike
+    every other step action, ``setinitialconditions`` declares no ``name`` argument at all (see the
+    commented-out ``addRequiredArg`` above). The field is called ``propertyName`` rather than
+    ``property`` to avoid shadowing the ``property`` builtin, hence the ``optionName`` indirection.
     """
 
     propertyName: str | None = schemaField(
@@ -80,6 +83,12 @@ class SetInitialConditionsSchema:
     )
     values: str | None = schemaField(
         description="Comma separated property values.", dtype=str, default=None, required=True
+    )
+    elSet: str | None = schemaField(
+        description="The element set for which the initaliziation is performed",
+        dtype=str,
+        default="all",
+        structuralOnly=True,
     )
 
 

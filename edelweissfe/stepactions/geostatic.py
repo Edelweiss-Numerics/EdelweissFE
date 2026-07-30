@@ -71,11 +71,17 @@ class GeostaticSchema:
     """L2: the scalar options of the ``geostatic`` keyword, owned by this module and never mutated
     from outside it.
 
-    ``elSet`` is *not* a schema field: it names an existing model object, resolved by
-    :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
-    category's structural names.
+    ``name`` and ``elSet`` are ``structuralOnly`` fields: ``elSet`` names an existing model object,
+    resolved by :meth:`fromStepActionDefinition` before the schema is even built, exactly like
+    every other category's structural names, and ``name`` is popped even earlier, by
+    ``helpers/inputfilehelpers.py``. Both are declared here purely so the rendered grammar surface
+    documents them -- :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` never actually sees
+    either key; see :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.structuralOnly`.
     """
 
+    name: str | None = schemaField(
+        description="Name of the step action.", dtype=str, default=None, required=True, structuralOnly=True
+    )
     p1: float | None = schemaField(
         description="sig_x=sig_y=sig_z in first point.", dtype=float, default=None, required=True
     )
@@ -84,6 +90,12 @@ class GeostaticSchema:
     h2: float | None = schemaField(description="y coordinate of second point", dtype=float, default=-1.0)
     xLateral: float | None = schemaField(description="ratio of sig_x/sig_y, default=1.0", dtype=float, default=1.0)
     zLateral: float | None = schemaField(description="ratio of sig_z/sig_y, default=1.0", dtype=float, default=1.0)
+    elSet: str | None = schemaField(
+        description="The element set for which the initaliziation is performed",
+        dtype=str,
+        default="all",
+        structuralOnly=True,
+    )
 
 
 class StepAction(StepActionBase):

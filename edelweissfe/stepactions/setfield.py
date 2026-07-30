@@ -71,14 +71,25 @@ class SetFieldSchema:
     """L2: the scalar options of the ``setfield`` keyword, owned by this module and never mutated
     from outside it.
 
-    ``fieldOutput`` is *not* a schema field: it names an existing model object, resolved by
-    :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
-    category's structural names. ``valueType`` is named to avoid shadowing the ``type`` builtin,
-    hence the ``optionName`` indirection; ``value`` stays a plain string regardless of what
-    ``valueType`` says it means -- interpreting it (a numeric vector, or an analytical field name to
-    resolve against the model) is :meth:`_valueFromDefinition`'s job, not the schema's.
+    ``name`` and ``fieldOutput`` are ``structuralOnly`` fields: ``fieldOutput`` names an existing
+    model object, resolved by :meth:`fromStepActionDefinition` before the schema is even built,
+    exactly like every other category's structural names, and ``name`` is popped even earlier, by
+    ``helpers/inputfilehelpers.py``. Both are declared here purely so the rendered grammar surface
+    documents them -- :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` never actually sees
+    either key. Unlike every other step action, ``name`` is *optional* here (it defaults to
+    ``"setfield"``), matching the legacy ``Module`` declaration's ``addOptionalArg`` rather than
+    ``addRequiredArg``. ``valueType`` is named to avoid shadowing the ``type`` builtin, hence the
+    ``optionName`` indirection; ``value`` stays a plain string regardless of what ``valueType``
+    says it means -- interpreting it (a numeric vector, or an analytical field name to resolve
+    against the model) is :meth:`_valueFromDefinition`'s job, not the schema's.
     """
 
+    name: str | None = schemaField(
+        description="Name of the step action.", dtype=str, default="setfield", structuralOnly=True
+    )
+    fieldOutput: str | None = schemaField(
+        description="Field output to be set.", dtype=str, default=None, required=True, structuralOnly=True
+    )
     valueType: str | None = schemaField(
         description="Either 'uniform' or 'analyticalField'.", dtype=str, default=None, required=True, optionName="type"
     )

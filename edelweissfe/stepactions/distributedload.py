@@ -99,17 +99,30 @@ class DistributedLoadSchema:
     """L2: the scalar options of the ``distributedload`` keyword, owned by this module and never
     mutated from outside it.
 
-    ``surface`` is *not* a schema field: it names an existing model object, resolved by
-    :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
-    category's structural names. ``delta`` belongs only to the ``updatedistributedload`` grammar
-    (a full ``distributedload`` declaration never carries it), and ``field`` is accepted purely for
+    ``name`` and ``surface`` are ``structuralOnly`` fields: ``surface`` names an existing model
+    object, resolved by :meth:`fromStepActionDefinition` before the schema is even built, exactly
+    like every other category's structural names, and ``name`` is popped even earlier, by
+    ``helpers/inputfilehelpers.py``. Both are declared here purely so the rendered grammar surface
+    documents them; neither is ever actually seen by
+    :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`. ``delta`` belongs only to the
+    ``updatedistributedload`` grammar (a full ``distributedload`` declaration never carries it), so
+    it is ``updateOnly`` -- rendered as part of :class:`UpdateDistributedloadSchema` below, not of
+    this schema's own ``[distributedload] ...``/``< distributedload >`` block, even though it stays
+    a real, validated field of this one shared runtime schema. ``field`` is accepted purely for
     backward compatibility -- ``DistributedLoadBase`` has no notion of a field, so a load is applied
     to whatever field the element's load type implies, and ``configuration.field`` is never read.
-    Both nonetheless belong on one schema rather than two: the module's ``schema`` attribute is a
-    single class, and which grammar accepts which field is already recorded precisely enough by the
-    ``Module`` keyword declarations above.
     """
 
+    name: str | None = schemaField(
+        description="Name of the step action.", dtype=str, default=None, required=True, structuralOnly=True
+    )
+    surface: str | None = schemaField(
+        description="Surface for application of the distributed load",
+        dtype=str,
+        default=None,
+        required=True,
+        structuralOnly=True,
+    )
     field: str | None = schemaField(
         description="Field for which the boundary condition is active.", dtype=str, default="displacement"
     )
@@ -130,7 +143,41 @@ class DistributedLoadSchema:
         optionName="f(t)",
     )
     delta: str | None = schemaField(
+        description="In subsequent steps only: define the new magnitude incrementally",
+        dtype=str,
+        default=None,
+        updateOnly=True,
+    )
+
+
+@dataclass(frozen=True)
+class UpdateDistributedloadSchema:
+    """L2, documentation-only: the ``updatedistributedload`` keyword's own grammar.
+
+    ``updatedistributedload`` is a genuinely different keyword from ``distributedload`` -- a
+    partial re-declaration that restates only ``name`` (to identify which instance to update), and
+    treats ``magnitude`` as optional (unlike the initial declaration, where it is required), adding
+    ``delta`` as an alternative way to express it. This class is **not** referenced by any runtime
+    code: :meth:`StepAction.updateStepActionFromDefinition` validates a re-declaration via
+    :func:`~edelweissfe.utils.schema.coercePresentOptions` against :class:`DistributedLoadSchema`
+    itself, which does not enforce required-ness at all (an override is by definition partial). It
+    exists solely so :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface` can reproduce the
+    golden grammar surface's ``< updatedistributedload >`` block, which has its own distinct
+    required-arg set and therefore cannot be rendered from :class:`DistributedLoadSchema` as-is.
+    """
+
+    name: str | None = schemaField(
+        description="Name of the step action to update.", dtype=str, default=None, required=True, structuralOnly=True
+    )
+    magnitude: str | None = schemaField(description="Magnitude of the distributed load", dtype=str, default=None)
+    delta: str | None = schemaField(
         description="In subsequent steps only: define the new magnitude incrementally", dtype=str, default=None
+    )
+    f_t: str | None = schemaField(
+        description="Define an amplitude in the step progress interval [0...1]",
+        dtype=str,
+        default=None,
+        optionName="f(t)",
     )
 
 

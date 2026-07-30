@@ -116,16 +116,79 @@ class NodeForcesSchema:
     """L2: the scalar options of the ``nodeforces`` keyword, owned by this module and never mutated
     from outside it.
 
-    ``nSet`` is *not* a schema field: it names an existing model object, resolved by
-    :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
-    category's structural names. ``field`` stays a schema field -- it is used as a plain string tag
-    (to compute the field size), never looked up in a model dict. The numbered components ``1``..
-    ``6`` are not valid Python identifiers, hence the ``optionName`` indirection on
-    ``component1``..``component6``.
+    ``name`` and ``nSet`` are ``structuralOnly`` fields: ``nSet`` names an existing model object,
+    resolved by :meth:`fromStepActionDefinition` before the schema is even built, exactly like
+    every other category's structural names, and ``name`` is popped even earlier, by
+    ``helpers/inputfilehelpers.py``. Both are declared here purely so the rendered grammar surface
+    documents them -- :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` never actually sees
+    either key. ``field`` stays an ordinary schema field -- it is used as a plain string tag (to
+    compute the field size), never looked up in a model dict. The numbered components ``1``..``6``
+    are not valid Python identifiers, hence the ``optionName`` indirection on ``component1``..
+    ``component6``.
     """
 
+    name: str | None = schemaField(
+        description="Name of the step action.", dtype=str, default=None, required=True, structuralOnly=True
+    )
+    nSet: str | None = schemaField(
+        description="The node set for application of the boundary condition.",
+        dtype=str,
+        default=None,
+        required=True,
+        structuralOnly=True,
+    )
     field: str | None = schemaField(
         description="Field for which the boundary condition is active.", dtype=str, default=None, required=True
+    )
+    component1: float | None = schemaField(
+        description="Prescribe first component of field.", dtype=float, default=None, optionName="1"
+    )
+    component2: float | None = schemaField(
+        description="Prescribe second component of field.", dtype=float, default=None, optionName="2"
+    )
+    component3: float | None = schemaField(
+        description="Prescribe third component of field.", dtype=float, default=None, optionName="3"
+    )
+    component4: float | None = schemaField(
+        description="Prescribe fourth component of field.", dtype=float, default=None, optionName="4"
+    )
+    component5: float | None = schemaField(
+        description="Prescribe fifth component of field.", dtype=float, default=None, optionName="5"
+    )
+    component6: float | None = schemaField(
+        description="Prescribe sixth component of field.", dtype=float, default=None, optionName="6"
+    )
+    components: str | None = schemaField(
+        description="Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
+        dtype=str,
+        default=None,
+    )
+    f_t: str | None = schemaField(
+        description="Define an amplitude in the step progress interval [0...1]",
+        dtype=str,
+        default=None,
+        optionName="f(t)",
+    )
+
+
+@dataclass(frozen=True)
+class UpdateNodeforcesSchema:
+    """L2, documentation-only: the ``updateNodeforces`` keyword's own grammar.
+
+    ``updateNodeforces`` is a genuinely different keyword from ``nodeforces`` -- a partial
+    re-declaration that restates only ``name`` (to identify which instance to update) plus the
+    same prescription arguments, dropping the ``nSet``/``field`` required on the initial
+    declaration. This class is **not** referenced by any runtime code:
+    :meth:`StepAction.updateStepActionFromDefinition` validates a re-declaration via
+    :func:`~edelweissfe.utils.schema.coercePresentOptions` against :class:`NodeForcesSchema`
+    itself, which does not enforce required-ness at all (an override is by definition partial). It
+    exists solely so :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface` can reproduce the
+    golden grammar surface's ``< updateNodeforces >`` block, which has its own distinct
+    required-arg set and therefore cannot be rendered from :class:`NodeForcesSchema` as-is.
+    """
+
+    name: str | None = schemaField(
+        description="Name of the step action to update.", dtype=str, default=None, required=True, structuralOnly=True
     )
     component1: float | None = schemaField(
         description="Prescribe first component of field.", dtype=float, default=None, optionName="1"

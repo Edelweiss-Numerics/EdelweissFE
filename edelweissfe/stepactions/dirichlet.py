@@ -104,18 +104,33 @@ class DirichletSchema:
     """L2: the scalar options of the ``dirichlet`` keyword, owned by this module and never mutated
     from outside it.
 
-    Mirrors ``_addPrescriptionArgs`` (plus ``field``) one-for-one. The two declarations coexist
-    while the migration is in progress; the ``Module`` one goes away with the ``InputLanguage``
-    singleton in P5.
+    Mirrors ``_addPrescriptionArgs`` (plus ``name``/``nSet``/``field``) one-for-one. The two
+    declarations coexist while the migration is in progress; the ``Module`` one goes away with the
+    ``InputLanguage`` singleton in P5.
 
-    ``nSet`` and ``analyticalField`` are *not* schema fields: both name an existing model object
-    (a node set, an analytical field) resolved by :meth:`fromStepActionDefinition` before the
-    schema is even built, exactly like every other category's structural names. ``field`` stays a
+    ``name``, ``nSet`` and ``analyticalField`` are ``structuralOnly`` fields: ``nSet`` and
+    ``analyticalField`` each name an existing model object (a node set, an analytical field)
+    resolved by :meth:`fromStepActionDefinition` before the schema is even built, exactly like
+    every other category's structural names, and ``name`` is popped even earlier, by
+    ``helpers/inputfilehelpers.py``. All three are declared here purely so the rendered grammar
+    surface documents them -- :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` never
+    actually sees any of the three keys; see
+    :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.structuralOnly`. ``field`` stays an ordinary
     schema field -- it is used as a plain string tag (to compute the field size), never looked up
     in a model dict. The numbered components ``1``..``6`` are not valid Python identifiers, hence
     the ``optionName`` indirection on ``component1``..``component6``.
     """
 
+    name: str | None = schemaField(
+        description="Name of the step action.", dtype=str, default=None, required=True, structuralOnly=True
+    )
+    nSet: str | None = schemaField(
+        description="The node set for application of the boundary condition.",
+        dtype=str,
+        default=None,
+        required=True,
+        structuralOnly=True,
+    )
     field: str | None = schemaField(
         description="Field for which the boundary condition is active.", dtype=str, default=None, required=True
     )
@@ -141,6 +156,62 @@ class DirichletSchema:
         description="Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
         dtype=str,
         default=None,
+    )
+    analyticalField: str | None = schemaField(
+        description="Scales the defined boundary condition", dtype=str, default=None, structuralOnly=True
+    )
+    f_t: str | None = schemaField(
+        description="Define an amplitude in the step progress interval [0...1]",
+        dtype=str,
+        default=None,
+        optionName="f(t)",
+    )
+
+
+@dataclass(frozen=True)
+class UpdateDirichletSchema:
+    """L2, documentation-only: the ``updateDirichlet`` keyword's own grammar.
+
+    ``updateDirichlet`` is a genuinely different keyword from ``dirichlet`` -- a partial
+    re-declaration that restates only ``name`` (to identify which instance to update) plus the
+    same prescription arguments, dropping the ``nSet``/``field`` required on the initial
+    declaration (``_addPrescriptionArgs`` in the ``Module`` block above). This class is **not**
+    referenced by any runtime code: :meth:`StepAction.updateStepActionFromDefinition` validates a
+    re-declaration via :func:`~edelweissfe.utils.schema.coercePresentOptions` against
+    :class:`DirichletSchema` itself, which does not enforce required-ness at all (an override is by
+    definition partial). It exists solely so :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface`
+    can reproduce the golden grammar surface's ``< updateDirichlet >`` block, which has its own
+    distinct required-arg set and therefore cannot be rendered from :class:`DirichletSchema` as-is.
+    """
+
+    name: str | None = schemaField(
+        description="Name of the step action to update.", dtype=str, default=None, required=True, structuralOnly=True
+    )
+    component1: float | None = schemaField(
+        description="Prescribe first component of field.", dtype=float, default=None, optionName="1"
+    )
+    component2: float | None = schemaField(
+        description="Prescribe second component of field.", dtype=float, default=None, optionName="2"
+    )
+    component3: float | None = schemaField(
+        description="Prescribe third component of field.", dtype=float, default=None, optionName="3"
+    )
+    component4: float | None = schemaField(
+        description="Prescribe fourth component of field.", dtype=float, default=None, optionName="4"
+    )
+    component5: float | None = schemaField(
+        description="Prescribe fifth component of field.", dtype=float, default=None, optionName="5"
+    )
+    component6: float | None = schemaField(
+        description="Prescribe sixth component of field.", dtype=float, default=None, optionName="6"
+    )
+    components: str | None = schemaField(
+        description="Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
+        dtype=str,
+        default=None,
+    )
+    analyticalField: str | None = schemaField(
+        description="Scales the defined boundary condition", dtype=str, default=None, structuralOnly=True
     )
     f_t: str | None = schemaField(
         description="Define an amplitude in the step progress interval [0...1]",
