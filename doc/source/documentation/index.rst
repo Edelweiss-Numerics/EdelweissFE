@@ -5,6 +5,7 @@ Documentation
    :maxdepth: 2
 
    syntax
+   inputsystem
    jobs
    models
    solvers
