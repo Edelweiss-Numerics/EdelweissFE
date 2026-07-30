@@ -39,7 +39,7 @@ from edelweissfe.sections.base.sectionbase import Section as SectionBase
 from edelweissfe.sections.base.sectionbase import WriteMaterialPropertiesToFileSchema
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.schema import schemaField, subKeywordField
+from edelweissfe.utils.schema import datalineField, schemaField, subKeywordField
 
 module = Module("plane", "This section represents a classical plane solid materal section.")
 
@@ -75,14 +75,21 @@ class PlaneSectionSchema:
     """L2: the options this section accepts, owned by this module and never mutated from outside
     it.
 
-    Mirrors the ``module.addRequiredArg``/``module.addOptionalKeyword(...)`` declarations above
-    one-for-one. The two declarations coexist while the migration is in progress; the ``Module``
-    one goes away with the ``InputLanguage`` singleton in P5.
+    Mirrors the ``module.addRequiredArg``/``module.addOptionalKeyword(...)``/
+    ``module.addRequiredDatalines(...)`` declarations above one-for-one. The two declarations
+    coexist while the migration is in progress; the ``Module`` one goes away with the
+    ``InputLanguage`` singleton in P5.
 
     ``thickness`` is declared ``required=True`` explicitly, mirroring ``addRequiredArg`` above, but
     is still given a ``default=None`` so that ``PlaneSectionSchema()`` remains constructible for the
     L1 constructor's default argument; the L4 adapter (``buildSchemaFromOptions``) still enforces
     that an ``.inp`` file supplies it.
+
+    ``elementSets`` is a :func:`~edelweissfe.utils.schema.datalineField`, additive-only: it
+    documents the dataline payload's presence for the grammar surface, but is excluded from
+    :func:`~edelweissfe.utils.schema.optionNames`/``buildSchemaFromOptions`` and is not read by
+    this section's constructor -- the actual element-set datalines are still interpreted by the
+    U3-scoped construction path.
     """
 
     thickness: float | None = schemaField(description="thickness", dtype=float, default=None, required=True)
@@ -93,6 +100,9 @@ class PlaneSectionSchema:
     writeMaterialPropertiesToFile: tuple[WriteMaterialPropertiesToFileSchema, ...] = subKeywordField(
         description="export material properties to file",
         schema=WriteMaterialPropertiesToFileSchema,
+    )
+    elementSets: str | None = datalineField(
+        description="elementSets as comma separated list of element sets for this section", required=True
     )
 
 

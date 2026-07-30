@@ -108,6 +108,18 @@ class SchemaFieldMeta:
     isDataline
         Marks this field as the keyword's dataline payload rather than a ``key=value`` scalar
         option or a ``>>`` sub-keyword block. See :func:`datalineField`.
+    optionsOverrideOnly
+        Marks a scalar field that exists solely so a later ``>>options, name=X, ...`` block has
+        something to validate against and override (via
+        :func:`~edelweissfe.utils.schema.coercePresentOptions`/``applyOptionsOverride``), and is
+        **not** part of the keyword's own line/``>>``-block grammar -- e.g. ensight's
+        ``intermediateSaveInterval``/``minDTForOutput``, which a ``>>configuration`` block or the
+        keyword line never sets directly. This affects rendering only:
+        :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface`'s module-section renderer
+        skips such fields, but :func:`optionNames`/:func:`scalarOptionNames` (and therefore
+        :func:`registerSchemaOptions`/:func:`buildSchemaFromOptions`) deliberately still include
+        them -- they legitimately remain reachable through ``>>options``, so excluding them there
+        would change the runtime ``>>options`` grammar.
     """
 
     description: str
@@ -116,6 +128,7 @@ class SchemaFieldMeta:
     optionName: str | None = None
     subSchema: type | None = None
     isDataline: bool = False
+    optionsOverrideOnly: bool = False
 
 
 def schemaField(
@@ -127,6 +140,7 @@ def schemaField(
     required: bool | None = None,
     optionName: str | None = None,
     subSchema: type | None = None,
+    optionsOverrideOnly: bool = False,
 ) -> dataclasses.Field:
     """Declare one field of an L2 option schema dataclass.
 
@@ -165,6 +179,10 @@ def schemaField(
     subSchema
         Marks this field as a repeatable sub-keyword block described by the given schema. Prefer
         :func:`subKeywordField`, which sets the remaining arguments consistently.
+    optionsOverrideOnly
+        Marks this field as reachable only through a later ``>>options`` override, not through the
+        keyword's own line/``>>``-block grammar -- see :class:`SchemaFieldMeta`. Affects rendering
+        only.
 
     Returns
     -------
@@ -183,6 +201,7 @@ def schemaField(
         required=required,
         optionName=optionName,
         subSchema=subSchema,
+        optionsOverrideOnly=optionsOverrideOnly,
     )
 
     fieldKwargs: dict[str, Any] = {"metadata": {_METADATA_KEY: meta}}

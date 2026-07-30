@@ -195,6 +195,12 @@ def _renderKeywordLines(spec: KeywordSurfaceSpec, bracket: str) -> list[str]:
         optionName = fieldMeta.optionName or fieldName
         if fieldMeta.subSchema is not None:
             (subRequired if fieldMeta.required else subOptional).append((optionName, fieldName))
+        elif fieldMeta.optionsOverrideOnly:
+            # Reachable only via a later ">>options" override, not part of this keyword's own
+            # line/">>"-block grammar -- see SchemaFieldMeta.optionsOverrideOnly. Rendering-only
+            # exclusion: scalarOptionNames/optionNames (and therefore registerSchemaOptions) still
+            # include it, so ">>options" itself is unaffected.
+            continue
         else:
             (scalarRequired if fieldMeta.required else scalarOptional).append((optionName, fieldName))
 

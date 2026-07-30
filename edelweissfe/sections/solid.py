@@ -35,7 +35,7 @@ from edelweissfe.sections.base.sectionbase import Section as SectionBase
 from edelweissfe.sections.base.sectionbase import WriteMaterialPropertiesToFileSchema
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.schema import subKeywordField
+from edelweissfe.utils.schema import datalineField, subKeywordField
 
 module = Module("solid", "This section represents a classical solid materal section.")
 
@@ -70,9 +70,15 @@ class SolidSectionSchema:
     """L2: the options this section accepts, owned by this module and never mutated from outside
     it.
 
-    Mirrors the ``module.addOptionalKeyword(...)`` declarations above one-for-one. The two
-    declarations coexist while the migration is in progress; the ``Module`` one goes away with the
-    ``InputLanguage`` singleton in P5.
+    Mirrors the ``module.addOptionalKeyword(...)``/``module.addRequiredDatalines(...)``
+    declarations above one-for-one. The two declarations coexist while the migration is in
+    progress; the ``Module`` one goes away with the ``InputLanguage`` singleton in P5.
+
+    ``elementSets`` is a :func:`~edelweissfe.utils.schema.datalineField`, additive-only: it
+    documents the dataline payload's presence for the grammar surface, but is excluded from
+    :func:`~edelweissfe.utils.schema.optionNames`/``buildSchemaFromOptions`` and is not read by
+    this section's constructor -- the actual element-set datalines are still interpreted by the
+    U3-scoped construction path.
     """
 
     materialParameterFromField: tuple[MaterialParameterFromFieldSchema, ...] = subKeywordField(
@@ -82,6 +88,9 @@ class SolidSectionSchema:
     writeMaterialPropertiesToFile: tuple[WriteMaterialPropertiesToFileSchema, ...] = subKeywordField(
         description="export material properties to file",
         schema=WriteMaterialPropertiesToFileSchema,
+    )
+    elementSets: str | None = datalineField(
+        description="elementSets as comma separated list of element sets for this section", required=True
     )
 
 

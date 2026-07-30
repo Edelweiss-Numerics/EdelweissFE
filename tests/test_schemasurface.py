@@ -387,3 +387,309 @@ def test_registered_keyword_category_matches_the_golden_printKeywords_surface_ex
     registeredDisplayNames = {registry.lookup("keyword", name)[0].keywordName for name in _ALL_TOP_LEVEL_KEYWORDS}
     assert registeredDisplayNames == set(_PRINT_KEYWORDS_GOLDEN_BLOCKS)
     assert len(_ALL_TOP_LEVEL_KEYWORDS) == 21
+
+
+# --- U2c: the ``Module.__doc__`` "module documentation" sections, over every registry entry that ---
+# declares a real (non-``None``) schema -- as opposed to the ``printKeywords()`` surface above, which
+# only ever covered the 21 top-level keywords. This is the *other* legacy rendering format
+# (``renderSchemaSurface``, not ``renderPrintKeywordsBlock``), and it is checked across every
+# category discovered to carry both a schema and a golden "module documentation:" section --
+# ``outputmanager``, ``section``, ``analyticalfield``, ``generator``, ``modelmodifier``,
+# ``statetransferstrategy``, plus ``constraint`` and ``stepaction`` (found to qualify too; see
+# ``_DEFERRED_TO_U3``/``_NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION`` below for why most of the latter
+# two still differ).
+
+_MODULE_SECTION_CATEGORIES = [
+    "outputmanager",
+    "section",
+    "analyticalfield",
+    "generator",
+    "modelmodifier",
+    "statetransferstrategy",
+    "constraint",
+    "stepaction",
+]
+
+
+def _moduleDocGoldenBodies() -> dict[str, str]:
+    """Parse the golden file's "module documentation" sections into one body of text per module,
+    keyed by the module's dotted import path -- extracted from the golden file itself, never
+    hand-retyped, mirroring :func:`_printKeywordsBlocksByName`.
+
+    A section's raw content (between its own ``===== module documentation: X =====`` marker and
+    the next one, or end of file) sometimes carries a leading line or two that is **not** part of
+    ``Module.__doc__``'s own rendering at all: ``tests/_inputlanguage_snapshot.py`` additionally
+    prints the *Python* module's own docstring (``mod.__doc__.strip()``), when non-empty, directly
+    above it -- e.g. ``edelweissfe.generators.findclosestnode``'s golden section starts with its
+    ``.py`` file's docstring line before the ``[findclosestnode] ...`` grammar line.
+    :func:`renderSchemaSurface` has no access to (and does not reproduce) that Python-level
+    docstring -- it only renders from the schema -- so the "body" extracted here starts at the
+    first line matching ``^\\[`` (the ``[name] ...`` header ``KeywordSurfaceSpec`` produces),
+    discarding everything before it, exactly as the U2c spec's "the lines AFTER the ``[name]``
+    header line" phrasing describes. A module documented instead with a ``< name >`` header (the
+    step actions) or the legacy dict style (``meshplot``) -- see
+    ``_NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION`` -- has no such line, so it is not usable as a golden
+    body here at all; those modules are tracked for their (deferred) status only, never compared.
+    """
+    golden = _GOLDEN_PATH.read_text()
+    marker = re.compile(r"===== module documentation: (\S+) =====\n")
+    boundaries = list(marker.finditer(golden))
+    bodies: dict[str, str] = {}
+    for i, m in enumerate(boundaries):
+        start = m.end()
+        end = boundaries[i + 1].start() if i + 1 < len(boundaries) else len(golden)
+        lines = golden[start:end].rstrip("\n").split("\n")
+        headerIndex = next((idx for idx, line in enumerate(lines) if re.match(r"^\[\S", line)), None)
+        if headerIndex is not None:
+            bodies[m.group(1)] = "\n".join(lines[headerIndex + 1 :])
+    return bodies
+
+
+_MODULE_DOC_GOLDEN_BODIES = _moduleDocGoldenBodies()
+
+
+def _registrySchemaEntries() -> dict[str, type]:
+    """Every dotted module path, across :data:`_MODULE_SECTION_CATEGORIES`, that resolves to a
+    registered class declaring a real schema *and* has a ``[name] ...``-headed golden "module
+    documentation" section -- the population :func:`renderSchemaSurface` can meaningfully be
+    checked against here (a ``schema=None`` entry cannot be rendered at all; a ``< name >``-headed
+    entry, e.g. every step action, was never extracted into :data:`_MODULE_DOC_GOLDEN_BODIES`).
+    """
+    from edelweissfe.config import registry
+
+    entries: dict[str, type] = {}
+    for category in _MODULE_SECTION_CATEGORIES:
+        for name in registry.availableNames(category):
+            target, schema = registry.lookup(category, name)
+            if schema is None:
+                continue
+            modpath = target.__module__
+            if modpath in _MODULE_DOC_GOLDEN_BODIES:
+                entries[modpath] = schema
+    return entries
+
+
+_REGISTRY_SCHEMA_ENTRIES = _registrySchemaEntries()
+
+#: The 21 module-documentation sections already byte-identical before U2c (measured directly
+#: against the golden file, not transcribed from the plan's recon prose -- see the module docstring
+#: of ``PLAN_INPUT_SYSTEM_UNIFICATION.md``'s "U2 recon findings + rescope").
+_PREVIOUSLY_BYTE_IDENTICAL_MODULES = frozenset(
+    {
+        "edelweissfe.analyticalfields.fromvtk",
+        "edelweissfe.analyticalfields.randomscalar",
+        "edelweissfe.analyticalfields.scalarexpression",
+        "edelweissfe.constraints.hangingnode",
+        "edelweissfe.generators.boxgen",
+        "edelweissfe.generators.cubit",
+        "edelweissfe.generators.cuboidlatticegenerator",
+        "edelweissfe.generators.discreterigidbodygenerator",
+        "edelweissfe.generators.findclosestnode",
+        "edelweissfe.generators.microstructuregenerator",
+        "edelweissfe.generators.pipegen",
+        "edelweissfe.generators.planerectquad",
+        "edelweissfe.generators.surfaceelementgenerator",
+        "edelweissfe.outputmanagers.computetimemonitor",
+        "edelweissfe.outputmanagers.conditionalstop",
+        "edelweissfe.outputmanagers.fractureenergyintegrator",
+        "edelweissfe.outputmanagers.meshdatatofile",
+        "edelweissfe.outputmanagers.monitor",
+        "edelweissfe.outputmanagers.plotalongpath",
+        "edelweissfe.outputmanagers.statusfile",
+        "edelweissfe.outputmanagers.timemonitor",
+    }
+)
+assert len(_PREVIOUSLY_BYTE_IDENTICAL_MODULES) == 21
+
+#: U2c's three closures: the renderer now reproduces ``datalineField`` (closing ``section/plane``
+#: and ``section/solid``) and the ``optionsOverrideOnly`` marker excludes ``ensight``'s two
+#: ``>>options``-only fields from its module section.
+_NEWLY_BYTE_IDENTICAL_MODULES = frozenset(
+    {
+        "edelweissfe.outputmanagers.ensight",
+        "edelweissfe.sections.plane",
+        "edelweissfe.sections.solid",
+    }
+)
+
+_EXPECTED_BYTE_IDENTICAL_MODULES = _PREVIOUSLY_BYTE_IDENTICAL_MODULES | _NEWLY_BYTE_IDENTICAL_MODULES
+
+#: Every module documentation section that HAS a ``[name] ...``-headed golden body (i.e. is a member
+#: of :data:`_REGISTRY_SCHEMA_ENTRIES`) but is *not* byte-identical, deliberately deferred to U3 --
+#: this is the "documented, deliberately-excluded list" the U2c spec asks for (the 11 constraints and
+#: the schema=None modules), so coverage can only grow from here, never shrink silently.
+#:
+#: The 11 constraints (PLAN_INPUT_SYSTEM_UNIFICATION.md's U2 recon): a structural arg such as
+#: `slaveSurface`/`nSet`/`referencePoint` is resolved in `fromConstraintDefinition` (popped from the
+#: raw definition) rather than declared on the L2 schema, so the schema under-describes the grammar;
+#: 2 of these 11 (`nodetodeformablesurfacepenalty.augmentedLagrange`, `tie.adjust`) additionally show
+#: the plan's endorsed `str`->`bool` improvement, whose golden regeneration is bundled with the same
+#: U3 commit. `constraints/hangingnode` is the twelfth registered constraint but is NOT in this set
+#: -- it is already byte-identical (see `_PREVIOUSLY_BYTE_IDENTICAL_MODULES`).
+_DEFERRED_TO_U3 = frozenset(
+    {
+        "edelweissfe.constraints.amrtransparencyprobe",
+        "edelweissfe.constraints.directionalspringpenalty",
+        "edelweissfe.constraints.equalvaluelagrangian",
+        "edelweissfe.constraints.equalvaluepenalty",
+        "edelweissfe.constraints.linearizedrigidbody",
+        "edelweissfe.constraints.nodetodeformablesurfacepenalty",
+        "edelweissfe.constraints.nodetodiscreterigidbodypenalty",
+        "edelweissfe.constraints.nodetorigidsurfacepenalty",
+        "edelweissfe.constraints.penaltyindirectcontrol",
+        "edelweissfe.constraints.rigidbody",
+        "edelweissfe.constraints.tie",
+    }
+)
+
+#: The schema=None modules (PLAN_INPUT_SYSTEM_UNIFICATION.md's U2 recon) that additionally have a
+#: golden "module documentation" section -- they cannot be rendered at all today, let alone compared,
+#: so they are tracked separately from `_DEFERRED_TO_U3` (which is exclusively "has a schema, differs
+#: from golden"). Real schemas are added in U3. (`sections/planerandomthickness` and the three
+#: `statetransferstrategy` entries are also `schema=None` but have NO golden section at all --
+#: they were never `Module`-documented in the legacy grammar -- so they are outside this tracking
+#: entirely, not merely deferred.)
+_SCHEMA_NONE_WITH_GOLDEN_SECTION = frozenset(
+    {
+        "edelweissfe.generators.executepythoncode",
+        "edelweissfe.stepactions.options",
+        "edelweissfe.modelmodifiers.adaptivity.hadaptivity",
+    }
+)
+
+#: Modules that DO have a real schema and a golden "module documentation:" marker, but whose golden
+#: content is not headed by a ``[name] ...`` line at all -- a fundamentally different rendering
+#: *shape* than :func:`renderSchemaSurface` produces, discovered while extending this test beyond
+#: the categories the U2 recon explicitly measured (``stepaction``, ``outputmanager``). Because
+#: :func:`_moduleDocGoldenBodies` only extracts a body for a ``[name] ...``-headed section, none of
+#: these ever enter :data:`_REGISTRY_SCHEMA_ENTRIES` in the first place, so they are tracked here
+#: rather than in ``_DEFERRED_TO_U3`` (which is exclusively "in `_REGISTRY_SCHEMA_ENTRIES`, differs"):
+#:
+#: - The 12 step actions (`stepactions/options`, the thirteenth registered one, is `schema=None`
+#:   instead -- see above): each golden section documents TWO ``< name >``/``< updateName >``
+#:   sub-keyword-style blocks (repeated twice over, a legacy ``documentation = [module, module]``
+#:   artifact) rather than one top-level ``[name] ...`` block -- registry-shape/construction-path
+#:   rework for U3, not a U2c renderer gap.
+#: - ``outputmanagers/meshplot``: golden documents it via the legacy *dict*-style
+#:   ``documentation = {...}`` rendering (plain ``key: description`` lines, no ``[``/``<`` header at
+#:   all) while its L2 schema declares a scalar ``jobs`` field -- another rendering-shape mismatch.
+_NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION = frozenset(
+    {
+        "edelweissfe.stepactions.bodyforce",
+        "edelweissfe.stepactions.changematerialproperty",
+        "edelweissfe.stepactions.dirichlet",
+        "edelweissfe.stepactions.distributedload",
+        "edelweissfe.stepactions.geostatic",
+        "edelweissfe.stepactions.indirectcontractioncontrol",
+        "edelweissfe.stepactions.indirectcontrol",
+        "edelweissfe.stepactions.initializematerial",
+        "edelweissfe.stepactions.modelupdate",
+        "edelweissfe.stepactions.nodeforces",
+        "edelweissfe.stepactions.setfield",
+        "edelweissfe.stepactions.setinitialconditions",
+        "edelweissfe.outputmanagers.meshplot",
+    }
+)
+
+
+def _moduleSectionBody(schema: type) -> str:
+    """The lines of :func:`renderSchemaSurface` after its own ``[name] ...`` header line, for a
+    single schema -- the "grammar body" the U2c spec's gate compares against the golden body
+    extracted by :func:`_moduleDocGoldenBodies`. ``name``/``description`` are placeholders: the
+    header line itself is never compared (only the golden extraction's own header line is
+    discarded), so what is written here is immaterial.
+    """
+    rendered = renderSchemaSurface([KeywordSurfaceSpec(name="_", description="_", schema=schema)])
+    _, _, body = rendered.partition("\n")
+    return body
+
+
+@pytest.mark.parametrize("modpath", sorted(_EXPECTED_BYTE_IDENTICAL_MODULES))
+def test_module_section_matches_golden_byte_for_byte(modpath):
+    """U2c's gate (A), extended: every module documentation section not deferred to U3 -- the 21
+    already-identical before this phase, plus ``ensight``/``section.plane``/``section.solid`` closed
+    by this phase's renderer feature and ``optionsOverrideOnly`` marker -- renders byte-identical to
+    its golden grammar body.
+    """
+    schema = _REGISTRY_SCHEMA_ENTRIES[modpath]
+    assert _moduleSectionBody(schema) == _MODULE_DOC_GOLDEN_BODIES[modpath]
+
+
+def test_module_section_byte_identical_set_is_exactly_previously_21_plus_ensight_plane_solid():
+    """The end-to-end U2c assertion the spec's GATE names explicitly: computing byte-identity fresh
+    for every qualifying registry entry (not trusting the parametrized list above, which could in
+    principle omit an entry) yields exactly ``_EXPECTED_BYTE_IDENTICAL_MODULES`` -- no regression
+    among the previous 21, and exactly the three new closures, no more.
+    """
+    matching = {
+        modpath
+        for modpath, schema in _REGISTRY_SCHEMA_ENTRIES.items()
+        if _moduleSectionBody(schema) == _MODULE_DOC_GOLDEN_BODIES[modpath]
+    }
+    assert matching == _EXPECTED_BYTE_IDENTICAL_MODULES
+
+
+def test_deferred_and_matching_module_sections_partition_every_schema_bearing_entry():
+    """Falsifies both the matching set and ``_DEFERRED_TO_U3`` against drift: every registry entry
+    across :data:`_MODULE_SECTION_CATEGORIES` that declares a real schema and has a golden section is
+    either byte-identical or explicitly deferred -- never silently unaccounted for. A future module
+    gaining a schema (or a golden-format change) that is neither ported to match nor added to
+    ``_DEFERRED_TO_U3`` fails here first, before it could fail silently by omission.
+    """
+    assert set(_REGISTRY_SCHEMA_ENTRIES) == _EXPECTED_BYTE_IDENTICAL_MODULES | _DEFERRED_TO_U3
+
+
+def test_schema_none_modules_with_a_golden_section_are_tracked_and_unrenderable():
+    """Falsifies :data:`_SCHEMA_NONE_WITH_GOLDEN_SECTION`: every entry in it really is registered
+    with ``schema=None`` today (so U3, not U2c, is where it gains one), and really does have a golden
+    "module documentation" section (otherwise it would belong outside this tracking entirely, like
+    ``sections/planerandomthickness``).
+    """
+    from edelweissfe.config import registry
+
+    golden = _GOLDEN_PATH.read_text()
+    for modpath in _SCHEMA_NONE_WITH_GOLDEN_SECTION:
+        assert f"===== module documentation: {modpath} =====" in golden
+        found = False
+        for category in _MODULE_SECTION_CATEGORIES:
+            for name in registry.availableNames(category):
+                target, schema = registry.lookup(category, name)
+                if target.__module__ == modpath:
+                    assert schema is None, f"{modpath} now has a schema -- move it out of this set."
+                    found = True
+        assert found, f"{modpath} is not registered under any of {_MODULE_SECTION_CATEGORIES}."
+
+
+def test_non_bracket_format_modules_have_a_schema_but_no_extractable_golden_body():
+    """Falsifies :data:`_NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION`: every entry in it really is
+    registered with a real (non-``None``) schema today -- so it is not miscategorized as
+    ``_SCHEMA_NONE_WITH_GOLDEN_SECTION`` -- really does have a golden "module documentation" marker,
+    and really is excluded from :func:`_moduleDocGoldenBodies`'s extraction (confirming the "no
+    ``[name] ...`` header line" premise that keeps it out of :data:`_REGISTRY_SCHEMA_ENTRIES`
+    entirely, rather than showing up there as a spurious "differs" entry).
+    """
+    from edelweissfe.config import registry
+
+    golden = _GOLDEN_PATH.read_text()
+    for modpath in _NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION:
+        assert f"===== module documentation: {modpath} =====" in golden
+        assert modpath not in _MODULE_DOC_GOLDEN_BODIES
+        assert modpath not in _REGISTRY_SCHEMA_ENTRIES
+        found = False
+        for category in _MODULE_SECTION_CATEGORIES:
+            for name in registry.availableNames(category):
+                target, schema = registry.lookup(category, name)
+                if target.__module__ == modpath:
+                    assert schema is not None, f"{modpath} has schema=None -- move it to that set instead."
+                    found = True
+        assert found, f"{modpath} is not registered under any of {_MODULE_SECTION_CATEGORIES}."
+
+
+def test_module_doc_golden_extraction_is_not_vacuous():
+    """Falsifies :func:`_moduleDocGoldenBodies` itself: if the golden file's header-line format ever
+    changed such that the ``^\\[`` regex silently stopped matching, every body would disappear and
+    every test above would vacuously pass on empty dicts/sets instead of failing. Pin a lower bound
+    (21 previously-identical + at least one differing/deferred entry) so that cannot happen quietly.
+    """
+    assert len(_MODULE_DOC_GOLDEN_BODIES) >= len(_PREVIOUSLY_BYTE_IDENTICAL_MODULES) + 1
+    assert _PREVIOUSLY_BYTE_IDENTICAL_MODULES <= set(_MODULE_DOC_GOLDEN_BODIES)

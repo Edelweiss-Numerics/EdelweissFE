@@ -168,7 +168,12 @@ class EnsightSchema:
     without repeating its full ``>>configuration``. Unlike a solver option, neither has a default of
     its own here: not writing them leaves whatever the manager was configured with in place (the
     ``>>configuration`` block's value, or ``-1e16``, respectively), so that -- not the runtime
-    ``None`` -- is what the docs must say.
+    ``None`` -- is what the docs must say. This is exactly what
+    :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.optionsOverrideOnly` marks both fields as:
+    reachable through ``>>options`` (``scalarOptionNames``/``registerSchemaOptions`` still see
+    them) but omitted from :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface`'s
+    module-section rendering, since they are not part of this keyword's own line/``>>``-block
+    grammar.
     """
 
     perNode: tuple[EnsightPerNodeSchema, ...] = subKeywordField(
@@ -185,11 +190,13 @@ class EnsightSchema:
         "leaves whatever the '>>configuration' block set (or its own default) in place.",
         dtype=int,
         default=None,
+        optionsOverrideOnly=True,
     )
     minDTForOutput: float | None = schemaField(
         description="Set the minimum time between two Ensight exports. Not writing it leaves no " "minimum in place.",
         dtype=float,
         default=None,
+        optionsOverrideOnly=True,
     )
 
 
