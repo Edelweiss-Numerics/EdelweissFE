@@ -76,10 +76,6 @@ class OutputManagerBase(OptionSchemaProvider, ABC):
     ):
         pass
 
-    # @abstractmethod
-    # def updateDefinition(self, **kwargs: dict):
-    #     pass
-
     def applyOptionsOverride(self, fieldValues: dict) -> None:
         """Apply a partial override of this output manager's own ``schema`` fields.
 

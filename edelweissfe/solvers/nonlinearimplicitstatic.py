@@ -66,9 +66,9 @@ class NISTSchema:
 
     Mirrors :attr:`NIST.SolverSpecificOptions` one-for-one; that dict remains the actual source of
     truth consulted at runtime (``self.options``, a plain mutable dict) -- this schema exists so the
-    L3 registry and the future name-based ``>>options`` override mechanism have a typed description
-    of what this solver accepts, without yet requiring every internal ``self.options[...]`` access
-    to become a dataclass attribute access.
+    L3 registry and the name-based ``>>options`` override mechanism have a typed description of
+    what this solver accepts, without requiring every internal ``self.options[...]`` access to
+    become a dataclass attribute access.
     """
 
     defaultMaxIter: int | None = schemaField(

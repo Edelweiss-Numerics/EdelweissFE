@@ -38,10 +38,9 @@ Bug 1
 
 Bug 2
     ``strtobool()`` (``edelweissfe/utils/misc.py``) calls ``.lower()`` on its argument, so a
-    programmatic caller (e.g. an EdelweissMeshfree script) passing a real Python ``bool`` for
-    ``overwrite``/``transient`` raised ``AttributeError``. Fixed by routing both call sites in
-    ``OutputManager.updateDefinition`` through the new ``edelweissfe.utils.misc.asBool`` helper,
-    which passes a real ``bool`` through unchanged and otherwise delegates to ``strtobool``.
+    programmatic caller (e.g. an EdelweissMeshfree script) passing a real Python ``bool`` raised
+    ``AttributeError``. Fixed by adding ``edelweissfe.utils.misc.asBool``, which passes a real
+    ``bool`` through unchanged and otherwise delegates to ``strtobool``.
 """
 
 import numpy as np
@@ -109,22 +108,6 @@ def test_intermediateSaveInterval_reads_its_own_default_not_overwrites():
 
     assert manager.intermediateSaveInterval == 10
     assert manager.overwrite is False  # its own (correct) default
-
-
-def test_updateDefinition_configuration_accepts_real_bool_overwrite():
-    """Bug 2 regression: passing a real bool (as a programmatic caller, e.g. EdelweissMeshfree,
-    would) used to raise AttributeError inside strtobool()."""
-    manager = _buildEnsightOutputManager()
-
-    manager.updateDefinition(configuration=True, overwrite=False)
-    assert manager.overwrite is False
-
-    manager.updateDefinition(configuration=True, overwrite=True)
-    assert manager.overwrite is True
-
-    # strings must keep working exactly as before (this is how the input file parser calls it)
-    manager.updateDefinition(configuration=True, overwrite="False")
-    assert manager.overwrite is False
 
 
 def test_asBool_accepts_bool_and_string_where_strtobool_would_crash_on_bool():

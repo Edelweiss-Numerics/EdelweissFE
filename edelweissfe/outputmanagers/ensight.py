@@ -49,7 +49,6 @@ from edelweissfe.utils.fieldoutput import (
     _FieldOutputBase,
 )
 from edelweissfe.utils.meshtools import disassembleElsetToEnsightShapes
-from edelweissfe.utils.misc import asBool
 from edelweissfe.utils.schema import schemaField, subKeywordField
 
 """
@@ -88,18 +87,9 @@ class EnsightPerElementSchema:
 class EnsightConfigurationSchema:
     """L2: the options of a single ``>>configuration`` block.
 
-    These defaults are the single source of truth for what an ensight export does when no
-    ``>>configuration`` block is given at all -- read directly from this schema's own field
-    defaults, with no dependency on the input-language machinery being loaded first.
-
-    Note that ``overwrite`` defaults to ``False``, i.e. an export directory is by default suffixed
-    with a timestamp rather than overwritten -- despite the "ensight output is overwritten by
-    default" comment on the (separate, dataline-driven) ``updateDefinition`` path. The default is
-    reproduced here exactly as declared, but be aware that **no test exercises it**: of the 142 test
-    inputs with an active ensight block, 141 pass ``overwrite=yes``, and the single one that does not
-    (``testfiles/marmot/GMCDPPlaneStrain/test_coarse.inp``) is not named ``test.inp`` and is
-    therefore never run by ``run_tests_edelweissfe``. The timestamp branch is preserved by
-    inspection, not by coverage.
+    These defaults are also what an ensight export uses when no ``>>configuration`` block is given
+    at all. Note that ``overwrite`` defaults to ``False``, i.e. an export directory is by default
+    suffixed with a timestamp rather than overwritten.
     """
 
     overwrite: bool = schemaField(description="Overwrite results.", dtype=bool, default=False)
@@ -116,30 +106,19 @@ class EnsightSchema:
     """L2: the options this output manager accepts, owned by this module and never mutated from
     outside it.
 
-    Unlike the other output managers, ensight's grammar is not a flat option list: it is a set of
-    repeatable ``>>`` sub-keyword blocks, mirrored one-for-one here via
-    :func:`edelweissfe.utils.schema.subKeywordField`. Each field therefore holds a *tuple* of
-    per-block schema instances, in file order.
+    Ensight's grammar is not a flat option list: it is a set of repeatable ``>>`` sub-keyword
+    blocks, mirrored one-for-one here via :func:`edelweissfe.utils.schema.subKeywordField`. Each
+    field therefore holds a *tuple* of per-block schema instances, in file order. ``configurations``
+    answers to the sub-keyword ``>>configuration`` (singular) but is a tuple like the others, since
+    repeating the block is not forbidden.
 
-    ``configurations`` answers to the sub-keyword ``>>configuration`` (singular) but is kept plural
-    as a field name because it, too, is a tuple -- the input language does not currently forbid
-    repeating the block, and this port deliberately does not start forbidding it (see the
-    constructor).
-
-    ``intermediateSaveInterval``/``minDTForOutput`` are, unlike every other field here, not read at
-    construction time at all: they exist purely so a later ``>>options, name=<this export's name>,
-    ...`` block (``stepactions/options.py``, validated dynamically against this very schema once
-    ``name`` resolves to this instance) has something to validate against and
-    :meth:`OutputManager.applyOptionsOverride` to apply -- adjusting the running export mid-job
-    without repeating its full ``>>configuration``. Unlike a solver option, neither has a default of
-    its own here: not writing them leaves whatever the manager was configured with in place (the
-    ``>>configuration`` block's value, or ``-1e16``, respectively), so that -- not the runtime
-    ``None`` -- is what the docs must say. This is exactly what
-    :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.optionsOverrideOnly` marks both fields as:
-    reachable through ``>>options`` (``scalarOptionNames``/``optionNames`` still see them, which is
-    what :func:`~edelweissfe.utils.schema.coercePresentOptions` consults) but omitted from
-    :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface`'s module-section rendering, since
-    they are not part of this keyword's own line/``>>``-block grammar.
+    ``intermediateSaveInterval``/``minDTForOutput`` are not read at construction time: they exist so
+    a later ``>>options, name=<this export's name>, ...`` block (``stepactions/options.py``) has
+    something to validate against and :meth:`OutputManager.applyOptionsOverride` to apply --
+    adjusting the running export mid-job without repeating its full ``>>configuration``. Not writing
+    either leaves whatever the manager was already configured with in place, so both are marked
+    :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.optionsOverrideOnly`: reachable through
+    ``>>options`` but not part of this keyword's own line/``>>``-block grammar.
     """
 
     perNode: tuple[EnsightPerNodeSchema, ...] = subKeywordField(
@@ -916,21 +895,13 @@ class OutputManager(OutputManagerBase):
         configSetName = None
         configIsNodeSet = None
 
-        # configuration keyword should only be allowed once. It is not actually rejected when
-        # repeated, and this port deliberately keeps the loop rather than collapsing it to
-        # `configurations[-1]`: with several blocks, every scalar is last-wins but `configSetName`
-        # *carries over* from an earlier block when the last one names neither nSet nor elSet, and
-        # a last-wins rewrite would silently drop that. No test input repeats the block, so the
-        # behavior is unverifiable here -- which is exactly why it should not be changed in passing.
+        # A repeated `>>configuration` is not rejected: every scalar option is last-wins, but
+        # `configSetName` carries over from an earlier block if the last one names neither nSet nor
+        # elSet.
         for configurationBlock in configurations:
             self.intermediateSaveInterval = configurationBlock.intermediateSaveInterval
             transient = configurationBlock.transient
             self.overwrite = configurationBlock.overwrite
-
-            # if bool(definition["nSet"]) and bool(definition["elSet"]):
-            #     raise Exception(
-            #         f"During parsing of keyword {keywordIdentifier}output ({moduleLevelKeywordIdentifier}ensight): Specify either nSet OR elSet."
-            #     )
 
             if configurationBlock.nSet:
                 configSetName = configurationBlock.nSet
@@ -951,10 +922,6 @@ class OutputManager(OutputManagerBase):
         self._configPart = None
         self._resolveConfigPart()
         self._transientCfg = transient
-        # Previously `kwargs.get("name")`, but the factory never forwarded any **kwargs, so this
-        # was unconditionally None on every path that existed. Kept as an explicit attribute (rather
-        # than dropped) because `_buildVariableJobs` reads it to override the exported variable name.
-        self._nameKwarg = None
         self._initialMeshSignature = (len(self.model.elements), len(self.model.nodes))
         self._meshSignature = None
         self._buildVariableJobs()
@@ -978,7 +945,7 @@ class OutputManager(OutputManagerBase):
             _, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
             if self.model.domainSize == 2 and varSize == 2:
                 varSize = 3
-            name = (self._nameKwarg or fieldOutput.name).replace(" ", "_")
+            name = fieldOutput.name.replace(" ", "_")
             self.createPerNodeOutput(fieldOutput, self._configPart, name, transient=self._transientCfg, varSize=varSize)
 
         for definition in self._perElementDefs:
@@ -986,7 +953,7 @@ class OutputManager(OutputManagerBase):
             _, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
             if self.model.domainSize == 2 and varSize == 2:
                 varSize = 3
-            name = (self._nameKwarg or fieldOutput.name).replace(" ", "_")
+            name = fieldOutput.name.replace(" ", "_")
             self.createPerElementOutput(
                 fieldOutput, self._configPart, name, transient=self._transientCfg, varSize=varSize
             )
@@ -1002,37 +969,6 @@ class OutputManager(OutputManagerBase):
         self.geometryParts = self._createGeometryParts(1)
         self._resolveConfigPart()
         self._buildVariableJobs()
-
-    def updateDefinition(self, **kwargs: dict):
-        # Determine the type
-        if "create" in kwargs:
-            create = kwargs.pop("create")
-            fieldOutput = kwargs.pop("fieldOutput")
-            part = None
-            if "nSet" in kwargs:
-                part = self.nSetToEnsightPartMappings[kwargs.pop("nSet")]
-            elif "elSet" in kwargs:
-                part = self.elSetToEnsightPartMappings[kwargs.pop("elSet")]
-
-            name = kwargs.get("name", fieldOutput.name).replace(" ", "_")
-
-            nEntries, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
-
-            if self.model.domainSize == 2 and varSize == 2:
-                varSize = 3
-
-            transient = asBool(kwargs.get("transient", "True"))
-
-            if create == "perElement":
-                self.createPerElementOutput(fieldOutput, part, name, transient=transient, varSize=varSize)
-            elif create == "perNode":
-                self.createPerNodeOutput(fieldOutput, part, name, transient=transient, varSize=varSize)
-
-        if "configuration" in kwargs:
-            # ensight output is overwritten by default
-            self.overwrite = asBool(kwargs.get("overwrite", "True"))
-            if not self.overwrite:
-                self.exportName = "{:}_{:}".format(self.name, datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
 
     def createPerElementOutput(
         self,
@@ -1150,10 +1086,9 @@ class OutputManager(OutputManagerBase):
         # change with adaptive mesh refinement and stay 1:1 aligned with the variable time steps.
 
     def initializeStep(self, step):
-        # Adjusting intermediateSaveInterval/minDTForOutput mid-job used to be pulled from here, once
-        # per step; it is now pushed directly by applyOptionsOverride as soon as a step's >>options
-        # block routed to this export (by name) is constructed -- which happens before any step in
-        # StepManager.generateSteps runs -- so there is nothing left to do here.
+        # intermediateSaveInterval/minDTForOutput overrides are pushed directly by
+        # applyOptionsOverride as soon as a step's >>options block is constructed, so there is
+        # nothing to do here.
         pass
 
     def applyOptionsOverride(self, fieldValues: dict) -> None:

@@ -231,10 +231,7 @@ class MeshPlotSchema(DatalineAggregatingSchema):
                     f"{', '.join(sorted(cls._jobSchemasByFlag))}."
                 )
 
-            # Legacy `updateDefinition` tested for `saveFigure` and `create` independently, so one
-            # line could emit two jobs -- but each arm then had to tolerate the other's options,
-            # which is exactly the silent-typo tolerance the closed schema exists to remove. No
-            # input file in the repository does this, so one line now means one job.
+            # A dataline selects exactly one job.
             if len(selectors) > 1:
                 raise ValueError(
                     f"A meshplot dataline must select a single job, not {', '.join(sorted(selectors))}; "
@@ -482,9 +479,7 @@ class OutputManager(OutputManagerBase):
                 "axSpec": job.axSpec,
                 "label": job.label if job.label is not None else y.name,
                 "integral": job.integral,
-                # Forwarded to `plotter.plotXYData`, which reads these keys out of the job dict.
-                # The legacy dataline path built a fresh dict and never copied them in, so every
-                # `c=`/`ls=`/`marker=` in an input file was silently ignored.
+                # Forwarded to `plotter.plotXYData`, which reads these keys directly out of the job dict.
                 "plotType": job.plotType,
                 **{
                     name: value

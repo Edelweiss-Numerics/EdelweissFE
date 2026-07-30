@@ -76,9 +76,9 @@ _OPTIONS_KEYWORD_DESCRIPTION = (
 def _writtenOptions(definition: dict) -> dict:
     """Recover the options a user actually wrote in a parsed ``>>options`` block.
 
-    The parser's static grammar check accepts any key beyond ``name`` unvalidated (see
-    :func:`_ensureOptionsKeyword`), so a parsed block carries exactly the keys the user wrote --
-    plus the parser's own bookkeeping keys and ``name`` itself, both stripped here.
+    The parser accepts any key beyond ``name`` unvalidated, so a parsed block carries exactly the
+    keys the user wrote -- plus the parser's own bookkeeping keys and ``name`` itself, both
+    stripped here.
 
     Parameters
     ----------

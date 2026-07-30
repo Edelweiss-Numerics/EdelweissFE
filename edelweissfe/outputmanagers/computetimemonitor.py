@@ -102,9 +102,6 @@ class OutputManager(OutputManagerBase):
             with open(self.exportFile, "w+") as f:
                 f.write("# \n# EdelweissFE: computing times per increment\n#\n")
 
-    def updateDefinition(self, **kwargs: dict):
-        pass
-
     def initializeJob(self):
         pass
 
