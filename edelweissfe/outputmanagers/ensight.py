@@ -942,21 +942,13 @@ class OutputManager(OutputManagerBase):
         current geometry parts. Called at setup and again whenever the mesh changes (AMR)."""
         for definition in self._perNodeDefs:
             fieldOutput = self._fieldOutputController.fieldOutputs[definition.fieldOutput]
-            _, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
-            if self.model.domainSize == 2 and varSize == 2:
-                varSize = 3
             name = fieldOutput.name.replace(" ", "_")
-            self.createPerNodeOutput(fieldOutput, self._configPart, name, transient=self._transientCfg, varSize=varSize)
+            self.createPerNodeOutput(fieldOutput, self._configPart, name, transient=self._transientCfg)
 
         for definition in self._perElementDefs:
             fieldOutput = self._fieldOutputController.fieldOutputs[definition.fieldOutput]
-            _, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
-            if self.model.domainSize == 2 and varSize == 2:
-                varSize = 3
             name = fieldOutput.name.replace(" ", "_")
-            self.createPerElementOutput(
-                fieldOutput, self._configPart, name, transient=self._transientCfg, varSize=varSize
-            )
+            self.createPerElementOutput(fieldOutput, self._configPart, name, transient=self._transientCfg)
 
     def _rebuildForMeshChange(self):
         """Rebuild geometry parts + variable jobs after an AMR mesh change, so both stay consistent
@@ -991,7 +983,9 @@ class OutputManager(OutputManagerBase):
         transient
             Whether the output is transient.
         varSize
-            The size of the variable. If not specified, the size of the field output is taken.
+            The size of the variable. If not specified, the size of the field output is taken --
+            promoted from 2 to 3 components for a 2D-domain vector field, since Ensight expects a
+            3-component vector even in 2D (the implicit z-component is 0).
         """
 
         variableJob = dict()
@@ -1003,6 +997,8 @@ class OutputManager(OutputManagerBase):
         variableJob["transient"] = transient
 
         nEntries, varSizeFp = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
+        if self.model.domainSize == 2 and varSizeFp == 2:
+            varSizeFp = 3
 
         if not part:
             part = self._getTargetPartForFieldOutput(fieldOutput)
@@ -1047,7 +1043,9 @@ class OutputManager(OutputManagerBase):
         transient
             Whether the output is transient.
         varSize
-            The size of the variable. If not specified, the size of the field output is taken.
+            The size of the variable. If not specified, the size of the field output is taken --
+            promoted from 2 to 3 components for a 2D-domain vector field, since Ensight expects a
+            3-component vector even in 2D (the implicit z-component is 0).
         """
 
         variableJob = dict()
@@ -1059,6 +1057,8 @@ class OutputManager(OutputManagerBase):
         variableJob["transient"] = transient
 
         nEntries, varSizeFp = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
+        if self.model.domainSize == 2 and varSizeFp == 2:
+            varSizeFp = 3
         if not varSize:
             varSize = varSizeFp
 
