@@ -36,10 +36,18 @@ running; U2 drives it over the whole grammar and asserts byte-identical output a
 file.
 """
 
+import re
 from dataclasses import dataclass
+from pathlib import Path
+
+import pytest
 
 from edelweissfe.utils.schema import datalineField, schemaField, subKeywordField
-from edelweissfe.utils.schemasurface import KeywordSurfaceSpec, renderSchemaSurface
+from edelweissfe.utils.schemasurface import (
+    KeywordSurfaceSpec,
+    renderPrintKeywordsBlock,
+    renderSchemaSurface,
+)
 
 # --- scalar-only shape (mirrors edelweissfe.generators.findclosestnode) -------------------------
 
@@ -261,3 +269,82 @@ def test_multiple_keyword_specs_are_joined_by_a_blank_line():
 def test_a_schemaless_keyword_renders_only_its_header_line():
     rendered = renderSchemaSurface([KeywordSurfaceSpec(name="fieldOutput", description="", schema=None)])
     assert rendered == "[fieldOutput]"
+
+
+# --- U2a: the six structural keywords' printKeywords()-format blocks, proven byte-identical -------
+# against the frozen golden (PLAN_INPUT_SYSTEM_UNIFICATION.md, U2a gate (A)). This is the *second*
+# legacy rendering format -- ``inputfileparser.printKeywords()``'s hand-rolled dump of the
+# structural/type-dispatch keywords declared directly in that file -- as opposed to the
+# ``Module.__doc__`` format every test above this one exercises.
+
+_GOLDEN_PATH = Path(__file__).parent / "golden" / "inputlanguage_surface.txt"
+
+
+def _printKeywordsBlocksByName() -> dict[str, str]:
+    """Parse the golden file's ``printKeywords()`` section into one block of text per top-level
+    keyword, keyed by keyword name -- extracted from the golden file itself, never hand-retyped.
+
+    Blocks are separated by the two blank lines ``printKeywords()``'s trailing ``print("\\n")``
+    produces between keywords. Each block's own header line is ``"    {name}    {description...}"``
+    (``kwString`` in ``printKeywords()``); the name is recovered with a regex rather than assumed
+    from list position, so a reordering of the golden file cannot silently pair the wrong block
+    with the wrong keyword name.
+    """
+    golden = _GOLDEN_PATH.read_text()
+    section = golden.split("===== printKeywords() =====\n", 1)[1]
+    section = section.split("===== module documentation:", 1)[0]
+    blocksByName: dict[str, str] = {}
+    for block in section.split("\n\n\n"):
+        if not block.strip():
+            continue
+        header = re.match(r"^ {4}(\S+) {4}", block)
+        assert header, f"printKeywords() block has no parseable '    name    ' header: {block[:60]!r}"
+        blocksByName[header.group(1)] = block
+    return blocksByName
+
+
+_PRINT_KEYWORDS_GOLDEN_BLOCKS = _printKeywordsBlocksByName()
+
+
+def _structuralKeywordSpec(keywordName: str, description: str) -> KeywordSurfaceSpec:
+    """Build the :class:`KeywordSurfaceSpec` for one of the six U2a structural keywords from its
+    real, registered ``KeywordBase`` subclass -- not a synthetic stand-in -- so this test also
+    exercises :func:`edelweissfe.config.registry.lookup`."""
+    from edelweissfe.config import registry
+
+    target, schema = registry.lookup("keyword", keywordName)
+    return KeywordSurfaceSpec(name=keywordName, description=description, schema=schema)
+
+
+@pytest.mark.parametrize(
+    "keywordName,description",
+    [
+        ("element", "definition of element(s)"),
+        ("elSet", "definition of an element set"),
+        ("node", "definition of nodes"),
+        # Yes, "definition of an element set" again -- the legacy grammar's *nSet* keyword
+        # description is copy-pasted from *elSet* (PLAN_INPUT_SYSTEM_UNIFICATION.md's mandate to
+        # transcribe bugs verbatim). See edelweissfe.keywords.nset's module docstring.
+        ("nSet", "definition of an element set"),
+        ("surface", "definition of surface set"),
+        ("job", "definition of an analysis job"),
+    ],
+)
+def test_structural_keyword_printKeywords_block_matches_golden_byte_for_byte(keywordName, description):
+    """U2a's gate (A): ``renderPrintKeywordsBlock`` over each structural keyword's real, registered
+    schema reproduces the corresponding golden ``printKeywords()`` block exactly -- proving the
+    schema encodes the legacy grammar (descriptions, types, required/optional-ness, textwrap-80
+    wrapping) with zero drift, without touching the running parser at all.
+    """
+    spec = _structuralKeywordSpec(keywordName, description)
+    rendered = renderPrintKeywordsBlock(spec)
+    assert rendered == _PRINT_KEYWORDS_GOLDEN_BLOCKS[keywordName]
+
+
+def test_printKeywords_golden_extraction_found_all_six_structural_keywords():
+    """Falsifies the extraction helper itself: if a golden-file reformat ever changed the
+    ``printKeywords()`` section's separator/header shape such that :func:`_printKeywordsBlocksByName`
+    silently found fewer blocks, the parametrized test above would just stop running for the
+    missing ones instead of failing -- this pins the extraction's coverage independently.
+    """
+    assert {"element", "elSet", "node", "nSet", "surface", "job"} <= set(_PRINT_KEYWORDS_GOLDEN_BLOCKS)

@@ -46,6 +46,7 @@ nothing wired" gate.
 from __future__ import annotations
 
 import dataclasses
+import textwrap
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -56,6 +57,16 @@ from edelweissfe.utils.schema import SchemaFieldMeta, datalineFieldMeta, schemaF
 #: header, and the entries within it).
 _INDENT1 = "  "
 _INDENT2 = "    "
+
+#: Matches ``edelweissfe.utils.inputfileparser.printKeywords``'s ``kwString``/``kwDataString``
+#: exactly -- the format used for the top-level structural/type-dispatch keywords hand-declared
+#: directly in ``inputfileparser.py`` (as opposed to the ``Module.__doc__`` format above, used by
+#: every keyword ported to a ``documentation = [module]`` block).
+_PRINT_KEYWORDS_HEADER = "    {:}    "
+_PRINT_KEYWORDS_ARG = "        {:22}{:20}"
+
+#: Matches ``edelweissfe.utils.misc.typeString``'s ``dtypeMapping`` exactly.
+_PRINT_KEYWORDS_TYPE_STRING = {str: "string", bool: "boolean", int: "integer", float: "float"}
 
 
 @dataclass(frozen=True)
@@ -187,6 +198,69 @@ def _renderKeywordLines(spec: KeywordSurfaceSpec, bracket: str) -> list[str]:
         lines.append(_INDENT2 + datalineMeta.description)
 
     return lines
+
+
+def _printKeywordsTypeString(dtype: type) -> str:
+    """Mirror ``edelweissfe.utils.misc.typeString`` exactly, without importing it: that function
+    also accepts a raw string (for a caller passing an already-rendered type), a case this
+    renderer's schema-sourced ``dtype`` never needs."""
+    return _PRINT_KEYWORDS_TYPE_STRING.get(dtype, str(dtype))
+
+
+def renderPrintKeywordsBlock(spec: KeywordSurfaceSpec) -> str:
+    """Render one top-level keyword in the legacy ``inputfileparser.printKeywords()`` format.
+
+    This is the *second* legacy rendering format (see the module docstring) -- the one used for the
+    structural/type-dispatch keywords hand-declared directly in ``inputfileparser.py`` via
+    ``inputLanguage.addKeyword(...)``, rather than the ``Module.__doc__`` format
+    :func:`renderSchemaSurface` reproduces. It differs in three respects, matching
+    ``printKeywords()`` precisely: required arguments are listed before optional ones with no
+    section header separating them, no default value is ever shown (even for an optional
+    argument), and neither ``>>`` sub-keyword blocks nor the dataline payload are rendered at all
+    -- ``printKeywords()`` only ever iterates ``kw.requiredArgs``/``kw.optionalArgs``, which have no
+    sub-keyword or dataline concept.
+
+    Uses :mod:`textwrap` with the exact same ``TextWrapper(width=80, replace_whitespace=False)``
+    configuration and ``kwString``/``kwDataString`` indent templates as ``printKeywords()``, so a
+    multi-line-wrapped description reproduces the original's wrapping byte-for-byte.
+
+    Parameters
+    ----------
+    spec
+        The keyword to render. ``spec.schema`` may be ``None`` (a keyword with no line options at
+        all), in which case only the header line is rendered.
+
+    Returns
+    -------
+    str
+        The rendered block: the header line, then one wrapped line (or more) per required and
+        optional scalar argument, newline-joined -- **without** the blank-line separator
+        ``printKeywords()`` prints between keywords (``print("\\n")``), which is a concern of the
+        caller joining multiple blocks, not of rendering one.
+    """
+    wrapper = textwrap.TextWrapper(width=80, replace_whitespace=False)
+    wrapper.initial_indent = _PRINT_KEYWORDS_HEADER.format(spec.name)
+    wrapper.subsequent_indent = " " * len(wrapper.initial_indent)
+    lines = [wrapper.fill(spec.description)]
+
+    if spec.schema is None:
+        return "\n".join(lines)
+
+    meta = schemaFields(spec.schema)
+    required: list[tuple[str, SchemaFieldMeta]] = []
+    optional: list[tuple[str, SchemaFieldMeta]] = []
+    for fieldName, fieldMeta in meta.items():
+        if fieldMeta.isDataline or fieldMeta.subSchema is not None:
+            continue
+        optionName = fieldMeta.optionName or fieldName
+        (required if fieldMeta.required else optional).append((optionName, fieldMeta))
+
+    for optionName, fieldMeta in (*required, *optional):
+        wrapper.initial_indent = _PRINT_KEYWORDS_ARG.format(optionName, _printKeywordsTypeString(fieldMeta.dtype))
+        wrapper.subsequent_indent = " " * len(wrapper.initial_indent)
+        lines.append(wrapper.fill(fieldMeta.description))
+
+    return "\n".join(lines)
 
 
 def _renderSubKeywordLines(optionName: str, fieldMeta: SchemaFieldMeta) -> list[str]:

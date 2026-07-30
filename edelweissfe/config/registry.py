@@ -76,16 +76,18 @@ for exactly how each list was derived):
 ``generator`` (10), ``analyticalfield`` (3), ``solver`` (7), ``step`` (2), ``modelmodifier`` (1),
 ``statetransferstrategy`` (3), ``element`` (42), ``material`` (7), ``linsolver`` (9).
 
-``keyword`` is a **reserved, currently-empty category** (``PLAN_INPUT_SYSTEM_UNIFICATION.md``,
-U1/§1.3): the eventual single source the ``.inp`` parser consults for every top-level keyword
+``keyword`` is the eventual single source the ``.inp`` parser consults for every top-level keyword
 (``element``, ``node``, ``nSet``, ``elSet``, ``surface``, ``job``, ``section``, ``material``,
 ``advancedmaterial``, ``fieldOutput``, ``analyticalField``, ``solver``, ``step``, ``output``,
 ``constraint``, ``modelGenerator``), each mapped to a
-:class:`edelweissfe.keywords.base.keywordbase.KeywordBase` subclass. No name is registered under
-it yet -- this module already accepts and resolves any category string without a fixed whitelist
-(see :func:`lookup`/:func:`register`), so nothing about *this* module changes to "support" it; the
-reservation is this documentation note plus the U2 phase that actually populates it, one keyword
-group per commit.
+:class:`edelweissfe.keywords.base.keywordbase.KeywordBase` subclass. U1 reserved the category
+empty; U2a (``PLAN_INPUT_SYSTEM_UNIFICATION.md``, §5) populates its first slice -- the six
+structural mesh/job keywords (``element``, ``elSet``, ``node``, ``nSet``, ``surface``, ``job``),
+which live nowhere as ``Module``s in the legacy grammar and so have no coexistence window to
+manage. The remaining ten (pluggable-module and type-dispatch keywords) follow in later U2
+increments, one keyword group per commit. Registering a keyword here does **not** wire it into the
+running parser -- ``inputfileparser.py`` still resolves every keyword through ``inputlanguage.py``
+until U3 swaps it over; see each ``KeywordBase`` subclass's ``fromKeywordDefinition`` stub.
 
 ``element`` and ``material`` are keyed by *element type* / *material name* and cover exactly the
 ``provider=edelweiss`` namespace of ``config/elementlibrary.py`` and ``config/materiallibrary.py``.
@@ -414,6 +416,21 @@ for _linsolverName in [
     "amgcl",
 ]:
     _BUILTINS[("linsolver", _linsolverName)] = f"edelweissfe.linsolve.{_linsolverName}:createSolver"
+
+
+# The "keyword" category's first slice (U2a, PLAN_INPUT_SYSTEM_UNIFICATION.md §5): the six
+# structural mesh/job keywords, each its own module with its own class name -- so, like the
+# `material` table above, this is an explicit dict rather than `_addBuiltins`'s "one fixed
+# attribute name" convention.
+for _keywordName, _keywordDotted in {
+    "element": "edelweissfe.keywords.element:ElementKeyword",
+    "elSet": "edelweissfe.keywords.elset:ElSetKeyword",
+    "node": "edelweissfe.keywords.node:NodeKeyword",
+    "nSet": "edelweissfe.keywords.nset:NSetKeyword",
+    "surface": "edelweissfe.keywords.surface:SurfaceKeyword",
+    "job": "edelweissfe.keywords.job:JobKeyword",
+}.items():
+    _BUILTINS[("keyword", _keywordName.casefold())] = _keywordDotted
 
 
 #: Resolved-object memo cache: ``(category, name)`` (casefolded) -> ``(target, schema)``. Guarded

@@ -545,24 +545,37 @@ def test_isRegistered_sees_all_three_registration_mechanisms():
     assert "inprocessaction" in registry.availableNames("stepaction")
 
 
-# --- the "keyword" category (U1, PLAN_INPUT_SYSTEM_UNIFICATION.md §1.3): reserved, still empty ---
+# --- the "keyword" category (U1 reserved it empty; U2a populates its first slice, the six
+# structural mesh/job keywords -- PLAN_INPUT_SYSTEM_UNIFICATION.md §1.3/§5) ---
 
 
-def test_keyword_category_is_reserved_but_declares_no_entries_yet():
-    """U1 reserves the ``"keyword"`` category (the eventual home of every top-level ``.inp``
-    keyword, resolved to a ``KeywordBase`` subclass) without populating it -- that is U2's job, one
-    keyword group per commit. Pinning ``availableNames`` empty here means a later phase cannot
-    accidentally believe it is starting from a partially-populated category.
+def test_keyword_category_covers_the_six_structural_keywords_after_u2a():
+    """U2a populates ``"keyword"`` with exactly the six structural mesh/job keywords; the
+    remaining ten (pluggable-module/type-dispatch keywords) follow in later U2 increments, one
+    keyword group per commit, so this list is expected to grow -- it is not the final state.
     """
-    assert registry.availableNames("keyword") == []
+    assert registry.availableNames("keyword") == ["element", "elset", "job", "node", "nset", "surface"]
 
 
-def test_keyword_category_lookup_fails_cleanly_like_any_other_unpopulated_category():
-    """An unpopulated category must behave exactly like any other empty category (see
-    ``test_lookup_failure_for_unknown_category_does_not_crash``) -- this module makes no special
-    case for ``"keyword"``, so there is nothing to special-case in its failure path either."""
+def test_keyword_category_lookup_resolves_a_structural_keyword_to_its_KeywordBase_subclass():
+    """Each of the six U2a entries resolves to its ``KeywordBase`` subclass, declaring its own L2
+    schema -- exactly like any other built-in category entry."""
+    from edelweissfe.keywords.base.keywordbase import KeywordBase
+    from edelweissfe.keywords.element import ElementKeyword
+
+    target, schema = registry.lookup("keyword", "element")
+    assert target is ElementKeyword
+    assert issubclass(target, KeywordBase)
+    assert schema is ElementKeyword.schema
+
+
+def test_keyword_category_lookup_fails_cleanly_for_an_unregistered_name():
+    """A name not among the six U2a entries must behave exactly like any other unknown name in a
+    populated category (see ``test_lookup_failure_for_unknown_category_does_not_crash``) -- this
+    module makes no special case for ``"keyword"``, so there is nothing to special-case in its
+    failure path either."""
     with pytest.raises(registry.RegistryLookupError) as excinfo:
-        registry.lookup("keyword", "element")
+        registry.lookup("keyword", "notAKeyword")
     assert "keyword" in str(excinfo.value)
 
 
