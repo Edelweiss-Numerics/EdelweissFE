@@ -42,7 +42,6 @@ from edelweissfe.stepactions.base.amplitude import (
     linearAmplitude,
 )
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
@@ -99,6 +98,18 @@ class PenaltyIndirectControlSchema:
     field: str = schemaField(description="The field this constraint acts on.", dtype=str, default="displacement")
     cVector: str | None = schemaField(
         description="The projection vector for the constrained nodes (e.g., CMOD).",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    constrainedNSet: str | None = schemaField(
+        description="The node set for determining the constraint (e.g., CMOD).",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    loadNSet: str | None = schemaField(
+        description="The node set for application of the controlled load.",
         dtype=str,
         default=None,
         required=True,
@@ -196,15 +207,12 @@ class Constraint(ConstraintBase):
         """Build this constraint from a parsed ``*constraint`` definition. See
         :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
         separate from ``__init__``."""
-        definition = CaseInsensitiveDict(definition)
-        constrainedNSetName = definition.pop("constrainedNSet")
-        loadNSetName = definition.pop("loadNSet")
         configuration = buildSchemaFromOptions(cls.schema, definition)
         return cls(
             name,
             model,
-            model.nodeSets[constrainedNSetName],
-            model.nodeSets[loadNSetName],
+            model.nodeSets[configuration.constrainedNSet],
+            model.nodeSets[configuration.loadNSet],
             configuration=configuration,
         )
 

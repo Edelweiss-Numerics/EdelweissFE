@@ -512,21 +512,16 @@ _NEWLY_BYTE_IDENTICAL_MODULES = frozenset(
     }
 )
 
-_EXPECTED_BYTE_IDENTICAL_MODULES = _PREVIOUSLY_BYTE_IDENTICAL_MODULES | _NEWLY_BYTE_IDENTICAL_MODULES
-
-#: Every module documentation section that HAS a ``[name] ...``-headed golden body (i.e. is a member
-#: of :data:`_REGISTRY_SCHEMA_ENTRIES`) but is *not* byte-identical, deliberately deferred to U3 --
-#: this is the "documented, deliberately-excluded list" the U2c spec asks for (the 11 constraints and
-#: the schema=None modules), so coverage can only grow from here, never shrink silently.
-#:
-#: The 11 constraints (PLAN_INPUT_SYSTEM_UNIFICATION.md's U2 recon): a structural arg such as
-#: `slaveSurface`/`nSet`/`referencePoint` is resolved in `fromConstraintDefinition` (popped from the
-#: raw definition) rather than declared on the L2 schema, so the schema under-describes the grammar;
-#: 2 of these 11 (`nodetodeformablesurfacepenalty.augmentedLagrange`, `tie.adjust`) additionally show
-#: the plan's endorsed `str`->`bool` improvement, whose golden regeneration is bundled with the same
-#: U3 commit. `constraints/hangingnode` is the twelfth registered constraint but is NOT in this set
-#: -- it is already byte-identical (see `_PREVIOUSLY_BYTE_IDENTICAL_MODULES`).
-_DEFERRED_TO_U3 = frozenset(
+#: U3a's closure: the 11 constraints whose structural args (`slaveSurface`/`masterSurface`/`nSet`/
+#: `referencePoint`/`constrainedNSet`/`loadNSet`/`rigidBody`) were resolved in
+#: `fromConstraintDefinition` (popped from the raw definition) rather than declared on the L2 schema,
+#: leaving the schema under-describing the grammar. U3a adds them as required schema fields (dtype/
+#: order matching the golden) and reworks `fromConstraintDefinition` to read them off the built schema
+#: instance. 2 of these 11 (`nodetodeformablesurfacepenalty.augmentedLagrange`, `tie.adjust`) also
+#: carry the plan's endorsed `str`->`bool` improvement, whose golden lines are updated in the same
+#: U3a commit. `constraints/hangingnode` is the twelfth registered constraint but is NOT here -- it
+#: was already byte-identical (see `_PREVIOUSLY_BYTE_IDENTICAL_MODULES`).
+_U3A_CONSTRAINT_MODULES = frozenset(
     {
         "edelweissfe.constraints.amrtransparencyprobe",
         "edelweissfe.constraints.directionalspringpenalty",
@@ -541,6 +536,21 @@ _DEFERRED_TO_U3 = frozenset(
         "edelweissfe.constraints.tie",
     }
 )
+assert len(_U3A_CONSTRAINT_MODULES) == 11
+
+_EXPECTED_BYTE_IDENTICAL_MODULES = (
+    _PREVIOUSLY_BYTE_IDENTICAL_MODULES | _NEWLY_BYTE_IDENTICAL_MODULES | _U3A_CONSTRAINT_MODULES
+)
+
+#: Every module documentation section that HAS a ``[name] ...``-headed golden body (i.e. is a member
+#: of :data:`_REGISTRY_SCHEMA_ENTRIES`) but is *not* byte-identical, deliberately deferred to a later
+#: U3 sub-increment -- the "documented, deliberately-excluded list" so coverage can only grow, never
+#: shrink silently. U3a closed all 11 constraints (see :data:`_U3A_CONSTRAINT_MODULES`), so this set
+#: is now empty; the remaining not-yet-schema-described modules are the ``schema=None`` ones tracked
+#: in :data:`_SCHEMA_NONE_WITH_GOLDEN_SECTION` and the ``< name >``-headed ones in
+#: :data:`_NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION`, neither of which is a member of
+#: :data:`_REGISTRY_SCHEMA_ENTRIES` in the first place.
+_DEFERRED_TO_U3 = frozenset()
 
 #: The schema=None modules (PLAN_INPUT_SYSTEM_UNIFICATION.md's U2 recon) that additionally have a
 #: golden "module documentation" section -- they cannot be rendered at all today, let alone compared,
@@ -606,20 +616,20 @@ def _moduleSectionBody(schema: type) -> str:
 
 @pytest.mark.parametrize("modpath", sorted(_EXPECTED_BYTE_IDENTICAL_MODULES))
 def test_module_section_matches_golden_byte_for_byte(modpath):
-    """U2c's gate (A), extended: every module documentation section not deferred to U3 -- the 21
-    already-identical before this phase, plus ``ensight``/``section.plane``/``section.solid`` closed
-    by this phase's renderer feature and ``optionsOverrideOnly`` marker -- renders byte-identical to
-    its golden grammar body.
+    """U2c's gate (A), extended through U3a: every module documentation section not deferred -- the
+    21 already-identical before U2c, the ``ensight``/``section.plane``/``section.solid`` trio closed
+    by U2c's renderer feature and ``optionsOverrideOnly`` marker, and the 11 constraints closed by
+    U3a (structural args added to their schemas) -- renders byte-identical to its golden grammar body.
     """
     schema = _REGISTRY_SCHEMA_ENTRIES[modpath]
     assert _moduleSectionBody(schema) == _MODULE_DOC_GOLDEN_BODIES[modpath]
 
 
-def test_module_section_byte_identical_set_is_exactly_previously_21_plus_ensight_plane_solid():
-    """The end-to-end U2c assertion the spec's GATE names explicitly: computing byte-identity fresh
-    for every qualifying registry entry (not trusting the parametrized list above, which could in
-    principle omit an entry) yields exactly ``_EXPECTED_BYTE_IDENTICAL_MODULES`` -- no regression
-    among the previous 21, and exactly the three new closures, no more.
+def test_module_section_byte_identical_set_is_exactly_the_expected_closed_set():
+    """The end-to-end U2c/U3a assertion the spec's GATE names explicitly: computing byte-identity
+    fresh for every qualifying registry entry (not trusting the parametrized list above, which could
+    in principle omit an entry) yields exactly ``_EXPECTED_BYTE_IDENTICAL_MODULES`` -- no regression
+    among the previous 21, the three U2c closures, and the 11 U3a constraints, and no more.
     """
     matching = {
         modpath

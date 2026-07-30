@@ -35,9 +35,8 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.schema import buildSchemaFromOptions
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 Acceptance test double for the "topological containers have stable identity" contract
@@ -70,8 +69,20 @@ documentation = [module]
 
 @dataclass(frozen=True)
 class AmrTransparencyProbeSchema:
-    """L2: this constraint accepts no options beyond the structural ``nSet`` it watches (see
-    :meth:`Constraint.fromConstraintDefinition`)."""
+    """L2: the options this constraint accepts, owned by this module and never mutated from
+    outside it.
+
+    Its only option is the structural ``nSet`` it watches -- a node set *name*, resolved to the
+    actual node set in :meth:`Constraint.fromConstraintDefinition`. It is declared ``required=True``
+    explicitly, but still given a ``default=None`` so the schema remains constructible for the L1
+    constructor's default argument."""
+
+    nSet: str | None = schemaField(
+        description="The node set whose growth under AMR this probe verifies.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
 
 
 class Constraint(ConstraintBase):
@@ -116,10 +127,8 @@ class Constraint(ConstraintBase):
         """Build this constraint from a parsed ``*constraint`` definition. See
         :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
         separate from ``__init__``."""
-        definition = CaseInsensitiveDict(definition)
-        nSetName = definition.pop("nSet")
         configuration = buildSchemaFromOptions(cls.schema, definition)
-        return cls(name, model, model.nodeSets[nSetName], configuration=configuration)
+        return cls(name, model, model.nodeSets[configuration.nSet], configuration=configuration)
 
     @property
     def nodes(self) -> list:

@@ -40,7 +40,6 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.facetcontactgeometry import line2ClosestPoint, tria3ClosestPoint
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
@@ -132,8 +131,8 @@ module.addOptionalArg(
     "(without snapping) across larger, deliberate ones. Note that adjusting modifies the nodal "
     "coordinates before the element geometry is initialized; avoid adjusting nodes that also "
     "belong to an already-generated contact surface of another constraint.",
-    str,
-    "True",
+    bool,
+    True,
 )
 module.addOptionalArg(
     "adjustTolerance",
@@ -183,6 +182,22 @@ class TieSchema:
     :func:`edelweissfe.utils.schema.coerceValue`).
     """
 
+    slaveSurface: str | None = schemaField(
+        description="The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) "
+        "forming the slave surface; its nodes are tied. For quadratic (hexa20/quad8) faces, generate "
+        "the facets with triangulation=midside on BOTH surfaces -- the corner triangulation excludes "
+        "the midside nodes from the facet node list entirely, leaving them untied.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    masterSurface: str | None = schemaField(
+        description="The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) "
+        "forming the master surface.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
     positionTolerance: float | None = schemaField(
         description="Whether a slave node is tied at all: nodes whose reference-configuration "
         "closest-point distance to the master surface exceeds this tolerance are left untied "
@@ -343,15 +358,12 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         """Build this constraint from a parsed ``*constraint`` definition. See
         :class:`~edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase`
         for why this is separate from ``__init__``."""
-        definition = CaseInsensitiveDict(definition)
-        slaveSurfaceName = definition.pop("slaveSurface")
-        masterSurfaceName = definition.pop("masterSurface")
         configuration = buildSchemaFromOptions(cls.schema, definition)
         return cls(
             name,
             model,
-            model.elementSets[slaveSurfaceName],
-            model.elementSets[masterSurfaceName],
+            model.elementSets[configuration.slaveSurface],
+            model.elementSets[configuration.masterSurface],
             journal,
             configuration=configuration,
         )

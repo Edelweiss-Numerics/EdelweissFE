@@ -40,7 +40,6 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
@@ -112,6 +111,9 @@ class NodeToRigidSurfacePenaltySchema:
     )
     penalty: float | None = schemaField(
         description="The numerical penalty value.", dtype=float, default=None, required=True
+    )
+    nSet: str | None = schemaField(
+        description="The node set to be constrained.", dtype=str, default=None, required=True
     )
     value: float = schemaField(
         description="The prescribed distance to the rigid boundary. A value of 0.0 implies no "
@@ -197,10 +199,8 @@ class Constraint(ConstraintBase, MeshDependent):
         """Build this constraint from a parsed ``*constraint`` definition. See
         :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
         separate from ``__init__``."""
-        definition = CaseInsensitiveDict(definition)
-        nSetName = definition.pop("nSet")
         configuration = buildSchemaFromOptions(cls.schema, definition)
-        return cls(name, model, model.nodeSets[nSetName], journal, configuration=configuration)
+        return cls(name, model, model.nodeSets[configuration.nSet], journal, configuration=configuration)
 
     def _rebuildFromNodes(self) -> None:
         """(Re)derive every quantity that depends on the node set/count."""

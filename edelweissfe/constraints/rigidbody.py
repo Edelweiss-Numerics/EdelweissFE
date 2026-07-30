@@ -37,9 +37,8 @@ from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.schema import buildSchemaFromOptions
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 module = Module("rigidbody", "A rigid body constraint tying nodes to a reference point.")
 
@@ -150,8 +149,18 @@ class RigidBodyStiffnessView:
 
 @dataclass(frozen=True)
 class RigidBodySchema:
-    """L2: this constraint accepts no options beyond the structural ``nSet``/``referencePoint`` it
-    ties (see :meth:`Constraint.fromConstraintDefinition`)."""
+    """L2: the options this constraint accepts, owned by this module and never mutated from
+    outside it.
+
+    Its only options are the structural ``nSet``/``referencePoint`` it ties -- node set *names*,
+    resolved to the actual node sets in :meth:`Constraint.fromConstraintDefinition`. Each is
+    declared ``required=True`` explicitly, but still given a ``default=None`` so the schema remains
+    constructible for the L1 constructor's default argument."""
+
+    nSet: str | None = schemaField(description="Node set to tie.", dtype=str, default=None, required=True)
+    referencePoint: str | None = schemaField(
+        description="Node set containing only the reference point.", dtype=str, default=None, required=True
+    )
 
 
 class Constraint(ConstraintBase):
@@ -232,15 +241,12 @@ class Constraint(ConstraintBase):
         """Build this constraint from a parsed ``*constraint`` definition. See
         :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
         separate from ``__init__``."""
-        definition = CaseInsensitiveDict(definition)
-        nSetName = definition.pop("nSet")
-        referencePointName = definition.pop("referencePoint")
         configuration = buildSchemaFromOptions(cls.schema, definition)
         return cls(
             name,
             model,
-            model.nodeSets[nSetName],
-            model.nodeSets[referencePointName],
+            model.nodeSets[configuration.nSet],
+            model.nodeSets[configuration.referencePoint],
             configuration=configuration,
         )
 

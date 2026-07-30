@@ -37,7 +37,6 @@ from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.rigidbodies.discreterigidbody import DiscreteRigidBody
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
@@ -105,6 +104,18 @@ class NodeToDiscreteRigidBodyPenaltySchema:
     that an ``.inp`` file supplies it.
     """
 
+    nSet: str | None = schemaField(
+        description="The (slave) node set to be protected from penetrating the rigid body.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    rigidBody: str | None = schemaField(
+        description="The name of the discrete rigid body (as registered in model.rigidBodies).",
+        dtype=str,
+        default=None,
+        required=True,
+    )
     penalty: float | None = schemaField(
         description="The numerical penalty value.", dtype=float, default=None, required=True
     )
@@ -323,15 +334,12 @@ class Constraint(ConstraintBase, MeshDependent):
         """Build this constraint from a parsed ``*constraint`` definition. See
         :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
         separate from ``__init__``."""
-        definition = CaseInsensitiveDict(definition)
-        nSetName = definition.pop("nSet")
-        rigidBodyName = definition.pop("rigidBody")
         configuration = buildSchemaFromOptions(cls.schema, definition)
         return cls(
             name,
             model,
-            model.nodeSets[nSetName],
-            model.rigidBodies[rigidBodyName],
+            model.nodeSets[configuration.nSet],
+            model.rigidBodies[configuration.rigidBody],
             configuration=configuration,
         )
 

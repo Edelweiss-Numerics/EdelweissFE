@@ -38,7 +38,6 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.facetcontactgeometry import (
     line2ClosestPoint,
     line2GapGradientHessian,
@@ -146,8 +145,8 @@ module.addOptionalArg(
     "The multiplier is constant within an increment (zero tangent contribution), drives the "
     "penetration toward zero over the increments at a fixed penalty, and sharpens the friction "
     "cone mu * N. Requires sliding=small.",
-    str,
-    "False",
+    bool,
+    False,
 )
 
 documentation = [module]
@@ -185,6 +184,21 @@ class NodeToDeformableSurfacePenaltySchema:
     :func:`edelweissfe.utils.schema.coerceValue`).
     """
 
+    slaveSurface: str | None = schemaField(
+        description="The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) "
+        "forming the slave surface; its nodes act as the contact points, penalty-weighted by their "
+        "tributary areas.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    masterSurface: str | None = schemaField(
+        description="The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) "
+        "forming the master surface.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
     penalty: float | None = schemaField(
         description="The numerical penalty value, an interface stiffness modulus per unit slave " "surface area.",
         dtype=float,
@@ -534,15 +548,12 @@ class Constraint(ConstraintBase, MeshDependent):
         """Build this constraint from a parsed ``*constraint`` definition. See
         :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
         separate from ``__init__``."""
-        definition = CaseInsensitiveDict(definition)
-        slaveSurfaceName = definition.pop("slaveSurface")
-        masterSurfaceName = definition.pop("masterSurface")
         configuration = buildSchemaFromOptions(cls.schema, definition)
         return cls(
             name,
             model,
-            model.elementSets[slaveSurfaceName],
-            model.elementSets[masterSurfaceName],
+            model.elementSets[configuration.slaveSurface],
+            model.elementSets[configuration.masterSurface],
             journal,
             configuration=configuration,
         )

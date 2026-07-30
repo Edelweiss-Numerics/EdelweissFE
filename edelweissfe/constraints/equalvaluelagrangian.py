@@ -39,7 +39,6 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
@@ -92,6 +91,9 @@ class EqualValueLagrangianSchema:
     )
     component: int | None = schemaField(
         description="The component of the field.", dtype=int, default=None, required=True
+    )
+    nSet: str | None = schemaField(
+        description="The node set to be constrained.", dtype=str, default=None, required=True
     )
 
 
@@ -164,10 +166,8 @@ class Constraint(ConstraintBase):
         """Build this constraint from a parsed ``*constraint`` definition. See
         :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
         separate from ``__init__``."""
-        definition = CaseInsensitiveDict(definition)
-        nSetName = definition.pop("nSet")
         configuration = buildSchemaFromOptions(cls.schema, definition)
-        return cls(name, model, model.nodeSets[nSetName], configuration=configuration)
+        return cls(name, model, model.nodeSets[configuration.nSet], configuration=configuration)
 
     @property
     def nodes(self) -> list:
