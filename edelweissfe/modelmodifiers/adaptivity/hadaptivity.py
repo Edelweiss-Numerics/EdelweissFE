@@ -29,6 +29,7 @@
 """Dynamic h-adaptivity model modifier for HEX20 hanging-node AMR."""
 
 from collections import defaultdict
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -57,6 +58,7 @@ from edelweissfe.utils.misc import (
     castKwargsValuesAndAddDefaults,
 )
 from edelweissfe.utils.performancetiming import timeit
+from edelweissfe.utils.schema import schemaField, subKeywordField
 
 module = Module("hadaptivity", "Dynamic hanging-node h-adaptivity model modifier for HEX20 elements.")
 inputLanguage = InputLanguage()
@@ -123,6 +125,100 @@ module.addOptionalArg(
 documentation = [module]
 
 
+@dataclass(frozen=True)
+class HAdaptivityMarkerSchema:
+    """L2: the options of a single ``>>marker`` block.
+
+    Registered purely for the L3 registry / rendered documentation surface (see
+    :class:`HAdaptivitySchema`) -- ``ModelModifier.__init__`` still consumes ``>>marker`` blocks via
+    the legacy ``Module``/``castKwargsValuesAndAddDefaults`` mechanism above, unchanged.
+    """
+
+    type: str | None = schemaField(
+        description="Type of marker: fieldOutput, elementSet, nodeSet, surface", dtype=str, default=None, required=True
+    )
+    initialOnly: bool = schemaField(description="Evaluate only once at simulation start", dtype=bool, default=False)
+    fieldOutput: str | None = schemaField(
+        description=(
+            "Name of an already-declared 'perElement' *fieldOutput (covering every quadrature point "
+            "of interest, no 'f(x)') to mark on."
+        ),
+        dtype=str,
+        default=None,
+    )
+    expression: str | None = schemaField(
+        description="Boolean expression in x (the fieldOutput's raw per-element result).", dtype=str, default=None
+    )
+    elSet: str | None = schemaField(description="Element set to mark", dtype=str, default=None)
+    nSet: str | None = schemaField(description="Node set to mark", dtype=str, default=None)
+    surface: str | None = schemaField(description="Surface to mark", dtype=str, default=None)
+
+
+@dataclass(frozen=True)
+class HAdaptivitySchema:
+    """L2: the options this model modifier accepts, owned by this module and never mutated from
+    outside it.
+
+    Registered purely for the L3 registry / rendered documentation surface -- ``ModelModifier``'s
+    construction still goes entirely through the legacy ``Module``/``castKwargsValuesAndAddDefaults``
+    mechanism above, unchanged; this schema does not (yet) replace it. ``marker`` is declared
+    optional (matching the legacy ``module.addOptionalKeyword("marker", ...)``) even though at least
+    one is required in practice -- that invariant is enforced in ``ModelModifier.__init__``, not by
+    the grammar, exactly as the legacy declaration already did.
+    """
+
+    moduleOptions: dict = schemaField(description="Internal", dtype=dict, default_factory=dict)
+    elSet: str | None = schemaField(
+        description=(
+            "Fallback for 'refineElSet' if that is not given. Each '>>marker' scopes its own "
+            "eligible elements (a fieldOutput's associated set, an elementSet/nodeSet/surface's "
+            "members); this no longer restricts marking itself."
+        ),
+        dtype=str,
+        default=None,
+    )
+    refineElSet: str | None = schemaField(
+        description=(
+            "Restrict the AMR octree mirror itself to this element set, e.g. the solid elements in "
+            "a mesh that also contains contact-facet elements. Elements outside this set never "
+            "become octree roots and are left untouched by refinement. Defaults to 'elSet' if given, "
+            "otherwise to every 20-node (HEX20-family) element in the model."
+        ),
+        dtype=str,
+        default=None,
+    )
+    maxLevel: int = schemaField(description="Maximum refinement level.", dtype=int, default=1)
+    splitFactor: int = schemaField(
+        description=(
+            "Number of equal parts per axis a marked element is split into (2 = octree bisection "
+            "into 8 children; 3 = 3x3x3 = 27 children, etc.). The hanging-node coupling stays exact "
+            "for any factor."
+        ),
+        dtype=int,
+        default=2,
+    )
+    elementType: str | None = schemaField(
+        description="Element type to instantiate for children (default: like parents).", dtype=str, default=None
+    )
+    elementProvider: str = schemaField(description="Element provider.", dtype=str, default="marmot")
+    stateTransfer: str = schemaField(
+        description="Quadrature-point state-transfer strategy for the whole state block: nearestQp|projection|virgin.",
+        dtype=str,
+        default="nearestQp",
+    )
+    stateTransferOverrides: str | None = schemaField(
+        description=(
+            "Per-state-variable overrides routing named variables to a different strategy, e.g. "
+            "'strain:projection, stress:virgin'. Comma-separated 'name:strategy' pairs."
+        ),
+        dtype=str,
+        default=None,
+    )
+    marker: tuple = subKeywordField(
+        description="AMR marker definition. At least one is required.", schema=HAdaptivityMarkerSchema
+    )
+
+
 def _buildStateTransferStrategy(defaultName, overridesSpec):
     """Construct the state-transfer strategy from the input arguments. With no per-variable
     overrides this is just the named default strategy; otherwise a
@@ -186,6 +282,11 @@ def _connectedComponents(elements: list) -> dict:
 
 
 class ModelModifier(ModelModifierBase):
+    #: L2 schema declared for the L3 registry, per OptionSchemaProvider. Documentation-only for now
+    #: (see HAdaptivitySchema's own docstring) -- construction still goes through the legacy
+    #: Module-based mechanism below, unchanged.
+    schema = HAdaptivitySchema
+
     @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
     @castKwargsValuesAndAddDefaults(module)
     def __init__(self, name: str, model: FEModel, journal: Journal, *args, **kwargs):

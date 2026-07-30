@@ -48,33 +48,27 @@ how ``NISTPArcLength``'s two bespoke options ended up registered, and resolved, 
 string ``"NISTArcLength"`` rather than its own ``identification``. A name is already unique and
 already declared; there is no second tag to keep in sync with it.
 
-The ``>>options`` keyword itself still needs every solver's and output manager's option names
-pre-declared on it (:func:`registerSchemaOptions`), because the ``.inp`` grammar is validated
-statically against a keyword's own known arguments (see ``utils/inputlanguage.py``) -- a single
-``>>options, name=X, ...`` line cannot itself carry the information "only validate the keys ``X``'s
-own type declares" at parse time, before ``name`` has even been resolved. What changes is *how* that
-declaration happens: one call per *schema* (:func:`registerSchemaOptions`, called once by each
-solver/output manager module with its own ``schema`` class) instead of one call per *option*
-(the old ``registerOptionsArg``, called by hand once per field) -- so a schema and its grammar
-registration cannot independently drift, because there is only one source now.
+The ``>>options`` keyword's own grammar is validated **dynamically**, not against a statically
+pre-declared list of every solver's and output manager's option names: at parse time, before
+``name`` has even been resolved, the keyword only enforces that ``name`` itself is present
+(:meth:`~edelweissfe.utils.inputlanguage.InputFileKeyword.allowArbitraryOptionalArgs`, set by
+:func:`_ensureOptionsKeyword`) -- every other ``key=value`` pair is accepted unvalidated and handed
+on raw. Real validation happens once ``name`` resolves to a concrete object, against *that object's
+own* ``type(target).schema`` (:func:`coercePresentOptions`, in :meth:`StepAction.fromStepActionDefinition`
+below). There is therefore no shared, hand-synchronized aggregate of every solver's and output
+manager's option names to keep from drifting: each schema is consulted directly, once, exactly when
+it is needed.
 """
-
-import dataclasses
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.utils.inputlanguage import InputLanguage
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
-from edelweissfe.utils.schema import (
-    coercePresentOptions,
-    fieldSchemaMeta,
-    scalarOptionNames,
-)
+from edelweissfe.utils.schema import coercePresentOptions
 
 inputLanguage = InputLanguage()
 
-#: The description of the ``options`` keyword. A module-level constant because
-#: :func:`_ensureOptionsKeyword` may declare the keyword from either of two call sites, and the two
-#: must not be able to disagree -- the rendered grammar surface would then depend on import order.
+#: The description of the ``options`` keyword. A module-level constant so it cannot drift from one
+#: call to :func:`_ensureOptionsKeyword` to the next.
 _OPTIONS_KEYWORD_DESCRIPTION = (
     "Adjust a solver's or output manager's own options mid-job. 'name' must be the name an "
     "already-declared *solver or *output block gave it; every other option is validated against "
@@ -87,24 +81,20 @@ documentation = []
 def _ensureOptionsKeyword():
     """Declare the ``options`` keyword on every registered step type, at most once each.
 
-    Idempotent and safe to call repeatedly, because it has to be called from two places.
+    Idempotent and safe to call repeatedly. Declared lazily, from a function called at the bottom
+    of this module rather than in a one-shot ``for module in modules:`` loop at plain import time
+    (as every other step action does): this module has historically been reachable before every
+    step type module was registered, in which case a one-shot loop would declare nothing and never
+    get a second chance (``sys.modules`` caching this module against later re-import). Calling this
+    lazily and idempotently removes the dependence on import order entirely.
 
-    Every other step action declares its keywords in a one-shot ``for module in modules:`` loop at
-    import time, which is only correct if the step type modules are already registered by then -- as
-    they are when the input file parser does the importing. This module cannot rely on that, because
-    it is also imported *indirectly*, by any module calling :func:`registerSchemaOptions` at its own
-    import time (``outputmanagers.ensight`` and four solvers do). Reached that way before the step
-    types exist, the one-shot loop declared nothing, and -- since the module was then in
-    ``sys.modules`` -- the parser's later import did not re-run it, so the keyword stayed undeclared
-    and the *next* ``registerSchemaOptions`` call died with
-    ``ValueError: options is not a valid argument``. Measured: importing either
-    ``edelweissfe.outputmanagers.ensight`` or this module before
-    ``edelweissfe.utils.inputfileparser`` broke the parser outright, while the reverse order worked.
-
-    Declaring lazily removes the dependence on hitting that window, rather than papering over it: the
-    keyword is declared by whichever of the two call sites first runs at a point where there is a
-    step type to declare it on. ``documentation`` is populated here too, so the rendered grammar
-    surface cannot differ by import order either.
+    The declared keyword accepts only ``name`` statically
+    (:meth:`~edelweissfe.utils.inputlanguage.InputFileKeyword.allowArbitraryOptionalArgs`): unlike
+    every other step action, this one has no fixed option set of its own to pre-declare -- what a
+    given ``>>options`` block may write depends on what its ``name`` resolves to, which is not known
+    until :meth:`StepAction.fromStepActionDefinition` runs, long after the static parse-time grammar
+    check. ``documentation`` is populated here too, so the rendered grammar surface cannot differ by
+    import order either.
     """
 
     if "step" not in inputLanguage:
@@ -118,6 +108,7 @@ def _ensureOptionsKeyword():
         keyword.addRequiredArg(
             "name", "The name of the already-declared solver or output manager this block configures.", str
         )
+        keyword.allowArbitraryOptionalArgs()
 
         documentation.append(keyword)
 
@@ -125,86 +116,12 @@ def _ensureOptionsKeyword():
 _ensureOptionsKeyword()
 
 
-def _fieldRuntimeDefault(field: dataclasses.Field):
-    """The value a schema field actually defaults to at runtime, for documentation purposes only.
-
-    Parameters
-    ----------
-    field
-        A field of a schema dataclass.
-
-    Returns
-    -------
-    Any
-        The field's default (calling its ``default_factory`` if that is how it is declared), or
-        ``None`` if the field is required and therefore has no default to show.
-    """
-    if field.default is not dataclasses.MISSING:
-        return field.default
-    if field.default_factory is not dataclasses.MISSING:
-        return field.default_factory()
-    return None
-
-
-def registerSchemaOptions(schemaCls: type) -> None:
-    """Register every scalar option of an L2 schema onto the shared ``>>options`` keyword.
-
-    This is what lets a solver's or output manager's own options be *written* on an ``>>options``
-    block at all: the parser validates a keyword's arguments against a static, pre-declared grammar,
-    so every name that may ever appear on this shared keyword must be known before the file is
-    parsed -- the same reason the old, deleted ``registerOptionsArg`` existed, one call per option.
-    This registers a whole schema in one call instead, so the registration cannot independently drift
-    from the schema describing what the resolved target actually accepts (see the module docstring).
-
-    Sub-keyword fields (:func:`~edelweissfe.utils.schema.subKeywordField`) are skipped: they are
-    filled from nested ``>>`` blocks of their own module, not from a flat ``name=value`` pair here,
-    and are therefore not reachable through ``>>options`` regardless.
-
-    Idempotent per option name: a name already registered (by this schema or, for a subclass
-    schema such as ``NISTPArcLengthSchema``, by an ancestor's own registration) is left alone rather
-    than appended a second time, since :meth:`~edelweissfe.utils.inputlanguage.Keyword.addOptionalArg`
-    has no such guard of its own.
-
-    The runtime default of every registered arg is always ``None`` -- never the schema's own default
-    -- which is what lets :meth:`StepAction.fromStepActionDefinition`/
-    :meth:`StepAction.updateStepActionFromDefinition` tell "the user wrote this" apart from "some
-    other module's option that happens to share this keyword" (see :func:`_writtenOptions`). The
-    schema's real default is rendered as ``documentedDefault`` instead, so the generated docs still
-    show what actually takes effect.
-
-    Parameters
-    ----------
-    schemaCls
-        A frozen dataclass whose fields were declared via
-        :func:`~edelweissfe.utils.schema.schemaField`.
-    """
-
-    if "step" not in inputLanguage:
-        return
-
-    # The keyword may not exist yet: this module can be imported, indirectly and via this very
-    # function, before any step type is registered. See _ensureOptionsKeyword.
-    _ensureOptionsKeyword()
-
-    for optionName, field in scalarOptionNames(schemaCls).items():
-        meta = fieldSchemaMeta(field)
-        for stepModule in inputLanguage["step"].modules:
-            keyword = stepModule.getKeyword("options")
-            if any(arg.name.casefold() == optionName.casefold() for arg in keyword.optionalArgs):
-                continue
-            keyword.addOptionalArg(
-                optionName, meta.description, meta.dtype, None, documentedDefault=_fieldRuntimeDefault(field)
-            )
-
-
 def _writtenOptions(definition: dict) -> dict:
     """Recover the options a user actually wrote in a parsed ``>>options`` block.
 
-    Every solver's and output manager's options share this one keyword (:func:`registerSchemaOptions`
-    registers them all, with a runtime default of ``None``), so a parsed block carries every
-    registered name, ``None`` where the user did not write it. Only the non-``None`` entries -- the
-    ones the user actually set -- are meaningful to validate against the resolved target's own
-    schema; the rest belong to *other* modules and would otherwise fail that validation outright.
+    The parser's static grammar check accepts any key beyond ``name`` unvalidated (see
+    :func:`_ensureOptionsKeyword`), so a parsed block carries exactly the keys the user wrote --
+    plus the parser's own bookkeeping keys and ``name`` itself, both stripped here.
 
     Parameters
     ----------
@@ -214,9 +131,12 @@ def _writtenOptions(definition: dict) -> dict:
     Returns
     -------
     dict
-        The options the user actually wrote, without the parser's bookkeeping keys, the ``name``
-        this step action is itself identified by, or any ``None`` placeholder contributed by a
-        foreign module sharing this keyword.
+        The options the user actually wrote, without the parser's bookkeeping keys or the ``name``
+        this step action is itself identified by. A defensive ``None``-value filter is kept for a
+        programmatic caller that hands in an explicit ``None`` to mean "not set" (the convention
+        :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`/:func:`~edelweissfe.utils.schema.coercePresentOptions`
+        already apply elsewhere), even though the ``.inp`` parser itself never produces one here
+        anymore.
     """
 
     written = withoutParserBookkeepingKeys(definition)

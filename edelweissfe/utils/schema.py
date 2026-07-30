@@ -117,9 +117,11 @@ class SchemaFieldMeta:
         keyword line never sets directly. This affects rendering only:
         :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface`'s module-section renderer
         skips such fields, but :func:`optionNames`/:func:`scalarOptionNames` (and therefore
-        :func:`registerSchemaOptions`/:func:`buildSchemaFromOptions`) deliberately still include
-        them -- they legitimately remain reachable through ``>>options``, so excluding them there
-        would change the runtime ``>>options`` grammar.
+        :func:`buildSchemaFromOptions`/:func:`coercePresentOptions`) deliberately still include
+        them -- they legitimately remain reachable through a later ``>>options`` override (validated
+        dynamically against this very schema once ``name`` resolves to this instance -- see
+        ``stepactions/options.py``), so excluding them there would change the runtime ``>>options``
+        grammar.
     structuralOnly
         The mirror image of ``optionsOverrideOnly``: marks a field that documents a *structural*
         argument -- one naming an existing model object (an element/node set, a material, a
@@ -147,10 +149,10 @@ class SchemaFieldMeta:
     documentedDefault
         Overrides the default value shown by :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface`
         for an optional field, when it differs from the dataclass field's own (runtime) default --
-        mirroring ``edelweissfe.utils.inputlanguage.OptionalKeywordArg.documentedDefault`` /
-        ``stepactions/options.py``'s ``registerSchemaOptions``, the existing precedent for this
-        exact split. The one real case today is ``bodyforce.delta``: the legacy ``Module``
-        documented its default as ``0``, but the field's actual runtime default is ``None`` (the
+        mirroring ``edelweissfe.utils.inputlanguage.OptionalKeywordArg.documentedDefault``, the
+        existing precedent for this exact split. The one real case today is ``bodyforce.delta``: the
+        legacy ``Module`` documented its default as ``0``, but the field's actual runtime default is
+        ``None`` (the
         sentinel :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` needs to tell "not
         given" apart from a real value) -- changing the runtime default to match the stale
         documented one would be a behavior change, and changing the documented one would be an

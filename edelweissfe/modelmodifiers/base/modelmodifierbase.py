@@ -32,9 +32,10 @@ from abc import ABC, abstractmethod
 
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.utils.schema import OptionSchemaProvider
 
 
-class ModelModifierBase(ABC):
+class ModelModifierBase(OptionSchemaProvider, ABC):
     """Abstract base class for entities that dynamically mutate the FEModel topology,
     mesh, or state variables during analysis steps.
     """

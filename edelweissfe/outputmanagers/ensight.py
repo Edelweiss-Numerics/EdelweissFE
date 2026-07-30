@@ -43,7 +43,6 @@ from edelweissfe.points.node import Node
 from edelweissfe.rigidbodies.rigidbody import RigidBody
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.stepactions.options import registerSchemaOptions
 from edelweissfe.utils.fieldoutput import (
     ElementFieldOutput,
     NodeFieldOutput,
@@ -163,17 +162,18 @@ class EnsightSchema:
 
     ``intermediateSaveInterval``/``minDTForOutput`` are, unlike every other field here, not read at
     construction time at all: they exist purely so a later ``>>options, name=<this export's name>,
-    ...`` block (``stepactions/options.py``) has something to validate against and
+    ...`` block (``stepactions/options.py``, validated dynamically against this very schema once
+    ``name`` resolves to this instance) has something to validate against and
     :meth:`OutputManager.applyOptionsOverride` to apply -- adjusting the running export mid-job
     without repeating its full ``>>configuration``. Unlike a solver option, neither has a default of
     its own here: not writing them leaves whatever the manager was configured with in place (the
     ``>>configuration`` block's value, or ``-1e16``, respectively), so that -- not the runtime
     ``None`` -- is what the docs must say. This is exactly what
     :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.optionsOverrideOnly` marks both fields as:
-    reachable through ``>>options`` (``scalarOptionNames``/``registerSchemaOptions`` still see
-    them) but omitted from :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface`'s
-    module-section rendering, since they are not part of this keyword's own line/``>>``-block
-    grammar.
+    reachable through ``>>options`` (``scalarOptionNames``/``optionNames`` still see them, which is
+    what :func:`~edelweissfe.utils.schema.coercePresentOptions` consults) but omitted from
+    :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface`'s module-section rendering, since
+    they are not part of this keyword's own line/``>>``-block grammar.
     """
 
     perNode: tuple[EnsightPerNodeSchema, ...] = subKeywordField(
@@ -198,10 +198,6 @@ class EnsightSchema:
         default=None,
         optionsOverrideOnly=True,
     )
-
-
-# Registered after the schema itself -- see the equivalent comment in nonlinearimplicitstatic.py.
-registerSchemaOptions(EnsightSchema)
 
 
 def writeCFloat(f, ndarray):

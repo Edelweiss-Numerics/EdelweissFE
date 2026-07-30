@@ -939,65 +939,22 @@ how ``NISTPArcLength``'s two bespoke options ended up registered, and resolved, 
 string ``"NISTArcLength"`` rather than its own ``identification``. A name is already unique and
 already declared; there is no second tag to keep in sync with it.
 
-The ``>>options`` keyword itself still needs every solver's and output manager's option names
-pre-declared on it (:func:`registerSchemaOptions`), because the ``.inp`` grammar is validated
-statically against a keyword's own known arguments (see ``utils/inputlanguage.py``) -- a single
-``>>options, name=X, ...`` line cannot itself carry the information "only validate the keys ``X``'s
-own type declares" at parse time, before ``name`` has even been resolved. What changes is *how* that
-declaration happens: one call per *schema* (:func:`registerSchemaOptions`, called once by each
-solver/output manager module with its own ``schema`` class) instead of one call per *option*
-(the old ``registerOptionsArg``, called by hand once per field) -- so a schema and its grammar
-registration cannot independently drift, because there is only one source now.
+The ``>>options`` keyword's own grammar is validated **dynamically**, not against a statically
+pre-declared list of every solver's and output manager's option names: at parse time, before
+``name`` has even been resolved, the keyword only enforces that ``name`` itself is present
+(:meth:`~edelweissfe.utils.inputlanguage.InputFileKeyword.allowArbitraryOptionalArgs`, set by
+:func:`_ensureOptionsKeyword`) -- every other ``key=value`` pair is accepted unvalidated and handed
+on raw. Real validation happens once ``name`` resolves to a concrete object, against *that object's
+own* ``type(target).schema`` (:func:`coercePresentOptions`, in :meth:`StepAction.fromStepActionDefinition`
+below). There is therefore no shared, hand-synchronized aggregate of every solver's and output
+manager's option names to keep from drifting: each schema is consulted directly, once, exactly when
+it is needed.
 < options > Adjust a solver's or output manager's own options mid-job. 'name' must be the name an already-declared *solver or *output block gave it; every other option is validated against that specific instance's own type.
   required arguments
     [name] The name of the already-declared solver or output manager this block configures. (<class 'str'>)
-  optional arguments
-    [defaultMaxIter] The default maximum number of iterations. (<class 'int'>, default = 10)
-    [defaultCriticalIter] The default number of critical iterations. (<class 'int'>, default = 5)
-    [defaultMaxGrowingIter] The default number of allowed residual growths. (<class 'int'>, default = 10)
-    [extrapolation] The extrapolation strategy for new increments (off|linear). (<class 'str'>, default = linear)
-    [extrapolateAfterModelChange] Whether to extrapolate the predictor on the increment FOLLOWING a model change (adaptive mesh refinement). Set False to start that increment from a zero predictor, avoiding extrapolation of the one-off warm-start/remesh settling transient. (<class 'bool'>, default = True)
-    [equilibrateAfterModelChange] Whether to insert one constant-load, zero-time re-equilibration increment immediately after an adaptive mesh refinement, before advancing the load. When True, the warm-started refined mesh is first settled to equilibrium at the last converged load level (no load advance, no Dirichlet increment, zero time increment) so the subsequent load-advancing increment starts from an equilibrated state. Intended for softening problems where remeshing near the process zone otherwise couples the load advance with the warm-start settling transient in one solve. Note: the equilibration solve integrates materials with dT=0, which suits rate-independent models; rate-dependent materials see no time advance during it (by design). (<class 'bool'>, default = False)
-    [linsolver] The linear solver to be used. (<class 'str'>, default = pardiso)
-    [linsolverConfigFile] A JSON configuration file for the linear solver. (<class 'str'>, default = )
-    [arcLengthController] The step action module serving as the arc length controller. (<class 'str'>, default = None)
-    [stopCondition] A model accessible expression defining a conditional stop. (<class 'str'>, default = None)
-    [runge-kutta-stages] The number of Runge-Kutta stages. (<class 'int'>, default = 2)
-    [runge-kutta-error-tolerance] The error tolerance for the Runge-Kutta error control. (<class 'float'>, default = 0.001)
-    [runge-kutta-error-control] Activate the Runge-Kutta error control (on|off). (<class 'str'>, default = on)
-    [intermediateSaveInterval] Set the intermediate save interval for the Ensight export. Not writing it leaves whatever the '>>configuration' block set (or its own default) in place. (<class 'int'>, default = None)
-    [minDTForOutput] Set the minimum time between two Ensight exports. Not writing it leaves no minimum in place. (<class 'float'>, default = None)
-    [first-order-fields] Fields integrated with a first-order (forward-Euler) time scheme. (<class 'list'>, default = [])
-    [second-order-fields] Fields integrated with a second-order (central-difference) time scheme. (<class 'list'>, default = [])
-    [first-order-scheme] The time integration scheme for first-order fields. (<class 'str'>, default = forward-euler)
-    [second-order-scheme] The time integration scheme for second-order fields. (<class 'str'>, default = central-difference)
-    [courant-number] The fraction of the critical time step actually used. (<class 'float'>, default = 0.8)
-    [output-frequency] The increment interval at which progress is logged. (<class 'int'>, default = 1000)
 < options > Adjust a solver's or output manager's own options mid-job. 'name' must be the name an already-declared *solver or *output block gave it; every other option is validated against that specific instance's own type.
   required arguments
     [name] The name of the already-declared solver or output manager this block configures. (<class 'str'>)
-  optional arguments
-    [defaultMaxIter] The default maximum number of iterations. (<class 'int'>, default = 10)
-    [defaultCriticalIter] The default number of critical iterations. (<class 'int'>, default = 5)
-    [defaultMaxGrowingIter] The default number of allowed residual growths. (<class 'int'>, default = 10)
-    [extrapolation] The extrapolation strategy for new increments (off|linear). (<class 'str'>, default = linear)
-    [extrapolateAfterModelChange] Whether to extrapolate the predictor on the increment FOLLOWING a model change (adaptive mesh refinement). Set False to start that increment from a zero predictor, avoiding extrapolation of the one-off warm-start/remesh settling transient. (<class 'bool'>, default = True)
-    [equilibrateAfterModelChange] Whether to insert one constant-load, zero-time re-equilibration increment immediately after an adaptive mesh refinement, before advancing the load. When True, the warm-started refined mesh is first settled to equilibrium at the last converged load level (no load advance, no Dirichlet increment, zero time increment) so the subsequent load-advancing increment starts from an equilibrated state. Intended for softening problems where remeshing near the process zone otherwise couples the load advance with the warm-start settling transient in one solve. Note: the equilibration solve integrates materials with dT=0, which suits rate-independent models; rate-dependent materials see no time advance during it (by design). (<class 'bool'>, default = False)
-    [linsolver] The linear solver to be used. (<class 'str'>, default = pardiso)
-    [linsolverConfigFile] A JSON configuration file for the linear solver. (<class 'str'>, default = )
-    [arcLengthController] The step action module serving as the arc length controller. (<class 'str'>, default = None)
-    [stopCondition] A model accessible expression defining a conditional stop. (<class 'str'>, default = None)
-    [runge-kutta-stages] The number of Runge-Kutta stages. (<class 'int'>, default = 2)
-    [runge-kutta-error-tolerance] The error tolerance for the Runge-Kutta error control. (<class 'float'>, default = 0.001)
-    [runge-kutta-error-control] Activate the Runge-Kutta error control (on|off). (<class 'str'>, default = on)
-    [intermediateSaveInterval] Set the intermediate save interval for the Ensight export. Not writing it leaves whatever the '>>configuration' block set (or its own default) in place. (<class 'int'>, default = None)
-    [minDTForOutput] Set the minimum time between two Ensight exports. Not writing it leaves no minimum in place. (<class 'float'>, default = None)
-    [first-order-fields] Fields integrated with a first-order (forward-Euler) time scheme. (<class 'list'>, default = [])
-    [second-order-fields] Fields integrated with a second-order (central-difference) time scheme. (<class 'list'>, default = [])
-    [first-order-scheme] The time integration scheme for first-order fields. (<class 'str'>, default = forward-euler)
-    [second-order-scheme] The time integration scheme for second-order fields. (<class 'str'>, default = central-difference)
-    [courant-number] The fraction of the critical time step actually used. (<class 'float'>, default = 0.8)
-    [output-frequency] The increment interval at which progress is logged. (<class 'int'>, default = 1000)
 ===== module documentation: edelweissfe.stepactions.setfield =====
 < setfield > Set a field (via fieldOutput) to a predefined value.
   required arguments

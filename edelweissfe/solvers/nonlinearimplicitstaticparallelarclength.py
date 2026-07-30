@@ -40,7 +40,6 @@ from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstaticparallel import NISTParallel
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.stepactions.options import registerSchemaOptions
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -469,9 +468,3 @@ class NISTPArcLength(NISTParallel):
                 stepAction.applyAtStepEnd(model, stepMagnitude=self.Lambda)
 
         return super().applyStepActionsAtStepEnd(model, stepActions)
-
-
-# Registered *after* the class, from the schema itself -- see the equivalent comment in
-# nonlinearimplicitstatic.py. Only arcLengthController/stopCondition are new here: every inherited
-# NISTSchema field was already registered by NIST's own registerSchemaOptions call.
-registerSchemaOptions(NISTPArcLengthSchema)

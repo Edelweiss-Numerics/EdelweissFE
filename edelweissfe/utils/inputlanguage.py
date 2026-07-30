@@ -134,7 +134,23 @@ class InputFileKeyword:
 
         self.modules = []
 
+        #: Whether this keyword's option grammar is validated dynamically, elsewhere, rather than
+        #: statically against a pre-declared list of names -- see :meth:`allowArbitraryOptionalArgs`.
+        self.acceptsArbitraryArgs = False
+
         return
+
+    def allowArbitraryOptionalArgs(self):
+        """Mark this keyword as accepting any ``key=value`` pair beyond its own ``requiredArgs``.
+
+        Used by a keyword whose full set of acceptable option names cannot be known when the
+        keyword is declared -- e.g. the ``>>options`` step action keyword, whose accepted options
+        depend on which object its own ``name`` argument resolves to at construction time, long
+        after parsing. ``requiredArgs`` are still enforced statically; every other key is accepted
+        unvalidated and passed through raw, for whatever resolves the keyword's meaning at runtime
+        to validate on its own terms (see ``edelweissfe.stepactions.options``).
+        """
+        self.acceptsArbitraryArgs = True
 
     def addModule(self, module):
         self.modules.append(module)

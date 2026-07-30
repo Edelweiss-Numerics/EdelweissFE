@@ -560,8 +560,12 @@ _U3A_CONSTRAINT_MODULES = frozenset(
 )
 assert len(_U3A_CONSTRAINT_MODULES) == 11
 
+#: U3c's closure: hadaptivity gained a real (documentation-only -- construction is untouched, see
+#: HAdaptivitySchema's own docstring) schema, reproducing its golden module section byte-for-byte.
+_U3C_MODULES = frozenset({"edelweissfe.modelmodifiers.adaptivity.hadaptivity"})
+
 _EXPECTED_BYTE_IDENTICAL_MODULES = (
-    _PREVIOUSLY_BYTE_IDENTICAL_MODULES | _NEWLY_BYTE_IDENTICAL_MODULES | _U3A_CONSTRAINT_MODULES
+    _PREVIOUSLY_BYTE_IDENTICAL_MODULES | _NEWLY_BYTE_IDENTICAL_MODULES | _U3A_CONSTRAINT_MODULES | _U3C_MODULES
 )
 
 #: Every module documentation section that HAS a ``[name] ...``-headed golden body (i.e. is a member
@@ -581,11 +585,14 @@ _DEFERRED_TO_U3 = frozenset()
 #: `statetransferstrategy` entries are also `schema=None` but have NO golden section at all --
 #: they were never `Module`-documented in the legacy grammar -- so they are outside this tracking
 #: entirely, not merely deferred.)
+#:
+#: U3c closed `hadaptivity` (see :data:`_U3C_MODULES`). `stepactions/options` deliberately stays
+#: `schema=None` permanently, not just for now: it is a dispatcher onto another object's schema, not
+#: a leaf option consumer (see that module's own docstring) -- there is no schema of its own to add.
 _SCHEMA_NONE_WITH_GOLDEN_SECTION = frozenset(
     {
         "edelweissfe.generators.executepythoncode",
         "edelweissfe.stepactions.options",
-        "edelweissfe.modelmodifiers.adaptivity.hadaptivity",
     }
 )
 

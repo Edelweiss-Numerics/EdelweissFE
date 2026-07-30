@@ -40,7 +40,6 @@ from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatr
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.stepactions.options import registerSchemaOptions
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -710,9 +709,3 @@ class NED(NonlinearSolverBase):
                 minTimeStep = elementTimeStep
 
         return minTimeStep
-
-
-# Registered *after* the class, from the schema itself -- see the equivalent comment in
-# nonlinearimplicitstatic.py. Unlike NIST/NEST, NED never registered any option here before this
-# port: it was reachable only via its own *solver datalines, never via >>options at all.
-registerSchemaOptions(NEDSchema)

@@ -41,6 +41,7 @@ from edelweissfe.utils.inputlanguage import (
 )
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
+    caseInsensitiveRequiredArgsChecker,
     castKwargsValuesAndAddDefaults,
     convertAssignmentsToCaseInsensitiveStringDictionary,
     splitLineAtCommas,
@@ -130,58 +131,73 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fil
 
     kw = module.getKeyword(keyword)
 
-    @caseInsensitiveKwargsChecker([kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs])
-    @castKwargsValuesAndAddDefaults(kw)
-    def checkKeywordInput(*args, **kwargs):
-        """this is a dummy function needed to apply kwargsChecker"""
-        return CaseInsensitiveDict(kwargs)
+    if kw.acceptsArbitraryArgs:
+        # This keyword's full option set depends on runtime information the parser does not have
+        # (see InputFileKeyword.allowArbitraryOptionalArgs) -- only its own requiredArgs are
+        # enforced here; every other key is passed through raw for a later stage to validate
+        # against whatever it actually resolves to.
+        @caseInsensitiveRequiredArgsChecker([kw.name for kw in kw.requiredArgs])
+        @castKwargsValuesAndAddDefaults(kw)
+        def checkKeywordInput(*args, **kwargs):
+            """this is a dummy function needed to apply kwargsChecker"""
+            return CaseInsensitiveDict(kwargs)
 
-    try:
         options = checkKeywordInput(**options)
-    except ValueError as e:
-        # A step action can be updated in a subsequent step by repeating the module
-        # level keyword with the same name as previously defined. Updates are validated
-        # against the dedicated 'update<keyword>' keyword, if the module provides one.
-        updateKeyword = None
-        if (
-            topLevelKeyword == "step"
-            and "name" in options
-            and options["name"].casefold()
-            in [  # check if a step action with the same name already exists
-                item["name"].casefold()
-                for step in fileDict["step"]
-                if keyword in step["moduleoptions"]
-                for item in step["moduleoptions"][keyword]
-                if "name" in item
-            ]
-        ):
-            try:
-                updateKeyword = module.getKeyword("update" + keyword)
-            except ValueError:
-                updateKeyword = None
+    else:
 
-        if updateKeyword is not None:
-            kw = updateKeyword
+        @caseInsensitiveKwargsChecker([kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs])
+        @castKwargsValuesAndAddDefaults(kw)
+        def checkKeywordInput(*args, **kwargs):
+            """this is a dummy function needed to apply kwargsChecker"""
+            return CaseInsensitiveDict(kwargs)
 
-            @caseInsensitiveKwargsChecker([kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs])
-            @castKwargsValuesAndAddDefaults(kw)
-            def checkUpdateKeywordInput(*args, **kwargs):
-                """this is a dummy function needed to apply kwargsChecker"""
-                return CaseInsensitiveDict(kwargs)
+        try:
+            options = checkKeywordInput(**options)
+        except ValueError as e:
+            # A step action can be updated in a subsequent step by repeating the module
+            # level keyword with the same name as previously defined. Updates are validated
+            # against the dedicated 'update<keyword>' keyword, if the module provides one.
+            updateKeyword = None
+            if (
+                topLevelKeyword == "step"
+                and "name" in options
+                and options["name"].casefold()
+                in [  # check if a step action with the same name already exists
+                    item["name"].casefold()
+                    for step in fileDict["step"]
+                    if keyword in step["moduleoptions"]
+                    for item in step["moduleoptions"][keyword]
+                    if "name" in item
+                ]
+            ):
+                try:
+                    updateKeyword = module.getKeyword("update" + keyword)
+                except ValueError:
+                    updateKeyword = None
 
-            try:
-                options = checkUpdateKeywordInput(**options)
-            except ValueError as e2:
-                e2.args = (
-                    f"Error during updating stepaction {moduleLevelKeywordIdentifier}{keyword}, name={options['name']}: "
-                    + e2.args[0],
+            if updateKeyword is not None:
+                kw = updateKeyword
+
+                @caseInsensitiveKwargsChecker([kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs])
+                @castKwargsValuesAndAddDefaults(kw)
+                def checkUpdateKeywordInput(*args, **kwargs):
+                    """this is a dummy function needed to apply kwargsChecker"""
+                    return CaseInsensitiveDict(kwargs)
+
+                try:
+                    options = checkUpdateKeywordInput(**options)
+                except ValueError as e2:
+                    e2.args = (
+                        f"Error during updating stepaction {moduleLevelKeywordIdentifier}{keyword}, "
+                        f"name={options['name']}: " + e2.args[0],
+                    )
+                    raise e2
+            else:
+                e.args = (
+                    f"Error during parsing of module level keyword {moduleLevelKeywordIdentifier}{keyword}: "
+                    + e.args[0],
                 )
-                raise e2
-        else:
-            e.args = (
-                f"Error during parsing of module level keyword {moduleLevelKeywordIdentifier}{keyword}: " + e.args[0],
-            )
-            raise e
+                raise e
 
     for opt in kw.optionalArgs:
         if opt.name not in options:
@@ -348,12 +364,15 @@ from edelweissfe.stepactions.nodeforces import inputLanguage  # noqa: F811,E402
 from edelweissfe.stepactions.setfield import inputLanguage  # noqa: F811,E402
 from edelweissfe.stepactions.setinitialconditions import inputLanguage  # noqa: F811,E402
 
-from edelweissfe.stepactions.options import inputLanguage  # noqa: F811,E402
+from edelweissfe.stepactions.options import _ensureOptionsKeyword, inputLanguage  # noqa: F811,E402
 
-# these modules register their available options on the 'options' keyword of all step types:
-import edelweissfe.solvers.nonlinearimplicitstatic  # noqa: F401,E402
-import edelweissfe.solvers.nonlinearimplicitstaticparallelarclength  # noqa: F401,E402
-import edelweissfe.solvers.nonlinearexplicitstatic  # noqa: F401,E402
+# Guarantees the 'options' keyword is declared on every step type at this exact point in the
+# import sequence (every step type + step action module above is already loaded), regardless of
+# whether 'edelweissfe.stepactions.options' happened to be imported earlier by some other caller
+# before 'step' existed -- in which case its own module-level call above already ran and no-opped,
+# and would otherwise never get a second chance (the module is cached in sys.modules by then, so
+# the 'from ... import' above does not re-run its body). See _ensureOptionsKeyword's docstring.
+_ensureOptionsKeyword()
 
 # isort: on
 

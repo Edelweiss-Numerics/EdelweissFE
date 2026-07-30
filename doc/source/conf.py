@@ -164,8 +164,8 @@ def _declaredArgsFor(category: str, name: str):
     a ``Keyword`` on *each* step-type ``Module`` (identically on all of them), rather than a
     ``Module`` directly on its own top-level keyword, so it needs ``getKeyword`` instead of
     ``getModule``. ``solver`` has no entry at all: a solver's own grammar lives entirely in its
-    schema, registered onto the shared ``>>options`` keyword (``registerSchemaOptions``), not
-    under any keyword of its own.
+    schema, validated dynamically against a resolved ``*solver``/``*output`` instance by an
+    ``>>options`` block (``stepactions/options.py``), not under any keyword of its own.
 
     Parameters
     ----------

@@ -424,6 +424,42 @@ def caseInsensitiveKwargsChecker(kwargsRequired: list[str], kwargsOptional: list
     return wrapper
 
 
+def caseInsensitiveRequiredArgsChecker(kwargsRequired: list[str]):
+    """Like :func:`caseInsensitiveKwargsChecker`, but enforces only the required keyword arguments
+    and imposes no restriction at all on which other keys may additionally be present.
+
+    Used for a keyword whose full set of acceptable option names cannot be known statically at
+    parse time because it depends on runtime information the parser does not have -- e.g.
+    ``>>options, name=X, ...``, whose accepted options depend on what ``name`` resolves to (see
+    ``edelweissfe.stepactions.options``). Any key beyond the required ones is passed through
+    unvalidated and uncoerced, for a later stage to validate against the actually-relevant target.
+
+    Parameters
+    ----------
+    kwargsRequired
+        The names that must be present, compared case-insensitively.
+    """
+    casefoldedKwargsRequired = [kw.casefold() for kw in kwargsRequired]
+
+    def wrapper(fun, *args, **kwargs):
+        def wrapped(*args, **kwargs):
+            casefoldedKwargs = {key.casefold(): val for key, val in kwargs.items()}
+
+            missingKwargs = [kwarg for kwarg in casefoldedKwargsRequired if kwarg not in casefoldedKwargs]
+            nMissing = len(missingKwargs)
+            if nMissing:
+                raise ValueError(
+                    f"Function call to {fun} missing {nMissing} required keyword argument{'s'[:nMissing ^ 1]}: "
+                    + ", ".join(missingKwargs)
+                )
+
+            return fun(*args, **casefoldedKwargs)
+
+        return wrapped
+
+    return wrapper
+
+
 def castKwargsValuesAndAddDefaults(module):
     def wrapper(fun, *args, **kwargs):
         def wrapped(*args, **kwargs):

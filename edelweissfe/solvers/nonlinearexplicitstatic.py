@@ -40,7 +40,6 @@ from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
-from edelweissfe.stepactions.options import registerSchemaOptions
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -536,9 +535,3 @@ class NEST(NIST):
             beta = max(0.1, min(np.sqrt(self.tol / (normErr + 1e-15)) * 0.9, 2))
 
         return U_np, dU, P, beta
-
-
-# Registered *after* the class, from the schema itself -- see the equivalent comment in
-# nonlinearimplicitstatic.py. linsolver/linsolverConfigFile are skipped here (already registered by
-# NIST, whose own registerSchemaOptions call already ran by the time this module's body executes).
-registerSchemaOptions(NESTSchema)

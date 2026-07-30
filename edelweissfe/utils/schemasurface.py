@@ -224,8 +224,8 @@ def _renderKeywordLines(spec: KeywordSurfaceSpec, bracket: str) -> list[str]:
         elif fieldMeta.optionsOverrideOnly:
             # Reachable only via a later ">>options" override, not part of this keyword's own
             # line/">>"-block grammar -- see SchemaFieldMeta.optionsOverrideOnly. Rendering-only
-            # exclusion: scalarOptionNames/optionNames (and therefore registerSchemaOptions) still
-            # include it, so ">>options" itself is unaffected.
+            # exclusion: scalarOptionNames/optionNames still include it, so the dynamic ">>options"
+            # validation (coercePresentOptions against this very schema) is unaffected.
             continue
         elif fieldMeta.updateOnly:
             # Belongs only to this schema's "update<keyword>" grammar (e.g. distributedload's

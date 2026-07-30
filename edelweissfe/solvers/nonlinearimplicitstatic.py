@@ -45,7 +45,6 @@ from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.dirichlet import applyDirichletToStiffness
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.stepactions.options import registerSchemaOptions
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -888,10 +887,3 @@ class NIST(NonlinearSolverBase):
         PExt, K = self.computeBodyForces(bodyForces, U_np, PExt, K, timeStep)
 
         return PExt, K
-
-
-# Registered *after* the class, from the schema itself: registerSchemaOptions reads each field's
-# documented default (its schemaField(..., default=...)) straight off NISTSchema, which is the same
-# object solveStep validates option overrides against -- there is no separate, hand-maintained
-# per-option registration left to drift from it.
-registerSchemaOptions(NISTSchema)
