@@ -43,6 +43,8 @@ from edelweissfe.utils.schema import (
     SchemaFieldMeta,
     buildSchemaFromOptions,
     coerceValue,
+    datalineField,
+    datalineFieldMeta,
     fieldSchemaMeta,
     optionNames,
     resolveCaseInsensitiveOptions,
@@ -500,6 +502,75 @@ def test_meshplot_rejects_a_misspelled_option_within_an_arm():
 
     with pytest.raises(ValueError, match="legend"):
         MeshPlotSchema.fromDatalines([{"create": "xyData", "x": "time", "y": "RF", "legend": "ignored"}])
+
+
+# --- datalineField: presence + doc + required only, no column/table modelling -------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class _DatalineOnlySchema:
+    """Mirrors ``executePythonCode``'s shape: a keyword whose entire payload is its datalines."""
+
+    code: str = datalineField(description="Python code to run", required=True)
+
+
+def test_datalineField_attaches_dataline_metadata():
+    meta = schemaFields(_DatalineOnlySchema)["code"]
+    assert meta.isDataline is True
+    assert meta.description == "Python code to run"
+    assert meta.required is True
+    # Unlike schemaField/subKeywordField, a datalineField carries no column/table modelling: dtype
+    # is not part of its documented contract (its value is set by the class's own fromDatalines).
+
+
+def test_datalineField_defaults_to_None_regardless_of_required():
+    """A schema instance must stay constructible with no arguments (mirroring every other field
+    kind) -- 'required' documents an invariant the *owning class* enforces while parsing datalines,
+    not a dataclass-level default."""
+    instance = _DatalineOnlySchema()
+    assert instance.code is None
+
+
+def test_datalineFieldMeta_finds_the_declared_dataline_field():
+    meta = datalineFieldMeta(_DatalineOnlySchema)
+    assert meta is not None
+    assert meta.isDataline is True
+    assert meta.description == "Python code to run"
+
+
+def test_datalineFieldMeta_returns_None_for_a_schema_without_one():
+    assert datalineFieldMeta(_SampleSchema) is None
+
+
+def test_a_dataline_field_is_excluded_from_optionNames_and_scalarOptionNames():
+    """A datalineField must not be reachable as a `key=value` option on the keyword's own line --
+    it is filled by the owning class's own dataline interpretation, not by buildSchemaFromOptions."""
+    assert "code" not in optionNames(_DatalineOnlySchema)
+    assert "code" not in scalarOptionNames(_DatalineOnlySchema)
+
+
+def test_buildSchemaFromOptions_ignores_a_dataline_field_entirely():
+    """A required datalineField must not make buildSchemaFromOptions raise 'missing required' --
+    its required-ness is the owning class's concern when it calls fromDatalines, not something
+    buildSchemaFromOptions can check (it is never handed dataline content)."""
+    built = buildSchemaFromOptions(_DatalineOnlySchema, {})
+    assert built.code is None
+
+    # Nor is it settable as a scalar option, even under its own name.
+    with pytest.raises(ValueError, match="not a valid option"):
+        buildSchemaFromOptions(_DatalineOnlySchema, {"code": "print(1)"})
+
+
+def test_a_schema_may_mix_scalar_options_and_a_dataline_field():
+    @dataclasses.dataclass(frozen=True)
+    class _MixedSchema:
+        label: str = schemaField(description="A label.", dtype=str, default="unnamed")
+        rows: str = datalineField(description="Raw property rows.", required=True)
+
+    built = buildSchemaFromOptions(_MixedSchema, {"label": "myKeyword"})
+    assert built.label == "myKeyword"
+    assert built.rows is None
+    assert list(optionNames(_MixedSchema)) == ["label"]
 
 
 def test_meshplot_schema_is_constructible_programmatically_without_the_parser():

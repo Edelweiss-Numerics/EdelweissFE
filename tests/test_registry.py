@@ -543,3 +543,37 @@ def test_isRegistered_sees_all_three_registration_mechanisms():
     registry.register("stepaction", "inprocessaction", _PluginOutputManager)
     assert registry.isRegistered("stepaction", "InProcessAction")
     assert "inprocessaction" in registry.availableNames("stepaction")
+
+
+# --- the "keyword" category (U1, PLAN_INPUT_SYSTEM_UNIFICATION.md §1.3): reserved, still empty ---
+
+
+def test_keyword_category_is_reserved_but_declares_no_entries_yet():
+    """U1 reserves the ``"keyword"`` category (the eventual home of every top-level ``.inp``
+    keyword, resolved to a ``KeywordBase`` subclass) without populating it -- that is U2's job, one
+    keyword group per commit. Pinning ``availableNames`` empty here means a later phase cannot
+    accidentally believe it is starting from a partially-populated category.
+    """
+    assert registry.availableNames("keyword") == []
+
+
+def test_keyword_category_lookup_fails_cleanly_like_any_other_unpopulated_category():
+    """An unpopulated category must behave exactly like any other empty category (see
+    ``test_lookup_failure_for_unknown_category_does_not_crash``) -- this module makes no special
+    case for ``"keyword"``, so there is nothing to special-case in its failure path either."""
+    with pytest.raises(registry.RegistryLookupError) as excinfo:
+        registry.lookup("keyword", "element")
+    assert "keyword" in str(excinfo.value)
+
+
+def test_keyword_category_accepts_manual_registration_like_any_other_category():
+    """The category is "valid" in the sense the plan means: nothing rejects it, so U2 can start
+    calling :func:`registry.register`/rely on :func:`registry.lookup` for it without any further
+    change here."""
+
+    class _FakeKeyword:
+        pass
+
+    registry.register("keyword", "syntheticfixture", _FakeKeyword)
+    assert registry.lookup("keyword", "syntheticfixture") == (_FakeKeyword, None)
+    assert registry.isRegistered("keyword", "syntheticfixture")

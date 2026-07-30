@@ -105,6 +105,9 @@ class SchemaFieldMeta:
         For a field representing a *sub-keyword block* rather than a scalar option: the schema
         dataclass describing one such block. ``None`` (the common case) marks an ordinary scalar
         option. See :func:`subKeywordField`.
+    isDataline
+        Marks this field as the keyword's dataline payload rather than a ``key=value`` scalar
+        option or a ``>>`` sub-keyword block. See :func:`datalineField`.
     """
 
     description: str
@@ -112,6 +115,7 @@ class SchemaFieldMeta:
     required: bool = False
     optionName: str | None = None
     subSchema: type | None = None
+    isDataline: bool = False
 
 
 def schemaField(
@@ -248,6 +252,51 @@ def subKeywordField(
     )
 
 
+def datalineField(*, description: str, required: bool = False) -> dataclasses.Field:
+    """Declare one field of an L2 schema as this keyword's *dataline payload*.
+
+    A ``.inp`` keyword block carries, below its own ``key=value`` line, a body of raw dataline
+    strings (element connectivity, node coordinates, an elSet's ranges, a material's property
+    rows, `>>`-less option lines, raw Python source, ...). :func:`schemaField` and
+    :func:`subKeywordField` both model *typed, named* pieces of grammar; a dataline field is
+    neither -- its shape varies per keyword and is not a flat option mapping nor a repeatable
+    named block. So, per the plan's pinned decision (``PLAN_INPUT_SYSTEM_UNIFICATION.md`` §6.1),
+    this field records only **presence, documentation, and required-ness** -- never a column or
+    table description -- and the owning class is responsible for turning the raw
+    ``list[str]``/``list[Mapping[str, Any]]`` datalines into whatever it stores here, via its own
+    ``fromDatalines`` classmethod (see :class:`DatalineAggregatingSchema`, now the general,
+    uniform way any keyword consumes datalines -- not only the aggregating/heterogeneous-job case
+    it was first built for).
+
+    A datalineField is deliberately excluded from :func:`optionNames`/:func:`scalarOptionNames`
+    (and therefore from :func:`buildSchemaFromOptions`'s ``key=value`` validation and
+    missing-required check): it is never reachable as a scalar option on the keyword's own line,
+    and its required-ness is the owning class's concern (raise from ``fromDatalines`` if the
+    datalines are empty), not something ``buildSchemaFromOptions`` can check -- it is never handed
+    dataline content in the first place.
+
+    The declared dataclass field always defaults to ``None`` regardless of ``required``, since a
+    schema instance must remain constructible with no arguments at all (mirroring every other
+    field kind here) -- "required" documents an invariant the *owning class* enforces while
+    interpreting datalines, not a constructor-level default.
+
+    Parameters
+    ----------
+    description
+        Human-readable description of what the datalines contain.
+    required
+        Whether at least one dataline must be supplied. Purely documentation/validation metadata
+        for the owning class to consult -- see above.
+
+    Returns
+    -------
+    dataclasses.Field
+        A field descriptor suitable as a dataclass class-body value.
+    """
+    meta = SchemaFieldMeta(description=description, dtype=list, required=required, isDataline=True)
+    return dataclasses.field(default=None, metadata={_METADATA_KEY: meta})
+
+
 def fieldSchemaMeta(field: dataclasses.Field) -> SchemaFieldMeta:
     """Retrieve the :class:`SchemaFieldMeta` attached to a dataclass field by :func:`schemaField`.
 
@@ -298,6 +347,10 @@ def optionNames(schemaCls: type) -> dict[str, dataclasses.Field]:
     :attr:`SchemaFieldMeta.optionName` -- see there for why that indirection exists (input-file
     options such as ``f(x)`` are not valid Python identifiers).
 
+    A field declared via :func:`datalineField` is excluded: it is filled by the owning class's own
+    dataline interpretation, not by a ``key=value``/`` >>`` name the parser resolves here -- see
+    that function's docstring.
+
     Parameters
     ----------
     schemaCls
@@ -309,7 +362,11 @@ def optionNames(schemaCls: type) -> dict[str, dataclasses.Field]:
         Mapping of user-facing option name to its field, in declaration order.
     """
     fields = dataclasses.fields(schemaCls)
-    return {(fieldSchemaMeta(field).optionName or field.name): field for field in fields}
+    return {
+        (fieldSchemaMeta(field).optionName or field.name): field
+        for field in fields
+        if not fieldSchemaMeta(field).isDataline
+    }
 
 
 def scalarOptionNames(schemaCls: type) -> dict[str, dataclasses.Field]:
@@ -357,6 +414,29 @@ def subKeywordFieldNames(schemaCls: type) -> dict[str, dataclasses.Field]:
     }
 
 
+def datalineFieldMeta(schemaCls: type) -> SchemaFieldMeta | None:
+    """Return the :class:`SchemaFieldMeta` of ``schemaCls``'s dataline field, if it declares one.
+
+    A schema declares at most one :func:`datalineField` -- a keyword has exactly one dataline
+    payload, however that payload is structured once parsed.
+
+    Parameters
+    ----------
+    schemaCls
+        A frozen dataclass, possibly declaring one field via :func:`datalineField`.
+
+    Returns
+    -------
+    SchemaFieldMeta | None
+        The dataline field's metadata, or ``None`` if ``schemaCls`` declares no dataline field.
+    """
+    for field in dataclasses.fields(schemaCls):
+        meta = fieldSchemaMeta(field)
+        if meta.isDataline:
+            return meta
+    return None
+
+
 class OptionSchemaProvider:
     """Mixin declaring that a class owns an L2 option schema, exposed as the class attribute
     :attr:`schema`.
@@ -386,10 +466,25 @@ class OptionSchemaProvider:
 class DatalineAggregatingSchema:
     """Base for an L2 schema that is built from *all* datalines of one keyword block at once.
 
+    This is **the** general, uniform mechanism by which any keyword turns its raw dataline payload
+    (element connectivity, node coordinates, elSet ranges, surface faces, material property rows,
+    ``>>``-less option datalines, raw Python source, ...) into typed data -- not a meshplot-only
+    special case. :func:`datalineField` marks *that a keyword has* a dataline payload (presence +
+    doc + required, on the enclosing schema); :meth:`fromDatalines` is where the owning class
+    actually *interprets* that payload, however it is shaped for that particular keyword. Relocate
+    existing interpretation code here verbatim when porting a keyword (e.g.
+    ``abqmodelconstructor.py``'s element/node/elSet loops, in a later phase of
+    ``PLAN_INPUT_SYSTEM_UNIFICATION.md``) rather than reinventing a table-description DSL --- see
+    that plan's §6.1, a pinned decision.
+
     The ordinary L4 adapter treats each dataline as an independent module instance: it builds one
-    schema per dataline and calls the L1 constructor once per dataline. A few legacy modules invert
-    that -- a single instance aggregates a *heterogeneous list of jobs*, one per dataline, with the
-    kind of job selected by an option value on the line itself (``meshplot``'s
+    schema per dataline and calls the L1 constructor once per dataline. That default is exactly
+    right for a keyword whose datalines are a flat, uniform ``key=value`` mapping repeated per
+    instance. ``DatalineAggregatingSchema`` is for the opposite shape: a single instance built from
+    *all* datalines of the block *at once*, which every one of the cases in the paragraph above
+    needs to some degree, and which ``meshplot`` was merely the first to formalize -- a single
+    instance aggregates a *heterogeneous list of jobs*, one per dataline, with the kind of job
+    selected by an option value on the line itself (``meshplot``'s
     ``create=perNode|perElement|xyData|meshOnly``, plus its orthogonal ``saveFigure``). Neither a
     flat schema nor :func:`subKeywordField` expresses that: the jobs are not sub-keyword blocks and
     they do not share one option set.
@@ -398,15 +493,24 @@ class DatalineAggregatingSchema:
     third schema pattern, in the framework, for a module shape we do not want to encourage -- a
     schema of this kind takes responsibility for its own dataline interpretation in
     :meth:`fromDatalines`, and the adapter dispatches on this base class (a type check, like
-    :func:`schemaOf`, not attribute probing). The generic path stays two lines shorter than the
-    special-case it replaces, and the whole pattern disappears with the last module that uses it.
+    :func:`schemaOf`, not attribute probing).
 
-    Prefer a flat schema or :func:`subKeywordField` for anything new.
+    Prefer a flat schema (with a plain :func:`datalineField`) or :func:`subKeywordField` when a
+    keyword's datalines really are independent, uniformly-shaped instances; reach for this base
+    only for the aggregate-into-one-instance shape described above.
     """
 
     @classmethod
     def fromDatalines(cls, datalines: list[Mapping[str, Any]]) -> Any:
-        """Build one schema instance from the option mappings of every dataline, in file order.
+        """Build one schema instance from *all* datalines of this keyword block, in file order.
+
+        The one, uniform seam by which any keyword of this shape turns its raw dataline payload
+        into typed data -- see the class docstring. What ``datalines`` contains is whatever the
+        ``.inp`` parser produces for this keyword's block: a per-line mapping of raw (string)
+        option name to value, for a ``key=value``-shaped payload (as here, for ``meshplot``), or a
+        list of raw strings for a payload that is not `key=value` shaped at all (e.g. raw Python
+        source, connectivity rows) -- a future subclass with that shape overrides this with the
+        signature it actually needs.
 
         Parameters
         ----------
