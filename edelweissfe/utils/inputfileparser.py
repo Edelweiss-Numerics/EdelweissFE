@@ -30,9 +30,12 @@
 Inputfileparser for inputfiles employing an Abaqus-like syntax.
 """
 
+import dataclasses
 import textwrap
 from os.path import dirname, join
 
+from edelweissfe.config import registry
+from edelweissfe.config.registry import RegistryLookupError
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.inputlanguage import (
     InputLanguage,
@@ -42,12 +45,347 @@ from edelweissfe.utils.inputlanguage import (
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     caseInsensitiveRequiredArgsChecker,
-    castKwargsValuesAndAddDefaults,
     convertAssignmentsToCaseInsensitiveStringDictionary,
     splitLineAtCommas,
     strCaseCmp,
     typeString,
 )
+from edelweissfe.utils.schema import (
+    coerceValue,
+    datalineFieldMeta,
+    fieldSchemaMeta,
+    subKeywordFieldNames,
+)
+
+#: Top-level keywords whose grammar is completed by a further name/generator-dispatched target's
+#: own schema (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U3d-1) -- maps the keyword's casefolded
+#: name to ``(registry category, the keyword-line option name carrying the dispatch value)``.
+#: ``step`` is included only for :func:`_expectsPlainDatalines`'s sake -- its ``>>`` grammar is
+#: resolved separately, always via the ``stepaction`` category regardless of the step *type* (see
+#: :func:`_resolveModuleKeywordSchema`), because every step action registers identically onto every
+#: step type in the legacy grammar (``modules = inputLanguage["step"].modules`` in each
+#: ``stepactions/*.py``).
+_DISPATCH_CATEGORY_BY_KEYWORD = {
+    "output": ("outputmanager", "type"),
+    "section": ("section", "type"),
+    "analyticalfield": ("analyticalfield", "type"),
+    "constraint": ("constraint", "type"),
+    "modelmodifier": ("modelmodifier", "type"),
+    "modelgenerator": ("generator", "generator"),
+    "step": ("step", "type"),
+}
+
+
+def _updateStepActionSchema(moduleKeyword: str):
+    """Return the dedicated ``update<keyword>`` schema for a step action's partial re-declaration
+    in a later step, or ``None`` if this step action has no such companion (U3b,
+    ``PLAN_INPUT_SYSTEM_UNIFICATION.md``).
+
+    Only three step actions declare one at all (``dirichlet``, ``distributedload``,
+    ``nodeforces``) -- every other step action either has no update path (a re-declaration must
+    restate every required argument again) or -- ``options`` -- validates dynamically and never
+    reaches this function at all (see the ``isDynamicOptionsKeyword`` branch of
+    :func:`parseModuleKeywordLine`). A small explicit table, not a registry category: these
+    ``Update<Name>Schema`` classes are documentation/parser-validation companions the L1 step action
+    itself never references (see e.g. ``stepactions/dirichlet.py``'s own docstring), so they have no
+    home in the ``stepaction`` registry, which maps to the L1 classes.
+
+    Parameters
+    ----------
+    moduleKeyword
+        The step action's own name, as written in the ``.inp`` file (e.g. ``"dirichlet"``).
+
+    Returns
+    -------
+    type | None
+        The update schema, or ``None``.
+    """
+    name = moduleKeyword.casefold()
+    if name == "dirichlet":
+        from edelweissfe.stepactions.dirichlet import UpdateDirichletSchema
+
+        return UpdateDirichletSchema
+    if name == "distributedload":
+        from edelweissfe.stepactions.distributedload import UpdateDistributedloadSchema
+
+        return UpdateDistributedloadSchema
+    if name == "nodeforces":
+        from edelweissfe.stepactions.nodeforces import UpdateNodeforcesSchema
+
+        return UpdateNodeforcesSchema
+    return None
+
+
+def _allScalarFields(schemaCls: type | None) -> dict:
+    """Map every input-file option name of ``schemaCls``'s own scalar (non-dataline,
+    non-sub-keyword) fields to its :class:`dataclasses.Field`.
+
+    Deliberately **not** :func:`~edelweissfe.utils.schema.scalarOptionNames`: that function excludes
+    ``structuralOnly`` fields (an L4 adapter pops them before ``buildSchemaFromOptions`` ever sees
+    them), but the *parser* must still recognize and require them exactly as the legacy
+    ``InputFileKeyword``/``Module`` flat ``requiredArgs``/``optionalArgs`` lists did -- those drew no
+    such distinction at all (``structuralOnly``/``optionsOverrideOnly``/``updateOnly`` are new,
+    schema-only rendering/construction concerns, see ``utils/schema.py``'s ``SchemaFieldMeta``).
+
+    Parameters
+    ----------
+    schemaCls
+        A frozen dataclass schema, or ``None`` (a keyword/module declaring no line options at all).
+
+    Returns
+    -------
+    dict
+        Maps option name to field, in declaration order. Empty if ``schemaCls`` is ``None``.
+    """
+    if schemaCls is None:
+        return {}
+    fields = {}
+    for field in dataclasses.fields(schemaCls):
+        meta = fieldSchemaMeta(field)
+        if meta.isDataline or meta.subSchema is not None:
+            continue
+        fields[meta.optionName or field.name] = field
+    return fields
+
+
+def _realScalarFields(schemaCls: type | None) -> dict:
+    """Like :func:`_allScalarFields`, but excluding ``optionsOverrideOnly``/``updateOnly`` fields --
+    the ones that exist purely for the ``>>options`` override mechanism or the ``update<keyword>``
+    grammar and were never declared as a real ``Module.addRequiredArg``/``addOptionalArg`` (whose
+    presence is what implies a dispatch target actually expects plain datalines, see
+    :func:`_expectsPlainDatalines`).
+
+    Parameters
+    ----------
+    schemaCls
+        A frozen dataclass schema, or ``None``.
+
+    Returns
+    -------
+    dict
+        Maps option name to field, in declaration order. Empty if ``schemaCls`` is ``None``.
+    """
+    return {
+        name: field
+        for name, field in _allScalarFields(schemaCls).items()
+        if not fieldSchemaMeta(field).optionsOverrideOnly and not fieldSchemaMeta(field).updateOnly
+    }
+
+
+def _requiredAndOptionalNames(schemaCls: type | None) -> tuple[list, list]:
+    """Split :func:`_allScalarFields`'s option names into required/optional lists, mirroring the
+    ``[kw.name for kw in kw.requiredArgs]``/``[kw.name for kw in kw.optionalArgs]`` pairs the legacy
+    parser passed to :func:`~edelweissfe.utils.misc.caseInsensitiveKwargsChecker`.
+
+    Parameters
+    ----------
+    schemaCls
+        A frozen dataclass schema, or ``None``.
+
+    Returns
+    -------
+    tuple[list, list]
+        ``(requiredNames, optionalNames)``.
+    """
+    fields = _allScalarFields(schemaCls)
+    required = [name for name, field in fields.items() if fieldSchemaMeta(field).required]
+    optional = [name for name, field in fields.items() if not fieldSchemaMeta(field).required]
+    return required, optional
+
+
+def _coerceKnownFields(schemaCls: type | None, options: dict) -> CaseInsensitiveDict:
+    """Coerce and default the keys of ``options`` that match one of ``schemaCls``'s own scalar
+    fields; every other key is left untouched, as a raw string -- mirroring
+    ``castKwargsValuesAndAddDefaults``'s behaviour of only ever touching the keys it knows about.
+
+    Parameters
+    ----------
+    schemaCls
+        A frozen dataclass schema, or ``None`` (nothing is coerced or defaulted).
+    options
+        A mapping of (possibly mis-cased) option names to raw, typically string, values.
+
+    Returns
+    -------
+    CaseInsensitiveDict
+        ``options``, with its known keys coerced to their declared type and every missing optional
+        field defaulted.
+    """
+    options = CaseInsensitiveDict(options)
+    for optionName, field in _allScalarFields(schemaCls).items():
+        meta = fieldSchemaMeta(field)
+        if optionName in options:
+            options[optionName] = coerceValue(options[optionName], meta.dtype)
+        elif not meta.required:
+            options[optionName] = field.default if field.default is not dataclasses.MISSING else None
+    return options
+
+
+def _resolveDispatchSchemaForKeywordLine(keyword: str, options: dict) -> type | None:
+    """Resolve the L2 schema of the ``type=``/``generator=``-dispatched target hosted by a
+    top-level keyword's line, so a value meant for *that* target's own options (e.g. a plane
+    section's ``thickness``) written directly on the ``*section`` line is not rejected as unknown --
+    mirroring the legacy hard-coded ``section``/``plane`` fallback in ``parseKeywordLine``,
+    generalized to every dispatch keyword via the registry.
+
+    Parameters
+    ----------
+    keyword
+        The top-level keyword being parsed.
+    options
+        Its already-coerced-so-far option mapping (used only to read the dispatch value).
+
+    Returns
+    -------
+    type | None
+        The dispatch target's schema, or ``None`` if this keyword has no such dispatch, the
+        dispatch value is missing, or it does not resolve to anything registered.
+    """
+    dispatch = _DISPATCH_CATEGORY_BY_KEYWORD.get(keyword.casefold())
+    if dispatch is None:
+        return None
+    category, optionName = dispatch
+    dispatchValue = options.get(optionName)
+    if not dispatchValue:
+        return None
+    try:
+        _, schema = registry.lookup(category, dispatchValue)
+    except RegistryLookupError:
+        return None
+    return schema
+
+
+def _resolveModuleKeywordSchema(topLevelKeyword: str, topLevelOptions: dict, moduleKeyword: str) -> type | None:
+    """Resolve the L2 schema describing one ``>>`` sub-keyword block's own grammar, mirroring the
+    legacy ``Module.getKeyword(keyword)`` lookup (U3d-1, ``PLAN_INPUT_SYSTEM_UNIFICATION.md``).
+
+    For ``*step``, every step action registers identically onto every step type
+    (``modules = inputLanguage["step"].modules`` in each ``stepactions/*.py``), so its ``>>``
+    grammar is resolved directly against the ``stepaction`` registry category, independent of the
+    step's own ``type=``. Every other keyword's ``>>`` grammar is a
+    :func:`~edelweissfe.utils.schema.subKeywordField` of either the dispatch target's own schema
+    (resolved via ``type=``/``generator=``, e.g. ensight's ``>>perNode``) or, for a keyword with no
+    such dispatch (``*fieldOutput``), the keyword's own schema directly.
+
+    Parameters
+    ----------
+    topLevelKeyword
+        The enclosing top-level keyword (e.g. ``"output"``, ``"step"``).
+    topLevelOptions
+        The enclosing top-level keyword's own (already coerced) option mapping.
+    moduleKeyword
+        The ``>>`` sub-keyword's own name, as written in the ``.inp`` file.
+
+    Returns
+    -------
+    type | None
+        The sub-keyword's own schema.
+
+    Raises
+    ------
+    ValueError
+        If ``moduleKeyword`` does not name a known ``>>`` sub-keyword in this context.
+    """
+    if strCaseCmp(topLevelKeyword, "step"):
+        try:
+            _, schema = registry.lookup("stepaction", moduleKeyword)
+        except RegistryLookupError as e:
+            raise ValueError(str(e)) from e
+        return schema
+
+    _, keywordSchema = registry.lookup("keyword", topLevelKeyword)
+    dispatch = _DISPATCH_CATEGORY_BY_KEYWORD.get(topLevelKeyword.casefold())
+    if dispatch is None:
+        hostSchema = keywordSchema
+    else:
+        category, optionName = dispatch
+        dispatchValue = topLevelOptions.get(optionName)
+        try:
+            _, hostSchema = registry.lookup(category, dispatchValue)
+        except RegistryLookupError as e:
+            raise ValueError(str(e)) from e
+
+    subFields = subKeywordFieldNames(hostSchema) if hostSchema is not None else {}
+    foldedFields = {name.casefold(): field for name, field in subFields.items()}
+    field = foldedFields.get(moduleKeyword.casefold())
+    if field is None:
+        available = ", ".join(sorted(subFields)) or "none"
+        raise ValueError(
+            f"'{moduleLevelKeywordIdentifier}{moduleKeyword}' is not a valid module keyword for "
+            f"'{keywordIdentifier}{topLevelKeyword}'. Available: {available}."
+        )
+    return fieldSchemaMeta(field).subSchema
+
+
+def _dispatchTargetExpectsPlainDatalines(schemaCls: type | None) -> bool:
+    """Whether a resolved dispatch target (a section type, output-manager type, generator, ...)
+    accepts plain (non-``>>``) datalines, mirroring the legacy ``Module``'s
+    ``expectsRequiredDatalines``/``expectsOptionalDatalines`` -- which ``Module.addRequiredArg``/
+    ``addOptionalArg`` set as a side effect (a module's *own* options, unlike a top-level keyword's,
+    are conventionally supplied via datalines) alongside ``addRequiredDatalines``/
+    ``addOptionalDatalines`` proper.
+
+    Parameters
+    ----------
+    schemaCls
+        The dispatch target's own schema, or ``None``.
+
+    Returns
+    -------
+    bool
+        Whether a plain dataline is valid here. ``True`` when ``schemaCls`` is ``None``: a dispatch
+        target with no L2 schema at all yet is a genuinely raw-datalines case in every instance that
+        exists today (``executePythonCode``'s Python source), so this conservatively allows rather
+        than rejecting every real ``.inp`` file exercising it.
+    """
+    if schemaCls is None:
+        return True
+    return bool(_realScalarFields(schemaCls)) or datalineFieldMeta(schemaCls) is not None
+
+
+def _expectsPlainDatalines(keyword: str, options: dict) -> bool:
+    """Whether a plain (non-``>>``) line following a ``*keyword`` block's own line is a valid
+    dataline for it, mirroring ``InputFileKeyword``/``Module``'s
+    ``expectsRequiredDatalines``/``expectsOptionalDatalines`` flags (U3d-1,
+    ``PLAN_INPUT_SYSTEM_UNIFICATION.md``).
+
+    Parameters
+    ----------
+    keyword
+        The current top-level keyword.
+    options
+        Its current (already coerced) option mapping -- used to read the dispatch value
+        (``type=``/``generator=``) for a keyword whose plain-dataline grammar belongs to a resolved
+        dispatch target rather than to the keyword's own schema (e.g. ``*modelGenerator``'s
+        ``x0=...`` datalines belong to the resolved generator, not to ``*modelGenerator`` itself).
+
+    Returns
+    -------
+    bool
+        Whether a plain dataline is valid here.
+    """
+    dispatch = _DISPATCH_CATEGORY_BY_KEYWORD.get(keyword.casefold())
+    if dispatch is None:
+        _, keywordSchema = registry.lookup("keyword", keyword)
+        return keywordSchema is not None and datalineFieldMeta(keywordSchema) is not None
+
+    if strCaseCmp(keyword, "step"):
+        # Neither step type (`adaptive`/`adaptiveForExplicitSimulations`) has an L2 schema yet
+        # (PLAN_INPUT_SYSTEM_UNIFICATION.md's U2 recon notes) -- both declare their incrementation
+        # options via `Module.addOptionalArg`, which always implies `expectsOptionalDatalines=True`
+        # regardless of type, so mirror that directly rather than rejecting every real .inp file
+        # that writes step incrementation options (maxInc=..., ...) as plain datalines.
+        return True
+
+    category, optionName = dispatch
+    dispatchValue = options.get(optionName)
+    if not dispatchValue:
+        return False
+    try:
+        _, dispatchSchema = registry.lookup(category, dispatchValue)
+    except RegistryLookupError:
+        return False
+    return _dispatchTargetExpectsPlainDatalines(dispatchSchema)
 
 
 def parseKeywordLine(line, fileName):
@@ -62,16 +400,16 @@ def parseKeywordLine(line, fileName):
         e.args = (f"Error during parsing of keyword {keywordIdentifier}{keyword}: " + e.args[0],)
         raise e
 
-    kw = inputLanguage[keyword]
+    try:
+        _, keywordSchema = registry.lookup("keyword", keyword)
+    except RegistryLookupError as e:
+        raise ValueError(str(e)) from e
 
-    @castKwargsValuesAndAddDefaults(kw)
-    def checkKeywordInput(*args, **kwargs):
-        """this is a dummy function needed to apply kwargsChecker"""
-        return CaseInsensitiveDict(kwargs)
+    options = _coerceKnownFields(keywordSchema, options)
 
-    options = checkKeywordInput(**options)
+    requiredNames, optionalNames = _requiredAndOptionalNames(keywordSchema)
 
-    @caseInsensitiveKwargsChecker([kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs])
+    @caseInsensitiveKwargsChecker(requiredNames, optionalNames)
     def checkKeywordInput(*args, **kwargs):
         """this is a dummy function needed to apply kwargsChecker"""
         return
@@ -79,28 +417,23 @@ def parseKeywordLine(line, fileName):
     try:
         checkKeywordInput(**options)
     except ValueError as e:
-        try:
-            module = None  # in some cases, module-specific kwArgs arguments can be given in the keyword line
-            if strCaseCmp(kw.name, "section") and strCaseCmp(options.get("type", ""), "plane"):
-                module = kw.getModule("plane")
+        # in some cases, dispatch-target-specific kwArgs arguments can be given directly on the
+        # keyword line (e.g. a plane section's 'thickness') -- see
+        # _resolveDispatchSchemaForKeywordLine.
+        dispatchSchema = _resolveDispatchSchemaForKeywordLine(keyword, options)
 
-            if module is not None:
-                addRequired = [kw.name for kw in module.requiredArgs]
-                addOptional = [kw.name for kw in module.optionalArgs]
+        if dispatchSchema is not None:
+            extraRequired, extraOptional = _requiredAndOptionalNames(dispatchSchema)
 
-                @caseInsensitiveKwargsChecker(
-                    [kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs] + addOptional + addRequired
-                )
-                def checkKeywordInput(*args, **kwargs):
-                    """this is a dummy function needed to apply kwargsChecker"""
-                    return
+            @caseInsensitiveKwargsChecker(requiredNames, optionalNames + extraOptional + extraRequired)
+            def checkKeywordInput(*args, **kwargs):
+                """this is a dummy function needed to apply kwargsChecker"""
+                return
 
-                checkKeywordInput(**options)
+            checkKeywordInput(**options)
 
-            else:
-                e.args = (f"Error during parsing of keyword {keywordIdentifier}{keyword}: " + e.args[0],)
-                raise e
-        except ValueError as e:
+        else:
+            e.args = (f"Error during parsing of keyword {keywordIdentifier}{keyword}: " + e.args[0],)
             raise e
 
     options["inputFile"] = fileName  # save also the filename of the original inputfile!
@@ -117,75 +450,67 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fil
     optionAssignments = lineElements[1:]
 
     try:
-        options = convertAssignmentsToCaseInsensitiveStringDictionary(optionAssignments)
+        rawOptions = convertAssignmentsToCaseInsensitiveStringDictionary(optionAssignments)
     except ValueError as e:
         e.args = (f"Error during parsing of keyword {keywordIdentifier}{keyword}: " + e.args[0],)
         raise e
 
-    if "type" in inputLanguage[topLevelKeyword].argNames:
-        module = inputLanguage[topLevelKeyword].getModule(
-            inputLanguage[topLevelKeyword].getArg("type").getValueFromKwargs(topLevelOptions)
-        )
-    else:
-        module = inputLanguage[topLevelKeyword].getModule(topLevelKeyword)
+    isDynamicOptionsKeyword = strCaseCmp(topLevelKeyword, "step") and strCaseCmp(keyword, "options")
 
-    kw = module.getKeyword(keyword)
-
-    if kw.acceptsArbitraryArgs:
+    if isDynamicOptionsKeyword:
         # This keyword's full option set depends on runtime information the parser does not have
-        # (see InputFileKeyword.allowArbitraryOptionalArgs) -- only its own requiredArgs are
-        # enforced here; every other key is passed through raw for a later stage to validate
-        # against whatever it actually resolves to.
-        @caseInsensitiveRequiredArgsChecker([kw.name for kw in kw.requiredArgs])
-        @castKwargsValuesAndAddDefaults(kw)
+        # (see stepactions/options.py, U3c) -- only 'name' is enforced here; every other key is
+        # passed through raw for a later stage to validate against whatever it actually resolves to.
+        @caseInsensitiveRequiredArgsChecker(["name"])
         def checkKeywordInput(*args, **kwargs):
             """this is a dummy function needed to apply kwargsChecker"""
-            return CaseInsensitiveDict(kwargs)
+            return
 
-        options = checkKeywordInput(**options)
+        checkKeywordInput(**rawOptions)
+        options = CaseInsensitiveDict(rawOptions)
     else:
+        moduleSchema = _resolveModuleKeywordSchema(topLevelKeyword, topLevelOptions, keyword)
+        options = _coerceKnownFields(moduleSchema, rawOptions)
 
-        @caseInsensitiveKwargsChecker([kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs])
-        @castKwargsValuesAndAddDefaults(kw)
+        requiredNames, optionalNames = _requiredAndOptionalNames(moduleSchema)
+
+        @caseInsensitiveKwargsChecker(requiredNames, optionalNames)
         def checkKeywordInput(*args, **kwargs):
             """this is a dummy function needed to apply kwargsChecker"""
-            return CaseInsensitiveDict(kwargs)
+            return
 
         try:
-            options = checkKeywordInput(**options)
+            checkKeywordInput(**options)
         except ValueError as e:
             # A step action can be updated in a subsequent step by repeating the module
             # level keyword with the same name as previously defined. Updates are validated
-            # against the dedicated 'update<keyword>' keyword, if the module provides one.
-            updateKeyword = None
+            # against the dedicated 'update<keyword>' schema, if this step action provides one.
+            updateSchema = None
             if (
-                topLevelKeyword == "step"
-                and "name" in options
-                and options["name"].casefold()
+                strCaseCmp(topLevelKeyword, "step")
+                and "name" in rawOptions
+                and rawOptions["name"].casefold()
                 in [  # check if a step action with the same name already exists
                     item["name"].casefold()
                     for step in fileDict["step"]
-                    if keyword in step["moduleoptions"]
-                    for item in step["moduleoptions"][keyword]
+                    if keyword in step["moduleOptions"]
+                    for item in step["moduleOptions"][keyword]
                     if "name" in item
                 ]
             ):
-                try:
-                    updateKeyword = module.getKeyword("update" + keyword)
-                except ValueError:
-                    updateKeyword = None
+                updateSchema = _updateStepActionSchema(keyword)
 
-            if updateKeyword is not None:
-                kw = updateKeyword
+            if updateSchema is not None:
+                options = _coerceKnownFields(updateSchema, rawOptions)
+                updateRequired, updateOptional = _requiredAndOptionalNames(updateSchema)
 
-                @caseInsensitiveKwargsChecker([kw.name for kw in kw.requiredArgs], [kw.name for kw in kw.optionalArgs])
-                @castKwargsValuesAndAddDefaults(kw)
+                @caseInsensitiveKwargsChecker(updateRequired, updateOptional)
                 def checkUpdateKeywordInput(*args, **kwargs):
                     """this is a dummy function needed to apply kwargsChecker"""
-                    return CaseInsensitiveDict(kwargs)
+                    return
 
                 try:
-                    options = checkUpdateKeywordInput(**options)
+                    checkUpdateKeywordInput(**options)
                 except ValueError as e2:
                     e2.args = (
                         f"Error during updating stepaction {moduleLevelKeywordIdentifier}{keyword}, "
@@ -199,14 +524,17 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fil
                 )
                 raise e
 
-    for opt in kw.optionalArgs:
-        if opt.name not in options:
-            options[opt.name] = opt.default
-
     options["inputFile"] = fileName  # save also the filename of the original inputfile!
 
-    if kw.expectsRequiredDatalines or kw.expectsOptionalDatalines:
-        options["datalines"] = []
+    # Unlike a top-level keyword, no `>>` sub-keyword in the whole grammar ever expects its own
+    # plain datalines: `Module.addRequiredArg`/`addOptionalArg` (whose side effect is what makes a
+    # *module*'s `expectsRequiredDatalines`/`expectsOptionalDatalines` True) is not how a `>>`
+    # sub-keyword's own args are declared -- those go through
+    # `InputFileKeyword.addRequiredArg`/`addOptionalArg` instead (via `Module.addOptionalKeyword`),
+    # which sets no such flag. So legacy never added a `datalines` key here for any `>>` block, and
+    # this must not either -- doing so unconditionally regressed e.g. `>>bodyforce`, whose
+    # `fromStepActionDefinition` hands the whole definition dict to `buildSchemaFromOptions` without
+    # stripping parser bookkeeping keys first.
 
     return keyword, options
 
@@ -552,50 +880,11 @@ def parseInputFile(
             # else splitLineAtCommas(line)[]  # line is a module level keyword line
 
             else:  # line is a data line
-                # # module kw parsing backward compatibility
-                # try:
-                #     module = inputLanguage[keyword].getModule(options["type"])
-                # except:
-                #     module = None
-                # moduleKeyword = ">>"+splitLineAtCommas(line)[0]
-                #
-                # if module and moduleKeyword in [kw.name for kw in module.keywords]:
-                #     moduleKeyword, moduleOptions = parseModuleKeywordLine(">>"+line, fileName, keyword, options)
-                #
-                #     if moduleKeyword in fileDict[keyword][-1]["moduleOptions"]:
-                #         fileDict[keyword][-1]["moduleOptions"][moduleKeyword].append(moduleOptions)
-                #     else:
-                #         fileDict[keyword][-1]["moduleOptions"] = {moduleKeyword: [moduleOptions]}
-                #     continue
-                # # module kw parsing backward compatibility
-
-                inputFileKeyword = inputLanguage[keyword]
-                if not inputFileKeyword.modules:  # for keywords with no modules:
-                    if not (
-                        inputLanguage[keyword].expectsOptionalDatalines
-                        or inputLanguage[keyword].expectsRequiredDatalines
-                    ):
-                        raise ValueError(
-                            f"Error during parsing of keyword {keywordIdentifier}{keyword}: {keywordIdentifier}{keyword} expects no data lines"
-                        )
-                    fileDict[keyword][-1]["datalines"].append(line)
-                else:  # for keywords with modules
-                    # module = inputLanguage[keyword].getModule(options["type"] if "type" in options else keyword)
-                    if "type" in inputLanguage[keyword].argNames:
-                        module = inputLanguage[keyword].getModule(
-                            inputLanguage[keyword].getArg("type").getValueFromKwargs(options)
-                        )
-                    elif "generator" in inputLanguage[keyword].argNames:
-                        module = inputLanguage[keyword].getModule(
-                            inputLanguage[keyword].getArg("generator").getValueFromKwargs(options)
-                        )
-                    else:
-                        module = inputLanguage[keyword].getModule(keyword)
-                    if not (module.expectsOptionalDatalines or module.expectsRequiredDatalines):
-                        raise ValueError(
-                            f"Error during parsing of keyword {keywordIdentifier}{keyword}: {module} expects no data lines"
-                        )
-                    fileDict[keyword][-1]["datalines"].append(line)
+                if not _expectsPlainDatalines(keyword, options):
+                    raise ValueError(
+                        f"Error during parsing of keyword {keywordIdentifier}{keyword}: {keywordIdentifier}{keyword} expects no data lines"
+                    )
+                fileDict[keyword][-1]["datalines"].append(line)
 
     return fileDict
 

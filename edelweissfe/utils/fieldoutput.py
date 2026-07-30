@@ -38,6 +38,7 @@ ATTENTION:
     the time History is automatically appended to the .csv file"
 """
 
+from dataclasses import dataclass
 from typing import Callable, Union
 
 import numpy as np
@@ -49,6 +50,7 @@ from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.orderedset import OrderedSet
 from edelweissfe.utils.elementresultcollector import ElementResultCollector
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
+from edelweissfe.utils.schema import schemaField, subKeywordField
 
 inputLanguage = InputLanguage()
 
@@ -95,6 +97,104 @@ kw.addOptionalArg("f_export(x)", "Function to apply on final result (table).", s
 kw.addOptionalArg("export", "Export the field output to a file at the end of the job.", str, None)
 
 documentation.append(kw)
+
+
+@dataclass(frozen=True)
+class FieldOutputPerNodeSchema:
+    """L2: the options of a single ``>>perNode`` field-output block. Mirrors the
+    ``module.addOptionalKeyword("perNode", ...)`` declaration above one-for-one."""
+
+    name: str | None = schemaField(description="Name of the field output.", dtype=str, default=None, required=True)
+    field: str | None = schemaField(description="Field of the result.", dtype=str, default=None, required=True)
+    result: str | None = schemaField(description="Result name.", dtype=str, default=None, required=True)
+    elSet: str | None = schemaField(description="Element set.", dtype=str, default=None)
+    nSet: str | None = schemaField(description="Node set.", dtype=str, default=None)
+    rigidBody: str | None = schemaField(
+        description="Rigid body (as registered in model.rigidBodies).", dtype=str, default=None
+    )
+    saveHistory: bool = schemaField(
+        description="Save complete History or only last (increment) result", dtype=bool, default=False
+    )
+    f_x: str | None = schemaField(
+        description="Function to apply in each increment.", dtype=str, default=None, optionName="f(x)"
+    )
+    f_export_x: str | None = schemaField(
+        description="Function to apply on final result (table).", dtype=str, default=None, optionName="f_export(x)"
+    )
+    export: str | None = schemaField(
+        description="Export the field output to a file at the end of the job.", dtype=str, default=None
+    )
+
+
+@dataclass(frozen=True)
+class FieldOutputPerElementSchema:
+    """L2: the options of a single ``>>perElement`` field-output block. Mirrors the
+    ``module.addOptionalKeyword("perElement", ...)`` declaration above one-for-one."""
+
+    name: str | None = schemaField(description="Name of the field output.", dtype=str, default=None, required=True)
+    elSet: str | None = schemaField(description="Element set.", dtype=str, default=None, required=True)
+    result: str | None = schemaField(description="Result name.", dtype=str, default=None, required=True)
+    quadraturePoint: str | None = schemaField(description="Integer or slice.", dtype=str, default=None, required=True)
+    saveHistory: bool = schemaField(
+        description="Save complete History or only last (increment) result", dtype=bool, default=False
+    )
+    f_x: str | None = schemaField(
+        description="Function to apply in each increment.", dtype=str, default=None, optionName="f(x)"
+    )
+    f_export_x: str | None = schemaField(
+        description="Function to apply on final result (table).", dtype=str, default=None, optionName="f_export(x)"
+    )
+    export: str | None = schemaField(
+        description="Export the field output to a file at the end of the job.", dtype=str, default=None
+    )
+
+
+@dataclass(frozen=True)
+class FieldOutputFromExpressionSchema:
+    """L2: the options of a single ``>>fromExpression`` field-output block. Mirrors the
+    ``module.addOptionalKeyword("fromExpression", ...)`` declaration above one-for-one."""
+
+    name: str | None = schemaField(description="Name of the field output.", dtype=str, default=None, required=True)
+    elSet: str | None = schemaField(description="Element set.", dtype=str, default=None)
+    nSet: str | None = schemaField(description="Node set.", dtype=str, default=None)
+    expression: str | None = schemaField(
+        description="Expression for retrieving field output.", dtype=str, default=None, required=True
+    )
+    saveHistory: bool = schemaField(
+        description="Save complete History or only last (increment) result", dtype=bool, default=False
+    )
+    f_x: str | None = schemaField(
+        description="Function to apply in each increment.", dtype=str, default=None, optionName="f(x)"
+    )
+    f_export_x: str | None = schemaField(
+        description="Function to apply on final result (table).", dtype=str, default=None, optionName="f_export(x)"
+    )
+    export: str | None = schemaField(
+        description="Export the field output to a file at the end of the job.", dtype=str, default=None
+    )
+
+
+@dataclass(frozen=True)
+class FieldOutputSchema:
+    """L2: the sub-keyword blocks of the ``*fieldOutput`` keyword.
+
+    ``*fieldOutput`` itself declares no line options of its own (see
+    ``edelweissfe.keywords.fieldoutput``'s module docstring) -- its entire grammar is these three
+    repeatable ``>>`` blocks, mirrored one-for-one from the ``module.addOptionalKeyword(...)``
+    declarations above. Documentation/parser-validation only, exactly like every other schema in
+    this file: ``_FieldOutputBase`` and friends still construct from the raw parsed dict via
+    ``abqmodelconstructor``/``inputfilehelpers``, unchanged.
+    """
+
+    perNode: tuple[FieldOutputPerNodeSchema, ...] = subKeywordField(
+        description="Create node-based field output.", schema=FieldOutputPerNodeSchema
+    )
+    perElement: tuple[FieldOutputPerElementSchema, ...] = subKeywordField(
+        description="Create element-based field output.", schema=FieldOutputPerElementSchema
+    )
+    fromExpression: tuple[FieldOutputFromExpressionSchema, ...] = subKeywordField(
+        description="Create field output from expression.", schema=FieldOutputFromExpressionSchema
+    )
 
 
 class _FieldOutputBase:
