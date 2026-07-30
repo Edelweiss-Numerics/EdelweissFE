@@ -79,15 +79,17 @@ for exactly how each list was derived):
 ``keyword`` is the eventual single source the ``.inp`` parser consults for every top-level keyword
 (``element``, ``node``, ``nSet``, ``elSet``, ``surface``, ``job``, ``section``, ``material``,
 ``advancedmaterial``, ``fieldOutput``, ``analyticalField``, ``solver``, ``step``, ``output``,
-``constraint``, ``modelGenerator``), each mapped to a
+``updateConfiguration``, ``modelGenerator``, ``constraint``, ``modelModifier``,
+``configurePlots``, ``exportPlots``, ``include``), each mapped to a
 :class:`edelweissfe.keywords.base.keywordbase.KeywordBase` subclass. U1 reserved the category
-empty; U2a (``PLAN_INPUT_SYSTEM_UNIFICATION.md``, §5) populates its first slice -- the six
+empty; U2a (``PLAN_INPUT_SYSTEM_UNIFICATION.md``, §5) populated its first slice -- the six
 structural mesh/job keywords (``element``, ``elSet``, ``node``, ``nSet``, ``surface``, ``job``),
 which live nowhere as ``Module``s in the legacy grammar and so have no coexistence window to
-manage. The remaining ten (pluggable-module and type-dispatch keywords) follow in later U2
-increments, one keyword group per commit. Registering a keyword here does **not** wire it into the
-running parser -- ``inputfileparser.py`` still resolves every keyword through ``inputlanguage.py``
-until U3 swaps it over; see each ``KeywordBase`` subclass's ``fromKeywordDefinition`` stub.
+manage. U2b populates the remaining fifteen (pluggable-module and type-dispatch keywords), so the
+category now covers the full printKeywords() surface of 21 top-level keywords. Registering a
+keyword here does **not** wire it into the running parser -- ``inputfileparser.py`` still resolves
+every keyword through ``inputlanguage.py`` until U3 swaps it over; see each ``KeywordBase``
+subclass's ``fromKeywordDefinition`` stub.
 
 ``element`` and ``material`` are keyed by *element type* / *material name* and cover exactly the
 ``provider=edelweiss`` namespace of ``config/elementlibrary.py`` and ``config/materiallibrary.py``.
@@ -418,10 +420,10 @@ for _linsolverName in [
     _BUILTINS[("linsolver", _linsolverName)] = f"edelweissfe.linsolve.{_linsolverName}:createSolver"
 
 
-# The "keyword" category's first slice (U2a, PLAN_INPUT_SYSTEM_UNIFICATION.md §5): the six
-# structural mesh/job keywords, each its own module with its own class name -- so, like the
-# `material` table above, this is an explicit dict rather than `_addBuiltins`'s "one fixed
-# attribute name" convention.
+# The "keyword" category: the six structural mesh/job keywords from U2a
+# (PLAN_INPUT_SYSTEM_UNIFICATION.md §5), plus the fifteen pluggable-module/type-dispatch keywords
+# from U2b -- each its own module with its own class name, so, like the `material` table above,
+# this is an explicit dict rather than `_addBuiltins`'s "one fixed attribute name" convention.
 for _keywordName, _keywordDotted in {
     "element": "edelweissfe.keywords.element:ElementKeyword",
     "elSet": "edelweissfe.keywords.elset:ElSetKeyword",
@@ -429,6 +431,21 @@ for _keywordName, _keywordDotted in {
     "nSet": "edelweissfe.keywords.nset:NSetKeyword",
     "surface": "edelweissfe.keywords.surface:SurfaceKeyword",
     "job": "edelweissfe.keywords.job:JobKeyword",
+    "section": "edelweissfe.keywords.section:SectionKeyword",
+    "material": "edelweissfe.keywords.material:MaterialKeyword",
+    "advancedmaterial": "edelweissfe.keywords.advancedmaterial:AdvancedMaterialKeyword",
+    "fieldOutput": "edelweissfe.keywords.fieldoutput:FieldOutputKeyword",
+    "analyticalField": "edelweissfe.keywords.analyticalfield:AnalyticalFieldKeyword",
+    "solver": "edelweissfe.keywords.solver:SolverKeyword",
+    "step": "edelweissfe.keywords.step:StepKeyword",
+    "output": "edelweissfe.keywords.output:OutputKeyword",
+    "updateConfiguration": "edelweissfe.keywords.updateconfiguration:UpdateConfigurationKeyword",
+    "modelGenerator": "edelweissfe.keywords.modelgenerator:ModelGeneratorKeyword",
+    "constraint": "edelweissfe.keywords.constraint:ConstraintKeyword",
+    "modelModifier": "edelweissfe.keywords.modelmodifier:ModelModifierKeyword",
+    "configurePlots": "edelweissfe.keywords.configureplots:ConfigurePlotsKeyword",
+    "exportPlots": "edelweissfe.keywords.exportplots:ExportPlotsKeyword",
+    "include": "edelweissfe.keywords.include:IncludeKeyword",
 }.items():
     _BUILTINS[("keyword", _keywordName.casefold())] = _keywordDotted
 

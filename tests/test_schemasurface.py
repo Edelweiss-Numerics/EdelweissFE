@@ -272,13 +272,40 @@ def test_a_schemaless_keyword_renders_only_its_header_line():
     assert rendered == "[fieldOutput]"
 
 
-# --- U2a: the six structural keywords' printKeywords()-format blocks, proven byte-identical -------
-# against the frozen golden (PLAN_INPUT_SYSTEM_UNIFICATION.md, U2a gate (A)). This is the *second*
+# --- U2a/U2b: all 21 top-level keywords' printKeywords()-format blocks, proven byte-identical -----
+# against the frozen golden (PLAN_INPUT_SYSTEM_UNIFICATION.md, U2 gate (A)). This is the *second*
 # legacy rendering format -- ``inputfileparser.printKeywords()``'s hand-rolled dump of the
 # structural/type-dispatch keywords declared directly in that file -- as opposed to the
 # ``Module.__doc__`` format every test above this one exercises.
 
 _GOLDEN_PATH = Path(__file__).parent / "golden" / "inputlanguage_surface.txt"
+
+#: Every top-level keyword covered by U2a (the six structural mesh/job keywords) and U2b (the
+#: remaining fifteen pluggable-module/type-dispatch keywords) -- the complete ``printKeywords()``
+#: surface, per ``PLAN_INPUT_SYSTEM_UNIFICATION.md``.
+_ALL_TOP_LEVEL_KEYWORDS = [
+    "element",
+    "elSet",
+    "node",
+    "nSet",
+    "surface",
+    "job",
+    "section",
+    "material",
+    "advancedmaterial",
+    "fieldOutput",
+    "analyticalField",
+    "solver",
+    "step",
+    "output",
+    "updateConfiguration",
+    "modelGenerator",
+    "constraint",
+    "modelModifier",
+    "configurePlots",
+    "exportPlots",
+    "include",
+]
 
 
 def _printKeywordsBlocksByName() -> dict[str, str]:
@@ -290,6 +317,13 @@ def _printKeywordsBlocksByName() -> dict[str, str]:
     (``kwString`` in ``printKeywords()``); the name is recovered with a regex rather than assumed
     from list position, so a reordering of the golden file cannot silently pair the wrong block
     with the wrong keyword name.
+
+    The very last keyword of the section (``*include``) is not followed by another ``"\\n\\n\\n"``
+    separator but directly by the ``"===== module documentation:"`` marker one line down, so its
+    raw slice carries one trailing ``"\\n"`` that is not part of any other block's rendering. That
+    is an artifact of where the section boundary was cut, not of ``printKeywords()`` itself (every
+    other block, mid-section, has no leading/trailing newline at all -- confirmed against the raw
+    golden bytes), so it is stripped here rather than reproduced by the renderer.
     """
     golden = _GOLDEN_PATH.read_text()
     section = golden.split("===== printKeywords() =====\n", 1)[1]
@@ -300,7 +334,7 @@ def _printKeywordsBlocksByName() -> dict[str, str]:
             continue
         header = re.match(r"^ {4}(\S+) {4}", block)
         assert header, f"printKeywords() block has no parseable '    name    ' header: {block[:60]!r}"
-        blocksByName[header.group(1)] = block
+        blocksByName[header.group(1)] = block.rstrip("\n")
     return blocksByName
 
 
@@ -308,10 +342,10 @@ _PRINT_KEYWORDS_GOLDEN_BLOCKS = _printKeywordsBlocksByName()
 
 
 def _structuralKeywordSpec(keywordName: str) -> KeywordSurfaceSpec:
-    """Build the :class:`KeywordSurfaceSpec` for one of the six U2a structural keywords from its
-    real, registered ``KeywordBase`` subclass -- name, description and schema all sourced from the
-    class via :func:`specFromKeywordClass` (no hand-typed spelling/description), so this test proves
-    the *class* encodes the legacy grammar, and also exercises
+    """Build the :class:`KeywordSurfaceSpec` for one of the 21 top-level keywords from its real,
+    registered ``KeywordBase`` subclass -- name, description and schema all sourced from the class
+    via :func:`specFromKeywordClass` (no hand-typed spelling/description), so this test proves the
+    *class* encodes the legacy grammar, and also exercises
     :func:`edelweissfe.config.registry.lookup`."""
     from edelweissfe.config import registry
 
@@ -319,12 +353,9 @@ def _structuralKeywordSpec(keywordName: str) -> KeywordSurfaceSpec:
     return specFromKeywordClass(target)
 
 
-@pytest.mark.parametrize(
-    "keywordName",
-    ["element", "elSet", "node", "nSet", "surface", "job"],
-)
+@pytest.mark.parametrize("keywordName", _ALL_TOP_LEVEL_KEYWORDS)
 def test_structural_keyword_printKeywords_block_matches_golden_byte_for_byte(keywordName):
-    """U2a's gate (A): ``renderPrintKeywordsBlock`` over each structural keyword's real, registered
+    """U2's gate (A): ``renderPrintKeywordsBlock`` over each top-level keyword's real, registered
     class (name + description + schema all from the class) reproduces the corresponding golden
     ``printKeywords()`` block exactly -- proving the class encodes the legacy grammar (spelling in
     exact display case, descriptions incl. the *nSet* copy-paste bug, types, required/optional-ness,
@@ -335,10 +366,24 @@ def test_structural_keyword_printKeywords_block_matches_golden_byte_for_byte(key
     assert rendered == _PRINT_KEYWORDS_GOLDEN_BLOCKS[keywordName]
 
 
-def test_printKeywords_golden_extraction_found_all_six_structural_keywords():
+def test_printKeywords_golden_extraction_found_all_21_top_level_keywords():
     """Falsifies the extraction helper itself: if a golden-file reformat ever changed the
     ``printKeywords()`` section's separator/header shape such that :func:`_printKeywordsBlocksByName`
     silently found fewer blocks, the parametrized test above would just stop running for the
     missing ones instead of failing -- this pins the extraction's coverage independently.
     """
-    assert {"element", "elSet", "node", "nSet", "surface", "job"} <= set(_PRINT_KEYWORDS_GOLDEN_BLOCKS)
+    assert set(_ALL_TOP_LEVEL_KEYWORDS) <= set(_PRINT_KEYWORDS_GOLDEN_BLOCKS)
+
+
+def test_registered_keyword_category_matches_the_golden_printKeywords_surface_exactly():
+    """The end-to-end U2 assertion: every header the golden ``printKeywords()`` section actually
+    contains resolves to a registered ``"keyword"`` entry whose rendered block matches, and every
+    registered ``"keyword"`` entry is exercised above -- i.e. the registry's ``keyword`` category
+    and the golden's ``printKeywords()`` section describe exactly the same 21 names, not merely a
+    subset of each other.
+    """
+    from edelweissfe.config import registry
+
+    registeredDisplayNames = {registry.lookup("keyword", name)[0].keywordName for name in _ALL_TOP_LEVEL_KEYWORDS}
+    assert registeredDisplayNames == set(_PRINT_KEYWORDS_GOLDEN_BLOCKS)
+    assert len(_ALL_TOP_LEVEL_KEYWORDS) == 21

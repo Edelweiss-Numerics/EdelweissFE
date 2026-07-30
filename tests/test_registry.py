@@ -545,16 +545,40 @@ def test_isRegistered_sees_all_three_registration_mechanisms():
     assert "inprocessaction" in registry.availableNames("stepaction")
 
 
-# --- the "keyword" category (U1 reserved it empty; U2a populates its first slice, the six
-# structural mesh/job keywords -- PLAN_INPUT_SYSTEM_UNIFICATION.md §1.3/§5) ---
+# --- the "keyword" category (U1 reserved it empty; U2a populated its first slice, the six
+# structural mesh/job keywords; U2b populates the remaining fifteen --
+# PLAN_INPUT_SYSTEM_UNIFICATION.md §1.3/§5) ---
 
 
-def test_keyword_category_covers_the_six_structural_keywords_after_u2a():
-    """U2a populates ``"keyword"`` with exactly the six structural mesh/job keywords; the
-    remaining ten (pluggable-module/type-dispatch keywords) follow in later U2 increments, one
-    keyword group per commit, so this list is expected to grow -- it is not the final state.
+def test_keyword_category_covers_all_21_top_level_keywords_after_u2b():
+    """U2b completes ``"keyword"`` with all 21 top-level keywords -- U2a's six structural mesh/job
+    keywords plus the fifteen pluggable-module/type-dispatch keywords -- matching the full
+    ``printKeywords()`` surface exactly. This is now the final state of the category (U3 does not
+    add further names, only wires resolution into the running parser).
     """
-    assert registry.availableNames("keyword") == ["element", "elset", "job", "node", "nset", "surface"]
+    assert registry.availableNames("keyword") == [
+        "advancedmaterial",
+        "analyticalfield",
+        "configureplots",
+        "constraint",
+        "element",
+        "elset",
+        "exportplots",
+        "fieldoutput",
+        "include",
+        "job",
+        "material",
+        "modelgenerator",
+        "modelmodifier",
+        "node",
+        "nset",
+        "output",
+        "section",
+        "solver",
+        "step",
+        "surface",
+        "updateconfiguration",
+    ]
 
 
 def test_keyword_category_lookup_resolves_a_structural_keyword_to_its_KeywordBase_subclass():
