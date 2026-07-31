@@ -32,6 +32,7 @@ from edelweissfe.constraints.base.multipointconstraintbase import (
     MultiPointConstraintBase,
 )
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.facetcontactgeometry import line2ClosestPoint, tria3ClosestPoint
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
@@ -251,6 +252,13 @@ class Constraint(MultiPointConstraintBase):
                 slaveNode.coordinates[:] = bestWeights @ masterFacetCoords[bestFacetIdx]
 
             self.tiedRecords.append((slaveNode, masterFacetElements[bestFacetIdx].nodes, bestWeights))
+
+        # Exposed as ordinary node sets so the tied/untied split is directly inspectable -- e.g. via
+        # *fieldOutput, or for free in Ensight, which automatically creates a part for every node
+        # set in the model (edelweissfe/outputmanagers/ensight.py's _createGeometryParts), no
+        # fieldOutput required just to see where these nodes are.
+        model.nodeSets[f"{name}_tied"] = NodeSet(f"{name}_tied", [record[0] for record in self.tiedRecords])
+        model.nodeSets[f"{name}_untied"] = NodeSet(f"{name}_untied", self.untiedSlaveNodes)
 
     def getMultiPointConstraints(self, dofManager) -> list[tuple[int, list[tuple[int, float]]]]:
         fieldVariableIndices = dofManager.idcsOfFieldVariablesInDofVector
