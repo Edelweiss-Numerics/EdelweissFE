@@ -118,7 +118,6 @@ class Constraint(ConstraintBase):
         self.distancesSlaveNodeRP = [s.coordinates - self.referencePoint.coordinates for s in self.slaveNodes]
 
         self._nDof = self.nDofsOnNodes + nConstraints
-        self.sizeStiffness = self._nDof * self._nDof
 
         self.nConstraints = nConstraints
 
@@ -157,8 +156,18 @@ class Constraint(ConstraintBase):
 
         Total = nRot² + nSlaves × 2 × nUCoupledPerSlave × nDim
               = 9    + nSlaves × 54  (in 3-D)
+
+        Finally the **diagonal** ``(i, i)`` of every DOF owned by this constraint is declared,
+        with a zero value.  Those entries are structurally required even though the constraint
+        never writes to them: Dirichlet boundary conditions are imposed on the assembled CSR
+        matrix by setting ``K[i, i] = 1``, which is only possible if that position exists in the
+        sparsity pattern.  The reference point belongs to no element, so this constraint is the
+        only entity that can declare its diagonal - without it a prescribed reference-point
+        displacement is silently not enforced (see issue: rigid body gives wrong results).
+
+        Total = nRot**2 + nSlaves * 2 * nUCoupledPerSlave * nDim + nDof
         """
-        return self.nRot**2 + len(self.slaveNodes) * 2 * self._nUCoupledPerSlave * self.nDim
+        return self.nRot**2 + len(self.slaveNodes) * 2 * self._nUCoupledPerSlave * self.nDim + self.nDof
 
     def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
         """Fill the VIJ index arrays with the sparse pattern of this constraint.
@@ -208,6 +217,13 @@ class Constraint(ConstraintBase):
                     I_[k] = idcs[L0_local + il]
                     J_[k] = idcs[indcsU_s[iu]]
                     k += 1
+
+        # Diagonal of every owned DOF.  The constraint contributes nothing here; these entries
+        # only reserve the position so that Dirichlet BCs can be imposed on those DOFs.
+        for i in range(len(idcs)):
+            I_[k] = idcs[i]
+            J_[k] = idcs[i]
+            k += 1
 
     def Rz_2D(self, phi, derivative):
         phi = phi + np.pi / 2 * derivative
