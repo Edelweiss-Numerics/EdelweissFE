@@ -27,6 +27,7 @@
 #  ---------------------------------------------------------------------
 
 import numpy as np
+from scipy.spatial import cKDTree
 
 from edelweissfe.constraints.base.multipointconstraintbase import (
     MultiPointConstraintBase,
@@ -206,6 +207,25 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
         masterFacetCoords = [np.array([n.coordinates for n in el.nodes]) for el in masterFacetElements]
 
+        # Projecting every slave node onto its closest master facet by brute force is O(nSlave *
+        # nMaster) and, on a large tied surface re-projected after every AMR refinement, dominates
+        # the whole refinement step. Index the master facets by centroid in a k-d tree instead and,
+        # per slave node, run the exact closest-point test only on the facets that could possibly win.
+        # The candidate set is a *superset* of the brute-force winner (see maxFacetRadius below), and
+        # iterating it in ascending facet order with a strict "<" reproduces the brute-force choice
+        # exactly (same first-of-equals tie-break) -- so this is an acceleration, not an approximation.
+        if masterFacetCoords:
+            centroids = np.array([coords.mean(axis=0) for coords in masterFacetCoords])
+            facetTree = cKDTree(centroids)
+            # The farthest any facet vertex sits from that facet's own centroid. If a facet's true
+            # closest point beats a known distance d, its centroid lies within d + maxFacetRadius of
+            # the slave node (triangle inequality), so a ball query of that radius, seeded with the
+            # exact distance to the nearest-centroid facet (an upper bound on the global minimum),
+            # is guaranteed to include the brute-force winner.
+            maxFacetRadius = max(
+                float(np.linalg.norm(coords - coords.mean(axis=0), axis=1).max()) for coords in masterFacetCoords
+            )
+
         tiedRecords = []
         untiedSlaveNodes = []
         nSkippedClaimedNodes = 0
@@ -219,12 +239,18 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
             bestFacetIdx = None
             bestDistance = np.inf
 
-            for facetIdx, facetCoords in enumerate(masterFacetCoords):
-                weights, distance = closestPointFunction(slaveNode.coordinates, *facetCoords)
-                if distance < bestDistance:
-                    bestDistance = distance
-                    bestWeights = weights
-                    bestFacetIdx = facetIdx
+            if masterFacetCoords:
+                xs = slaveNode.coordinates
+                _, seedIdx = facetTree.query(xs, k=1)
+                _, seedDistance = closestPointFunction(xs, *masterFacetCoords[int(seedIdx)])
+                candidates = set(facetTree.query_ball_point(xs, seedDistance + maxFacetRadius))
+                candidates.add(int(seedIdx))
+                for facetIdx in sorted(candidates):
+                    weights, distance = closestPointFunction(xs, *masterFacetCoords[facetIdx])
+                    if distance < bestDistance:
+                        bestDistance = distance
+                        bestWeights = weights
+                        bestFacetIdx = facetIdx
 
             if self._positionTolerance is not None and bestDistance > self._positionTolerance:
                 untiedSlaveNodes.append(slaveNode)
