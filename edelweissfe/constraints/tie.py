@@ -256,9 +256,15 @@ class Constraint(MultiPointConstraintBase):
         # Exposed as ordinary node sets so the tied/untied split is directly inspectable -- e.g. via
         # *fieldOutput, or for free in Ensight, which automatically creates a part for every node
         # set in the model (edelweissfe/outputmanagers/ensight.py's _createGeometryParts), no
-        # fieldOutput required just to see where these nodes are.
-        model.nodeSets[f"{name}_tied"] = NodeSet(f"{name}_tied", [record[0] for record in self.tiedRecords])
-        model.nodeSets[f"{name}_untied"] = NodeSet(f"{name}_untied", self.untiedSlaveNodes)
+        # fieldOutput required just to see where these nodes are. A set with no members is left
+        # unpublished rather than published empty: Ensight's export is unconditional over every
+        # node set, so a tie whose untied side is (as is typical) always empty would otherwise get
+        # its own empty, useless part in every export.
+        tiedNodes = [record[0] for record in self.tiedRecords]
+        if tiedNodes:
+            model.nodeSets[f"{name}_tied"] = NodeSet(f"{name}_tied", tiedNodes)
+        if self.untiedSlaveNodes:
+            model.nodeSets[f"{name}_untied"] = NodeSet(f"{name}_untied", self.untiedSlaveNodes)
 
     def getMultiPointConstraints(self, dofManager) -> list[tuple[int, list[tuple[int, float]]]]:
         fieldVariableIndices = dofManager.idcsOfFieldVariablesInDofVector
