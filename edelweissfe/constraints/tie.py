@@ -81,37 +81,55 @@ module.addRequiredArg(
 )
 module.addOptionalArg(
     "positionTolerance",
-    "Slave nodes whose reference-configuration closest-point distance to the master surface "
-    "exceeds this tolerance are left untied (recorded in the constraint's untiedSlaveNodes), "
-    "matching Abaqus' *TIE default behavior of silently dropping out-of-range slave nodes. If not "
-    "given (the default), a tolerance is computed per slave node as positionToleranceFactor times "
-    "the characteristic edge length of that node's closest master facet -- see "
+    "Whether a slave node is tied at all: nodes whose reference-configuration closest-point "
+    "distance to the master surface exceeds this tolerance are left untied (recorded in the "
+    "constraint's untiedSlaveNodes), matching Abaqus' *TIE default behavior of silently dropping "
+    "out-of-range slave nodes. Applies independently of adjust -- whether a tied node's "
+    "coordinates additionally get snapped onto the master is a separate decision, see "
+    "adjust/adjustTolerance. If not given (the default), a tolerance is computed as "
+    "positionToleranceFactor times the master surface's characteristic facet size -- see "
     "positionToleranceFactor. Set this explicitly to an absolute distance to override that.",
     float,
     None,
 )
 module.addOptionalArg(
     "positionToleranceFactor",
-    "Used only when positionTolerance is not given: the default tolerance for a slave node is this "
-    "fraction of its closest master facet's own characteristic (mean) edge length, so it scales "
-    "with local mesh density instead of being one fixed number for the whole surface. 0.25 "
-    "comfortably exceeds the sub-percent gaps expected between two compatible discretizations of "
-    "the same surface (mismatched density, curvature/interpolation error), while remaining well "
-    "below the facet-size-or-larger gaps that indicate the surfaces don't actually correspond (e.g. "
-    "a slave surface extending beyond the master surface's actual extent -- a partial-bond-length "
-    "or otherwise partially-overlapping pair of surfaces).",
+    "Used only when positionTolerance is not given: the default tolerance is this fraction of the "
+    "master surface's characteristic (mean, over all its facets) edge length, computed once and "
+    "used for every slave node. 0.25 comfortably exceeds the sub-percent gaps expected between two "
+    "compatible discretizations of the same surface (mismatched density, curvature/interpolation "
+    "error), while remaining well below the facet-size-or-larger gaps that indicate the surfaces "
+    "don't actually correspond (e.g. a slave surface extending beyond the master surface's actual "
+    "extent -- a partial-bond-length or otherwise partially-overlapping pair of surfaces).",
     float,
     0.25,
 )
 module.addOptionalArg(
     "adjust",
-    "Move each tied slave node onto its closest master point at construction (Abaqus-like "
-    "default). If False, any initial geometric gap between the surfaces is preserved rigidly "
-    "(the displacements are tied, not the positions). Note that adjusting modifies the nodal "
+    "Whether a TIED node's coordinates additionally get snapped onto its projected master point "
+    "at construction (Abaqus-like default) -- a separate decision from whether the node is tied "
+    "at all (see positionTolerance). If False, no tied node is ever snapped: any initial geometric "
+    "gap is preserved rigidly (the displacements are tied, not the positions), regardless of size. "
+    "If True, a tied node is snapped only if its distance is also within adjustTolerance (default: "
+    "unconditionally, i.e. every tied node is snapped, matching plain Abaqus ADJUST=YES) -- see "
+    "adjustTolerance to snap away only small, effectively-numerical gaps while still tying "
+    "(without snapping) across larger, deliberate ones. Note that adjusting modifies the nodal "
     "coordinates before the element geometry is initialized; avoid adjusting nodes that also "
     "belong to an already-generated contact surface of another constraint.",
     str,
     "True",
+)
+module.addOptionalArg(
+    "adjustTolerance",
+    "Used only when adjust=True: a tied node's coordinates are snapped onto the master only if "
+    "its closest-point distance is also within this tolerance; beyond it, the node stays tied "
+    "(kinematically) but its position is left as found, preserving the gap. Independent of "
+    "positionTolerance -- a node can be tied across a fairly generous distance while only "
+    "genuinely small (e.g. sub-percent, mesh-discretization-scale) gaps within that get snapped "
+    "away. If not given (the default), any tied node is snapped, matching plain Abaqus ADJUST=YES "
+    "and this constraint's behavior before this option existed.",
+    float,
+    None,
 )
 
 documentation = [module]
@@ -188,10 +206,21 @@ class Constraint(MultiPointConstraintBase):
         positionTolerance = kwargs["positionTolerance"]
         positionToleranceFactor = kwargs["positionToleranceFactor"]
         adjust = strtobool(kwargs["adjust"])
+        adjustTolerance = kwargs["adjustTolerance"]
 
         closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
         masterFacetCoords = [np.array([n.coordinates for n in el.nodes]) for el in masterFacetElements]
-        masterFacetCharacteristicSizes = [_facetCharacteristicSize(coords) for coords in masterFacetCoords]
+
+        # Tie MEMBERSHIP (is this node tied at all) is independent of adjust (does a tied node get
+        # snapped) -- these are separate decisions, see the adjust arg's docstring. A single
+        # tolerance, computed once from the whole master surface's characteristic facet size, is
+        # used for every slave node (matching Abaqus' *TIE, which always enforces some tolerance --
+        # explicit or internally computed -- and never ties unconditionally regardless of distance).
+        membershipTolerance = (
+            positionTolerance
+            if positionTolerance is not None
+            else positionToleranceFactor * np.mean([_facetCharacteristicSize(c) for c in masterFacetCoords])
+        )
 
         #: Tied records: (slaveNode, masterNodes of the assigned facet, frozen weights).
         self.tiedRecords = []
@@ -210,21 +239,15 @@ class Constraint(MultiPointConstraintBase):
                     bestWeights = weights
                     bestFacetIdx = facetIdx
 
-            # Abaqus' *TIE always enforces some tolerance (an explicit POSITION TOLERANCE, or an
-            # internally computed default) and silently drops slave nodes outside it -- it never
-            # ties unconditionally regardless of distance. Mirror that: fall back to a tolerance
-            # scaled by the winning facet's own size when none is given explicitly, instead of
-            # skipping the check entirely.
-            effectiveTolerance = (
-                positionTolerance
-                if positionTolerance is not None
-                else positionToleranceFactor * masterFacetCharacteristicSizes[bestFacetIdx]
-            )
-            if bestDistance > effectiveTolerance:
+            if bestDistance > membershipTolerance:
                 self.untiedSlaveNodes.append(slaveNode)
                 continue
 
-            if adjust and bestDistance > 0.0:
+            # Snapping is the separate, independent decision: a tied node is only snapped if adjust
+            # is requested AND (when given) its distance is also within adjustTolerance -- a node
+            # beyond adjustTolerance stays tied, just not snapped, preserving its gap exactly.
+            withinAdjustTolerance = adjustTolerance is None or bestDistance <= adjustTolerance
+            if adjust and withinAdjustTolerance and bestDistance > 0.0:
                 slaveNode.coordinates[:] = bestWeights @ masterFacetCoords[bestFacetIdx]
 
             self.tiedRecords.append((slaveNode, masterFacetElements[bestFacetIdx].nodes, bestWeights))
