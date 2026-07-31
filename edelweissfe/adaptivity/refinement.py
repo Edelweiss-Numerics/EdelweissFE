@@ -383,10 +383,24 @@ class AdaptiveMesh:
             E = self.elements[eid]
             Eset = set(E["conn"])
             bMin, bMax = box[eid]
+            compEid = comp[eid]
             cands = set()
             for cell in _grid_cells_for_box(bMin, bMax, h_cell):
                 for lab in nodeGrid.get(cell, ()):
-                    if lab not in Eset and componentOf[lab] == comp[eid]:
+                    if lab in Eset or componentOf[lab] != compEid:
+                        continue
+                    # A hanging node lies on a face/edge of E, hence within E's node-AABB. The padded
+                    # broad-phase gather above deliberately also pulls in a shell of nodes just
+                    # outside E (so nothing on the boundary is missed to grid rounding); those cannot
+                    # be hanging on E, so reject them here with a cheap box test before the exact
+                    # per-edge/face geometry probes, which otherwise run 12 + 6 tests on each such
+                    # node for nothing. Exact: no true hanging node is ever outside this box.
+                    c = coords[lab]
+                    if (
+                        bMin[0] - tol <= c[0] <= bMax[0] + tol
+                        and bMin[1] - tol <= c[1] <= bMax[1] + tol
+                        and bMin[2] - tol <= c[2] <= bMax[2] + tol
+                    ):
                         cands.add(lab)
             for h in self.topology.classify_hanging_on_element(E["conn"], self.registry, cands, tol):
                 dim = 1 if h["kind"] == "edge" else 2
