@@ -81,11 +81,27 @@ module.addRequiredArg(
 )
 module.addOptionalArg(
     "positionTolerance",
-    "If given, slave nodes whose reference-configuration closest-point distance to the master "
-    "surface exceeds this tolerance are left untied (recorded in the constraint's "
-    "untiedSlaveNodes). If not given, every slave node is tied unconditionally.",
+    "Slave nodes whose reference-configuration closest-point distance to the master surface "
+    "exceeds this tolerance are left untied (recorded in the constraint's untiedSlaveNodes), "
+    "matching Abaqus' *TIE default behavior of silently dropping out-of-range slave nodes. If not "
+    "given (the default), a tolerance is computed per slave node as positionToleranceFactor times "
+    "the characteristic edge length of that node's closest master facet -- see "
+    "positionToleranceFactor. Set this explicitly to an absolute distance to override that.",
     float,
     None,
+)
+module.addOptionalArg(
+    "positionToleranceFactor",
+    "Used only when positionTolerance is not given: the default tolerance for a slave node is this "
+    "fraction of its closest master facet's own characteristic (mean) edge length, so it scales "
+    "with local mesh density instead of being one fixed number for the whole surface. 0.25 "
+    "comfortably exceeds the sub-percent gaps expected between two compatible discretizations of "
+    "the same surface (mismatched density, curvature/interpolation error), while remaining well "
+    "below the facet-size-or-larger gaps that indicate the surfaces don't actually correspond (e.g. "
+    "a slave surface extending beyond the master surface's actual extent -- a partial-bond-length "
+    "or otherwise partially-overlapping pair of surfaces).",
+    float,
+    0.25,
 )
 module.addOptionalArg(
     "adjust",
@@ -99,6 +115,26 @@ module.addOptionalArg(
 )
 
 documentation = [module]
+
+
+def _facetCharacteristicSize(facetCoords: np.ndarray) -> float:
+    """Mean edge length of a facet (Line2: its one edge; Tria3: its three edges) -- the local
+    length scale used for the default position tolerance when none is given explicitly.
+
+    Parameters
+    ----------
+    facetCoords
+        The facet's node coordinates, shape (2, nDim) for a Line2 or (3, nDim) for a Tria3.
+
+    Returns
+    -------
+    float
+        The facet's mean edge length.
+    """
+
+    nNodes = facetCoords.shape[0]
+    edgeLengths = [np.linalg.norm(facetCoords[i] - facetCoords[(i + 1) % nNodes]) for i in range(nNodes)]
+    return np.mean(edgeLengths)
 
 
 class Constraint(MultiPointConstraintBase):
@@ -150,14 +186,16 @@ class Constraint(MultiPointConstraintBase):
             )
 
         positionTolerance = kwargs["positionTolerance"]
+        positionToleranceFactor = kwargs["positionToleranceFactor"]
         adjust = strtobool(kwargs["adjust"])
 
         closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
         masterFacetCoords = [np.array([n.coordinates for n in el.nodes]) for el in masterFacetElements]
+        masterFacetCharacteristicSizes = [_facetCharacteristicSize(coords) for coords in masterFacetCoords]
 
         #: Tied records: (slaveNode, masterNodes of the assigned facet, frozen weights).
         self.tiedRecords = []
-        #: Slave nodes beyond positionTolerance, left untied.
+        #: Slave nodes beyond positionTolerance (explicit or computed default), left untied.
         self.untiedSlaveNodes = []
 
         for slaveNode in slaveNodes:
@@ -172,7 +210,17 @@ class Constraint(MultiPointConstraintBase):
                     bestWeights = weights
                     bestFacetIdx = facetIdx
 
-            if positionTolerance is not None and bestDistance > positionTolerance:
+            # Abaqus' *TIE always enforces some tolerance (an explicit POSITION TOLERANCE, or an
+            # internally computed default) and silently drops slave nodes outside it -- it never
+            # ties unconditionally regardless of distance. Mirror that: fall back to a tolerance
+            # scaled by the winning facet's own size when none is given explicitly, instead of
+            # skipping the check entirely.
+            effectiveTolerance = (
+                positionTolerance
+                if positionTolerance is not None
+                else positionToleranceFactor * masterFacetCharacteristicSizes[bestFacetIdx]
+            )
+            if bestDistance > effectiveTolerance:
                 self.untiedSlaveNodes.append(slaveNode)
                 continue
 
