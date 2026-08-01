@@ -25,6 +25,7 @@ Documentation
    materials
    mesh
    modelmodifiers
+   adaptivitytheory
    output
    parallelization
    phenomena
