@@ -110,7 +110,10 @@ class HAdaptivityMarkerSchema:
         default=0.1,
     )
     recovery: str = schemaField(
-        description="For 'recoveryError': gradient recovery method ('averaging').",
+        description=(
+            "For 'recoveryError': gradient recovery method -- 'averaging' (nodal averaging) or "
+            "'spr' (superconvergent patch recovery, sharper for serendipity elements)."
+        ),
         dtype=str,
         default="averaging",
     )

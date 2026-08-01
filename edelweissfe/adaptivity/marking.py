@@ -31,9 +31,12 @@ per-element quantity -- reusing EdelweissFE's math-expression stack
 (:func:`edelweissfe.utils.math.createMathExpression`), the same mechanism as monitor/conditionalstop.
 """
 
+from collections import defaultdict
+
 import numpy as np
 
 from edelweissfe.adaptivity.hex20shapefunctions import (
+    EDGES,
     LOCAL_COORDS,
     N_NODES,
     hex20_shape,
@@ -55,6 +58,13 @@ _GAUSS_POINTS = np.array(
 _GP_N = np.array([hex20_shape(*gp) for gp in _GAUSS_POINTS])  # (8, 20)  shape-fn values at Gauss points
 _GP_DNDXI = np.array([hex20_shape_grad(*gp)[1] for gp in _GAUSS_POINTS])  # (8, 20, 3)  dN/dxi at Gauss points
 _NODE_DNDXI = np.array([hex20_shape_grad(*p)[1] for p in LOCAL_COORDS])  # (20, 20, 3)  dN/dxi at each node
+
+# HEX20 corner (vertex) local indices and edge topology, used by superconvergent patch recovery
+# (SPR): the 8 corners are the patch-assembly nodes, and each of the 12 edge midsides is recovered
+# from the polynomial fits of its two corner-endpoint patches.
+_MID_LOCALS = {edge[1] for edge in EDGES}  # 12 edge-midside local indices
+_CORNER_LOCALS = [i for i in range(N_NODES) if i not in _MID_LOCALS]  # 8 corner local indices
+_MID_EDGES = [(edge[1], edge[0], edge[2]) for edge in EDGES]  # (midLocal, cornerA_local, cornerB_local)
 
 
 class MarkerBase:
@@ -163,11 +173,118 @@ class SurfaceMarker(MarkerBase):
         return marked
 
 
-def _recovery_indicators(coordsAll, valuesAll, connectivity, nGlobalNodes):
-    r"""Vectorized Zienkiewicz-Zhu recovered-gradient error indicator, over all elements at once.
+def _spr_polynomial_basis(localCoords, order):
+    """Complete polynomial basis (3D) evaluated at ``localCoords`` (shape ``(n, 3)``, relative to a
+    patch centre). ``order=1`` -> ``[1, x, y, z]`` (4 terms); ``order=2`` -> that plus
+    ``[x^2, y^2, z^2, xy, yz, zx]`` (10 terms)."""
+    x, y, z = localCoords[:, 0], localCoords[:, 1], localCoords[:, 2]
+    ones = np.ones(len(localCoords))
+    if order == 1:
+        return np.stack([ones, x, y, z], axis=1)
+    return np.stack([ones, x, y, z, x * x, y * y, z * z, x * y, y * z, z * x], axis=1)
 
-    All per-element 3x3 Jacobians are batched into single ``numpy`` calls (``einsum`` / a stacked
-    ``linalg.inv``), so the whole element set is processed without a Python-level per-element loop.
+
+def _recover_averaging(coordsAll, valuesAll, connectivity, nGlobalNodes, dim, volume):
+    """Volume-weighted nodal averaging recovery (ZZ 1987): the recovered nodal gradient is the
+    volume-weighted mean of the FE gradient sampled at that node by every element sharing it.
+    Returns ``(recovered (nGlobalNodes, dim, 3), hasRecovery (nGlobalNodes,))``."""
+    jacobianNode = np.einsum("ebi,abj->eaij", coordsAll, _NODE_DNDXI)  # (nElem, 20, 3, 3)
+    paramGradNode = np.einsum("ebd,abj->eadj", valuesAll, _NODE_DNDXI)  # (nElem, 20, dim, 3)
+    gradAtNode = np.einsum("eadj,eaji->eadi", paramGradNode, np.linalg.inv(jacobianNode))  # (nElem, 20, dim, 3)
+
+    weight = np.where(volume > 0.0, volume, 0.0)  # (nElem,) drop any inverted/degenerate element
+    flatConnectivity = connectivity.ravel()
+    recoveredSum = np.zeros((nGlobalNodes, dim, 3))
+    recoveredWeight = np.zeros(nGlobalNodes)
+    np.add.at(recoveredSum, flatConnectivity, (weight[:, None, None, None] * gradAtNode).reshape(-1, dim, 3))
+    np.add.at(recoveredWeight, flatConnectivity, np.repeat(weight, N_NODES))
+    hasRecovery = recoveredWeight > 0.0
+    recovered = np.zeros((nGlobalNodes, dim, 3))
+    recovered[hasRecovery] = recoveredSum[hasRecovery] / recoveredWeight[hasRecovery][:, None, None]
+    return recovered, hasRecovery
+
+
+def _recover_spr(coordsAll, connectivity, nGlobalNodes, dim, gaussCoords, gradGauss):
+    """Superconvergent patch recovery (Zienkiewicz-Zhu 1992). For each corner (vertex) node a least-
+    squares polynomial is fitted to the FE gradient at the superconvergent Gauss points of the patch
+    of elements sharing that node; the recovered corner value is the fit at the node. Each edge
+    midside node is recovered by averaging the two corner-endpoint patch fits evaluated at its
+    location. Returns ``(recovered (nGlobalNodes, dim, 3), hasRecovery (nGlobalNodes,))``.
+
+    Parameters
+    ----------
+    gaussCoords
+        ``(nElem, 8, 3)`` physical coordinates of each element's Gauss points.
+    gradGauss
+        ``(nElem, 8, dim, 3)`` FE gradient at those Gauss points.
+    """
+    nComponents = dim * 3
+    gaussCoords = gaussCoords.reshape(-1, 8, 3)
+    gaussValues = gradGauss.reshape(-1, 8, nComponents)
+
+    # global node coordinates, corner patches, and edge (midside -> two corners) topology
+    nodeCoords = np.zeros((nGlobalNodes, 3))
+    seen = np.zeros(nGlobalNodes, dtype=bool)
+    cornerElements = defaultdict(list)  # global corner node -> element indices sharing it
+    edgeCorners = {}  # global midside node -> (global cornerA, global cornerB)
+    for e, conn in enumerate(connectivity):
+        for a in range(N_NODES):
+            g = conn[a]
+            if not seen[g]:
+                nodeCoords[g] = coordsAll[e, a]
+                seen[g] = True
+        for cornerLocal in _CORNER_LOCALS:
+            cornerElements[conn[cornerLocal]].append(e)
+        for midLocal, cornerA, cornerB in _MID_EDGES:
+            edgeCorners[conn[midLocal]] = (conn[cornerA], conn[cornerB])
+
+    # fit one polynomial per corner patch; the value at the corner is the constant term (the fit is
+    # centred on the corner, so the basis reduces to [1, 0, ...] there)
+    cornerFit = {}  # global corner -> (order, coeffs (nBasis, nComponents)) or ("mean", value (nComponents,))
+    recovered = np.zeros((nGlobalNodes, dim, 3))
+    for corner, elements in cornerElements.items():
+        elements = np.asarray(elements)
+        sampleCoords = gaussCoords[elements].reshape(-1, 3) - nodeCoords[corner]
+        sampleValues = gaussValues[elements].reshape(-1, nComponents)
+        nSamples = sampleCoords.shape[0]
+        order = 2 if nSamples >= 10 else (1 if nSamples >= 4 else 0)
+        if order == 0:  # too few points even for a linear fit -> fall back to the plain mean
+            meanValue = sampleValues.mean(axis=0)
+            cornerFit[corner] = ("mean", meanValue)
+            recovered[corner] = meanValue.reshape(dim, 3)
+            continue
+        basis = _spr_polynomial_basis(sampleCoords, order)
+        coeffs, _, _, _ = np.linalg.lstsq(basis, sampleValues, rcond=None)  # (nBasis, nComponents)
+        cornerFit[corner] = (order, coeffs)
+        recovered[corner] = coeffs[0].reshape(dim, 3)
+
+    # midside nodes: average of the adjacent corner patches, each evaluated at the midside location
+    hasRecovery = seen.copy()
+    for midside, (cornerA, cornerB) in edgeCorners.items():
+        values = []
+        for corner in (cornerA, cornerB):
+            fit = cornerFit.get(corner)
+            if fit is None:
+                continue
+            if fit[0] == "mean":
+                values.append(fit[1])
+            else:
+                order, coeffs = fit
+                basis = _spr_polynomial_basis((nodeCoords[midside] - nodeCoords[corner])[None, :], order)
+                values.append((basis @ coeffs).ravel())
+        if values:
+            recovered[midside] = np.mean(values, axis=0).reshape(dim, 3)
+        else:
+            hasRecovery[midside] = False
+    return recovered, hasRecovery
+
+
+def _recovery_indicators(coordsAll, valuesAll, connectivity, nGlobalNodes, recovery="averaging"):
+    r"""Zienkiewicz-Zhu recovered-gradient error indicator, over all elements at once.
+
+    The FE gradient at the 2x2x2 Gauss points and the final error norm are batched into single
+    ``numpy`` calls; the recovery of the continuous gradient ``grad*`` is delegated to
+    :func:`_recover_averaging` (``recovery='averaging'``) or :func:`_recover_spr` (``'spr'``).
 
     Parameters
     ----------
@@ -180,6 +297,8 @@ def _recovery_indicators(coordsAll, valuesAll, connectivity, nGlobalNodes):
         elements accumulate into the same recovery slot.
     nGlobalNodes
         Number of distinct global nodes referenced by ``connectivity``.
+    recovery
+        ``'averaging'`` (nodal averaging) or ``'spr'`` (superconvergent patch recovery).
 
     Returns
     -------
@@ -195,21 +314,11 @@ def _recovery_indicators(coordsAll, valuesAll, connectivity, nGlobalNodes):
     gradH = np.einsum("egdj,egji->egdi", paramGradGauss, np.linalg.inv(jacobianGauss))  # (nElem, 8, dim, 3)
     volume = detJGauss.sum(axis=1)  # (nElem,)
 
-    # FE gradient sampled at each node's own location, for the nodal-averaging recovery
-    jacobianNode = np.einsum("ebi,abj->eaij", coordsAll, _NODE_DNDXI)  # (nElem, 20, 3, 3)
-    paramGradNode = np.einsum("ebd,abj->eadj", valuesAll, _NODE_DNDXI)  # (nElem, 20, dim, 3)
-    gradAtNode = np.einsum("eadj,eaji->eadi", paramGradNode, np.linalg.inv(jacobianNode))  # (nElem, 20, dim, 3)
-
-    # volume-weighted nodal averaging -> continuous recovered gradient grad*
-    weight = np.where(volume > 0.0, volume, 0.0)  # (nElem,) drop any inverted/degenerate element
-    flatConnectivity = connectivity.ravel()
-    recoveredSum = np.zeros((nGlobalNodes, dim, 3))
-    recoveredWeight = np.zeros(nGlobalNodes)
-    np.add.at(recoveredSum, flatConnectivity, (weight[:, None, None, None] * gradAtNode).reshape(-1, dim, 3))
-    np.add.at(recoveredWeight, flatConnectivity, np.repeat(weight, N_NODES))
-    hasRecovery = recoveredWeight > 0.0
-    recovered = np.zeros((nGlobalNodes, dim, 3))
-    recovered[hasRecovery] = recoveredSum[hasRecovery] / recoveredWeight[hasRecovery][:, None, None]
+    if recovery == "spr":
+        gaussCoords = np.einsum("ga,ead->egd", _GP_N, coordsAll)  # (nElem, 8, 3) physical Gauss coords
+        recovered, hasRecovery = _recover_spr(coordsAll, connectivity, nGlobalNodes, dim, gaussCoords, gradH)
+    else:
+        recovered, hasRecovery = _recover_averaging(coordsAll, valuesAll, connectivity, nGlobalNodes, dim, volume)
 
     # eta_K = || grad* - grad^h ||_{L2(K)}, integrated at the Gauss points
     gradStar = np.einsum("ga,eadi->egdi", _GP_N, recovered[connectivity])  # (nElem, 8, dim, 3)
@@ -255,10 +364,13 @@ class RecoveryErrorMarker(MarkerBase):
     maxRefinedFraction
         Hard cap on the fraction of eligible elements a single pass may mark.
     recovery
-        Recovery method. Only ``'averaging'`` (volume-weighted nodal averaging) is implemented.
+        Recovery method: ``'averaging'`` (volume-weighted nodal averaging, ZZ 1987) or ``'spr'``
+        (superconvergent patch recovery, ZZ 1992 -- the sharper choice for serendipity elements).
     entry
         Node-field value entry to read (``'U'``, the current converged field, by default).
     """
+
+    _RECOVERY_METHODS = ("averaging", "spr")
 
     def __init__(
         self,
@@ -273,10 +385,9 @@ class RecoveryErrorMarker(MarkerBase):
         self.nodeFieldName = nodeFieldName
         self.markFraction = float(markFraction)
         self.maxRefinedFraction = float(maxRefinedFraction)
-        if recovery != "averaging":
-            raise NotImplementedError(
-                f"RecoveryErrorMarker: recovery={recovery!r} is not implemented; only 'averaging' "
-                "(volume-weighted nodal averaging) is available."
+        if recovery not in self._RECOVERY_METHODS:
+            raise ValueError(
+                f"RecoveryErrorMarker: unknown recovery={recovery!r}; expected one of {self._RECOVERY_METHODS}."
             )
         self.recovery = recovery
         self.entry = entry
@@ -325,7 +436,7 @@ class RecoveryErrorMarker(MarkerBase):
         coordsAll = np.asarray(coordsList, dtype=float)  # (nElem, 20, 3)
         valuesAll = np.asarray(valuesList, dtype=float)  # (nElem, 20, dim)
         connectivity = np.asarray(connectivity, dtype=np.intp)  # (nElem, 20)
-        indicators = _recovery_indicators(coordsAll, valuesAll, connectivity, len(nodeToIndex))
+        indicators = _recovery_indicators(coordsAll, valuesAll, connectivity, len(nodeToIndex), self.recovery)
 
         # ---- Doerfler bulk marking, capped by the DOF budget ----
         totalSquared = float(np.sum(indicators**2))
