@@ -38,6 +38,7 @@ from edelweissfe.adaptivity.marking import (
     ElementSetMarker,
     FieldOutputMarker,
     NodeSetMarker,
+    RecoveryErrorMarker,
     SurfaceMarker,
 )
 from edelweissfe.adaptivity.refinement import AdaptiveMesh
@@ -64,7 +65,10 @@ class HAdaptivityMarkerSchema:
     """The options of a single ``>>marker`` block."""
 
     type: str | None = schemaField(
-        description="Type of marker: fieldOutput, elementSet, nodeSet, surface", dtype=str, default=None, required=True
+        description="Type of marker: fieldOutput, elementSet, nodeSet, surface, recoveryError",
+        dtype=str,
+        default=None,
+        required=True,
     )
     initialOnly: bool = schemaField(description="Evaluate only once at simulation start", dtype=bool, default=False)
     fieldOutput: str | None = schemaField(
@@ -81,6 +85,35 @@ class HAdaptivityMarkerSchema:
     elSet: str | None = schemaField(description="Element set to mark", dtype=str, default=None)
     nSet: str | None = schemaField(description="Node set to mark", dtype=str, default=None)
     surface: str | None = schemaField(description="Surface to mark", dtype=str, default=None)
+    nodeField: str | None = schemaField(
+        description=(
+            "For 'recoveryError': name of the nodal field whose recovered-gradient (Zienkiewicz-Zhu) "
+            "error drives marking, e.g. 'nonlocal damage'."
+        ),
+        dtype=str,
+        default=None,
+    )
+    markFraction: float = schemaField(
+        description=(
+            "For 'recoveryError': Doerfler bulk-marking fraction theta in (0, 1]; refine the worst "
+            "elements accumulating this fraction of the total squared error."
+        ),
+        dtype=float,
+        default=0.5,
+    )
+    maxRefinedFraction: float = schemaField(
+        description=(
+            "For 'recoveryError': hard cap on the fraction of elements a single pass may mark "
+            "(bounds the direct-solver factorization cost)."
+        ),
+        dtype=float,
+        default=0.1,
+    )
+    recovery: str = schemaField(
+        description="For 'recoveryError': gradient recovery method ('averaging').",
+        dtype=str,
+        default="averaging",
+    )
 
 
 @dataclass(frozen=True)
@@ -236,10 +269,20 @@ class ModelModifier(ModelModifierBase):
                 self.markers.append(NodeSetMarker(m_opt["nSet"], initialOnly=init_only))
             elif m_type == "surface":
                 self.markers.append(SurfaceMarker(m_opt["surface"], initialOnly=init_only))
+            elif m_type == "recoveryError":
+                self.markers.append(
+                    RecoveryErrorMarker(
+                        m_opt["nodeField"],
+                        markFraction=float(m_opt.get("markFraction", 0.5)),
+                        maxRefinedFraction=float(m_opt.get("maxRefinedFraction", 0.1)),
+                        recovery=m_opt.get("recovery", "averaging"),
+                        initialOnly=init_only,
+                    )
+                )
             else:
                 raise ValueError(
                     f"hAdaptivity modifier {name!r}: unknown '>>marker' type {m_type!r}; expected one "
-                    "of 'fieldOutput', 'elementSet', 'nodeSet', 'surface'."
+                    "of 'fieldOutput', 'elementSet', 'nodeSet', 'surface', 'recoveryError'."
                 )
         if not self.markers:
             raise ValueError(

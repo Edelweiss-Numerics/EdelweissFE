@@ -49,7 +49,10 @@ concrete
 reinforced_concrete
 
 *modelModifier, type=hAdaptivity, name=amr
->>marker, type=fieldOutput, fieldOutput=alphaPForAMR, expression='abs(x) > 0.0'
+** reactive: ZZ recovered-gradient error of the nonlocal damage field localizes on the process zone
+>>marker, type=recoveryError, nodeField='nonlocal damage', markFraction=0.5, maxRefinedFraction=0.1
+** predictive: refine ahead of the front where the local driving field (alphaP) starts to grow
+>>marker, type=fieldOutput, fieldOutput=alphaPForAMR, expression='x > 1e-4'
 elSet=concrete
 maxLevel=1
 splitFactor=3
@@ -75,7 +78,7 @@ fieldOutput=RF
 >>configuration, overwrite=yes
 
 *step, solver=theSolver
-maxInc=1e-2, minInc=1e-4, maxNumInc=200, maxIter=25, stepLength=100
+maxInc=1e-2, minInc=1e-4, maxNumInc=30, maxIter=25, stepLength=100
 >>options, name=theSolver, extrapolation=linear
 >>dirichlet, name=bottom, nSet=nset_bottom, field=displacement, 2=0, 1=0, 3=0
 >>dirichlet, name=load, nSet=nset_load_application, field=displacement, 2=+1
