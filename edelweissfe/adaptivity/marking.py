@@ -163,6 +163,64 @@ class SurfaceMarker(MarkerBase):
         return marked
 
 
+def _recovery_indicators(coordsAll, valuesAll, connectivity, nGlobalNodes):
+    r"""Vectorized Zienkiewicz-Zhu recovered-gradient error indicator, over all elements at once.
+
+    All per-element 3x3 Jacobians are batched into single ``numpy`` calls (``einsum`` / a stacked
+    ``linalg.inv``), so the whole element set is processed without a Python-level per-element loop.
+
+    Parameters
+    ----------
+    coordsAll
+        ``(nElem, 20, 3)`` node coordinates of each element, in C3D20 order.
+    valuesAll
+        ``(nElem, 20, dim)`` nodal values of the recovered field on each element.
+    connectivity
+        ``(nElem, 20)`` compact global node index of each element node, so nodes shared between
+        elements accumulate into the same recovery slot.
+    nGlobalNodes
+        Number of distinct global nodes referenced by ``connectivity``.
+
+    Returns
+    -------
+    np.ndarray
+        ``(nElem,)`` indicator :math:`\eta_K = \lVert \nabla u^{*} - \nabla u^{h} \rVert_{L^2(K)}`.
+    """
+    dim = valuesAll.shape[2]
+
+    # FE gradient at the 2x2x2 Gauss points (grad^h) and the element volumes
+    jacobianGauss = np.einsum("eai,gaj->egij", coordsAll, _GP_DNDXI)  # (nElem, 8, 3, 3): dx_i/dxi_j
+    detJGauss = np.linalg.det(jacobianGauss)  # (nElem, 8)
+    paramGradGauss = np.einsum("ead,gaj->egdj", valuesAll, _GP_DNDXI)  # (nElem, 8, dim, 3): du_d/dxi_j
+    gradH = np.einsum("egdj,egji->egdi", paramGradGauss, np.linalg.inv(jacobianGauss))  # (nElem, 8, dim, 3)
+    volume = detJGauss.sum(axis=1)  # (nElem,)
+
+    # FE gradient sampled at each node's own location, for the nodal-averaging recovery
+    jacobianNode = np.einsum("ebi,abj->eaij", coordsAll, _NODE_DNDXI)  # (nElem, 20, 3, 3)
+    paramGradNode = np.einsum("ebd,abj->eadj", valuesAll, _NODE_DNDXI)  # (nElem, 20, dim, 3)
+    gradAtNode = np.einsum("eadj,eaji->eadi", paramGradNode, np.linalg.inv(jacobianNode))  # (nElem, 20, dim, 3)
+
+    # volume-weighted nodal averaging -> continuous recovered gradient grad*
+    weight = np.where(volume > 0.0, volume, 0.0)  # (nElem,) drop any inverted/degenerate element
+    flatConnectivity = connectivity.ravel()
+    recoveredSum = np.zeros((nGlobalNodes, dim, 3))
+    recoveredWeight = np.zeros(nGlobalNodes)
+    np.add.at(recoveredSum, flatConnectivity, (weight[:, None, None, None] * gradAtNode).reshape(-1, dim, 3))
+    np.add.at(recoveredWeight, flatConnectivity, np.repeat(weight, N_NODES))
+    hasRecovery = recoveredWeight > 0.0
+    recovered = np.zeros((nGlobalNodes, dim, 3))
+    recovered[hasRecovery] = recoveredSum[hasRecovery] / recoveredWeight[hasRecovery][:, None, None]
+
+    # eta_K = || grad* - grad^h ||_{L2(K)}, integrated at the Gauss points
+    gradStar = np.einsum("ga,eadi->egdi", _GP_N, recovered[connectivity])  # (nElem, 8, dim, 3)
+    perGauss = np.sum((gradStar - gradH) ** 2, axis=(2, 3))  # (nElem, 8)
+    errorSq = np.sum(np.where(detJGauss > 0.0, detJGauss, 0.0) * perGauss, axis=1)  # (nElem,)
+    # an element touching a node that never received a recovered value (all its elements degenerate)
+    # cannot be scored; leave its indicator at zero
+    errorSq[~hasRecovery[connectivity].all(axis=1)] = 0.0
+    return np.sqrt(errorSq)
+
+
 class RecoveryErrorMarker(MarkerBase):
     r"""Zienkiewicz-Zhu recovery-based error indicator on the *gradient* of a nodal field, with
     Doerfler bulk marking. Aimed at gradient-enhanced damage: the nonlocal driving field
@@ -223,16 +281,6 @@ class RecoveryErrorMarker(MarkerBase):
         self.recovery = recovery
         self.entry = entry
 
-    def _nodalValues(self, nodeField, element):
-        """The (nNodes, dim) block of field values on ``element``'s nodes, or ``None`` if any node
-        does not carry the field (so this element cannot contribute to recovery)."""
-        values = nodeField[self.entry]
-        indexOf = nodeField._indicesOfNodesInArray
-        try:
-            return np.array([values[indexOf[n]] for n in element.nodes])
-        except KeyError:
-            return None
-
     def mark(self, model, refineElements, mesh):
         if model.nodeFields is None or self.nodeFieldName not in model.nodeFields:
             raise KeyError(
@@ -242,65 +290,42 @@ class RecoveryErrorMarker(MarkerBase):
         nodeField = model.nodeFields[self.nodeFieldName]
         if self.entry not in nodeField:
             return set()
+        values = nodeField[self.entry]
+        indexOf = nodeField._indicesOfNodesInArray
 
-        elements = [el for el in refineElements if len(el.nodes) == N_NODES]
+        # gather, for every eligible element, its node coordinates and field values plus a compact
+        # global node index (so shared nodes accumulate into the same recovery slot). Elements with a
+        # node that does not carry the field are skipped -- they cannot contribute to recovery.
+        elements = []
+        coordsList = []
+        valuesList = []
+        connectivity = []
+        nodeToIndex = {}
+        for element in refineElements:
+            if len(element.nodes) != N_NODES:
+                continue
+            rows = [indexOf.get(node, -1) for node in element.nodes]
+            if -1 in rows:
+                continue
+            localConnectivity = []
+            for node in element.nodes:
+                globalIndex = nodeToIndex.get(node)
+                if globalIndex is None:
+                    globalIndex = len(nodeToIndex)
+                    nodeToIndex[node] = globalIndex
+                localConnectivity.append(globalIndex)
+            elements.append(element)
+            coordsList.append([node.coordinates for node in element.nodes])
+            valuesList.append(values[rows])
+            connectivity.append(localConnectivity)
+
         if not elements:
             return set()
 
-        # ---- pass 1: FE gradient at the Gauss points + volume-weighted nodal recovery ----
-        # Per element we cache the physical coordinates, the FE gradient at each Gauss point, and the
-        # Gauss-point Jacobian determinants, so pass 2 needs no re-evaluation. Simultaneously we
-        # accumulate, at every node, the volume-weighted FE gradient to form the recovered field.
-        perElement = []  # list of (element, gradH (8, dim, 3), detJ (8,)) or None to skip
-        recoveredSum = {}  # node -> summed (dim, 3) gradient, volume-weighted
-        recoveredWeight = {}  # node -> summed volume weight
-        for element in elements:
-            nodalValues = self._nodalValues(nodeField, element)
-            if nodalValues is None:
-                perElement.append(None)
-                continue
-            coords = np.array([n.coordinates for n in element.nodes], dtype=float)  # (20, 3)
-
-            gradH = np.empty((len(_GAUSS_POINTS), nodalValues.shape[1], 3))
-            detJ = np.empty(len(_GAUSS_POINTS))
-            for g in range(len(_GAUSS_POINTS)):
-                jacobian = coords.T @ _GP_DNDXI[g]  # (3, 3), J[i, j] = dx_i/dxi_j
-                detJ[g] = np.linalg.det(jacobian)
-                dNdx = _GP_DNDXI[g] @ np.linalg.inv(jacobian)  # (20, 3)
-                gradH[g] = nodalValues.T @ dNdx  # (dim, 3)
-            volume = float(np.sum(detJ))
-            perElement.append((element, gradH, detJ))
-            if volume <= 0.0:
-                continue
-
-            # recovery: sample the FE gradient at each node's own parametric location and accumulate
-            for a, node in enumerate(element.nodes):
-                jacobian = coords.T @ _NODE_DNDXI[a]
-                gradAtNode = nodalValues.T @ (_NODE_DNDXI[a] @ np.linalg.inv(jacobian))  # (dim, 3)
-                if node in recoveredSum:
-                    recoveredSum[node] += volume * gradAtNode
-                    recoveredWeight[node] += volume
-                else:
-                    recoveredSum[node] = volume * gradAtNode
-                    recoveredWeight[node] = volume
-
-        recovered = {node: recoveredSum[node] / recoveredWeight[node] for node in recoveredSum}
-
-        # ---- pass 2: per-element indicator eta_K = || grad* - grad^h ||_{L2(K)} ----
-        indicators = np.zeros(len(elements))
-        for i, record in enumerate(perElement):
-            if record is None:
-                continue
-            element, gradH, detJ = record
-            if any(n not in recovered for n in element.nodes):
-                continue  # no recovered gradient available on a node (all its elements degenerate)
-            recoveredNodal = np.array([recovered[n] for n in element.nodes])  # (20, dim, 3)
-            errorSq = 0.0
-            for g in range(len(_GAUSS_POINTS)):
-                gradStar = np.tensordot(_GP_N[g], recoveredNodal, axes=(0, 0))  # (dim, 3)
-                if detJ[g] > 0.0:
-                    errorSq += detJ[g] * float(np.sum((gradStar - gradH[g]) ** 2))
-            indicators[i] = np.sqrt(errorSq)
+        coordsAll = np.asarray(coordsList, dtype=float)  # (nElem, 20, 3)
+        valuesAll = np.asarray(valuesList, dtype=float)  # (nElem, 20, dim)
+        connectivity = np.asarray(connectivity, dtype=np.intp)  # (nElem, 20)
+        indicators = _recovery_indicators(coordsAll, valuesAll, connectivity, len(nodeToIndex))
 
         # ---- Doerfler bulk marking, capped by the DOF budget ----
         totalSquared = float(np.sum(indicators**2))
