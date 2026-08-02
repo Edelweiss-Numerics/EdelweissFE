@@ -18,7 +18,7 @@ all
 nSet=x0
 
 *modelModifier, type=hAdaptivity, name=amr
->>marker, type=fieldOutput, fieldOutput=stressForAMR, expression='abs(x) > 0.6'
+>>marker, type=fieldOutput, fieldOutput=stressForAMR, operator='>', threshold=0.6
 maxLevel=1
 
 *job, name=amr, domain=3d

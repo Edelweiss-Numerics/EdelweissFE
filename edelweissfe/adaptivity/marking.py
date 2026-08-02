@@ -26,12 +26,21 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""Refinement marking (WS-G): decide which elements to refine from a user expression evaluated on a
-per-element quantity -- reusing EdelweissFE's math-expression stack
-(:func:`edelweissfe.utils.math.createMathExpression`), the same mechanism as monitor/conditionalstop.
+"""Refinement marking (WS-G): the markers that decide which elements an adaptivity mechanism refines.
+
+Each marker is a small, registry-resolved policy object (see :mod:`edelweissfe.config.markerlibrary`)
+implementing :meth:`MarkerBase.mark`. Topological markers select from a set/surface; the
+:class:`FieldOutputMarker` thresholds a per-element quantity. Deliberately, a marker never re-derives
+a field quantity itself: the reduction (a magnitude, a principal stress via ``eigVal``, a norm, ...)
+lives in the referenced fieldOutput's own ``f(x)`` -- one first-class, reusable quantity -- and the
+marker only applies the refinement decision (a threshold) on top of it.
 """
 
+import operator
 from collections import defaultdict
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -43,7 +52,11 @@ from edelweissfe.adaptivity.hex20shapefunctions import (
     hex20_shape_grad,
 )
 from edelweissfe.utils.fieldoutput import ElementFieldOutput
-from edelweissfe.utils.math import createMathExpression
+from edelweissfe.utils.schema import (
+    OptionSchemaProvider,
+    buildSchemaFromOptions,
+    schemaField,
+)
 
 # 2x2x2 Gauss points on the reference cube [-1, 1]^3, with unit weights. These are the reduced-
 # integration points of GC3D20R and, for a serendipity HEX20, the superconvergent points of the
@@ -67,73 +80,201 @@ _CORNER_LOCALS = [i for i in range(N_NODES) if i not in _MID_LOCALS]  # 8 corner
 _MID_EDGES = [(edge[1], edge[0], edge[2]) for edge in EDGES]  # (midLocal, cornerA_local, cornerB_local)
 
 
-class MarkerBase:
+@dataclass(frozen=True)
+class MarkerOptionsBase:
+    """L2 options common to every ``>>marker`` block, regardless of ``type``.
+
+    Each concrete marker's schema derives from this so that ``initialOnly`` -- the one option every
+    marker accepts -- is declared once. The ``type`` dispatch key itself is deliberately *not* a
+    field here: it is consumed by the adaptivity mechanism to resolve the marker class through the
+    :mod:`~edelweissfe.config.markerlibrary` registry, and is stripped before a marker validates the
+    remaining options against its own schema.
+    """
+
+    initialOnly: bool = schemaField(
+        description="Evaluate the marker only once, at simulation start, instead of every increment.",
+        dtype=bool,
+        default=False,
+    )
+
+
+class MarkerBase(OptionSchemaProvider):
+    """Base class for AMR refinement markers.
+
+    A marker decides which elements to refine. It is resolved by ``type`` through the L3 registry
+    (category ``marker``; see :mod:`edelweissfe.config.markerlibrary`) and constructed from its
+    ``>>marker`` block options via :meth:`fromOptions`, so *any* adaptivity mechanism -- not only the
+    HEX20 h-adaptivity model modifier -- can reuse the same marker library, and third-party packages
+    can contribute markers through entry points. Each concrete marker owns its option :attr:`schema`
+    (an :class:`MarkerOptionsBase` subclass), which both validates and documents its ``>>marker``
+    line, replacing the former flat union schema that jammed every marker's options together.
+    """
+
+    #: The L2 option schema for this marker's ``>>marker`` block, overridden per subclass.
+    schema = None
+
     def __init__(self, initialOnly=False):
         self.initialOnly = initialOnly
 
     def mark(self, model, refineElements, mesh):
         raise NotImplementedError()
 
+    @classmethod
+    def fromOptions(cls, options: Mapping[str, Any]) -> "MarkerBase":
+        """Construct this marker from its raw parsed ``>>marker`` options.
+
+        ``options`` is the ``>>marker`` block's option mapping with the ``type`` dispatch key already
+        removed (the adaptivity mechanism uses ``type`` to look the class up before calling this).
+        The options are validated and coerced against :attr:`schema` via
+        :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`, then mapped onto the constructor.
+        """
+        raise NotImplementedError()
+
+
+def _perElementFieldOutputResult(model, fieldOutputName):
+    """Resolve an already-declared ``perElement`` fieldOutput and return ``(elements, values)`` --
+    the element list (its associated set) and the last per-element result array ``(nElem, ...)``.
+
+    The fieldOutput *may* carry an ``f(x)``: that is precisely how a marker consumes a shaped
+    quantity -- a magnitude ``abs(x)``, a principal stress ``eigVal(...)``, a norm -- computed once in
+    the fieldOutput layer (where it is also reusable for output/monitoring) rather than re-derived
+    here. The only requirement is that it keeps one result row per element; an ``f(x)`` that collapses
+    the per-element axis is caught by the row-count check below. Raises with an actionable message if
+    the fieldOutput is missing, is not a ``perElement`` one, or reports a row count that does not match
+    its element set. Shared by every marker that drives refinement off a fieldOutput.
+    """
+    fieldOutputController = model.fieldOutputController
+    if fieldOutputController is None or fieldOutputName not in fieldOutputController.fieldOutputs:
+        raise KeyError(
+            f"hAdaptivity marker references fieldOutput {fieldOutputName!r}, which is not "
+            "defined. Declare it under '*fieldOutput' (before the increment loop starts) so the "
+            "marker can look it up by name."
+        )
+    fieldOutput = fieldOutputController.fieldOutputs[fieldOutputName]
+
+    if not isinstance(fieldOutput, ElementFieldOutput):
+        raise TypeError(
+            f"hAdaptivity marker references fieldOutput {fieldOutputName!r}, which is a "
+            f"{type(fieldOutput).__name__}; only a 'perElement' fieldOutput exposes one result "
+            "row per element, as required for marking."
+        )
+
+    elements = list(fieldOutput.associatedSet)
+    values = np.asarray(fieldOutput.getLastResult())
+
+    if values.shape[0] != len(elements):
+        raise ValueError(
+            f"hAdaptivity marker: fieldOutput {fieldOutputName!r} reports {values.shape[0]} "
+            f"result row(s) for {len(elements)} element(s) in its associated set; refusing to mark "
+            "against a mismatched fieldOutput."
+        )
+    return elements, values
+
+
+# Comparison operators a FieldOutputMarker may apply against its threshold, keyed by the string a
+# user writes in the input file. numpy broadcasts these element-wise over a result row.
+_COMPARISON_OPERATORS = {
+    ">": operator.gt,
+    ">=": operator.ge,
+    "<": operator.lt,
+    "<=": operator.le,
+    "==": operator.eq,
+    "!=": operator.ne,
+}
+
+
+@dataclass(frozen=True)
+class FieldOutputMarkerSchema(MarkerOptionsBase):
+    """L2 options of a ``>>marker, type=fieldOutput`` block."""
+
+    fieldOutput: str | None = schemaField(
+        description=(
+            "Name of an already-declared 'perElement' *fieldOutput to threshold. The *quantity* is "
+            "shaped by that fieldOutput's own 'f(x)' (e.g. 'abs(x)' for a magnitude, "
+            "'eigVal(x.reshape(-1,6))[:,0]...' for a principal stress); the marker only compares it."
+        ),
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    threshold: float | None = schemaField(
+        description="Value the fieldOutput result is compared against (element-wise, via 'operator').",
+        dtype=float,
+        default=None,
+        required=True,
+    )
+    operator: str = schemaField(
+        description="Comparison against 'threshold', applied element-wise: one of >, >=, <, <=, ==, !=.",
+        dtype=str,
+        default=">=",
+    )
+
 
 class FieldOutputMarker(MarkerBase):
-    """Marks elements by evaluating a boolean expression against an already-declared ``*fieldOutput``
-    (a ``perElement`` one, covering every quadrature point of interest), instead of re-deriving a
-    per-element scalar from the elements' raw quadrature-point results independently. This way
-    refinement is driven by the exact same numbers the field output reports -- not a second,
-    possibly divergent, reduction over the same underlying data (e.g. a marker silently reducing
-    over all QPs while the corresponding output only reports QP 1).
+    """Marks every element whose fieldOutput result satisfies ``value <operator> threshold`` at any
+    entry (any quadrature point / component).
+
+    The marker is a pure *threshold decision*: the quantity it compares is produced by the referenced
+    ``perElement`` fieldOutput -- either raw, or shaped by that fieldOutput's own ``f(x)`` (``abs(x)``
+    for a magnitude, ``eigVal`` for a principal stress, a norm, ...). Keeping the reduction in the
+    fieldOutput (where it is a first-class, reusable/visualizable quantity) and only the threshold
+    policy here is the division of labour -- the fieldOutput says *what* the quantity is, the marker
+    says *when* it is large enough to refine. Marking is driven by the exact numbers the fieldOutput
+    reports, and an element is marked if ``np.any`` of the comparison over its result row holds, so a
+    multi-QP / multi-component row is decided by its worst entry.
     """
 
-    def __init__(self, fieldOutputName, expression, initialOnly=False):
+    schema = FieldOutputMarkerSchema
+
+    def __init__(self, fieldOutputName, threshold, operator=">=", initialOnly=False):
         super().__init__(initialOnly)
         self.fieldOutputName = fieldOutputName
-        self._predicate = createMathExpression(expression)
+        self.threshold = float(threshold)
+        if operator not in _COMPARISON_OPERATORS:
+            raise ValueError(
+                f"FieldOutputMarker: unknown operator {operator!r}; expected one of "
+                f"{', '.join(_COMPARISON_OPERATORS)}."
+            )
+        self.operator = operator
+        self._compare = _COMPARISON_OPERATORS[operator]
+
+    @classmethod
+    def fromOptions(cls, options):
+        opts = buildSchemaFromOptions(cls.schema, options)
+        return cls(opts.fieldOutput, opts.threshold, operator=opts.operator, initialOnly=opts.initialOnly)
 
     def mark(self, model, refineElements, mesh):
-        fieldOutputController = model.fieldOutputController
-        if fieldOutputController is None or self.fieldOutputName not in fieldOutputController.fieldOutputs:
-            raise KeyError(
-                f"hAdaptivity marker references fieldOutput {self.fieldOutputName!r}, which is not "
-                "defined. Declare it under '*fieldOutput' (before the increment loop starts) so the "
-                "marker can look it up by name."
-            )
-        fieldOutput = fieldOutputController.fieldOutputs[self.fieldOutputName]
-
-        if not isinstance(fieldOutput, ElementFieldOutput):
-            raise TypeError(
-                f"hAdaptivity marker references fieldOutput {self.fieldOutputName!r}, which is a "
-                f"{type(fieldOutput).__name__}; only a 'perElement' fieldOutput exposes one result "
-                "row per element, as required for marking."
-            )
-        if fieldOutput.f is not None:
-            raise ValueError(
-                f"hAdaptivity marker references fieldOutput {self.fieldOutputName!r}, which defines "
-                "'f(x)'; that reduces away the per-element axis, so it can no longer drive per-element "
-                "marking. Declare a separate, unreduced fieldOutput (same result/quadraturePoint, no "
-                "f(x)) for marking."
-            )
-
-        elements = list(fieldOutput.associatedSet)
-        values = np.asarray(fieldOutput.getLastResult())
-
-        if values.shape[0] != len(elements):
-            raise ValueError(
-                f"hAdaptivity marker: fieldOutput {self.fieldOutputName!r} reports {values.shape[0]} "
-                f"result row(s) for {len(elements)} element(s) in its associated set; refusing to mark "
-                "against a mismatched fieldOutput."
-            )
-
+        elements, values = _perElementFieldOutputResult(model, self.fieldOutputName)
         marked = set()
         for element, row in zip(elements, values):
-            if bool(np.any(self._predicate(row))):
+            if bool(np.any(self._compare(np.asarray(row), self.threshold))):
                 marked.add(element)
         return marked
 
 
+@dataclass(frozen=True)
+class ElementSetMarkerSchema(MarkerOptionsBase):
+    """L2 options of a ``>>marker, type=elementSet`` block."""
+
+    elSet: str | None = schemaField(
+        description="Element set whose members are marked for refinement.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+
+
 class ElementSetMarker(MarkerBase):
+    schema = ElementSetMarkerSchema
+
     def __init__(self, elSetName, initialOnly=False):
         super().__init__(initialOnly)
         self.elSetName = elSetName
+
+    @classmethod
+    def fromOptions(cls, options):
+        opts = buildSchemaFromOptions(cls.schema, options)
+        return cls(opts.elSet, initialOnly=opts.initialOnly)
 
     def mark(self, model, refineElements, mesh):
         if self.elSetName not in model.elementSets:
@@ -141,10 +282,29 @@ class ElementSetMarker(MarkerBase):
         return set(model.elementSets[self.elSetName])
 
 
+@dataclass(frozen=True)
+class NodeSetMarkerSchema(MarkerOptionsBase):
+    """L2 options of a ``>>marker, type=nodeSet`` block."""
+
+    nSet: str | None = schemaField(
+        description="Node set whose touching elements are marked for refinement.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+
+
 class NodeSetMarker(MarkerBase):
+    schema = NodeSetMarkerSchema
+
     def __init__(self, nSetName, initialOnly=False):
         super().__init__(initialOnly)
         self.nSetName = nSetName
+
+    @classmethod
+    def fromOptions(cls, options):
+        opts = buildSchemaFromOptions(cls.schema, options)
+        return cls(opts.nSet, initialOnly=opts.initialOnly)
 
     def mark(self, model, refineElements, mesh):
         if self.nSetName not in model.nodeSets:
@@ -157,10 +317,29 @@ class NodeSetMarker(MarkerBase):
         return marked
 
 
+@dataclass(frozen=True)
+class SurfaceMarkerSchema(MarkerOptionsBase):
+    """L2 options of a ``>>marker, type=surface`` block."""
+
+    surface: str | None = schemaField(
+        description="Surface whose elements are marked for refinement.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+
+
 class SurfaceMarker(MarkerBase):
+    schema = SurfaceMarkerSchema
+
     def __init__(self, surfaceName, initialOnly=False):
         super().__init__(initialOnly)
         self.surfaceName = surfaceName
+
+    @classmethod
+    def fromOptions(cls, options):
+        opts = buildSchemaFromOptions(cls.schema, options)
+        return cls(opts.surface, initialOnly=opts.initialOnly)
 
     def mark(self, model, refineElements, mesh):
         if self.surfaceName not in model.surfaces:
@@ -171,6 +350,16 @@ class SurfaceMarker(MarkerBase):
             for el in elements:
                 marked.add(el)
         return marked
+
+
+# A predictive Rankine (max-principal-stress) criterion needs no dedicated marker: the expression
+# stack (edelweissfe.utils.math.mathModules) already ships eigVal(), which turns a Marmot Voigt
+# stress row into its principal stresses in descending order. Compute the quantity in the stress
+# fieldOutput's own f(x) and let a plain FieldOutputMarker threshold it:
+#     >>perElement, ..., result=stress, f(x)='eigVal(x.reshape(-1,6))[:,0].reshape(x.shape[0],x.shape[1])'
+#     >>marker, type=fieldOutput, fieldOutput=<that output>, operator='>=', threshold=<factor*f_t>
+# refines every element whose largest principal stress reaches the threshold at any quadrature point.
+# See examples/WinklerL_AMR.
 
 
 def _spr_polynomial_basis(localCoords, order):
@@ -302,8 +491,11 @@ def _recovery_indicators(coordsAll, valuesAll, connectivity, nGlobalNodes, recov
 
     Returns
     -------
-    np.ndarray
-        ``(nElem,)`` indicator :math:`\eta_K = \lVert \nabla u^{*} - \nabla u^{h} \rVert_{L^2(K)}`.
+    tuple[np.ndarray, np.ndarray]
+        ``indicators`` ``(nElem,)`` :math:`\eta_K = \lVert \nabla u^{*} - \nabla u^{h} \rVert_{L^2(K)}`
+        and ``gradEnergy`` ``(nElem,)`` :math:`\lVert \nabla u^{h} \rVert_{L^2(K)}^2` -- the FE-gradient
+        energy, used as the reference scale for the global relative error that gates marking (so a
+        smooth, well-resolved field, whose indicators are pure floating-point noise, marks nothing).
     """
     dim = valuesAll.shape[2]
 
@@ -313,6 +505,10 @@ def _recovery_indicators(coordsAll, valuesAll, connectivity, nGlobalNodes, recov
     paramGradGauss = np.einsum("ead,gaj->egdj", valuesAll, _GP_DNDXI)  # (nElem, 8, dim, 3): du_d/dxi_j
     gradH = np.einsum("egdj,egji->egdi", paramGradGauss, np.linalg.inv(jacobianGauss))  # (nElem, 8, dim, 3)
     volume = detJGauss.sum(axis=1)  # (nElem,)
+    detJPos = np.where(detJGauss > 0.0, detJGauss, 0.0)  # (nElem, 8) drop inverted-element Gauss points
+
+    # || grad^h ||^2_L2(K): the field's own gradient energy, the reference scale for the relative error
+    gradEnergy = np.sum(detJPos * np.sum(gradH**2, axis=(2, 3)), axis=1)  # (nElem,)
 
     if recovery == "spr":
         gaussCoords = np.einsum("ga,ead->egd", _GP_N, coordsAll)  # (nElem, 8, 3) physical Gauss coords
@@ -323,11 +519,110 @@ def _recovery_indicators(coordsAll, valuesAll, connectivity, nGlobalNodes, recov
     # eta_K = || grad* - grad^h ||_{L2(K)}, integrated at the Gauss points
     gradStar = np.einsum("ga,eadi->egdi", _GP_N, recovered[connectivity])  # (nElem, 8, dim, 3)
     perGauss = np.sum((gradStar - gradH) ** 2, axis=(2, 3))  # (nElem, 8)
-    errorSq = np.sum(np.where(detJGauss > 0.0, detJGauss, 0.0) * perGauss, axis=1)  # (nElem,)
+    errorSq = np.sum(detJPos * perGauss, axis=1)  # (nElem,)
     # an element touching a node that never received a recovered value (all its elements degenerate)
     # cannot be scored; leave its indicator at zero
     errorSq[~hasRecovery[connectivity].all(axis=1)] = 0.0
-    return np.sqrt(errorSq)
+    return np.sqrt(errorSq), gradEnergy
+
+
+def _growByNeighbors(seed, candidatePool, layers):
+    """Dilate ``seed`` by ``layers`` rings of node-adjacent elements drawn from ``candidatePool``.
+
+    Two elements are neighbours if they share at least one node (a node-adjacency, so it also picks up
+    edge/corner touches, not only shared faces -- the coarser stencil is what a refinement halo wants).
+    Returns a new ``set`` containing ``seed`` plus the grown ring; ``candidatePool`` bounds the growth
+    so the halo can never leak onto non-refineable elements.
+    """
+    if layers <= 0:
+        return set(seed)
+    # node label -> elements of the pool touching it, built once
+    elementsAtNode = defaultdict(list)
+    for element in candidatePool:
+        for node in element.nodes:
+            elementsAtNode[node.label].append(element)
+    grown = set(seed)
+    frontier = set(seed)
+    for _ in range(layers):
+        nextFrontier = set()
+        for element in frontier:
+            for node in element.nodes:
+                for neighbor in elementsAtNode[node.label]:
+                    if neighbor not in grown:
+                        grown.add(neighbor)
+                        nextFrontier.add(neighbor)
+        if not nextFrontier:
+            break
+        frontier = nextFrontier
+    return grown
+
+
+@dataclass(frozen=True)
+class RecoveryErrorMarkerSchema(MarkerOptionsBase):
+    """L2 options of a ``>>marker, type=recoveryError`` block."""
+
+    nodeField: str | None = schemaField(
+        description=(
+            "Name of the nodal field whose recovered-gradient (Zienkiewicz-Zhu) error drives "
+            "marking, e.g. 'nonlocal damage'."
+        ),
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    markFraction: float = schemaField(
+        description=(
+            "Doerfler bulk-marking fraction theta in (0, 1]; refine the worst elements accumulating "
+            "this fraction of the total squared error."
+        ),
+        dtype=float,
+        default=0.5,
+    )
+    maxRefinedFraction: float = schemaField(
+        description=(
+            "Hard cap on the fraction of elements a single pass may mark (bounds the direct-solver "
+            "factorization cost)."
+        ),
+        dtype=float,
+        default=0.1,
+    )
+    fieldThreshold: float = schemaField(
+        description=(
+            "Absolute floor on the peak nodal |field| per element; an element is a refinement "
+            "candidate only where the driving field is significant. This is what keeps the elastic "
+            "phase (nonlocal field at machine zero) from being refined -- set it to a small fraction "
+            "of the field value at damage initiation. 0 disables."
+        ),
+        dtype=float,
+        default=1e-6,
+    )
+    relTol: float = schemaField(
+        description=(
+            "Global relative-error threshold applied among the significant elements; while "
+            "||eta|| / ||grad|| stays below it the field is treated as well resolved and nothing is "
+            "refined. 0 disables."
+        ),
+        dtype=float,
+        default=1e-3,
+    )
+    halo: int = schemaField(
+        description=(
+            "Number of rings of node-adjacent elements to add around the marked set (a refinement "
+            "buffer). Since the ZZ error peaks on the flanks of a localization band and dips over "
+            "its core, halo=1 bridges the flank rows across the core; larger values also refine "
+            "ahead of the front. Grows only within refineable elements. 0 disables."
+        ),
+        dtype=int,
+        default=0,
+    )
+    recovery: str = schemaField(
+        description=(
+            "Gradient recovery method -- 'averaging' (nodal averaging) or 'spr' (superconvergent "
+            "patch recovery, sharper for serendipity elements)."
+        ),
+        dtype=str,
+        default="averaging",
+    )
 
 
 class RecoveryErrorMarker(MarkerBase):
@@ -353,6 +648,16 @@ class RecoveryErrorMarker(MarkerBase):
     natural criterion: refinement depth is fixed, so marking reduces to ranking, and the hard cap
     keeps the direct-solver (PARDISO) factorization cost bounded.
 
+    Doerfler is a purely *relative* criterion, so on its own it always marks a ``markFraction`` share
+    of the ranking -- even in the elastic phase, before any damage, where the nonlocal field is
+    *machine zero* (~1e-30). Crucially, a relative gate cannot fix this: the noise-level field's
+    recovered-vs-FE gradient mismatch is O(1) *relative to itself*, indistinguishable from a genuinely
+    localizing field. Marking is therefore gated by an **absolute** floor ``fieldThreshold`` on the
+    peak nodal ``|field|`` per element -- an element is a candidate only where the driving field is
+    significant (the active-damage field is 1e-5 and up, ~25 orders above the elastic noise, so the
+    separation is unambiguous). Among those significant elements a secondary ZZ *global relative error*
+    gate ``relTol`` skips regions the mesh already resolves well.
+
     Parameters
     ----------
     nodeFieldName
@@ -363,6 +668,27 @@ class RecoveryErrorMarker(MarkerBase):
         fraction of the total squared error.
     maxRefinedFraction
         Hard cap on the fraction of eligible elements a single pass may mark.
+    fieldThreshold
+        Absolute floor on the peak nodal ``|field|`` per element: an element is a refinement candidate
+        only where the driving field itself is significant. This is what keeps the elastic phase (where
+        the nonlocal field is machine zero, ~1e-30) from being refined -- a purely relative criterion
+        cannot, because the noise-level field's recovered-vs-FE gradient mismatch is O(1) relative to
+        itself. Set it to a small fraction of the field value at damage initiation (for a strain-like
+        driving field, damage onset is ``O(f_t / E)``, so a default of ``1e-6`` sits well below onset
+        yet ~20 orders above the elastic noise). Set to ``0.0`` to disable and refine on gradient
+        roughness alone.
+    relTol
+        Global relative-error threshold, applied among the significant elements only: while
+        :math:`\lVert \eta \rVert / \lVert \nabla\bar\varepsilon^{h} \rVert < \text{relTol}` the field
+        is treated as well resolved and no element is refined. Set to ``0.0`` to disable.
+    halo
+        Number of rings of node-adjacent elements to add around the Doerfler-marked set (a refinement
+        buffer). The ZZ estimator responds to gradient error, which peaks on the *flanks* of a
+        localization band and dips over its (locally smooth) core, so on its own it can refine two rows
+        straddling a crack while leaving the core coarse. ``halo=1`` bridges those rows across the
+        core; a larger halo also refines ahead of the propagating front. ``0`` (default) keeps the bare
+        Doerfler set. The halo grows only within the refineable elements, so it never leaks elsewhere,
+        and it is applied *after* the ``maxRefinedFraction`` cap, so the final count may exceed it.
     recovery
         Recovery method: ``'averaging'`` (volume-weighted nodal averaging, ZZ 1987) or ``'spr'``
         (superconvergent patch recovery, ZZ 1992 -- the sharper choice for serendipity elements).
@@ -372,11 +698,30 @@ class RecoveryErrorMarker(MarkerBase):
 
     _RECOVERY_METHODS = ("averaging", "spr")
 
+    schema = RecoveryErrorMarkerSchema
+
+    @classmethod
+    def fromOptions(cls, options):
+        opts = buildSchemaFromOptions(cls.schema, options)
+        return cls(
+            opts.nodeField,
+            markFraction=opts.markFraction,
+            maxRefinedFraction=opts.maxRefinedFraction,
+            fieldThreshold=opts.fieldThreshold,
+            relTol=opts.relTol,
+            halo=opts.halo,
+            recovery=opts.recovery,
+            initialOnly=opts.initialOnly,
+        )
+
     def __init__(
         self,
         nodeFieldName,
         markFraction=0.5,
         maxRefinedFraction=0.1,
+        fieldThreshold=1e-6,
+        relTol=1e-3,
+        halo=0,
         recovery="averaging",
         entry="U",
         initialOnly=False,
@@ -385,6 +730,9 @@ class RecoveryErrorMarker(MarkerBase):
         self.nodeFieldName = nodeFieldName
         self.markFraction = float(markFraction)
         self.maxRefinedFraction = float(maxRefinedFraction)
+        self.fieldThreshold = float(fieldThreshold)
+        self.relTol = float(relTol)
+        self.halo = int(halo)
         if recovery not in self._RECOVERY_METHODS:
             raise ValueError(
                 f"RecoveryErrorMarker: unknown recovery={recovery!r}; expected one of {self._RECOVERY_METHODS}."
@@ -436,12 +784,34 @@ class RecoveryErrorMarker(MarkerBase):
         coordsAll = np.asarray(coordsList, dtype=float)  # (nElem, 20, 3)
         valuesAll = np.asarray(valuesList, dtype=float)  # (nElem, 20, dim)
         connectivity = np.asarray(connectivity, dtype=np.intp)  # (nElem, 20)
-        indicators = _recovery_indicators(coordsAll, valuesAll, connectivity, len(nodeToIndex), self.recovery)
+        indicators, gradEnergy = _recovery_indicators(
+            coordsAll, valuesAll, connectivity, len(nodeToIndex), self.recovery
+        )
 
-        # ---- Doerfler bulk marking, capped by the DOF budget ----
+        # ---- absolute field-magnitude eligibility ----
+        # An element is a refinement candidate only where the driving field itself is significant.
+        # This is the decisive gate for gradient-enhanced damage: in the elastic phase the nonlocal
+        # field is machine zero (~1e-30), yet its *shape* is floating-point noise whose recovered-vs-FE
+        # gradient mismatch is O(1) relative to itself -- so a purely relative (scale-invariant)
+        # criterion cannot tell it apart from a genuinely localizing field and would refine the elastic
+        # structure everywhere. An absolute floor on the peak nodal |field| per element separates the
+        # two cleanly (the active-damage field is 1e-5 and up, ~25 orders above the elastic noise) and
+        # restricts marking to the process zone once damage is active. Elements below the floor are
+        # scored zero and never reached by the ranking below.
+        elementFieldMax = np.max(np.abs(valuesAll), axis=(1, 2))  # (nElem,) peak |field| per element
+        indicators = np.where(elementFieldMax >= self.fieldThreshold, indicators, 0.0)
+
+        # ---- global relative-error gate ----
+        # Among the significant elements, skip refinement while the field is already well resolved: the
+        # ZZ global relative error ||eta|| / ||grad|| must exceed relTol for any element to be marked.
         totalSquared = float(np.sum(indicators**2))
         if totalSquared <= 0.0:
             return set()
+        referenceSquared = float(np.sum(np.where(elementFieldMax >= self.fieldThreshold, gradEnergy, 0.0)))
+        if referenceSquared <= 0.0 or np.sqrt(totalSquared / referenceSquared) < self.relTol:
+            return set()
+
+        # ---- Doerfler bulk marking, capped by the DOF budget ----
         target = self.markFraction * totalSquared
         budget = max(1, int(np.ceil(self.maxRefinedFraction * len(elements))))
         order = np.argsort(indicators)[::-1]  # worst first
@@ -455,4 +825,9 @@ class RecoveryErrorMarker(MarkerBase):
             accumulated += indicators[idx] ** 2
             if accumulated >= target:
                 break
+
+        # optional refinement halo: bridge the flank-marked rows across the (locally smooth) band core
+        # and buffer ahead of the front, growing only within the refineable elements
+        if self.halo > 0 and marked:
+            marked = _growByNeighbors(marked, refineElements, self.halo)
         return marked

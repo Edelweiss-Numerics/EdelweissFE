@@ -50,9 +50,14 @@ reinforced_concrete
 
 *modelModifier, type=hAdaptivity, name=amr
 ** reactive: ZZ recovered-gradient error of the nonlocal damage field localizes on the process zone
->>marker, type=recoveryError, nodeField='nonlocal damage', markFraction=0.5, maxRefinedFraction=0.1
+** >>marker, type=recoveryError, nodeField='nonlocal damage', markFraction=0.5, maxRefinedFraction=0.1, halo=1
 ** predictive: refine ahead of the front where the local driving field (alphaP) starts to grow
->>marker, type=fieldOutput, fieldOutput=alphaPForAMR, expression='x > 1e-4'
+** >>marker, type=fieldOutput, fieldOutput=alphaPForAMR, operator='>', threshold=0.1
+** predictive: refine crack-nucleation sites where the max principal (Rankine) stress reaches 0.9*ftu.
+** The quantity (max principal stress per quadrature point) is computed by the fieldOutput's f(x)
+** below via eigVal; the marker only thresholds it (0.9*2.70 = 2.43). It marks the element if any
+** quadrature point reaches the threshold.
+>>marker, type=fieldOutput, fieldOutput=stressForAMR, operator='>=', threshold=2.43
 elSet=concrete
 maxLevel=1
 splitFactor=3
@@ -67,6 +72,7 @@ splitFactor=3
 >>perElement, elSet=concrete, name=damage, result=omega, quadraturePoint=0:8, f(x)='np.mean(x,axis=1)'
 >>perElement, elSet=concrete, name=alphaP, result=alphaP, quadraturePoint=0:8, f(x)='np.min(x,axis=1)'
 >>perElement, elSet=concrete, name=alphaPForAMR, result=alphaP, quadraturePoint=0:8
+>>perElement, elSet=concrete, name=stressForAMR, result=stress, quadraturePoint=0:8, f(x)='eigVal(x.reshape(-1,6))[:,0].reshape(x.shape[0],x.shape[1])'
 
 *output, type=monitor, name=monitor
 fieldOutput=RF
@@ -78,7 +84,7 @@ fieldOutput=RF
 >>configuration, overwrite=yes
 
 *step, solver=theSolver
-maxInc=1e-2, minInc=1e-4, maxNumInc=30, maxIter=25, stepLength=100
+maxInc=1e-2, minInc=1e-4, maxNumInc=200, maxIter=25, stepLength=100
 >>options, name=theSolver, extrapolation=linear
 >>dirichlet, name=bottom, nSet=nset_bottom, field=displacement, 2=0, 1=0, 3=0
 >>dirichlet, name=load, nSet=nset_load_application, field=displacement, 2=+1

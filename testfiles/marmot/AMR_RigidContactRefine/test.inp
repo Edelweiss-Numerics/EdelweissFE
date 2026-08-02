@@ -31,14 +31,14 @@ direction=-1
 type=linear
 
 *modelModifier, type=hAdaptivity, name=amr
->>marker, type=fieldOutput, fieldOutput=stressForAMR, expression='abs(x) > 300.0'
+>>marker, type=fieldOutput, fieldOutput=stressForAMR, operator='>', threshold=300.0
 maxLevel=1
 
 *job, name=amrrigid, domain=3d
 *solver, solver=NIST, name=theSolver
 *fieldOutput
 >>perNode, elSet=all, field=displacement, result=U, name=U
->>perElement, elSet=all, result=stress, quadraturePoint=0:27, name=stressForAMR
+>>perElement, elSet=all, result=stress, quadraturePoint=0:27, name=stressForAMR, f(x)='np.abs(x)'
 
 *step, solver=theSolver
 maxInc=0.02, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1

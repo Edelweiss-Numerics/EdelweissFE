@@ -34,16 +34,11 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.adaptivity.hex20topology import Hex20Topology
-from edelweissfe.adaptivity.marking import (
-    ElementSetMarker,
-    FieldOutputMarker,
-    NodeSetMarker,
-    RecoveryErrorMarker,
-    SurfaceMarker,
-)
 from edelweissfe.adaptivity.refinement import AdaptiveMesh
 from edelweissfe.adaptivity.statetransfer.perstatevar import PerStateVarStateTransfer
 from edelweissfe.config.elementlibrary import getElementClass
+from edelweissfe.config.markerlibrary import getMarkerClass
+from edelweissfe.config.registry import RegistryLookupError
 from edelweissfe.config.statetransferstrategies import getStateTransferStrategyClass
 from edelweissfe.constraints.hangingnode import Constraint as HangingNodeConstraint
 from edelweissfe.journal.journal import Journal
@@ -62,61 +57,29 @@ from edelweissfe.utils.schema import (
 
 @dataclass(frozen=True)
 class HAdaptivityMarkerSchema:
-    """The options of a single ``>>marker`` block."""
+    """The grammar common to every ``>>marker`` block.
+
+    A ``>>marker`` block is polymorphic on ``type``: the remaining options depend on which marker
+    that selects, and are owned/validated by that marker's own schema (a
+    :class:`~edelweissfe.adaptivity.marking.MarkerOptionsBase` subclass, e.g.
+    :class:`~edelweissfe.adaptivity.marking.RecoveryErrorMarkerSchema`) rather than being flattened
+    into one union here. This schema therefore declares only the two options every marker shares --
+    ``type`` (the dispatch key) and ``initialOnly`` -- with the type-specific options documented on
+    each marker in :mod:`edelweissfe.adaptivity.marking` and reachable through the ``marker``
+    registry category (:mod:`edelweissfe.config.markerlibrary`).
+    """
 
     type: str | None = schemaField(
-        description="Type of marker: fieldOutput, elementSet, nodeSet, surface, recoveryError",
+        description=(
+            "Marker type, resolved through the 'marker' registry: fieldOutput, elementSet, nodeSet, "
+            "surface, recoveryError. The type-specific options are defined by the selected marker's "
+            "own schema."
+        ),
         dtype=str,
         default=None,
         required=True,
     )
     initialOnly: bool = schemaField(description="Evaluate only once at simulation start", dtype=bool, default=False)
-    fieldOutput: str | None = schemaField(
-        description=(
-            "Name of an already-declared 'perElement' *fieldOutput (covering every quadrature point "
-            "of interest, no 'f(x)') to mark on."
-        ),
-        dtype=str,
-        default=None,
-    )
-    expression: str | None = schemaField(
-        description="Boolean expression in x (the fieldOutput's raw per-element result).", dtype=str, default=None
-    )
-    elSet: str | None = schemaField(description="Element set to mark", dtype=str, default=None)
-    nSet: str | None = schemaField(description="Node set to mark", dtype=str, default=None)
-    surface: str | None = schemaField(description="Surface to mark", dtype=str, default=None)
-    nodeField: str | None = schemaField(
-        description=(
-            "For 'recoveryError': name of the nodal field whose recovered-gradient (Zienkiewicz-Zhu) "
-            "error drives marking, e.g. 'nonlocal damage'."
-        ),
-        dtype=str,
-        default=None,
-    )
-    markFraction: float = schemaField(
-        description=(
-            "For 'recoveryError': Doerfler bulk-marking fraction theta in (0, 1]; refine the worst "
-            "elements accumulating this fraction of the total squared error."
-        ),
-        dtype=float,
-        default=0.5,
-    )
-    maxRefinedFraction: float = schemaField(
-        description=(
-            "For 'recoveryError': hard cap on the fraction of elements a single pass may mark "
-            "(bounds the direct-solver factorization cost)."
-        ),
-        dtype=float,
-        default=0.1,
-    )
-    recovery: str = schemaField(
-        description=(
-            "For 'recoveryError': gradient recovery method -- 'averaging' (nodal averaging) or "
-            "'spr' (superconvergent patch recovery, sharper for serendipity elements)."
-        ),
-        dtype=str,
-        default="averaging",
-    )
 
 
 @dataclass(frozen=True)
@@ -257,36 +220,28 @@ class ModelModifier(ModelModifierBase):
         self._model = model
         self._journal = journal
 
+        # Markers are resolved by 'type' through the L3 marker registry and each builds itself from
+        # its own >>marker options via fromOptions (validated against that marker's own schema), so
+        # this loop is marker-agnostic: adding a marker means registering it, not editing an if/elif
+        # here. The 'type' key is the dispatch key, not a marker option, so it is stripped before the
+        # marker validates the rest.
         self.markers = []
         for m_opt in options.moduleOptions.get("marker", []):
-            m_type = m_opt.get("type", "")
-            init_only = m_opt.get("initialOnly", False)
-            if isinstance(init_only, str):
-                init_only = init_only.lower() in ("true", "yes", "1")
-
-            if m_type == "fieldOutput":
-                self.markers.append(FieldOutputMarker(m_opt["fieldOutput"], m_opt["expression"], initialOnly=init_only))
-            elif m_type == "elementSet":
-                self.markers.append(ElementSetMarker(m_opt["elSet"], initialOnly=init_only))
-            elif m_type == "nodeSet":
-                self.markers.append(NodeSetMarker(m_opt["nSet"], initialOnly=init_only))
-            elif m_type == "surface":
-                self.markers.append(SurfaceMarker(m_opt["surface"], initialOnly=init_only))
-            elif m_type == "recoveryError":
-                self.markers.append(
-                    RecoveryErrorMarker(
-                        m_opt["nodeField"],
-                        markFraction=float(m_opt.get("markFraction", 0.5)),
-                        maxRefinedFraction=float(m_opt.get("maxRefinedFraction", 0.1)),
-                        recovery=m_opt.get("recovery", "averaging"),
-                        initialOnly=init_only,
-                    )
-                )
-            else:
+            m_type = m_opt.get("type")
+            if not m_type:
                 raise ValueError(
-                    f"hAdaptivity modifier {name!r}: unknown '>>marker' type {m_type!r}; expected one "
-                    "of 'fieldOutput', 'elementSet', 'nodeSet', 'surface', 'recoveryError'."
+                    f"hAdaptivity modifier {name!r}: a '>>marker' block is missing its required "
+                    "'type' (e.g. 'type=fieldOutput', 'type=recoveryError', 'type=nodeSet')."
                 )
+            try:
+                markerClass = getMarkerClass(m_type)
+            except RegistryLookupError as e:
+                raise ValueError(f"hAdaptivity modifier {name!r}: {e}") from e
+            # 'type' is the dispatch key (already consumed above); 'inputFile' is parser bookkeeping
+            # stamped onto every module keyword's options. Everything else is a real marker option,
+            # validated against the marker's own schema inside fromOptions.
+            markerOptions = {key: value for key, value in m_opt.items() if key.casefold() not in ("type", "inputfile")}
+            self.markers.append(markerClass.fromOptions(markerOptions))
         if not self.markers:
             raise ValueError(
                 f"hAdaptivity modifier {name!r} defines no '>>marker' block. At least one is required, "
