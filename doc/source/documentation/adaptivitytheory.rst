@@ -37,9 +37,13 @@ sub-keyword of ``*modelModifier, type=hAdaptivity``. The available types are:
     pre-refinement.
 
 ``fieldOutput``
-    Mark by a boolean expression evaluated on an already-declared ``perElement`` ``*fieldOutput``
-    (e.g. ``expression='abs(x) > 0.6'`` on a stress or state-variable output). A simple *threshold*
-    criterion -- see :class:`~edelweissfe.adaptivity.marking.FieldOutputMarker`.
+    Mark by thresholding an already-declared ``perElement`` ``*fieldOutput``: ``operator`` (one of
+    ``>``, ``>=``, ``<``, ``<=``, ``==``, ``!=``) against ``threshold``, applied element-wise, marking
+    the element if any entry passes. The *quantity* being thresholded is shaped by that fieldOutput's
+    own ``f(x)`` -- e.g. ``f(x)='np.abs(x)'`` for a magnitude, or
+    ``f(x)='eigVal(x.reshape(-1,6))[:,0]...'`` for a principal stress -- so the reduction lives in the
+    (reusable) fieldOutput and the marker carries only the refinement policy. See
+    :class:`~edelweissfe.adaptivity.marking.FieldOutputMarker`.
 
 ``recoveryError``
     A recovery-based *a posteriori error estimator* on the gradient of a nodal field, with Dörfler
@@ -258,7 +262,7 @@ and optionally the recovery method, bulk fraction and budget cap::
     ** reactive: ZZ recovered-gradient error of the nonlocal field localizes on the process zone
     >>marker, type=recoveryError, nodeField='nonlocal damage', markFraction=0.5, maxRefinedFraction=0.1, recovery=spr
     ** predictive: refine ahead of the front where the local driving field starts to grow
-    >>marker, type=fieldOutput, fieldOutput=alphaPForAMR, expression='x > 1e-4'
+    >>marker, type=fieldOutput, fieldOutput=alphaPForAMR, operator='>', threshold=1e-4
     elSet=concrete
     maxLevel=1
     splitFactor=3
