@@ -237,6 +237,10 @@ class NIST(NonlinearSolverBase):
                         model.constraints.values(),
                         model.nodeSets.values(),
                     )
+                    # findDirichletIndices() keys its cache in part on self.theDofManager, so
+                    # entries from the discarded manager would otherwise keep it (and everything
+                    # it references) alive for the rest of the run.
+                    self._dirichletIndicesCache = None
                     self.journal.message(
                         "total size of eq. system: {:}".format(self.theDofManager.nDof),
                         self.identification,
