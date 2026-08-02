@@ -113,6 +113,18 @@ class HAdaptivitySchema:
         default=None,
     )
     maxLevel: int = schemaField(description="Maximum refinement level.", dtype=int, default=1)
+    minMarkedElements: int = schemaField(
+        description=(
+            "Minimum number of eligible elements that must be marked before a refinement pass is "
+            "triggered. Marked elements persist (accumulate) across increments -- across calls where "
+            "fewer than this many are marked, no refinement happens and no equation system rebuild is "
+            "triggered -- until the accumulated count reaches this threshold, at which point all of "
+            "them are refined together in a single pass. Default 1 refines as soon as any element is "
+            "marked (previous behavior)."
+        ),
+        dtype=int,
+        default=1,
+    )
     splitFactor: int = schemaField(
         description=(
             "Number of equal parts per axis a marked element is split into (2 = octree bisection "
@@ -250,6 +262,8 @@ class ModelModifier(ModelModifierBase):
             )
 
         self.maxLevel = options.maxLevel
+        self.minMarkedElements = max(1, options.minMarkedElements)
+        self._pendingMarkedElements = set()  # elements marked but not yet refined (below minMarkedElements)
         self.splitFactor = options.splitFactor
         self._stateTransfer = _buildStateTransferStrategy(options.stateTransfer, options.stateTransferOverrides)
         self._provider = options.elementProvider
@@ -394,18 +408,36 @@ class ModelModifier(ModelModifierBase):
 
         self._isFirstCall = False
 
-        if not marked_elements:
+        # freshly marked elements accumulate onto any still-pending ones from earlier increments; a
+        # stale pending element that another path already refined/removed is dropped by the
+        # elForEid/maxLevel filter below, same as a freshly marked one would be.
+        self._pendingMarkedElements.update(marked_elements)
+
+        if not self._pendingMarkedElements:
             return False
 
         # keep only active elements below maxLevel
         with timeit("marking filter"):
-            markedEids = [
-                elForEid[el]
-                for el in sorted(marked_elements, key=lambda e: e.elNumber)
+            eligible = [
+                el
+                for el in sorted(self._pendingMarkedElements, key=lambda e: e.elNumber)
                 if el in elForEid and self._mesh.elements[elForEid[el]]["level"] < self.maxLevel
             ]
-        if not markedEids:
+        self._pendingMarkedElements = set(eligible)
+
+        if len(eligible) < self.minMarkedElements:
+            if eligible:
+                self._journal.message(
+                    "AMR ModelModifier: {:} element(s) marked, deferring refinement until {:} accumulate".format(
+                        len(eligible), self.minMarkedElements
+                    ),
+                    "hadaptivity",
+                    1,
+                )
             return False
+
+        markedEids = [elForEid[el] for el in eligible]
+        self._pendingMarkedElements = set()
 
         # refine + 2:1 balance in the mirror
         nBefore = len(self._mesh.active())
