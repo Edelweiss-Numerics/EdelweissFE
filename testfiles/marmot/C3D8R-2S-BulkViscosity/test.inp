@@ -1,0 +1,38 @@
+*material, name=VonMises, id=myMaterial
+210000, 0.3, 550, 1000, 200, 1400, 1e-2
+
+*section, name=section1, material=myMaterial, type=solid
+all
+
+*job, name=c3d8job, domain=3d
+*solver, solver=NEDParallel, name=theSolver
+second-order-fields="displacement"
+output-frequency=100
+
+*modelGenerator, generator=boxGen, name=gen
+nX      =2
+nY      =2
+nZ      =1
+lX      =2
+lY      =2
+lZ      =1
+elType  =C3D8R-2S
+
+*elementproperty, elset=all, propertyname=bulk viscosity
+0.05
+
+*step, type=adaptiveForExplicitSimulations, solver=theSolver
+maxInc=1e-5, minInc=1e-5, maxNumInc=5000, maxIter=25, stepLength=1
+>>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0, 2=0, 3=0
+>>dirichlet, name=right, nSet=gen_right, field=displacement, 2=0.04, f(t)='t'
+
+*fieldOutput
+>>perNode, name=Displacement, elSet=all, field=displacement, result=U,
+>>perElement, name=Stress, elSet=all, result=stress, quadraturePoint=0
+>>perElement, name=Strain, elSet=all, result=strain, quadraturePoint=0
+>>perNode, name=Reaction, nSet=gen_left, field=displacement, result=P, export=RF, saveHistory=True, f_export(x)='np.sum(x, axis=1)'
+
+*output, type=ensight, name=myEnsightExport
+>>perNode,    fieldOutput=Displacement
+>>perElement, fieldOutput=Stress
+>>perElement, fieldOutput=Strain
