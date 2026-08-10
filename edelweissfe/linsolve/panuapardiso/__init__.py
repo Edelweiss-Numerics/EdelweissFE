@@ -40,9 +40,9 @@ from collections.abc import Callable
 def createSolver(opts) -> Callable:
     """Create a Panua-PARDISO-backed linear solver.
 
-    The factory the ``linsolver`` registry category resolves for the name ``panuapardiso`` (see
-    ``PLAN_INPUT_SYSTEM.md`` §9): every ``linsolve`` subpackage exposes this one signature, so that
-    a third party can contribute a linear solver through an entry point.
+    The factory the ``linsolver`` registry category resolves for the name ``panuapardiso``: every ``linsolve``
+    subpackage exposes this one signature, so that a third party can contribute a linear solver through an entry
+    point.
 
     Parameters
     ----------

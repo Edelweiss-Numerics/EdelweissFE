@@ -1,8 +1,8 @@
 ** Coverage for the meshplot output manager, using only pure-Python elements and materials.
 **
 ** Every other meshplot input lives under testfiles/marmot/ and needs a Marmot element or material,
-** so meshplot had no executing coverage at all (see PLAN_INPUT_SYSTEM.md, P2 finding (vii)). This
-** input exercises all four `create=` job kinds plus a `saveFigure` job, so that porting meshplot to
+** so meshplot had no executing coverage at all (P2 finding (vii)). This input exercises all four
+** `create=` job kinds plus a `saveFigure` job, so that porting meshplot to
 ** an L2 schema is verifiable rather than review-only. `run_tests_edelweissfe` sets the matplotlib
 ** "Agg" backend, so the plotting paths run headless.
 

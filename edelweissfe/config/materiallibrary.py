@@ -36,7 +36,7 @@ def getMaterialClass(materialName: str, provider: str = None) -> type:
     The ``provider`` dispatch below is deliberately an explicit table and **not** a registry lookup:
     a provider selects a *namespace*, not a variant of one lookup. Only ``edelweiss`` addresses
     anything by name; ``marmotmaterial`` ignores ``materialName`` and returns ``None`` (see below).
-    There is nothing per-name to register for it, so it stays here (``PLAN_INPUT_SYSTEM.md`` §9).
+    There is nothing per-name to register for it, so it stays here.
 
     **Returning ``None`` for the ``marmotmaterial`` provider is deliberate, not a missing case.** A
     Marmot material has no Python class at all -- it is instantiated inside the C++/Cython element

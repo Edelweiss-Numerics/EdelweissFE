@@ -39,8 +39,8 @@ class StepActionBase(OptionSchemaProvider, ABC):
     """This is the base class for all step actions.
     User defined step actions must implement the methods.
 
-    Two construction paths (see ``PLAN_INPUT_SYSTEM.md``, P3(c))
-    -----------------------------------------------------------
+    Two construction paths (P3(c))
+    -------------------------------
     A step action is reached either from Python or from an ``.inp`` file, and the input file is a
     *serialization* of the Python path, not a second way of building the object. So a **ported**
     step action declares a real typed constructor -- ``nSet`` is a node set, ``f_t`` is a callable,

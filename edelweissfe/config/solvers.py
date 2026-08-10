@@ -64,10 +64,10 @@ def getSolverByName(name: str) -> type:
     case-*sensitive* registry in the codebase: it indexed a table with CamelCase keys and then read
     the class off the module under the *same* string, so the name doubled as the class
     attribute name and e.g. ``"nist"`` failed twice over, while 12 of the 13 legacy ``config/*.py``
-    registries already casefolded the name at the resolver. ``PLAN_INPUT_SYSTEM.md`` §3 records that
-    audit and amends rule (c) to sanction this: a name must not resolve differently depending on
-    which front-end it arrived through, and the registry is reached by callers with no ``.inp`` parser
-    in the loop. The change is strictly more permissive, so no existing input file changes meaning.
+    registries already casefolded the name at the resolver. That audit amends rule (c) to sanction
+    this: a name must not resolve differently depending on which front-end it arrived through, and
+    the registry is reached by callers with no ``.inp`` parser in the loop. The change is strictly
+    more permissive, so no existing input file changes meaning.
 
     Parameters
     ----------

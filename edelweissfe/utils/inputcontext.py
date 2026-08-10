@@ -26,8 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``InputContext``: a plain parameter object for the L4 adapter layer (see
-``PLAN_INPUT_SYSTEM.md``, P1).
+"""``InputContext``: a plain parameter object for the L4 adapter layer (P1).
 
 Today, an L4-shaped helper such as ``createFieldOutputFromInputFile(inputfile, model, journal)``
 (``edelweissfe/helpers/inputfilehelpers.py:71``) and the ``outputManagerFactory(name, FEModel,

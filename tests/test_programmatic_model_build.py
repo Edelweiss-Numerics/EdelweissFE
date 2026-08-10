@@ -26,7 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """
-P0.1 safety net (see PLAN_INPUT_SYSTEM.md): a model built and solved entirely via real Python
+P0.1 safety net: a model built and solved entirely via real Python
 constructors -- no ``.inp`` file, no ``parseInputFile``, no dependency on the ``InputLanguage``
 singleton having been populated.
 
@@ -314,9 +314,9 @@ def test_full_step_and_solver_cycle_driven_programmatically():
     ``StepManager`` would fill.
 
     Before P3(c) this test could not be written: constructing *any* ``StepAction`` required a
-    fully-populated parser-shaped ``action`` dict (see the module docstring and
-    PLAN_INPUT_SYSTEM.md's section 6), and a step cannot be solved without one -- ``NIST``
-    unconditionally reads ``stepActions["dirichlet"]``, ``["nodeforces"]`` and friends.
+    fully-populated parser-shaped ``action`` dict (see the module docstring), and a step cannot be
+    solved without one -- ``NIST`` unconditionally reads ``stepActions["dirichlet"]``,
+    ``["nodeforces"]`` and friends.
 
     The assertions are physical invariants of the setup rather than expected numbers:
 

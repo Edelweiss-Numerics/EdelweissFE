@@ -25,7 +25,7 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""P1 tests (see PLAN_INPUT_SYSTEM.md) for ``edelweissfe/utils/schema.py``, the L2 primitives.
+"""P1 tests for ``edelweissfe/utils/schema.py``, the L2 primitives.
 
 Covers frozen-ness, field-metadata round-trip, and coercion parity against the pre-P1 casting logic
 it replaced (``edelweissfe.utils.inputlanguage.KeywordArg.getValueFromKwargs``, deleted in

@@ -26,7 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""L3 lazy registry for the input-language redesign (see ``PLAN_INPUT_SYSTEM.md``, P1).
+"""L3 lazy registry for the input-language redesign (P1).
 
 Maps ``(category, name)`` to the implementing object (a class, or occasionally a factory
 function -- see the coverage notes below) that EdelweissFE's own modules or third-party packages
@@ -62,8 +62,8 @@ Four properties are load-bearing; the first three are each covered by a dedicate
    13 ``config/*.py`` registries this replaces already did via ``name.lower()``; the lone
    exception, ``config/solvers.py``, is case-sensitive, so solver names becoming case-insensitive
    is this registry's one behavioral change (strictly more permissive -- no existing ``.inp``
-   changes meaning). See rule (c) in ``PLAN_INPUT_SYSTEM.md`` §3, amended to say so. Casefolded keys
-   widen the window for registration collisions, which is why every way of claiming a name now
+   changes meaning); rule (c) is amended to say so. Casefolded keys widen the window for
+   registration collisions, which is why every way of claiming a name now
    raises :class:`RegistryConflictError` instead of silently overwriting -- see that class.
 
 Built-in coverage
@@ -94,8 +94,8 @@ subclass's ``fromKeywordDefinition`` stub.
 ``element`` and ``material`` are keyed by *element type* / *material name* and cover exactly the
 ``provider=edelweiss`` namespace of ``config/elementlibrary.py`` and ``config/materiallibrary.py``.
 The ``provider`` axis those two modules also dispatch on is **not** part of this registry, by
-decision (``PLAN_INPUT_SYSTEM.md`` §9): ``provider`` selects a namespace rather than a variant of
-one lookup, and only ``edelweiss`` addresses anything by name at all -- ``marmot`` and
+decision: ``provider`` selects a namespace rather than a variant of one lookup, and only
+``edelweiss`` addresses anything by name at all -- ``marmot`` and
 ``marmotsingleqpelement`` ignore the name and return a single wrapper class, ``marmotmaterial``
 returns ``None``. So those branches stay an explicit table in their own module and nothing about
 them is registrable.
@@ -105,7 +105,7 @@ were not uniformly "a dotted string to a plain class/callable": ``superlu``/``um
 ``lambda`` closures with no module-level name to point a dotted string at, and ``gmres``/``amgcl``
 require constructing a wrapper object with call-site-specific options before the usable callable
 exists. It is now covered by the uniform ``createSolver(opts) -> Callable[[A, b], x]`` factory
-``PLAN_INPUT_SYSTEM.md`` §9 settled on -- see the ``linsolver`` block below.
+this module settled on -- see the ``linsolver`` block below.
 
 **With ``linsolver`` folded in, there is no category left under "not covered"** -- the list above is
 the complete set of things EdelweissFE dispatches by name, so a call site may now assume any of them
@@ -396,16 +396,16 @@ for _materialName, _materialDotted in {
 }.items():
     _BUILTINS[("material", _materialName)] = _materialDotted
 
-# The linsolver category, implementing the decision recorded in `PLAN_INPUT_SYSTEM.md` §9: every
-# `linsolve/*` subpackage exposes a module-level `createSolver(opts) -> Callable[[A, b], x]` factory,
-# which is the single shape the four pre-existing ones collapse to (inline scipy lambdas, an
-# option-constructed class, plain module-level functions, and bound methods of option-constructed
-# objects). The factory lives in each subpackage's `__init__.py` rather than in the solver module
-# itself because four of the implementations are Cython (`amgcl`, `klu`, `panuapardiso`, `pardiso`),
-# and each one imports its backend *inside* the function body -- most of these backends are optional
-# and genuinely absent in some installs, and `config.linsolve.getDefaultLinSolver` relies on catching
-# that ImportError to fall back to scipy. A module-scope import would turn "backend not built" into
-# an import error for anyone merely resolving a name here.
+# The linsolver category: every `linsolve/*` subpackage exposes a module-level
+# `createSolver(opts) -> Callable[[A, b], x]` factory, which is the single shape the four
+# pre-existing ones collapse to (inline scipy lambdas, an option-constructed class, plain
+# module-level functions, and bound methods of option-constructed objects). The factory lives in
+# each subpackage's `__init__.py` rather than in the solver module itself because four of the
+# implementations are Cython (`amgcl`, `klu`, `panuapardiso`, `pardiso`), and each one imports its
+# backend *inside* the function body -- most of these backends are optional and genuinely absent
+# in some installs, and `config.linsolve.getDefaultLinSolver` relies on catching that ImportError
+# to fall back to scipy. A module-scope import would turn "backend not built" into an import error
+# for anyone merely resolving a name here.
 for _linsolverName in [
     "superlu",
     "umfpack",

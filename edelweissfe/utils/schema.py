@@ -26,7 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""L2 primitives for the input-language redesign (see ``PLAN_INPUT_SYSTEM.md``, P1).
+"""L2 primitives for the input-language redesign (P1).
 
 A "schema" here is an ordinary, immutable (``frozen=True``) :mod:`dataclasses` class that a
 module owns for itself: it declares which options that module accepts, their Python types,
@@ -534,9 +534,9 @@ class OptionSchemaProvider:
     resolution paths -- the built-in table and, crucially, third-party ``importlib.metadata`` entry
     points. ``registry.register(..., schema=...)`` can pass a schema explicitly, but nothing can
     pass an argument alongside a dotted string in a ``pyproject.toml``; without this convention the
-    registry would be schema-blind for exactly the external caller it exists to serve (see
-    ``PLAN_INPUT_SYSTEM.md`` §4 and the P2 row). Keeping the schema on the class also keeps it next
-    to the constructor it describes, so the two cannot drift apart or be registered inconsistently.
+    registry would be schema-blind for exactly the external caller it exists to serve. Keeping the
+    schema on the class also keeps it next to the constructor it describes, so the two cannot
+    drift apart or be registered inconsistently.
 
     Deriving from this mixin is what makes a class's schema discoverable; the default of ``None``
     means "no schema declared yet", which is the correct answer for every module that has not been

@@ -26,15 +26,15 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """
-P0.3 focused regression tests (see PLAN_INPUT_SYSTEM.md) for two standing bugs in
+P0.3 focused regression tests for two standing bugs in
 ``edelweissfe/outputmanagers/ensight.py``:
 
 Bug 1
     ``self.intermediateSaveInterval`` used to be assigned from the legacy ``Module`` declaration's
     ``overwrite`` default instead of its own ``intermediateSaveInterval`` default. This has
     *already been fixed* upstream (found while verifying this branch's diagnosis against the
-    current code -- see PLAN_INPUT_SYSTEM.md), but the test below still pins the correct behavior
-    down so a regression is caught immediately.
+    current code), but the test below still pins the correct behavior down so a regression is
+    caught immediately.
 
 Bug 2
     ``strtobool()`` (``edelweissfe/utils/misc.py``) calls ``.lower()`` on its argument, so a

@@ -25,7 +25,7 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""P1 tests (see PLAN_INPUT_SYSTEM.md) for ``edelweissfe/utils/inputcontext.py``."""
+"""P1 tests for ``edelweissfe/utils/inputcontext.py``."""
 
 import dataclasses
 

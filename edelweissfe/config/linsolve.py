@@ -70,7 +70,7 @@ def getLinSolverByName(linsolverName: str, opts) -> Callable:
     module-level functions, and bound methods of option-constructed objects), which is why this was
     the last category folded in. The uniform shape they collapse to is a module-level
     ``createSolver(opts) -> Callable[[A, b], x]`` factory per ``linsolve`` subpackage, which is what
-    the registry's dotted strings point at (``PLAN_INPUT_SYSTEM.md`` §9). Each factory keeps the
+    the registry's dotted strings point at. Each factory keeps the
     option handling that used to live in this function's corresponding arm, including the tolerance
     for a non-mapping ``opts``.
 

@@ -45,7 +45,7 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
     ) -> "ConstraintBase":
         """Create this constraint from a parsed ``.inp`` constraint definition.
 
-        This is the L4 seam (see ``PLAN_INPUT_SYSTEM.md``, P4): the one place a module's
+        This is the L4 seam (P4): the one place a module's
         input-file shape (set/surface *names*, string-typed booleans) is turned into the typed
         arguments its real constructor takes. Override it together with a typed ``__init__``;
         leave it alone and the legacy dict-consuming constructor is used unchanged.

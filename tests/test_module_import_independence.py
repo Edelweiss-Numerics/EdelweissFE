@@ -26,26 +26,16 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""P4's regression gate (see PLAN_INPUT_SYSTEM.md): no documented module may have an import-time
-side effect that depends on, or damages, the import order.
-
-Rule (a) of the target architecture is "no import side effects". Today's modules break it by
-construction -- each declares its grammar in a one-shot ``for module in modules:`` loop that reads
-``inputLanguage["step"]`` at import time -- so this gate does not assert the rule outright. It
-asserts the two consequences that are observable from outside and that a refactor can regress:
+"""No documented module may have an import-time side effect that depends on, or damages, the
+import order:
 
 1. **Every documented module imports standalone**, in an interpreter where nothing else from
-   ``edelweissfe`` has been imported. This is the P4 checkpoint's wording, and it is what makes a
-   module reusable by an external caller (EdelweissMeshfree, a script) rather than only by the
-   parser. All modules satisfy it today, so this is purely a guard.
-2. **No documented module poisons the parser by being imported first.** This is the stronger and
-   more valuable half, because it is the failure this project keeps rediscovering, and it was *red*
-   when this gate was written: importing ``outputmanagers.ensight`` or ``stepactions.options`` before
-   ``utils.inputfileparser`` made the parser raise
-   ``ValueError: options is not a valid argument``. Both had one cause -- ``stepactions/options.py``
-   declaring the shared ``options`` keyword in a one-shot import-time loop that silently did nothing
-   when it ran before any step type existed, with ``sys.modules`` then denying it a second chance.
-   Fixed by declaring that keyword lazily and idempotently; see ``_ensureOptionsKeyword``.
+   ``edelweissfe`` has been imported -- what makes a module reusable by an external caller
+   (EdelweissMeshfree, a script) rather than only by the parser.
+2. **No documented module poisons the parser by being imported first.** A module that declares
+   its grammar via an import-time side effect (e.g. a shared keyword like ``options``, registered
+   lazily and idempotently by ``_ensureOptionsKeyword``) must not fail silently if imported before
+   the step types it depends on exist.
 
 Each check runs in a **fresh subprocess** per module, which is the only way to test an import-order
 property, and the reason this file is slower than the rest of the suite. The subprocesses run

@@ -31,7 +31,7 @@
 Like its ``superlu`` sibling this subpackage exists only to give the solver a *module* of its own:
 it used to be an inline ``lambda A, b: spsolve(A, b, use_umfpack=True)`` inside
 ``config/linsolve.py``'s ``if/elif`` chain, which the L3 registry's ``"module.path:Attr"`` dotted
-strings cannot address (``PLAN_INPUT_SYSTEM.md`` §9).
+strings cannot address.
 
 Note that ``use_umfpack=True`` is a *request*, not a guarantee: SciPy silently falls back to
 SuperLU when ``scikit-umfpack`` is not installed, so this name never fails to produce a working
@@ -45,9 +45,9 @@ from collections.abc import Callable
 def createSolver(opts) -> Callable:
     """Create an UMFPACK-backed linear solver.
 
-    The factory the ``linsolver`` registry category resolves for the name ``umfpack`` (see
-    ``PLAN_INPUT_SYSTEM.md`` §9): every ``linsolve`` subpackage exposes this one signature, so that
-    a third party can contribute a linear solver through an entry point.
+    The factory the ``linsolver`` registry category resolves for the name ``umfpack``: every ``linsolve``
+    subpackage exposes this one signature, so that a third party can contribute a linear solver through an
+    entry point.
 
     Parameters
     ----------

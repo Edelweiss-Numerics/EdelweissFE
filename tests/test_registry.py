@@ -25,8 +25,7 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""P1 tests (see PLAN_INPUT_SYSTEM.md) for ``edelweissfe/config/registry.py``, the L3 lazy
-registry.
+"""P1 tests for ``edelweissfe/config/registry.py``, the L3 lazy registry.
 
 Covers: zero-eager-import (subprocess, since ``sys.modules`` pollution from other test modules
 would otherwise make an in-process check meaningless -- the same reasoning
@@ -346,7 +345,7 @@ def test_schema_reaches_the_caller_through_the_builtin_dotted_string_path():
 
 
 def test_schema_reaches_the_caller_through_a_third_party_entry_point():
-    """The case that actually motivates the whole convention (PLAN_INPUT_SYSTEM.md §4).
+    """The case that actually motivates the whole convention.
 
     An external package -- EdelweissMeshfree, or any plugin -- registers a class via an entry
     point in its own ``pyproject.toml``. There is no way to pass a ``schema=`` argument alongside a

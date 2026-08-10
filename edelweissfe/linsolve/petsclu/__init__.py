@@ -39,9 +39,8 @@ from collections.abc import Callable
 def createSolver(opts) -> Callable:
     """Create a PETSc-LU-backed linear solver.
 
-    The factory the ``linsolver`` registry category resolves for the name ``petsclu`` (see
-    ``PLAN_INPUT_SYSTEM.md`` §9): every ``linsolve`` subpackage exposes this one signature, so that
-    a third party can contribute a linear solver through an entry point.
+    The factory the ``linsolver`` registry category resolves for the name ``petsclu``: every ``linsolve`` subpackage
+    exposes this one signature, so that a third party can contribute a linear solver through an entry point.
 
     Parameters
     ----------

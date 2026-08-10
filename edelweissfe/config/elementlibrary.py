@@ -52,7 +52,7 @@ def getElementClass(elType: str, provider: str = None) -> type:
     addresses anything by name -- ``marmot`` and ``marmotsingleqpelement`` ignore ``elType``
     entirely and return a single wrapper class that then reads the type at the Marmot boundary. There
     is nothing per-name to register for those two, so folding them in would mean inventing 42
-    identical entries per provider (see ``PLAN_INPUT_SYSTEM.md`` §9).
+    identical entries per provider.
 
     The ``edelweiss`` branch *is* resolved through the L3 registry (``element`` category), keyed by
     element type. It used to read a class *name* out of
