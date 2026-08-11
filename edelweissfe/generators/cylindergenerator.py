@@ -38,21 +38,6 @@ the ring elements:
 
 .. code-block:: console
 
-               y
-               |
-               |___x                  cross section (O-grid, x-z plane)
-              /
-             z                             . - ~ ~ ~ - .
-                                        .'      _____    `.
-        A                             /        |     |     \\
-        |                            |    ,----|-----|----, |
-        | lY                         |    |    |_____|    | |
-        | nY elements                |    |    |     |    | |
-        V                             \\    `----|-----|----'/
-                                        `.      core block   .'
-      <--radius-->                        ' - . _______ . -'
-                                                nR rings
-
 nSets, elSets, surface: 'name'_top, _bottom, _outer, _all are automatically
 generated. _top/_bottom refer to the two end faces (constant y), _outer to
 the lateral (mantle) surface at r=radius.
