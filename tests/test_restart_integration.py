@@ -37,6 +37,13 @@ per-quadrature-point plastic history), not ``LinearElastic``: a history-free mat
 exercise ``getStateVars``/``setStateVars`` round-tripping at all, so it could not catch a state
 transfer bug.
 
+Parametrized over ``linsolver`` (``pardiso``, the shipped default, and ``blockamg``, the
+block-AMG-preconditioned outer solver from ``perf/linsolve-investigation``): restart's
+reconstruct-then-overwrite model construction never touches the linear solver at all -- every
+``NIST`` step builds a fresh one in ``solveStep`` regardless of whether the run is resumed -- so
+this is less "does restart know about blockamg" (it doesn't need to) and more a pinned regression
+proving that claim, on the one solver stack this branch actually adds.
+
 This two-invocation shape does not fit ``run_tests_edelweissfe``'s single ``test.inp``/``U.ref``
 model, so it lives here as a real pytest test instead (this repo's ``tests/`` already hosts one,
 see ``PLAN_INPUT_SYSTEM.md``), driving ``finiteElementSimulation`` directly rather than the ``.inp``
@@ -50,11 +57,17 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import pytest
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.utils.inputfileparser import parseInputFile
 
-_MATERIAL_AND_MESH = """
+
+def _materialAndMesh(linsolver: str) -> str:
+    # "pardiso" is the shipped NIST default (edelweissfe/solvers/nonlinearimplicitstatic.py) and
+    # needs no explicit option; only deviate from it for "blockamg".
+    linsolverOption = "" if linsolver == "pardiso" else f"linsolver={linsolver}\n"
+    return f"""
 *material, name=VonMises, id=myMaterial
 210000, 0.3, 550, 1000, 200, 1400
 
@@ -63,7 +76,7 @@ all
 
 *job, name=restartTestJob, domain=2d
 *solver, solver=NIST, name=theSolver
-
+{linsolverOption}
 *modelGenerator, generator=planeRectQuad, name=gen
 l=10
 h=10
@@ -71,6 +84,7 @@ nX=2
 nY=2
 elType=CPE4
 """
+
 
 _STEP_1 = """
 *step, solver=theSolver
@@ -105,9 +119,12 @@ def _mostRecentCheckpoint(tmp_path: Path) -> Path:
     return max(checkpoints, key=checkpointTime)
 
 
-def test_restart_resume_matches_uninterrupted_reference(tmp_path):
+@pytest.mark.parametrize("linsolver", ["pardiso", "blockamg"])
+def test_restart_resume_matches_uninterrupted_reference(tmp_path, linsolver):
+    materialAndMesh = _materialAndMesh(linsolver)
+
     fullPath = tmp_path / "full.inp"
-    fullPath.write_text(_MATERIAL_AND_MESH + _STEP_1 + _step2(maxNumInc=10000))
+    fullPath.write_text(materialAndMesh + _STEP_1 + _step2(maxNumInc=10000))
     referenceModel = _runInputFile(fullPath)
     referenceU = referenceModel.nodeFields["displacement"]["U"].copy()
 
@@ -118,7 +135,7 @@ def test_restart_resume_matches_uninterrupted_reference(tmp_path):
 
     truncatedPath = tmp_path / "truncated.inp"
     truncatedPath.write_text(
-        _MATERIAL_AND_MESH + f"\n*output, type=restart, name=restartwriter\n"
+        materialAndMesh + f"\n*output, type=restart, name=restartwriter\n"
         f"writeInterval=1, baseName={checkpointBaseName}, numberOfFilesToKeep=3\n"
         + _STEP_1
         + _step2(maxNumInc=3)  # deliberately too low: truncates the job before step 2 finishes
@@ -128,9 +145,7 @@ def test_restart_resume_matches_uninterrupted_reference(tmp_path):
     checkpoint = _mostRecentCheckpoint(tmp_path)
 
     resumePath = tmp_path / "resume.inp"
-    resumePath.write_text(
-        _MATERIAL_AND_MESH + f"\n*restart, readFrom={checkpoint}\n" + _STEP_1 + _step2(maxNumInc=10000)
-    )
+    resumePath.write_text(materialAndMesh + f"\n*restart, readFrom={checkpoint}\n" + _STEP_1 + _step2(maxNumInc=10000))
     resumedModel = _runInputFile(resumePath)
     resumedU = resumedModel.nodeFields["displacement"]["U"]
 
