@@ -391,6 +391,7 @@ kw.addOptionalArg(
 # from edelweissfe.generators.abqmodelconstructor import inputLanguage  # noqa: F811,E402
 from edelweissfe.generators.boxgen import inputLanguage  # noqa: F811,E402
 from edelweissfe.generators.cubit import inputLanguage  # noqa: F811,E402
+from edelweissfe.generators.cylindergenerator import inputLanguage  # noqa: F811,E402
 from edelweissfe.generators.executepythoncode import inputLanguage  # noqa: F811,E402
 from edelweissfe.generators.findclosestnode import inputLanguage  # noqa: F811,E402
 from edelweissfe.generators.pipegen import inputLanguage  # noqa: F811,E402
