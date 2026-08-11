@@ -26,6 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+import os
 from collections import deque
 from dataclasses import dataclass
 
@@ -72,13 +73,36 @@ class RestartOutputManagerSchema:
 class _RestartFileRingBuffer(deque):
     """Rotates through ``numberOfFilesToKeep`` checkpoint file names, ported from
     EdelweissMeshfree's ``RestartHistoryManager``
-    (``edelweissmeshfree/solvers/base/nonlinearsolverbase.py``)."""
+    (``edelweissmeshfree/solvers/base/nonlinearsolverbase.py``).
+
+    Resumes an existing ring buffer found on disk rather than always starting at index 0 --
+    otherwise a resumed run that keeps writing checkpoints (the common case for a
+    walltime-limited job chained across several resumes) would silently overwrite earlier
+    checkpoints, including, in the common case of an unchanged ``baseName``, the very one it
+    just resumed from.
+    """
 
     def __init__(self, baseName: str, maxsize: int):
         super().__init__(maxlen=maxsize)
         self._baseName = baseName
         self._maxsize = maxsize
-        self._nextIndex = 0
+        self._nextIndex = self._resumeNextIndex()
+
+    def _resumeNextIndex(self) -> int:
+        """The index to write next, continuing whatever ring-buffer state already exists on disk:
+        the first never-written slot if the buffer hasn't filled up yet, otherwise the slot
+        holding the oldest checkpoint (by mtime), i.e. the one due to be overwritten next."""
+
+        existingMTimeByIndex = {}
+        for index in range(self._maxsize):
+            fileName = "{:}_{:}.h5".format(self._baseName, index)
+            if os.path.exists(fileName):
+                existingMTimeByIndex[index] = os.path.getmtime(fileName)
+
+        neverWritten = [index for index in range(self._maxsize) if index not in existingMTimeByIndex]
+        if neverWritten:
+            return min(neverWritten)
+        return min(existingMTimeByIndex, key=existingMTimeByIndex.get)
 
     def nextFileName(self) -> str:
         """The file name for the next checkpoint to be written, rotating over
