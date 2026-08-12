@@ -234,6 +234,17 @@ class AdaptiveTimeStepper(TimeStepperBase):
         definition. Restoring the configuration fields here would silently re-clobber any such
         edit with whatever was in effect when the checkpoint was written.
 
+        This runs (via the restart output manager's ``finalizeIncrement``) while
+        :meth:`generateTimeStep` is paused *at* the ``yield`` for the increment that just
+        converged -- i.e. before that generator's own post-yield bookkeeping (the growth-factor
+        update and the ``incrementCounter``/``nPassedGoodIncrements`` advance) has run. An
+        uninterrupted run never notices, since the same generator object applies that bookkeeping
+        itself on its next resume. But a *fresh* generator built for a resumed run has never
+        reached that yield point at all, so it would skip the bookkeeping entirely -- repeating
+        the just-converged increment's size (mislabeled with its own ``incrementCounter``)
+        instead of continuing the growth sequence. So this snapshots the state as it will be once
+        that bookkeeping runs, replicating its exact logic, rather than the raw current attributes.
+
         Parameters
         ----------
         restartFile
@@ -242,12 +253,16 @@ class AdaptiveTimeStepper(TimeStepperBase):
         f = restartFile
         f.create_group("timestepper")
 
+        increment = self.increment
+        if self.nPassedGoodIncrements >= 3 and self.allowedToIncreasedNext:
+            increment = min(increment * self.increaseFactor, self.maxIncrement)
+
         f["timestepper"].attrs["currentTime"] = self.currentTime
-        f["timestepper"].attrs["nPassedGoodIncrements"] = self.nPassedGoodIncrements
-        f["timestepper"].attrs["incrementCounter"] = self.incrementCounter
+        f["timestepper"].attrs["nPassedGoodIncrements"] = self.nPassedGoodIncrements + 1
+        f["timestepper"].attrs["incrementCounter"] = self.incrementCounter + 1
         f["timestepper"].attrs["finishedStepProgress"] = self.finishedStepProgress
-        f["timestepper"].attrs["increment"] = self.increment
-        f["timestepper"].attrs["allowedToIncreasedNext"] = self.allowedToIncreasedNext
+        f["timestepper"].attrs["increment"] = increment
+        f["timestepper"].attrs["allowedToIncreasedNext"] = True
         f["timestepper"].attrs["dT"] = self.dT
 
     def readRestart(self, restartFile):
