@@ -45,8 +45,8 @@ this is less "does restart know about blockamg" (it doesn't need to) and more a 
 proving that claim, on the one solver stack this branch actually adds.
 
 This two-invocation shape does not fit ``run_tests_edelweissfe``'s single ``test.inp``/``U.ref``
-model, so it lives here as a real pytest test instead (this repo's ``tests/`` already hosts one,
-see ``PLAN_INPUT_SYSTEM.md``), driving ``finiteElementSimulation`` directly rather than the ``.inp``
+model, so it lives here as a real pytest test instead, driving ``finiteElementSimulation`` directly
+rather than the ``.inp``
 files under ``testfiles/`` -- both invocations of the resumed run must share byte-identical step
 definitions with the uninterrupted reference (see the module-level template), which a
 ``testfiles/marmot/RestartTest/test.inp`` alone could not enforce without duplicating it into two
@@ -201,6 +201,13 @@ def test_restart_ensight_output_continues_across_resume(tmp_path):
     # every declared frame file must actually exist, in the range the .case file promises
     for i in range(resumedStepCount):
         assert (ensightName.parent / f"{ensightName.name}" / f"displacement.var_{i:04d}").exists()
+
+    # the GEOMETRY section must still reference the model: since this mesh never changes, the
+    # resumed run's own writeOutput never calls writeGeometryTrendChunk (mesh_changed stays False
+    # the whole time), so geometryTrends -- which the "model:" line is written from -- would stay
+    # empty unless it was restored too, even though timeAndFileSets/the sequence itself is correct.
+    caseText = (ensightName.parent / f"{ensightName.name}.case").read_text()
+    assert "model:" in caseText, "GEOMETRY section lost its model: reference after resume"
 
 
 def _ensightStepCount(ensightName: Path) -> int:
