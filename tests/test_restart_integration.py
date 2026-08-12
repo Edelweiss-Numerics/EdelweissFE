@@ -150,3 +150,89 @@ def test_restart_resume_matches_uninterrupted_reference(tmp_path, linsolver):
     resumedU = resumedModel.nodeFields["displacement"]["U"]
 
     np.testing.assert_allclose(resumedU, referenceU, atol=1e-10)
+
+
+def test_restart_ensight_output_continues_across_resume(tmp_path):
+    """Found via a real end-to-end validation run (AnchorPryOut): a resumed run's Ensight output
+    used to restart its transient sequence numbering from zero -- since a fresh OutputManager
+    instance has no way to know what a previous, now-dead process already wrote -- silently
+    orphaning the pre-resume portion (the .case file only ever describes what *this* process
+    wrote) and misordering the on-disk frame files (the resumed run's frame 0 landing chronologically
+    after the truncated run's later frames). This pins the fix: the .case file's declared step
+    list, after resuming, must cover the *entire* run (pre- and post-checkpoint), not just the
+    resumed portion, and must be in correct chronological order.
+    """
+    materialAndMesh = _materialAndMesh("pardiso")
+    ensightName = tmp_path / "esTest"
+    ensightBlock = (
+        "\n*fieldOutput\n"
+        ">>perNode, elSet=all, field=displacement, result=U, name=displacement\n"
+        f"\n*output, type=ensight, name={ensightName}\n"
+        ">>perNode, fieldOutput=displacement\n"
+        ">>configuration, overwrite=yes\n"
+    )
+
+    fullPath = tmp_path / "full.inp"
+    fullPath.write_text(materialAndMesh + ensightBlock + _STEP_1 + _step2(maxNumInc=10000))
+    _runInputFile(fullPath)
+    fullStepCount = _ensightStepCount(ensightName)
+
+    checkpointBaseName = tmp_path / "ckpt"
+    truncatedPath = tmp_path / "truncated.inp"
+    truncatedPath.write_text(
+        materialAndMesh + ensightBlock + f"\n*output, type=restart, name=restartwriter\n"
+        f"writeInterval=1, baseName={checkpointBaseName}, numberOfFilesToKeep=3\n" + _STEP_1 + _step2(maxNumInc=3)
+    )
+    _runInputFile(truncatedPath)
+    truncatedStepCount = _ensightStepCount(ensightName)
+    assert 0 < truncatedStepCount < fullStepCount, "the truncated run should stop partway through"
+
+    checkpoint = _mostRecentCheckpoint(tmp_path)
+    resumePath = tmp_path / "resume.inp"
+    resumePath.write_text(
+        materialAndMesh + ensightBlock + f"\n*restart, readFrom={checkpoint}\n" + _STEP_1 + _step2(maxNumInc=10000)
+    )
+    _runInputFile(resumePath)
+    resumedStepCount, resumedTimeValues = _ensightStepCountAndTimes(ensightName)
+
+    assert resumedStepCount == fullStepCount, "resuming must cover the whole run, not just the resumed portion"
+    assert list(resumedTimeValues) == sorted(resumedTimeValues), "time values must stay in chronological order"
+
+    # every declared frame file must actually exist, in the range the .case file promises
+    for i in range(resumedStepCount):
+        assert (ensightName.parent / f"{ensightName.name}" / f"displacement.var_{i:04d}").exists()
+
+
+def _ensightStepCount(ensightName: Path) -> int:
+    return _ensightStepCountAndTimes(ensightName)[0]
+
+
+def _ensightStepCountAndTimes(ensightName: Path) -> tuple[int, list]:
+    """The .case file's TIME block declares one sub-block per time/file set (geometry, which only
+    grows when the mesh changes, and variables, which grow every write) -- parse per-set and
+    return the variable set's (always >= geometry's, and the one file numbering/comparisons here
+    actually care about), not just whichever "number of steps:" line comes first."""
+
+    caseFile = ensightName.parent / f"{ensightName.name}.case"
+    lines = caseFile.read_text().splitlines()
+
+    setsByNumber = {}
+    currentSetNumber = None
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("time set:"):
+            currentSetNumber = int(stripped.split(":")[1].strip().split()[0])
+            setsByNumber[currentSetNumber] = {"numberOfSteps": None, "timeValues": []}
+        elif stripped.startswith("number of steps:"):
+            setsByNumber[currentSetNumber]["numberOfSteps"] = int(stripped.split(":")[1].strip())
+        elif stripped.startswith("time values:"):
+            setsByNumber[currentSetNumber]["timeValues"].append(float(stripped.split(":")[1].strip()))
+        elif stripped.startswith(("filename start number:", "filename increment:")):
+            pass
+        elif stripped.startswith(("GEOMETRY", "VARIABLE", "FORMAT")):
+            currentSetNumber = None
+        elif currentSetNumber is not None and stripped:
+            setsByNumber[currentSetNumber]["timeValues"].append(float(stripped))
+
+    variableSet = max(setsByNumber.values(), key=lambda s: s["numberOfSteps"])
+    return variableSet["numberOfSteps"], variableSet["timeValues"]

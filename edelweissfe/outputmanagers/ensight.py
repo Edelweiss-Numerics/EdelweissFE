@@ -1212,6 +1212,54 @@ class OutputManager(OutputManagerBase):
     ):
         self.ensightCase.finalize(replaceTimeValuesByEnumeration=False)
 
+    def getRestartData(self) -> dict[str, np.ndarray] | None:
+        """This export's transient-sequence bookkeeping: each Ensight time/file set's history of
+        already-written time values (flattened CSR-style, since sets can have different lengths),
+        plus the mesh signature and ``timeAtLastOutput`` used to decide whether to write a fresh
+        geometry chunk / throttle output. Both file numbering (``writeGeometryTrendChunk``/
+        ``writeVariableTrendChunk`` derive the next chunk's index from ``len(timeValues)``) and the
+        ``.case`` file's own declared step list come directly from this state -- restoring it is
+        both necessary and sufficient for a resumed run to continue the same sequence rather than
+        starting a fresh, colliding/orphaning one.
+
+        ``None`` if nothing has been written yet (nothing to restore).
+        """
+
+        timeAndFileSets = self.ensightCase.timeAndFileSets
+        if not timeAndFileSets:
+            return None
+
+        setNumbers = sorted(timeAndFileSets)
+        sizes = [len(timeAndFileSets[n].timeValues) for n in setNumbers]
+        flatTimeValues = [v for n in setNumbers for v in timeAndFileSets[n].timeValues]
+        meshSignature = self._meshSignature if self._meshSignature is not None else (-1, -1)
+
+        return {
+            "setNumbers": np.array(setNumbers, dtype=int),
+            "timeValueSizes": np.array(sizes, dtype=int),
+            "timeValues": np.array(flatTimeValues, dtype=float),
+            "meshSignature": np.array(meshSignature, dtype=int),
+            "timeAtLastOutput": np.array([self.timeAtLastOutput]),
+        }
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore this export's transient-sequence bookkeeping from a restart checkpoint written
+        by :meth:`getRestartData`, so the next chunk written continues the existing sequence
+        (correct file numbering, correct ``.case`` step list) instead of starting a fresh one."""
+
+        offset = 0
+        for setNumber, size in zip(data["setNumbers"], data["timeValueSizes"]):
+            size = int(size)
+            timeValues = list(data["timeValues"][offset : offset + size])
+            offset += size
+            self.ensightCase.timeAndFileSets[int(setNumber)] = EnsightTimeSet(
+                int(setNumber), "no description", 0, 1, timeValues
+            )
+
+        meshSignature = tuple(int(x) for x in data["meshSignature"])
+        self._meshSignature = None if meshSignature == (-1, -1) else meshSignature
+        self.timeAtLastOutput = float(data["timeAtLastOutput"][0])
+
     def _createGeometryParts(self, firstPartID: int):
         model = self.model
         elementSets = model.elementSets

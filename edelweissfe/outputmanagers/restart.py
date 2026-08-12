@@ -175,6 +175,21 @@ class OutputManager(OutputManagerBase):
             self.model.writeRestart(f)
             self._currentStep.timeStepper.writeRestart(f)
 
+            # Sibling output managers' own sequence bookkeeping (e.g. Ensight's transient time/file
+            # sets, whose file numbering a resumed run would otherwise restart from zero, orphaning
+            # the pre-resume portion of the sequence). model.outputManagers is already populated by
+            # the time any increment converges -- it's set right after construction, well before
+            # stepping begins -- so it's safe to read here, unlike at readRestart time (see the
+            # driver's own restore pass for why that side needs separate handling).
+            outputManagersGroup = f.create_group("outputManagers")
+            for name, manager in self.model.outputManagers.items():
+                restartData = manager.getRestartData()
+                if restartData is None:
+                    continue
+                managerGroup = outputManagersGroup.create_group(name)
+                for entryName, entryValues in restartData.items():
+                    managerGroup.create_dataset(entryName, data=entryValues)
+
         self.journal.message("Wrote restart checkpoint {:}".format(fileName), self.identification, 2)
 
     def finalizeFailedIncrement(self, **kwargs):

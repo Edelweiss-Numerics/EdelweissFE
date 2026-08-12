@@ -199,6 +199,21 @@ def finiteElementSimulation(
     model.solvers = solvers
     model.outputManagers = {outputManager.name: outputManager for outputManager in outputManagers}
 
+    # Output managers don't exist yet at the earlier model.readRestart(resumeCheckpoint) call
+    # above (they're constructed here, well after) -- restore whichever of them wrote restart data
+    # (see outputmanagers/restart.py's finalizeIncrement) now that they do, and while the
+    # checkpoint is still open. Ensight is the motivating case: without this, its transient
+    # sequence numbering (derived from its own history of already-written time values) would
+    # restart from zero, orphaning the pre-resume portion of the sequence.
+    if resumeCheckpoint is not None and "outputManagers" in resumeCheckpoint:
+        for name, outputManager in model.outputManagers.items():
+            if name not in resumeCheckpoint["outputManagers"]:
+                continue
+            restartData = {
+                entryName: values[:] for entryName, values in resumeCheckpoint["outputManagers"][name].items()
+            }
+            outputManager.setRestartData(restartData)
+
     try:
         for step in stepManager.generateSteps(jobInfo, model, fieldOutputController, journal, solvers, outputManagers):
             if resumeStepNumber is not None:
