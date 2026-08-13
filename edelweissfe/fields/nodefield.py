@@ -100,6 +100,22 @@ class NodeField:
     def __contains__(self, key):
         return key in self._values
 
+    def indexOfNode(self, node) -> int:
+        """
+        The row index of a node's entries within this field's value arrays.
+
+        Parameters
+        ----------
+        node
+            The node.
+
+        Returns
+        -------
+        int
+            The row index.
+        """
+        return self._indicesOfNodesInArray[node]
+
     def createFieldValueEntry(self, name: str) -> np.ndarray:
         """
         Add an empty entry with given name for the field, e.g, 'U' or 'P' for flux or effort entries.
@@ -238,13 +254,13 @@ class NodeFieldSubset(NodeField):
         list[Node]
             The list of subset nodes.
         """
-        if type(subset) is Node:
+        if isinstance(subset, Node):
             nodeCandidates = [
                 subset,
             ]
-        elif type(subset) is ElementSet:
+        elif isinstance(subset, ElementSet):
             nodeCandidates = subset.extractNodeSet()
-        elif type(subset) is NodeSet:
+        elif isinstance(subset, NodeSet):
             nodeCandidates = subset
         else:
             raise Exception("Invalid subset")

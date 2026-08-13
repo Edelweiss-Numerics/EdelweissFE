@@ -64,6 +64,7 @@ kw.addRequiredArg("field", "Field of the result.", str)
 kw.addRequiredArg("result", "Result name.", str)
 kw.addOptionalArg("elSet", "Element set.", str, None)
 kw.addOptionalArg("nSet", "Node set.", str, None)
+kw.addOptionalArg("rigidBody", "Rigid body (as registered in model.rigidBodies).", str, None)
 kw.addOptionalArg("saveHistory", "Save complete History or only last (increment) result", bool, False)
 kw.addOptionalArg("f(x)", "Function to apply in each increment.", str, None)
 kw.addOptionalArg("f_export(x)", "Function to apply on final result (table).", str, None)
@@ -374,6 +375,72 @@ class NodeFieldOutput(_FieldOutputBase):
         return super()._applyResultsPipleline(result)
 
 
+class RigidBodyFieldOutput(_FieldOutputBase):
+    """
+    This is a FieldOutput operating directly on a RigidBody.
+
+    A rigid body's visualization (e.g., surface) nodes are not independent
+    degrees of freedom -- they are fully determined by the rigid body's
+    reference point, which is itself part of an ordinary NodeField. This
+    FieldOutput therefore does not operate on a NodeField at all: it queries
+    :meth:`~edelweissfe.rigidbodies.rigidbody.RigidBody.getVisualizationField`,
+    which computes the requested field directly from the rigid body's
+    (already solved) kinematics.
+
+    Parameters
+    ----------
+    name
+        The name of this FieldOutput.
+    rigidBody
+        The RigidBody on which this FieldOutput operates.
+    field
+        The name of the field to retrieve from the rigid body (e.g., "displacement").
+    model
+        The model tree instance.
+    journal
+        The journal object for logging.
+    saveHistory
+        Save the complete history or only the last result.
+    f_x
+        Apply a math function on the results.
+    export
+        Export the results to a file.
+    fExport_x
+        Apply a math function on the results before exporting.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        rigidBody,
+        field: str,
+        model: FEModel,
+        journal: Journal,
+        saveHistory: bool = False,
+        f_x: Callable = None,
+        export: str = None,
+        fExport_x: Callable = None,
+    ):
+        self._rigidBody = rigidBody
+        self._field = field
+        self.associatedSet = rigidBody
+
+        super().__init__(name, model, journal, saveHistory, f_x, export, fExport_x)
+
+    def updateResults(self, model: FEModel):
+        """Update the field output from the rigid body's current kinematics.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        """
+
+        result = self._rigidBody.getVisualizationField(self._field)
+
+        return super()._applyResultsPipleline(result)
+
+
 class ElementFieldOutput(_FieldOutputBase):
     """
     This is a Element based FieldOutput.
@@ -623,6 +690,51 @@ class FieldOutputController:
             name,
             nodeField,
             result,
+            self.model,
+            self.journal,
+            saveHistory,
+            f_x,
+            export,
+            fExport_x,
+        )
+
+    def addRigidBodyFieldOutput(
+        self,
+        name: str,
+        rigidBody,
+        field: str,
+        saveHistory=False,
+        f_x: Callable = None,
+        export: str = None,
+        fExport_x: Callable = None,
+    ):
+        """Add a new FieldOutput entry operating directly on a RigidBody.
+
+        Parameters
+        ----------
+        name
+            The name of this FieldOutput.
+        rigidBody
+            The :class:`~edelweissfe.rigidbodies.rigidbody.RigidBody` on which this FieldOutput should operate.
+        field
+            The name of the field to retrieve from the rigid body (e.g., "displacement").
+        saveHistory
+            Save the complete history or only the last result.
+        f_x
+            Apply a math function on the results.
+        export
+            Export the results to a file.
+        fExport_x
+            Apply a math function on the results before exporting.
+        """
+
+        if name in self.fieldOutputs:
+            raise Exception("FieldOutput {:} already exists!".format(name))
+
+        self.fieldOutputs[name] = RigidBodyFieldOutput(
+            name,
+            rigidBody,
+            field,
             self.model,
             self.journal,
             saveHistory,

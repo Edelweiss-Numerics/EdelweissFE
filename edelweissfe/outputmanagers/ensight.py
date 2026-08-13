@@ -39,6 +39,7 @@ import numpy as np
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.points.node import Node
+from edelweissfe.rigidbodies.rigidbody import RigidBody
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
@@ -693,6 +694,42 @@ def createUnstructuredPartFromNodeSet(setName, nodeSet: list, partID: int):
     return EnsightUnstructuredPart("NSET_" + setName, partID, list(nodeSet), elementDict)
 
 
+def createUnstructuredPartFromRigidBody(bodyName, rigidBody, partID: int):
+    """Determines the element and node list for an Ensightpart from a
+    RigidBody. The reduced, unique node set is generated, as well as
+    the element to node index mapping for the ensight part.
+
+    Parameters
+    ----------
+    bodyName
+        The name of the rigid body.
+    rigidBody
+        The rigid body object.
+    partID
+        The id of this part.
+    """
+
+    # the node list must follow getVisualizationNodes()'s order, since that is the
+    # order in which RigidBodyFieldOutput.getVisualizationField() reports per-node
+    # results - deriving it from the facets instead (e.g. by first-seen order, or
+    # excluding nodes unreferenced by any facet) would misalign or drop entries.
+    visualizationNodes = rigidBody.getVisualizationNodes()
+    nodeIndices = {node: idx for idx, node in enumerate(visualizationNodes)}
+
+    elementDict = dict()
+    facets = rigidBody.getVisualizationElements()
+
+    facetID = 1
+    for facet in facets:
+        elShape = facet["type"]
+        if elShape not in elementDict:
+            elementDict[elShape] = dict()
+        elementDict[elShape][facetID] = [nodeIndices[node] for node in facet["nodes"]]
+        facetID += 1
+
+    return EnsightUnstructuredPart("RIGIDBODY_" + bodyName, partID, visualizationNodes, elementDict)
+
+
 required = [kw.name for kw in module.requiredArgs]
 required += [kw.name for kw in module.requiredKeywords]
 
@@ -743,7 +780,6 @@ class OutputManager(OutputManagerBase):
         self.timeAtLastOutput = -1e16
         self.minDTForOutput = -1e16
         self.finishedSteps = 0
-        # self.intermediateSaveInterval = int(kwargs.get("intermediateSaveInterval", 10))
         self.intermediateSaveIntervalCounter = 0
         self.fieldOutputController = fieldOutputController
         self.journal = journal
@@ -753,6 +789,7 @@ class OutputManager(OutputManagerBase):
 
         self.elSetToEnsightPartMappings = {}
         self.nSetToEnsightPartMappings = {}
+        self.rigidBodyToEnsightPartMappings = {}
 
         self._transientPerNodeVariableJobs = defaultdict(list)
         self._transientPerElementVariableJobs = defaultdict(list)
@@ -761,7 +798,10 @@ class OutputManager(OutputManagerBase):
 
         self.geometryParts = self._createGeometryParts(1)
 
-        self.intermediateSaveInterval = module.getKeyword("configuration")["overwrite"].default
+        val = kwargs.get(
+            "intermediateSaveInterval", module.getKeyword("configuration")["intermediateSaveInterval"].default
+        )
+        self.intermediateSaveInterval = int(val) if val is not None else None
         self.overwrite = module.getKeyword("configuration")["overwrite"].default
         transient = module.getKeyword("configuration")["transient"].default
         part = None
@@ -968,8 +1008,15 @@ class OutputManager(OutputManagerBase):
     def initializeStep(self, step):
         if self.name in step.actions["options"] or "Ensight" in step.actions["options"]:
             options = step.actions["options"].get(self.name, False) or step.actions["options"]["Ensight"].options
-            self.intermediateSaveInterval = int(options.get("intermediateSaveInterval", self.intermediateSaveInterval))
-            self.minDTForOutput = float(options.get("minDTForOutput", self.minDTForOutput))
+            # options always carries these keys (module default None), so a plain options.get(key,
+            # self.attr) never falls back to self.attr -- guard the assignment instead, or any
+            # >>options, category=Ensight block silently wipes a previously configured value.
+            val = options.get("intermediateSaveInterval")
+            if val is not None:
+                self.intermediateSaveInterval = int(val)
+            val_dt = options.get("minDTForOutput")
+            if val_dt is not None:
+                self.minDTForOutput = float(val_dt)
 
     def finalizeIncrement(self, **kwargs):
         time = self.model.time
@@ -1033,10 +1080,10 @@ class OutputManager(OutputManagerBase):
 
         # intermediate save of the case
         if self.intermediateSaveInterval:
+            self.intermediateSaveIntervalCounter += 1
             if self.intermediateSaveIntervalCounter >= self.intermediateSaveInterval:
                 self.ensightCase.finalize(replaceTimeValuesByEnumeration=False, closeFileHandes=False)
                 self.intermediateSaveIntervalCounter = 0
-            self.intermediateSaveIntervalCounter += 1
 
     def finalizeStep(
         self,
@@ -1072,7 +1119,14 @@ class OutputManager(OutputManagerBase):
             nodeSetParts.append(nodeSetPart)
             partCounter += 1
 
-        return elSetParts + nodeSetParts
+        rigidBodyParts = []
+        for bodyName, body in model.rigidBodies.items():
+            bodyPart = createUnstructuredPartFromRigidBody(bodyName, body, partCounter)
+            self.rigidBodyToEnsightPartMappings[bodyName] = bodyPart
+            rigidBodyParts.append(bodyPart)
+            partCounter += 1
+
+        return elSetParts + nodeSetParts + rigidBodyParts
 
     def _getTargetPartForFieldOutput(self, fieldOutput: _FieldOutputBase) -> EnsightUnstructuredPart:
         """
@@ -1090,7 +1144,6 @@ class OutputManager(OutputManagerBase):
         EnsightStructuredPart
             The identified part.
         """
-
         theSetName = fieldOutput.associatedSet.name
 
         if isinstance(fieldOutput.associatedSet, NodeSet):
@@ -1099,9 +1152,12 @@ class OutputManager(OutputManagerBase):
         elif isinstance(fieldOutput.associatedSet, ElementSet):
             return self.elSetToEnsightPartMappings[theSetName]
 
+        elif isinstance(fieldOutput.associatedSet, RigidBody):
+            return self.rigidBodyToEnsightPartMappings[theSetName]
+
         else:
             raise Exception(
-                "Ensight Variables need to be excplicity associated with a part, our implicitly through a FieldOutput defined on ElementSets or NodeSets!"
+                "Ensight Variables need to be explicitly associated with a part, or implicitly through a FieldOutput defined on ElementSets, NodeSets, or RigidBodies!"
             )
 
     def _ensureArrayIs2D(self, result: np.ndarray) -> np.ndarray:

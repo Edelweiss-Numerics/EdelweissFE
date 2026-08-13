@@ -276,6 +276,8 @@ class NED(NonlinearSolverBase):
                     for variable in model.scalarVariables.values():
                         variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
 
+                    self.updateRigidBodies(model, timeStep)
+
                     model.advanceToTime(timeStep.totalTime)
 
                     if timeStep.number % self.options["output-frequency"] == 0:
