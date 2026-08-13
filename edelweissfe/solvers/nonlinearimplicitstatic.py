@@ -289,7 +289,6 @@ class NIST(NonlinearSolverBase):
                         )
 
         except ReachedMaxIncrements:
-            self.journal.message("Reached maximum number of increments", self.identification)
             self.applyStepActionsAtStepEnd(model, step.actions)
 
         except ReachedMinIncrementSize:
