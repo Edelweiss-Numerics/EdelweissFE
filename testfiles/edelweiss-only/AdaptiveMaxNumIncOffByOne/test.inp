@@ -14,8 +14,8 @@ x0=0, l=25
 y0=0, h=150
 elType=CPE4
 elProvider=edelweiss
-nX=8
-nY=20
+nX=1
+nY=1
 
 *step, solver=theSolver
 maxInc=0.05, minInc=1e-8, maxNumInc=19, maxIter=25, stepLength=100
