@@ -89,7 +89,7 @@ world frame by :math:`\mathbf{R}`.
 .. note::
     The implementation stores points as *row* vectors (shape ``(N, 3)``), for which
     ``v.dot(M)`` computes :math:`\mathbf{M}^{\top}\mathbf{v}` per row. Consequently the inverse
-    map above is coded as ``local_coords.dot(rotation_matrix)`` (i.e. :math:`\mathbf{R}^{\top}`) and
+    map above is coded as ``localCoords.dot(rotation_matrix)`` (i.e. :math:`\mathbf{R}^{\top}`) and
     the forward map of normals as ``normals.dot(rotation_matrix.T)`` (i.e. :math:`\mathbf{R}`) —
     the opposite of what a naive read of the transpose suggests. This convention is documented in
     the source and was verified numerically against a known rotated mesh; do not "fix" the transpose

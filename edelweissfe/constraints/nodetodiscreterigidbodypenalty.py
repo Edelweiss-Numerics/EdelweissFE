@@ -26,6 +26,11 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+"""
+A penalty based unilateral contact constraint between a node set of ordinary FE nodes and the
+surface of a :class:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody`.
+"""
+
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
@@ -38,11 +43,6 @@ from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
     castKwargsValuesAndAddDefaults,
 )
-
-"""
-A penalty based unilateral contact constraint between a node set of ordinary FE nodes and the
-surface of a :class:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody`.
-"""
 
 module = Module(
     "nodeToDiscreteRigidBodyPenalty",
@@ -162,8 +162,8 @@ class Constraint(ConstraintBase):
     """
     Penalty based unilateral contact between a slave node set and a discrete rigid body.
 
-    Theoretical background
-    -----------------------
+    Notes
+    -----
     For a slave node :math:`s` at current position :math:`\\mathbf{x}_s`, the rigid body's surface
     query returns the signed distance :math:`d_s` (negative when penetrating) and outward unit
     normal :math:`\\mathbf{n}_s` of the closest surface point. The contact is active whenever
@@ -216,9 +216,11 @@ class Constraint(ConstraintBase):
     Hessian of the gap function restricted to the implemented blocks. Not included: the
     :math:`\\boldsymbol{\\theta}_{RP}\\boldsymbol{\\theta}_{RP}` self-block -- symmetric on its own
     (verified numerically) but requiring the second derivative of the SO(3) exponential map, which
-    is not implemented -- omitting it only affects the convergence rate, not correctness of the
-    residual. Facet-boundary (edge/vertex) normal discontinuities are also not smoothed, so no
-    consistent tangent exists exactly there regardless.
+    is not implemented. This is still only a convergence-rate issue, not a correctness bug (the
+    residual itself is exact), but the omitted block is not negligible: measured by central finite
+    differences, it is 40-60% of the largest entry in the assembled tangent across accumulated
+    rotations from 0 to 0.4 rad. Facet-boundary (edge/vertex) normal discontinuities are also not
+    smoothed, so no consistent tangent exists exactly there regardless.
 
     Currently only available for spatialdomain = 3D.
     """
@@ -236,7 +238,15 @@ class Constraint(ConstraintBase):
         self.rigidBody = model.rigidBodies[kwargs["rigidBody"]]
         self.rpNode = self.rigidBody.rpNode
 
-        self.slaveNodes = [node for node in model.nodeSets[kwargs["nSet"]] if node is not self.rpNode]
+        rigidBodyNodes = set(self.rigidBody.surfaceNodes) | {self.rpNode}
+        slaveNodesRequested = model.nodeSets[kwargs["nSet"]]
+        if any(node in rigidBodyNodes for node in slaveNodesRequested):
+            raise ValueError(
+                f"nSet '{kwargs['nSet']}' for constraint '{name}' contains nodes belonging to rigid body "
+                f"'{self.rigidBody.name}' (e.g. its surface or reference-point nodes) -- these carry no "
+                "field variables and cannot be slave nodes. Exclude them from the node set."
+            )
+        self.slaveNodes = list(slaveNodesRequested)
         self.nSlaves = len(self.slaveNodes)
 
         self.penalty = kwargs["penalty"]
@@ -387,10 +397,10 @@ class Constraint(ConstraintBase):
             K.K_rpp[s] += stiffness * np.outer(w_rp, w_p)
             K.K_rprp += stiffness * np.outer(w_rp, w_rp)
 
-            # Geometric stiffness from the rigid rotation of the (locally flat) facet normal, and
-            # from dPhysicalSpin_dTheta(theta_rp) itself, with the RP rotation -- exact linearization of
-            # w_s as coded (verified against finite differences for arbitrary accumulated theta_rp,
-            # not just small-angle). Each block below is named after the derivative it is:
+            # Geometric stiffness from the rigid rotation of the (locally flat) facet normal, and from
+            # dPhysicalSpin_dTheta(theta_rp) itself, with the RP rotation. Each block below is named
+            # after the derivative it is (see the class docstring for the theta_rp-theta_rp self-block,
+            # which is not included here):
             #   dn_dTheta    = d(n_s)/d(theta_rp)     = -skew(n_s) @ dPhysicalSpin_dTheta
             #   dMoment_dUs  = d(r_s x n_s)/d(u_s)     = -skew(n_s)
             #   dMoment_dUrp = d(r_s x n_s)/d(u_rp)    = skew(n_s)
@@ -399,12 +409,6 @@ class Constraint(ConstraintBase):
             #   d(w_rp,disp)/d(theta_rp) =  dn_dTheta
             #   d(w_rp,rot)/d(u_s)       =  dPhysicalSpin_dTheta^T @ dMoment_dUs
             #   d(w_rp,rot)/d(u_rp)      =  dPhysicalSpin_dTheta^T @ dMoment_dUrp
-            # Since w_rp,rot is now the exact generalized force conjugate to theta_rp (not just its
-            # theta_rp=0 special case), this tangent is the exact (symmetric, verified) Hessian of
-            # the gap function restricted to these off-diagonal blocks. The theta_rp-theta_rp
-            # self-block is additionally symmetric here (confirmed numerically) but still needs the
-            # second derivative of R(theta_rp), which is not implemented -- omitting it only affects
-            # the convergence rate, not correctness of the residual.
             dn_dTheta = -_skew(n_s) @ dPhysicalSpin_dTheta
             dMoment_dUs = -_skew(n_s)
             dMoment_dUrp = _skew(n_s)

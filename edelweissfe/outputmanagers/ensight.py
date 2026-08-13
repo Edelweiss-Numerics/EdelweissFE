@@ -39,6 +39,7 @@ import numpy as np
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.points.node import Node
+from edelweissfe.rigidbodies.rigidbody import RigidBody
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
@@ -726,7 +727,7 @@ def createUnstructuredPartFromRigidBody(bodyName, rigidBody, partID: int):
         elementDict[elShape][facetID] = [nodeIndices[node] for node in facet["nodes"]]
         facetID += 1
 
-    return EnsightUnstructuredPart(bodyName, partID, visualizationNodes, elementDict)
+    return EnsightUnstructuredPart("RIGIDBODY_" + bodyName, partID, visualizationNodes, elementDict)
 
 
 required = [kw.name for kw in module.requiredArgs]
@@ -779,7 +780,6 @@ class OutputManager(OutputManagerBase):
         self.timeAtLastOutput = -1e16
         self.minDTForOutput = -1e16
         self.finishedSteps = 0
-        # self.intermediateSaveInterval = int(kwargs.get("intermediateSaveInterval", 10))
         self.intermediateSaveIntervalCounter = 0
         self.fieldOutputController = fieldOutputController
         self.journal = journal
@@ -1008,10 +1008,15 @@ class OutputManager(OutputManagerBase):
     def initializeStep(self, step):
         if self.name in step.actions["options"] or "Ensight" in step.actions["options"]:
             options = step.actions["options"].get(self.name, False) or step.actions["options"]["Ensight"].options
-            val = options.get("intermediateSaveInterval", self.intermediateSaveInterval)
-            self.intermediateSaveInterval = int(val) if val is not None else None
-            val_dt = options.get("minDTForOutput", self.minDTForOutput)
-            self.minDTForOutput = float(val_dt) if val_dt is not None else 0.0
+            # options always carries these keys (module default None), so a plain options.get(key,
+            # self.attr) never falls back to self.attr -- guard the assignment instead, or any
+            # >>options, category=Ensight block silently wipes a previously configured value.
+            val = options.get("intermediateSaveInterval")
+            if val is not None:
+                self.intermediateSaveInterval = int(val)
+            val_dt = options.get("minDTForOutput")
+            if val_dt is not None:
+                self.minDTForOutput = float(val_dt)
 
     def finalizeIncrement(self, **kwargs):
         time = self.model.time
@@ -1139,8 +1144,6 @@ class OutputManager(OutputManagerBase):
         EnsightStructuredPart
             The identified part.
         """
-        from edelweissfe.rigidbodies.rigidbody import RigidBody
-
         theSetName = fieldOutput.associatedSet.name
 
         if isinstance(fieldOutput.associatedSet, NodeSet):

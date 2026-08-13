@@ -157,7 +157,7 @@ class DofManager:
 
         if initializeVIJPattern:
             self._sizeVIJ = self._accumulatedElementVIJSize + self._accumulatedConstraintVIJSize
-            self.I, self.J, self.idcsOfHigherOrderEntitiesInVIJ = self._initializeVIJPattern()
+            (self.I, self.J, self.idcsOfHigherOrderEntitiesInVIJ) = self._initializeVIJPattern()
 
         if determiningIndexToHostObjectMappping:
             self.indexToHostObjectMapping |= self._determineIndexToNodeMap()

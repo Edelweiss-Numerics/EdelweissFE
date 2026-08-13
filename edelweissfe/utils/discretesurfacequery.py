@@ -30,43 +30,26 @@ import numpy as np
 
 
 class DiscreteSurfaceQuery:
-    def __init__(self, filename: str = None, mesh=None, initial_offset: np.ndarray = None):
+    def __init__(self, mesh):
         """
-        Initializes the query engine by loading an Exodus mesh or using a provided PyVista mesh.
+        Initializes the query engine for a given PyVista mesh.
 
         Uses static VTK locators and evaluators to avoid memory leaks during
         repeated distance evaluations.
 
         Parameters
         ----------
-        filename : str, optional
-            Path to the Exodus mesh file for the rigid body.
-        mesh : pyvista.PolyData, optional
-            A direct PyVista mesh object to use. If provided, `filename` is ignored.
-        initial_offset : numpy.ndarray, optional
-            A translation vector applied to the mesh points before building
-            the VTK locators.
+        mesh : pyvista.PolyData
+            The PyVista mesh to query.
         """
-        global pv, vtk
-        import pyvista as pv
         import vtk
 
-        if mesh is not None:
-            self.mesh = mesh
-        elif filename is not None:
-            self.mesh = pv.read(filename)
-            if isinstance(self.mesh, pv.MultiBlock):
-                self.mesh = self.mesh.combine()
-        else:
-            raise ValueError("Must provide either 'filename' or 'mesh'")
+        self._vtk = vtk
+
+        self.mesh = mesh
 
         # Extract the outer surface to ensure we have a PolyData object
-        self.mesh = self.mesh.extract_surface()
-
-        # Apply the initial offset so that the contact surface sits at its
-        # physical starting position (consistent with the visualization nodes).
-        if initial_offset is not None:
-            self.mesh.points = self.mesh.points + np.asarray(initial_offset, dtype=np.float64)
+        self.mesh = self.mesh.extract_surface(algorithm="dataset_surface")
 
         # Ensure outward normals are computed for each cell. auto_orient_normals determines the
         # true outward direction from the mesh topology itself (requires a closed, manifold
@@ -116,49 +99,48 @@ class DiscreteSurfaceQuery:
         normals : numpy.ndarray
             Array of shape (N, 3) containing the outward normal vectors on the closest faces.
 
-        Note on the rotation convention
-        --------------------------------
-        Both ``local_coords``/``normals`` here and e.g.
-        :meth:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getCurrentKinematics`
-        use the *same* forward convention: a body-frame vector ``v`` is mapped to the world frame
-        via ``v.dot(R.T)``. Because these are *row* vectors (shape ``(N, 3)``), ``v.dot(M)`` computes
-        ``M.T @ v`` per row, not ``M @ v`` -- so ``v.dot(R.T)`` is ``R @ v`` (forward: body -> world),
-        and ``v.dot(R)`` is ``R.T @ v`` (inverse: world -> body). This is the opposite of what a
-        naive read of ``.dot(rotation_matrix)`` vs. ``.dot(rotation_matrix.T)`` suggests -- verified
-        numerically against a known rotated mesh before relying on it, since it is easy to get backwards
-        (do not "fix" the transpose here without re-deriving/re-checking this convention first).
+        .. note::
+            Note on the rotation convention: both ``localCoords``/``normals`` here and e.g.
+            :meth:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getCurrentKinematics`
+            use the *same* forward convention: a body-frame vector ``v`` is mapped to the world frame
+            via ``v.dot(R.T)``. Because these are *row* vectors (shape ``(N, 3)``), ``v.dot(M)`` computes
+            ``M.T @ v`` per row, not ``M @ v`` -- so ``v.dot(R.T)`` is ``R @ v`` (forward: body -> world),
+            and ``v.dot(R)`` is ``R.T @ v`` (inverse: world -> body). This is the opposite of what a
+            naive read of ``.dot(rotation_matrix)`` vs. ``.dot(rotation_matrix.T)`` suggests -- verified
+            numerically against a known rotated mesh before relying on it, since it is easy to get backwards
+            (do not "fix" the transpose here without re-deriving/re-checking this convention first).
         """
         # Inverse transform query coordinates to the local (static mesh) frame
-        local_coords = coords.copy()
+        localCoords = coords.copy()
 
         if translation is not None and rotation_center is not None:
             # RP current position
             rp_current = rotation_center + translation
-            local_coords -= rp_current
+            localCoords -= rp_current
 
         if rotation_matrix is not None:
-            # Inverse rotation R^T * (P - RP_current) -- see "Note on the rotation convention" above;
+            # Inverse rotation R^T * (P - RP_current) -- see the rotation-convention note above;
             # .dot(rotation_matrix), NOT .dot(rotation_matrix.T), is the correct inverse here.
-            local_coords = local_coords.dot(rotation_matrix)
+            localCoords = localCoords.dot(rotation_matrix)
 
         if rotation_center is not None:
             # P_local = RP_initial + R^T * (P_global - RP_current)
-            local_coords += rotation_center
+            localCoords += rotation_center
 
-        n_points = local_coords.shape[0]
+        n_points = localCoords.shape[0]
         dists = np.empty(n_points, dtype=np.float64)
         closest_cells = np.empty(n_points, dtype=np.int64)
 
         # Pre-allocate reusable VTK out arguments for speed
         closest_point = [0.0, 0.0, 0.0]
-        sub_id = vtk.reference(0)
-        dist2 = vtk.reference(0.0)
+        sub_id = self._vtk.reference(0)
+        dist2 = self._vtk.reference(0.0)
 
         for i in range(n_points):
-            pt = local_coords[i]
+            pt = localCoords[i]
             dists[i] = self.implicit_dist.EvaluateFunction(pt)
 
-            cell_id = vtk.reference(0)
+            cell_id = self._vtk.reference(0)
             self.locator.FindClosestPoint(pt, closest_point, cell_id, sub_id, dist2)
             closest_cells[i] = int(cell_id)
 
