@@ -130,7 +130,7 @@ class AdaptiveTimeStepper:
                 endTimeOfIncrementInTotal,
             )
 
-            if self.incrementCounter > self.maxNumberIncrements:
+            if self.incrementCounter >= self.maxNumberIncrements:
                 self.journal.errorMessage("Reached maximum number of increments", self.identification)
                 raise ReachedMaxIncrements()
 
