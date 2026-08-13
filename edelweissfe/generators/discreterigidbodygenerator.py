@@ -37,11 +37,13 @@ only has to deal with rigid body kinematics, not with how it is instantiated.
 """
 
 import numpy as np
+import pyvista as pv
 
 from edelweissfe.points.node import Node
 from edelweissfe.rigidbodies.discreterigidbody import DiscreteRigidBody
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.exceptions import WrongDomain
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
@@ -82,7 +84,6 @@ module.addOptionalArg(
     str,
     None,
 )
-module.addOptionalArg("initialVelocity", "A comma-separated initial velocity vector [vx, vy, vz].", str, None)
 module.addOptionalArg(
     "rpCoordinate",
     "A comma-separated explicit global coordinate for the reference point. Defaults to the (exact or "
@@ -109,19 +110,37 @@ def generateModelData(generatorDefinition: dict, model, journal, *args, **kwargs
 
     kwargs = CaseInsensitiveDict(kwargs)
 
+    # The rigid body's surface mesh and the node-to-discrete-rigid-body contact are inherently 3D.
+    if model.domainSize != 3:
+        raise WrongDomain("discreteRigidBodyGenerator is only available for 3D models.")
+
     name = generatorDefinition.get("name", "discreteRigidBody")
+
+    translation = _parseVector(kwargs["translation"])
+    inertia = _parseVector(kwargs["inertia"])
+    rpCoordinate = _parseVector(kwargs["rpCoordinate"])
+
+    # All of these are 3-component quantities (Cartesian vectors, or the diagonal inertia
+    # [Ixx, Iyy, Izz]). Validate up front so a mistyped option fails clearly here rather than
+    # silently creating wrong-sized coordinate/inertia arrays that break downstream.
+    for argName, vector in (
+        ("translation", translation),
+        ("inertia", inertia),
+        ("rpCoordinate", rpCoordinate),
+    ):
+        if vector is not None and vector.shape[0] != 3:
+            raise WrongDomain(f"discreteRigidBodyGenerator option '{argName}' must have 3 components.")
 
     generateDiscreteRigidBodyFromMeshFile(
         model,
         journal,
         name=name,
         filename=kwargs["filename"],
-        translation=_parseVector(kwargs["translation"]),
+        translation=translation,
         density=kwargs["density"],
         mass=kwargs["mass"],
-        inertia=_parseVector(kwargs["inertia"]),
-        initial_velocity=_parseVector(kwargs["initialVelocity"]),
-        rp_coordinate=_parseVector(kwargs["rpCoordinate"]),
+        inertia=inertia,
+        rpCoordinate=rpCoordinate,
     )
 
     return model
@@ -136,8 +155,7 @@ def generateDiscreteRigidBodyFromMeshFile(
     density: float = None,
     mass: float = None,
     inertia: list = None,
-    initial_velocity: list = None,
-    rp_coordinate: np.ndarray = None,
+    rpCoordinate: np.ndarray = None,
     start_label: int = None,
 ) -> DiscreteRigidBody:
     """Create a :class:`DiscreteRigidBody` from a surface mesh file and register it in the model.
@@ -175,9 +193,7 @@ def generateDiscreteRigidBodyFromMeshFile(
         density-based computation. Note that
         :class:`~edelweissfe.elements.pointmass.PointMass` only supports a
         diagonal (axis-aligned) rotary inertia -- see Notes.
-    initial_velocity : list, optional
-        The initial velocity vector [vx, vy, vz].
-    rp_coordinate : numpy.ndarray, optional
+    rpCoordinate : numpy.ndarray, optional
         The explicit global coordinates for the reference point. If `None`,
         it defaults to the exact center of mass (if `density` was given) or
         otherwise the mesh's approximate center of mass.
@@ -204,11 +220,7 @@ def generateDiscreteRigidBodyFromMeshFile(
 
     journal.message(f"Reading discrete rigid body surface mesh from: {filename}", "discreteRigidBody", 1)
 
-    filenameLower = filename.lower()
-    if filenameLower.endswith(".exo") or filenameLower.endswith(".nc"):
-        points, faces, elementTypes, surf = _readExodusSurfaceMesh(filename, translation)
-    else:
-        points, faces, elementTypes, surf = _readGenericSurfaceMesh(filename, translation)
+    points, faces, elementTypes, surf = _readGenericSurfaceMesh(filename, translation)
 
     if density is not None:
         massProperties = computePolyhedronMassProperties(points, faces, density)
@@ -230,8 +242,8 @@ def generateDiscreteRigidBodyFromMeshFile(
             mass = massProperties.mass
         if inertia is None:
             inertia = list(np.diag(massProperties.inertia))
-        if rp_coordinate is None:
-            rp_coordinate = massProperties.centerOfMass
+        if rpCoordinate is None:
+            rpCoordinate = massProperties.centerOfMass
 
     journal.message(f"Discrete rigid body '{name}': {len(points)} surface nodes, mass={mass}.", "discreteRigidBody", 1)
 
@@ -251,10 +263,10 @@ def generateDiscreteRigidBodyFromMeshFile(
         for face, elementType in zip(faces, elementTypes)
     ]
 
-    if rp_coordinate is None:
-        rp_coordinate = surf.center_of_mass()
+    if rpCoordinate is None:
+        rpCoordinate = surf.center_of_mass()
 
-    referencePoint = Node(nodeLabel, np.asarray(rp_coordinate))
+    referencePoint = Node(nodeLabel, np.asarray(rpCoordinate))
     model.nodes[referencePoint.label] = referencePoint
 
     rpNodeSetName = f"{name}_rp"
@@ -269,86 +281,19 @@ def generateDiscreteRigidBodyFromMeshFile(
     rigidBody = DiscreteRigidBody(
         name,
         model,
+        surf,
         nSet=surfaceNodeSetName,
         referencePoint=rpNodeSetName,
         mass=mass,
         inertia=inertia,
-        initial_velocity=initial_velocity,
         facets=facets,
     )
-    rigidBody.surface_mesh = surf
 
     return rigidBody
 
 
-def _readExodusSurfaceMesh(filename: str, translation: np.ndarray = None):
-    """Read a surface mesh from an Exodus/NetCDF file.
-
-    Parameters
-    ----------
-    filename : str
-        The file path to the Exodus/NetCDF surface mesh.
-    translation : numpy.ndarray, optional
-        A 3D vector to translate the mesh globally.
-
-    Returns
-    -------
-    points : numpy.ndarray, shape (nNodes, 3)
-        The (translated) vertex coordinates.
-    faces : list of numpy.ndarray
-        The vertex-index list of each face.
-    elementTypes : list of str
-        The EdelweissFE/Ensight element type ("tria3" or "quad4") of each face.
-    surf : pyvista.PolyData
-        The assembled surface, with outward face normals computed.
-    """
-    import netCDF4
-    import pyvista as pv
-
-    nc = netCDF4.Dataset(filename, "r")
-    try:
-        x = nc.variables["coordx"][:]
-        y = nc.variables["coordy"][:]
-        z = nc.variables["coordz"][:] if "coordz" in nc.variables else np.zeros_like(x)
-        points = np.column_stack((x, y, z))
-
-        if translation is not None:
-            points = points + np.asarray(translation)
-
-        if "connect1" not in nc.variables:
-            raise ValueError("No connect1 variable found in NetCDF/Exodus file.")
-
-        connectivity = nc.variables["connect1"][:] - 1  # 0-indexed
-    finally:
-        nc.close()
-
-    numElements, numNodesPerElement = connectivity.shape
-
-    faces = []
-    elementTypes = []
-    pyvistaFaces = []
-    for i in range(numElements):
-        face = connectivity[i]
-        faces.append(face)
-
-        pyvistaFaces.append(numNodesPerElement)
-        pyvistaFaces.extend(face)
-
-        if numNodesPerElement == 3:
-            elementTypes.append("tria3")
-        elif numNodesPerElement == 4:
-            elementTypes.append("quad4")
-        else:
-            raise ValueError(f"Unsupported number of nodes {numNodesPerElement} for surface mesh.")
-
-    surf = pv.PolyData(points, np.array(pyvistaFaces))
-    surf.compute_normals(cell_normals=True, point_normals=False, inplace=True)
-
-    return points, faces, elementTypes, surf
-
-
 def _readGenericSurfaceMesh(filename: str, translation: np.ndarray = None):
-    """Read a surface mesh via PyVista (STL, OBJ, VTK, ...).
+    """Read a surface mesh via PyVista (Exodus, STL, OBJ, VTK, ...).
 
     Parameters
     ----------
@@ -368,19 +313,19 @@ def _readGenericSurfaceMesh(filename: str, translation: np.ndarray = None):
     surf : pyvista.PolyData
         The extracted surface, with outward face normals computed.
     """
-    import pyvista as pv
-
     mesh = pv.read(filename)
     if isinstance(mesh, pv.MultiBlock):
         mesh = mesh.combine()
 
-    points = mesh.points.copy()
+    surf = mesh.extract_surface(algorithm="dataset_surface")
+    surf.compute_normals(cell_normals=True, point_normals=False, inplace=True)
+
+    # points must come from surf, not mesh, since extract_surface() can drop/renumber
+    # points relative to the input mesh - faces below index into surf's point array.
+    points = surf.points.copy()
     if translation is not None:
         points = points + np.asarray(translation)
-    mesh.points = points
-
-    surf = mesh.extract_surface()
-    surf.compute_normals(cell_normals=True, point_normals=False, inplace=True)
+        surf.points = points
 
     # PyVista renamed PolyData.cells -> PolyData.faces for this flat VTK cell-array representation.
     cells = surf.faces

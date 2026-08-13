@@ -45,7 +45,7 @@ class DiscreteRigidBody(RigidBody):
     nodes -- this class itself only deals with the rigid body's kinematics.
     """
 
-    def __init__(self, name, model, *args, **kwargs):
+    def __init__(self, name, model, surfaceMesh, *args, **kwargs):
         super().__init__(name, model)
         self.model.rigidBodies[self.name] = self
 
@@ -60,10 +60,9 @@ class DiscreteRigidBody(RigidBody):
         self.rpNode = list(rpNodeSet)[0]
         self.domainSize = model.domainSize
 
-        # The RP velocity state is owned by the PointMass mass carrier (created
-        # below), not by the node -- the explicit solver keeps it in sync.
-        self.surface_mesh = None
-        self._query_engine = None
+        self.surfaceMesh = surfaceMesh
+        self._queryEngine = None
+        self._stackedSurfaceCoordinatesCache = None
 
         # Facets replace DiscreteRigidElement.
         # Format: [{'type': 'tria3', 'nodes': [node1, node2, node3]}, ...]
@@ -74,18 +73,18 @@ class DiscreteRigidBody(RigidBody):
 
         self.mass = kwargs.get("mass")
         self.inertia = kwargs.get("inertia")
-        self.initial_velocity = kwargs.get("initial_velocity")
 
         # Abstract the PointMass element
-        self.point_mass_element = None
+        self.pointMassElement = None
         if self.mass is not None:
             from edelweissfe.elements.pointmass import PointMass
 
+            # NOTE: assumes no other generator assigns element labels from its own counter
+            # after this one runs; a shared label allocator on the model would remove this
+            # class of collision risk entirely.
             el_num = max(model.elements.keys()) + 1 if model.elements else 1
-            self.point_mass_element = PointMass(
-                el_num, [self.rpNode], model, self.mass, self.inertia, self.initial_velocity
-            )
-            model.elements[el_num] = self.point_mass_element
+            self.pointMassElement = PointMass(el_num, [self.rpNode], model, self.mass, self.inertia)
+            model.elements[el_num] = self.pointMassElement
 
     def getCurrentKinematics(self):
         """Return the current rigid body motion.
@@ -98,19 +97,18 @@ class DiscreteRigidBody(RigidBody):
             the sum of the first and third entries.
         """
         disp_field = self.model.nodeFields.get("displacement")
-        if disp_field is not None and "U" in disp_field and self.rpNode in disp_field.nodes:
-            idx = disp_field._indicesOfNodesInArray[self.rpNode]
-            u_rp = disp_field["U"][idx].copy()
-        else:
-            u_rp = np.zeros(self.model.domainSize)
+        if disp_field is None or "U" not in disp_field or self.rpNode not in disp_field.nodes:
+            raise RuntimeError(
+                f"Discrete rigid body '{self.name}': reference point node is not part of the model's "
+                "'displacement' NodeField -- the model may not be fully initialized yet."
+            )
+        u_rp = disp_field["U"][disp_field.indexOfNode(self.rpNode)].copy()
 
         R = np.eye(3)
-        if self.model.domainSize == 3:
-            rot_field = self.model.nodeFields.get("rotation")
-            if rot_field is not None and "U" in rot_field and self.rpNode in rot_field.nodes:
-                idx = rot_field._indicesOfNodesInArray[self.rpNode]
-                theta = rot_field["U"][idx]
-                R = self.rotationMatrixFromPseudoVector(theta)
+        rot_field = self.model.nodeFields.get("rotation")
+        if rot_field is not None and "U" in rot_field and self.rpNode in rot_field.nodes:
+            theta = rot_field["U"][rot_field.indexOfNode(self.rpNode)]
+            R = self.rotationMatrixFromPseudoVector(theta)
 
         # In EdelweissFE, the RP node's coordinates are the *reference* (initial) coordinates.
         return u_rp, R, self.rpNode.coordinates
@@ -140,8 +138,7 @@ class DiscreteRigidBody(RigidBody):
             The current and reference coordinates, both of shape ``(nSurfaceNodes, domainSize)``.
         """
         u_rp, R, rp_initial = kinematics if kinematics is not None else self.getCurrentKinematics()
-        d = self.domainSize
-        currentCoords = (rp_initial + u_rp) + self.initialRelativePositions.dot(R[:d, :d].T)
+        currentCoords = (rp_initial + u_rp) + self.initialRelativePositions.dot(R.T)
         referenceCoords = rp_initial + self.initialRelativePositions
         return currentCoords, referenceCoords
 
@@ -159,6 +156,8 @@ class DiscreteRigidBody(RigidBody):
         for i, node in enumerate(self.surfaceNodes):
             node.coordinates[:] = currentCoords[i]
 
+        self._stackedSurfaceCoordinatesCache = currentCoords
+
     def getAABB(self, kinematics: tuple = None):
         """Axis-aligned bounding box of the surface nodes' current positions.
 
@@ -166,12 +165,14 @@ class DiscreteRigidBody(RigidBody):
         ----------
         kinematics : tuple, optional
             See :meth:`_currentAndReferenceSurfaceCoordinates`. If not given, uses
-            the surface nodes' own (last-updated-by :meth:`updateKinematics`)
-            ``coordinates`` directly rather than recomputing them, as a fast path
-            for the common case.
+            the stacked array cached by the last :meth:`updateKinematics` call (or,
+            before the first such call, rebuilds it from the surface nodes' own
+            ``coordinates``), as a fast path for the common case.
         """
         if kinematics is None:
-            coords = np.array([n.coordinates for n in self.surfaceNodes])
+            coords = self._stackedSurfaceCoordinatesCache
+            if coords is None:
+                coords = np.array([n.coordinates for n in self.surfaceNodes])
         else:
             coords, _ = self._currentAndReferenceSurfaceCoordinates(kinematics)
         return np.min(coords, axis=0), np.max(coords, axis=0)
@@ -205,12 +206,10 @@ class DiscreteRigidBody(RigidBody):
         normals : numpy.ndarray, shape (nPoints, 3)
             The outward unit normals of the closest faces.
         """
-        if self._query_engine is None:
-            if self.surface_mesh is None:
-                raise RuntimeError(f"Discrete rigid body '{self.name}' has no surface_mesh to query.")
+        if self._queryEngine is None:
             from edelweissfe.utils.discretesurfacequery import DiscreteSurfaceQuery
 
-            self._query_engine = DiscreteSurfaceQuery(mesh=self.surface_mesh)
+            self._queryEngine = DiscreteSurfaceQuery(mesh=self.surfaceMesh)
 
         n_points = coords.shape[0]
         if proximityDistance is not None:
@@ -227,7 +226,7 @@ class DiscreteRigidBody(RigidBody):
             active_indices = np.arange(n_points)
 
         u_rp, R, rp_initial = kinematics if kinematics is not None else self.getCurrentKinematics()
-        active_dists, active_normals = self._query_engine.query(
+        active_dists, active_normals = self._queryEngine.query(
             coords_to_query, translation=u_rp, rotation_matrix=R, rotation_center=rp_initial
         )
 
@@ -265,11 +264,18 @@ class DiscreteRigidBody(RigidBody):
         Parameters
         ----------
         fieldName
-            The name of the field. Currently only ``"displacement"`` is supported;
-            any other field returns zeros.
+            The name of the field. Currently only ``"displacement"`` is supported.
+
+        Raises
+        ------
+        ValueError
+            If ``fieldName`` is not ``"displacement"``.
         """
         if fieldName != "displacement":
-            return np.zeros((len(self.surfaceNodes), self.model.domainSize))
+            raise ValueError(
+                f"Discrete rigid body '{self.name}': unsupported field '{fieldName}' for visualization "
+                "output; only 'displacement' is currently supported."
+            )
 
         currentCoords, referenceCoords = self._currentAndReferenceSurfaceCoordinates()
         return currentCoords - referenceCoords

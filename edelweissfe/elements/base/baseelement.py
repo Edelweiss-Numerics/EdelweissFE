@@ -235,24 +235,6 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
             The diagonal of the lumped mass matrix to be defined.
         """
 
-    @property
-    def initialVelocity(self) -> np.ndarray:
-        """The element's initial velocity, in DOF order, applied once as an
-        initial condition at the start of an explicit simulation.
-
-        Elements do not take part in the per-step momentum remap (that is a
-        particle/cell concern); a mass-bearing element such as
-        :class:`~edelweissfe.elements.pointmass.PointMass` instead declares its
-        initial velocity here, which the explicit solver seeds into the grid
-        velocity vector once. The default is rest.
-
-        Returns
-        -------
-        np.ndarray
-            The initial velocity of the element's DOFs (size ``nDof``).
-        """
-        return np.zeros(self.nDof)
-
     @abstractmethod
     def computeCriticalTimeStepForExplicitDynamics(
         self,
