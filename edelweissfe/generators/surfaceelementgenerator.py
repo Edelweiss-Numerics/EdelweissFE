@@ -86,6 +86,13 @@ module.addOptionalArg(
 
 documentation = [module]
 
+#: The face-numbering convention ``_FACE_TABLES``/``_MIDSIDE_FACE_TABLES`` below are keyed by --
+#: this codebase's own mesh generators (``boxGen``, ``pipeGen``, ``planeRectQuad``) register their
+#: surfaces under this convention automatically. This is the only convention this generator
+#: understands; see the module-level comment on ``_FACE_TABLES`` for why it is *not* interchangeable
+#: with the generic Abaqus S1..S6 convention.
+NATIVE_FACE_NUMBERING_CONVENTION = "native"
+
 # Face-node-ordering tables, 0-indexed, reduced to each element type's linear corner nodes. Each
 # face maps to a tuple of node-index groups: a 3-tuple is a Tria3 facet, a 2-tuple is a Line2 facet.
 # Quad faces of 3D solids are split into two Tria3 facets via a diagonal, preserving the source
@@ -213,6 +220,22 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args,
 
     if surfaceName not in model.surfaces:
         raise ValueError(f"surfaceElementGenerator: surface '{surfaceName}' is not defined.")
+
+    # Surfaces registered by this codebase's own mesh generators (boxGen, pipeGen, planeRectQuad)
+    # are untagged and implicitly native; only abqmodelconstructor's *surface keyword (real Abaqus
+    # S1..S6 face numbers) tags itself otherwise. See NATIVE_FACE_NUMBERING_CONVENTION above and
+    # the "Face triangulation" section of the contact theory docs for why the two are not
+    # interchangeable -- this codebase's own elements do not use Abaqus' local node ordering either,
+    # so translating the face number alone would not be sufficient to support the latter.
+    surfaceConvention = model.surfaceFaceNumberingConventions.get(surfaceName, NATIVE_FACE_NUMBERING_CONVENTION)
+    if surfaceConvention != NATIVE_FACE_NUMBERING_CONVENTION:
+        raise ValueError(
+            f"surfaceElementGenerator: surface '{surfaceName}' uses the '{surfaceConvention}' "
+            "face-numbering convention (e.g. from a *surface keyword definition), which this generator "
+            "does not support -- it only understands the face-numbering convention of this codebase's "
+            "own mesh generators (boxGen, pipeGen, planeRectQuad). Define the contact surface via one "
+            "of those generators instead."
+        )
 
     surfaceDef = model.surfaces[surfaceName]
 
