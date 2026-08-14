@@ -30,12 +30,13 @@ lZ      =1
 elProvider =edelweiss
 elType  =C3D20
 
+** y0 offset from round 0.55 for the same reason as test.inp -- see its comment. Keep in sync.
 *modelGenerator, generator=boxGen, name=upper
 nX      =2
 nY      =2
 nZ      =2
 x0      =0.55
-y0      =0.55
+y0      =0.6
 z0      =1.02
 lX      =0.9
 lY      =0.9

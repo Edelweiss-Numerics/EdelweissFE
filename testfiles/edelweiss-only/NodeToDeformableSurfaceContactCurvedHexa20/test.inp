@@ -27,12 +27,27 @@ lZ      =1
 elProvider =edelweiss
 elType  =C3D20
 
+** y0 is deliberately offset from the round 0.55 (spanning 0.55-1.45, dead center on the lower
+** block's own y-midplane y=1, since lower spans y=0-2): with y0=0.55, both blocks are exactly
+** y-mirror-symmetric about y=1, independent of x. That symmetry makes several of
+** _tria3ClosestPoint's region-test discriminants (va/vb/vc in nodetodeformablesurfacepenalty.py)
+** evaluate to exactly 0.0 along the *entire* y=1 line (confirmed by scanning every closest-point
+** call for the whole run: 0 such ties after this offset, vs. several at y0=0.55, spanning multiple
+** x positions -- this is a plane of ties, not an isolated point). Same class of bug as
+** NodeToDeformableSurfaceContactPullOut's thread-count-dependent facet tie (see that test's
+** comment): this machine's arithmetic happens to resolve the tie consistently, but a different
+** NumPy/BLAS build can round the same expression to a tiny nonzero value of either sign and select
+** a different region. Do not move this back to 0.55. (An earlier attempt at this fix incorrectly
+** offset x0 instead, based on a single coincidental x=1 tie that turned out to be secondary to
+** this y=1 plane -- verify with a full discriminant scan, not just thread-count spot checks, before
+** trusting a future change here: thread-count agreement on this machine does NOT imply the tie is
+** actually gone, it can resolve the same exact tie deterministically while still being fragile.)
 *modelGenerator, generator=boxGen, name=upper
 nX      =2
 nY      =2
 nZ      =2
 x0      =0.55
-y0      =0.55
+y0      =0.6
 z0      =1.02
 lX      =0.9
 lY      =0.9
