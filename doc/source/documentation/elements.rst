@@ -46,7 +46,7 @@ One of the following element types needs to be included in the definition (``typ
 
 .. note::
     ``C3D8``/``C3D20`` (and their ``TL`` counterparts) use the standard Abaqus node ordering
-    (corner ring 0-3 at :math:`\zeta=-1`, ring 4-7 at :math:`\zeta=+1`), matching the ``marmot``
+    (corner ring 1-4 at :math:`\zeta=-1`, ring 5-8 at :math:`\zeta=+1`), matching the ``marmot``
     provider's elements -- there is only one node-ordering convention across the framework.
 
 **additional Parameters**

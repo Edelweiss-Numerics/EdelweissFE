@@ -652,7 +652,7 @@ def _B2D8(xi: np.ndarray, eta: np.ndarray, x: np.ndarray, nInt: int):
     return Bi
 
 
-def _B3DGeneric(dNdXi: np.ndarray, x: np.ndarray, J: np.ndarray, nInt: int, nNodes: int):
+def _B3DGeneric(dNdXi: np.ndarray, J: np.ndarray, nInt: int, nNodes: int):
     """Assemble the standard isoparametric strain-displacement (B) operator for a 3D solid
     element from its dN/dxi and Jacobian, given a node-major local DOF vector
     ``(ux1,uy1,uz1,ux2,uy2,uz2,...)``.
@@ -661,8 +661,6 @@ def _B3DGeneric(dNdXi: np.ndarray, x: np.ndarray, J: np.ndarray, nInt: int, nNod
     ----------
     dNdXi
         Shape ``(nInt, 3, nNodes)``, as returned by :func:`_dNdXi3D8`/:func:`_dNdXi3D20`.
-    x
-        Coordinates of the element points.
     J
         The Jacobian matrices, shape ``(nInt, 3, 3)``.
     nInt
@@ -678,7 +676,7 @@ def _B3DGeneric(dNdXi: np.ndarray, x: np.ndarray, J: np.ndarray, nInt: int, nNod
 
     Bi = np.zeros([nInt, 6, 3 * nNodes])
     for i in range(nInt):
-        dNdX = np.linalg.inv(J[i]) @ dNdXi[i]  # (3, nNodes): row b = dN/dX_b
+        dNdX = np.linalg.solve(J[i], dNdXi[i])  # (3, nNodes): row b = dN/dX_b
         for k in range(nNodes):
             dNkdX, dNkdY, dNkdZ = dNdX[:, k]
             Bi[i, :, 3 * k : 3 * k + 3] = np.array(
@@ -717,7 +715,7 @@ def _B3D8(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, x: np.ndarray, nInt: i
 
     dNdXi = _dNdXi3D8(xi, eta, z, nInt)
     J = _J3D8(xi, eta, z, x, nInt)
-    return _B3DGeneric(dNdXi, x, J, nInt, 8)
+    return _B3DGeneric(dNdXi, J, nInt, 8)
 
 
 def _B3D20(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, x: np.ndarray, nInt: int):
@@ -743,4 +741,4 @@ def _B3D20(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, x: np.ndarray, nInt: 
 
     dNdXi = _dNdXi3D20(xi, eta, z, nInt)
     J = _J3D20(xi, eta, z, x, nInt)
-    return _B3DGeneric(dNdXi, x, J, nInt, 20)
+    return _B3DGeneric(dNdXi, J, nInt, 20)
