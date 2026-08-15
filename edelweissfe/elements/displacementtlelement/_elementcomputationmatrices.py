@@ -29,6 +29,13 @@
 import numpy as np
 import numpy.linalg as lin
 
+from edelweissfe.elements._hexa3dnodeordering import (
+    hexa8DNdXi,
+    hexa8N,
+    hexa20DNdXi,
+    hexa20N,
+)
+
 
 def computeJacobian(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, x: np.ndarray, nInt: int, nNodes: int, dim: int):
     """Get the Jacobi matrix for the element calculation.
@@ -193,58 +200,17 @@ def computeNOperator(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, nInt: int, 
                     )
                 )
     elif dim == 3:
-        # Hexa8/Hexa20 node ordering follows the standard Abaqus C3D8/C3D20 convention (corner
-        # ring 0-3 at zeta=-1, ring 4-7 at zeta=+1), matching Marmot's element formulation and
-        # the small-strain displacementelement -- see edelweissfe.generators.surfaceelementgenerator's
-        # module docstring for why this matters for contact-facet generation.
+        # Hexa8/Hexa20 node ordering (see edelweissfe.elements._hexa3dnodeordering) follows the
+        # standard Abaqus C3D8/C3D20 convention (corner ring 0-3 at zeta=-1, ring 4-7 at zeta=+1),
+        # matching Marmot's element formulation and the small-strain displacementelement -- this
+        # is also the local node ordering assumed by any face-numbering convention (e.g. a
+        # contact-facet generator) built on top of this element.
         if nNodes == 8:  # Hexa8
             for i in range(nInt):
-                N[i] = (
-                    1
-                    / 8
-                    * np.array(
-                        [
-                            (1 - xi[i]) * (1 - eta[i]) * (1 - z[i]),
-                            (1 + xi[i]) * (1 - eta[i]) * (1 - z[i]),
-                            (1 + xi[i]) * (1 + eta[i]) * (1 - z[i]),
-                            (1 - xi[i]) * (1 + eta[i]) * (1 - z[i]),
-                            (1 - xi[i]) * (1 - eta[i]) * (1 + z[i]),
-                            (1 + xi[i]) * (1 - eta[i]) * (1 + z[i]),
-                            (1 + xi[i]) * (1 + eta[i]) * (1 + z[i]),
-                            (1 - xi[i]) * (1 + eta[i]) * (1 + z[i]),
-                        ]
-                    )
-                )
+                N[i] = hexa8N(xi[i], eta[i], z[i])
         elif nNodes == 20:  # Hexa20
             for i in range(nInt):
-                N[i] = (
-                    1
-                    / 8
-                    * np.array(
-                        [
-                            -(1 - xi[i]) * (1 - eta[i]) * (1 - z[i]) * (2 + xi[i] + eta[i] + z[i]),
-                            -(1 + xi[i]) * (1 - eta[i]) * (1 - z[i]) * (2 - xi[i] + eta[i] + z[i]),
-                            -(1 + xi[i]) * (1 + eta[i]) * (1 - z[i]) * (2 - xi[i] - eta[i] + z[i]),
-                            -(1 - xi[i]) * (1 + eta[i]) * (1 - z[i]) * (2 + xi[i] - eta[i] + z[i]),
-                            -(1 - xi[i]) * (1 - eta[i]) * (1 + z[i]) * (2 + xi[i] + eta[i] - z[i]),
-                            -(1 + xi[i]) * (1 - eta[i]) * (1 + z[i]) * (2 - xi[i] + eta[i] - z[i]),
-                            -(1 + xi[i]) * (1 + eta[i]) * (1 + z[i]) * (2 - xi[i] - eta[i] - z[i]),
-                            -(1 - xi[i]) * (1 + eta[i]) * (1 + z[i]) * (2 + xi[i] - eta[i] - z[i]),
-                            2 * (1 - xi[i] ** 2) * (1 - eta[i]) * (1 - z[i]),
-                            2 * (1 - eta[i] ** 2) * (1 + xi[i]) * (1 - z[i]),
-                            2 * (1 - xi[i] ** 2) * (1 + eta[i]) * (1 - z[i]),
-                            2 * (1 - eta[i] ** 2) * (1 - xi[i]) * (1 - z[i]),
-                            2 * (1 - xi[i] ** 2) * (1 - eta[i]) * (1 + z[i]),
-                            2 * (1 - eta[i] ** 2) * (1 + xi[i]) * (1 + z[i]),
-                            2 * (1 - xi[i] ** 2) * (1 + eta[i]) * (1 + z[i]),
-                            2 * (1 - eta[i] ** 2) * (1 - xi[i]) * (1 + z[i]),
-                            2 * (1 - xi[i]) * (1 - eta[i]) * (1 - z[i] ** 2),
-                            2 * (1 + xi[i]) * (1 - eta[i]) * (1 - z[i] ** 2),
-                            2 * (1 + xi[i]) * (1 + eta[i]) * (1 - z[i] ** 2),
-                            2 * (1 - xi[i]) * (1 + eta[i]) * (1 - z[i] ** 2),
-                        ]
-                    )
-                )
+                N[i] = hexa20N(xi[i], eta[i], z[i])
     return N
 
 
@@ -392,115 +358,9 @@ def _Ndiff3D(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, nNodes: int):
 
     # Node ordering matches computeNOperator (Marmot's/standard Abaqus C3D8/C3D20 convention).
     if nNodes == 8:  # Hexa8
-        return (
-            1
-            / 8
-            * np.array(
-                [
-                    [
-                        -(1 - eta) * (1 - z),
-                        (1 - eta) * (1 - z),
-                        (1 + eta) * (1 - z),
-                        -(1 + eta) * (1 - z),
-                        -(1 - eta) * (1 + z),
-                        (1 - eta) * (1 + z),
-                        (1 + eta) * (1 + z),
-                        -(1 + eta) * (1 + z),
-                    ],
-                    [
-                        -(1 - xi) * (1 - z),
-                        -(1 + xi) * (1 - z),
-                        (1 + xi) * (1 - z),
-                        (1 - xi) * (1 - z),
-                        -(1 - xi) * (1 + z),
-                        -(1 + xi) * (1 + z),
-                        (1 + xi) * (1 + z),
-                        (1 - xi) * (1 + z),
-                    ],
-                    [
-                        -(1 - xi) * (1 - eta),
-                        -(1 + xi) * (1 - eta),
-                        -(1 + xi) * (1 + eta),
-                        -(1 - xi) * (1 + eta),
-                        (1 - xi) * (1 - eta),
-                        (1 + xi) * (1 - eta),
-                        (1 + xi) * (1 + eta),
-                        (1 - xi) * (1 + eta),
-                    ],
-                ]
-            )
-        )
+        return hexa8DNdXi(xi, eta, z)
     else:  # Hexa20
-        return np.array(
-            [
-                [
-                    0.125 * (1 - eta) * (1 - z) * (1 + 2 * xi + eta + z),
-                    -0.125 * (1 - eta) * (1 - z) * (1 - 2 * xi + eta + z),
-                    -0.125 * (1 + eta) * (1 - z) * (1 - 2 * xi - eta + z),
-                    0.125 * (1 + eta) * (1 - z) * (1 + 2 * xi - eta + z),
-                    0.125 * (1 - eta) * (1 + z) * (1 + 2 * xi + eta - z),
-                    -0.125 * (1 - eta) * (1 + z) * (1 - 2 * xi + eta - z),
-                    -0.125 * (1 + eta) * (1 + z) * (1 - 2 * xi - eta - z),
-                    0.125 * (1 + eta) * (1 + z) * (1 + 2 * xi - eta - z),
-                    -0.5 * xi * (1 - eta) * (1 - z),
-                    0.25 * (1 - eta * eta) * (1 - z),
-                    -0.5 * xi * (1 + eta) * (1 - z),
-                    -0.25 * (1 - eta * eta) * (1 - z),
-                    -0.5 * xi * (1 - eta) * (1 + z),
-                    0.25 * (1 - eta * eta) * (1 + z),
-                    -0.5 * xi * (1 + eta) * (1 + z),
-                    -0.25 * (1 - eta * eta) * (1 + z),
-                    -0.25 * (1 - eta) * (1 - z * z),
-                    0.25 * (1 - eta) * (1 - z * z),
-                    0.25 * (1 + eta) * (1 - z * z),
-                    -0.25 * (1 + eta) * (1 - z * z),
-                ],
-                [
-                    0.125 * (1 - xi) * (1 - z) * (1 + xi + 2 * eta + z),
-                    0.125 * (1 + xi) * (1 - z) * (1 - xi + 2 * eta + z),
-                    -0.125 * (1 + xi) * (1 - z) * (1 - xi - 2 * eta + z),
-                    -0.125 * (1 - xi) * (1 - z) * (1 + xi - 2 * eta + z),
-                    0.125 * (1 - xi) * (1 + z) * (1 + xi + 2 * eta - z),
-                    0.125 * (1 + xi) * (1 + z) * (1 - xi + 2 * eta - z),
-                    -0.125 * (1 + xi) * (1 + z) * (1 - xi - 2 * eta - z),
-                    -0.125 * (1 - xi) * (1 + z) * (1 + xi - 2 * eta - z),
-                    -0.25 * (1 - xi * xi) * (1 - z),
-                    -0.5 * eta * (1 + xi) * (1 - z),
-                    0.25 * (1 - xi * xi) * (1 - z),
-                    -0.5 * eta * (1 - xi) * (1 - z),
-                    -0.25 * (1 - xi * xi) * (1 + z),
-                    -0.5 * eta * (1 + xi) * (1 + z),
-                    0.25 * (1 - xi * xi) * (1 + z),
-                    -0.5 * eta * (1 - xi) * (1 + z),
-                    -0.25 * (1 - xi) * (1 - z * z),
-                    -0.25 * (1 + xi) * (1 - z * z),
-                    0.25 * (1 + xi) * (1 - z * z),
-                    0.25 * (1 - xi) * (1 - z * z),
-                ],
-                [
-                    0.125 * (1 - xi) * (1 - eta) * (1 + xi + eta + 2 * z),
-                    0.125 * (1 + xi) * (1 - eta) * (1 - xi + eta + 2 * z),
-                    0.125 * (1 + xi) * (1 + eta) * (1 - xi - eta + 2 * z),
-                    0.125 * (1 - xi) * (1 + eta) * (1 + xi - eta + 2 * z),
-                    -0.125 * (1 - xi) * (1 - eta) * (1 + xi + eta - 2 * z),
-                    -0.125 * (1 + xi) * (1 - eta) * (1 - xi + eta - 2 * z),
-                    -0.125 * (1 + xi) * (1 + eta) * (1 - xi - eta - 2 * z),
-                    -0.125 * (1 - xi) * (1 + eta) * (1 + xi - eta - 2 * z),
-                    -0.25 * (1 - xi * xi) * (1 - eta),
-                    -0.25 * (1 - eta * eta) * (1 + xi),
-                    -0.25 * (1 - xi * xi) * (1 + eta),
-                    -0.25 * (1 - eta * eta) * (1 - xi),
-                    0.25 * (1 - xi * xi) * (1 - eta),
-                    0.25 * (1 - eta * eta) * (1 + xi),
-                    0.25 * (1 - xi * xi) * (1 + eta),
-                    0.25 * (1 - eta * eta) * (1 - xi),
-                    -0.5 * (1 - xi) * (1 - eta) * z,
-                    -0.5 * (1 + xi) * (1 - eta) * z,
-                    -0.5 * (1 + xi) * (1 + eta) * z,
-                    -0.5 * (1 - xi) * (1 + eta) * z,
-                ],
-            ]
-        )
+        return hexa20DNdXi(xi, eta, z)
 
 
 def _J2D4(xi: np.ndarray, eta: np.ndarray, x: np.ndarray, nInt: int):
