@@ -773,15 +773,27 @@ class Constraint(ConstraintBase):
 
     def getNormalPressures(self) -> np.ndarray:
         """The current per-slave normal contact pressures (positive in compression), ordered like
-        the surface element generator's ``<prefix>_nodes`` node set of the slave surface."""
+        the surface element generator's ``<prefix>_nodes`` node set of the slave surface. 0 for a
+        slave node with a degenerate (zero-area) tributary area, rather than NaN."""
 
-        return -self._normalForceCurrent / self.tributaryAreas
+        return np.divide(
+            -self._normalForceCurrent,
+            self.tributaryAreas,
+            out=np.zeros_like(self.tributaryAreas),
+            where=self.tributaryAreas > 0,
+        )
 
     def getTangentialTractions(self) -> np.ndarray:
         """The current per-slave tangential (frictional) traction magnitudes, ordered like the
-        surface element generator's ``<prefix>_nodes`` node set of the slave surface."""
+        surface element generator's ``<prefix>_nodes`` node set of the slave surface. 0 for a
+        slave node with a degenerate (zero-area) tributary area, rather than NaN."""
 
-        return np.linalg.norm(self._tangentialForceCurrent, axis=1) / self.tributaryAreas
+        return np.divide(
+            np.linalg.norm(self._tangentialForceCurrent, axis=1),
+            self.tributaryAreas,
+            out=np.zeros_like(self.tributaryAreas),
+            where=self.tributaryAreas > 0,
+        )
 
     def getGaps(self) -> np.ndarray:
         """The current per-slave gaps (negative when penetrating; only meaningful for
