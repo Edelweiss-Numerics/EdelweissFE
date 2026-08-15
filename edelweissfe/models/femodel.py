@@ -65,7 +65,6 @@ class FEModel:
         self.elementSets = {}  #: ElementSets in the model.
         self.sections = {}  #: Sections in the model.
         self.surfaces = {}  #: Surface definitions in the model.
-        self.surfaceFaceNumberingConventions = {}  #: Per-surface face-numbering convention (see `surfaces`).
         self.constraints = {}  #: Constraints in the model.
         self.constraintSets = {}  #: ConstraintsSets in the model.
         self.materials = {}  #: Materials in the model.

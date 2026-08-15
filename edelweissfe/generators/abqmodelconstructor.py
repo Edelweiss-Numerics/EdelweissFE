@@ -241,11 +241,6 @@ class AbqModelConstructor:
                     surface[faceNumber] = model.elementSets[elSet]
 
             model.surfaces[name] = surface
-            # These face numbers follow the genuine Abaqus S1..S6 convention, not this codebase's
-            # own mesh generators' convention (see edelweissfe.generators.surfaceelementgenerator,
-            # NATIVE_FACE_NUMBERING_CONVENTION) -- tag it so consumers that assume the latter can
-            # reject it with a clear error instead of silently misinterpreting the face numbers.
-            model.surfaceFaceNumberingConventions[name] = "abaqus"
 
         return model
 
