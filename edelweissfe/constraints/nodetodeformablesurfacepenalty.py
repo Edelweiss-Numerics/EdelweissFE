@@ -138,6 +138,19 @@ module.addOptionalArg(
 
 documentation = [module]
 
+# Angular threshold separating a *continuous* drift of the frozen contact frame between two
+# increments (the slave staying on its facet, or crossing onto a smoothly adjacent one of a curved
+# but adequately resolved master surface) from a genuine *crease* of the master surface, used in
+# updateConnectivity to decide whether the frictional history may still be rotated into the newly
+# frozen tangent plane. 30 degrees is the customary smooth-versus-sharp feature angle of surface
+# geometry processing and of contact surface smoothing, and it separates the two regimes with a
+# comfortable margin on both sides: a smooth surface of curvature radius R facetted with facet size
+# h changes its normal by about h / R between neighboring facets, i.e. by less than 10 degrees for
+# any surface resolved finely enough for a meaningful contact pressure distribution, while the
+# creases of engineering geometries (45 degree chamfers, 90 degree steps, notch flanks) change it
+# by 45 degrees and more.
+_cosOfSmoothNormalChangeLimit = np.cos(np.deg2rad(30.0))
+
 
 class DeformableSurfaceContactStiffnessView:
     """Provides structured 2-D sub-views for the sparse stiffness matrix slice of
@@ -334,7 +347,11 @@ class Constraint(ConstraintBase):
     reassignment) plus the tangential penalty stiffness times the incremental relative slip forms
     the stick predictor, capped at ``mu * N`` on the friction cone. The consistent tangent is
     symmetric in stick and nonsymmetric on slip (normal-tangential coupling). Combine with
-    ``type=quadratic`` (see the ``mu`` option documentation).
+    ``type=quadratic`` (see the ``mu`` option documentation). Rotating the history is only
+    admissible as long as the frozen tangent plane changes continuously between the increments;
+    a slave sliding over a genuine crease of the master surface (normal change beyond
+    ``_cosOfSmoothNormalChangeLimit``) restarts its frictional history instead, keeping its normal
+    traction multiplier.
 
     With ``augmentedLagrange=True`` (requires ``sliding=small``), a per-slave normal traction
     multiplier augments the penalty force. It is constant within an increment (zero tangent
@@ -364,6 +381,7 @@ class Constraint(ConstraintBase):
     def __init__(self, name: str, model: FEModel, journal: Journal, *args, **kwargs):
         super().__init__(name, model, *args, **kwargs)
 
+        self.name = name
         self.journal = journal
 
         kwargs = CaseInsensitiveDict(kwargs)
@@ -498,6 +516,7 @@ class Constraint(ConstraintBase):
             # clamped weights are non-negative by construction. Facet, weights, and normal are
             # frozen for the whole increment, making the gap linear in the displacement DOFs.
             closestPointFunction = _tria3ClosestPoint if self.nDim == 3 else _line2ClosestPoint
+            nSlavesWithDiscardedHistory = 0
             for s in range(self.nSlaves):
                 bestDistance = np.inf
                 bestFacet = None
@@ -511,16 +530,52 @@ class Constraint(ConstraintBase):
                     newAssignment[s] = bestFacet
                     self._frozenWeights[s] = bestWeights
                     normal, _ = facetNormalAndMeasure(facetCoords[bestFacet])
+                    previousNormal = self._frozenNormals[s]
                     self._frozenNormals[s] = normal
-                    # Rotate the frictional history into the new frozen tangent plane; the frame
-                    # changes only slightly per increment in a small-deformation setting.
-                    projectorOntoTangentPlane = np.eye(self.nDim) - np.outer(normal, normal)
-                    self._tangentialForceConverged[s] = projectorOntoTangentPlane @ self._tangentialForceConverged[s]
+
+                    if previousNormal is None or previousNormal.dot(normal) >= _cosOfSmoothNormalChangeLimit:
+                        # Rotate the frictional history into the new frozen tangent plane; the frame
+                        # changes only slightly per increment in a small-deformation setting. Nothing
+                        # to rotate if the slave was out of contact in the last increment (no
+                        # previous normal): its history has been zeroed then, respectively at
+                        # construction.
+                        projectorOntoTangentPlane = np.eye(self.nDim) - np.outer(normal, normal)
+                        self._tangentialForceConverged[s] = (
+                            projectorOntoTangentPlane @ self._tangentialForceConverged[s]
+                        )
+                    else:
+                        # The new frozen tangent plane is *not* a small perturbation of the one the
+                        # frictional history was accumulated in: the slave has slid over a genuine
+                        # crease of the master surface (or its facet has rotated far beyond what the
+                        # small-sliding formulation assumes). Rotating the history here would
+                        # silently discard the -- possibly dominant -- part of it that now points
+                        # along the new normal, leaving a stick predictor unrelated to the actual
+                        # frictional state, so the history is discarded instead and the slave enters
+                        # the increment like a fresh contact on the new face. This is cheap where it
+                        # is wrong and right where it matters: a slave in genuine stick does not
+                        # move, hence cannot cross a crease in the first place, while a *slipping*
+                        # slave is returned onto the cone |f_T| = mu * N within the same increment,
+                        # independently of its history. The normal traction multiplier is retained:
+                        # it is a frame-independent magnitude acting along the freshly frozen gap
+                        # gradient, and the contact pressure does not vanish just because the slave
+                        # slid over a corner -- releasing it (as done below on loss of contact)
+                        # would only undo the converged Uzawa progress and let the penetration
+                        # spike again.
+                        self._tangentialForceConverged[s] = 0.0
+                        nSlavesWithDiscardedHistory += 1
                 else:
                     self._frozenWeights[s] = None
                     self._frozenNormals[s] = None
                     self._tangentialForceConverged[s] = 0.0
                     self._lambdaN[s] = 0.0
+
+            if self.mu > 0.0 and nSlavesWithDiscardedHistory > 0:
+                self.journal.message(
+                    f"{nSlavesWithDiscardedHistory} slave nodes crossed a crease of the master "
+                    "surface; their frictional history was discarded",
+                    self.name,
+                    level=2,
+                )
         else:
             facetCentroids = np.array([np.mean(c, axis=0) for c in facetCoords])
             for s in range(self.nSlaves):
