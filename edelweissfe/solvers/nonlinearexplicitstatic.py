@@ -33,6 +33,7 @@ import numpy as np
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.linsolve import getLinSolverByName
 from edelweissfe.config.timing import createTimingDict
+from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
@@ -198,6 +199,14 @@ class NEST(NIST):
         fieldOutputController
             The field output controller.
         """
+
+        for constraintName, constraint in model.constraints.items():
+            if type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity:
+                raise Exception(
+                    f"Constraint '{constraintName}' requires a dynamic connectivity update "
+                    f"(contact) every increment, which {self.identification} never performs -- "
+                    "contact is not currently supported with this solver."
+                )
 
         self.journal.message("Creating monolithic equation system", self.identification, 0)
         self.theDofManager = DofManager(
