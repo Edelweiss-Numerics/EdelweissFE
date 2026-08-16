@@ -13,7 +13,10 @@ from edelweissfe.numerics.parallelizationutilities import (
     getNumberOfThreads,
     isFreeThreadingSupported,
 )
-from edelweissfe.numerics.scatterdofvector import ScatterDofVector, ScatterDofVectorTemplate
+from edelweissfe.numerics.scatterdofvector import (
+    ScatterDofVector,
+    ScatterDofVectorTemplate,
+)
 from edelweissfe.numerics.vijentitybase import VIJEntityBase
 from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
 
