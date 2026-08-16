@@ -33,19 +33,24 @@ import edelweissfe.numerics.scatterdofvector
 
 class DofVector(np.ndarray):
     """
-    Represents a Dof Vector with entity-aware indexing.
+    Represents a Degree-of-Freedom (DOF) vector with entity-aware indexing.
+
+    A `DofVector` is a 1D NumPy array subclass augmented with metadata mapping simulation
+    entities (such as elements, constraints, or node sets) to their respective DOF indices.
+    This enables direct indexing and assignment using entity objects as keys.
 
     Parameters
     ----------
-    nDof
-        The total number of degrees of freedom.
-    entitiesInDofVector
-        A dictionary mapping entities to their indices in the DofVector.
+    nDof : int
+        The total number of degrees of freedom (length of the vector).
+    entitiesInDofVector : dict, optional
+        A dictionary mapping entities (or entity keys) to their index arrays or slices
+        in the DofVector.
     """
 
-    def __new__(cls, nDof: int, entitiesInDofVector: dict):
+    def __new__(cls, nDof: int, entitiesInDofVector: dict | None = None):
         obj = np.zeros(nDof, dtype=float).view(cls)
-        obj.entitiesInDofVector = entitiesInDofVector
+        obj.entitiesInDofVector = entitiesInDofVector if entitiesInDofVector is not None else {}
         obj._scatterTemplate = None
         return obj
 
@@ -59,38 +64,46 @@ class DofVector(np.ndarray):
         # try the entity lookup first; it is by far the most common access pattern.
         # Non-entity keys (ints, slices, arrays, lists) miss the dictionary cheaply
         # via KeyError/TypeError and fall through to plain ndarray indexing.
+        if isinstance(key, (int, slice, np.ndarray, list, tuple)):
+            return super().__getitem__(key)
+
         try:
             return super().__getitem__(self.entitiesInDofVector[key])
         except (KeyError, TypeError):
             return super().__getitem__(key)
 
     def __setitem__(self, key, value):
+        if isinstance(key, (int, slice, np.ndarray, list, tuple)):
+            super().__setitem__(key, value)
+            return
+
         try:
             super().__setitem__(self.entitiesInDofVector[key], value)
         except (KeyError, TypeError):
             super().__setitem__(key, value)
 
-    def copy(self, order="C"):
+    def copy(self, order: str = "C") -> "DofVector":
         """
         Create a copy of this DofVector.
 
         Parameters
         ----------
-        order
-            The memory layout order.
+        order : str, optional
+            The memory layout order ('C' for C-contiguous, 'F' for Fortran-contiguous). Default is 'C'.
+
         Returns
         -------
         DofVector
-            The copied DofVector.
+            A new `DofVector` instance with copied array data and an independent copy of `entitiesInDofVector`.
         """
         newDofVector = super().copy(order).view(DofVector)
         if self.entitiesInDofVector is not None:
             newDofVector.entitiesInDofVector = self.entitiesInDofVector.copy()
         return newDofVector
 
-    def createScatterVector(self) -> "ScatterDofVector":  # noqa: F821
+    def createScatterVector(self) -> "edelweissfe.numerics.scatterdofvector.ScatterDofVector":
         """
-        Create a scatter vector for ALL entities in this DofVector.
+        Create a scatter vector for ALL entities registered in this DofVector.
 
         The underlying layout (entity lookup map and scatter indices) is computed once
         and cached, so repeated calls (e.g. once per Newton iteration) only allocate
@@ -99,8 +112,16 @@ class DofVector(np.ndarray):
         Returns
         -------
         ScatterDofVector
-            The ScatterDofVector.
+            A `ScatterDofVector` initialized with this vector's entity mapping and total DOF count.
+
+        Raises
+        ------
+        ValueError
+            If `entitiesInDofVector` is None or uninitialized.
         """
+        if self.entitiesInDofVector is None:
+            raise ValueError("Cannot create a ScatterDofVector: entitiesInDofVector is None.")
+
         # __array_finalize__ inherits _scatterTemplate across views/copies, but a view's
         # entitiesInDofVector may later be replaced by a different mapping (e.g. copy()
         # assigns a fresh dict) - guard against reusing a template built for a stale one.

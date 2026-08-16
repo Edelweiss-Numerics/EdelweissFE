@@ -202,6 +202,9 @@ class NISTPArcLength(NISTParallel):
         distributedLoads = stepActions["distributedload"].values()
         bodyForces = stepActions["bodyforce"].values()
 
+        # Find which global DOFs the Dirichlet BCs constrain, once up front.
+        self.locateConstrainedDofs(dirichlets)
+
         for stepActionType in stepActions.values():
             for action in stepActionType.values():
                 action.applyAtIncrementStart(model, timeStep)
@@ -269,12 +272,12 @@ class NISTPArcLength(NISTParallel):
 
             # Dirichlets ..
             if isExtrapolatedIncrement and iterationCounter == 0:
-                R_0 = self.applyDirichlet(zeroTimeStep, R_0, dirichlets)
+                R_0 = self.applyDirichletToResidual(zeroTimeStep, R_0, dirichlets)
             else:
                 modifiedTimeStep = TimeStep(timeStep.number, dLambda, Lambda + dLambda, 0.0, 0.0, 0.0)
-                R_0 = self.applyDirichlet(modifiedTimeStep, R_0, dirichlets)
+                R_0 = self.applyDirichletToResidual(modifiedTimeStep, R_0, dirichlets)
 
-            R_f = self.applyDirichlet(referenceTimeStep, R_f, dirichlets)
+            R_f = self.applyDirichletToResidual(referenceTimeStep, R_f, dirichlets)
 
             if iterationCounter > 0 or isExtrapolatedIncrement:
                 converged, nodesWithLargestResidual = self.checkConvergence(
@@ -293,7 +296,7 @@ class NISTPArcLength(NISTParallel):
                     raise ReachedMaxIterations("Reached max. iterations in current increment, cutting back")
 
             K_ = self.assembleStiffnessCSR(K)
-            K_ = self.applyDirichletK(K_, dirichlets)
+            K_ = self.applyDirichletToStiffness(K_, dirichlets)  # zero rows, unit diagonal
 
             # solve 2 eq. systems at once:
             ddU_ = self.linearSolve(K_, R_)

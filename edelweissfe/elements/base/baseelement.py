@@ -105,6 +105,39 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
             A numpy array containing the element properties.
         """
 
+    def assignProperty(self, propertyName: str, properties: np.ndarray):
+        """Assign a property of the element by name.
+
+        Parameters
+        ----------
+        propertyName
+            The name of the property.
+        properties
+            A numpy array containing the property values.
+        """
+        raise NotImplementedError("This element type does not support named property assignment.")
+
+    def getPropertyNames(self) -> list[str]:
+        """Get the names of all the valid properties of the element.
+
+        Returns
+        -------
+        list[str]
+            A list of valid property names.
+        """
+        return []
+
+    @property
+    def propertyNames(self) -> list[str]:
+        """Get the names of all the valid properties of the element.
+
+        Returns
+        -------
+        list[str]
+            A list of valid property names.
+        """
+        return self.getPropertyNames()
+
     @abstractmethod
     def initializeElement(
         self,

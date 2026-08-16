@@ -153,7 +153,7 @@ class StepAction(DirichletBase):
 
         self.amplitude = self._getAmplitude(action)
 
-    def getDelta(self, timeStep: TimeStep):
+    def getPrescribedIncrement(self, timeStep: TimeStep):
         if self.active:
             return self.delta * (
                 self.amplitude(timeStep.stepProgress)

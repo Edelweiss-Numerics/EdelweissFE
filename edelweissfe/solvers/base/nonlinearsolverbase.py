@@ -55,10 +55,6 @@ class NonlinearSolverBase(ABC):
 
     SolverSpecificOptions = {}
 
-    #: Cache for :meth:`findDirichletIndices`; lazily initialized since not all
-    #: subclasses call ``super().__init__()``.
-    _dirichletIndicesCache = None
-
     def __init__(self, jobInfo, journal, **kwargs):
         pass
 
@@ -89,14 +85,19 @@ class NonlinearSolverBase(ABC):
         pass
 
     @performancetiming.timeit("dirichlet R")
-    def applyDirichlet(self, timeStep: TimeStep, R: DofVector, dirichlets: list[StepActionBase]):
-        """Apply the dirichlet bcs on the residual vector
-        Is called by solveStep() before solving the global equatuon system.
+    def applyDirichletToResidual(self, timeStep: TimeStep, R: DofVector, dirichlets: list[StepActionBase]):
+        """Impose the Dirichlet BCs on the residual using the row-replacement method.
+
+        For every constrained DOF we *overwrite* its residual entry with the
+        value we want the linear solve to return for that DOF's increment.
+        Together with :meth:`applyDirichletToStiffness` (which zeroes the DOF's
+        row of K and puts 1.0 on the diagonal), the linearized system
+        ``K ddU = R`` then reproduces exactly that increment for the DOF.
 
         Parameters
         ----------
-        increment
-            The increment.
+        timeStep
+            The current time step.
         R
             The residual vector of the global equation system to be modified.
         dirichlets
@@ -108,8 +109,7 @@ class NonlinearSolverBase(ABC):
             The modified residual vector.
         """
         for dirichlet in dirichlets:
-            delta = dirichlet.getDelta(timeStep)
-            R[self.findDirichletIndices(dirichlet)] = delta.flatten()
+            R[dirichlet.constrainedDofIndices] = dirichlet.getPrescribedIncrement(timeStep).flatten()
 
         return R
 
@@ -311,7 +311,7 @@ class NonlinearSolverBase(ABC):
 
         if extrapolation == "linear" and prevTimeStep and prevTimeStep.timeIncrement:
             dU *= timeStep.stepProgressIncrement / prevTimeStep.stepProgressIncrement
-            dU = self.applyDirichlet(timeStep, dU, dirichlets)
+            dU = self.applyDirichletToResidual(timeStep, dU, dirichlets)
             isExtrapolatedIncrement = True
         else:
             isExtrapolatedIncrement = False
@@ -433,25 +433,38 @@ class NonlinearSolverBase(ABC):
             for action in stepActionType.values():
                 action.applyAtIncrementStart(model, timeStep)
 
-    def findDirichletIndices(self, dirichlet):
-        nSet = dirichlet.nSet
-        field = dirichlet.field
-        components = dirichlet.components
+    def locateConstrainedDofs(self, dirichlets: list[StepActionBase]):
+        """Determine, up front, which global DOFs each Dirichlet BC constrains.
 
-        # The result is fully determined by the boundary condition, its (mutable)
-        # components, and the current DofManager, so it is memoized. It is requested
-        # multiple times per Newton iteration (residual zeroing and system matrix
-        # modification), but only changes when the equation system is rebuilt or the
-        # boundary condition is updated between steps.
-        cache = self._dirichletIndicesCache
-        if cache is None:
-            cache = self._dirichletIndicesCache = {}
+        Called once when a step's boundary conditions are established. The result
+        is cached on each BC as :attr:`~DirichletBase.constrainedDofIndices`, so
+        that the Newton loop can address the constrained DOFs directly, instead
+        of recomputing the mapping on every residual update and every stiffness
+        modification.
 
-        key = (dirichlet, self.theDofManager, tuple(components))
-        indices = cache.get(key)
-        if indices is None:
-            fieldIndices = self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[field][nSet]
+        Parameters
+        ----------
+        dirichlets
+            The list of dirichlet boundary conditions active in this step.
+        """
+        for dirichlet in dirichlets:
+            dirichlet.constrainedDofIndices = self._constrainedDofsOf(dirichlet)
 
-            indices = cache[key] = fieldIndices.reshape((len(nSet), -1))[:, components].flatten()
+    def _constrainedDofsOf(self, dirichlet: StepActionBase) -> np.ndarray:
+        """Return the global DOF indices prescribed by a single Dirichlet BC.
 
-        return indices
+        The DofManager knows every DOF of ``field`` on ``nSet``, laid out node
+        by node in a single flat array::
+
+            [ node0: (u_x u_y u_z),  node1: (u_x u_y u_z),  ... ]
+
+        A BC usually prescribes only some of the per-node components (given by
+        ``dirichlet.components``, e.g. just u_x and u_z). So we view the flat
+        array as one row per node, keep only the prescribed component columns,
+        and flatten it back into a plain list of global DOF indices. The order
+        stays node-major, matching ``getPrescribedIncrement().flatten()``.
+        """
+        dofsOfFieldOnNodeSet = self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[dirichlet.field][dirichlet.nSet]
+        perNodeDofs = dofsOfFieldOnNodeSet.reshape((-1, dirichlet.fieldSize))
+
+        return perNodeDofs[:, dirichlet.components].flatten()

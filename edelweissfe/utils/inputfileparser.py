@@ -254,6 +254,14 @@ from edelweissfe.sections.plane import inputLanguage  # noqa: F811,E402
 # isort: on
 
 """
+*elementproperty
+"""
+kw = inputLanguage.addKeyword("elementproperty", "define element property values")
+kw.addRequiredArg("elSet", "name of element set", str)
+kw.addRequiredArg("propertyName", "name of the property", str)
+kw.addRequiredDatalines("value(s) of the property", "")
+
+"""
 *material
 """
 kw = inputLanguage.addKeyword("material", "definition of a material")

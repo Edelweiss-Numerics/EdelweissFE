@@ -368,6 +368,9 @@ class NED(NonlinearSolverBase):
         distributedLoads = stepActions["distributedload"].values()
         bodyForces = stepActions["bodyforce"].values()
 
+        # Find which global DOFs the Dirichlet BCs constrain, once up front.
+        self.locateConstrainedDofs(dirichlets)
+
         if timeStep.timeIncrement == 0.0:
             return U_n, V, P
 
@@ -382,10 +385,14 @@ class NED(NonlinearSolverBase):
                 timeStep.totalTime - timeStep.timeIncrement,
             )
 
-        # enforce dirichlet boundary conditions
+        # Enforce the Dirichlet boundary conditions on the constrained DOFs:
+        # there is no free equilibrium there, so their force P is set to zero,
+        # and their velocity is prescribed as (prescribed increment) / (time step).
         for dirichlet in dirichlets:
-            P[self.findDirichletIndices(dirichlet)] = 0.0
-            V[self.findDirichletIndices(dirichlet)] = dirichlet.getDelta(timeStep).flatten() / timeStep.timeIncrement
+            P[dirichlet.constrainedDofIndices] = 0.0
+            V[dirichlet.constrainedDofIndices] = (
+                dirichlet.getPrescribedIncrement(timeStep).flatten() / timeStep.timeIncrement
+            )
 
         if self.ids_1st is not None:
             V[self.ids_1st] = Minv[self.ids_1st] * P[self.ids_1st]

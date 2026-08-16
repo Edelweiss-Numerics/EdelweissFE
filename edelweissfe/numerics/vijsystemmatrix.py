@@ -31,22 +31,22 @@ import numpy as np
 
 class VIJSystemMatrix(np.ndarray):
     """
-    This class represents the V Vector of VIJ triple (sparse matrix in COO format),
-    which
+    Represents the value vector `V` of a COO (VIJ triple) sparse matrix.
 
-      * also contains the I and J vectors as class members,
-      * allows to directly access (contiguous read and write) access of each entity via the [] operator
+    `VIJSystemMatrix` stores matrix entry values for sparse global systems (Coordinate format),
+    maintaining associated row indices `I`, column indices `J`, and an `entitiesInVIJ` mapping.
+    It supports entity-aware indexing to slice, reshape, and assign local entity matrices directly.
 
     Parameters
     ----------
-    nDof
-        The size of the system.
-    I
-        The I vector for the VIJ triple.
-    J
-        The J vector for the VIJ triple.
-    entitiesInVIJ
-        A dictionary containing the indices of an entity in the value vector.
+    nDof : int
+        The dimension (number of rows/columns) of the system matrix.
+    I : ndarray
+        The 1D integer array of global row indices.
+    J : ndarray
+        The 1D integer array of global column indices.
+    entitiesInVIJ : dict
+        A dictionary mapping entities to their starting offset index in `V`.
     """
 
     def __new__(cls, nDof: int, I: np.ndarray, J: np.ndarray, entitiesInVIJ: dict):  # noqa: E741
@@ -68,15 +68,77 @@ class VIJSystemMatrix(np.ndarray):
         self.entitiesInVIJ = getattr(obj, "entitiesInVIJ", None)
 
     def __getitem__(self, key):
-        # try the entity lookup first; it is by far the most common access pattern.
-        # Non-entity keys (ints, slices, arrays, lists) miss the dictionary cheaply
-        # via KeyError/TypeError and fall through to plain ndarray indexing.
-        try:
-            # Entity Lookup
-            idxInVIJ = self.entitiesInVIJ[key]
-            size = key.getVIJContributionSize()
-            flat_view = super().__getitem__(slice(idxInVIJ, idxInVIJ + size))
-            return key.shapeVIJContribution(flat_view)
-        except (KeyError, TypeError, AttributeError):
-            # Fallback for any other weird key types
+        """
+        Get value(s) or shaped entity matrix slice.
+
+        Parameters
+        ----------
+        key : int, slice, np.ndarray, list, tuple, or entity
+            Standard array index/slice or entity instance.
+
+        Returns
+        -------
+        ndarray or float
+            Sub-array or shaped entity matrix view.
+        """
+        if isinstance(key, (int, slice, np.ndarray, list, tuple)):
             return super().__getitem__(key)
+
+        if self.entitiesInVIJ is not None:
+            try:
+                idxInVIJ = self.entitiesInVIJ[key]
+                size = key.getVIJContributionSize()
+                flat_view = super().__getitem__(slice(idxInVIJ, idxInVIJ + size))
+                return key.shapeVIJContribution(flat_view)
+            except (KeyError, TypeError, AttributeError):
+                pass
+        return super().__getitem__(key)
+
+    def __setitem__(self, key, value):
+        """
+        Set value(s) in the system matrix.
+
+        Parameters
+        ----------
+        key : int, slice, np.ndarray, list, tuple, or entity
+            Standard array index/slice or entity instance.
+        value : array_like or float
+            Value(s) to assign.
+        """
+        if isinstance(key, (int, slice, np.ndarray, list, tuple)):
+            super().__setitem__(key, value)
+            return
+
+        if self.entitiesInVIJ is not None:
+            try:
+                idxInVIJ = self.entitiesInVIJ[key]
+                size = key.getVIJContributionSize()
+                super().__setitem__(slice(idxInVIJ, idxInVIJ + size), value)
+                return
+            except (KeyError, TypeError, AttributeError):
+                pass
+        super().__setitem__(key, value)
+
+    def copy(self, order: str = "C") -> "VIJSystemMatrix":
+        """
+        Create a copy of this VIJSystemMatrix.
+
+        Parameters
+        ----------
+        order : str, optional
+            The memory layout order ('C' for C-contiguous, 'F' for Fortran-contiguous). Default is 'C'.
+
+        Returns
+        -------
+        VIJSystemMatrix
+            A new `VIJSystemMatrix` instance with copied values and metadata.
+        """
+        new_mat = super().copy(order).view(VIJSystemMatrix)
+        new_mat.nDof = self.nDof
+        if self.I is not None:
+            new_mat.I = self.I.copy()  # noqa: E741
+        if self.J is not None:
+            new_mat.J = self.J.copy()
+        if self.entitiesInVIJ is not None:
+            new_mat.entitiesInVIJ = self.entitiesInVIJ.copy()
+        return new_mat

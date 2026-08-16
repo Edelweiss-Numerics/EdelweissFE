@@ -442,3 +442,33 @@ class AbqModelConstructor:
             model.analyticalFields[analyticalFieldName] = analyticalField
 
         return model
+
+    def createElementPropertiesFromInputFile(self, model, inputFile):
+        """Collects element property definitions from the input file and stores them in the model.
+
+        Parameters
+        ----------
+        model
+            The model object.
+        inputFile
+            The input file dictionary.
+
+        Returns
+        -------
+        model
+            The updated model object.
+        """
+        from edelweissfe.elements.elementproperty import ElementProperty
+
+        for definition in inputFile.get("elementproperty", []):
+            elSetName = definition["elSet"]
+            propertyName = definition["propertyName"]
+            data = definition["datalines"]
+
+            values_str = " ".join(data).replace(",", " ")
+            values = np.array([float(x) for x in values_str.split()], dtype=float)
+
+            elementProperty = ElementProperty(elSetName, propertyName, values)
+            model.elementProperties.append(elementProperty)
+
+        return model
