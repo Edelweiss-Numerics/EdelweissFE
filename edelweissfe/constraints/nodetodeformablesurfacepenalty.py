@@ -128,7 +128,10 @@ module.addOptionalArg(
 module.addOptionalArg(
     "augmentedLagrange",
     "Augment the penalty force with a per-slave normal traction multiplier, updated once per "
-    "increment on acceptance (incremental Uzawa: lambda <- min(0, lambda + penalty * A * g)). "
+    "increment on acceptance (incremental Uzawa: lambda <- min(0, lambda + converged penalty "
+    "force part); the update is law-dependent -- penalty * A * g for the linear law, "
+    "-0.5 * penalty * A * g**2 for the quadratic law, since the textbook penalty * A * g rule "
+    "overshoots grossly for the quadratic one). "
     "The multiplier is constant within an increment (zero tangent contribution), drives the "
     "penetration toward zero over the increments at a fixed penalty, and sharpens the friction "
     "cone mu * N. Requires sliding=small.",
@@ -411,6 +414,8 @@ class Constraint(ConstraintBase):
             )
 
         self.penalty = kwargs["penalty"]
+        if self.penalty <= 0.0:
+            raise ValueError("The penalty must be positive: a non-positive penalty silently disables contact.")
         self.type = kwargs["type"].lower()
         if self.type not in ["linear", "quadratic"]:
             raise ValueError(f"Constraint type '{self.type}' is not supported. Use 'linear' or 'quadratic'.")
@@ -429,6 +434,11 @@ class Constraint(ConstraintBase):
                 "corrector operates in the frozen tangent frame of the small-sliding formulation."
             )
         self.tangentPenalty = kwargs["tangentPenalty"] if kwargs["tangentPenalty"] is not None else self.penalty
+        if self.mu > 0.0 and self.tangentPenalty <= 0.0:
+            raise ValueError(
+                "The tangential penalty must be positive when mu > 0: a non-positive tangentPenalty "
+                "silently disables the frictional stick response."
+            )
 
         self.augmentedLagrange = strtobool(kwargs["augmentedLagrange"])
         if self.augmentedLagrange and self.sliding != "small":
