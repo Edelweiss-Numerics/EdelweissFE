@@ -180,7 +180,8 @@ class AbqModelConstructor:
 
                     elif booleanDef == "intersection":
                         elNumbersBase = [n.elNumber for n in elementSets[name]]
-                        els = [elements[n] for n in list(set(elNumbers).intersection(elNumbersBase))]
+                        elNumbersSet = set(elNumbers)
+                        els = [elements[n] for n in elNumbersBase if n in elNumbersSet]
                     else:
                         raise Exception("Undefined boolean operation!")
 
@@ -190,7 +191,10 @@ class AbqModelConstructor:
                         del elementSets[name]
                 else:
                     els = [elements[elNum] for elNum in elNumbers]
-                elementSets[name] = ElementSet(name, set(els))
+                # dict.fromkeys deduplicates while preserving first-occurrence order -- a plain
+                # set() here would make facet numbering, slave-node order, and closest-facet tie
+                # breaking depend on Python's hash-based set iteration order instead.
+                elementSets[name] = ElementSet(name, list(dict.fromkeys(els)))
             else:
                 elementSets[name] = []
                 for line in data:
