@@ -171,6 +171,12 @@ def _assignQuadConsistentShares(quadFacets: list):
     the triangles of this quad containing it -- removing the diagonal-position dependence of the
     equal per-triangle split.
 
+    Known limitation (not yet addressed, candidate for future investigation): the equal quad
+    area / 4 split is the consistent lumping of a *uniform* pressure only for an affine
+    (parallelogram) quad; for a general distorted bilinear quad, the consistent nodal shares of a
+    uniform pressure are not exactly equal quarters, so this is an approximation whose accuracy
+    degrades with facet distortion. No test currently quantifies this error.
+
     Parameters
     ----------
     quadFacets
