@@ -250,7 +250,8 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
         generatorDefinition = CaseInsensitiveDict(definition.copy())
 
         generatorType = generatorDefinition.pop("generator")
-        data = generatorDefinition.pop("datalines")
+        # data = generatorDefinition.pop("datalines")
+        data = generatorDefinition.get("datalines", "")
         module = inputLanguage["modelGenerator"].getModule(generatorType)
 
         args, kwargs = module.parseDatalines(data)

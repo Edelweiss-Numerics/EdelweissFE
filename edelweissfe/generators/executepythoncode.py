@@ -48,8 +48,10 @@ documentation = [module]
 
 
 def generateModelData(generatorDefinition, model, journal, *args, **kwargs):
-    codeLines = "\n".join(args)
+    codeLines = "\n".join(generatorDefinition.get("datalines", []))
 
-    exec(codeLines, {"model": model})
+    cleanCodeLines = codeLines.replace(r"\t", "\t")  # replace tabs with spaces to avoid indentation errors
+
+    exec(cleanCodeLines, {"model": model})
 
     return model
