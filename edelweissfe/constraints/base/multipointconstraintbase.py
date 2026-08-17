@@ -54,7 +54,7 @@ class MultiPointConstraintBase(ABC):
     """
 
     @abstractmethod
-    def __init__(self, name: str, model: FEModel, **kwargs):
+    def __init__(self, name: str, model: FEModel, *args, **kwargs):
         """The multi-point constraint base class.
 
         Parameters
