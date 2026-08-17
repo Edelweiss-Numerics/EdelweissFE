@@ -79,9 +79,9 @@ maxInc=0.05, minInc=1e-6, maxNumInc=200, maxIter=25, stepLength=1
 >>dirichlet, name=fixLower, nSet=lower_back, field=displacement, 1=0.0, 2=0.0, 3=0.0
 >>dirichlet, name=holdUpper, nSet=upper_front, field=displacement, 1=0.0, 2=0.0, 3=-0.15
 
-** step 2: drag the compressed upper block 0.8 across the lower block's surface -- the slave
-** nodes slide over several master facet columns, exercising per-increment reassignment of the
-** frozen small-sliding projection and the frictional stick-slip history
+** step 2: drag the compressed upper block 1.4 across the lower block's surface -- one third
+** slides off the master edge (contact release + multiplier decay), exercising per-increment
+** reassignment of the frozen small-sliding projection and the frictional stick-slip history
 *step, solver=theSolver
 maxInc=0.01, minInc=1e-6, maxNumInc=200, maxIter=25, stepLength=1
 >>options, category=NISTSolver, extrapolation=off
