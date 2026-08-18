@@ -194,6 +194,15 @@ class Constraint(MultiPointConstraintBase):
         slaveFacetElements = list(model.elementSets[kwargs["slaveSurface"]])
         masterFacetElements = list(model.elementSets[kwargs["masterSurface"]])
 
+        if not masterFacetElements:
+            raise ValueError(
+                f"Constraint '{name}': master surface '{kwargs['masterSurface']}' contains no facet elements."
+            )
+        if not slaveFacetElements:
+            raise ValueError(
+                f"Constraint '{name}': slave surface '{kwargs['slaveSurface']}' contains no facet elements."
+            )
+
         # the tied points are the unique nodes of the slave surface, in first-seen order
         slaveNodes = list(dict.fromkeys(node for el in slaveFacetElements for node in el.nodes))
 
@@ -240,7 +249,7 @@ class Constraint(MultiPointConstraintBase):
                     bestWeights = weights
                     bestFacetIdx = facetIdx
 
-            if bestDistance > membershipTolerance:
+            if bestFacetIdx is None or bestDistance > membershipTolerance:
                 self.untiedSlaveNodes.append(slaveNode)
                 continue
 
@@ -262,17 +271,33 @@ class Constraint(MultiPointConstraintBase):
         # its own empty, useless part in every export.
         tiedNodes = [record[0] for record in self.tiedRecords]
         if tiedNodes:
-            model.nodeSets[f"{name}_tied"] = NodeSet(f"{name}_tied", tiedNodes)
+            tiedSetName = f"{name}_tied"
+            if tiedSetName in model.nodeSets:
+                raise ValueError(f"Constraint '{name}': node set '{tiedSetName}' already exists in the model.")
+            model.nodeSets[tiedSetName] = NodeSet(tiedSetName, tiedNodes)
         if self.untiedSlaveNodes:
-            model.nodeSets[f"{name}_untied"] = NodeSet(f"{name}_untied", self.untiedSlaveNodes)
+            untiedSetName = f"{name}_untied"
+            if untiedSetName in model.nodeSets:
+                raise ValueError(f"Constraint '{name}': node set '{untiedSetName}' already exists in the model.")
+            model.nodeSets[untiedSetName] = NodeSet(untiedSetName, self.untiedSlaveNodes)
 
     def getMultiPointConstraints(self, dofManager) -> list[tuple[int, list[tuple[int, float]]]]:
         fieldVariableIndices = dofManager.idcsOfFieldVariablesInDofVector
 
+        def getDofs(node):
+            if "displacement" not in node.fields:
+                raise KeyError(f"Constraint '{self.name}': node {node.label} has no 'displacement' field defined.")
+            fieldVar = node.fields["displacement"]
+            if fieldVar not in fieldVariableIndices:
+                raise KeyError(
+                    f"Constraint '{self.name}': displacement field of node {node.label} is not registered in the DofManager (no active degrees of freedom)."
+                )
+            return fieldVariableIndices[fieldVar]
+
         records = []
         for slaveNode, masterNodes, weights in self.tiedRecords:
-            slaveDofIndices = fieldVariableIndices[slaveNode.fields["displacement"]]
-            masterDofIndices = [fieldVariableIndices[node.fields["displacement"]] for node in masterNodes]
+            slaveDofIndices = getDofs(slaveNode)
+            masterDofIndices = [getDofs(node) for node in masterNodes]
 
             for component in range(self.nDim):
                 records.append(

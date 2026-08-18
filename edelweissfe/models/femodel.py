@@ -268,6 +268,9 @@ class FEModel:
         for constraint in self.constraints.values():
             constraint.acceptLastState()
 
+        for mpc in self.multiPointConstraints.values():
+            mpc.acceptLastState()
+
     def writeRestart(self, restartFile: h5py.File):
         """Write the current state of the model to a restart file.
 
@@ -355,6 +358,12 @@ def printPrettyModelSummary(model: FEModel, journal: Journal):
     if model.constraints:
         journal.message(
             " {:<20}{:<15}".format("constraints: ", len(model.constraints)),
+            identification,
+            0,
+        )
+    if model.multiPointConstraints:
+        journal.message(
+            " {:<20}{:<15}".format("multi-point constraints: ", len(model.multiPointConstraints)),
             identification,
             0,
         )

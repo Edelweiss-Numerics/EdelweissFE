@@ -84,3 +84,11 @@ class MultiPointConstraintBase(ABC):
             One record per slave degree of freedom:
             ``(slaveDofIndex, [(masterDofIndex, coefficient), ...])``.
         """
+
+    def acceptLastState(self):
+        """Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` when an increment
+        is accepted, so a stateful multi-point constraint can promote the state of the last
+        (converged) iterate to its history.
+
+        The default implementation does nothing, which is correct for every stateless constraint
+        (i.e. every constraint that does not override this method)."""

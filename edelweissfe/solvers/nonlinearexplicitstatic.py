@@ -163,6 +163,8 @@ class NEST(NIST):
 
     identification = "NESTSolver"
 
+    supportsMPC = False
+
     SolverSpecificOptions = {
         "runge-kutta-stages": 2,
         "runge-kutta-error-tolerance": 1e-3,
@@ -200,6 +202,8 @@ class NEST(NIST):
             The field output controller.
         """
 
+        self.validateModelCapabilities(model)
+
         for constraintName, constraint in model.constraints.items():
             if type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity:
                 raise Exception(
@@ -207,11 +211,6 @@ class NEST(NIST):
                     f"(contact) every increment, which {self.identification} never performs -- "
                     "contact is not currently supported with this solver."
                 )
-
-        if model.multiPointConstraints:
-            raise NotImplementedError(
-                "Multi-point constraints (e.g. surface ties) are not yet supported by the NEST solver."
-            )
 
         self.journal.message("Creating monolithic equation system", self.identification, 0)
         self.theDofManager = DofManager(

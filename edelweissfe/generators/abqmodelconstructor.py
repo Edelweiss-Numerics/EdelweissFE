@@ -338,7 +338,18 @@ class AbqModelConstructor:
             The updated model tree.
         """
 
-        for definition in inputFile["constraint"]:
+        # Multi-point / geometric-adjustment constraints (e.g. Tie with adjust=True) are
+        # instantiated first so that any in-place reference coordinate adjustments take effect
+        # before subsequent constraints (e.g. penalty contact) cache reference nodal coordinates
+        # by value. Order within each category is preserved.
+        def isMPCDefinition(definition):
+            constraintType = CaseInsensitiveDict(definition)["type"]
+            return issubclass(getConstraintClass(constraintType), MultiPointConstraintBase)
+
+        mpcDefinitions = [d for d in inputFile["constraint"] if isMPCDefinition(d)]
+        ordinaryDefinitions = [d for d in inputFile["constraint"] if not isMPCDefinition(d)]
+
+        for definition in mpcDefinitions + ordinaryDefinitions:
             constraintKwArgs = CaseInsensitiveDict(definition.copy())
 
             name = constraintKwArgs.pop("name")

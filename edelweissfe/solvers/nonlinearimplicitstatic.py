@@ -79,6 +79,8 @@ class NIST(NonlinearSolverBase):
 
     identification = "NISTSolver"
 
+    supportsMPC = True
+
     SolverSpecificOptions = {
         "defaultMaxIter": 10,
         "defaultCriticalIter": 5,
@@ -153,6 +155,8 @@ class NIST(NonlinearSolverBase):
         U = dU = P = K = None
 
         prevTimeStep = None
+
+        self.validateModelCapabilities(model)
 
         self.applyStepActionsAtStepStart(model, step.actions)
 

@@ -56,6 +56,10 @@ class NonlinearSolverBase(ABC):
 
     SolverSpecificOptions = {}
 
+    #: Whether this solver supports master-slave condensation / multi-point constraints
+    #: (e.g. surface ties). Subclasses supporting MPCs must set this to True.
+    supportsMPC = False
+
     #: The active multi-point-constraint (hanging node / tie) condensation, if any -- None
     #: whenever there are no multi-point constraints in the model. Lets
     #: applyDirichletToStiffness tell an MPC-transformed (fresh, disposable) system matrix
@@ -66,6 +70,19 @@ class NonlinearSolverBase(ABC):
 
     def __init__(self, jobInfo, journal, **kwargs):
         pass
+
+    def validateModelCapabilities(self, model: FEModel):
+        """Validate whether the solver supports the active features/constraints of the model.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        """
+        if model.multiPointConstraints and not self.supportsMPC:
+            raise NotImplementedError(
+                f"Multi-point constraints (e.g. surface ties) are not supported by the {self.identification} solver."
+            )
 
     def _updateOptions(self, updatedOptions: dict, journal):
         """Update options of the solver using a string dict
@@ -496,6 +513,11 @@ class NonlinearSolverBase(ABC):
 
         if not model.multiPointConstraints:
             return None
+
+        if not self.supportsMPC:
+            raise NotImplementedError(
+                f"Multi-point constraints (e.g. surface ties) are not supported by the {self.identification} solver."
+            )
 
         records = [
             record

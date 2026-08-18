@@ -63,6 +63,8 @@ class NED(NonlinearSolverBase):
 
     identification = "NEDSolver"
 
+    supportsMPC = True
+
     NEDOptions = {
         "first-order-fields": [],
         "second-order-fields": [],
@@ -126,6 +128,8 @@ class NED(NonlinearSolverBase):
             The field output controller.
         """
 
+        self.validateModelCapabilities(model)
+
         for constraintName, constraint in model.constraints.items():
             if type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity:
                 raise Exception(
@@ -187,6 +191,10 @@ class NED(NonlinearSolverBase):
             raise ValueError(
                 "Zero mass found in mass vector. This can be caused by elements with zero density, or by elements with zero volume."
             )
+
+        # Kept before folding so the kinetic energy diagnostic accounts for the true velocities of
+        # all nodes (including tied slaves) rather than master-placed folded mass.
+        self._rawLumpedMass = M.copy()
 
         # Slave DOFs of multi-point constraints carry no own inertia: their mass is folded onto
         # their masters (row-sum lumping of T^T M T, mass-conserving), their Minv stays zero, and
@@ -439,7 +447,7 @@ class NED(NonlinearSolverBase):
 
         if timeStep.number % self.options["output-frequency"] == 0:
             Wint = psi
-            Wkin = 0.5 * np.sum(self._lumpedMass * V**2)
+            Wkin = 0.5 * np.sum(self._rawLumpedMass * V**2)
             W = Wint + Wkin
             self.journal.message(
                 "Internal energy: {:e} ({:.2f} %)".format(Wint, Wint / W * 100), self.identification, 2
