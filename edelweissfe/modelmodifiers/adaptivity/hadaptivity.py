@@ -449,8 +449,10 @@ class ModelModifier(ModelModifierBase):
         change = ModelChange(kind=ModelChangeType.REFINEMENT, addedNodes=set(newNodes.keys()))
 
         # new child elements (single level of new refinement per call -> parents are materialized)
+        # Iterate SORTED: element labels are handed out in this order, so an unordered set here would
+        # make which child gets which label depend on set iteration order rather than on the mesh.
         with timeit("elements & state transfer"):
-            for eid in newChildEids:
+            for eid in sorted(newChildEids):
                 e = mesh.elements[eid]
                 parentEid = e["parent"]
                 parentEl = self._eidToEl[parentEid]
@@ -504,7 +506,9 @@ class ModelModifier(ModelModifierBase):
                 if any(meid in newChildEids for meid, _ in pairs):
                     change.changedSurfaces.add(surfaceName)
                 byFace = defaultdict(list)
-                for meid, faceID in pairs:
+                # Sorted: this fixes the member order of the rebuilt surface, and a contact/tie
+                # facet generator hands out facet element labels in exactly that order.
+                for meid, faceID in sorted(pairs):
                     if meid in self._eidToEl:
                         byFace[faceID].append(self._eidToEl[meid])
                 model.surfaces[surfaceName].replaceData({f: els for f, els in byFace.items()})
@@ -530,7 +534,9 @@ class ModelModifier(ModelModifierBase):
                 if setName in model.elementSets:
                     if eids & newChildEids:
                         change.changedElementSets.add(setName)
-                    elements = [self._eidToEl[eid] for eid in eids if eid in self._eidToEl]
+                    # sorted, for the same reason as the surface sync above: this order becomes the
+                    # element set's member order, which downstream generators number entities by
+                    elements = [self._eidToEl[eid] for eid in sorted(eids) if eid in self._eidToEl]
                     # carry the non-mirrored members along: the octree only knows refineable elements,
                     # so a mixed set would silently drop them here. Members deleted from the model in
                     # the meantime are filtered out by their label

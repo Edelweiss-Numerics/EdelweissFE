@@ -238,6 +238,19 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
                 f"'{kwargs['masterSurface']}' share nodes -- a node cannot be tied to itself."
             )
 
+        # Frozen ONCE from the INITIAL (pre-any-AMR) master surface, not recomputed on every
+        # reconcile(): computing it fresh from whatever the master surface's mean facet size happens
+        # to be at reconcile time is unsafe under AMR -- a node evaluated after an unrelated
+        # refinement has already shrunk that mean would get an artificially tight tolerance unrelated
+        # to its actual (unchanged) gap.
+        if self._positionTolerance is not None:
+            self._membershipTolerance = self._positionTolerance
+        else:
+            initialMasterFacetCoords = [np.array([n.coordinates for n in el.nodes]) for el in masterFacetElements]
+            self._membershipTolerance = self._positionToleranceFactor * np.mean(
+                [_facetCharacteristicSize(c) for c in initialMasterFacetCoords]
+            )
+
         self.tiedRecords, self.untiedSlaveNodes = self._buildTiedRecords(
             model, slaveFacetElements, masterFacetElements, adjust=strtobool(kwargs["adjust"])
         )
@@ -264,10 +277,14 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
 
         Tie MEMBERSHIP (is this node tied at all) is independent of adjust (does a tied node get
         snapped) -- these are separate decisions, see the ``adjust`` option's docstring. A single
-        tolerance, computed once from the whole master surface's characteristic facet size unless
-        given explicitly, is used for every slave node (matching Abaqus' *TIE, which always enforces
-        some tolerance -- explicit or internally computed -- and never ties unconditionally regardless
-        of distance).
+        tolerance, frozen once at construction from the INITIAL (pre-any-AMR) master surface's
+        characteristic facet size unless given explicitly, is used for every slave node regardless of
+        when it is evaluated (matching Abaqus' *TIE, which always enforces some tolerance -- explicit
+        or internally computed -- and never ties unconditionally regardless of distance). It is
+        deliberately NOT recomputed from ``masterFacetElements`` on a later reconcile() call: an
+        unrelated AMR refinement elsewhere on the master surface would otherwise shrink the mean facet
+        size and retroactively tighten the tolerance for nodes evaluated afterwards, for a gap that
+        never changed.
 
         Slave nodes already claimed as slaves by another multi-point constraint of the model are
         skipped: a DOF may be condensed out only once, and a second record for it would be rejected
@@ -286,11 +303,9 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
         masterFacetCoords = [np.array([n.coordinates for n in el.nodes]) for el in masterFacetElements]
 
-        membershipTolerance = (
-            self._positionTolerance
-            if self._positionTolerance is not None
-            else self._positionToleranceFactor * np.mean([_facetCharacteristicSize(c) for c in masterFacetCoords])
-        )
+        # Frozen at construction (see __init__) -- NOT recomputed from the current (possibly
+        # AMR-refined, and therefore shrunk) masterFacetCoords passed in here on a reconcile() call.
+        membershipTolerance = self._membershipTolerance
 
         # Projecting every slave node onto its closest master facet by brute force is O(nSlave *
         # nMaster) and, on a large tied surface re-projected after every AMR refinement, dominates

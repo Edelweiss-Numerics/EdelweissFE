@@ -150,8 +150,11 @@ def generateModelData(generatorDefinition: dict, model: FEModel, journal: Journa
             elements_per_block.append(newEl)
             idx += 1
 
+        # not set(...): ElementSet already deduplicates and keeps the order it is fed, whereas a set
+        # of identity-hashed elements would fix the member order from object addresses instead of the
+        # mesh -- and that order reaches facet/element numbering downstream (see hadaptivity.py).
         model.elementSets[f"{name}_block-{block_id + 1}"] = ElementSet(
-            f"{name}_block-{block_id + 1}", set(elements_per_block)
+            f"{name}_block-{block_id + 1}", elements_per_block
         )
 
     # replicate the mesh of the unit cell in x direction
@@ -294,10 +297,11 @@ def replicateMesh(
                 # add element to corresponding element set
                 new_el_ids.append(len(model.elements) - 1)
 
-            # create new element set becaus elsets are immutable
+            # create new element set becaus elsets are immutable -- not set(...): ElementSet already
+            # deduplicates and keeps the order it is fed (see the block-assignment loop above)
             model.elementSets[elset_name] = ElementSet(
                 elset_name,
-                set(list(model.elementSets[elset_name].elements) + [model.elements[el_id + 1] for el_id in new_el_ids]),
+                list(model.elementSets[elset_name].elements) + [model.elements[el_id + 1] for el_id in new_el_ids],
             )
 
         # remove nodes that are now internal
