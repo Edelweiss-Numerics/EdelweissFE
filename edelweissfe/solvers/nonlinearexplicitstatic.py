@@ -164,6 +164,7 @@ class NEST(NIST):
     identification = "NESTSolver"
 
     supportsMPC = False
+    supportsModelModifiers = False
 
     SolverSpecificOptions = {
         "runge-kutta-stages": 2,

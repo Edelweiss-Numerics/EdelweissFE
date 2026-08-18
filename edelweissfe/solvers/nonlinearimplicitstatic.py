@@ -102,6 +102,7 @@ class NIST(NonlinearSolverBase):
     identification = "NISTSolver"
 
     supportsMPC = True
+    supportsModelModifiers = True
 
     SolverSpecificOptions = {
         "defaultMaxIter": 10,

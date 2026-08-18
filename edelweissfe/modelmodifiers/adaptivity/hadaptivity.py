@@ -355,14 +355,14 @@ class ModelModifier(ModelModifierBase):
                 elements = m.mark(model, self._eidToEl.values(), self._mesh)
                 marked_elements.update(elements)
 
-        # dynamic markers (not initialOnly) need a non-zero state to evaluate safely
-        dynamic_markers = [m for m in self.markers if not m.initialOnly]
-
-        stateMagnitude = max(
-            (float(np.abs(np.asarray(nf["U"])).max()) for nf in model.nodeFields.values() if "U" in nf),
-            default=0.0,
-        )
-        if stateMagnitude >= 1e-12:
+        # dynamic markers (not initialOnly) evaluate the converged solution, so they need at least
+        # one increment to have actually converged -- on the very first call, updateModel() runs
+        # before increment 1 is solved and model fields still hold the pre-solve initial condition,
+        # which is meaningless to mark on regardless of which field a given marker evaluates.
+        # Gating on displacement magnitude instead would wrongly skip markers that evaluate other
+        # fields (stress, strain, ...) whenever displacement itself happens to stay tiny.
+        if not self._isFirstCall:
+            dynamic_markers = [m for m in self.markers if not m.initialOnly]
             for m in dynamic_markers:
                 marked_elements.update(m.mark(model, self._eidToEl.values(), self._mesh))
 

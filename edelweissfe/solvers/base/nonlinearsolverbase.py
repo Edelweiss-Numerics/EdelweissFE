@@ -60,6 +60,11 @@ class NonlinearSolverBase(ABC):
     #: (e.g. surface ties). Subclasses supporting MPCs must set this to True.
     supportsMPC = False
 
+    #: Whether this solver polls model.modelModifiers (e.g. h-adaptivity) every increment.
+    #: Subclasses that call modifier.updateModel(...) in their solveStep loop must set this
+    #: to True; without it, a modifier silently never runs and the model never adapts.
+    supportsModelModifiers = False
+
     #: The active multi-point-constraint (hanging node / tie) condensation, if any -- None
     #: whenever there are no multi-point constraints in the model. Lets
     #: applyDirichletToStiffness tell an MPC-transformed (fresh, disposable) system matrix
@@ -82,6 +87,11 @@ class NonlinearSolverBase(ABC):
         if model.multiPointConstraints and not self.supportsMPC:
             raise NotImplementedError(
                 f"Multi-point constraints (e.g. surface ties) are not supported by the {self.identification} solver."
+            )
+
+        if model.modelModifiers and not self.supportsModelModifiers:
+            raise NotImplementedError(
+                f"Model modifiers (e.g. h-adaptivity) are not supported by the {self.identification} solver."
             )
 
     def _updateOptions(self, updatedOptions: dict, journal, strict: bool = False):
