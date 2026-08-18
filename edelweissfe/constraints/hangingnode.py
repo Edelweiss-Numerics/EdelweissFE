@@ -90,7 +90,7 @@ class Constraint(MultiPointConstraintBase):
 
     @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
     @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name: str, model: FEModel, **kwargs):
+    def __init__(self, name: str, model: FEModel, *args, **kwargs):
         kwargs = CaseInsensitiveDict(kwargs)
         self._name = name
         self._model = model
