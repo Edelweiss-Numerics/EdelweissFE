@@ -160,14 +160,30 @@ def makePrettyTable(maxLevels: int = 4) -> PrettyTable:
     return prettytable
 
 
-def extractIncrementTimes(maxLevels: int = 4) -> PrettyTable:
+def extractIncrementTimeRows(maxLevels: int = 4) -> list[tuple[int, str, float, int]]:
     """
-    Returns a PrettyTable of the time elapsed since the last time
-    this function was called, while keeping global 'times' intact.
+    Returns the time elapsed since the last time this function was called, as
+    ``(level, function, time, calls)`` rows, while keeping global 'times' intact.
+
+    **Consuming this is destructive**: it advances the snapshot the next delta is measured
+    against, so a caller that needs the same increment's times in more than one place (printed
+    *and* written to a file, say) must call this once and share the rows -- a second call
+    within the same increment reports zeros. :func:`makeIncrementTimesPrettyTable` turns the
+    rows into the printable table for exactly that reason.
+
+    Parameters
+    ----------
+    maxLevels
+        The maximum number of stack levels considered.
+
+    Returns
+    -------
+    list[tuple[int, str, float, int]]
+        One ``(level, function, time, calls)`` row per timed category, parents before children.
     """
 
-    if not hasattr(extractIncrementTimes, "_last_snapshot") or extractIncrementTimes._last_snapshot is None:
-        extractIncrementTimes._last_snapshot = None
+    if not hasattr(extractIncrementTimeRows, "_last_snapshot") or extractIncrementTimeRows._last_snapshot is None:
+        extractIncrementTimeRows._last_snapshot = None
 
     current_state = times.get_snapshot()
 
@@ -185,8 +201,8 @@ def extractIncrementTimes(maxLevels: int = 4) -> PrettyTable:
 
         return {"time": delta_t, "calls": delta_c, "children": children_deltas}
 
-    delta_tree = compute_delta(current_state, extractIncrementTimes._last_snapshot)
-    extractIncrementTimes._last_snapshot = current_state
+    delta_tree = compute_delta(current_state, extractIncrementTimeRows._last_snapshot)
+    extractIncrementTimeRows._last_snapshot = current_state
 
     def flatten_delta(node, level):
         rows = []
@@ -196,19 +212,47 @@ def extractIncrementTimes(maxLevels: int = 4) -> PrettyTable:
                 rows += flatten_delta(data, level + 1)
         return rows
 
-    delta_rows = flatten_delta(delta_tree, 0)
+    return flatten_delta(delta_tree, 0)
+
+
+def makeIncrementTimesPrettyTable(rows: list[tuple[int, str, float, int]]) -> PrettyTable:
+    """Create a pretty formatted table from :func:`extractIncrementTimeRows` rows.
+
+    Parameters
+    ----------
+    rows
+        The ``(level, function, time, calls)`` rows to format.
+
+    Returns
+    -------
+    PrettyTable
+        The table in pretty format.
+    """
 
     prettytable = PrettyTable()
     prettytable.field_names = ["function", "inc. runtime", "calls"]
     prettytable.align = "l"
-    for level, cat, t, calls in delta_rows:
+    for level, cat, t, calls in rows:
         prettytable.add_row([" " * level + cat, "{:}{:10.4E}s".format(" " * level, t), calls])
 
     return prettytable
+
+
+def extractIncrementTimes(maxLevels: int = 4) -> PrettyTable:
+    """
+    Returns a PrettyTable of the time elapsed since the last time
+    this function was called, while keeping global 'times' intact.
+
+    Convenience composition of :func:`extractIncrementTimeRows` and
+    :func:`makeIncrementTimesPrettyTable`, and destructive for the same reason: use those two
+    directly whenever the rows are needed for anything besides printing.
+    """
+
+    return makeIncrementTimesPrettyTable(extractIncrementTimeRows(maxLevels))
 
 
 def reset():
     """Reset all measured times."""
     global times
     times.clear()
-    extractIncrementTimes._last_snapshot = None
+    extractIncrementTimeRows._last_snapshot = None
