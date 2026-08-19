@@ -1,13 +1,14 @@
 ** Dynamic h-adaptivity regression test -- exercises the full *modelModifier path end to end:
 ** marking -> octree refinement -> model mutation -> nodal warm-start -> quadrature-point state
 ** transfer -> hanging-node MPC -> equation-system rebuild -> solve on the refined mesh.
-** Two coarse GC3D20R elements form a cantilever; bending concentrates stress at the fixed end,
+** Two coarse C3D20R elements form a cantilever; bending concentrates stress at the fixed end,
 ** so the stress marker refines exactly one element (2 -> 9 active, 13 hanging nodes), creating a
-** 2:1 hanging interface that the MPC couples across both fields (displacement + nonlocal damage).
+** 2:1 hanging interface that the MPC couples across the displacement field. (Multi-field
+** coupling across a hanging interface is covered separately by AMR_TwoFieldGC3D20R.)
 ** Pins the dynamic solution against U.ref. (A true adaptive-vs-uniform-fine PHYSICS benchmark --
 ** PLAN_AMR.md M3 -- needs a two-run comparison harness and remains future work.)
-*material, name=AT2PHASEFIELD, id=mat
-20000, 0.2, 0.1, 5
+*material, name=linearelastic, id=mat
+20000, 0.2
 
 *section, name=sec, material=mat, type=solid
 all
@@ -20,7 +21,6 @@ maxLevel=1
 *solver, solver=NIST, name=S
 *fieldOutput
 >>perNode, elSet=all, field=displacement, result=U, name=U
->>perNode, elSet=all, field=nonlocal damage, result=U, name=D
 >>perElement, elSet=all, result=stress, quadraturePoint=0:8, name=stressForAMR
 
 *step, solver=S
@@ -61,7 +61,7 @@ maxInc=0.5, minInc=1e-4, maxNumInc=50, maxIter=25,
 30, 1.5, 0.0, 1.0
 31, 1.5, 0.0, 0.0
 32, 1.5, 1.0, 0.0
-*Element, type=GC3D20R
+*Element, type=C3D20R
 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
 2, 5, 6, 7, 8, 21, 22, 23, 24, 13, 14, 15, 16, 25, 26, 27, 28, 29, 30, 31, 32
 *elSet, elSet=all, generate

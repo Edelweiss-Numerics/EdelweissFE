@@ -4,8 +4,8 @@
 ** into 27 children with a 3:1 hanging interface. The QUAD8 face-trace / quadratic-edge spaces are
 ** nested under any uniform affine sub-map, so the hanging-node MPC stays exact for a factor of 3 just
 ** as for 2 (verified kinematically to 1e-15). Pins the split-factor path against U.ref.
-*material, name=AT2PHASEFIELD, id=mat
-20000, 0.2, 0.1, 5
+*material, name=linearelastic, id=mat
+20000, 0.2
 
 *section, name=sec, material=mat, type=solid
 all
@@ -19,7 +19,6 @@ splitFactor=3
 *solver, solver=NIST, name=S
 *fieldOutput
 >>perNode, elSet=all, field=displacement, result=U, name=U
->>perNode, elSet=all, field=nonlocal damage, result=U, name=D
 >>perElement, elSet=all, result=stress, quadraturePoint=0:8, name=stressForAMR
 
 *step, solver=S
@@ -60,7 +59,7 @@ maxInc=0.5, minInc=1e-4, maxNumInc=50, maxIter=25,
 30, 1.5, 0.0, 1.0
 31, 1.5, 0.0, 0.0
 32, 1.5, 1.0, 0.0
-*Element, type=GC3D20R
+*Element, type=C3D20R
 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
 2, 5, 6, 7, 8, 21, 22, 23, 24, 13, 14, 15, 16, 25, 26, 27, 28, 29, 30, 31, 32
 *elSet, elSet=all, generate

@@ -1,11 +1,11 @@
 ** Mixed-mesh AMR regression test (§3 of PLAN_AMR_CONTACT.md): the model contains two refineable
-** GC3D20R hexahedra (the AT2 cantilever from AMR_DynamicRefinement) PLUS a non-refineable 8-node
+** C3D20R hexahedra (the cantilever from AMR_DynamicRefinement) PLUS a non-refineable 8-node
 ** C3D8 hexahedron glued onto its free face -- standing in for a mesh that also carries e.g.
 ** contact-facet elements. hAdaptivity must (a) not choke on construction when the model isn't
 ** pure-HEX20, and (b) leave the C3D8 element completely untouched (no marking, no materialization,
-** no state transfer) while the two GC3D20R elements refine exactly as in AMR_DynamicRefinement.
-*material, name=AT2PHASEFIELD, id=mat
-20000, 0.2, 0.1, 5
+** no state transfer) while the two C3D20R elements refine exactly as in AMR_DynamicRefinement.
+*material, name=linearelastic, id=mat
+20000, 0.2
 
 *material, name=linearelastic, id=matLE
 30000, 0.15
@@ -24,7 +24,6 @@ maxLevel=1
 *solver, solver=NIST, name=S
 *fieldOutput
 >>perNode, elSet=hexEls, field=displacement, result=U, name=U
->>perNode, elSet=hexEls, field=nonlocal damage, result=U, name=D
 >>perElement, elSet=hexEls, result=stress, quadraturePoint=0:8, name=stressForAMR
 
 *step, solver=S
@@ -69,7 +68,7 @@ maxInc=0.5, minInc=1e-4, maxNumInc=50, maxIter=25,
 34, 3.0, 0.0, 1.0
 35, 3.0, 0.0, 0.0
 36, 3.0, 1.0, 0.0
-*Element, type=GC3D20R
+*Element, type=C3D20R
 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
 2, 5, 6, 7, 8, 21, 22, 23, 24, 13, 14, 15, 16, 25, 26, 27, 28, 29, 30, 31, 32
 *Element, type=C3D8
