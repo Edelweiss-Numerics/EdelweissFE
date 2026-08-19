@@ -35,7 +35,7 @@ if checkSuccessfulExtension("edelweissfe.elements.marmotelement.element"):
 else:
     MarmotElementWrapper = None
 
-if checkSuccessfulExtension("edelweissfe.elements.marmotsingleqpelement.marmotmaterialhypoelasticwrapper"):
+if checkSuccessfulExtension("edelweissfe.materials.marmot.marmothypoelastic"):
     from edelweissfe.elements.marmotsingleqpelement.element import (
         MarmotMaterialWrappingElement,
     )

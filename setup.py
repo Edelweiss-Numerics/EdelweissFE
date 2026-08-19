@@ -66,6 +66,27 @@ print("MKL include directory (overwrite via environment var. MKL_INCLUDE_DIR):")
 print(mkl_include)
 print("Eigen include directory (overwrite via environment var. EIGEN_INCLUDE_DIR):")
 print(eigen_include)
+
+# Extension build failures are tolerated by optional_build_ext below, so a wrong include
+# directory would otherwise only show up as a missing module much later. The header is looked
+# for in every directory which ends up on the include path of the respective extension, since
+# Eigen is sometimes installed next to the Marmot headers rather than into its own eigen3
+# subdirectory.
+for description, header, searchPath, variable in [
+    ("Marmot", join("Marmot", "MarmotMaterialHypoElastic.h"), [join(marmot_dir, "include")], "MARMOT_INSTALL_DIR"),
+    ("Eigen", join("Eigen", "Dense"), [eigen_include, join(marmot_dir, "include")], "EIGEN_INCLUDE_DIR"),
+]:
+    if not any(os.path.exists(join(candidate, header)) for candidate in searchPath):
+        print("!" * 80)
+        print(
+            "WARNING: {:} was not found ({:} is in none of {:}).\n"
+            "         Extensions depending on it will NOT be built.\n"
+            "         Set the environment variable {:} to the correct location.".format(
+                description, header, ", ".join(searchPath), variable
+            )
+        )
+        print("!" * 80)
+
 print("*" * 80)
 
 print("Gather the extension for the MarmotElement base element, linked to the Marmot library")
@@ -82,35 +103,57 @@ extensions = [
     )
 ]
 
-print("Gather the extension for wrapping a hypoelastic Marmot material")
-extensions += [
-    Extension(
-        "*",
-        sources=[
-            "edelweissfe/elements/marmotsingleqpelement/marmotmaterialhypoelasticwrapper.pyx",
-        ],
-        include_dirs=[join(marmot_dir, "include"), numpy.get_include(), eigen_include],
-        libraries=["Marmot"],
-        library_dirs=[join(marmot_dir, "lib")],
-        runtime_library_dirs=[join(marmot_dir, "lib")],
-        language="c++",
-        extra_compile_args=["-O3", "-std=c++20"],
-    )
-]
+print("Gather the compiled finite difference cell kernels")
+kernel_dir = join("edelweissfe", "kernels")
+for kernel_source in [
+    "displacementkernel.pyx",
+    "gradientenhanceddisplacementkernel.pyx",
+    "gradientplasticitykernel.pyx",
+]:
+    extensions += [
+        Extension(
+            "*",
+            sources=[join(kernel_dir, kernel_source)],
+            include_dirs=[
+                join(marmot_dir, "include"),
+                numpy.get_include(),
+                eigen_include,
+                # the C++ shims the kernels cimport live next to the material sources
+                join("edelweissfe", "materials", "marmot"),
+            ],
+            libraries=["Marmot"],
+            library_dirs=[join(marmot_dir, "lib")],
+            runtime_library_dirs=[join(marmot_dir, "lib")],
+            language="c++",
+            extra_compile_args=["-O3", "-std=c++20"],
+        )
+    ]
 
-# extensions += [
-#     Extension(
-#         "*",
-#         sources=[
-#             "edelweissfe/elements/marmotsingleqpelement/marmotmaterialgradientenhancedhypoelasticwrapper.pyx",
-#         ],
-#         include_dirs=[join(marmot_dir, "include"), numpy.get_include()],
-#         libraries=["Marmot"],
-#         library_dirs=[join(marmot_dir, "lib")],
-#         runtime_library_dirs=[join(marmot_dir, "lib")],
-#         language="c++",
-#     )
-# ]
+print("Gather the extensions for the point-wise Marmot material interfaces")
+marmot_material_dir = join("edelweissfe", "materials", "marmot")
+for marmot_material_source in [
+    "marmothypoelastic.pyx",
+    "marmotgradientenhancedhypoelastic.pyx",
+    "marmotgradientplasticityhypoelastic.pyx",
+]:
+    extensions += [
+        Extension(
+            "*",
+            sources=[join(marmot_material_dir, marmot_material_source)],
+            include_dirs=[
+                join(marmot_dir, "include"),
+                numpy.get_include(),
+                eigen_include,
+                # for the C++ shim living next to the sources
+                marmot_material_dir,
+            ],
+            libraries=["Marmot"],
+            library_dirs=[join(marmot_dir, "lib")],
+            runtime_library_dirs=[join(marmot_dir, "lib")],
+            language="c++",
+            extra_compile_args=["-O3", "-std=c++20"],
+        )
+    ]
 
 print("Gather the extension for the fast element result collector")
 extensions += [

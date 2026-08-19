@@ -14,6 +14,7 @@
 #  2017 - today
 #
 #  Matthias Neuner matthias.neuner@uibk.ac.at
+#  Alexander Dummer alexander.dummer@uibk.ac.at
 #
 #  This file is part of EdelweissFE.
 #
@@ -28,32 +29,33 @@
 # Created on Wed Aug 31 08:35:06 2022
 # @author: matthias
 
+"""
+A single quadrature point 'element' which drives a Marmot material directly, such that
+materials can be investigated without any spatial discretization.
+
+The element itself is agnostic of the material's base class. Everything base class
+specific, i.e., the coupled fields, the layout of the state variables and how the
+material response translates into the residual and the tangent, is delegated to a
+material driver in :mod:`~edelweissfe.elements.marmotsingleqpelement.materialdrivers`.
+"""
+
 import numpy as np
 
 from edelweissfe.elements.base.baseelement import BaseElement
-
-# from edelweissfe.elements.marmotsingleqpelement.marmotmaterialgradientenhancedhypoelasticwrapper import (
-#     MarmotMaterialGradientEnhancedHypoElasticWrapper,
-# )
-from edelweissfe.elements.marmotsingleqpelement.marmotmaterialhypoelasticwrapper import (
-    MarmotMaterialHypoElasticWrapper,
+from edelweissfe.elements.marmotsingleqpelement.materialdrivers import (
+    materialDriverForMaterialType,
 )
 from edelweissfe.points.node import Node
-
-marmotMaterialWrappers = {
-    "MarmotMaterialHypoElastic": MarmotMaterialHypoElasticWrapper,
-    # "MarmotMaterialGradientEnhancedHypoElastic": MarmotMaterialGradientEnhancedHypoElasticWrapper,
-}
 
 
 class MarmotMaterialWrappingElement(BaseElement):
     def __init__(self, materialType: str, elNumber: int):
-        """This element serves as a wrapper for MarmotMaterials,
+        """This element serves as a driver for MarmotMaterials,
         cf. `Marmot <https://github.com/MAteRialMOdelingToolbox/Marmot/>`_.
 
         It has a single quadrature point, and one (dummy) node.
-        For interfacing with specific Marmot materials,
-        specialized material wrappers are used.
+        For interfacing with the different Marmot material base classes,
+        specialized material drivers are used.
 
         The element allows to run quadrature point simulations investigating materials
         for development purposes.
@@ -61,7 +63,8 @@ class MarmotMaterialWrappingElement(BaseElement):
         Parameters
         ----------
         materialType
-            The Marmot material class which should be represented, e.g., MarmotMaterialHypoElastic.
+            The Marmot material base class which should be driven, e.g.,
+            MarmotMaterialHypoElastic.
         elNumber
             The number of the element."""
 
@@ -72,9 +75,9 @@ class MarmotMaterialWrappingElement(BaseElement):
         self._ensightType = "point"
         self._hasMaterial = False
 
-        self._marmotMaterialWrapper = marmotMaterialWrappers[self._materialType]()
-        self._fields = (self._marmotMaterialWrapper.fields,)
-        self._nDof = self._marmotMaterialWrapper.nU
+        self._driver = materialDriverForMaterialType(materialType)()
+        self._fields = (self._driver.fields,)
+        self._nDof = self._driver.nDof
         self._dofIndicesPermutation = np.arange(0, self._nDof, 1, dtype=int)
 
     @property
@@ -130,18 +133,18 @@ class MarmotMaterialWrappingElement(BaseElement):
 
     def setProperties(self, elementProperties):
         """
-        Not used by this wrapper"""
+        Not used by this driver"""
 
-        raise ValueError("This should not be called for this material wrapper!")
+        raise ValueError("This should not be called for this material driver!")
 
     def initializeElement(
         self,
     ):
         """
-        Not used by this wrapper"""
+        Not used by this driver"""
 
     def setMaterial(self, materialName: str, materialProperties: np.ndarray):
-        """Assign a material and material properties to the underlying Wrapper.
+        """Assign a material and material properties to the underlying driver.
         Furthermore, create two sets of state vars:
 
             * the actual set,
@@ -156,14 +159,17 @@ class MarmotMaterialWrappingElement(BaseElement):
         """
 
         self._materialProperties = materialProperties
-        self._marmotMaterialWrapper.createMaterial(materialName.upper(), materialProperties)
 
-        self._nStateVars = self._marmotMaterialWrapper.getNumberOfRequiredStateVars()
+        self._driver.createMaterial(materialName.upper(), materialProperties)
+
+        self._nStateVars = self._driver.getNumberOfRequiredStateVars()
 
         self._stateVars = np.zeros(self._nStateVars)
         self._stateVarsTemp = np.zeros(self._nStateVars)
 
-        self._marmotMaterialWrapper.assignStateVars(self._stateVarsTemp)
+        # The temporary state vars are only ever overwritten in place, hence the driver
+        # may hold persistent views into them.
+        self._driver.assignStateVars(self._stateVarsTemp)
 
         self._hasMaterial = True
 
@@ -176,16 +182,12 @@ class MarmotMaterialWrappingElement(BaseElement):
         self._initializeStateVarsTemp()
 
         if stateType == "initialize material":
-            self._marmotMaterialWrapper.initializeYourself()
+            self._driver.initializeYourself()
 
         if stateType == "characteristic element length":
-            self._marmotMaterialWrapper.setCharacteristicElementLength(values)
+            self._driver.setCharacteristicElementLength(values[0])
 
         self.acceptLastState()
-
-    def shapeVIJContribution(self, flat_view: np.ndarray) -> np.ndarray:
-        """Keep the view flat for Cython 1-D memoryview compatibility."""
-        return flat_view
 
     def computeKernels(
         self,
@@ -198,7 +200,7 @@ class MarmotMaterialWrappingElement(BaseElement):
     ):
         self._initializeStateVarsTemp()
 
-        self._marmotMaterialWrapper.computeKernels(Ke, Pe, U, dU, time, dTime)
+        self._driver.computeKernels(Ke, Pe, U, dU, time, dTime)
 
     def computeKernelsExplicit(
         self,
@@ -210,17 +212,17 @@ class MarmotMaterialWrappingElement(BaseElement):
     ):
         self._initializeStateVarsTemp()
 
-        self._marmotMaterialWrapper.computeKernelsExplicit(Pe, U, dU, time, dTime)
+        self._driver.computeKernels(np.zeros((self._nDof, self._nDof)), Pe, U, dU, time, dTime)
 
     def computeLumpedInertia(self, Me: np.ndarray):
-        """Not implemented for this wrapper."""
+        """Not implemented for this driver."""
 
-        raise ValueError("This should not be called for this wrapper.")
+        raise ValueError("This should not be called for this driver.")
 
     def computeCriticalTimeStepForExplicitDynamics(self, Q: np.ndarray):
-        """Not implemented for this wrapper."""
+        """Not implemented for this driver."""
 
-        raise ValueError("This should not be called for this wrapper.")
+        raise ValueError("This should not be called for this driver.")
 
     def computeDistributedLoad(
         self,
@@ -233,14 +235,14 @@ class MarmotMaterialWrappingElement(BaseElement):
         time: float,
         dTime: float,
     ):
-        """Not implemented for this wrapper."""
+        """Not implemented for this driver."""
 
-        raise ValueError("This should not be called for this wrapper.")
+        raise ValueError("This should not be called for this driver.")
 
     def computeInternalEnergy(self) -> float:
-        """Not implemented for this wrapper."""
+        """Not implemented for this driver."""
 
-        raise ValueError("This should not be called for this wrapper.")
+        raise ValueError("This should not be called for this driver.")
 
     def computeBodyForce(
         self,
@@ -251,9 +253,9 @@ class MarmotMaterialWrappingElement(BaseElement):
         time: float,
         dTime: float,
     ):
-        """Not implemented for this wrapper."""
+        """Not implemented for this driver."""
 
-        raise ValueError("This should not be called for this wrapper.")
+        raise ValueError("This should not be called for this driver.")
 
     def acceptLastState(
         self,
@@ -268,7 +270,7 @@ class MarmotMaterialWrappingElement(BaseElement):
         pass
 
     def getResultArray(self, result: str, quadraturePoint: int, getPersistentView: bool = True) -> np.ndarray:
-        return self._marmotMaterialWrapper.getResultArray(result, getPersistentView)
+        return self._driver.getResultArray(result, getPersistentView)
 
     def getCoordinatesAtCenter(self) -> np.ndarray:
         """Return the only node's coordinates.

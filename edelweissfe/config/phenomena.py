@@ -120,7 +120,8 @@ def getFieldSize(field, domainSize):
     if fType == "vector":
         return domainSize
     if fType == "rotation vector":
-        if domainSize == 2:
+        # a one and a two dimensional domain both leave a single rotation axis
+        if domainSize in (1, 2):
             return 1
         elif domainSize == 3:
             return 3
