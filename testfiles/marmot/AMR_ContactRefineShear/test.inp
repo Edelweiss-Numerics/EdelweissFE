@@ -28,15 +28,22 @@ lY      =1
 lZ      =1
 elType  =C3D20R
 
+** In-plane footprint deliberately asymmetric (was 0/1, exactly matching the fixed block's
+** [0,1]x[0,1] footprint, both meshes symmetric about x=y=0.5): a centered/symmetric shrink was
+** tried first and left the near-tie unchanged, because a symmetric perturbation preserves the
+** same mirror symmetry that puts a slave node exactly equidistant between two master facets --
+** breaking the tie needs to break the symmetry, not just the corner alignment. x0/y0/lX/lY are
+** now all different from each other and from the master's, so no slave node coordinate is
+** related to any master facet boundary by either coincidence or mirror symmetry.
 *modelGenerator, generator=boxGen, name=moving
 nX      =3
 nY      =3
 nZ      =2
-x0      =0
-y0      =0
+x0      =0.07
+y0      =0.11
 z0      =1.05
-lX      =1
-lY      =1
+lX      =0.83
+lY      =0.79
 lZ      =1
 elType  =C3D20R
 
