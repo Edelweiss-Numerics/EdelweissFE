@@ -43,7 +43,7 @@ It did so because of a gap that P3(c) has now started closing. Originally, const
 hand-assembling one here would have meant writing a second, hidden input-file parser. The second
 test below is the successor that gap was blocking: it builds a real ``dirichlet.StepAction``
 through its typed constructor, with no dict and no parser anywhere, and checks the boundary
-condition it produces, but it stops at ``getDelta`` and never reaches a solver.
+condition it produces, but it stops at ``getPrescribedIncrement`` and never reaches a solver.
 
 With all 13 step actions ported (P3(c) complete), the third test closes the remaining gap: it drives
 a real ``AdaptiveStep`` through the production ``NIST`` solver, with typed step actions and a real
@@ -212,12 +212,12 @@ def test_dirichlet_step_action_built_from_python_without_a_parser_dict():
     for i in range(nIncrements):
         progress = (i + 1) / nIncrements
         timeStep = TimeStep(i, 1.0 / nIncrements, progress, 1.0 / nIncrements, progress, progress)
-        total += bc.getDelta(timeStep)[0, 0]
+        total += bc.getPrescribedIncrement(timeStep)[0, 0]
     np.testing.assert_allclose(total, 0.5, atol=1e-12)
 
     # a nonlinear amplitude must actually be nonlinear in the increments, otherwise the callable
     # was silently ignored and the assertion above would pass for the wrong reason
-    firstHalf = bc.getDelta(TimeStep(0, 0.5, 0.5, 0.5, 0.5, 0.5))[0, 0]
+    firstHalf = bc.getPrescribedIncrement(TimeStep(0, 0.5, 0.5, 0.5, 0.5, 0.5))[0, 0]
     assert firstHalf < 0.5 * 0.5
 
     # updating on the same set is typed too, and re-prescribing must replace, not accumulate
