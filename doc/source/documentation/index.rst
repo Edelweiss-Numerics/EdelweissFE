@@ -12,6 +12,7 @@ Documentation
    steps
    analyticalfields
    constraints
+   rigidbodies
    contacttheory
    dofmanager
    fieldoutputmanager

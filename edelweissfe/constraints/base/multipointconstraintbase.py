@@ -64,7 +64,7 @@ class MultiPointConstraintBase(ABC):
     _records: list = []
 
     @abstractmethod
-    def __init__(self, name: str, model: FEModel, **kwargs):
+    def __init__(self, name: str, model: FEModel, *args, **kwargs):
         """The multi-point constraint base class.
 
         Parameters
@@ -109,3 +109,11 @@ class MultiPointConstraintBase(ABC):
         """
 
         return {record[0] for record in self._records}
+
+    def acceptLastState(self):
+        """Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` when an increment
+        is accepted, so a stateful multi-point constraint can promote the state of the last
+        (converged) iterate to its history.
+
+        The default implementation does nothing, which is correct for every stateless constraint
+        (i.e. every constraint that does not override this method)."""

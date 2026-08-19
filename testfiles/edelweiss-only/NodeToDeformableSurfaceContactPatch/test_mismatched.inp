@@ -7,9 +7,9 @@
 ** 2x2, upper meshed 3x3 -- non-matching interface nodes) under uniform compression, nu = 0 so
 ** the exact solution is homogeneous uniaxial stress. Analytic contact pressure:
 ** sigma = E * (0.06 - 0.02) / 2 = 1.8e4 * 0.02 = 360 (interface compliance 1/penalty adds
-** ~1e-5 relative). The monitored per-slave pressure spread (pNspread) stays at the 1e-3 level
-** and the mean (pNmean) matches 360 -- tributary-area weighting recovers uniform pressure on a
-** non-matching interface. Also exercises the fromExpression-based constraint result output.
+** ~1e-5 relative). The mean (pNmean) tracks 360, but tributary-area weighting does NOT recover
+** uniform pointwise pressure on a non-matching interface -- pNspread stays at the ~0.5 level
+** quantified above. Also exercises the fromExpression-based constraint result output.
 *material, name=LinearElastic, id=linearelastic, provider=edelweiss
 1.8e4, 0.0
 

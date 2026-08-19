@@ -99,7 +99,7 @@ class SimpleTimeStepper:
         if self.enforcedTimeIncrement is None:
             while self.finishedStepProgress < (1.0 - 1e-15):
                 if self.totalIncrements >= self.maxNumberIncrements:
-                    self.journal.errorMessage("Reached maximum number of increments", self.identification)
+                    self.journal.message("Reached maximum number of increments", self.identification)
                     raise ReachedMaxIncrements()
                 if self.increment > self.maxIncrement:
                     self.increment = self.maxIncrement
@@ -126,7 +126,7 @@ class SimpleTimeStepper:
         else:
             while self.finishedStepProgress < (1.0 - 1e-15):
                 if self.totalIncrements >= self.maxNumberIncrements:
-                    self.journal.errorMessage("Reached maximum number of increments", self.identification)
+                    self.journal.message("Reached maximum number of increments", self.identification)
                     raise ReachedMaxIncrements()
                 if self.increment > self.maxIncrement:
                     self.increment = self.maxIncrement

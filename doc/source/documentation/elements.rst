@@ -44,6 +44,11 @@ One of the following element types needs to be included in the definition (``typ
 - **C3D8**    - hexahedron 3D element with 8 nodes.
 - **C3D20**    - hexahedron 3D element with 20 nodes.
 
+.. note::
+    ``C3D8``/``C3D20`` (and their ``TL`` counterparts) use the standard Abaqus node ordering
+    (corner ring 1-4 at :math:`\zeta=-1`, ring 5-8 at :math:`\zeta=+1`), matching the ``marmot``
+    provider's elements -- there is only one node-ordering convention across the framework.
+
 **additional Parameters**
 
 The following optional Parameters are also included in the element type definition:

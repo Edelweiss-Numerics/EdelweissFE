@@ -39,6 +39,7 @@ import numpy as np
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.points.node import Node
+from edelweissfe.rigidbodies.rigidbody import RigidBody
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
@@ -754,10 +755,14 @@ def createUnstructuredPartFromRigidBody(bodyName, rigidBody, partID: int):
         The id of this part.
     """
 
-    nodeCounter = 0
-    partNodes = dict()
-    elementDict = dict()
+    # the node list must follow getVisualizationNodes()'s order, since that is the
+    # order in which RigidBodyFieldOutput.getVisualizationField() reports per-node
+    # results - deriving it from the facets instead (e.g. by first-seen order, or
+    # excluding nodes unreferenced by any facet) would misalign or drop entries.
+    visualizationNodes = rigidBody.getVisualizationNodes()
+    nodeIndices = {node: idx for idx, node in enumerate(visualizationNodes)}
 
+    elementDict = dict()
     facets = rigidBody.getVisualizationElements()
 
     facetID = 1
@@ -765,16 +770,10 @@ def createUnstructuredPartFromRigidBody(bodyName, rigidBody, partID: int):
         elShape = facet["type"]
         if elShape not in elementDict:
             elementDict[elShape] = dict()
-        elNodeIndices = []
-        for node in facet["nodes"]:
-            idx = partNodes.setdefault(node, nodeCounter)
-            elNodeIndices.append(idx)
-            if idx == nodeCounter:
-                nodeCounter += 1
-        elementDict[elShape][facetID] = elNodeIndices
+        elementDict[elShape][facetID] = [nodeIndices[node] for node in facet["nodes"]]
         facetID += 1
 
-    return EnsightUnstructuredPart(bodyName, partID, list(partNodes.keys()), elementDict)
+    return EnsightUnstructuredPart("RIGIDBODY_" + bodyName, partID, visualizationNodes, elementDict)
 
 
 required = [kw.name for kw in module.requiredArgs]
@@ -827,7 +826,6 @@ class OutputManager(OutputManagerBase):
         self.timeAtLastOutput = -1e16
         self.minDTForOutput = -1e16
         self.finishedSteps = 0
-        # self.intermediateSaveInterval = int(kwargs.get("intermediateSaveInterval", 10))
         self.intermediateSaveIntervalCounter = 0
         self.fieldOutputController = fieldOutputController
         self.journal = journal
@@ -868,7 +866,8 @@ class OutputManager(OutputManagerBase):
 
         # configuration keyword should only be allowed once
         for configuration in configurations:
-            self.intermediateSaveInterval = configuration["intermediateSaveInterval"]
+            val = configuration["intermediateSaveInterval"]
+            self.intermediateSaveInterval = int(val) if val is not None else None
             transient = configuration["transient"]
             self.overwrite = configuration["overwrite"]
 
@@ -1095,10 +1094,15 @@ class OutputManager(OutputManagerBase):
     def initializeStep(self, step):
         if self.name in step.actions["options"] or "Ensight" in step.actions["options"]:
             options = step.actions["options"].get(self.name, False) or step.actions["options"]["Ensight"].options
-            val = options.get("intermediateSaveInterval", self.intermediateSaveInterval)
-            self.intermediateSaveInterval = int(val) if val is not None else None
-            val_dt = options.get("minDTForOutput", self.minDTForOutput)
-            self.minDTForOutput = float(val_dt) if val_dt is not None else 0.0
+            # options always carries these keys (module default None), so a plain options.get(key,
+            # self.attr) never falls back to self.attr -- guard the assignment instead, or any
+            # >>options, category=Ensight block silently wipes a previously configured value.
+            val = options.get("intermediateSaveInterval")
+            if val is not None:
+                self.intermediateSaveInterval = int(val)
+            val_dt = options.get("minDTForOutput")
+            if val_dt is not None:
+                self.minDTForOutput = float(val_dt)
 
     def finalizeIncrement(self, **kwargs):
         time = self.model.time
@@ -1248,8 +1252,6 @@ class OutputManager(OutputManagerBase):
         EnsightStructuredPart
             The identified part.
         """
-        from edelweissfe.rigidbodies.rigidbody import RigidBody
-
         theSetName = fieldOutput.associatedSet.name
 
         if isinstance(fieldOutput.associatedSet, NodeSet):

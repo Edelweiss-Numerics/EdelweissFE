@@ -41,7 +41,7 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
-from edelweissfe.solvers.base.dirichlet import applyDirichletK
+from edelweissfe.solvers.base.dirichlet import applyDirichletToStiffness
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.stepactions.options import inputLanguage
@@ -100,6 +100,8 @@ class NIST(NonlinearSolverBase):
     """
 
     identification = "NISTSolver"
+
+    supportsMPC = True
 
     SolverSpecificOptions = {
         "defaultMaxIter": 10,
@@ -197,12 +199,16 @@ class NIST(NonlinearSolverBase):
 
         prevTimeStep = None
 
+        self.validateModelCapabilities(model)
+
         self.applyStepActionsAtStepStart(model, step.actions)
 
         try:
             for timeStep in step.getTimeStep():
                 # NOTE: materialize the list before any() -- a generator would short-circuit at
-                # the first modifier/constraint reporting a change.
+                # the first modifier/constraint reporting a change, silently skipping
+                # updateModel()/updateConnectivity() for every remaining one (their state/connectivity
+                # would stay stale/empty).
                 modelHasChanged = any(
                     [modifier.updateModel(model, step, timeStep) for modifier in model.modelModifiers.values()]
                 )
@@ -413,8 +419,7 @@ class NIST(NonlinearSolverBase):
                     for variable in model.scalarVariables.values():
                         variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
 
-                    for rigidBody in model.rigidBodies.values():
-                        rigidBody.updateKinematics(timeStep)
+                    self.updateRigidBodies(model, timeStep)
 
                     model.advanceToTime(timeStep.totalTime)
 
@@ -433,7 +438,10 @@ class NIST(NonlinearSolverBase):
                             statusInfoDict=statusInfoDict,
                         )
 
-        except (ReachedMaxIncrements, ReachedMinIncrementSize):
+        except ReachedMaxIncrements:
+            self.applyStepActionsAtStepEnd(model, step.actions)
+
+        except ReachedMinIncrementSize:
             self.journal.errorMessage("Incrementation failed", self.identification)
             raise StepFailed()
 
@@ -520,6 +528,9 @@ class NIST(NonlinearSolverBase):
         distributedLoads = stepActions["distributedload"].values()
         bodyForces = stepActions["bodyforce"].values()
 
+        # Find which global DOFs the Dirichlet BCs constrain, once up front.
+        self.locateConstrainedDofs(dirichlets)
+
         self.applyStepActionsAtIncrementStart(model, timeStep, stepActions)
 
         dU, isExtrapolatedIncrement = self.extrapolateLastIncrement(
@@ -548,13 +559,25 @@ class NIST(NonlinearSolverBase):
             if self.mpcTransformation is not None:
                 R[:] = self.mpcTransformation.transformResidual(R, dU)
 
+            # --- Impose the Dirichlet (prescribed-value) boundary conditions ---
+            # Row-replacement method: for each constrained DOF i we overwrite its
+            # row of the linearized system  K ddU = R  so that the linear solve
+            # returns a *known* value for the increment ddU[i]:
+            #     K: zero row i, set K[i, i] = 1   (see applyDirichletToStiffness)
+            #     R: set R[i] to the value ddU[i] must take
+            # Together these give  ddU[i] = R[i]  exactly.
             if iterationCounter == 0 and not isExtrapolatedIncrement and dirichlets:
-                # first iteration? apply dirichlet bcs and unconditionally solve
-                R = self.applyDirichlet(timeStep, R, dirichlets)
+                # First iteration: the constrained DOFs must still move by their
+                # prescribed increment for this step, so we ask the solve for it.
+                R = self.applyDirichletToResidual(timeStep, R, dirichlets)
             else:
-                # iteration cycle 1 or higher, time to check the convergence
+                # Later iterations: the constrained DOFs already sit at their
+                # prescribed value and must not move further, so we prescribe a
+                # zero increment. This also removes them from the convergence
+                # check below: there is no force equilibrium to satisfy at a DOF
+                # whose value we dictate.
                 for dirichlet in dirichlets:
-                    R[self.findDirichletIndices(dirichlet)] = 0.0
+                    R[dirichlet.constrainedDofIndices] = 0.0
 
                 converged, nodesWithLargestResidual = self.checkConvergence(
                     R, ddU, F, iterationCounter, incrementResidualHistory
@@ -576,7 +599,7 @@ class NIST(NonlinearSolverBase):
             if self.mpcTransformation is not None:
                 K_ = self.mpcTransformation.transformSystemMatrix(K_)
 
-            K_ = self.applyDirichletK(K_, dirichlets)
+            K_ = self.applyDirichletToStiffness(K_, dirichlets)  # zero rows, unit diagonal
 
             ddU = self.linearSolve(K_, R)
             dU += ddU
@@ -678,8 +701,8 @@ class NIST(NonlinearSolverBase):
         return PExt, K
 
     @performancetiming.timeit("dirichlet K on CSR")
-    def applyDirichletK(self, K: csr_matrix, dirichlets: list[StepActionBase]) -> csr_matrix:
-        K = applyDirichletK(self, K, dirichlets)
+    def applyDirichletToStiffness(self, K: csr_matrix, dirichlets: list[StepActionBase]) -> csr_matrix:
+        K = applyDirichletToStiffness(K, dirichlets)
 
         # Compacting the just-zeroed entries out of K is a storage/performance concern,
         # not part of applying the boundary condition -- and whether it's even safe

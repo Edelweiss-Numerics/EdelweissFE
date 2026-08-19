@@ -33,6 +33,7 @@ import numpy as np
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.linsolve import getLinSolverByName
 from edelweissfe.config.timing import createTimingDict
+from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
@@ -162,6 +163,8 @@ class NEST(NIST):
 
     identification = "NESTSolver"
 
+    supportsMPC = False
+
     SolverSpecificOptions = {
         "runge-kutta-stages": 2,
         "runge-kutta-error-tolerance": 1e-3,
@@ -201,10 +204,15 @@ class NEST(NIST):
             The field output controller.
         """
 
-        if model.multiPointConstraints:
-            raise NotImplementedError(
-                "Multi-point constraints (e.g. surface ties) are not yet supported by the NEST solver."
-            )
+        self.validateModelCapabilities(model)
+
+        for constraintName, constraint in model.constraints.items():
+            if type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity:
+                raise Exception(
+                    f"Constraint '{constraintName}' requires a dynamic connectivity update "
+                    f"(contact) every increment, which {self.identification} never performs -- "
+                    "contact is not currently supported with this solver."
+                )
 
         self.journal.message("Creating monolithic equation system", self.identification, 0)
         self.theDofManager = DofManager(
@@ -333,8 +341,7 @@ class NEST(NIST):
                     for variable in model.scalarVariables.values():
                         variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
 
-                    for rigidBody in model.rigidBodies.values():
-                        rigidBody.updateKinematics(timeStep)
+                    self.updateRigidBodies(model, timeStep)
 
                     model.advanceToTime(timeStep.totalTime)
 
@@ -345,7 +352,10 @@ class NEST(NIST):
                             statusInfoDict=statusInfoDict,
                         )
 
-        except (ReachedMaxIncrements, ReachedMinIncrementSize):
+        except ReachedMaxIncrements:
+            self.applyStepActionsAtStepEnd(model, step.actions)
+
+        except ReachedMinIncrementSize:
             self.journal.errorMessage("Incrementation failed", self.identification)
             raise StepFailed()
 
@@ -421,6 +431,9 @@ class NEST(NIST):
         distributedLoads = stepActions["distributedload"].values()
         bodyForces = stepActions["bodyforce"].values()
 
+        # Find which global DOFs the Dirichlet BCs constrain, once up front.
+        self.locateConstrainedDofs(dirichlets)
+
         self.applyStepActionsAtIncrementStart(model, timeStep, stepActions)
 
         for geostatic in stepActions["geostatic"].values():
@@ -449,10 +462,10 @@ class NEST(NIST):
             R[:] = -P
             R += PExt
 
-            R = self.applyDirichlet(timeStep, R, dirichlets)
+            R = self.applyDirichletToResidual(timeStep, R, dirichlets)
 
             K_ = self.assembleStiffnessCSR(K)
-            K_ = self.applyDirichletK(K_, dirichlets)
+            K_ = self.applyDirichletToStiffness(K_, dirichlets)  # zero rows, unit diagonal
 
             # solve for increment
             dU_[k] = self.linearSolve(K_, R)

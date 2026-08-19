@@ -33,6 +33,7 @@ from copy import deepcopy
 import numpy as np
 
 import edelweissfe.utils.performancetiming as performancetiming
+from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
@@ -61,6 +62,8 @@ class NED(NonlinearSolverBase):
     """
 
     identification = "NEDSolver"
+
+    supportsMPC = True
 
     NEDOptions = {
         "first-order-fields": [],
@@ -125,6 +128,16 @@ class NED(NonlinearSolverBase):
             The field output controller.
         """
 
+        self.validateModelCapabilities(model)
+
+        for constraintName, constraint in model.constraints.items():
+            if type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity:
+                raise Exception(
+                    f"Constraint '{constraintName}' requires a dynamic connectivity update "
+                    f"(contact) every increment, which {self.identification} never performs -- "
+                    "contact is not currently supported with this solver."
+                )
+
         self.journal.message("Creating monolithic equation system", self.identification, 0)
         self.theDofManager = DofManager(
             model.nodeFields.values(),
@@ -178,6 +191,10 @@ class NED(NonlinearSolverBase):
             raise ValueError(
                 "Zero mass found in mass vector. This can be caused by elements with zero density, or by elements with zero volume."
             )
+
+        # Kept before folding so the kinetic energy diagnostic accounts for the true velocities of
+        # all nodes (including tied slaves) rather than master-placed folded mass.
+        self._rawLumpedMass = M.copy()
 
         # Slave DOFs of multi-point constraints carry no own inertia: their mass is folded onto
         # their masters (row-sum lumping of T^T M T, mass-conserving), their Minv stays zero, and
@@ -286,6 +303,8 @@ class NED(NonlinearSolverBase):
                     for variable in model.scalarVariables.values():
                         variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
 
+                    self.updateRigidBodies(model, timeStep)
+
                     model.advanceToTime(timeStep.totalTime)
 
                     if timeStep.number % self.options["output-frequency"] == 0:
@@ -295,7 +314,10 @@ class NED(NonlinearSolverBase):
                                 statusInfoDict=None,
                             )
 
-        except (ReachedMaxIncrements, ReachedMinIncrementSize):
+        except ReachedMaxIncrements:
+            self.applyStepActionsAtStepEnd(model, step.actions)
+
+        except ReachedMinIncrementSize:
             self.journal.errorMessage("Incrementation failed", self.identification)
             raise StepFailed()
 
@@ -364,6 +386,9 @@ class NED(NonlinearSolverBase):
         distributedLoads = stepActions["distributedload"].values()
         bodyForces = stepActions["bodyforce"].values()
 
+        # Find which global DOFs the Dirichlet BCs constrain, once up front.
+        self.locateConstrainedDofs(dirichlets)
+
         if timeStep.timeIncrement == 0.0:
             return U_n, V, P
 
@@ -378,10 +403,14 @@ class NED(NonlinearSolverBase):
                 timeStep.totalTime - timeStep.timeIncrement,
             )
 
-        # enforce dirichlet boundary conditions
+        # Enforce the Dirichlet boundary conditions on the constrained DOFs:
+        # there is no free equilibrium there, so their force P is set to zero,
+        # and their velocity is prescribed as (prescribed increment) / (time step).
         for dirichlet in dirichlets:
-            P[self.findDirichletIndices(dirichlet)] = 0.0
-            V[self.findDirichletIndices(dirichlet)] = dirichlet.getDelta(timeStep).flatten() / timeStep.timeIncrement
+            P[dirichlet.constrainedDofIndices] = 0.0
+            V[dirichlet.constrainedDofIndices] = (
+                dirichlet.getPrescribedIncrement(timeStep).flatten() / timeStep.timeIncrement
+            )
 
         if self.ids_1st is not None:
             V[self.ids_1st] = Minv[self.ids_1st] * P[self.ids_1st]
@@ -418,7 +447,7 @@ class NED(NonlinearSolverBase):
 
         if timeStep.number % self.options["output-frequency"] == 0:
             Wint = psi
-            Wkin = 0.5 * np.sum(self._lumpedMass * V**2)
+            Wkin = 0.5 * np.sum(self._rawLumpedMass * V**2)
             W = Wint + Wkin
             self.journal.message(
                 "Internal energy: {:e} ({:.2f} %)".format(Wint, Wint / W * 100), self.identification, 2

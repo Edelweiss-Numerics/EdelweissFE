@@ -79,6 +79,7 @@ class FEModel:
         self.scalarVariables = {}  #: ScalarVariables in the model.
         self.additionalParameters = {}  #: Additional information.
         self.rigidBodies = {}  #: RigidBodies in the model.
+        self.elementProperties = []  #: Element properties.
         self.domainSize = dimension  #: Spatial dimension of the model
         self.fieldOutputController = None  #: Set once by the driver; lets in-model entities (e.g. AMR markers) look up a named *fieldOutput by value, not just by declaration.
 
@@ -317,6 +318,9 @@ class FEModel:
         for section in self.sections.values():
             section.assignSectionPropertiesToModel(self)
 
+        for elementProperty in self.elementProperties:
+            elementProperty.assignElementPropertiesToModel(self)
+
         # check if all elements are assigned a material
         materialAssigned = np.fromiter(map(attrgetter("hasMaterial"), self.elements.values()), dtype=bool)
         if not materialAssigned.all():
@@ -355,6 +359,9 @@ class FEModel:
 
         for constraint in self.constraints.values():
             constraint.acceptLastState()
+
+        for mpc in self.multiPointConstraints.values():
+            mpc.acceptLastState()
 
     def writeRestart(self, restartFile: h5py.File):
         """Write the current state of the model to a restart file.
@@ -443,6 +450,12 @@ def printPrettyModelSummary(model: FEModel, journal: Journal):
     if model.constraints:
         journal.message(
             " {:<20}{:<15}".format("constraints: ", len(model.constraints)),
+            identification,
+            0,
+        )
+    if model.multiPointConstraints:
+        journal.message(
+            " {:<20}{:<15}".format("multi-point constraints: ", len(model.multiPointConstraints)),
             identification,
             0,
         )

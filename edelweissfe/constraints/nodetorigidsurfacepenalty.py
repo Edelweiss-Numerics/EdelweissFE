@@ -33,6 +33,7 @@ import numpy as np
 
 from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -89,8 +90,10 @@ documentation = [module]
 class Constraint(ConstraintBase, MeshDependent):
     @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
     @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name: str, model: FEModel, *args, **kwargs):
+    def __init__(self, name: str, model: FEModel, journal: Journal, *args, **kwargs):
         super().__init__(name, model, *args, **kwargs)
+
+        self.journal = journal
 
         kwargs = CaseInsensitiveDict(kwargs)
 
@@ -111,6 +114,12 @@ class Constraint(ConstraintBase, MeshDependent):
         self._rebuildFromNodes()
 
         self.active = True
+
+        self.journal.message(
+            f"{self._nNodes} nodes, field={self._field}, component={self.component}, "
+            f"type={self.type}, direction={self.direction:+.1f}",
+            name,
+        )
 
     def _rebuildFromNodes(self) -> None:
         """(Re)derive every quantity that depends on the node set/count."""

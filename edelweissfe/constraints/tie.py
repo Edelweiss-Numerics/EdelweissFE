@@ -36,6 +36,7 @@ from edelweissfe.generators.surfaceelementgenerator import buildContactFacets
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
+from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.facetcontactgeometry import line2ClosestPoint, tria3ClosestPoint
 from edelweissfe.utils.inputlanguage import InputLanguage, Module
@@ -97,24 +98,78 @@ module.addRequiredArg(
 )
 module.addOptionalArg(
     "positionTolerance",
-    "If given, slave nodes whose reference-configuration closest-point distance to the master "
-    "surface exceeds this tolerance are left untied (recorded in the constraint's "
-    "untiedSlaveNodes). If not given, every slave node is tied unconditionally.",
+    "Whether a slave node is tied at all: nodes whose reference-configuration closest-point "
+    "distance to the master surface exceeds this tolerance are left untied (recorded in the "
+    "constraint's untiedSlaveNodes), matching Abaqus' *TIE default behavior of silently dropping "
+    "out-of-range slave nodes. Applies independently of adjust -- whether a tied node's "
+    "coordinates additionally get snapped onto the master is a separate decision, see "
+    "adjust/adjustTolerance. If not given (the default), a tolerance is computed as "
+    "positionToleranceFactor times the master surface's characteristic facet size -- see "
+    "positionToleranceFactor. Set this explicitly to an absolute distance to override that.",
     float,
     None,
 )
 module.addOptionalArg(
+    "positionToleranceFactor",
+    "Used only when positionTolerance is not given: the default tolerance is this fraction of the "
+    "master surface's characteristic (mean, over all its facets) edge length, computed once and "
+    "used for every slave node. 0.25 comfortably exceeds the sub-percent gaps expected between two "
+    "compatible discretizations of the same surface (mismatched density, curvature/interpolation "
+    "error), while remaining well below the facet-size-or-larger gaps that indicate the surfaces "
+    "don't actually correspond (e.g. a slave surface extending beyond the master surface's actual "
+    "extent -- a partial-bond-length or otherwise partially-overlapping pair of surfaces).",
+    float,
+    0.25,
+)
+module.addOptionalArg(
     "adjust",
-    "Move each tied slave node onto its closest master point at construction (Abaqus-like "
-    "default). If False, any initial geometric gap between the surfaces is preserved rigidly "
-    "(the displacements are tied, not the positions). Note that adjusting modifies the nodal "
+    "Whether a TIED node's coordinates additionally get snapped onto its projected master point "
+    "at construction (Abaqus-like default) -- a separate decision from whether the node is tied "
+    "at all (see positionTolerance). If False, no tied node is ever snapped: any initial geometric "
+    "gap is preserved rigidly (the displacements are tied, not the positions), regardless of size. "
+    "If True, a tied node is snapped only if its distance is also within adjustTolerance (default: "
+    "unconditionally, i.e. every tied node is snapped, matching plain Abaqus ADJUST=YES) -- see "
+    "adjustTolerance to snap away only small, effectively-numerical gaps while still tying "
+    "(without snapping) across larger, deliberate ones. Note that adjusting modifies the nodal "
     "coordinates before the element geometry is initialized; avoid adjusting nodes that also "
     "belong to an already-generated contact surface of another constraint.",
     str,
     "True",
 )
+module.addOptionalArg(
+    "adjustTolerance",
+    "Used only when adjust=True: a tied node's coordinates are snapped onto the master only if "
+    "its closest-point distance is also within this tolerance; beyond it, the node stays tied "
+    "(kinematically) but its position is left as found, preserving the gap. Independent of "
+    "positionTolerance -- a node can be tied across a fairly generous distance while only "
+    "genuinely small (e.g. sub-percent, mesh-discretization-scale) gaps within that get snapped "
+    "away. If not given (the default), any tied node is snapped, matching plain Abaqus ADJUST=YES "
+    "and this constraint's behavior before this option existed.",
+    float,
+    None,
+)
 
 documentation = [module]
+
+
+def _facetCharacteristicSize(facetCoords: np.ndarray) -> float:
+    """Mean edge length of a facet (Line2: its one edge; Tria3: its three edges) -- the local
+    length scale used for the default position tolerance when none is given explicitly.
+
+    Parameters
+    ----------
+    facetCoords
+        The facet's node coordinates, shape (2, nDim) for a Line2 or (3, nDim) for a Tria3.
+
+    Returns
+    -------
+    float
+        The facet's mean edge length.
+    """
+
+    nNodes = facetCoords.shape[0]
+    edgeLengths = [np.linalg.norm(facetCoords[i] - facetCoords[(i + 1) % nNodes]) for i in range(nNodes)]
+    return np.mean(edgeLengths)
 
 
 class Constraint(MultiPointConstraintBase, MeshDependent):
@@ -146,7 +201,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
 
     @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
     @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name: str, model: FEModel, **kwargs):
+    def __init__(self, name: str, model: FEModel, *args, **kwargs):
         kwargs = CaseInsensitiveDict(kwargs)
 
         self.name = name
@@ -156,9 +211,24 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         self._slaveSurfaceSetName = kwargs["slaveSurface"]
         self._masterSurfaceSetName = kwargs["masterSurface"]
         self._positionTolerance = kwargs["positionTolerance"]
+        self._positionToleranceFactor = kwargs["positionToleranceFactor"]
+        self._adjustTolerance = kwargs["adjustTolerance"]
+        #: References to the published tied/untied NodeSets, so a later reconcile() updates their
+        #: membership in place (via replaceMembers) instead of colliding with its own earlier publish.
+        self._tiedNodeSet = None
+        self._untiedNodeSet = None
 
         slaveFacetElements = list(model.elementSets[self._slaveSurfaceSetName])
         masterFacetElements = list(model.elementSets[self._masterSurfaceSetName])
+
+        if not masterFacetElements:
+            raise ValueError(
+                f"Constraint '{name}': master surface '{kwargs['masterSurface']}' contains no facet elements."
+            )
+        if not slaveFacetElements:
+            raise ValueError(
+                f"Constraint '{name}': slave surface '{kwargs['slaveSurface']}' contains no facet elements."
+            )
 
         masterNodes = {node for el in masterFacetElements for node in el.nodes}
         slaveNodesForCheck = {node for el in slaveFacetElements for node in el.nodes}
@@ -171,6 +241,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         self.tiedRecords, self.untiedSlaveNodes = self._buildTiedRecords(
             model, slaveFacetElements, masterFacetElements, adjust=strtobool(kwargs["adjust"])
         )
+        self._publishTiedUntiedNodeSets(model)
 
         # A tie has no per-increment tick of its own that runs before the DofManager/VIJSystemMatrix
         # rebuild -- getMultiPointConstraints() is only called from inside that rebuild, too late to
@@ -187,8 +258,16 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
     def _buildTiedRecords(self, model: FEModel, slaveFacetElements, masterFacetElements, adjust: bool):
         """Project every unique slave-surface node onto its closest master facet (reference
         configuration) and freeze the resulting clamped weights. With ``adjust``, additionally snap
-        each tied node onto its projected point, removing any initial geometric gap -- a setup-time
-        convenience, never applied on a reconcile-triggered re-projection.
+        each tied node onto its projected point (only if also within ``adjustTolerance``), removing
+        any initial geometric gap -- a setup-time convenience, never applied on a reconcile-triggered
+        re-projection.
+
+        Tie MEMBERSHIP (is this node tied at all) is independent of adjust (does a tied node get
+        snapped) -- these are separate decisions, see the ``adjust`` option's docstring. A single
+        tolerance, computed once from the whole master surface's characteristic facet size unless
+        given explicitly, is used for every slave node (matching Abaqus' *TIE, which always enforces
+        some tolerance -- explicit or internally computed -- and never ties unconditionally regardless
+        of distance).
 
         Slave nodes already claimed as slaves by another multi-point constraint of the model are
         skipped: a DOF may be condensed out only once, and a second record for it would be rejected
@@ -206,6 +285,12 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
 
         closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
         masterFacetCoords = [np.array([n.coordinates for n in el.nodes]) for el in masterFacetElements]
+
+        membershipTolerance = (
+            self._positionTolerance
+            if self._positionTolerance is not None
+            else self._positionToleranceFactor * np.mean([_facetCharacteristicSize(c) for c in masterFacetCoords])
+        )
 
         # Projecting every slave node onto its closest master facet by brute force is O(nSlave *
         # nMaster) and, on a large tied surface re-projected after every AMR refinement, dominates
@@ -252,11 +337,15 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
                         bestWeights = weights
                         bestFacetIdx = facetIdx
 
-            if self._positionTolerance is not None and bestDistance > self._positionTolerance:
+            if bestFacetIdx is None or bestDistance > membershipTolerance:
                 untiedSlaveNodes.append(slaveNode)
                 continue
 
-            if adjust and bestDistance > 0.0:
+            # Snapping is the separate, independent decision: a tied node is only snapped if adjust
+            # is requested AND (when given) its distance is also within adjustTolerance -- a node
+            # beyond adjustTolerance stays tied, just not snapped, preserving its gap exactly.
+            withinAdjustTolerance = self._adjustTolerance is None or bestDistance <= self._adjustTolerance
+            if adjust and withinAdjustTolerance and bestDistance > 0.0:
                 slaveNode.coordinates[:] = bestWeights @ masterFacetCoords[bestFacetIdx]
 
             tiedRecords.append((slaveNode, masterFacetElements[bestFacetIdx].nodes, bestWeights))
@@ -269,6 +358,40 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
             )
 
         return tiedRecords, untiedSlaveNodes
+
+    def _publishTiedUntiedNodeSets(self, model: FEModel):
+        """Expose the tied/untied slave nodes as ordinary node sets -- e.g. via *fieldOutput, or for
+        free in Ensight, which automatically creates a part for every node set in the model
+        (edelweissfe/outputmanagers/ensight.py's _createGeometryParts), no fieldOutput required just
+        to see where these nodes are. A set with no members is left unpublished rather than published
+        empty: Ensight's export is unconditional over every node set, so a tie whose untied side is
+        (as is typical) always empty would otherwise get its own empty, useless part in every export.
+
+        Called again after every :meth:`reconcile` (AMR may change which nodes are tied/untied): an
+        already-published set is updated in place via :meth:`~edelweissfe.sets.orderedset.OrderedSet.
+        replaceMembers` rather than recreated, so a reference elsewhere in the model keeps seeing
+        current membership, and the "does this name already exist" collision check below only ever
+        fires against a genuinely foreign set."""
+
+        tiedNodes = [record[0] for record in self.tiedRecords]
+        if tiedNodes:
+            if self._tiedNodeSet is not None:
+                self._tiedNodeSet.replaceMembers(tiedNodes)
+            else:
+                tiedSetName = f"{self.name}_tied"
+                if tiedSetName in model.nodeSets:
+                    raise ValueError(f"Constraint '{self.name}': node set '{tiedSetName}' already exists in the model.")
+                self._tiedNodeSet = model.nodeSets[tiedSetName] = NodeSet(tiedSetName, tiedNodes)
+        if self.untiedSlaveNodes:
+            if self._untiedNodeSet is not None:
+                self._untiedNodeSet.replaceMembers(self.untiedSlaveNodes)
+            else:
+                untiedSetName = f"{self.name}_untied"
+                if untiedSetName in model.nodeSets:
+                    raise ValueError(
+                        f"Constraint '{self.name}': node set '{untiedSetName}' already exists in the model."
+                    )
+                self._untiedNodeSet = model.nodeSets[untiedSetName] = NodeSet(untiedSetName, self.untiedSlaveNodes)
 
     def reconcile(self, model: FEModel, change) -> bool:
         """Regenerate whichever side's facets were affected by ``change`` (via its recorded
@@ -293,6 +416,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         self.tiedRecords, self.untiedSlaveNodes = self._buildTiedRecords(
             model, slaveFacetElements, masterFacetElements, adjust=False
         )
+        self._publishTiedUntiedNodeSets(model)
         return True
 
     def claimedSlaveNodes(self) -> set:
@@ -304,10 +428,20 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
     def getMultiPointConstraints(self, dofManager) -> list[tuple[int, list[tuple[int, float]]]]:
         fieldVariableIndices = dofManager.idcsOfFieldVariablesInDofVector
 
+        def getDofs(node):
+            if "displacement" not in node.fields:
+                raise KeyError(f"Constraint '{self.name}': node {node.label} has no 'displacement' field defined.")
+            fieldVar = node.fields["displacement"]
+            if fieldVar not in fieldVariableIndices:
+                raise KeyError(
+                    f"Constraint '{self.name}': displacement field of node {node.label} is not registered in the DofManager (no active degrees of freedom)."
+                )
+            return fieldVariableIndices[fieldVar]
+
         records = []
         for slaveNode, masterNodes, weights in self.tiedRecords:
-            slaveDofIndices = fieldVariableIndices[slaveNode.fields["displacement"]]
-            masterDofIndices = [fieldVariableIndices[node.fields["displacement"]] for node in masterNodes]
+            slaveDofIndices = getDofs(slaveNode)
+            masterDofIndices = [getDofs(node) for node in masterNodes]
 
             for component in range(self.nDim):
                 records.append(

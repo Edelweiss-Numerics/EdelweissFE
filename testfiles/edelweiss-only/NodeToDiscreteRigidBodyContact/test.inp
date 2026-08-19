@@ -26,8 +26,10 @@ elType  =C3D8
 filename=rigid_body.exo
 translation='0, -10, -11.0'
 
+** Scoped to block_all rather than all: all also contains the rigid body's
+** surface/RP nodes/elements, which cannot take a solid section.
 *section, name=section1, material=linearelastic, type=solid
-all
+block_all
 
 *constraint, type=nodeToDiscreteRigidBodyPenalty, name=contact
 nSet=block_back
@@ -52,4 +54,4 @@ maxInc=0.1, minInc=1e-9, maxNumInc=100, maxIter=25, stepLength=1
 >>options, category=NISTSolver, extrapolation=off
 >>dirichlet, name=frontFixed, nSet=block_front, field=displacement, 1=0.0, 2=0.0, 3=0.0
 >>dirichlet, name=rpDisp, nSet=cylinder_rp, field=displacement, 1=0.0, 2=0.0, 3=3.00
->>dirichlet, name=rpRot, nSet=cylinder_rp, field=rotation, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=rpRot, nSet=cylinder_rp, field=rotation, 1=0.15, 2=0.0, 3=0.0

@@ -129,6 +129,96 @@ Module ``edelweissfe.constraints.nodetodiscreterigidbodypenalty``
 .. automodule:: edelweissfe.constraints.nodetodiscreterigidbodypenalty
     :members: __doc__
 
+This is a frictionless, penalty-based, unilateral (contact-only) constraint that prevents the nodes
+of a slave node set from penetrating the moving surface of a
+:doc:`discrete rigid body <rigidbodies>`. It is the discrete-mesh counterpart of
+``nodetorigidsurfacepenalty`` (which uses an analytical boundary) and reuses the rigid body's
+own closest-point surface query for the geometry evaluation. Currently 3D only, and implicit /
+explicit-static only (see :doc:`solvers`).
+
+**Theory**
+
+Let a slave node :math:`s` have reference position :math:`\mathbf{X}_s` and displacement DOF
+:math:`\mathbf{u}_s`, so its current position is :math:`\mathbf{x}_s = \mathbf{X}_s + \mathbf{u}_s`.
+The rigid body carries a reference point (RP) with displacement DOF :math:`\mathbf{u}_{RP}` and a
+rotation pseudo-vector DOF :math:`\boldsymbol{\theta}_{RP}`; its current position is
+:math:`\mathbf{x}_{RP} = \mathbf{X}_{RP} + \mathbf{u}_{RP}` and its orientation is
+:math:`\mathbf{R} = \exp(\mathrm{skew}(\boldsymbol{\theta}_{RP}))` (see
+:doc:`rigidbodies` for the rigid-body kinematics).
+
+For each slave node the rigid body's surface query returns the signed distance :math:`d_s`
+(negative when the node is *inside* the body) and the outward unit normal :math:`\mathbf{n}_s` of
+the closest surface point, evaluated for the body's *current* pose. Contact is active whenever
+:math:`d_s < 0`, with gap (penetration)
+
+.. math::
+    g_s = -d_s \; > 0 .
+
+The penalty normal force is, for the two available ``type`` formulations,
+
+.. math::
+    f_n = k\, g_s \quad(\texttt{linear},\ \text{constant tangent } k),
+    \qquad
+    f_n = \tfrac{1}{2}\, k\, g_s^2 \quad(\texttt{quadratic},\ \text{tangent } k\, g_s),
+
+with :math:`k` the user-supplied ``penalty``.
+
+With the contact-point moment arm :math:`\mathbf{r}_s = \mathbf{x}_s - \mathbf{x}_{RP}` about the
+current RP, the (negative) gap gradient with respect to the involved DOFs
+:math:`(\mathbf{u}_s,\, \mathbf{u}_{RP},\, \boldsymbol{\theta}_{RP})` defines the generalized
+direction vectors
+
+.. math::
+    \mathbf{w}_s = -\mathbf{n}_s , \qquad
+    \mathbf{w}_{RP} =
+    \begin{bmatrix}
+        \mathbf{n}_s \\[2pt]
+        \left(\mathbf{R}\, \mathbf{J}_r(\boldsymbol{\theta}_{RP})\right)^{\!\top}
+        (\mathbf{r}_s \times \mathbf{n}_s)
+    \end{bmatrix},
+
+and the residual (external force) and stiffness contributions are assembled exactly as in the
+node-to-rigid-surface penalty constraint,
+
+.. math::
+    \mathbf{P}_{ext} \mathrel{-{=}} f_n\, \mathbf{w} , \qquad
+    \mathbf{K} \mathrel{+{=}} k\, (\mathbf{w} \otimes \mathbf{w}) + f_n\, \nabla \mathbf{w} ,
+
+per slave node, where :math:`\mathbf{w}` collects the slave and RP blocks.
+
+The factor :math:`\mathbf{J}_r(\boldsymbol{\theta}_{RP})` is the **right Jacobian of the SO(3)
+exponential map**,
+
+.. math::
+    \mathbf{J}_r(\boldsymbol{\theta}) = \mathbf{I}
+    - \frac{1-\cos\varphi}{\varphi^2}\,\mathrm{skew}(\boldsymbol{\theta})
+    + \frac{\varphi-\sin\varphi}{\varphi^3}\,\mathrm{skew}(\boldsymbol{\theta})^2 ,
+    \qquad \varphi = \lVert \boldsymbol{\theta} \rVert .
+
+It is required because the stored rotation DOF :math:`\boldsymbol{\theta}_{RP}` is the *raw total*
+pseudo-vector (fed through the exponential map every iteration), and the exponential map does not
+compose additively: incrementing :math:`\boldsymbol{\theta}_{RP}` by
+:math:`\delta\boldsymbol{\theta}` does not produce a physical spin of
+:math:`\delta\boldsymbol{\theta}` unless the body is currently unrotated. The map
+:math:`\mathbf{R}\,\mathbf{J}_r` converts a perturbation of the stored DOF into the physical
+spatial rotation it actually produces; it reduces to the identity at
+:math:`\boldsymbol{\theta}_{RP} = \mathbf{0}`, where :math:`\mathbf{w}_{RP}` collapses to the
+naive :math:`\mathbf{r}_s \times \mathbf{n}_s`. Omitting it makes the RP-moment term a few percent
+off at :math:`\sim 0.1` rad accumulated rotation and :math:`\sim 15\%` off at :math:`\sim 0.4` rad.
+
+Both :math:`\mathbf{n}_s` and :math:`\mathbf{r}_s` are recomputed from the *current, total*
+solution every Newton iteration (no per-increment caching), so the coupling between the RP DOFs and
+the contact residual is exact. Because the rigid surface is a triangulated (piecewise-planar) mesh,
+:math:`\mathbf{n}_s` is exactly constant within a facet — the intra-facet curvature term of the
+tangent vanishes identically — but it still rotates rigidly with the RP. The geometric-stiffness
+term :math:`f_n\, \nabla \mathbf{w}` accounts for that rigid rotation of the normal and for the
+:math:`\mathbf{J}_r` dependence, giving the exact linearization of :math:`\mathbf{w}` in the
+implemented blocks (verified against finite differences for arbitrary accumulated rotation). The
+:math:`\boldsymbol{\theta}_{RP}\boldsymbol{\theta}_{RP}` self-block, which would require the second
+derivative of the exponential map, is omitted; this affects only the convergence rate, not the
+correctness of the converged solution. The per-block breakdown of the tangent is given in the inline
+comments of the ``applyConstraint`` method in the module source.
+
 .. pprint:: edelweissfe.constraints.nodetodiscreterigidbodypenalty.documentation
     :caption: Options:
 

@@ -47,9 +47,9 @@ Face triangulation
 ~~~~~~~~~~~~~~~~~~
 
 The generator (:mod:`~edelweissfe.generators.surfaceelementgenerator`) builds facets from an
-existing ``*surface`` definition via face-node-ordering tables that follow the local node numbering
-and face-number conventions of this codebase's own mesh generators (``boxGen``:
-1=Ymin, 2=Ymax, 3=Xmin, 4=Zmax, 5=Xmax, 6=Zmin -- *not* the generic Abaqus S1..S6 convention).
+existing ``*surface`` definition via face-node-ordering tables transcribed from Marmot's own face
+definitions -- the genuine Abaqus S1..S6 convention, which this codebase's ``Hexa8``/``Hexa20``
+elements and mesh generators (``boxGen``: 1=Ymin, 2=Ymax, 3=Xmin, 4=Zmax, 5=Xmax, 6=Zmin) share.
 Two triangulations are available for quadratic element faces:
 
 ``triangulation=corner``

@@ -185,7 +185,8 @@ class AbqModelConstructor:
 
                     elif booleanDef == "intersection":
                         elNumbersBase = [n.elNumber for n in elementSets[name]]
-                        els = [elements[n] for n in list(set(elNumbers).intersection(elNumbersBase))]
+                        elNumbersSet = set(elNumbers)
+                        els = [elements[n] for n in elNumbersBase if n in elNumbersSet]
                     else:
                         raise Exception("Undefined boolean operation!")
 
@@ -195,7 +196,10 @@ class AbqModelConstructor:
                         del elementSets[name]
                 else:
                     els = [elements[elNum] for elNum in elNumbers]
-                elementSets[name] = ElementSet(name, set(els))
+                # dict.fromkeys deduplicates while preserving first-occurrence order -- a plain
+                # set() here would make facet numbering, slave-node order, and closest-facet tie
+                # breaking depend on Python's hash-based set iteration order instead.
+                elementSets[name] = ElementSet(name, list(dict.fromkeys(els)))
             else:
                 elementSets[name] = []
                 for line in data:
@@ -336,7 +340,18 @@ class AbqModelConstructor:
             The updated model tree.
         """
 
-        for definition in inputFile["constraint"]:
+        # Multi-point / geometric-adjustment constraints (e.g. Tie with adjust=True) are
+        # instantiated first so that any in-place reference coordinate adjustments take effect
+        # before subsequent constraints (e.g. penalty contact) cache reference nodal coordinates
+        # by value. Order within each category is preserved.
+        def isMPCDefinition(definition):
+            constraintType = CaseInsensitiveDict(definition)["type"]
+            return issubclass(getConstraintClass(constraintType), MultiPointConstraintBase)
+
+        mpcDefinitions = [d for d in inputFile["constraint"] if isMPCDefinition(d)]
+        ordinaryDefinitions = [d for d in inputFile["constraint"] if not isMPCDefinition(d)]
+
+        for definition in mpcDefinitions + ordinaryDefinitions:
             constraintKwArgs = CaseInsensitiveDict(definition.copy())
 
             name = constraintKwArgs.pop("name")
@@ -348,7 +363,7 @@ class AbqModelConstructor:
             args, kwargs = module.parseDatalines(data)
 
             constraintClass = getConstraintClass(constraintType)
-            constraint = constraintClass(name, model, **kwargs)
+            constraint = constraintClass(name, model, self.journal, **kwargs)
 
             # Multi-point (DOF-elimination) constraints contribute nothing to the load vector or
             # system matrix and must stay outside the DofManager/assembly machinery.
@@ -488,5 +503,35 @@ class AbqModelConstructor:
             analyticalField = analyticalFieldFactory(analyticalFieldName, model, **analyticalFieldKwargs)
 
             model.analyticalFields[analyticalFieldName] = analyticalField
+
+        return model
+
+    def createElementPropertiesFromInputFile(self, model, inputFile):
+        """Collects element property definitions from the input file and stores them in the model.
+
+        Parameters
+        ----------
+        model
+            The model object.
+        inputFile
+            The input file dictionary.
+
+        Returns
+        -------
+        model
+            The updated model object.
+        """
+        from edelweissfe.elements.elementproperty import ElementProperty
+
+        for definition in inputFile.get("elementproperty", []):
+            elSetName = definition["elSet"]
+            propertyName = definition["propertyName"]
+            data = definition["datalines"]
+
+            values_str = " ".join(data).replace(",", " ")
+            values = np.array([float(x) for x in values_str.split()], dtype=float)
+
+            elementProperty = ElementProperty(elSetName, propertyName, values)
+            model.elementProperties.append(elementProperty)
 
         return model

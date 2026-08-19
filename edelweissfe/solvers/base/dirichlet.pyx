@@ -38,17 +38,22 @@ from scipy.sparse import csr_matrix
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def applyDirichletK(nls, K: csr_matrix, dirichlets: Iterable) -> csr_matrix:
-    """Apply the dirichlet bcs on the global stiffnes matrix
-    Is called by solveStep() before solving the global sys.
-    http://stackoverflux.com/questions/12129948/scipy-sparse-set-row-to-zeros
+def applyDirichletToStiffness(K: csr_matrix, dirichlets: Iterable) -> csr_matrix:
+    """Impose the Dirichlet BCs on the global stiffness matrix (row-replacement method).
+
+    For every constrained DOF (row) we set the whole row to zero and put 1.0 on
+    the diagonal. Solving  K ddU = R  then simply returns  ddU[row] = R[row],
+    i.e. the value that :func:`applyDirichletToResidual` wrote into R for that DOF.
+
+    The constrained DOF indices are precomputed once per step (by the solver's
+    ``locateConstrainedDofs``) and cached on each boundary condition, so here we
+    just read ``dirichlet.constrainedDofIndices``.
 
     Cythonized version for speed!
+    http://stackoverflux.com/questions/12129948/scipy-sparse-set-row-to-zeros
 
     Parameters
     ----------
-    nls: NonLinearSolverBase
-        The nonlinear solver.
     K: scipy.sparse.csr_matrix
         The system matrix.
     dirichlets: list
@@ -62,10 +67,10 @@ def applyDirichletK(nls, K: csr_matrix, dirichlets: Iterable) -> csr_matrix:
     if len(dirichlets) == 0:
         return K
 
-    # precompute the dirichlet indices for all dirichlet bcs
+    # gather the (precomputed) constrained DOF indices of all dirichlet bcs
     all_indices = []
     for d in dirichlets:
-        all_indices.append(nls.findDirichletIndices(d))
+        all_indices.append(d.constrainedDofIndices)
 
     cdef long[::1] dirichletIndices = np.concatenate(all_indices).astype(np.int64)
 

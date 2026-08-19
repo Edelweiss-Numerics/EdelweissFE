@@ -53,32 +53,34 @@ from edelweissfe.variables.scalarvariable import ScalarVariable
 
 class DofManager:
     """
-    The DofManager
+    The DofManager coordinates the global equation system structure.
 
-     * analyzes the domain (nodes and constraints),
-     * collects information about the necessary structure of the degrees of freedom
-     * handles the active fields on each node
-     * counts the accumulated number of associated elements on each dof (for the Abaqus like convergence test)
-     * supplies the framework with DofVectors and VIJSystemMatrices
+    Specifically, `DofManager`:
+     * Analyzes the simulation domain (nodes, scalar variables, elements, constraints, and node sets).
+     * Collects and assigns global Degree-of-Freedom (DOF) indices for node fields and scalar variables.
+     * Manages entity-to-index mappings for fast scatter/gather operations.
+     * Generates sparse system matrix sparsity patterns (`I` and `J` vectors in COO/VIJ format).
+     * Calculates accumulated elemental/constraint fluxes fieldwise for convergence tests.
+     * Constructs domain-aware `DofVector`, `ScatterDofVector`, and `VIJSystemMatrix` instances.
 
     Parameters
     ----------
-    nodeFields
-        The list of NodeFields which should be represented in the DofVector structure.
-    scalarVariables
-        The list of ScalarVariables which should be represented in the DofVector structure.
-    elements
-        The list of Elements for which a map to the respective indices should be created.
-    constraints
-        The list of Constraints for which a map to the respective indices should be created.
-    nodeSets
-        The list of NodeSets for which a map to the respective indices should be created.
-    initializeVIJPattern
-        Whether to initialize the VIJ pattern (I and J vectors) during construction. Can be set to False if the pattern will be initialized later or not needed.
-    initializeAccumulatedNodalFluxesFieldwise
-        Whether to compute the accumulated nodal fluxes fieldwise during construction. This is needed for the Abaqus like convergence test, but can be set to False if not needed.
-    determiningIndexToHostObjectMappping
-        Whether to determine the mapping from indices in the DofVector to their host objects (e.g., Nodes) during construction. This can be set to False if the mapping will be determined later or not needed.
+    nodeFields : list of NodeField
+        The list of NodeFields to be represented in the DofVector structure.
+    scalarVariables : list of ScalarVariable, optional
+        The list of ScalarVariables to be represented in the DofVector structure.
+    elements : list of BaseNodeCouplingEntity, optional
+        The list of Elements for which DOF index mappings will be created.
+    constraints : list of BaseNodeCouplingEntity, optional
+        The list of Constraints for which DOF index mappings will be created.
+    nodeSets : list of NodeSet, optional
+        The list of NodeSets for which DOF index mappings will be created.
+    initializeVIJPattern : bool, optional
+        Whether to initialize the sparse VIJ pattern (`I` and `J` vectors) during construction. Default is True.
+    initializeAccumulatedNodalFluxesFieldwise : bool, optional
+        Whether to compute accumulated nodal fluxes fieldwise during construction. Default is True.
+    determiningIndexToHostObjectMapping : bool, optional
+        Whether to determine the mapping from global DOF indices to their host objects (e.g. Node) during construction. Default is True.
     """
 
     def __init__(
@@ -90,8 +92,12 @@ class DofManager:
         nodeSets: list[NodeSet] = None,
         initializeVIJPattern: bool = True,
         initializeAccumulatedNodalFluxesFieldwise: bool = True,
-        determiningIndexToHostObjectMappping: bool = True,
+        determiningIndexToHostObjectMapping: bool = True,
+        **kwargs,
     ):
+        if "determiningIndexToHostObjectMappping" in kwargs:
+            determiningIndexToHostObjectMapping = kwargs.pop("determiningIndexToHostObjectMappping")
+
         if scalarVariables is None:
             scalarVariables = []
         if elements is None:
@@ -101,42 +107,34 @@ class DofManager:
         if nodeSets is None:
             nodeSets = []
 
-        self.nDof = int()  #: The total number of degrees of freedom (and size of the DofVector)
-        self.fields = list()  #: The list of fields which can be found in the Dofvector
-        self.idcsOfFieldsInDofVector = dict()  #: The dictionary mapping the field names to all indices in the DofVector
+        self.nDof = 0  #: The total number of degrees of freedom (and size of the DofVector)
+        self.fields = list()  #: The list of field names in the DofVector
+        self.idcsOfFieldsInDofVector = dict()  #: Dictionary mapping field names to all indices in the DofVector
         self.idcsOfScalarVariablesInDofVector = (
             dict()
-        )  #: The dictionary mapping the scalar variables to all indices in the DofVector
+        )  #: Dictionary mapping scalar variables to all indices in the DofVector
 
         self.idcsOfFieldVariablesInDofVector = (
             dict()
-        )  #: The dictionary mapping the nodal field variables to the indices in the DofVector
+        )  #: Dictionary mapping nodal field variables to their indices in the DofVector
         self.idcsOfNodeFieldsInDofVector = (
             dict()
-        )  #: The dictionary mapping the a complete NodeField to the all its indices in the DofVector
-        self.indexToHostObjectMapping = (
-            dict()
-        )  #: The reverse dictionary mapping an index to the Host (e.g., a Node) holding the index's FieldvVariable
-        self.accumulatedElementNDof = (
-            int()
-        )  #: The accumulated number of element dofs (= the sum of all element vector sizes)
-        self.largestNumberOfElNDof = int()  #: The size of the largest of all element dof vectors
-        self.accumulatedConstraintNDof = (
-            int()
-        )  #: The accumulated number of constraint dofs (= the sum of all constraint vector sizes)
-        self.largestNumberOfConstraintNDof = int()  #: The size of the largest of all constraint dof vectors
+        )  #: Dictionary mapping a complete NodeField to all its indices in the DofVector
+        self.indexToHostObjectMapping = dict()  #: Reverse dictionary mapping an index to its Host object (e.g., a Node)
+        self.accumulatedElementNDof = 0  #: Accumulated number of element DOFs (= sum of element vector sizes)
+        self.largestNumberOfElNDof = 0  #: Size of the largest element DOF vector
+        self.accumulatedConstraintNDof = 0  #: Accumulated number of constraint DOFs (= sum of constraint vector sizes)
+        self.largestNumberOfConstraintNDof = 0  #: Size of the largest constraint DOF vector
 
         self.idcsOfFieldsOnNodeSetsInDofVector = (
             dict()
-        )  #: The dictionary mapping for each field a NodeSet to the respective indices in the DofVector
-        self.idcsOfElementsInDofVector = dict()  #: The dictionary mapping an element to it's indices in the DofVector
-        self.idcsOfConstraintsInDofVector = (
-            dict()
-        )  #: The dictionary mapping a constraint to it's indices in the DofVector
+        )  #: Dictionary mapping for each field a NodeSet to its respective indices in the DofVector
+        self.idcsOfElementsInDofVector = dict()  #: Dictionary mapping an element to its indices in the DofVector
+        self.idcsOfConstraintsInDofVector = dict()  #: Dictionary mapping a constraint to its indices in the DofVector
 
         self._sizeVIJ = (
-            int()
-        )  #: The number of nonzero entries of the system matrix, resulting from the dense higher order entities contributions
+            0  #: Total number of nonzero entries in the system matrix resulting from higher order entity contributions
+        )
 
         # initialization:
 
@@ -145,7 +143,7 @@ class DofManager:
         self._gatherInformationAboutEntities(elements, constraints, nodeSets)
 
         self.idcsOfFieldsInDofVector = self.idcsOfNodeFieldsInDofVector
-        self.fields = self.idcsOfFieldsInDofVector.keys()
+        self.fields = list(self.idcsOfFieldsInDofVector.keys())
 
         self.idcsOfBasicVariablesInDofVector = (
             self.idcsOfFieldVariablesInDofVector | self.idcsOfScalarVariablesInDofVector
@@ -159,7 +157,7 @@ class DofManager:
             self._sizeVIJ = self._accumulatedElementVIJSize + self._accumulatedConstraintVIJSize
             self.I, self.J, self.idcsOfHigherOrderEntitiesInVIJ = self._initializeVIJPattern()
 
-        if determiningIndexToHostObjectMappping:
+        if determiningIndexToHostObjectMapping:
             self.indexToHostObjectMapping |= self._determineIndexToNodeMap()
 
     def _determineDofsAndTheirIndices(self, nodeFields: list, scalarVariables: list):
