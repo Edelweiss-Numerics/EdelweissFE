@@ -77,19 +77,20 @@ for exactly how each list was derived):
 ``statetransferstrategy`` (3), ``element`` (42), ``material`` (7), ``linsolver`` (9).
 
 ``keyword`` is the eventual single source the ``.inp`` parser consults for every top-level keyword
-(``element``, ``node``, ``nSet``, ``elSet``, ``surface``, ``job``, ``section``, ``material``,
-``advancedmaterial``, ``fieldOutput``, ``analyticalField``, ``solver``, ``step``, ``output``,
-``updateConfiguration``, ``modelGenerator``, ``constraint``, ``modelModifier``,
+(``element``, ``node``, ``nSet``, ``elSet``, ``surface``, ``job``, ``section``, ``elementProperty``,
+``material``, ``advancedmaterial``, ``fieldOutput``, ``analyticalField``, ``solver``, ``step``,
+``output``, ``updateConfiguration``, ``modelGenerator``, ``constraint``, ``modelModifier``,
 ``configurePlots``, ``exportPlots``, ``include``), each mapped to a
 :class:`edelweissfe.keywords.base.keywordbase.KeywordBase` subclass. U1 reserved the category
 empty; U2a (``PLAN_INPUT_SYSTEM_UNIFICATION.md``, §5) populated its first slice -- the six
 structural mesh/job keywords (``element``, ``elSet``, ``node``, ``nSet``, ``surface``, ``job``),
 which live nowhere as ``Module``s in the legacy grammar and so have no coexistence window to
-manage. U2b populates the remaining fifteen (pluggable-module and type-dispatch keywords), so the
-category now covers the full printKeywords() surface of 21 top-level keywords. Registering a
-keyword here does **not** wire it into the running parser -- ``inputfileparser.py`` still resolves
-every keyword through ``inputlanguage.py`` until U3 swaps it over; see each ``KeywordBase``
-subclass's ``fromKeywordDefinition`` stub.
+manage. U2b populated the pluggable-module and type-dispatch keywords; ``elementProperty`` was
+added afterwards, having been missed by both enumeration passes. The category now covers the full
+printKeywords() surface of 22 top-level keywords. Registering a keyword here does **not** wire it
+into the running parser -- ``inputfileparser.py`` still resolves every keyword through
+``inputlanguage.py`` until U3 swaps it over; see each ``KeywordBase`` subclass's
+``fromKeywordDefinition`` stub.
 
 ``element`` and ``material`` are keyed by *element type* / *material name* and cover exactly the
 ``provider=edelweiss`` namespace of ``config/elementlibrary.py`` and ``config/materiallibrary.py``.
@@ -432,6 +433,7 @@ for _keywordName, _keywordDotted in {
     "surface": "edelweissfe.keywords.surface:SurfaceKeyword",
     "job": "edelweissfe.keywords.job:JobKeyword",
     "section": "edelweissfe.keywords.section:SectionKeyword",
+    "elementProperty": "edelweissfe.keywords.elementproperty:ElementPropertyKeyword",
     "material": "edelweissfe.keywords.material:MaterialKeyword",
     "advancedmaterial": "edelweissfe.keywords.advancedmaterial:AdvancedMaterialKeyword",
     "fieldOutput": "edelweissfe.keywords.fieldoutput:FieldOutputKeyword",
