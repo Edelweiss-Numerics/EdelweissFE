@@ -577,10 +577,12 @@ def _auditEntryPoints() -> None:
 
     if _entryPointsAudited:
         return
-    _entryPointsAudited = True
 
     shadowed = _entryPointsShadowingBuiltins()
     if shadowed:
+        # Deliberately NOT setting _entryPointsAudited here: a conflict must keep raising on every
+        # call until the environment is actually fixed, rather than being permanently silenced by
+        # whichever call happens to discover it first.
         details = "; ".join(
             f"'{epName}' is built in as '{builtinDotted}' but an entry point claims it as " f"'{entryPointDotted}'"
             for epName, (builtinDotted, entryPointDotted) in sorted(shadowed.items())
@@ -590,6 +592,8 @@ def _auditEntryPoints() -> None:
             f"silently ignored because built-ins resolve first: {details}. Rename the entry "
             "point(s)."
         )
+
+    _entryPointsAudited = True
 
 
 def availableNames(category: str) -> list[str]:
@@ -697,6 +701,21 @@ def register(category: str, name: str, target: Any, *, schema: type | None = Non
                     f"'{name}' is a built-in '{category}' implementation ('{builtinDotted}'); "
                     f"registering {target!r} under that name would make the built-in unreachable. "
                     "Choose a different name, or pass override=True to shadow it deliberately."
+                )
+
+            # A name resolved via an earlier lookup() (built-in table or entry point) is memoized
+            # into _resolved directly, without ever touching _registered -- so the checks above miss
+            # it. Without this, register() for an already-resolved key silently overwrites the
+            # memoized entry a few lines below instead of raising.
+            resolvedEntry = _resolved.get(key)
+            resolvedDiffersFromTarget = resolvedEntry is not None and (
+                resolvedEntry[0] is not target or resolvedEntry[1] is not schema
+            )
+            if resolvedDiffersFromTarget and previous is None:
+                raise RegistryConflictError(
+                    f"'{name}' in category '{category}' was already resolved to {resolvedEntry[0]!r} "
+                    f"(via lookup); refusing to overwrite it with {target!r}. Pass override=True to "
+                    "replace it deliberately."
                 )
 
         _registered[key] = (target, schema)

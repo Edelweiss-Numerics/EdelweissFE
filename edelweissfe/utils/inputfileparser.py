@@ -34,7 +34,7 @@ import dataclasses
 from os.path import dirname, join
 
 from edelweissfe.config import registry
-from edelweissfe.config.registry import RegistryLookupError
+from edelweissfe.config.registry import RegistryConflictError, RegistryLookupError
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.misc import (
     caseInsensitiveKwargsChecker,
@@ -248,6 +248,10 @@ def _resolveDispatchSchemaForKeywordLine(keyword: str, options: dict) -> type | 
         return None
     try:
         _, schema = registry.lookup(category, dispatchValue)
+    except RegistryConflictError:
+        # An unresolvable name conflict, not a "does not exist" -- must not be mistaken for the
+        # latter by a caller treating a plain miss as "no dispatch schema".
+        raise
     except RegistryLookupError:
         return None
     return schema
@@ -379,6 +383,10 @@ def _expectsPlainDatalines(keyword: str, options: dict) -> bool:
         return False
     try:
         _, dispatchSchema = registry.lookup(category, dispatchValue)
+    except RegistryConflictError:
+        # An unresolvable name conflict, not a "does not exist" -- must not be mistaken for the
+        # latter by a caller treating a plain miss as "no plain datalines here".
+        raise
     except RegistryLookupError:
         return False
     return _dispatchTargetExpectsPlainDatalines(dispatchSchema)
