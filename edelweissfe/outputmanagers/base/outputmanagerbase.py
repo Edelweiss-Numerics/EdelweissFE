@@ -87,15 +87,30 @@ class OutputManagerBase(OptionSchemaProvider, ABC):
 
         Concrete output managers vary in how (or whether) they store overridable runtime options --
         unlike a solver's uniform ``self.options`` dict, there is no single shared storage shape to
-        update generically here, so the default is a no-op and a subclass overrides it with its own
-        named fields (ordinary polymorphism, not attribute probing -- see :class:`OutputManager` in
-        ``ensight.py`` for the one concrete case that needs this today).
+        update generically here, so a subclass that wants ``>>options`` support overrides this with
+        its own named fields (ordinary polymorphism, not attribute probing -- see
+        :class:`OutputManager` in ``ensight.py`` for the one concrete case that needs this today).
+
+        The default here raises rather than silently doing nothing: without an override, a
+        ``>>options, name=X, someField=...`` block against ``X`` would otherwise validate cleanly
+        against ``type(X).schema`` (``stepactions/options.py``) and then apply no change at all --
+        indistinguishable, from the ``.inp`` author's side, from success.
 
         Parameters
         ----------
         fieldValues
             Maps schema field name to its new, already-coerced value.
+
+        Raises
+        ------
+        NotImplementedError
+            If ``fieldValues`` is non-empty and the subclass has not overridden this method.
         """
+        if fieldValues:
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support '>>options' overrides for "
+                f"{sorted(fieldValues)} -- applyOptionsOverride is not implemented for this output manager."
+            )
 
     @abstractmethod
     def initializeJob(self):
