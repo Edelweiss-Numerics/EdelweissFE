@@ -154,9 +154,7 @@ class Constraint(ConstraintBase, MeshDependent):
         )
 
     @classmethod
-    def fromConstraintDefinition(
-        cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
-    ) -> "Constraint":
+    def fromConstraintDefinition(cls, name: str, definition: dict, model: FEModel, journal: "Journal") -> "Constraint":
         """Build this constraint from a parsed ``*constraint`` definition. See
         :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
         separate from ``__init__``."""
