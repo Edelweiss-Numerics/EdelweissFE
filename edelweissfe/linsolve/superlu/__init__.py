@@ -26,12 +26,8 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""Interface to SciPy's own sparse LU solver (SuperLU).
+"""Registry-facing factory for SciPy's own sparse LU solver (SuperLU).
 
-This subpackage exists only to give that solver a *module* of its own. It used to be an inline
-``lambda A, b: spsolve(A, b, use_umfpack=False)`` inside ``config/linsolve.py``'s ``if/elif``
-chain, i.e. a closure with no module-level name for the L3 registry's ``"module.path:Attr"``
-dotted string to point at -- which is why ``linsolver`` was the one category P1 had to leave out.
 There is no extension to build and no optional dependency behind it (SciPy is a hard requirement),
 so unlike its siblings this one is always importable, which is also what makes it the fallback of
 :func:`~edelweissfe.config.linsolve.getDefaultLinSolver`.
@@ -60,11 +56,8 @@ def createSolver(opts) -> Callable:
         :func:`scipy.sparse.linalg.spsolve` with ``use_umfpack=False``.
     """
 
-    # Imported inside the function body, not at module scope: several linsolve backends are
-    # optional and genuinely absent in some installs, and `getDefaultLinSolver` relies on catching
-    # the resulting ImportError. A module-scope import would turn "backend not built" from a
-    # graceful fallback into an import error for anyone merely resolving a registry name. SciPy is
-    # not optional, but the convention is kept uniform across all nine factories.
+    # Imported inside the function body for consistency with the other linsolve factories, even
+    # though SciPy itself is not optional here.
     from scipy.sparse.linalg import spsolve
 
     return lambda A, b: spsolve(A, b, use_umfpack=False)

@@ -39,14 +39,12 @@ from edelweissfe.utils.schema import datalineField, subKeywordField
 
 @dataclass(frozen=True)
 class SolidSectionSchema:
-    """L2: the options this section accepts, owned by this module and never mutated from outside
-    it.
+    """The options this section accepts, owned by this module and never mutated from outside it.
 
     ``elementSets`` is a :func:`~edelweissfe.utils.schema.datalineField`, additive-only: it
     documents the dataline payload's presence for the grammar surface, but is excluded from
     :func:`~edelweissfe.utils.schema.optionNames`/``buildSchemaFromOptions`` and is not read by
-    this section's constructor -- the actual element-set datalines are still interpreted by the
-    U3-scoped construction path.
+    this section's constructor -- the element-set datalines are interpreted elsewhere.
     """
 
     materialParameterFromField: tuple[MaterialParameterFromFieldSchema, ...] = subKeywordField(
@@ -65,7 +63,7 @@ class SolidSectionSchema:
 class Section(SectionBase):
     """This section represents a classical solid material section."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this section, per OptionSchemaProvider.
     schema = SolidSectionSchema
 
     def __init__(
@@ -77,7 +75,7 @@ class Section(SectionBase):
         *,
         configuration: SolidSectionSchema = SolidSectionSchema(),
     ):
-        """L1: constructible standalone, with no parser involvement.
+        """Constructible standalone, with no parser involvement.
 
         Parameters
         ----------

@@ -42,7 +42,7 @@ from edelweissfe.utils.schema import schemaField
 
 @dataclass(frozen=True)
 class RandomScalarSchema:
-    """L2: the options this analytical field accepts, owned by this module and never mutated from
+    """The options this analytical field accepts, owned by this module and never mutated from
     outside it.
     """
 
@@ -57,11 +57,11 @@ class RandomScalarSchema:
 class AnalyticalField(AnalyticalFieldBase):
     """Define a random field using the GSTools library."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this analytical field, per OptionSchemaProvider.
     schema = RandomScalarSchema
 
     def __init__(self, name: str, FEModel, *, configuration: RandomScalarSchema = RandomScalarSchema()):
-        """L1: constructible standalone, with no parser involvement.
+        """Constructible standalone, with no parser involvement.
 
         Parameters
         ----------

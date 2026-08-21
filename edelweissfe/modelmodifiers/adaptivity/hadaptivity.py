@@ -61,7 +61,7 @@ from edelweissfe.utils.schema import (
 
 @dataclass(frozen=True)
 class HAdaptivityMarkerSchema:
-    """L2: the options of a single ``>>marker`` block."""
+    """The options of a single ``>>marker`` block."""
 
     type: str | None = schemaField(
         description="Type of marker: fieldOutput, elementSet, nodeSet, surface", dtype=str, default=None, required=True
@@ -85,7 +85,7 @@ class HAdaptivityMarkerSchema:
 
 @dataclass(frozen=True)
 class HAdaptivitySchema:
-    """L2: the options this model modifier accepts, owned by this module and never mutated from
+    """The options this model modifier accepts, owned by this module and never mutated from
     outside it.
 
     ``marker`` is declared optional even though at least one is required in practice -- that
@@ -96,9 +96,9 @@ class HAdaptivitySchema:
     moduleOptions: dict = schemaField(description="Internal", dtype=dict, default_factory=dict)
     elSet: str | None = schemaField(
         description=(
-            "Fallback for 'refineElSet' if that is not given. Each '>>marker' scopes its own "
-            "eligible elements (a fieldOutput's associated set, an elementSet/nodeSet/surface's "
-            "members); this no longer restricts marking itself."
+            "Fallback for 'refineElSet' if that is not given. Does not restrict marking itself -- "
+            "each '>>marker' scopes its own eligible elements (a fieldOutput's associated set, an "
+            "elementSet/nodeSet/surface's members)."
         ),
         dtype=str,
         default=None,
@@ -208,9 +208,9 @@ def _connectedComponents(elements: list) -> dict:
 
 
 class ModelModifier(ModelModifierBase):
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider. Documentation-only for now
-    #: (see HAdaptivitySchema's own docstring) -- construction still goes through the legacy
-    #: Module-based mechanism below, unchanged.
+    #: Option schema for this model modifier, per OptionSchemaProvider. Documentation-only
+    #: (see HAdaptivitySchema's own docstring) -- construction still goes through the
+    #: Module-based mechanism below.
     schema = HAdaptivitySchema
 
     def __init__(self, name: str, model: FEModel, journal: Journal, *args, **kwargs):
@@ -321,7 +321,7 @@ class ModelModifier(ModelModifierBase):
             coords = np.array([n.coordinates for n in el.nodes])
             eid = self._mesh.add_root(coords, componentId)
             self._eidToEl[eid] = el
-        # nodes outside the refineable mesh are deliberately not seeded, but their labels are taken:
+        # nodes outside the refineable mesh are not seeded, but their labels are taken:
         # keep the registry's high-water mark above them so new nodes never collide with them
         self._mesh.registry.reserve_labels_up_to(max(model.nodes.keys(), default=0))
 
@@ -334,7 +334,7 @@ class ModelModifier(ModelModifierBase):
             if setName not in self._allLikeSets:
                 self._mesh.define_node_set(setName, [n.label for n in nodeSet])
 
-        # track element sets so user element sets propagate child elements on refinement (Finding 1)
+        # track element sets so user element sets propagate child elements on refinement
         elToEid = {el: eid for eid, el in self._eidToEl.items()}
         # passengers of a tracked set: members the octree mirror does not know (non-refineable
         # elements, e.g. HEX8, interface elements, contact facets). A mixed set would lose them on
@@ -348,7 +348,7 @@ class ModelModifier(ModelModifierBase):
                 self._mesh.define_element_set(setName, eids)
                 self._untrackedOfElementSet[setName] = [el for el in elementSet if el not in elToEid]
 
-        # track element-based surfaces so surface loads stay consistent under refinement (Finding 2)
+        # track element-based surfaces so surface loads stay consistent under refinement
         for surfaceName, surface in model.surfaces.items():
             pairs = [
                 (elToEid[el], faceID) for faceID, elementSet in surface.items() for el in elementSet if el in elToEid
@@ -406,7 +406,7 @@ class ModelModifier(ModelModifierBase):
         if not markedEids:
             return False
 
-        # (WS-B/C) refine + 2:1 balance in the mirror
+        # refine + 2:1 balance in the mirror
         nBefore = len(self._mesh.active())
         with timeit("refine & balance"):
             for eid in markedEids:
@@ -470,7 +470,8 @@ class ModelModifier(ModelModifierBase):
         newValues = {fieldName: {} for fieldName in oldValues}  # interpolated values for new nodes
         newChildEids = active - materialized
 
-        # the changeset this call produces (Finding 1/2 above become its faceMap/*Sets entries)
+        # the changeset this call produces (its faceMap/*Sets entries reflect the tracked element
+        # sets and surfaces above)
         change = ModelChange(kind=ModelChangeType.REFINEMENT, addedNodes=set(newNodes.keys()))
 
         # new child elements (single level of new refinement per call -> parents are materialized)
@@ -485,9 +486,9 @@ class ModelModifier(ModelModifierBase):
                 self._nextElLabel += 1
                 child.setNodes([model.nodes[label] for label in e["conn"]])
                 self._sectionOf[parentEl].assignSectionPropertiesToElement(child)
-                self._stateTransfer.transferState(parentEl, [child], self._topology)  # WS-F (state)
+                self._stateTransfer.transferState(parentEl, [child], self._topology)  # state transfer
 
-                # warm start (WS-H): interpolate each NEW node's field values from the parent via the
+                # warm start: interpolate each NEW node's field values from the parent via the
                 # HEX20 isoparametric map, so the increment restarts from a consistent state, not zero
                 octant = mesh.elements[parentEid]["children"].index(eid)
                 childParams = self._octantParams[octant]
@@ -507,7 +508,7 @@ class ModelModifier(ModelModifierBase):
                 change.addedElements.add(child.elNumber)
                 change.parentToChildren.setdefault(parentEl.elNumber, []).append(child.elNumber)
 
-        # per-face parent -> child tiling (Finding 2's faceMap), while parents are still materialized
+        # per-face parent -> child tiling (the faceMap), while parents are still materialized
         newlyRefinedParentEids = {mesh.elements[eid]["parent"] for eid in newChildEids}
         for parentEid in newlyRefinedParentEids:
             parentLabel = self._eidToEl[parentEid].elNumber
@@ -525,7 +526,7 @@ class ModelModifier(ModelModifierBase):
             del model.elements[el.elNumber]
             change.removedElements.add(el.elNumber)
 
-        # keep model.surfaces in sync (Finding 2): parent (eid,faceID) -> child faces
+        # keep model.surfaces in sync: parent (eid,faceID) -> child faces
         for surfaceName, pairs in mesh.surfaces.items():
             if surfaceName in model.surfaces:
                 if any(meid in newChildEids for meid, _ in pairs):
@@ -549,7 +550,7 @@ class ModelModifier(ModelModifierBase):
                     model.nodeSets[setName].replaceMembers(members)
                     change.changedNodeSets.add(setName)
 
-            # sync all element sets (user sets like 'concrete' and all-encompassing sets) -- Finding 1
+            # sync all element sets (user sets like 'concrete' and all-encompassing sets)
             allNodes = list(model.nodes.values())
             if newNodes:
                 for setName in self._allLikeSets | {"all"}:
@@ -572,7 +573,7 @@ class ModelModifier(ModelModifierBase):
 
         with timeit("fields resize & restore"):
             # resize node fields in place to include the new nodes, then restore the warm start:
-            # converged values on the retained nodes and interpolated values on the new nodes (Finding 1).
+            # converged values on the retained nodes and interpolated values on the new nodes.
             # Both U (current) and P (previous converged) get the same warm-start value, so the first
             # Newton iteration after refinement sees a normal residual rather than a spurious dU = U - P
             # = U - 0 cold-restart spike on every retained/new node (P-field warm-start fix).

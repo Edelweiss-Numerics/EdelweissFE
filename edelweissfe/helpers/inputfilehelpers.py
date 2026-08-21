@@ -252,8 +252,7 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
         args, kwargs = parseDatalinesToArgsAndKwargs(data)
 
         # raw code lines must not be comma-split -- same special case as in the
-        # executeAfterManualGeneration loop below, which previously was the only place with it
-        # (executePythonCode was broken in this phase)
+        # executeAfterManualGeneration loop below
         if strCaseCmp(generatorType, "executePythoncode"):
             args = data
 
@@ -472,12 +471,12 @@ def createOutputManagersFromInputFile(
                 "manager was ported, so there is no fallback path any more."
             )
 
-        # L4 adapter over the L3 registry: parse -> validate/coerce into the module's own L2 schema
-        # -> call its L1 constructor. `moduleOptions` carries the nested `>>` sub-keyword blocks
-        # (ensight's `>>perNode`, `>>perElement`, `>>configuration`) and is forwarded as the schema's
-        # sub-keyword source; for a schema that declares no sub-keyword fields it is `{}`, and a
-        # stray block under such a keyword is rejected by `buildSchemaFromOptions` rather than
-        # silently dropped.
+        # Look up the output manager's class and schema in the registry, then parse -> validate/coerce
+        # into the module's own option schema -> call its constructor. `moduleOptions` carries the
+        # nested `>>` sub-keyword blocks (ensight's `>>perNode`, `>>perElement`, `>>configuration`)
+        # and is forwarded as the schema's sub-keyword source; for a schema that declares no
+        # sub-keyword fields it is `{}`, and a stray block under such a keyword is rejected by
+        # `buildSchemaFromOptions` rather than silently dropped.
         for optionsForOneManager in [datalines] if len(datalines) == 0 else datalines:
             args, kwargs = parseDatalinesToArgsAndKwargs(optionsForOneManager)
 

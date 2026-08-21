@@ -143,11 +143,9 @@ class DisplacementElement(BaseElement):
         properties = elLibrary[elementType]
         # Guard against being handed an element type belonging to a *different* formulation, e.g.
         # `DisplacementElement("CPE4TL", 1)`: `elLibrary` supplies quadrature data for both
-        # formulations, so nothing else here would notice. The type -> class mapping is the L3
-        # registry's `element` category (previously an `elClass` name string in `elLibrary`, resolved
-        # by an `eval` -- which raised `NameError` rather than this message whenever the answer was
-        # the other class, i.e. in exactly the case the guard exists for, since neither element
-        # module imports the other's class).
+        # formulations, so nothing else here would notice. The type -> class mapping is looked up
+        # in the `element` category of the registry, since neither element module imports the
+        # other's class.
         if registry.lookup("element", elementType)[0] is not DisplacementElement:
             raise Exception("Something went wrong with the element initialization!")
         self._elNumber = elNumber

@@ -40,15 +40,15 @@ from edelweissfe.utils.schema import schemaField
 
 @dataclass(frozen=True)
 class FromVtkSchema:
-    """L2: the options this analytical field accepts, owned by this module and never mutated from
+    """The options this analytical field accepts, owned by this module and never mutated from
     outside it.
 
-    Both fields are ``required=True``, but are still given a
-    ``default=None``/``default=""`` so that ``FromVtkSchema()`` remains constructible for the L1
-    constructor's default argument; the L4 adapter (``buildSchemaFromOptions``) still enforces that
-    an ``.inp`` file supplies ``file``. ``result`` may legitimately be supplied empty (see
-    ``AnalyticalField.__init__``'s auto-pick fallback), so an empty string -- not ``None`` -- is its
-    default, matching what an ``.inp`` file writing ``result=`` produces.
+    Both fields are ``required=True``, but are still given a ``default=None``/``default=""`` so
+    that ``FromVtkSchema()`` remains constructible as the constructor's default argument;
+    ``buildSchemaFromOptions`` still enforces that an ``.inp`` file supplies ``file``. ``result``
+    may legitimately be supplied empty (see ``AnalyticalField.__init__``'s auto-pick fallback), so
+    an empty string -- not ``None`` -- is its default, matching what an ``.inp`` file writing
+    ``result=`` produces.
     """
 
     file: str | None = schemaField(description="path to database file", dtype=str, default=None, required=True)
@@ -58,11 +58,11 @@ class FromVtkSchema:
 class AnalyticalField(AnalyticalFieldBase):
     """Use PyVista to interpolate from vtk data."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this analytical field, per OptionSchemaProvider.
     schema = FromVtkSchema
 
     def __init__(self, name: str, FEModel, *, configuration: FromVtkSchema = FromVtkSchema()):
-        """L1: constructible standalone, with no parser involvement.
+        """Constructible standalone, with no parser involvement.
 
         Parameters
         ----------

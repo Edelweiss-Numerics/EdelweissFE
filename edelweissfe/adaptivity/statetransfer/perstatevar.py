@@ -41,9 +41,9 @@ class PerStateVarStateTransfer(StateTransferStrategy):
     """Apply a *default* strategy to the whole per-quadrature-point state block, then override
     selected named state variables with their own strategies.
 
-    This is the "project some, copy others" composite. It is deliberately policy-free: which state
-    variables may be projected, copied, or reset depends entirely on the constitutive model, so the
-    caller names the variables to treat specially and everything else follows the default. Each named
+    This is the "project some, copy others" composite. It is policy-free: which state variables may
+    be projected, copied, or reset depends entirely on the constitutive model, so the caller names
+    the variables to treat specially and everything else follows the default. Each named
     override is located within a quadrature-point block via the element's ``getStateVarSlice(name)``
     hook, driven by the material's / element's own state-variable names.
     """

@@ -26,17 +26,11 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""Interface to the UMFPACK sparse LU solver, through SciPy.
+"""Registry-facing factory for the UMFPACK sparse LU solver, through SciPy.
 
-Like its ``superlu`` sibling this subpackage exists only to give the solver a *module* of its own:
-it used to be an inline ``lambda A, b: spsolve(A, b, use_umfpack=True)`` inside
-``config/linsolve.py``'s ``if/elif`` chain, which the L3 registry's ``"module.path:Attr"`` dotted
-strings cannot address.
-
-Note that ``use_umfpack=True`` is a *request*, not a guarantee: SciPy silently falls back to
-SuperLU when ``scikit-umfpack`` is not installed, so this name never fails to produce a working
-solver -- it just may not produce an UMFPACK-backed one. That is pre-existing SciPy behaviour and
-is deliberately left as it was.
+``use_umfpack=True`` is a *request*, not a guarantee: SciPy silently falls back to SuperLU when
+``scikit-umfpack`` is not installed, so this name never fails to produce a working solver -- it
+just may not produce an UMFPACK-backed one.
 """
 
 from collections.abc import Callable

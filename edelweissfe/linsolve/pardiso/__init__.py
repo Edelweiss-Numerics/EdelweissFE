@@ -59,8 +59,8 @@ def createSolver(opts) -> Callable:
     Raises
     ------
     ImportError
-        If the optional ``pardiso`` extension was not built. This propagates deliberately:
-        :func:`~edelweissfe.config.linsolve.getDefaultLinSolver` catches it to fall back to SciPy.
+        If the optional ``pardiso`` extension was not built.
+        :func:`~edelweissfe.config.linsolve.getDefaultLinSolver` catches this to fall back to SciPy.
     """
 
     # Imported inside the function body, not at module scope: this extension is optional and

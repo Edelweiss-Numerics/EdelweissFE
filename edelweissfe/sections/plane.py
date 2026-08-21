@@ -43,19 +43,16 @@ from edelweissfe.utils.schema import datalineField, schemaField, subKeywordField
 
 @dataclass(frozen=True)
 class PlaneSectionSchema:
-    """L2: the options this section accepts, owned by this module and never mutated from outside
-    it.
+    """The options this section accepts, owned by this module and never mutated from outside it.
 
-    ``thickness`` is declared ``required=True`` explicitly, but
-    is still given a ``default=None`` so that ``PlaneSectionSchema()`` remains constructible for the
-    L1 constructor's default argument; the L4 adapter (``buildSchemaFromOptions``) still enforces
-    that an ``.inp`` file supplies it.
+    ``thickness`` is declared ``required=True``, but is still given a ``default=None`` so that
+    ``PlaneSectionSchema()`` remains constructible on its own; ``buildSchemaFromOptions`` still
+    enforces that an ``.inp`` file supplies it.
 
     ``elementSets`` is a :func:`~edelweissfe.utils.schema.datalineField`, additive-only: it
     documents the dataline payload's presence for the grammar surface, but is excluded from
     :func:`~edelweissfe.utils.schema.optionNames`/``buildSchemaFromOptions`` and is not read by
-    this section's constructor -- the actual element-set datalines are still interpreted by the
-    U3-scoped construction path.
+    this section's constructor -- the element-set datalines are interpreted elsewhere.
     """
 
     thickness: float | None = schemaField(description="thickness", dtype=float, default=None, required=True)
@@ -75,7 +72,7 @@ class PlaneSectionSchema:
 class Section(SectionBase):
     """This section represents a classical plane solid material section."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this section, per OptionSchemaProvider.
     schema = PlaneSectionSchema
 
     def __init__(
@@ -87,7 +84,7 @@ class Section(SectionBase):
         *,
         configuration: PlaneSectionSchema = PlaneSectionSchema(),
     ):
-        """L1: constructible standalone, with no parser involvement.
+        """Constructible standalone, with no parser involvement.
 
         Parameters
         ----------

@@ -40,13 +40,12 @@ from edelweissfe.utils.schema import schemaField
 
 @dataclass(frozen=True)
 class ScalarExpressionSchema:
-    """L2: the options this analytical field accepts, owned by this module and never mutated from
+    """The options this analytical field accepts, owned by this module and never mutated from
     outside it.
 
-    ``f_x_y_z`` is declared ``required=True`` explicitly, but is
-    still given a ``default=None`` so that ``ScalarExpressionSchema()`` remains constructible for
-    the L1 constructor's default argument; the L4 adapter (``buildSchemaFromOptions``) still
-    enforces that an ``.inp`` file supplies it.
+    ``f_x_y_z`` is declared ``required=True`` explicitly, but is still given a ``default=None`` so
+    that ``ScalarExpressionSchema()`` remains constructible as the constructor's default argument;
+    ``buildSchemaFromOptions`` still enforces that an ``.inp`` file supplies it.
     """
 
     f_x_y_z: str | None = schemaField(
@@ -62,11 +61,11 @@ class ScalarExpressionSchema:
 class AnalyticalField(AnalyticalFieldBase):
     """Define an analytical field using a scalar expression."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this analytical field, per OptionSchemaProvider.
     schema = ScalarExpressionSchema
 
     def __init__(self, name: str, FEModel, *, configuration: ScalarExpressionSchema = ScalarExpressionSchema()):
-        """L1: constructible standalone, with no parser involvement.
+        """Constructible standalone, with no parser involvement.
 
         Parameters
         ----------

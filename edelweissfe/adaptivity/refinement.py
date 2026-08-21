@@ -27,7 +27,7 @@
 #  ---------------------------------------------------------------------
 
 """HEX20 octree refinement: subdivision, coordinate-based node registry, and hanging-node
-classification (WS-A/B).
+classification.
 
 Geometry-level building blocks that operate on node coordinates and connectivity, independent of
 the live FEModel. Subdivision honours curved parents via the parent isoparametric map. Hanging
@@ -185,7 +185,7 @@ class AdaptiveMesh:
         self.surfaces = {}  # name -> set((eid, faceID))  (element-based, Marmot faceID convention)
         self._next = 1
 
-    # ---- topological containers (WS-K) ----
+    # ---- topological containers ----
     def define_element_set(self, name, eids):
         self.elementSets[name] = set(eids)
 
@@ -236,8 +236,8 @@ class AdaptiveMesh:
         return None
 
     def refine(self, eid) -> list:
-        """Subdivide an active element into 8 children (WS-B); deactivate the parent and keep all
-        topological containers (element sets, surfaces, node sets) consistent (WS-K).
+        """Subdivide an active element into 8 children; deactivate the parent and keep all
+        topological containers (element sets, surfaces, node sets) consistent.
 
         Children are returned in octant_children_param order, so kids[j] is octant j.
         """
@@ -390,7 +390,7 @@ class AdaptiveMesh:
                     if lab in Eset or componentOf[lab] != compEid:
                         continue
                     # A hanging node lies on a face/edge of E, hence within E's node-AABB. The padded
-                    # broad-phase gather above deliberately also pulls in a shell of nodes just
+                    # broad-phase gather above also pulls in a shell of nodes just
                     # outside E (so nothing on the boundary is missed to grid rounding); those cannot
                     # be hanging on E, so reject them here with a cheap box test before the exact
                     # per-edge/face geometry probes, which otherwise run 12 + 6 tests on each such
@@ -412,7 +412,7 @@ class AdaptiveMesh:
         return [{"slave": s, "kind": "edge" if v[0] == 1 else "face", "masters": v[2]} for s, v in best.items()]
 
     def hanging_mpc_records(self, tol=1e-8) -> dict:
-        """Flattened master-slave records for DOF-elimination MPCs (WS-J / surface_tie branch).
+        """Flattened master-slave records for DOF-elimination MPCs.
 
         Returns {slaveLabel: [(masterLabel, weight), ...]} where every master is an INDEPENDENT
         (non-hanging) node. Multi-level chains (a master that is itself a slave) are resolved here by

@@ -42,7 +42,7 @@ from edelweissfe.utils.schema import OptionSchemaProvider, schemaField
 
 @dataclass(frozen=True)
 class MaterialParameterFromFieldSchema:
-    """L2: one ``>>materialParameterFromField`` block, shared by every section type.
+    """One ``>>materialParameterFromField`` block, shared by every section type.
 
     The update-type option is spelled ``type`` in the input file but the field is named
     ``parameterUpdateType`` here -- a dataclass field literally called ``type`` would shadow the
@@ -63,7 +63,7 @@ class MaterialParameterFromFieldSchema:
 
 @dataclass(frozen=True)
 class WriteMaterialPropertiesToFileSchema:
-    """L2: one ``>>writeMaterialPropertiesToFile`` block, shared by every section type."""
+    """One ``>>writeMaterialPropertiesToFile`` block, shared by every section type."""
 
     filename: str = schemaField(description="file name for material property export", dtype=str)
 
@@ -86,8 +86,7 @@ class Section(OptionSchemaProvider, ABC):
         self.writeMaterialPropertiesToFileDefs = writeMaterialPropertiesToFileDefs
 
         # A schema instance is frozen, so the per-definition expression (once compiled from
-        # `f(p,f)`) is kept in a parallel list rather than stashed back onto the definition, as the
-        # legacy dict-based definitions used to allow.
+        # `f(p,f)`) is kept in a parallel list rather than stashed back onto the definition.
         self._materialParameterFromFieldExpressions = []
         for definition in materialParameterFromFieldDefs:
             if not any(
