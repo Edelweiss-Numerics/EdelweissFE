@@ -526,7 +526,7 @@ def withoutParserBookkeepingKeys(block) -> dict:
 def withoutParserBookkeeping(blocks: list) -> list:
     """Strip the parser's own bookkeeping keys from each block of a module-level (``>>``) keyword.
 
-    An L2 schema declares what a *user* may write, so it must not have to declare the parser's
+    An option schema declares what a *user* may write, so it must not have to declare the parser's
     internals as options: without this, validating any ``>>``-carrying keyword against its schema
     fails on the injected ``inputFile`` key. The enclosing top-level keyword's dict gets the
     equivalent treatment via explicit ``pop()`` calls in
@@ -534,9 +534,8 @@ def withoutParserBookkeeping(blocks: list) -> list:
 
     Lives here, in a leaf utility module, rather than next to its caller: ``inputfilehelpers`` cannot
     currently be imported after :mod:`edelweissfe.outputmanagers.ensight` in the same interpreter
-    (a pre-existing import-side-effect collision on the shared ``options`` keyword), which would
-    make this helper untestable in isolation. It is also needed by every other ``>>``-carrying
-    keyword as those are ported.
+    (an import-side-effect collision on the shared ``options`` keyword), which would make this
+    helper untestable in isolation. It is also needed by every other ``>>``-carrying keyword.
 
     Parameters
     ----------

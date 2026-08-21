@@ -26,8 +26,8 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``renderSchemaSurface``: render the ``.inp`` grammar surface directly from L2 schemas -- the sole
-grammar-rendering mechanism (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``).
+"""``renderSchemaSurface``: render the ``.inp`` grammar surface directly from schemas -- the sole
+grammar-rendering mechanism.
 
 ``tests/golden/inputlanguage_surface.txt`` is the frozen reference for that surface. This module
 implements two related bracket-and-indent formats: one keyed on a keyword's own name/description
@@ -67,7 +67,7 @@ _PRINT_KEYWORDS_TYPE_STRING = {str: "string", bool: "boolean", int: "integer", f
 
 @dataclass(frozen=True)
 class KeywordSurfaceSpec:
-    """One renderable keyword, built directly from an L2 schema -- the input :func:`renderSchemaSurface`
+    """One renderable keyword, built directly from a schema -- the input :func:`renderSchemaSurface`
     consumes.
 
     A top-level ``.inp`` keyword (``*ensight``, ``*section``, ...) is described by one of these; a
@@ -85,7 +85,7 @@ class KeywordSurfaceSpec:
         for ensight's ``>>configuration``, which has none), in which case the header line carries
         no trailing text.
     schema
-        The L2 schema dataclass describing this keyword's own line options, dataline payload, and
+        The schema dataclass describing this keyword's own line options, dataline payload, and
         ``>>`` sub-blocks -- typically a :class:`~edelweissfe.keywords.base.keywordbase.KeywordBase`
         subclass's :attr:`~edelweissfe.utils.schema.OptionSchemaProvider.schema`. ``None`` renders
         just the header line (a keyword that declares no schema at all).
@@ -102,7 +102,7 @@ def specFromKeywordClass(keywordClass: type) -> KeywordSurfaceSpec:
 
     The keyword's spelling (:attr:`~edelweissfe.keywords.base.keywordbase.KeywordBase.keywordName`,
     in exact display case), its description, and its schema all come from the class -- the single
-    source of truth -- so the grammar surface, the U3 parser, and any test all agree by construction
+    source of truth -- so the grammar surface, the parser, and any test all agree by construction
     rather than re-transcribing the name/description anywhere. Use this in preference to constructing
     a :class:`KeywordSurfaceSpec` by hand for a registered keyword.
 
@@ -165,7 +165,7 @@ def _fieldDefault(field: dataclasses.Field, meta: SchemaFieldMeta):
     ``meta.documentedDefault`` wins when set: it exists precisely for the rare field whose
     documented default legitimately differs from its runtime one (see
     :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.documentedDefault`). Otherwise this falls back
-    to the dataclass field's own default/``default_factory``, exactly as before.
+    to the dataclass field's own default/``default_factory``.
     """
     if meta.documentedDefault is not MISSING:
         return meta.documentedDefault
@@ -322,18 +322,17 @@ def _renderSubKeywordLines(optionName: str, fieldMeta: SchemaFieldMeta) -> list[
 
 
 def renderDictDocumentation(documentation: Mapping[str, str]) -> str:
-    """Render a legacy dict-style ``documentation = {optionName: description}`` module attribute.
+    """Render a dict-style ``documentation = {optionName: description}`` module attribute.
 
-    This is the *third* legacy rendering format (see the module docstring for the other two):
-    ``edelweissfe.outputmanagers.meshplot`` never declared its real grammar to the input language
-    (only a placeholder keyword, kept as-is -- see that module's own docstring), so its
-    "module documentation" golden section is not derived from any keyword/schema at all, just this
-    hand-maintained ``{name: description}`` mapping, rendered by
-    ``tests/_inputlanguage_snapshot.py::_renderDocumentation``'s dict branch:
+    This is a third rendering format, alongside the two the module docstring describes:
+    ``edelweissfe.outputmanagers.meshplot`` declares only a placeholder keyword to the input
+    language (see that module's own docstring), so its "module documentation" golden section is
+    not derived from any keyword/schema at all, just this hand-maintained ``{name: description}``
+    mapping, rendered by ``tests/_inputlanguage_snapshot.py::_renderDocumentation``'s dict branch:
     ``"\\n".join(f"  {key}: {documentation[key]}" for key in sorted(documentation))``. This
     function reproduces that exact format, so a caller need not special-case meshplot's own
-    ``documentation`` dict to render it identically. There is no schema-driven equivalent to build
-    this from: the dict itself remains the single source of truth for this one module.
+    ``documentation`` dict to render it identically. The dict itself remains the single source of
+    truth for this one module; there is no schema-driven equivalent to build this from.
 
     Parameters
     ----------

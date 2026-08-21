@@ -53,8 +53,8 @@ from edelweissfe.utils.schema import schemaField
 
 @dataclass(frozen=True)
 class NISTPArcLengthSchema(NISTParallel.schema):
-    """L2: :class:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema`'s options, plus the two
-    bespoke fields this solver reads from an ``>>options`` block under the (mismatched, pre-existing)
+    """:class:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema`'s options, plus the two
+    bespoke fields this solver reads from an ``>>options`` block under the (mismatched)
     ``category=NISTArcLength`` -- not ``category=NISTPArcLength``, this solver's own
     :attr:`identification`. Neither is a ``*solver`` dataline option (there is no
     ``SolverSpecificOptions`` entry for either; see :meth:`NISTPArcLength.solveStep`), so both are
@@ -74,7 +74,7 @@ class NISTPArcLength(NISTParallel):
 
     supportsMPC = False
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this solver, per OptionSchemaProvider.
     schema = NISTPArcLengthSchema
 
     def __init__(self, jobInfo, journal, **kwargs):
@@ -95,13 +95,12 @@ class NISTPArcLength(NISTParallel):
         the ordinary ``self.options`` dict via the base implementation.
 
         The pair is replaced *together*, not merged in individually, whenever either is mentioned:
-        this is what the pre-existing mechanism did too, since ``arcLengthController``/
-        ``stopCondition`` lived on their own step-action object (category ``"NISTArcLength"``,
-        distinct from the solver's own ``"NISTSolver"``/``"NISTPSolver"`` category), and a
-        re-declaration of that object always replaced its *entire* option set rather than adding to
-        it -- confirmed against ``testfiles/marmot/IndirectDisplacementControl2``, whose later steps
-        write ``arcLengthController=off`` alone, omitting ``stopCondition`` from an earlier step's
-        declaration specifically to clear it, not to leave it in effect.
+        ``arcLengthController``/``stopCondition`` live on their own step-action object (category
+        ``"NISTArcLength"``, distinct from the solver's own ``"NISTSolver"``/``"NISTPSolver"``
+        category), and a re-declaration of that object replaces its *entire* option set rather than
+        adding to it -- confirmed against ``testfiles/marmot/IndirectDisplacementControl2``, whose
+        later steps write ``arcLengthController=off`` alone, omitting ``stopCondition`` from an
+        earlier step's declaration specifically to clear it, not to leave it in effect.
 
         Parameters
         ----------
@@ -138,8 +137,7 @@ class NISTPArcLength(NISTParallel):
 
         # Sticky: whatever the last >>options, name=<this solver's name>, arcLengthController=...
         # block set (applyOptionsOverride) -- not re-fetched from step.actions, and not reset if a
-        # later step omits it, matching the pre-existing (empirically verified, despite a comment
-        # elsewhere in this codebase once claiming otherwise for the analogous NIST case) behavior.
+        # later step omits it.
         arcLengthControllerOptions = self._arcLengthOptions
 
         if arcLengthControllerOptions:

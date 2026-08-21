@@ -54,13 +54,13 @@ from edelweissfe.utils.schema import schemaField
 
 @dataclass(frozen=True)
 class NEDSchema:
-    """L2: the options of the ``*solver`` datalines and of an ``>>options`` block routed to this
+    """The options of the ``*solver`` datalines and of an ``>>options`` block routed to this
     solver, owned by this module and never mutated from outside it.
 
-    Mirrors :attr:`NED.NEDOptions` one-for-one (see :class:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema`
-    for why this schema coexists with the plain ``self.options`` dict rather than replacing it). The
-    ``*-fields``/``*-scheme``/``courant-number``/``output-frequency`` option names are not valid
-    Python identifiers, hence the ``optionName`` indirection. ``firstOrderFields``/
+    Mirrors :attr:`NED.NEDOptions` one-for-one; the plain ``self.options`` dict remains the actual
+    source of truth consulted at runtime (see :class:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema`
+    for why). The ``*-fields``/``*-scheme``/``courant-number``/``output-frequency`` option names are
+    not valid Python identifiers, hence the ``optionName`` indirection. ``firstOrderFields``/
     ``secondOrderFields`` are declared ``dtype=list`` to describe their real shape (a comma-separated
     list, appended to rather than replaced -- see :meth:`NED._updateOptions`), even though nothing
     coerces a raw string against this schema today.
@@ -119,7 +119,7 @@ class NED(NonlinearSolverBase):
 
     supportsMPC = True
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this solver, per OptionSchemaProvider.
     schema = NEDSchema
 
     NEDOptions = {
@@ -219,7 +219,8 @@ class NED(NonlinearSolverBase):
             ]
 
         # self.options already reflects every >>options, name=<this solver's name>, ... block applied
-        # so far -- see the equivalent comment in NIST.solveStep.
+        # so far, applied as each block is constructed or re-declared; there is nothing to reset or
+        # re-fetch here.
 
         self.mpcTransformation = self.buildMPCTransformation(model)
         self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)

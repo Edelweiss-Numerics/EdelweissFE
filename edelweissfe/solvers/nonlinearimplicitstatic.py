@@ -61,14 +61,14 @@ from edelweissfe.utils.schema import schemaField
 
 @dataclass(frozen=True)
 class NISTSchema:
-    """L2: the options of the ``*solver`` datalines and of an ``>>options`` block routed to this
+    """The options of the ``*solver`` datalines and of an ``>>options`` block routed to this
     solver, owned by this module and never mutated from outside it.
 
     Mirrors :attr:`NIST.SolverSpecificOptions` one-for-one; that dict remains the actual source of
     truth consulted at runtime (``self.options``, a plain mutable dict) -- this schema exists so the
-    L3 registry and the name-based ``>>options`` override mechanism have a typed description of
-    what this solver accepts, without requiring every internal ``self.options[...]`` access to
-    become a dataclass attribute access.
+    registry and the name-based ``>>options`` override mechanism have a typed description of what
+    this solver accepts, without requiring every internal ``self.options[...]`` access to become a
+    dataclass attribute access.
     """
 
     defaultMaxIter: int | None = schemaField(
@@ -128,7 +128,7 @@ class NIST(NonlinearSolverBase):
     supportsMPC = True
     supportsModelModifiers = True
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this solver, per OptionSchemaProvider.
     schema = NISTSchema
 
     SolverSpecificOptions = {
@@ -179,9 +179,8 @@ class NIST(NonlinearSolverBase):
 
         # self.options already reflects every >>options, name=<this solver's name>, ... block applied
         # so far: applyOptionsOverride pushes an override the moment such a block is constructed or
-        # re-declared (edelweissfe.stepactions.options.StepAction), rather than this method pulling
-        # one in per step, and an override sticks until changed again -- there is nothing to reset or
-        # re-fetch here.
+        # re-declared (edelweissfe.stepactions.options.StepAction), and an override sticks until
+        # changed again -- there is nothing to reset or re-fetch here.
         extrapolation = self.options["extrapolation"]
         extrapolateAfterModelChange = self.options["extrapolateAfterModelChange"]
         equilibrateAfterModelChange = self.options["equilibrateAfterModelChange"]

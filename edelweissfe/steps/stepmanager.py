@@ -89,12 +89,10 @@ class StepActionCollection:
     KeyError. This ensures that typos in step action module names fail loudly
     instead of being silently treated as empty collections.
 
-    What counts as "valid" comes from the L3 registry, via
-    :func:`~edelweissfe.config.registry.isRegistered` -- deliberately the non-importing predicate
-    rather than ``lookup``, because a consumer asking for a category it defines no actions in (a
-    solver checking for ``indirectcontrol``, say) must not thereby import that step action's module.
-    The check it replaces, ``importlib.util.find_spec("edelweissfe.stepactions." + module)``, could
-    only ever see step actions shipped inside this package.
+    What counts as "valid" comes from the registry, via
+    :func:`~edelweissfe.config.registry.isRegistered` -- the non-importing predicate rather than
+    ``lookup``, because a consumer asking for a category it defines no actions in (a solver
+    checking for ``indirectcontrol``, say) must not thereby import that step action's module.
     """
 
     def __init__(self):
@@ -218,7 +216,7 @@ class StepManager:
                     )
                 actionNamesInThisStep.add(action.name)
 
-                # Both paths go through the L4 seam on StepActionBase rather than calling
+                # Both paths go through the adapter seam on StepActionBase rather than calling
                 # __init__/updateStepAction directly, so that a step action with a real typed
                 # constructor and one still consuming the raw definition dict are driven
                 # identically from here -- see StepActionBase.fromStepActionDefinition.

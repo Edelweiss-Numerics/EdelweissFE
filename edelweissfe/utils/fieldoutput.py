@@ -54,7 +54,7 @@ from edelweissfe.utils.schema import schemaField, subKeywordField
 
 @dataclass(frozen=True)
 class FieldOutputPerNodeSchema:
-    """L2: the options of a single ``>>perNode`` field-output block."""
+    """The options of a single ``>>perNode`` field-output block."""
 
     name: str | None = schemaField(description="Name of the field output.", dtype=str, default=None, required=True)
     field: str | None = schemaField(description="Field of the result.", dtype=str, default=None, required=True)
@@ -80,7 +80,7 @@ class FieldOutputPerNodeSchema:
 
 @dataclass(frozen=True)
 class FieldOutputPerElementSchema:
-    """L2: the options of a single ``>>perElement`` field-output block."""
+    """The options of a single ``>>perElement`` field-output block."""
 
     name: str | None = schemaField(description="Name of the field output.", dtype=str, default=None, required=True)
     elSet: str | None = schemaField(description="Element set.", dtype=str, default=None, required=True)
@@ -102,7 +102,7 @@ class FieldOutputPerElementSchema:
 
 @dataclass(frozen=True)
 class FieldOutputFromExpressionSchema:
-    """L2: the options of a single ``>>fromExpression`` field-output block."""
+    """The options of a single ``>>fromExpression`` field-output block."""
 
     name: str | None = schemaField(description="Name of the field output.", dtype=str, default=None, required=True)
     elSet: str | None = schemaField(description="Element set.", dtype=str, default=None)
@@ -126,7 +126,7 @@ class FieldOutputFromExpressionSchema:
 
 @dataclass(frozen=True)
 class FieldOutputSchema:
-    """L2: the sub-keyword blocks of the ``*fieldOutput`` keyword.
+    """The sub-keyword blocks of the ``*fieldOutput`` keyword.
 
     ``*fieldOutput`` itself declares no line options of its own (see
     ``edelweissfe.keywords.fieldoutput``'s module docstring) -- its entire grammar is these three

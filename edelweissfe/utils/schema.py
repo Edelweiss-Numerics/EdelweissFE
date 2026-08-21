@@ -26,36 +26,32 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""L2 primitives for the input-language redesign (P1).
+"""Primitives describing a module's input options.
 
 A "schema" here is an ordinary, immutable (``frozen=True``) :mod:`dataclasses` class that a
 module owns for itself: it declares which options that module accepts, their Python types,
-whether they are required, and a human-readable description -- everything the future Sphinx
-``pprint`` replacement (P5) needs to render documentation, without a parallel dict living
-somewhere else and without mutating any other module's state.
+whether they are required, and a human-readable description -- everything the Sphinx
+``pprint`` documentation renderer needs, without a parallel dict living somewhere else and
+without mutating any other module's state.
 
-This module intentionally has **no** dependency on :mod:`edelweissfe.utils.inputlanguage`,
-:mod:`edelweissfe.config.registry`, or any concrete element/material/solver module: it is pure,
-stdlib-only (no pydantic, per the plan's rationale: avoid a new dependency and unknown
-free-threading behavior) infrastructure that L1 modules and the future L4 adapter both depend on.
+This module has **no** dependency on :mod:`edelweissfe.config.registry` or any concrete
+element/material/solver module: it is pure, stdlib-only infrastructure that every module's own
+constructor and the ``.inp`` parser both depend on.
 
-Per rule (c) of the target architecture, case-insensitivity and string-to-type coercion belong to
-L4 (the input-file front-end), not to the L2 schema objects themselves -- a schema instance is
-always exact-case and precisely typed. The coercion helpers in this module (:func:`coerceValue`,
-:func:`resolveCaseInsensitiveOptions`, :func:`buildSchemaFromOptions`,
-:func:`coercePresentOptions`) are therefore utilities *available to* L4, not something a schema
-class does to itself. :func:`coercePresentOptions` is the partial-application sibling of
-:func:`buildSchemaFromOptions`, for *overriding* a subset of an already-constructed instance's
-fields (via ``dataclasses.replace``) rather than building a fresh, fully-defaulted one.
+Case-insensitivity and string-to-type coercion belong to the ``.inp`` parser, not to the schema
+objects themselves -- a schema instance is always exact-case and precisely typed. The coercion
+helpers in this module (:func:`coerceValue`, :func:`resolveCaseInsensitiveOptions`,
+:func:`buildSchemaFromOptions`, :func:`coercePresentOptions`) are utilities the parser calls, not
+something a schema class does to itself. :func:`coercePresentOptions` is the partial-application
+sibling of :func:`buildSchemaFromOptions`, for *overriding* a subset of an already-constructed
+instance's fields (via ``dataclasses.replace``) rather than building a fresh, fully-defaulted one.
 
-The coercion logic mirrors, rather than reinvents, the casting performed by the (now-removed)
-pre-schema mechanism it replaced: a value destined for a ``bool`` field goes through
-:func:`edelweissfe.utils.misc.asBool` (tolerant of a real ``bool``, otherwise
-``strtobool``-parsed), and any other value is passed through unchanged if it is already an
-instance of the target type, otherwise coerced via ``dtype(value)``. Nothing here changes what a
-given input produces; it only makes the already-correct-type case explicit rather than relying on
-the target type's constructor happening to be idempotent (which is true for ``int``/``float``/
-``str`` but was **not** true for ``bool`` -- see the P0 bugfix to ``strtobool``/``asBool``).
+A value destined for a ``bool`` field goes through :func:`edelweissfe.utils.misc.asBool`
+(tolerant of a real ``bool``, otherwise ``strtobool``-parsed); any other value is passed through
+unchanged if it is already an instance of the target type, otherwise coerced via ``dtype(value)``.
+Do not call ``strtobool`` directly on a value that may already be a ``bool`` -- it unconditionally
+calls ``.lower()`` and raises ``AttributeError`` on a real ``bool``; always go through
+:func:`edelweissfe.utils.misc.asBool` instead.
 """
 
 from __future__ import annotations
@@ -81,8 +77,8 @@ class SchemaFieldMeta:
     Parameters
     ----------
     description
-        Human-readable description of the option, used verbatim by the future Sphinx
-        documentation generator (P5).
+        Human-readable description of the option, used verbatim by the Sphinx documentation
+        generator.
     dtype
         The Python type the option's value must have once coerced (e.g. ``int``, ``float``,
         ``str``, ``bool``).
@@ -116,31 +112,29 @@ class SchemaFieldMeta:
         keyword line never sets directly. This affects rendering only:
         :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface`'s module-section renderer
         skips such fields, but :func:`optionNames`/:func:`scalarOptionNames` (and therefore
-        :func:`buildSchemaFromOptions`/:func:`coercePresentOptions`) deliberately still include
-        them -- they legitimately remain reachable through a later ``>>options`` override (validated
-        dynamically against this very schema once ``name`` resolves to this instance -- see
-        ``stepactions/options.py``), so excluding them there would change the runtime ``>>options``
-        grammar.
+        :func:`buildSchemaFromOptions`/:func:`coercePresentOptions`) still include them, since they
+        remain reachable through a later ``>>options`` override (validated dynamically against this
+        very schema once ``name`` resolves to this instance -- see ``stepactions/options.py``).
     structuralOnly
         The mirror image of ``optionsOverrideOnly``: marks a field that documents a *structural*
         argument -- one naming an existing model object (an element/node set, a material, a
-        surface, the step action's own ``name``) -- which an L4 adapter such as
+        surface, the step action's own ``name``) -- which an adapter such as
         :meth:`~edelweissfe.stepactions.base.stepactionbase.StepActionBase.fromStepActionDefinition`
         resolves and pops from the raw definition *before* the remaining options ever reach
-        :func:`buildSchemaFromOptions`. Such a field is therefore never actually present in the
-        mapping :func:`buildSchemaFromOptions`/:func:`coercePresentOptions` validate, so it is
-        excluded from :func:`optionNames` (and therefore from :func:`scalarOptionNames`,
+        :func:`buildSchemaFromOptions`. Such a field is never actually present in the mapping
+        :func:`buildSchemaFromOptions`/:func:`coercePresentOptions` validate, so it is excluded
+        from :func:`optionNames` (and therefore from :func:`scalarOptionNames`,
         :func:`resolveCaseInsensitiveOptions`'s valid-key set, and the missing-required check) --
         the opposite exclusion from ``optionsOverrideOnly``, which stays *in* those but is excluded
-        from rendering. A ``structuralOnly`` field remains fully rendered by
+        from rendering. A ``structuralOnly`` field is still fully rendered by
         :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface` (in its required/optional
-        arguments section, ordered like any other field): the whole point is to let a schema
-        document a structural argument's name/description/required-ness without the adapter code
-        that pops it having to change at all.
+        arguments section, ordered like any other field), so a schema can document a structural
+        argument's name/description/required-ness without the adapter code that pops it changing
+        at all.
     updateOnly
         Marks a scalar field that belongs only to a keyword's ``update<keyword>`` partial
         re-declaration grammar, not to the base keyword's own line grammar -- e.g.
-        ``distributedload``'s ``delta``, which only ``updatedistributedload`` ever declared.
+        ``distributedload``'s ``delta``, which only ``updatedistributedload`` declares.
         Affects rendering only, exactly like ``optionsOverrideOnly``: excluded from the *base*
         keyword's :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface` block, but left in
         :func:`optionNames`/:func:`scalarOptionNames` since the field is a real, validated part of
@@ -148,16 +142,11 @@ class SchemaFieldMeta:
     documentedDefault
         Overrides the default value shown by :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface`
         for an optional field, when it differs from the dataclass field's own (runtime) default --
-        mirroring ``edelweissfe.utils.inputlanguage.OptionalKeywordArg.documentedDefault``, the
-        existing precedent for this exact split. The one real case today is ``bodyforce.delta``: the
-        legacy ``Module`` documented its default as ``0``, but the field's actual runtime default is
-        ``None`` (the
-        sentinel :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` needs to tell "not
-        given" apart from a real value) -- changing the runtime default to match the stale
-        documented one would be a behavior change, and changing the documented one would be an
-        undiscussed golden edit, so the two are recorded separately instead. :data:`MISSING` (the
-        default) means "no override -- render the field's own default", which is the overwhelming
-        common case.
+        mirroring ``edelweissfe.utils.inputlanguage.OptionalKeywordArg.documentedDefault``. One
+        example is ``bodyforce.delta``, whose documented default is ``0`` while the field's actual
+        runtime default is ``None`` (the sentinel :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`
+        needs to tell "not given" apart from a real value). :data:`MISSING` (the default) means "no
+        override -- render the field's own default", which is the common case.
     """
 
     description: str
@@ -192,7 +181,7 @@ def schemaField(
     updateOnly: bool = False,
     documentedDefault: Any = MISSING,
 ) -> dataclasses.Field:
-    """Declare one field of an L2 option schema dataclass.
+    """Declare one field of an option schema dataclass.
 
     This is a thin wrapper around :func:`dataclasses.field` that attaches a
     :class:`SchemaFieldMeta` under a well-known metadata key, instead of maintaining a parallel
@@ -234,7 +223,7 @@ def schemaField(
         keyword's own line/``>>``-block grammar -- see :class:`SchemaFieldMeta`. Affects rendering
         only.
     structuralOnly
-        Marks this field as documenting a structural argument that an L4 adapter resolves and pops
+        Marks this field as documenting a structural argument that the adapter resolves and pops
         before the schema is built, so it is never actually validated by
         :func:`buildSchemaFromOptions` -- see :class:`SchemaFieldMeta`. Affects
         :func:`optionNames`/construction-time validation only; rendering is unaffected (the field
@@ -287,7 +276,7 @@ def subKeywordField(
     optionName: str | None = None,
     required: bool = False,
 ) -> dataclasses.Field:
-    """Declare one field of an L2 schema as a repeatable *sub-keyword block*.
+    """Declare one field of a schema as a repeatable *sub-keyword block*.
 
     Several keywords of the input language are not flat lists of options but carry nested,
     repeatable blocks introduced by the module-level keyword identifier ``>>``. ``*output,
@@ -298,7 +287,7 @@ def subKeywordField(
         >>perElement, fieldOutput=Stress
         >>configuration, overwrite=yes
 
-    Each block has its own option set, so the natural L2 representation is a schema per block kind
+    Each block has its own option set, so the natural representation is a schema per block kind
     plus, on the enclosing schema, one field per kind holding a **tuple** of block instances. The
     tuple (rather than a single instance) is what makes repetition representable, and it is
     immutable, so it does not compromise the enclosing dataclass's ``frozen=True``.
@@ -306,10 +295,9 @@ def subKeywordField(
     The field defaults to the empty tuple, i.e. "no block of this kind was given". A block kind
     that must appear at least once can say so via ``required=True``.
 
-    This is deliberately generic rather than special-cased for ensight: roughly two dozen modules
-    use ``>>`` sub-keywords today (all of ``sections/``, thirteen ``stepactions/``,
-    ``utils/fieldoutput.py``, ``modelmodifiers/adaptivity/hadaptivity.py``), so P4 needs exactly
-    this mechanism.
+    This mechanism is generic, not special-cased for ensight: any module (``sections/``,
+    ``stepactions/``, ``utils/fieldoutput.py``, ``modelmodifiers/adaptivity/hadaptivity.py``, ...)
+    that needs repeatable ``>>`` sub-keyword blocks uses it.
 
     Parameters
     ----------
@@ -339,22 +327,20 @@ def subKeywordField(
 
 
 def datalineField(*, description: str, required: bool = False) -> dataclasses.Field:
-    """Declare one field of an L2 schema as this keyword's *dataline payload*.
+    """Declare one field of a schema as this keyword's *dataline payload*.
 
     A ``.inp`` keyword block carries, below its own ``key=value`` line, a body of raw dataline
     strings (element connectivity, node coordinates, an elSet's ranges, a material's property
     rows, `>>`-less option lines, raw Python source, ...). :func:`schemaField` and
     :func:`subKeywordField` both model *typed, named* pieces of grammar; a dataline field is
     neither -- its shape varies per keyword and is not a flat option mapping nor a repeatable
-    named block. So, per the plan's pinned decision (``PLAN_INPUT_SYSTEM_UNIFICATION.md`` §6.1),
-    this field records only **presence, documentation, and required-ness** -- never a column or
-    table description -- and the owning class is responsible for turning the raw
+    named block. This field records only **presence, documentation, and required-ness** -- never a
+    column or table description -- and the owning class is responsible for turning the raw
     ``list[str]``/``list[Mapping[str, Any]]`` datalines into whatever it stores here, via its own
-    ``fromDatalines`` classmethod (see :class:`DatalineAggregatingSchema`, now the general,
-    uniform way any keyword consumes datalines -- not only the aggregating/heterogeneous-job case
-    it was first built for).
+    ``fromDatalines`` classmethod (see :class:`DatalineAggregatingSchema`, the general, uniform way
+    any keyword consumes datalines).
 
-    A datalineField is deliberately excluded from :func:`optionNames`/:func:`scalarOptionNames`
+    A datalineField is excluded from :func:`optionNames`/:func:`scalarOptionNames`
     (and therefore from :func:`buildSchemaFromOptions`'s ``key=value`` validation and
     missing-required check): it is never reachable as a scalar option on the keyword's own line,
     and its required-ness is the owning class's concern (raise from ``fromDatalines`` if the
@@ -436,7 +422,7 @@ def optionNames(schemaCls: type) -> dict[str, dataclasses.Field]:
     A field declared via :func:`datalineField` is excluded: it is filled by the owning class's own
     dataline interpretation, not by a ``key=value``/`` >>`` name the parser resolves here -- see
     that function's docstring. A field declared with ``structuralOnly=True`` is excluded too: it
-    documents a structural argument an L4 adapter already resolves and pops before the schema is
+    documents a structural argument the adapter already resolves and pops before the schema is
     built, so it is never actually present in the mapping this function's callers validate -- see
     :class:`SchemaFieldMeta`.
 
@@ -527,10 +513,10 @@ def datalineFieldMeta(schemaCls: type) -> SchemaFieldMeta | None:
 
 
 class OptionSchemaProvider:
-    """Mixin declaring that a class owns an L2 option schema, exposed as the class attribute
+    """Mixin declaring that a class owns an option schema, exposed as the class attribute
     :attr:`schema`.
 
-    This is the convention by which a schema reaches the L3 registry along the *dotted-string*
+    This is the convention by which a schema reaches the registry along the *dotted-string*
     resolution paths -- the built-in table and, crucially, third-party ``importlib.metadata`` entry
     points. ``registry.register(..., schema=...)`` can pass a schema explicitly, but nothing can
     pass an argument alongside a dotted string in a ``pyproject.toml``; without this convention the
@@ -539,48 +525,40 @@ class OptionSchemaProvider:
     drift apart or be registered inconsistently.
 
     Deriving from this mixin is what makes a class's schema discoverable; the default of ``None``
-    means "no schema declared yet", which is the correct answer for every module that has not been
-    converted to L1/L2 yet, so a base class can adopt the mixin before its subclasses are ported.
+    means "this class declares no schema", which lets a base class adopt the mixin independently
+    of whether its subclasses declare one.
 
     The declared default is also why :func:`schemaOf` needs no ``getattr``/``hasattr`` probing
     (which this codebase's conventions forbid): the attribute is guaranteed to exist on every
     subclass, so a plain attribute access suffices.
     """
 
-    #: The L2 schema dataclass describing the options this class accepts, or ``None`` if it does
+    #: The schema dataclass describing the options this class accepts, or ``None`` if it does
     #: not declare one (yet). Overridden as a plain class attribute by concrete subclasses.
     schema: ClassVar[type | None] = None
 
 
 class DatalineAggregatingSchema:
-    """Base for an L2 schema that is built from *all* datalines of one keyword block at once.
+    """Base for a schema that is built from *all* datalines of one keyword block at once.
 
-    This is **the** general, uniform mechanism by which any keyword turns its raw dataline payload
+    This is the general, uniform mechanism by which any keyword turns its raw dataline payload
     (element connectivity, node coordinates, elSet ranges, surface faces, material property rows,
-    ``>>``-less option datalines, raw Python source, ...) into typed data -- not a meshplot-only
-    special case. :func:`datalineField` marks *that a keyword has* a dataline payload (presence +
-    doc + required, on the enclosing schema); :meth:`fromDatalines` is where the owning class
-    actually *interprets* that payload, however it is shaped for that particular keyword. Relocate
-    existing interpretation code here verbatim when porting a keyword (e.g.
-    ``abqmodelconstructor.py``'s element/node/elSet loops, in a later phase of
-    ``PLAN_INPUT_SYSTEM_UNIFICATION.md``) rather than reinventing a table-description DSL --- see
-    that plan's §6.1, a pinned decision.
+    ``>>``-less option datalines, raw Python source, ...) into typed data. :func:`datalineField`
+    marks *that a keyword has* a dataline payload (presence + doc + required, on the enclosing
+    schema); :meth:`fromDatalines` is where the owning class actually *interprets* that payload,
+    however it is shaped for that particular keyword.
 
-    The ordinary L4 adapter treats each dataline as an independent module instance: it builds one
-    schema per dataline and calls the L1 constructor once per dataline. That default is exactly
+    The ordinary adapter treats each dataline as an independent module instance: it builds one
+    schema per dataline and calls the constructor once per dataline. That default is exactly
     right for a keyword whose datalines are a flat, uniform ``key=value`` mapping repeated per
     instance. ``DatalineAggregatingSchema`` is for the opposite shape: a single instance built from
-    *all* datalines of the block *at once*, which every one of the cases in the paragraph above
-    needs to some degree, and which ``meshplot`` was merely the first to formalize -- a single
-    instance aggregates a *heterogeneous list of jobs*, one per dataline, with the kind of job
-    selected by an option value on the line itself (``meshplot``'s
+    *all* datalines of the block *at once*, aggregating a *heterogeneous list of jobs*, one per
+    dataline, with the kind of job selected by an option value on the line itself (``meshplot``'s
     ``create=perNode|perElement|xyData|meshOnly``, plus its orthogonal ``saveFigure``). Neither a
     flat schema nor :func:`subKeywordField` expresses that: the jobs are not sub-keyword blocks and
     they do not share one option set.
 
-    Rather than teach the generic adapter about tag options, arm tables and presence flags -- a
-    third schema pattern, in the framework, for a module shape we do not want to encourage -- a
-    schema of this kind takes responsibility for its own dataline interpretation in
+    A schema of this kind takes responsibility for its own dataline interpretation in
     :meth:`fromDatalines`, and the adapter dispatches on this base class (a type check, like
     :func:`schemaOf`, not attribute probing).
 
@@ -620,7 +598,7 @@ class DatalineAggregatingSchema:
 
 
 def schemaOf(target: Any) -> type | None:
-    """Return the L2 schema declared by ``target``, or ``None`` if it declares none.
+    """Return the schema declared by ``target``, or ``None`` if it declares none.
 
     Used by :func:`edelweissfe.config.registry.lookup` to attach a schema to an object it resolved
     from a dotted string.
@@ -628,7 +606,7 @@ def schemaOf(target: Any) -> type | None:
     ``None`` is returned for anything that is not a class deriving from
     :class:`OptionSchemaProvider`. That covers a registry target that is a plain module-level
     *function* rather than a class (e.g. ``executePythonCode``'s ``Generator``, whose datalines are
-    raw code rather than a flat option mapping, so it declares ``schema = None`` deliberately) --
+    raw code rather than a flat option mapping, so it declares ``schema = None``) --
     dispatching on the type here rather than probing for an attribute is what keeps that case an
     explicit, documented ``None`` instead of an ``AttributeError`` at lookup time.
 
@@ -652,15 +630,12 @@ def coerceValue(value: Any, dtype: type) -> Any:
 
     Mirrors ``edelweissfe.utils.inputlanguage.KeywordArg.getValueFromKwargs``: for ``dtype is
     bool`` this delegates to :func:`edelweissfe.utils.misc.asBool` (which passes a real ``bool``
-    through unchanged and otherwise parses a truth-string via ``strtobool``); a real ``strtobool``
-    call on an already-``bool`` value raises ``AttributeError`` (it unconditionally calls
-    ``.lower()``), which is exactly the P0 bug this module deliberately does not reproduce.
+    through unchanged and otherwise parses a truth-string via ``strtobool``). Do not call
+    ``strtobool`` directly on a value that may already be a ``bool``: it unconditionally calls
+    ``.lower()`` and raises ``AttributeError`` on a real ``bool``.
 
     For every other ``dtype``, a value that is already an instance of ``dtype`` is returned
-    unchanged; otherwise ``dtype(value)`` is attempted. This does not change behavior relative to
-    the existing (unconditional ``dtype(value)``) casting for ``int``/``float``/``str``, since
-    those constructors are idempotent on already-correct-type input -- it only avoids relying on
-    that idempotence implicitly.
+    unchanged; otherwise ``dtype(value)`` is attempted.
 
     Parameters
     ----------
@@ -695,10 +670,9 @@ def coerceValue(value: Any, dtype: type) -> Any:
 def resolveCaseInsensitiveOptions(schemaCls: type, options: Mapping[str, Any]) -> dict[str, Any]:
     """Map possibly-mis-cased option keys onto a schema dataclass's exact-case field names.
 
-    This is the one place case-insensitivity is allowed to enter the L2/L4 boundary (rule (c) of
-    the target architecture): the schema class itself (``schemaCls``) is always exact-case, but an
-    ``.inp`` file (or a careless caller) may spell an option key in any case. This utility performs
-    the case-fold lookup once, so schema instances never need to.
+    The schema class itself (``schemaCls``) is always exact-case, but an ``.inp`` file (or a
+    careless caller) may spell an option key in any case. This utility performs the case-fold
+    lookup once, so schema instances never need to.
 
     Parameters
     ----------
@@ -757,23 +731,19 @@ def buildSchemaFromOptions(
 ) -> Any:
     """Build an instance of a schema dataclass from a (possibly mis-cased, string-valued) mapping.
 
-    This is the L4-facing counterpart of the pre-schema cast-and-default/kwargs-check mechanism it
-    replaced: resolve case-insensitive keys (:func:`resolveCaseInsensitiveOptions`), coerce each
-    present value to its field's declared ``dtype`` (:func:`coerceValue`), and let the dataclass
+    Resolves case-insensitive keys (:func:`resolveCaseInsensitiveOptions`), coerces each present
+    value to its field's declared ``dtype`` (:func:`coerceValue`), and lets the dataclass
     constructor fill in defaults for any field that was not present in ``options``, expressed as an
     ordinary Python default value.
 
     An option whose value is ``None`` is treated as **not supplied**, so the field's default
-    applies. This is deliberate and is decided here, once, rather than in each L4 adapter. The
-    ``.inp`` parser represents "the user did not specify this optional argument" as a key present
-    with the value ``None`` (see e.g. ``inputfilehelpers.py``'s ``definition["name"] is not None``
-    test), and coercing that ``None`` would be actively harmful rather than merely useless: for a
-    ``str``-typed option, ``coerceValue(None, str)`` yields the *string* ``"None"``, which is
-    truthy, so "the user said nothing" would silently become a real value -- an export filename
-    literally called ``None``, for instance. The pre-schema mechanism avoided this only by
-    construction, coercing exclusively the keys actually present in the kwargs; stating the rule
-    explicitly here means an adapter cannot reintroduce the trap by passing definition-level keys
-    straight in.
+    applies, decided here once rather than in each adapter. The ``.inp`` parser represents "the
+    user did not specify this optional argument" as a key present with the value ``None`` (see e.g.
+    ``inputfilehelpers.py``'s ``definition["name"] is not None`` test), and coercing that ``None``
+    would be actively harmful rather than merely useless: for a ``str``-typed option,
+    ``coerceValue(None, str)`` yields the *string* ``"None"``, which is truthy, so "the user said
+    nothing" would silently become a real value -- an export filename literally called ``None``,
+    for instance.
 
     Key *names* are still validated before values are examined, so a misspelled option raises even
     if its value happens to be ``None``, and a required field given ``None`` is reported as missing

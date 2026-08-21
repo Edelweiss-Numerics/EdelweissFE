@@ -26,26 +26,24 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``InputContext``: a plain parameter object for the L4 adapter layer (P1).
+"""``InputContext``: a plain parameter object for the adapter layer.
 
-Today, an L4-shaped helper such as ``createFieldOutputFromInputFile(inputfile, model, journal)``
-(``edelweissfe/helpers/inputfilehelpers.py:71``) and the ``outputManagerFactory(name, FEModel,
-fieldOutputController, moduleOptions, journal, plotter, **kwargs)`` shape (finding #6 of the plan)
-both thread the same handful of collaborators -- the model, the journal, the plotter, the
-field-output controller -- through call frame after call frame as positional parameters. This is
-the "``moduleOptions`` disease": every new construction helper added along the way has to repeat
+Several adapter-shaped helpers -- e.g. ``createFieldOutputFromInputFile(inputfile, model, journal)``
+(``edelweissfe/helpers/inputfilehelpers.py:71``) and ``outputManagerFactory(name, FEModel,
+fieldOutputController, moduleOptions, journal, plotter, **kwargs)`` -- thread the same handful of
+collaborators (the model, the journal, the plotter, the field-output controller) through call
+frame after call frame as positional parameters, so every new construction helper has to repeat
 the same parameter list, in the same order, or reach for a global instead.
 
 ``InputContext`` replaces the repetition with a single typed, immutable value that is constructed
 once (by whatever assembles a simulation -- ``inputfileparser.py`` today, an EdelweissMeshfree
 script tomorrow) and passed down by reference.
 
-It is deliberately **not** a service locator: it has no lookup methods, performs no registry
-access, and is never mutated after construction (``frozen=True``). It is exactly as "smart" as a
-plain 4-tuple with names -- nothing more. In particular, and per this codebase's explicit
-convention (a ``Journal`` is never a singleton or a global -- see
-``edelweissfe/journal/journal.py``), the ``journal`` field is an ordinary attribute supplied by
-the caller at construction time, not something ``InputContext`` reaches for on its own.
+It is not a service locator: it has no lookup methods, performs no registry access, and is never
+mutated after construction (``frozen=True``) -- it is exactly as "smart" as a plain 4-tuple with
+names. The ``journal`` field is an ordinary attribute supplied by the caller at construction time,
+not something ``InputContext`` reaches for on its own, matching this codebase's convention that a
+``Journal`` is never a singleton or a global (see ``edelweissfe/journal/journal.py``).
 """
 
 from __future__ import annotations
@@ -60,7 +58,7 @@ from edelweissfe.utils.plotter import Plotter
 
 @dataclass(frozen=True)
 class InputContext:
-    """Carries the collaborators an L4 adapter needs to construct L1 objects.
+    """Carries the collaborators the adapter needs to construct a module's objects.
 
     Parameters
     ----------

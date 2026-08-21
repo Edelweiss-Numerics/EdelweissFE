@@ -42,7 +42,7 @@ from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 @dataclass(frozen=True)
 class StepIncrementationSchema:
-    """L2: the standard incrementation options common to every step type (``*step`` keyword
+    """The standard incrementation options common to every step type (``*step`` keyword
     datalines), owned by this module and never mutated from outside it.
 
     Every concrete :class:`StepBase` subclass shares exactly this option set -- there is no

@@ -35,7 +35,7 @@ class AdaptiveStep(StepBase):
     An adaptive incremental step to be used in nonlinear simulations with implicit time integration.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider. Shared with
+    #: Option schema for this step, per OptionSchemaProvider. Shared with
     #: :class:`~edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations`
     #: -- every step type accepts exactly the same incrementation options (see
     #: :meth:`~edelweissfe.steps.base.stepbase.StepBase.__init__`, which validates/coerces against

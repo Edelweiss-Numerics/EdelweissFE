@@ -51,20 +51,18 @@ from edelweissfe.utils.schema import (
 )
 
 #: The ``.inp`` syntax markers: a top-level keyword line starts with ``*``, a ``>>`` sub-keyword
-#: line with ``>>``. The single source of truth now that ``utils/inputlanguage.py`` (which used to
-#: own these two constants) is deleted (``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U4) -- imported from
-#: here by every other module that needs to spell an error message with the right marker.
+#: line with ``>>``. The single source of truth for these two markers, imported from here by every
+#: other module that needs to spell an error message with the right marker.
 keywordIdentifier = "*"
 moduleLevelKeywordIdentifier = ">>"
 
 #: Top-level keywords whose grammar is completed by a further name/generator-dispatched target's
-#: own schema (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U3d-1) -- maps the keyword's casefolded
-#: name to ``(registry category, the keyword-line option name carrying the dispatch value)``.
+#: own schema -- maps the keyword's casefolded name to ``(registry category, the keyword-line
+#: option name carrying the dispatch value)``.
 #: ``step`` is included only for :func:`_expectsPlainDatalines`'s sake -- its ``>>`` grammar is
 #: resolved separately, always via the ``stepaction`` category regardless of the step *type* (see
 #: :func:`_resolveModuleKeywordSchema`), because every step action registers identically onto every
-#: step type in the legacy grammar (``modules = inputLanguage["step"].modules`` in each
-#: ``stepactions/*.py``).
+#: step type.
 _DISPATCH_CATEGORY_BY_KEYWORD = {
     "output": ("outputmanager", "type"),
     "section": ("section", "type"),
@@ -78,17 +76,17 @@ _DISPATCH_CATEGORY_BY_KEYWORD = {
 
 def _updateStepActionSchema(moduleKeyword: str):
     """Return the dedicated ``update<keyword>`` schema for a step action's partial re-declaration
-    in a later step, or ``None`` if this step action has no such companion (U3b,
-    ``PLAN_INPUT_SYSTEM_UNIFICATION.md``).
+    in a later step, or ``None`` if this step action has no such companion.
 
     Only three step actions declare one at all (``dirichlet``, ``distributedload``,
     ``nodeforces``) -- every other step action either has no update path (a re-declaration must
     restate every required argument again) or -- ``options`` -- validates dynamically and never
     reaches this function at all (see the ``isDynamicOptionsKeyword`` branch of
     :func:`parseModuleKeywordLine`). A small explicit table, not a registry category: these
-    ``Update<Name>Schema`` classes are documentation/parser-validation companions the L1 step action
-    itself never references (see e.g. ``stepactions/dirichlet.py``'s own docstring), so they have no
-    home in the ``stepaction`` registry, which maps to the L1 classes.
+    ``Update<Name>Schema`` classes are documentation/parser-validation companions the step action's
+    own constructor never references (see e.g. ``stepactions/dirichlet.py``'s own docstring), so
+    they have no home in the ``stepaction`` registry, which maps to the step action classes
+    themselves.
 
     Parameters
     ----------
@@ -120,8 +118,8 @@ def _allScalarFields(schemaCls: type | None) -> dict:
     """Map every input-file option name of ``schemaCls``'s own scalar (non-dataline,
     non-sub-keyword) fields to its :class:`dataclasses.Field`.
 
-    Deliberately **not** :func:`~edelweissfe.utils.schema.scalarOptionNames`: that function excludes
-    ``structuralOnly`` fields (an L4 adapter pops them before ``buildSchemaFromOptions`` ever sees
+    Not :func:`~edelweissfe.utils.schema.scalarOptionNames`: that function excludes
+    ``structuralOnly`` fields (the adapter pops them before ``buildSchemaFromOptions`` ever sees
     them), but the *parser* must still recognize and require every scalar option a schema declares,
     with no such distinction at all (``structuralOnly``/``optionsOverrideOnly``/``updateOnly`` are
     schema-only rendering/construction concerns, see ``utils/schema.py``'s ``SchemaFieldMeta``).
@@ -172,9 +170,8 @@ def _realScalarFields(schemaCls: type | None) -> dict:
 
 
 def _requiredAndOptionalNames(schemaCls: type | None) -> tuple[list, list]:
-    """Split :func:`_allScalarFields`'s option names into required/optional lists, mirroring the
-    ``[kw.name for kw in kw.requiredArgs]``/``[kw.name for kw in kw.optionalArgs]`` pairs the legacy
-    parser passed to :func:`~edelweissfe.utils.misc.caseInsensitiveKwargsChecker`.
+    """Split :func:`_allScalarFields`'s option names into required/optional lists, the shape
+    :func:`~edelweissfe.utils.misc.caseInsensitiveKwargsChecker` expects.
 
     Parameters
     ----------
@@ -220,11 +217,9 @@ def _coerceKnownFields(schemaCls: type | None, options: dict) -> CaseInsensitive
 
 
 def _resolveDispatchSchemaForKeywordLine(keyword: str, options: dict) -> type | None:
-    """Resolve the L2 schema of the ``type=``/``generator=``-dispatched target hosted by a
+    """Resolve the schema of the ``type=``/``generator=``-dispatched target hosted by a
     top-level keyword's line, so a value meant for *that* target's own options (e.g. a plane
-    section's ``thickness``) written directly on the ``*section`` line is not rejected as unknown --
-    mirroring the legacy hard-coded ``section``/``plane`` fallback in ``parseKeywordLine``,
-    generalized to every dispatch keyword via the registry.
+    section's ``thickness``) written directly on the ``*section`` line is not rejected as unknown.
 
     Parameters
     ----------
@@ -258,11 +253,9 @@ def _resolveDispatchSchemaForKeywordLine(keyword: str, options: dict) -> type | 
 
 
 def _resolveModuleKeywordSchema(topLevelKeyword: str, topLevelOptions: dict, moduleKeyword: str) -> type | None:
-    """Resolve the L2 schema describing one ``>>`` sub-keyword block's own grammar, mirroring the
-    legacy ``Module.getKeyword(keyword)`` lookup (U3d-1, ``PLAN_INPUT_SYSTEM_UNIFICATION.md``).
+    """Resolve the schema describing one ``>>`` sub-keyword block's own grammar.
 
-    For ``*step``, every step action registers identically onto every step type
-    (``modules = inputLanguage["step"].modules`` in each ``stepactions/*.py``), so its ``>>``
+    For ``*step``, every step action registers identically onto every step type, so its ``>>``
     grammar is resolved directly against the ``stepaction`` registry category, independent of the
     step's own ``type=``. Every other keyword's ``>>`` grammar is a
     :func:`~edelweissfe.utils.schema.subKeywordField` of either the dispatch target's own schema
@@ -335,7 +328,7 @@ def _dispatchTargetExpectsPlainDatalines(schemaCls: type | None) -> bool:
     -------
     bool
         Whether a plain dataline is valid here. ``True`` when ``schemaCls`` is ``None``: a dispatch
-        target with no L2 schema at all yet is a genuinely raw-datalines case in every instance that
+        target with no schema at all yet is a genuinely raw-datalines case in every instance that
         exists today (``executePythonCode``'s Python source), so this conservatively allows rather
         than rejecting every real ``.inp`` file exercising it.
     """
@@ -369,12 +362,12 @@ def _expectsPlainDatalines(keyword: str, options: dict) -> bool:
         return keywordSchema is not None and datalineFieldMeta(keywordSchema) is not None
 
     if strCaseCmp(keyword, "step"):
-        # Every step type shares one schema (`steps.base.stepbase.StepIncrementationSchema`,
-        # PLAN_INPUT_SYSTEM_UNIFICATION.md, U4) with only optional fields, so this could dispatch
-        # through `dispatchSchema`/`_dispatchTargetExpectsPlainDatalines` like every other keyword
-        # -- kept as an unconditional `True` anyway since the outcome is identical for both
-        # registered step types and this avoids a resolve-then-recompute round trip on the hottest
-        # keyword in a typical input file.
+        # Every step type shares one schema (`steps.base.stepbase.StepIncrementationSchema`) with
+        # only optional fields, so this could dispatch through
+        # `dispatchSchema`/`_dispatchTargetExpectsPlainDatalines` like every other keyword -- kept
+        # as an unconditional `True` anyway since the outcome is identical for both registered
+        # step types and this avoids a resolve-then-recompute round trip on the hottest keyword in
+        # a typical input file.
         return True
 
     category, optionName = dispatch
@@ -463,7 +456,7 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fil
 
     if isDynamicOptionsKeyword:
         # This keyword's full option set depends on runtime information the parser does not have
-        # (see stepactions/options.py, U3c) -- only 'name' is enforced here; every other key is
+        # (see stepactions/options.py) -- only 'name' is enforced here; every other key is
         # passed through raw for a later stage to validate against whatever it actually resolves to.
         @caseInsensitiveRequiredArgsChecker(["name"])
         def checkKeywordInput(*args, **kwargs):
@@ -533,9 +526,9 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fil
     # Unlike a top-level keyword, no `>>` sub-keyword in the whole grammar ever expects its own
     # plain datalines -- a sub-keyword's own scalar options are declared on its schema's regular
     # fields, never on a dataline payload of its own. So a `datalines` key must never be added here
-    # for any `>>` block -- doing so unconditionally regressed e.g. `>>bodyforce`, whose
-    # `fromStepActionDefinition` hands the whole definition dict to `buildSchemaFromOptions` without
-    # stripping parser bookkeeping keys first.
+    # for any `>>` block: doing so would break e.g. `>>bodyforce`, whose `fromStepActionDefinition`
+    # hands the whole definition dict to `buildSchemaFromOptions` without stripping parser
+    # bookkeeping keys first.
 
     return keyword, options
 

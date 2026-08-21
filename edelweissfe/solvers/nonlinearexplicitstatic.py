@@ -154,11 +154,11 @@ def getRungeKuttaParameters(rungeKuttaStages: int) -> tuple[dict, dict, dict]:
 
 @dataclass(frozen=True)
 class NESTSchema:
-    """L2: the options of the ``*solver`` datalines and of an ``>>options`` block routed to this
+    """The options of the ``*solver`` datalines and of an ``>>options`` block routed to this
     solver, owned by this module and never mutated from outside it.
 
-    Mirrors :attr:`NEST.SolverSpecificOptions` one-for-one (see :class:`NISTSchema` for why this
-    schema coexists with the plain ``self.options`` dict rather than replacing it). The
+    Mirrors :attr:`NEST.SolverSpecificOptions` one-for-one; the plain ``self.options`` dict remains
+    the actual source of truth consulted at runtime (see :class:`NISTSchema` for why). The
     ``runge-kutta-*`` option names are not valid Python identifiers, hence the ``optionName``
     indirection.
     """
@@ -200,7 +200,7 @@ class NEST(NIST):
     supportsMPC = False
     supportsModelModifiers = False
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this solver, per OptionSchemaProvider.
     schema = NESTSchema
 
     SolverSpecificOptions = {
@@ -283,7 +283,8 @@ class NEST(NIST):
         self.computationTimes = createTimingDict()
 
         # self.options already reflects every >>options, name=<this solver's name>, ... block applied
-        # so far -- see the equivalent comment in NIST.solveStep.
+        # so far, applied as each block is constructed or re-declared; there is nothing to reset or
+        # re-fetch here.
 
         # get parameters for runge kutta scheme
         self.rkAlpha, self.rkOmega, self.rkLambda = getRungeKuttaParameters(self.options.get("runge-kutta-stages", 2))
