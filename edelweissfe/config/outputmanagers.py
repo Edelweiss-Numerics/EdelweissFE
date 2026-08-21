@@ -41,9 +41,7 @@ They are defined globally:
 
 """
 
-# This module deliberately holds no code any more. P2 replaced its construction protocol
-# (``getOutputManagerFactoryByName``) and P4 replaced its resolver (``getOutputManagerClass``, an
-# import-by-convention lookup with no callers left) with the L3 registry's ``outputmanager``
+# This module holds no code: output managers are resolved through the registry's ``outputmanager``
 # category, see :mod:`edelweissfe.config.registry`. The module survives for the docstring above,
 # which is user-facing prose rendered by ``doc/source/documentation/output.rst`` via
 # ``.. automodule:: edelweissfe.config.outputmanagers``; deleting the file would break that build.

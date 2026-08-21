@@ -41,19 +41,16 @@ Example syntax:
         nSet=right
         referencePoint=rBottom
 """
+
 from edelweissfe.config import registry
 
 
 def getConstraintClass(name: str) -> type:
-    """Get the class type of the requested constraint.
+    """Return the class implementing constraint type ``name``.
 
-    Resolved through the L3 registry (``constraint`` category) rather than by importing
-    ``edelweissfe.constraints.<name>`` directly. That import-by-convention could only ever find
-    constraints living *inside* this package, so an external package -- EdelweissMeshfree, a plugin
-    -- had no way to contribute one; going through the registry means a built-in, an entry point and
-    an in-process :func:`~edelweissfe.config.registry.register` call are all equally reachable here.
-    An unknown name now raises :class:`~edelweissfe.config.registry.RegistryLookupError` naming the
-    available constraints, instead of a bare ``ModuleNotFoundError``.
+    Resolved through the registry (``constraint`` category), which lets built-in constraints,
+    entry points, and in-process :func:`~edelweissfe.config.registry.register` calls all be
+    reached the same way.
 
     Parameters
     ----------
@@ -64,6 +61,11 @@ def getConstraintClass(name: str) -> type:
     -------
     type
         The constraint class type.
+
+    Raises
+    ------
+    edelweissfe.config.registry.RegistryLookupError
+        If no constraint is registered under ``name``.
     """
 
     constraintClass, _ = registry.lookup("constraint", name)

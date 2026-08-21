@@ -46,15 +46,11 @@ from edelweissfe.config import registry
 
 
 def stepActionFactory(name: str) -> type:
-    """Get the class type of the requested step action.
+    """Return the class implementing step action ``name``.
 
-    Resolved through the L3 registry (``stepaction`` category) rather than by importing
-    ``edelweissfe.stepactions.<name>`` directly. That import-by-convention could only ever find step
-    actions living *inside* this package, so an external package -- EdelweissMeshfree, a plugin --
-    had no way to contribute one; going through the registry means a built-in, an entry point and an
-    in-process :func:`~edelweissfe.config.registry.register` call are all equally reachable here.
-    An unknown name now raises :class:`~edelweissfe.config.registry.RegistryLookupError` naming the
-    available step actions, instead of a bare ``ModuleNotFoundError``.
+    Resolved through the registry (``stepaction`` category), which lets built-in step actions,
+    entry points, and in-process :func:`~edelweissfe.config.registry.register` calls all be
+    reached the same way.
 
     Parameters
     ----------
@@ -65,6 +61,11 @@ def stepActionFactory(name: str) -> type:
     -------
     type
         The step action class type.
+
+    Raises
+    ------
+    edelweissfe.config.registry.RegistryLookupError
+        If no step action is registered under ``name``.
     """
 
     stepActionClass, _ = registry.lookup("stepaction", name)

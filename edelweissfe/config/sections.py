@@ -41,8 +41,7 @@ with properties, such as materials.
         all
 """
 
-# This module deliberately holds no code any more. The L1/L2/L4 split replaced its construction
-# protocol (``getSectionFactoryByName``) with the L3 registry's ``section`` category, see
-# :mod:`edelweissfe.config.registry`. The module survives for the docstring above, which is
-# user-facing prose rendered by ``doc/source/documentation/sections.rst`` via
-# ``.. automodule:: edelweissfe.config.sections``; deleting the file would break that build.
+# This module holds no code. Sections are resolved through the ``section`` category of
+# :mod:`edelweissfe.config.registry`. The docstring above is rendered by Sphinx via
+# ``.. automodule:: edelweissfe.config.sections`` in ``doc/source/documentation/sections.rst``;
+# do not delete this file.

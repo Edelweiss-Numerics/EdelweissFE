@@ -52,7 +52,7 @@ from edelweissfe.config import registry
 def getSolverByName(name: str) -> type:
     """Get the class type of the requested solver.
 
-    Resolved through the L3 registry (``solver`` category) rather than through a hand-maintained
+    Resolved through the registry (``solver`` category) rather than through a hand-maintained
     table private to this module. Such a table could only ever list solvers living *inside* this
     package, so an external package -- EdelweissMeshfree, a plugin -- had no way to contribute one;
     going through the registry means a built-in, an entry point and an in-process

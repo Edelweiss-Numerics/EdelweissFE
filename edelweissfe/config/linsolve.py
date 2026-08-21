@@ -47,36 +47,21 @@ def getDefaultLinSolver() -> Callable:
     """
 
     try:
-        # symbolic-factorization reuse is opt-in only, see the pardiso factory; passing an empty
-        # option mapping here intentionally matches that safe default.
-        #
-        # Routed through the same seam as a named request rather than constructing PardisoSolver
-        # directly, so there is exactly one place that knows how a pardiso solver is built. The
-        # ImportError semantics are unchanged: the factory imports the extension inside its own
-        # body, so an install without it still raises ImportError from this call, and still falls
-        # back to scipy -- which is now the `superlu` factory rather than a duplicate lambda.
+        # An empty option mapping matches PARDISO's safe default: symbolic-factorization reuse is
+        # opt-in only, see the pardiso factory. If the PARDISO extension is not installed, the
+        # factory raises ImportError, which is caught below to fall back to SciPy's superlu.
         return getLinSolverByName("pardiso", {})
     except ImportError:
         return getLinSolverByName("superlu", {})
 
 
 def getLinSolverByName(linsolverName: str, opts) -> Callable:
-    """Get the linear solver registered under ``linsolverName``, configured with ``opts``.
+    """Return the linear solver registered under ``linsolverName``, configured with ``opts``.
 
-    Resolved through the L3 registry (``linsolver`` category), which replaces a nine-arm ``if/elif``
-    chain of local imports. That chain could only ever name solvers living inside this package, so an
-    external package -- EdelweissMeshfree, a plugin -- had no way to contribute one; and its nine
-    arms had four different shapes (inline SciPy lambdas, an option-constructed class, plain
-    module-level functions, and bound methods of option-constructed objects), which is why this was
-    the last category folded in. The uniform shape they collapse to is a module-level
-    ``createSolver(opts) -> Callable[[A, b], x]`` factory per ``linsolve`` subpackage, which is what
-    the registry's dotted strings point at. Each factory keeps the
-    option handling that used to live in this function's corresponding arm, including the tolerance
-    for a non-mapping ``opts``.
-
-    An unknown name now raises :class:`~edelweissfe.config.registry.RegistryLookupError` -- a
-    ``LookupError``, naming the available solvers and suggesting a similar one -- instead of
-    ``AttributeError("invalid linear solver ... requested")``.
+    Resolved through the registry (``linsolver`` category). Each ``linsolve`` subpackage provides
+    a module-level ``createSolver(opts) -> Callable[[A, b], x]`` factory, which the registry's
+    dotted strings point at and which handles its own option parsing, including the case of a
+    non-mapping ``opts``.
 
     Parameters
     ----------
@@ -97,9 +82,8 @@ def getLinSolverByName(linsolverName: str, opts) -> Callable:
     edelweissfe.config.registry.RegistryLookupError
         If no linear solver is registered under ``linsolverName``.
     ImportError
-        If the requested solver's optional backend is not available in this installation. Raised by
-        the factory, not by the lookup, and deliberately not caught here -- see
-        :func:`getDefaultLinSolver`, which relies on it.
+        If the requested solver's optional backend is not available in this installation. Raised
+        by the factory and not caught here; see :func:`getDefaultLinSolver`, which relies on it.
     """
 
     factory, _ = registry.lookup("linsolver", linsolverName)

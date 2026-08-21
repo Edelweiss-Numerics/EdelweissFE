@@ -31,26 +31,16 @@ from edelweissfe.utils.misc import strCaseCmp
 
 
 def getMaterialClass(materialName: str, provider: str = None) -> type:
-    """Get the the requested material class.
+    """Return the class implementing material ``materialName`` for the given ``provider``.
 
-    The ``provider`` dispatch below is deliberately an explicit table and **not** a registry lookup:
-    a provider selects a *namespace*, not a variant of one lookup. Only ``edelweiss`` addresses
-    anything by name; ``marmotmaterial`` ignores ``materialName`` and returns ``None`` (see below).
-    There is nothing per-name to register for it, so it stays here.
+    ``provider`` selects a namespace, not a variant of one lookup, and is dispatched via an
+    explicit table rather than the registry. The ``marmotmaterial`` provider ignores
+    ``materialName`` and returns ``None``: a Marmot material has no Python class, since it is
+    instantiated inside the C++/Cython element wrapper from its name and property array. ``None``
+    signals the caller to keep the material as a ``{"name": ..., "properties": ...}`` record
+    instead of constructing an object (see ``AbqModelConstructor.createMaterialsFromInputFile``).
 
-    **Returning ``None`` for the ``marmotmaterial`` provider is deliberate, not a missing case.** A
-    Marmot material has no Python class at all -- it is instantiated inside the C++/Cython element
-    wrapper from its name plus its property array -- so there is nothing for this function to hand
-    back. ``None`` is the caller's signal to keep the material as a ``{"name": ..., "properties":
-    ...}`` record instead of constructing an object -- see
-    ``AbqModelConstructor.createMaterialsFromInputFile``, which branches on exactly that.
-
-    The ``edelweiss`` branch is resolved through the L3 registry (``material`` category), which
-    replaces an eleven-arm ``if/elif`` chain of local imports. Besides being one table instead of
-    eleven branches, that chain could only ever name materials living *inside* this package, so an
-    external package -- EdelweissMeshfree, a plugin -- had no way to contribute one. An unknown name
-    now raises :class:`~edelweissfe.config.registry.RegistryLookupError` naming the available
-    materials, instead of ``Exception("This material type doesn't exist (yet)...")``.
+    The ``edelweiss`` provider is resolved through the registry (``material`` category).
 
     Parameters
     ----------
@@ -63,6 +53,11 @@ def getMaterialClass(materialName: str, provider: str = None) -> type:
     -------
     type
         The material provider class type, or ``None`` for the ``marmotmaterial`` provider.
+
+    Raises
+    ------
+    edelweissfe.config.registry.RegistryLookupError
+        If ``provider`` is ``edelweiss`` and no material is registered under ``materialName``.
     """
 
     if provider is None:

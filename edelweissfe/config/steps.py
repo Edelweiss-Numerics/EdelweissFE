@@ -38,16 +38,10 @@ from edelweissfe.config import registry
 
 
 def getStepClassByType(stepType: str) -> type:
-    """Get the class type of the requested step type.
+    """Return the class implementing step type ``stepType``.
 
-    Resolved through the L3 registry (``step`` category) rather than through this module's own
-    ``stepLibrary`` table of ``(module, class)`` pairs. That table could only ever list steps living
-    *inside* this package, so an external package -- EdelweissMeshfree, a plugin -- had no way to
-    contribute one; going through the registry means a built-in, an entry point and an in-process
-    :func:`~edelweissfe.config.registry.register` call are all equally reachable here. Names remain
-    case-insensitive, as ``stepLibrary`` already made them by casefolding its keys per call. An
-    unknown type now raises :class:`~edelweissfe.config.registry.RegistryLookupError` naming the
-    available step types, instead of a ``KeyError``.
+    Resolved through the registry (``step`` category). Step type names are matched
+    case-insensitively.
 
     Parameters
     ----------
@@ -58,6 +52,11 @@ def getStepClassByType(stepType: str) -> type:
     -------
     type
         The step class type.
+
+    Raises
+    ------
+    edelweissfe.config.registry.RegistryLookupError
+        If no step is registered under ``stepType``.
     """
 
     stepClass, _ = registry.lookup("step", stepType)

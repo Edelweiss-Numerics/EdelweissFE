@@ -26,11 +26,11 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""L3 lazy registry for the input-language redesign (P1).
+"""Lazy registry mapping ``(category, name)`` to the object that implements it.
 
-Maps ``(category, name)`` to the implementing object (a class, or occasionally a factory
-function -- see the coverage notes below) that EdelweissFE's own modules or third-party packages
-(EdelweissMeshfree, plugins) provide for that name.
+Used both by the ``.inp`` parser (to resolve a keyword/type name to its implementing class) and
+directly by third-party packages (EdelweissMeshfree, plugins) that need the same objects without
+going through the parser.
 
 Four properties are load-bearing; the first three are each covered by a dedicated test in
 ``tests/test_registry.py``:
@@ -42,82 +42,52 @@ Four properties are load-bearing; the first three are each covered by a dedicate
    name)`` pair.
 2. **Built-ins work with a stale editable install.** Entry points declared in a package's
    ``pyproject.toml`` only materialize in ``importlib.metadata`` after ``pip install -e .`` is
-   re-run -- so a registry that relies solely on entry-point discovery would leave a fresh
-   checkout of EdelweissFE itself broken until someone remembers to reinstall it. To avoid that,
-   EdelweissFE's own modules are additionally listed in the static ``_BUILTINS`` table below as
-   plain ``"module.path:AttrName"`` strings -- ordinary Python string literals, requiring no
-   metadata regeneration whatsoever -- and entry points are layered *on top* of that table for
-   third-party discovery.
+   re-run, so EdelweissFE's own modules are additionally listed in the static ``_BUILTINS`` table
+   below as plain ``"module.path:AttrName"`` strings, requiring no metadata regeneration. Entry
+   points are layered *on top* of that table for third-party discovery.
 3. **Thread-safe memoization.** ``lookup()`` caches the resolved object in ``_resolved`` so a
    given ``(category, name)`` is only imported once. Under free-threading (``PYTHON_GIL=0``),
    multiple threads can call ``lookup()`` for the same key concurrently; see the docstring of
    :func:`lookup` for the chosen strategy.
-4. **Names are case-insensitive, deliberately, and that belongs here rather than in the input-file
-   front-end.** Both ``category`` and ``name`` are casefolded on the way in (:func:`lookup`,
-   :func:`register`) and stored casefolded in ``_BUILTINS``. This is not a convenience shortcut and
-   should not be "corrected" to exact matching: the whole point of this registry is that an
-   external package (EdelweissMeshfree, a plugin) reaches these modules *without* the ``.inp``
-   parser in the loop, so if case-insensitivity lived only in the parser, the same name would
-   resolve differently depending on which front-end it arrived through. It is also what 12 of the
-   13 ``config/*.py`` registries this replaces already did via ``name.lower()``; the lone
-   exception, ``config/solvers.py``, is case-sensitive, so solver names becoming case-insensitive
-   is this registry's one behavioral change (strictly more permissive -- no existing ``.inp``
-   changes meaning); rule (c) is amended to say so. Casefolded keys widen the window for
-   registration collisions, which is why every way of claiming a name now
-   raises :class:`RegistryConflictError` instead of silently overwriting -- see that class.
+4. **Names are case-insensitive.** Both ``category`` and ``name`` are casefolded on the way in
+   (:func:`lookup`, :func:`register`) and stored casefolded in ``_BUILTINS``, so a name resolves
+   the same way whether it arrives through the ``.inp`` parser or directly from an external
+   package. Casefolded keys widen the chance of two callers claiming the same name, which is why
+   every way of claiming a name raises :class:`RegistryConflictError` instead of silently
+   overwriting -- see that class.
 
 Built-in coverage
 ------------------
-The ``_BUILTINS`` table below currently covers these categories, enumerated by hand from the
-corresponding ``edelweissfe`` subpackage (see the module docstring history / this branch's report
-for exactly how each list was derived):
+The ``_BUILTINS`` table below covers these categories:
 
 ``outputmanager`` (10), ``section`` (3), ``constraint`` (12), ``stepaction`` (13),
 ``generator`` (10), ``analyticalfield`` (3), ``solver`` (7), ``step`` (2), ``modelmodifier`` (1),
 ``statetransferstrategy`` (3), ``element`` (42), ``material`` (7), ``linsolver`` (9).
 
-``keyword`` is the eventual single source the ``.inp`` parser consults for every top-level keyword
+``keyword`` is the single source the ``.inp`` parser consults for every top-level keyword
 (``element``, ``node``, ``nSet``, ``elSet``, ``surface``, ``job``, ``section``, ``elementProperty``,
 ``material``, ``advancedmaterial``, ``fieldOutput``, ``analyticalField``, ``solver``, ``step``,
 ``output``, ``updateConfiguration``, ``modelGenerator``, ``constraint``, ``modelModifier``,
 ``configurePlots``, ``exportPlots``, ``include``), each mapped to a
-:class:`edelweissfe.keywords.base.keywordbase.KeywordBase` subclass. U1 reserved the category
-empty; U2a (``PLAN_INPUT_SYSTEM_UNIFICATION.md``, §5) populated its first slice -- the six
-structural mesh/job keywords (``element``, ``elSet``, ``node``, ``nSet``, ``surface``, ``job``),
-which live nowhere as ``Module``s in the legacy grammar and so have no coexistence window to
-manage. U2b populated the pluggable-module and type-dispatch keywords; ``elementProperty`` was
-added afterwards, having been missed by both enumeration passes. The category now covers the full
-printKeywords() surface of 22 top-level keywords. Registering a keyword here does **not** wire it
-into the running parser -- ``inputfileparser.py`` still resolves every keyword through
-``inputlanguage.py`` until U3 swaps it over; see each ``KeywordBase`` subclass's
-``fromKeywordDefinition`` stub.
+:class:`edelweissfe.keywords.base.keywordbase.KeywordBase` subclass.
 
 ``element`` and ``material`` are keyed by *element type* / *material name* and cover exactly the
 ``provider=edelweiss`` namespace of ``config/elementlibrary.py`` and ``config/materiallibrary.py``.
-The ``provider`` axis those two modules also dispatch on is **not** part of this registry, by
-decision: ``provider`` selects a namespace rather than a variant of one lookup, and only
-``edelweiss`` addresses anything by name at all -- ``marmot`` and
+The ``provider`` axis itself is not part of this registry: it selects a namespace rather than a
+variant of one lookup, and only ``edelweiss`` addresses anything by name -- ``marmot`` and
 ``marmotsingleqpelement`` ignore the name and return a single wrapper class, ``marmotmaterial``
-returns ``None``. So those branches stay an explicit table in their own module and nothing about
-them is registrable.
+returns ``None``. Those branches stay an explicit table in their own module.
 
-``linsolver`` was the last category left uncovered, because ``config/linsolve.py``'s nine entries
-were not uniformly "a dotted string to a plain class/callable": ``superlu``/``umfpack`` were inline
-``lambda`` closures with no module-level name to point a dotted string at, and ``gmres``/``amgcl``
-require constructing a wrapper object with call-site-specific options before the usable callable
-exists. It is now covered by the uniform ``createSolver(opts) -> Callable[[A, b], x]`` factory
-this module settled on -- see the ``linsolver`` block below.
+``linsolver`` is covered by a uniform ``createSolver(opts) -> Callable[[A, b], x]`` factory per
+solver (see the ``linsolver`` block below), since not every linear solver reduces to a plain
+class/callable a dotted string can point at.
 
-**With ``linsolver`` folded in, there is no category left under "not covered"** -- the list above is
-the complete set of things EdelweissFE dispatches by name, so a call site may now assume any of them
-resolves here. What is still outside the registry is *not* a category:
+What is outside the registry:
 
-- The ``provider`` axis of ``config/elementlibrary.py``/``config/materiallibrary.py`` -- a namespace
-  selector rather than a name lookup, see the paragraph above.
+- The ``provider`` axis of ``config/elementlibrary.py``/``config/materiallibrary.py`` (see above).
 - ``config/solvers.py``'s ``solverLibrary``, ``config/outputmanagers.py``, ``config/sections.py``
-  and ``config/analyticalfields.py``, which survive purely as Sphinx rendering targets and resolve
-  nothing (the pre-schema ``sectionFactory``/``analyticalFieldFactory`` construction protocol was
-  deleted along with the ``section``/``analyticalfield`` L1/L2 split).
+  and ``config/analyticalfields.py``, which exist purely as Sphinx rendering targets and resolve
+  nothing themselves.
 """
 
 from __future__ import annotations
@@ -151,20 +121,10 @@ class RegistryLookupError(LookupError):
 class RegistryConflictError(RegistryLookupError):
     """Raised when two different implementations claim the same ``(category, name)``.
 
-    A :class:`RegistryLookupError` subclass so that a caller guarding a name resolution with
-    ``except RegistryLookupError`` sees a conflict too, rather than having it escape as an unrelated
-    exception type.
-
-    Without this, a collision resolved silently in favour of whichever implementation happened to
-    win: :func:`register` overwrote its predecessor with a bare assignment (so a plugin registering
-    ``"Foo"`` made a built-in ``"foo"`` simply stop existing -- names are casefolded, which widens
-    the hazard but does not create it), and two entry points claiming one name were resolved by
-    taking the *first* match while iterating an unordered
-    :func:`~importlib.metadata.entry_points` result, so the winner was not even reproducible across
-    environments. Both now raise, naming the incumbent and the newcomer.
-
-    Deliberately **not** a conflict: re-registering the identical object under the same name, which
-    is idempotent and which tests rely on. Identity is compared before raising.
+    A :class:`RegistryLookupError` subclass, so a caller guarding a name resolution with
+    ``except RegistryLookupError`` also catches a conflict rather than letting it escape as an
+    unrelated exception type. Re-registering the identical object under the same name is not a
+    conflict (identity is compared before raising) and is idempotent.
     """
 
 
@@ -284,12 +244,9 @@ _addBuiltins(
     "edelweissfe.analyticalfields",
 )
 
-# solver / step / modelmodifier / statetransferstrategy are not "one module per name" -- originally
-# copied by hand from config/solvers.py's solverLibrary, config/steps.py's stepLibrary,
-# modelmodifiers/adaptivity, and config/statetransferstrategies.py's _STRATEGIES respectively. As of
-# P4 those four tables are gone and these entries are the only copy, so there is nothing left to keep
-# in sync. (config/solvers.py's solverLibrary itself is gone too, as of P5: it was kept only as a
-# rendering target for a Sphinx ``.. pprint::`` directive, which now reads this registry directly.)
+# solver / step / modelmodifier / statetransferstrategy are not "one module per name" -- this table
+# is their only copy. config/solvers.py's Sphinx ``.. pprint::`` directive reads this registry
+# directly rather than keeping its own copy.
 for _solverName, _moduleName in {
     "NIST": "nonlinearimplicitstatic",
     "NEST": "nonlinearexplicitstatic",
@@ -314,13 +271,11 @@ _BUILTINS[("statetransferstrategy", "virgin")] = "edelweissfe.adaptivity.statetr
 
 # The element category is keyed by element *type*, and 42 types share just 2 formulation classes, so
 # `_addBuiltins`'s "one module per name, fixed attribute name" convention does not apply -- hence two
-# explicit lists. This table is the single source of truth for type -> class: `elements/library.py`'s
-# `elLibrary` used to carry an `elClass` field naming the class as a *string*, resolved by an `eval`
-# in `config/elementlibrary.py`, and that field is deleted. Both lists were derived programmatically
-# from `elLibrary` and are pinned against it by
-# `tests/test_registry.py::test_element_category_covers_every_element_type_exactly`; they are written
-# out as literals rather than imported from `elements.library` so that this module keeps importing
-# nothing (property 1 above).
+# explicit lists. This table is the single source of truth for type -> class, pinned against
+# `elements/library.py`'s `elLibrary` by
+# `tests/test_registry.py::test_element_category_covers_every_element_type_exactly`; the types are
+# written out as literals rather than imported from `elements.library` so that this module keeps
+# importing nothing (property 1 above).
 for _elementTypeName in [
     "CPE4",
     "CPE4R",
@@ -421,10 +376,9 @@ for _linsolverName in [
     _BUILTINS[("linsolver", _linsolverName)] = f"edelweissfe.linsolve.{_linsolverName}:createSolver"
 
 
-# The "keyword" category: the six structural mesh/job keywords from U2a
-# (PLAN_INPUT_SYSTEM_UNIFICATION.md §5), plus the fifteen pluggable-module/type-dispatch keywords
-# from U2b -- each its own module with its own class name, so, like the `material` table above,
-# this is an explicit dict rather than `_addBuiltins`'s "one fixed attribute name" convention.
+# The "keyword" category: each top-level keyword is its own module with its own class name, so,
+# like the `material` table above, this is an explicit dict rather than `_addBuiltins`'s "one fixed
+# attribute name" convention.
 for _keywordName, _keywordDotted in {
     "element": "edelweissfe.keywords.element:ElementKeyword",
     "elSet": "edelweissfe.keywords.elset:ElSetKeyword",
@@ -665,7 +619,7 @@ def register(category: str, name: str, target: Any, *, schema: type | None = Non
     target
         The class (or factory callable) implementing ``name``.
     schema
-        The L2 option schema dataclass associated with ``target``, if any. Usually unnecessary for
+        The option schema dataclass associated with ``target``, if any. Usually unnecessary for
         a class that derives from :class:`edelweissfe.utils.schema.OptionSchemaProvider` and
         declares its own ``schema`` attribute -- :func:`lookup` picks that up by itself. Pass it
         explicitly only when ``target`` cannot declare it, e.g. a factory callable or a
@@ -723,7 +677,7 @@ def register(category: str, name: str, target: Any, *, schema: type | None = Non
 
 
 def lookup(category: str, name: str) -> tuple[Any, type | None]:
-    """Resolve ``(category, name)`` to its implementing object (and L2 schema, if any).
+    """Resolve ``(category, name)`` to its implementing object (and option schema, if any).
 
     Resolution order: the in-process memo cache, then the built-in static table, then
     ``importlib.metadata`` entry points. The result of a successful resolution is memoized, so a
@@ -749,8 +703,8 @@ def lookup(category: str, name: str) -> tuple[Any, type | None]:
         :func:`edelweissfe.utils.schema.schemaOf` -- i.e. the target declares it as a class
         attribute by deriving from
         :class:`edelweissfe.utils.schema.OptionSchemaProvider`. It is ``None`` for targets that
-        declare no schema, which as of P2 is still most of them, and structurally always will be
-        for the categories whose targets are plain functions rather than classes (see
+        declare no schema, and structurally always will be for the categories whose targets are
+        plain functions rather than classes (see
         :func:`~edelweissfe.utils.schema.schemaOf`). :func:`register` may instead supply a schema
         explicitly, which takes precedence because it writes straight into the memo cache.
 

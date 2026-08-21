@@ -47,15 +47,11 @@ from edelweissfe.config import registry
 
 
 def getGeneratorClass(name: str) -> type:
-    """Get the class type of the requested generator.
+    """Return the class implementing generator ``name``.
 
-    Resolved through the L3 registry (``generator`` category) rather than by importing
-    ``edelweissfe.generators.<name>`` directly. That import-by-convention could only ever find
-    generators living *inside* this package, so an external package -- EdelweissMeshfree, a plugin
-    -- had no way to contribute one; going through the registry means a built-in, an entry point and
-    an in-process :func:`~edelweissfe.config.registry.register` call are all equally reachable here.
-    An unknown name now raises :class:`~edelweissfe.config.registry.RegistryLookupError` naming the
-    available generators, instead of a bare ``ModuleNotFoundError``.
+    Resolved through the registry (``generator`` category), which lets built-in generators,
+    entry points, and in-process :func:`~edelweissfe.config.registry.register` calls all be
+    reached the same way.
 
     Parameters
     ----------
@@ -66,6 +62,11 @@ def getGeneratorClass(name: str) -> type:
     -------
     type
         The generator class type.
+
+    Raises
+    ------
+    edelweissfe.config.registry.RegistryLookupError
+        If no generator is registered under ``name``.
     """
 
     generatorClass, _ = registry.lookup("generator", name)
