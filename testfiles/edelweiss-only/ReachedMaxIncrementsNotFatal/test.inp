@@ -19,12 +19,12 @@ nY=20
 
 *step, solver=theSolver
 maxInc=0.05, minInc=1e-8, maxNumInc=5, maxIter=25, stepLength=100
->>options, category=NISTSolver, extrapolation=linear
+>>options, name=theSolver, extrapolation=linear
 >>dirichlet, name=bottom, nSet=gen_bottom,  field=displacement, 2=0, 1=0
 >>dirichlet, name=top, nSet=gen_top, field=displacement, 2=11.45, 1=3
 
 *step, solver=theSolver
 maxInc=1e-0, minInc=1e-8, maxNumInc=10, maxIter=25, stepLength=1
->>options, category=NISTSolver, extrapolation=linear
+>>options, name=theSolver, extrapolation=linear
 >>dirichlet, name=bottom, nSet=gen_bottom,  field=displacement, 2=0, 1=0
 >>dirichlet, name=top, nSet=gen_top, field=displacement, 2=22.9, 1=6
