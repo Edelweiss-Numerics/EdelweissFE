@@ -44,8 +44,8 @@ Stepaction to change material properties.
 
 @dataclass(frozen=True)
 class ChangeMaterialPropertySchema:
-    """L2: the scalar options of the ``changematerialproperty`` keyword, owned by this module and
-    never mutated from outside it.
+    """The scalar options of the ``changematerialproperty`` keyword, owned by this module and never
+    mutated from outside it.
 
     ``name`` and ``material`` are ``structuralOnly`` fields: ``material`` names an existing model
     object, resolved by :meth:`fromStepActionDefinition` before the schema is even built, exactly
@@ -113,7 +113,7 @@ class StepAction(StepActionBase):
         The journal object for logging.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = ChangeMaterialPropertySchema
 
     def __init__(self, name, material, index: int, f_t: Callable[[float], float], model, journal):
@@ -177,8 +177,8 @@ class StepAction(StepActionBase):
     def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
         """Update from a parsed ``>>changeMaterialProperty`` definition re-declared in a later step.
 
-        The re-declared ``material`` and ``index`` are ignored, as they always have been: only the
-        property function can be replaced, and the action is armed again.
+        The re-declared ``material`` and ``index`` are ignored: only the property function can be
+        replaced, and the action is armed again.
 
         Parameters
         ----------
@@ -336,16 +336,11 @@ class StepAction(StepActionBase):
 
         Notes
         -----
-        The autodiff materials' energy density function needs no carrying over, although
-        :mod:`edelweissfe.sections.base.sectionbase` carries it over at the equivalent point. It is
-        a no-op there: ``_materialEnergy`` is assigned only by ``setEnergyFunction``, which in turn
-        is called only from each material's own ``__init__`` with ``materialProperties["psi_e"]``
-        (verified across both EdelweissFE and EdelweissMeshfree), so re-running ``__init__`` on a
-        property set that still carries ``psi_e`` installs the very same function. The code that
-        used to stand here was a copy of that site which named the attribute ``self.material``,
-        which this class never defines -- so it raised ``AttributeError`` for *every* edelweiss
-        material rather than only failing to do something unnecessary. ``sectionbase``'s copy is
-        left alone; removing it is its own change.
+        The autodiff materials' energy density function needs no carrying over here, even though
+        :mod:`edelweissfe.sections.base.sectionbase` carries it over at the equivalent point:
+        re-running ``__init__`` on a property set that still carries ``psi_e`` installs the same
+        ``_materialEnergy`` function via ``setEnergyFunction``, so the carry-over in ``sectionbase``
+        is a no-op for materials rebuilt this way.
         """
 
         if isinstance(sectionMaterial, dict):  # for marmotmaterial provider

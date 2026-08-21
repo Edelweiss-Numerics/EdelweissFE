@@ -44,8 +44,8 @@ from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 @dataclass(frozen=True)
 class SetInitialConditionsSchema:
-    """L2: the scalar options of the ``setinitialconditions`` keyword, owned by this module and
-    never mutated from outside it.
+    """The scalar options of the ``setinitialconditions`` keyword, owned by this module and never
+    mutated from outside it.
 
     ``elSet`` is a ``structuralOnly`` field: it names an existing model object, resolved by
     :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
@@ -99,7 +99,7 @@ class StepAction(StepActionBase):
         The property values.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = SetInitialConditionsSchema
 
     def __init__(self, name: str, elementSet, propertyName: str, values: np.ndarray):

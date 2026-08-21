@@ -48,8 +48,8 @@ Set a field (via fieldOutput) to a predefined value.
 
 @dataclass(frozen=True)
 class SetFieldSchema:
-    """L2: the scalar options of the ``setfield`` keyword, owned by this module and never mutated
-    from outside it.
+    """The scalar options of the ``setfield`` keyword, owned by this module and never mutated from
+    outside it.
 
     ``name`` and ``fieldOutput`` are ``structuralOnly`` fields: ``fieldOutput`` names an existing
     model object, resolved by :meth:`fromStepActionDefinition` before the schema is even built,
@@ -108,7 +108,7 @@ class StepAction(StepActionBase):
         The journal object for logging.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = SetFieldSchema
 
     def __init__(self, name, fieldOutput, value, model, journal):

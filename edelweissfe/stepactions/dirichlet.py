@@ -55,8 +55,8 @@ If not modified in subsequent steps, the BC is held constant.
 
 @dataclass(frozen=True)
 class DirichletSchema:
-    """L2: the scalar options of the ``dirichlet`` keyword, owned by this module and never mutated
-    from outside it.
+    """The scalar options of the ``dirichlet`` keyword, owned by this module and never mutated from
+    outside it.
 
     ``name``, ``nSet`` and ``analyticalField`` are ``structuralOnly`` fields: ``nSet`` and
     ``analyticalField`` each name an existing model object (a node set, an analytical field)
@@ -120,13 +120,13 @@ class DirichletSchema:
 
 @dataclass(frozen=True)
 class UpdateDirichletSchema:
-    """L2, documentation-only: the ``updateDirichlet`` keyword's own grammar.
+    """Documentation-only: the ``updateDirichlet`` keyword's own grammar.
 
     ``updateDirichlet`` is a genuinely different keyword from ``dirichlet`` -- a partial
     re-declaration that restates only ``name`` (to identify which instance to update) plus the
     same prescription arguments, dropping the ``nSet``/``field`` required on the initial
-    declaration (``_addPrescriptionArgs`` in the ``Module`` block above). This class is **not**
-    referenced by any runtime code: :meth:`StepAction.updateStepActionFromDefinition` validates a
+    declaration. This class is **not** referenced by any runtime code:
+    :meth:`StepAction.updateStepActionFromDefinition` validates a
     re-declaration via :func:`~edelweissfe.utils.schema.coercePresentOptions` against
     :class:`DirichletSchema` itself, which does not enforce required-ness at all (an override is by
     definition partial). It exists solely so :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface`
@@ -179,9 +179,8 @@ class StepAction(DirichletBase):
     ``2=0.5`` and ``f(t)='t**2'`` into those arguments is the job of
     :meth:`fromStepActionDefinition` below, which is the only part of this module the ``.inp``
     front-end needs. That split is what lets an external caller (EdelweissMeshfree, a script) use
-    this class directly; the signature deliberately matches EdelweissMeshfree's own
-    ``stepactions/dirichlet.py``, which exists only because this one could not be constructed
-    without a parser-shaped dict.
+    this class directly; the signature matches EdelweissMeshfree's own
+    ``stepactions/dirichlet.py``.
 
     Parameters
     ----------
@@ -205,7 +204,7 @@ class StepAction(DirichletBase):
         Scales the prescribed values per node, evaluated at each node's coordinates.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = DirichletSchema
 
     def __init__(
@@ -292,10 +291,8 @@ class StepAction(DirichletBase):
         otherwise a refinement in a later step would silently revive it. The node set itself needs
         no re-fetch: it has stable identity (mutated in place), so ``self.nSet`` is already current.
 
-        Replays the *typed* state rather than a stashed definition dict, which is why
-        ``__init__`` keeps ``prescribedComponents``/``f_t``/``analyticalField`` as attributes: the
-        replay used to depend on the dict having been mutated in place by the ``components=``
-        handling, an interaction that only worked because both lived in the same dict."""
+        Replays the *typed* state (``prescribedComponents``/``f_t``/``analyticalField``, kept as
+        attributes by ``__init__``) rather than a stashed definition dict."""
         if self._checkSetChanged(self.nSet):
             wasActive = self.active
             self.updateStepAction(self._prescribedComponents, self._f_t, self._analyticalField)
@@ -396,8 +393,7 @@ class StepAction(DirichletBase):
 
         if configuration.components is not None:
             # An entry of `x` marks a component as free; anything else overrides a numbered option
-            # for the same component, which is the precedence the in-place dict mutation this
-            # replaces happened to produce.
+            # for the same component.
             values = np.array(eval(configuration.components.replace("x", "np.nan")), dtype=float)
             prescribed.update({index: value for index, value in enumerate(values) if not np.isnan(value)})
 

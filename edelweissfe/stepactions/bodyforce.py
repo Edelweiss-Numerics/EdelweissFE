@@ -51,8 +51,8 @@ If not modified in subsequent steps, the load held constant.
 
 @dataclass(frozen=True)
 class BodyForceSchema:
-    """L2: the scalar options of the ``bodyforce`` keyword, owned by this module and never mutated
-    from outside it.
+    """The scalar options of the ``bodyforce`` keyword, owned by this module and never mutated from
+    outside it.
 
     ``name`` and ``elSet`` are ``structuralOnly`` fields: ``elSet`` names an existing model object,
     resolved by :meth:`fromStepActionDefinition` before the schema is even built, exactly like
@@ -62,7 +62,7 @@ class BodyForceSchema:
     either key, since both are already gone from the definition mapping by the time it runs; see
     :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.structuralOnly`. ``forceVector`` is declared
     ``required=True`` explicitly, but is still given a ``default=None`` so the schema remains
-    constructible for the L1 constructor's default argument.
+    constructible for the constructor's default argument.
     """
 
     name: str | None = schemaField(
@@ -86,10 +86,10 @@ class BodyForceSchema:
         description="In subsequent steps only: define the updated force vector incrementally",
         dtype=str,
         default=None,
-        # The legacy `Module` documented this as `0`; the real runtime default is `None` (the
-        # sentinel `fromStepActionDefinition` needs -- see its docstring: this module's `delta` is
-        # unreachable via an input file anyway). Keep both: `documentedDefault` reproduces the
-        # golden text without changing behavior. See SchemaFieldMeta.documentedDefault.
+        # The documented default is `0`, but the actual runtime default is `None`, the sentinel
+        # `updateStepActionFromDefinition` checks for -- `delta` is unreachable via an input file
+        # anyway (see its docstring). `documentedDefault` reproduces the golden text without
+        # changing behavior. See SchemaFieldMeta.documentedDefault.
         documentedDefault=0,
     )
 
@@ -124,7 +124,7 @@ class StepAction(BodyLoadBase):
         force vector is reached linearly at the end of the step.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = BodyForceSchema
 
     def __init__(
@@ -173,17 +173,13 @@ class StepAction(BodyLoadBase):
     def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
         """Update from a parsed ``>>bodyforce`` definition re-declared in a later step.
 
-        The two magnitude options are mutually exclusive and ``forceVector`` wins, exactly as before:
-        ``forceVector`` is a new *total*, ``delta`` an *increment*.
+        ``forceVector`` is a new *total*, ``delta`` an *increment*; the two are mutually exclusive
+        and ``forceVector`` wins.
 
-        Unlike ``nodeforces``/``distributedload``, this module's ``delta`` really is **unreachable**.
-        A *partial* re-declaration would have to be validated against an ``updatebodyforce`` keyword
-        (that is how the parser handles a re-declaration missing required args, see
-        ``utils/inputfileparser.py``, ``parseModuleKeywordLine``) and no such keyword is declared, so
-        a partial ``>>bodyforce`` fails parsing outright. What remains is the *full* re-declaration,
-        which always carries ``forceVector`` -- a required arg -- so the first branch always wins.
-        The ``elif`` is carried across unchanged rather than simplified away, so that the day
-        ``bodyforce`` grows an update keyword the intended semantics are still written down here.
+        A partial re-declaration supplying only ``delta`` is rejected at parse time: there is no
+        ``updatebodyforce`` keyword, so a re-declaration is always validated against the full
+        ``bodyforce`` keyword, which requires ``forceVector``. The ``delta`` branch below is
+        therefore unreachable in practice; it is kept for a future partial-redeclaration path.
         """
 
         definition = CaseInsensitiveDict(definition)

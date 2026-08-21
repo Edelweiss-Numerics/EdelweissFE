@@ -44,7 +44,7 @@ from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 @dataclass(frozen=True)
 class InitializeMaterialSchema:
-    """L2: the scalar options of the ``initializematerial`` keyword, owned by this module and never
+    """The scalar options of the ``initializematerial`` keyword, owned by this module and never
     mutated from outside it.
 
     Declares only ``structuralOnly`` fields: ``name`` and ``elSet`` are the keyword's only options,
@@ -84,7 +84,7 @@ class StepAction(StepActionBase):
         The element set whose materials are initialized.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = InitializeMaterialSchema
 
     def __init__(self, name: str, elementSet):

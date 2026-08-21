@@ -57,7 +57,7 @@ If not modified in subsequent steps, the load held constant.
 
 @dataclass(frozen=True)
 class DistributedLoadSchema:
-    """L2: the scalar options of the ``distributedload`` keyword, owned by this module and never
+    """The scalar options of the ``distributedload`` keyword, owned by this module and never
     mutated from outside it.
 
     ``name`` and ``surface`` are ``structuralOnly`` fields: ``surface`` names an existing model
@@ -113,7 +113,7 @@ class DistributedLoadSchema:
 
 @dataclass(frozen=True)
 class UpdateDistributedloadSchema:
-    """L2, documentation-only: the ``updatedistributedload`` keyword's own grammar.
+    """Documentation-only: the ``updatedistributedload`` keyword's own grammar.
 
     ``updatedistributedload`` is a genuinely different keyword from ``distributedload`` -- a
     partial re-declaration that restates only ``name`` (to identify which instance to update), and
@@ -174,7 +174,7 @@ class StepAction(DistributedLoadBase):
         magnitude is reached linearly at the end of the step.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = DistributedLoadSchema
 
     def __init__(
@@ -205,9 +205,9 @@ class StepAction(DistributedLoadBase):
 
         ``name`` and the parser's bookkeeping keys are stripped, and ``surface`` is structural (it
         names a model object), so both are popped before the remaining options are validated
-        against :class:`DistributedLoadSchema`. The keyword's ``field`` option is deliberately not
-        passed on: this class never consumed it, and inventing a meaning for it here would not be a
-        behaviour-neutral port."""
+        against :class:`DistributedLoadSchema`. The keyword's ``field`` option is accepted but not
+        passed on: this class has no notion of a field, so a load is applied to whatever field the
+        element's load type implies."""
 
         definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
         definition.pop("name", None)
@@ -227,8 +227,8 @@ class StepAction(DistributedLoadBase):
     def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
         """Update from a parsed ``>>distributedload`` definition re-declared in a later step.
 
-        The two magnitude options are mutually exclusive and ``magnitude`` wins, exactly as before:
-        ``magnitude`` is a new *total*, ``delta`` an *increment*.
+        The two magnitude options are mutually exclusive and ``magnitude`` wins: ``magnitude`` is a
+        new *total*, ``delta`` an *increment*.
 
         A re-declaration is validated either against the full ``distributedload`` keyword (restating
         every required arg, including ``surface``) or, if it omits them, against the
@@ -238,7 +238,7 @@ class StepAction(DistributedLoadBase):
         :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`: only whatever keys are actually
         present are validated, which is what makes ``configuration.delta`` safe to read regardless
         of which of the two the parser matched -- a full re-declaration never carries it, so it
-        stays ``None`` and the ``magnitude`` branch wins, exactly as before."""
+        stays ``None`` and the ``magnitude`` branch wins."""
 
         definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
         definition.pop("name", None)

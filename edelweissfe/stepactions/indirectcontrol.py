@@ -51,7 +51,7 @@ Indirect (displacement) controller for the NISTArcLength solver
 
 @dataclass(frozen=True)
 class IndirectControlSchema:
-    """L2: the scalar options of the ``indirectcontrol`` keyword, owned by this module and never
+    """The scalar options of the ``indirectcontrol`` keyword, owned by this module and never
     mutated from outside it.
 
     None of ``dof1``/``dof2``/``cVector1``/``cVector2`` is structural in the usual sense (a model
@@ -125,7 +125,7 @@ class StepAction(StepActionBase):
 
     identification = "IndirectControl"
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = IndirectControlSchema
 
     def __init__(
@@ -178,23 +178,23 @@ class StepAction(StepActionBase):
         """Update from a parsed ``>>indirectcontrol`` definition re-declared in a later step.
 
         **Unreachable from an input file today**, which is worth knowing before relying on it. This
-        module declares no ``name`` arg (it is commented out above), so
-        ``helpers/inputfilehelpers.py`` gives every declaration an auto-generated unique name
-        (``indirectcontrol-0``, ``indirectcontrol-1``, ...). ``StepManager`` therefore matches no
-        existing action and takes the *create* branch every time, and the arc-length solver then
-        picks ``[...][0]`` out of the accumulated collection, i.e. the first controller ever declared.
-        So a per-step re-declared ``L`` has never taken effect, and ``currentL0`` together with the
-        whole ``absolute`` formulation is inert via the ``.inp`` front-end. The hook is implemented
-        regardless, because it *is* reachable programmatically -- and because whether to fix the
-        reachability (declare a ``name``, or have the solver honour the ``arcLengthController``
-        option's value) is a product decision, not part of a behaviour-neutral port. Its sibling
-        ``indirectcontractioncontrol`` does declare ``name`` and is not affected.
+        module declares no ``name`` field in its schema, so ``helpers/inputfilehelpers.py`` gives
+        every declaration an auto-generated unique name (``indirectcontrol-0``,
+        ``indirectcontrol-1``, ...). ``StepManager`` therefore matches no existing action and takes
+        the *create* branch every time, and the arc-length solver then picks ``[...][0]`` out of the
+        accumulated collection, i.e. the first controller ever declared. So a per-step re-declared
+        ``L`` never takes effect, and ``currentL0`` together with the whole ``absolute`` formulation
+        is inert via the ``.inp`` front-end. The hook is implemented regardless, because it *is*
+        reachable programmatically. Whether to fix the reachability (e.g. declare a ``name``, or
+        have the solver honour the ``arcLengthController`` option's value) is an open product
+        decision. Its sibling ``indirectcontractioncontrol`` does declare ``name`` and is not
+        affected.
 
-        ``absolute`` is deliberately not re-read: the formulation has always been fixed by the first
-        declaration (see the ``absolute`` entry in the class docstring), and re-reading it would
-        alter the ``L - currentL0`` bookkeeping. There is no ``update<keyword>`` grammar for this
-        module (see above), so a re-declaration is always validated against the full
-        ``indirectcontrol`` keyword and ``buildSchemaFromOptions`` is safe here too."""
+        ``absolute`` is deliberately not re-read: the formulation is fixed by the first declaration
+        (see the ``absolute`` entry in the class docstring), and re-reading it would alter the
+        ``L - currentL0`` bookkeeping. There is no ``update<keyword>`` grammar for this module, so a
+        re-declaration is always validated against the full ``indirectcontrol`` keyword and
+        ``buildSchemaFromOptions`` is safe here too."""
 
         definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
         definition.pop("name", None)

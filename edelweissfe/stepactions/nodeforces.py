@@ -58,7 +58,7 @@ Apply node forces on a nSet.
 
 @dataclass(frozen=True)
 class NodeForcesSchema:
-    """L2: the scalar options of the ``nodeforces`` keyword, owned by this module and never mutated
+    """The scalar options of the ``nodeforces`` keyword, owned by this module and never mutated
     from outside it.
 
     ``name`` and ``nSet`` are ``structuralOnly`` fields: ``nSet`` names an existing model object,
@@ -118,7 +118,7 @@ class NodeForcesSchema:
 
 @dataclass(frozen=True)
 class UpdateNodeforcesSchema:
-    """L2, documentation-only: the ``updateNodeforces`` keyword's own grammar.
+    """Documentation-only: the ``updateNodeforces`` keyword's own grammar.
 
     ``updateNodeforces`` is a genuinely different keyword from ``nodeforces`` -- a partial
     re-declaration that restates only ``name`` (to identify which instance to update) plus the
@@ -197,7 +197,7 @@ class StepAction(NodalLoadBase):
         forces are reached linearly at the end of the step.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = NodeForcesSchema
 
     def __init__(

@@ -54,8 +54,8 @@ The center is autotically computed from the bounding node coordinates.
 
 @dataclass(frozen=True)
 class IndirectContractionControlSchema:
-    """L2: the scalar options of the ``indirectcontractioncontrol`` keyword, owned by this module
-    and never mutated from outside it.
+    """The scalar options of the ``indirectcontractioncontrol`` keyword, owned by this module and
+    never mutated from outside it.
 
     ``name`` and ``contractionNSet`` are ``structuralOnly`` fields: ``contractionNSet`` names an
     existing model object, resolved by :meth:`fromStepActionDefinition` before the schema is even
@@ -118,7 +118,7 @@ class StepAction(StepActionBase):
 
     identification = "IndirectControl"
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = IndirectContractionControlSchema
 
     def __init__(

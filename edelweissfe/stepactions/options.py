@@ -41,23 +41,16 @@ actually present against *that instance's own* ``type(target).schema`` (:func:`c
 -- only present keys, no missing-required check, since an override is by definition partial), and
 applies them immediately via ``target.applyOptionsOverride(...)``.
 
-This replaces a name-blind, category-string mechanism (``getOptionsOfCategory``, matched against a
-solver's ``self.identification`` or an output manager's own name-or-a-hardcoded-fallback) that let a
-hand-maintained category tag drift from the object it was supposed to identify -- which is exactly
-how ``NISTPArcLength``'s two bespoke options ended up registered, and resolved, under the unrelated
-string ``"NISTArcLength"`` rather than its own ``identification``. A name is already unique and
-already declared; there is no second tag to keep in sync with it.
+Resolving directly by name against the target's own schema means there is no separate category tag
+that could drift out of sync with the object it is supposed to identify.
 
 The ``>>options`` keyword's own grammar is validated **dynamically**, not against a statically
 pre-declared list of every solver's and output manager's option names: at parse time, before
 ``name`` has even been resolved, the parser's dedicated ``isDynamicOptionsKeyword`` branch (see
 ``utils/inputfileparser.py::parseModuleKeywordLine``) only enforces that ``name`` itself is present
 -- every other ``key=value`` pair is accepted unvalidated and handed on raw. Real validation happens
-once ``name`` resolves to a concrete object, against *that object's
-own* ``type(target).schema`` (:func:`coercePresentOptions`, in :meth:`StepAction.fromStepActionDefinition`
-below). There is therefore no shared, hand-synchronized aggregate of every solver's and output
-manager's option names to keep from drifting: each schema is consulted directly, once, exactly when
-it is needed.
+once ``name`` resolves to a concrete object, against *that object's own* ``type(target).schema``
+(:func:`coercePresentOptions`, in :meth:`StepAction.fromStepActionDefinition` below).
 """
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
@@ -92,8 +85,7 @@ def _writtenOptions(definition: dict) -> dict:
         this step action is itself identified by. A defensive ``None``-value filter is kept for a
         programmatic caller that hands in an explicit ``None`` to mean "not set" (the convention
         :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`/:func:`~edelweissfe.utils.schema.coercePresentOptions`
-        already apply elsewhere), even though the ``.inp`` parser itself never produces one here
-        anymore.
+        already apply elsewhere), even though the ``.inp`` parser itself never produces one here.
     """
 
     written = withoutParserBookkeepingKeys(definition)
@@ -147,7 +139,7 @@ def _resolveTarget(name: str, model):
 class StepAction(StepActionBase):
     """Adjust a solver's or output manager's own options mid-job.
 
-    Unlike every other ported step action, this one has no scalar schema of its own to declare
+    Unlike every other step action, this one has no scalar schema of its own to declare
     (:attr:`schema` stays the :class:`~edelweissfe.utils.schema.OptionSchemaProvider` default of
     ``None``): it is a dispatcher onto *another* object's schema, resolved by ``name`` at
     :meth:`fromStepActionDefinition` time, not a leaf option consumer -- there is nothing this class

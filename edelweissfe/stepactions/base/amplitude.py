@@ -26,18 +26,18 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""Amplitude functions for step actions, and the compilation of an input file's ``f(t)`` option
-into one.
+"""Amplitude functions for step actions, and compilation of an input file's ``f(t)`` option into
+one.
 
 A step action prescribes a value that is scaled over the step by an amplitude. In Python that
 amplitude *is* a callable -- which is what a step action's typed constructor takes. The ``f(t)``
-option of an ``.inp`` file is a *serialization* of such a callable as a sympy expression string, so
-turning it back into one belongs on the L4 side of every step action that offers the option
-(see :class:`~edelweissfe.stepactions.base.stepactionbase.StepActionBase`).
+option of an ``.inp`` file is a *serialization* of such a callable as a sympy expression string,
+and turning it back into one is the job of each step action's ``fromStepActionDefinition`` /
+``updateStepActionFromDefinition`` (see
+:class:`~edelweissfe.stepactions.base.stepactionbase.StepActionBase`).
 
-This lives in one module because six step actions offered ``f(t)`` and each compiled it itself, in
-six copies of the same three lines -- with the copies having quietly drifted apart on what happens
-when the option is absent (:func:`amplitudeFromExpression` documents the one answer).
+Centralized here so that every step action offering ``f(t)`` agrees on what an absent option means
+-- see :func:`amplitudeFromExpression`.
 """
 
 from collections.abc import Callable

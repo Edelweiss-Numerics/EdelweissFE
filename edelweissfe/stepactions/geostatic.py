@@ -46,8 +46,8 @@ from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 @dataclass(frozen=True)
 class GeostaticSchema:
-    """L2: the scalar options of the ``geostatic`` keyword, owned by this module and never mutated
-    from outside it.
+    """The scalar options of the ``geostatic`` keyword, owned by this module and never mutated from
+    outside it.
 
     ``name`` and ``elSet`` are ``structuralOnly`` fields: ``elSet`` names an existing model object,
     resolved by :meth:`fromStepActionDefinition` before the schema is even built, exactly like
@@ -107,7 +107,7 @@ class StepAction(StepActionBase):
         The journal object for logging.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = GeostaticSchema
 
     def __init__(

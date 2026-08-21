@@ -44,8 +44,8 @@ of a step.
 
 @dataclass(frozen=True)
 class ModelUpdateSchema:
-    """L2: the scalar options of the ``modelupdate`` keyword, owned by this module and never
-    mutated from outside it."""
+    """The scalar options of the ``modelupdate`` keyword, owned by this module and never mutated
+    from outside it."""
 
     update: str | None = schemaField(
         description="Model accessible, executable expression", dtype=str, default=None, required=True
@@ -78,7 +78,7 @@ class StepAction(StepActionBase):
         journal handed to :meth:`updateModel`.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = ModelUpdateSchema
 
     def __init__(self, name, updateExpression: str, model, journal):
