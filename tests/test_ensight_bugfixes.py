@@ -26,7 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """
-P0.3 focused regression tests for two standing bugs in
+Focused regression tests for two standing bugs in
 ``edelweissfe/outputmanagers/ensight.py``:
 
 Bug 1

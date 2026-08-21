@@ -26,9 +26,8 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """
-P0.1 safety net: a model built and solved entirely via real Python
-constructors -- no ``.inp`` file, no ``parseInputFile``, no dependency on the ``InputLanguage``
-singleton having been populated.
+A model built and solved entirely via real Python constructors -- no ``.inp`` file, no
+``parseInputFile``, no dependency on the ``InputLanguage`` singleton having been populated.
 
 The first test stops short of driving the model through the production
 ``StepManager``/``StepAction``/``NIST`` solver stack, and drives the single element to equilibrium
@@ -37,17 +36,16 @@ the reduced (Dirichlet-eliminated) linear system with plain numpy, which is math
 what the production solver does for a single linear-elastic Newton iteration, just without the
 ``Step``/``StepAction`` wrapping.
 
-It did so because of a gap that P3(c) has now started closing. Originally, constructing a
-``StepAction`` required a fully-populated *parser-shaped* ``action`` dict -- every optional key
-(``"components"``, ``"analyticalField"``, ``"f(t)"``) had to be present even as ``None`` -- so
-hand-assembling one here would have meant writing a second, hidden input-file parser. The second
-test below is the successor that gap was blocking: it builds a real ``dirichlet.StepAction``
-through its typed constructor, with no dict and no parser anywhere, and checks the boundary
-condition it produces, but it stops at ``getPrescribedIncrement`` and never reaches a solver.
+Originally, constructing a ``StepAction`` required a fully-populated *parser-shaped* ``action``
+dict -- every optional key (``"components"``, ``"analyticalField"``, ``"f(t)"``) had to be present
+even as ``None`` -- so hand-assembling one here would have meant writing a second, hidden
+input-file parser. The second test below builds a real ``dirichlet.StepAction`` through its typed
+constructor, with no dict and no parser anywhere, and checks the boundary condition it produces,
+but it stops at ``getPrescribedIncrement`` and never reaches a solver.
 
-With all 13 step actions ported (P3(c) complete), the third test closes the remaining gap: it drives
-a real ``AdaptiveStep`` through the production ``NIST`` solver, with typed step actions and a real
-``FieldOutputController``, mirroring the lifecycle of
+With all 13 step actions now built the same way, the third test closes the remaining gap: it
+drives a real ``AdaptiveStep`` through the production ``NIST`` solver, with typed step actions and
+a real ``FieldOutputController``, mirroring the lifecycle of
 ``edelweissfe/drivers/inputfiledrivensimulation.py`` -- but built from Python objects rather than
 from a parsed input file.
 """
@@ -168,12 +166,12 @@ def test_single_cpe4_patch_test_pure_python_no_parser():
 
 
 def test_dirichlet_step_action_built_from_python_without_a_parser_dict():
-    """A real ``dirichlet.StepAction`` constructed through its typed L1 constructor.
+    """A real ``dirichlet.StepAction`` constructed through its typed constructor.
 
-    This is the P0.1 gap closing: no ``.inp`` file, no ``parseInputFile``, and -- the part that was
-    impossible before P3(c) -- no hand-assembled parser-shaped ``action`` dict either. The node set
-    is a ``NodeSet``, the prescribed values are a ``dict``, and the amplitude is an ordinary Python
-    callable, so nothing about this construction path knows that an input file exists.
+    This closes that gap: no ``.inp`` file, no ``parseInputFile``, and no hand-assembled
+    parser-shaped ``action`` dict either. The node set is a ``NodeSet``, the prescribed values are
+    a ``dict``, and the amplitude is an ordinary Python callable, so nothing about this
+    construction path knows that an input file exists.
     """
     n1 = Node(1, np.array([0.0, 0.0]))
     n2 = Node(2, np.array([1.0, 0.0]))
@@ -302,21 +300,19 @@ def _buildPatchModel(youngsModulus: float, poissonsRatio: float, thickness: floa
 def test_full_step_and_solver_cycle_driven_programmatically():
     """A complete ``Step``/``StepAction``/solver cycle driven from Python objects only.
 
-    This is the P0.1 successor that P3(c) unblocked, and the point where the programmatic path
-    reaches the same place the ``.inp`` front-end does: a 2x2 CPE4 patch is built, prepared through
-    the very lifecycle calls ``drivers/inputfiledrivensimulation.py`` makes (``prepareYourself``,
-    ``advanceToTime``, ``loadConfiguration``, the ``"U"``/``"P"`` field value entries,
-    ``_linkFieldVariableObjects``, ``FieldOutputController.initializeJob``), and solved by a real
-    ``NIST`` instance inside a real ``AdaptiveStep`` via ``step.solve()`` -- which is exactly what
-    the driver calls. No ``.inp`` file, no ``parseInputFile``, no ``InputLanguage`` lookup, and no
-    parser-shaped definition dict anywhere: every step action is built through its typed L1
-    constructor, and the step actions are handed over in the same ``StepActionCollection`` the
-    ``StepManager`` would fill.
+    This is the point where the programmatic path reaches the same place the ``.inp`` front-end
+    does: a 2x2 CPE4 patch is built, prepared through the very lifecycle calls
+    ``drivers/inputfiledrivensimulation.py`` makes (``prepareYourself``, ``advanceToTime``,
+    ``loadConfiguration``, the ``"U"``/``"P"`` field value entries, ``_linkFieldVariableObjects``,
+    ``FieldOutputController.initializeJob``), and solved by a real ``NIST`` instance inside a real
+    ``AdaptiveStep`` via ``step.solve()`` -- which is exactly what the driver calls. No ``.inp``
+    file, no ``parseInputFile``, no ``InputLanguage`` lookup, and no parser-shaped definition dict
+    anywhere: every step action is built through its typed constructor, and the step actions are
+    handed over in the same ``StepActionCollection`` the ``StepManager`` would fill.
 
-    Before P3(c) this test could not be written: constructing *any* ``StepAction`` required a
-    fully-populated parser-shaped ``action`` dict (see the module docstring), and a step cannot be
-    solved without one -- ``NIST`` unconditionally reads ``stepActions["dirichlet"]``,
-    ``["nodeforces"]`` and friends.
+    This relies on constructing *any* ``StepAction`` without a fully-populated parser-shaped
+    ``action`` dict (see the module docstring); a step cannot be solved without one -- ``NIST``
+    unconditionally reads ``stepActions["dirichlet"]``, ``["nodeforces"]`` and friends.
 
     The assertions are physical invariants of the setup rather than expected numbers:
 
@@ -370,7 +366,7 @@ def test_full_step_and_solver_cycle_driven_programmatically():
     model.fieldOutputController = fieldOutputController
     fieldOutputController.initializeJob()
 
-    # --- step actions, all through their typed L1 constructors, in the collection the
+    # --- step actions, all through their typed constructors, in the collection the
     # StepManager would hand to the step (keyed by step action module name) ---
     stepActions = StepActionCollection()
     stepActions["dirichlet"]["clamp"] = DirichletStepAction(

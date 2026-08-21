@@ -26,15 +26,14 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """
-Renders EdelweissFE's current input-language surface to stdout -- **from the L3 registry and L2
-schemas only** (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U4). This is the schema-sourced successor
-of the legacy renderer, which walked ``edelweissfe.utils.inputlanguage.InputLanguage``'s ``Module``
-tree (``Module.__doc__``/``InputFileKeyword.__doc__``/``printKeywords()``) -- that mechanism, and
-this script's own former dependency on it, is deleted in the same phase that introduced this
-rewrite. The output format is unchanged (this is what makes ``tests/golden/inputlanguage_surface.txt``
-still the correct oracle): two sections, ``===== printKeywords() =====`` for the 21 top-level
-keywords, then one ``===== module documentation: <dotted path> =====`` block per pluggable module,
-sorted by dotted module path.
+Renders EdelweissFE's current input-language surface to stdout, sourced entirely from the registry
+and the option schemas it exposes. This is the schema-sourced successor of the legacy renderer,
+which walked ``edelweissfe.utils.inputlanguage.InputLanguage``'s ``Module`` tree
+(``Module.__doc__``/``InputFileKeyword.__doc__``/``printKeywords()``) -- that mechanism, and this
+script's own former dependency on it, has since been removed. The output format is unchanged (this
+is what makes ``tests/golden/inputlanguage_surface.txt`` still the correct oracle): two sections,
+``===== printKeywords() =====`` for the 21 top-level keywords, then one ``===== module
+documentation: <dotted path> =====`` block per pluggable module, sorted by dotted module path.
 
 Two rendering formats, both reproduced by :mod:`edelweissfe.utils.schemasurface`:
 
@@ -46,13 +45,13 @@ Two rendering formats, both reproduced by :mod:`edelweissfe.utils.schemasurface`
   :class:`~edelweissfe.utils.schemasurface.KeywordSurfaceSpec` per module, prefixed by the module's
   own ``__doc__`` (unchanged from the legacy renderer's ``if mod.__doc__: ...`` behaviour).
 
-A module's own ``name``/``description`` text is not recoverable from any live object once the
-``Module``/``InputFileKeyword`` declarations that used to carry it are deleted (U4's kill list) --
-unlike a top-level keyword, which the U2a/U2b ``KeywordBase`` subclasses already carry
-``keywordName``/``keywordDescription`` for. Every other category (``constraint``, ``generator``,
+A module's own ``name``/``description`` text is not recoverable from any live object now that the
+``Module``/``InputFileKeyword`` declarations that used to carry it have been removed -- unlike a
+top-level keyword, whose ``KeywordBase`` subclasses already carry
+``keywordName``/``keywordDescription`` for it. Every other category (``constraint``, ``generator``,
 ``outputmanager``, ``analyticalfield``, ``section``, ``stepaction``, ``modelmodifier``) therefore
 has its ``name``/``description`` pair transcribed once, literally, into the spec tables below --
-exactly the same "transcribed verbatim from the golden" convention U3b already established for step
+the same "transcribed verbatim from the golden" convention already used for step
 actions in ``tests/test_schemasurface.py``'s ``_U3B_STEP_ACTION_SPECS`` (this module's step-action
 table is transcribed from that same source). The registry still supplies the one thing that must
 never drift by hand-transcription: the *schema* itself, resolved fresh via ``registry.lookup``, so
@@ -560,9 +559,9 @@ _STEP_ACTION_SPECS = [
 
 
 # --- the schema=None-but-content-bearing sections: a small, explicitly documented "minimal render --
-# path" for each (PLAN_INPUT_SYSTEM_UNIFICATION.md, U4 step 1). Neither schema below is imported by
-# any runtime code -- both exist solely so this renderer can reproduce the corresponding golden
-# section without a real (non-``None``) schema to resolve from the registry.
+# path" for each. Neither schema below is imported by any runtime code -- both exist solely so this
+# renderer can reproduce the corresponding golden section without a real (non-``None``) schema to
+# resolve from the registry.
 
 
 @dataclass(frozen=True)

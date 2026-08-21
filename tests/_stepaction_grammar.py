@@ -28,11 +28,11 @@
 
 """Dump the declared step-action grammar as JSON, for ``tests/test_stepaction_option_coverage.py``.
 
-Sourced entirely from the registry's ``"stepaction"`` category and each module's own L2 schema
-(``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U4) -- there is no other grammar representation left to read.
-Still runs as a **fresh subprocess**, matching ``tests/_inputlanguage_snapshot.py``: this keeps the
-grammar dump isolated from whatever else the shared pytest session happens to have imported, even
-though nothing about the registry is import-order dependent any more.
+Sourced entirely from the registry's ``"stepaction"`` category and each module's own option schema
+-- there is no other grammar representation left to read. Still runs as a **fresh subprocess**,
+matching ``tests/_inputlanguage_snapshot.py``: this keeps the grammar dump isolated from whatever
+else the shared pytest session happens to have imported, even though nothing about the registry is
+import-order dependent any more.
 """
 
 import dataclasses

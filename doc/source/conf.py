@@ -170,11 +170,11 @@ class PrettyPrintDirective(CodeBlock):
         return [table]
 
     def _render_inputlanguage(self, member_data, caption):
-        """Render a list of legacy grammar-declaration objects. Dead in practice since U4 (no
-        remaining ``.rst`` source passes a list-shaped dotted path -- every former
-        ``documentation = [module]`` list was deleted along with the mechanism that built it) --
-        kept only as a defensive fallback for :meth:`run`'s legacy dotted-path branch, whose only
-        live callers are dict-shaped.
+        """Render a list of legacy grammar-declaration objects.
+
+        Dead in practice -- no remaining ``.rst`` source passes a list-shaped dotted path, every
+        live caller of :meth:`run`'s dotted-path branch is dict-shaped -- kept only as a defensive
+        fallback.
         """
         result = []
         for item in member_data:
@@ -277,12 +277,11 @@ class PrettyPrintDirective(CodeBlock):
         return table
 
     def _render_registry_entry(self, category, name, caption):
-        """Render ``category:name`` from the L3 registry and its L2 schema -- the sole source of
-        truth for what a target accepts (``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U4). ``optionNames``
-        (rather than ``scalarOptionNames``) is used for the top-level table so that a
-        ``structuralOnly`` field (one an L4 adapter resolves and pops before the schema is built,
-        e.g. a constraint's ``nSet``) still renders -- it is real, documented grammar, not an
-        implementation detail.
+        """Render ``category:name`` from the registry and its option schema -- the sole source of
+        truth for what a target accepts. ``optionNames`` (rather than ``scalarOptionNames``) is
+        used for the top-level table so that a ``structuralOnly`` field (one an adapter resolves
+        and pops before the schema is built, e.g. a constraint's ``nSet``) still renders -- it is
+        real, documented grammar, not an implementation detail.
         """
         from edelweissfe.config import registry
         from edelweissfe.utils.schema import (
@@ -295,7 +294,7 @@ class PrettyPrintDirective(CodeBlock):
         itemCaption = caption or name
 
         if schema is None:
-            # No L2 schema at all (e.g. generator:executepythoncode, whose datalines are raw
+            # No option schema at all (e.g. generator:executepythoncode, whose datalines are raw
             # Python source with no flat option mapping to describe): nothing to render here, see
             # the target class's own docstring instead.
             table, head, body = self._make_table(itemCaption, ncols=1)
@@ -324,7 +323,7 @@ class PrettyPrintDirective(CodeBlock):
         caption = self.options.get("caption", "")
 
         # New syntax, ``.. pprint:: category:name`` -- e.g. ``stepaction:dirichlet``,
-        # ``solver:NIST``. Renders from the L3 registry and the target's own L2 schema, which is
+        # ``solver:NIST``. Renders from the registry and the target's own option schema, which is
         # the source of truth for what it accepts; see ``_render_registry_entry``.
         if ":" in self.arguments[0]:
             category, name = self.arguments[0].split(":", 1)

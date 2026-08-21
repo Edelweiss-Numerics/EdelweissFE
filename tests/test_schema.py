@@ -25,14 +25,14 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""P1 tests for ``edelweissfe/utils/schema.py``, the L2 primitives.
+"""Tests for ``edelweissfe/utils/schema.py``, the schema primitives.
 
-Covers frozen-ness, field-metadata round-trip, and coercion parity against the pre-P1 casting logic
-it replaced (``edelweissfe.utils.inputlanguage.KeywordArg.getValueFromKwargs``, deleted in
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``'s U4 -- :func:`_legacyGetValueFromKwargs` below is a frozen,
+Covers frozen-ness, field-metadata round-trip, and coercion parity against the legacy casting logic
+it replaced (``edelweissfe.utils.inputlanguage.KeywordArg.getValueFromKwargs``, since deleted --
+:func:`_legacyGetValueFromKwargs` below is a frozen,
 literal copy of its body, kept only so this parity pin survives the deletion) for a representative
 set of types (``int``, ``float``, ``str``, ``bool``), including the already-correct-type passthrough
-case that the legacy code only got right for ``bool`` (via the P0 ``asBool`` fix) and relied on
+case that the legacy code only got right for ``bool`` (via a bugfix to ``asBool``) and relied on
 constructor idempotence for everywhere else.
 """
 
@@ -60,7 +60,7 @@ from edelweissfe.utils.schema import (
 
 @dataclasses.dataclass(frozen=True)
 class _SampleSchema:
-    """A representative L2 schema mixing a required field and defaulted fields of every
+    """A representative schema mixing a required field and defaulted fields of every
     primitive type used across EdelweissFE's ``.inp`` grammar."""
 
     name: str = schemaField(description="A required name.", dtype=str, required=True, default="unnamed")
@@ -146,12 +146,12 @@ def test_coerceValue_raises_ValueError_on_bad_conversion():
         coerceValue("not-a-number", int)
 
 
-# --- coercion parity with the pre-P1 casting logic it replaced -----------------------------------
+# --- coercion parity with the legacy casting logic it replaced -----------------------------------
 
 
 def _legacyGetValueFromKwargs(kwargs: dict, dtype: type):
     """Frozen, literal copy of ``edelweissfe.utils.inputlanguage.KeywordArg.getValueFromKwargs``'s
-    body (deleted in U4) -- kept solely so the parity tests below survive that deletion. Must never
+    body (since deleted) -- kept solely so the parity tests below survive that deletion. Must never
     be "improved": its entire purpose is to keep failing exactly like the deleted code did.
     """
     if dtype == bool:
@@ -174,8 +174,8 @@ def _legacyGetValueFromKwargs(kwargs: dict, dtype: type):
 )
 def test_coerceValue_matches_legacy_KeywordArg_casting_for_string_input(dtype, rawValue):
     """For genuinely string-valued input (the only case the legacy code ever had to handle), the
-    new coercion must agree exactly with the deleted ``KeywordArg.getValueFromKwargs`` -- P1
-    factors the logic out, it does not change what a given ``.inp`` file produces.
+    new coercion must agree exactly with the deleted ``KeywordArg.getValueFromKwargs`` --
+    factoring the logic out must not change what a given ``.inp`` file produces.
     """
     legacyResult = _legacyGetValueFromKwargs({"value": rawValue}, dtype)
 
@@ -185,7 +185,7 @@ def test_coerceValue_matches_legacy_KeywordArg_casting_for_string_input(dtype, r
 def test_coerceValue_deliberately_diverges_from_legacy_for_an_already_bool_value():
     """The one deliberate divergence: the legacy ``KeywordArg.getValueFromKwargs`` path calls
     ``strtobool()`` unconditionally, which crashes with ``AttributeError`` on a real ``bool``
-    (this was P0's bugfix, see ``tests/test_ensight_bugfixes.py``). ``coerceValue`` must not
+    (see ``tests/test_ensight_bugfixes.py`` for the bugfix). ``coerceValue`` must not
     reproduce that crash -- it is a bug, not a "surprise" worth preserving for parity.
     """
     with pytest.raises(AttributeError):
@@ -194,7 +194,7 @@ def test_coerceValue_deliberately_diverges_from_legacy_for_an_already_bool_value
     assert coerceValue(True, bool) is True
 
 
-# --- case-insensitive key resolution (an L4-facing utility, not part of the schema itself) -------
+# --- case-insensitive key resolution (an adapter-facing utility, not part of the schema itself) --
 
 
 def test_resolveCaseInsensitiveOptions_matches_regardless_of_case():
@@ -437,7 +437,7 @@ def test_ensight_configuration_defaults_are_the_declared_ones():
 
 
 def test_ensight_schema_is_constructible_with_no_arguments_and_no_input_language():
-    """The L1 constructor default `configuration=EnsightSchema()` must not require the parser."""
+    """The constructor default `configuration=EnsightSchema()` must not require the parser."""
     from edelweissfe.outputmanagers.ensight import EnsightSchema, OutputManager
 
     assert EnsightSchema() == EnsightSchema(perNode=(), perElement=(), configurations=())

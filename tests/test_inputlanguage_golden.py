@@ -26,11 +26,11 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """
-P0.2 safety net: a golden/snapshot capture of EdelweissFE's entire
-input-language surface -- the ``InputLanguage`` singleton's ``printKeywords()`` dump, plus the
-rendered documentation of every module that exposes a module-level ``documentation`` list (the
-same mechanism ``edelweissfe/utils/printdocumentation.py`` and the Sphinx ``pprint`` directive
-use).
+A golden/snapshot capture of EdelweissFE's entire input-language surface -- the
+``InputLanguage`` singleton's ``printKeywords()`` dump, plus the rendered documentation of every
+module that exposes a module-level ``documentation`` list (the same mechanism
+``edelweissfe/utils/printdocumentation.py`` and the Sphinx ``pprint`` directive use) -- that pins
+the current surface against drift.
 
 The point of this test is not the specific content of the golden file -- it is that any future
 change to the input-language grammar (a renamed keyword, a changed default, a module that stops

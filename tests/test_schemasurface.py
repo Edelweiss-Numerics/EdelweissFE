@@ -25,15 +25,15 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""U1 tests (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``) for ``edelweissfe/utils/schemasurface.py``.
+"""Tests for ``edelweissfe/utils/schemasurface.py``.
 
 Every expected string here is transcribed verbatim from ``tests/golden/inputlanguage_surface.txt``
 (the frozen output of the *legacy* ``Module.__doc__``/``InputFileKeyword.__doc__``/
 ``OptionalKeywordArg.__doc__`` renderer), for the corresponding real module -- proving
 ``renderSchemaSurface`` reproduces that exact textual format from a schema alone, with no
-dependency on ``edelweissfe.utils.inputlanguage``. U1 does not wire this renderer into anything
-running; U2 drives it over the whole grammar and asserts byte-identical output against that golden
-file.
+dependency on ``edelweissfe.utils.inputlanguage``. This renderer is not yet wired into anything
+running; a broader battery of tests drives it over the whole grammar and asserts byte-identical
+output against that golden file.
 """
 
 import importlib
@@ -204,7 +204,7 @@ def test_a_dataline_field_is_never_rendered_as_a_scalar_option():
 def test_renders_sub_keywords_together_with_a_top_level_required_dataline():
     """Transcribed verbatim from the golden ``edelweissfe.sections.solid`` entry. Reuses the real
     ``MaterialParameterFromFieldSchema``/``WriteMaterialPropertiesToFileSchema`` from
-    ``edelweissfe.sections.base.sectionbase`` (already-ported L2 schemas, not a synthetic stand-in)
+    ``edelweissfe.sections.base.sectionbase`` (already-ported schemas, not a synthetic stand-in)
     so this test also pins that ``renderSchemaSurface`` renders an ``optionName`` containing
     parentheses (``f(p,f)``) correctly.
     """
@@ -274,17 +274,15 @@ def test_a_schemaless_keyword_renders_only_its_header_line():
     assert rendered == "[fieldOutput]"
 
 
-# --- U2a/U2b: all 21 top-level keywords' printKeywords()-format blocks, proven byte-identical -----
-# against the frozen golden (PLAN_INPUT_SYSTEM_UNIFICATION.md, U2 gate (A)). This is the *second*
-# legacy rendering format -- ``inputfileparser.printKeywords()``'s hand-rolled dump of the
-# structural/type-dispatch keywords declared directly in that file -- as opposed to the
+# --- all 21 top-level keywords' printKeywords()-format blocks, proven byte-identical against -------
+# the frozen golden file. This is the *second* legacy rendering format -- ``inputfileparser.printKeywords()``'s
+# hand-rolled dump of the structural/type-dispatch keywords declared directly in that file -- as opposed to the
 # ``Module.__doc__`` format every test above this one exercises.
 
 _GOLDEN_PATH = Path(__file__).parent / "golden" / "inputlanguage_surface.txt"
 
-#: Every top-level keyword covered by U2a (the six structural mesh/job keywords) and U2b (the
-#: remaining fifteen pluggable-module/type-dispatch keywords) -- the complete ``printKeywords()``
-#: surface, per ``PLAN_INPUT_SYSTEM_UNIFICATION.md``.
+#: Every top-level keyword -- the six structural mesh/job keywords and the remaining fifteen
+#: pluggable-module/type-dispatch keywords -- forming the complete ``printKeywords()`` surface.
 _ALL_TOP_LEVEL_KEYWORDS = [
     "element",
     "elSet",
@@ -357,7 +355,7 @@ def _structuralKeywordSpec(keywordName: str) -> KeywordSurfaceSpec:
 
 @pytest.mark.parametrize("keywordName", _ALL_TOP_LEVEL_KEYWORDS)
 def test_structural_keyword_printKeywords_block_matches_golden_byte_for_byte(keywordName):
-    """U2's gate (A): ``renderPrintKeywordsBlock`` over each top-level keyword's real, registered
+    """``renderPrintKeywordsBlock`` over each top-level keyword's real, registered
     class (name + description + schema all from the class) reproduces the corresponding golden
     ``printKeywords()`` block exactly -- proving the class encodes the legacy grammar (spelling in
     exact display case, descriptions incl. the *nSet* copy-paste bug, types, required/optional-ness,
@@ -378,7 +376,7 @@ def test_printKeywords_golden_extraction_found_all_21_top_level_keywords():
 
 
 def test_registered_keyword_category_matches_the_golden_printKeywords_surface_exactly():
-    """The end-to-end U2 assertion: every header the golden ``printKeywords()`` section actually
+    """The end-to-end assertion: every header the golden ``printKeywords()`` section actually
     contains resolves to a registered ``"keyword"`` entry whose rendered block matches, and every
     registered ``"keyword"`` entry is exercised above -- i.e. the registry's ``keyword`` category
     and the golden's ``printKeywords()`` section describe exactly the same 21 names, not merely a
@@ -391,7 +389,7 @@ def test_registered_keyword_category_matches_the_golden_printKeywords_surface_ex
     assert len(_ALL_TOP_LEVEL_KEYWORDS) == 21
 
 
-# --- U2c: the ``Module.__doc__`` "module documentation" sections, over every registry entry that ---
+# --- the ``Module.__doc__`` "module documentation" sections, over every registry entry that --------
 # declares a real (non-``None``) schema -- as opposed to the ``printKeywords()`` surface above, which
 # only ever covered the 21 top-level keywords. This is the *other* legacy rendering format
 # (``renderSchemaSurface``, not ``renderPrintKeywordsBlock``), and it is checked across every
@@ -451,8 +449,8 @@ def _moduleDocGoldenBodies() -> dict[str, str]:
     :func:`renderSchemaSurface` has no access to (and does not reproduce) that Python-level
     docstring -- it only renders from the schema -- so the "body" extracted here starts at the
     first line matching ``^\\[`` (the ``[name] ...`` header ``KeywordSurfaceSpec`` produces),
-    discarding everything before it, exactly as the U2c spec's "the lines AFTER the ``[name]``
-    header line" phrasing describes. A module documented instead with a ``< name >`` header (the
+    discarding everything before it -- i.e. only the lines AFTER the ``[name]``
+    header line. A module documented instead with a ``< name >`` header (the
     step actions) or the legacy dict style (``meshplot``) has no such line, so it is not usable as
     a golden body here at all -- see :func:`_stepActionExpectedSection`/
     :func:`_meshplotExpectedSection` below, which compare against
@@ -493,9 +491,8 @@ def _registrySchemaEntries() -> dict[str, type]:
 
 _REGISTRY_SCHEMA_ENTRIES = _registrySchemaEntries()
 
-#: The 21 module-documentation sections already byte-identical before U2c (measured directly
-#: against the golden file, not transcribed from the plan's recon prose -- see the module docstring
-#: of ``PLAN_INPUT_SYSTEM_UNIFICATION.md``'s "U2 recon findings + rescope").
+#: The 21 module-documentation sections that were already byte-identical (measured directly
+#: against the golden file, not transcribed from any planning notes).
 _PREVIOUSLY_BYTE_IDENTICAL_MODULES = frozenset(
     {
         "edelweissfe.analyticalfields.fromvtk",
@@ -523,7 +520,7 @@ _PREVIOUSLY_BYTE_IDENTICAL_MODULES = frozenset(
 )
 assert len(_PREVIOUSLY_BYTE_IDENTICAL_MODULES) == 21
 
-#: U2c's three closures: the renderer now reproduces ``datalineField`` (closing ``section/plane``
+#: Three additional closures: the renderer now reproduces ``datalineField`` (closing ``section/plane``
 #: and ``section/solid``) and the ``optionsOverrideOnly`` marker excludes ``ensight``'s two
 #: ``>>options``-only fields from its module section.
 _NEWLY_BYTE_IDENTICAL_MODULES = frozenset(
@@ -534,14 +531,14 @@ _NEWLY_BYTE_IDENTICAL_MODULES = frozenset(
     }
 )
 
-#: U3a's closure: the 11 constraints whose structural args (`slaveSurface`/`masterSurface`/`nSet`/
+#: The 11 constraints whose structural args (`slaveSurface`/`masterSurface`/`nSet`/
 #: `referencePoint`/`constrainedNSet`/`loadNSet`/`rigidBody`) were resolved in
-#: `fromConstraintDefinition` (popped from the raw definition) rather than declared on the L2 schema,
-#: leaving the schema under-describing the grammar. U3a adds them as required schema fields (dtype/
-#: order matching the golden) and reworks `fromConstraintDefinition` to read them off the built schema
-#: instance. 2 of these 11 (`nodetodeformablesurfacepenalty.augmentedLagrange`, `tie.adjust`) also
-#: carry the plan's endorsed `str`->`bool` improvement, whose golden lines are updated in the same
-#: U3a commit. `constraints/hangingnode` is the twelfth registered constraint but is NOT here -- it
+#: `fromConstraintDefinition` (popped from the raw definition) rather than declared on the schema,
+#: leaving the schema under-describing the grammar. These constraints now declare them as required
+#: schema fields (dtype/order matching the golden) and `fromConstraintDefinition` reads them off the
+#: built schema instance instead. 2 of these 11 (`nodetodeformablesurfacepenalty.augmentedLagrange`,
+#: `tie.adjust`) also carry a `str`->`bool` improvement, whose golden lines were updated alongside.
+#: `constraints/hangingnode` is the twelfth registered constraint but is NOT here -- it
 #: was already byte-identical (see `_PREVIOUSLY_BYTE_IDENTICAL_MODULES`).
 _U3A_CONSTRAINT_MODULES = frozenset(
     {
@@ -560,7 +557,7 @@ _U3A_CONSTRAINT_MODULES = frozenset(
 )
 assert len(_U3A_CONSTRAINT_MODULES) == 11
 
-#: U3c's closure: hadaptivity gained a real (documentation-only -- construction is untouched, see
+#: hadaptivity gained a real (documentation-only -- construction is untouched, see
 #: HAdaptivitySchema's own docstring) schema, reproducing its golden module section byte-for-byte.
 _U3C_MODULES = frozenset({"edelweissfe.modelmodifiers.adaptivity.hadaptivity"})
 
@@ -569,24 +566,24 @@ _EXPECTED_BYTE_IDENTICAL_MODULES = (
 )
 
 #: Every module documentation section that HAS a ``[name] ...``-headed golden body (i.e. is a member
-#: of :data:`_REGISTRY_SCHEMA_ENTRIES`) but is *not* byte-identical, deliberately deferred to a later
-#: U3 sub-increment -- the "documented, deliberately-excluded list" so coverage can only grow, never
-#: shrink silently. U3a closed all 11 constraints (see :data:`_U3A_CONSTRAINT_MODULES`), so this set
+#: of :data:`_REGISTRY_SCHEMA_ENTRIES`) but is *not* byte-identical, deliberately deferred -- the
+#: "documented, deliberately-excluded list" so coverage can only grow, never
+#: shrink silently. All 11 constraints are now closed (see :data:`_U3A_CONSTRAINT_MODULES`), so this set
 #: is now empty; the remaining not-yet-schema-described modules are the ``schema=None`` ones tracked
 #: in :data:`_SCHEMA_NONE_WITH_GOLDEN_SECTION` and the ``< name >``-headed ones in
 #: :data:`_NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION`, neither of which is a member of
 #: :data:`_REGISTRY_SCHEMA_ENTRIES` in the first place.
 _DEFERRED_TO_U3 = frozenset()
 
-#: The schema=None modules (PLAN_INPUT_SYSTEM_UNIFICATION.md's U2 recon) that additionally have a
+#: The schema=None modules that additionally have a
 #: golden "module documentation" section -- they cannot be rendered at all today, let alone compared,
 #: so they are tracked separately from `_DEFERRED_TO_U3` (which is exclusively "has a schema, differs
-#: from golden"). Real schemas are added in U3. (`sections/planerandomthickness` and the three
+#: from golden"). Real schemas may be added later. (`sections/planerandomthickness` and the three
 #: `statetransferstrategy` entries are also `schema=None` but have NO golden section at all --
 #: they were never `Module`-documented in the legacy grammar -- so they are outside this tracking
 #: entirely, not merely deferred.)
 #:
-#: U3c closed `hadaptivity` (see :data:`_U3C_MODULES`). `stepactions/options` deliberately stays
+#: `hadaptivity` is already closed (see :data:`_U3C_MODULES`). `stepactions/options` deliberately stays
 #: `schema=None` permanently, not just for now: it is a dispatcher onto another object's schema, not
 #: a leaf option consumer (see that module's own docstring) -- there is no schema of its own to add.
 _SCHEMA_NONE_WITH_GOLDEN_SECTION = frozenset(
@@ -599,13 +596,13 @@ _SCHEMA_NONE_WITH_GOLDEN_SECTION = frozenset(
 #: Modules that DO have a real schema and a golden "module documentation:" marker, but whose golden
 #: content is not headed by a ``[name] ...`` line at all -- a fundamentally different rendering
 #: *shape* than :func:`renderSchemaSurface` produces as a single top-level spec, discovered while
-#: extending this test beyond the categories the U2 recon explicitly measured (``stepaction``,
+#: extending this test beyond the categories originally measured (``stepaction``,
 #: ``outputmanager``). Because :func:`_moduleDocGoldenBodies` only extracts a body for a
 #: ``[name] ...``-headed section, none of these ever enter :data:`_REGISTRY_SCHEMA_ENTRIES` at all.
 #:
-#: U3b closed both shapes that used to populate this set (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``,
-#: U3b): the 12 step actions (`stepactions/options`, the thirteenth registered one, stays
-#: `schema=None` -- entangled with the U3c ``>>options`` rework, see
+#: Both shapes that used to populate this set are now closed: the 12 step actions (`stepactions/options`,
+#: the thirteenth registered one, stays
+#: `schema=None` -- entangled with the ``>>options`` rework, see
 #: :data:`_SCHEMA_NONE_WITH_GOLDEN_SECTION`) render their ``< name >``/``< updateName >`` pair,
 #: repeated once per registered step type, via :func:`_stepActionExpectedSection` below; and
 #: ``outputmanagers/meshplot``'s legacy dict-style ``documentation = {...}`` renders via
@@ -620,7 +617,7 @@ _NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION = frozenset()
 
 def _moduleSectionBody(schema: type) -> str:
     """The lines of :func:`renderSchemaSurface` after its own ``[name] ...`` header line, for a
-    single schema -- the "grammar body" the U2c spec's gate compares against the golden body
+    single schema -- the "grammar body" this test compares against the golden body
     extracted by :func:`_moduleDocGoldenBodies`. ``name``/``description`` are placeholders: the
     header line itself is never compared (only the golden extraction's own header line is
     discarded), so what is written here is immaterial.
@@ -632,20 +629,20 @@ def _moduleSectionBody(schema: type) -> str:
 
 @pytest.mark.parametrize("modpath", sorted(_EXPECTED_BYTE_IDENTICAL_MODULES))
 def test_module_section_matches_golden_byte_for_byte(modpath):
-    """U2c's gate (A), extended through U3a: every module documentation section not deferred -- the
-    21 already-identical before U2c, the ``ensight``/``section.plane``/``section.solid`` trio closed
-    by U2c's renderer feature and ``optionsOverrideOnly`` marker, and the 11 constraints closed by
-    U3a (structural args added to their schemas) -- renders byte-identical to its golden grammar body.
+    """Every module documentation section not deferred -- the
+    21 already-identical modules, the ``ensight``/``section.plane``/``section.solid`` trio closed
+    by the renderer's ``datalineField`` support and ``optionsOverrideOnly`` marker, and the 11 constraints closed by
+    adding their structural args to their schemas -- renders byte-identical to its golden grammar body.
     """
     schema = _REGISTRY_SCHEMA_ENTRIES[modpath]
     assert _moduleSectionBody(schema) == _MODULE_DOC_GOLDEN_BODIES[modpath]
 
 
 def test_module_section_byte_identical_set_is_exactly_the_expected_closed_set():
-    """The end-to-end U2c/U3a assertion the spec's GATE names explicitly: computing byte-identity
+    """The end-to-end assertion: computing byte-identity
     fresh for every qualifying registry entry (not trusting the parametrized list above, which could
     in principle omit an entry) yields exactly ``_EXPECTED_BYTE_IDENTICAL_MODULES`` -- no regression
-    among the previous 21, the three U2c closures, and the 11 U3a constraints, and no more.
+    among the previous 21, the three additional closures, and the 11 constraints, and no more.
     """
     matching = {
         modpath
@@ -667,7 +664,7 @@ def test_deferred_and_matching_module_sections_partition_every_schema_bearing_en
 
 def test_schema_none_modules_with_a_golden_section_are_tracked_and_unrenderable():
     """Falsifies :data:`_SCHEMA_NONE_WITH_GOLDEN_SECTION`: every entry in it really is registered
-    with ``schema=None`` today (so U3, not U2c, is where it gains one), and really does have a golden
+    with ``schema=None`` today (so a schema would need to be added for it to gain one), and really does have a golden
     "module documentation" section (otherwise it would belong outside this tracking entirely, like
     ``sections/planerandomthickness``).
     """
@@ -721,9 +718,9 @@ def test_module_doc_golden_extraction_is_not_vacuous():
     assert _PREVIOUSLY_BYTE_IDENTICAL_MODULES <= set(_MODULE_DOC_GOLDEN_BODIES)
 
 
-# --- U3b: the 12 step actions' `< name >`/`< updateName >` sections, and meshplot's dict-style ----
-# section -- the two non-bracket-format shapes `_NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION` used to
-# track (PLAN_INPUT_SYSTEM_UNIFICATION.md, U3b). Neither fits `_moduleSectionBody`'s "one `[name]`
+# --- the 12 step actions' `< name >`/`< updateName >` sections, and meshplot's dict-style section --
+# the two non-bracket-format shapes `_NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION` used to
+# track. Neither fits `_moduleSectionBody`'s "one `[name]`
 # spec, header line discarded" comparison above, so each gets its own reconstruction mirroring
 # `tests/_inputlanguage_snapshot.py::renderCurrentInputLanguageSurface`'s own per-module assembly
 # (the module's real `__doc__`, if any, then the rendered grammar, joined by one newline) and is
@@ -767,8 +764,8 @@ def _expectedModuleSection(modpath: str, renderedGrammar: str) -> str:
 class _StepActionRenderSpec:
     """Everything needed to reconstruct one step action's expected golden section: the keyword's
     own name/description (transcribed verbatim from the golden ``< name > description`` header --
-    step actions carry no ``keywordName``/``keywordDescription`` class attributes the way the U2a/
-    U2b top-level ``KeywordBase`` subclasses do, so unlike :func:`_structuralKeywordSpec` these
+    step actions carry no ``keywordName``/``keywordDescription`` class attributes the way the
+    top-level ``KeywordBase`` subclasses do, so unlike :func:`_structuralKeywordSpec` these
     cannot be read off the class), and -- only for the 3 modules with an ``update<keyword>``
     partial-redeclaration pair -- the same for the update keyword and its documentation-only schema
     attribute name.
@@ -783,7 +780,7 @@ class _StepActionRenderSpec:
     updateSchemaAttr: str | None = None
 
 
-#: One entry per U3b-closed step action (`stepactions/options`, the 13th registered one, is not
+#: One entry per closed step action (`stepactions/options`, the 13th registered one, is not
 #: here -- see :data:`_SCHEMA_NONE_WITH_GOLDEN_SECTION`). Every schema is real code, imported by
 #: attribute name from the actual module below, not re-declared here.
 _U3B_STEP_ACTION_SPECS = [
@@ -904,7 +901,7 @@ def _stepActionRenderedGrammar(spec: _StepActionRenderSpec) -> str:
 
 @pytest.mark.parametrize("spec", _U3B_STEP_ACTION_SPECS, ids=[s.modpath for s in _U3B_STEP_ACTION_SPECS])
 def test_stepaction_module_section_matches_golden_byte_for_byte(spec):
-    """U3b's gate (A) for step actions: reconstructing the ``< name > .../< updateName > ...``
+    """Reconstructing the ``< name > .../< updateName > ...``
     section from each step action's real (registry-backed) schema -- and, where one exists, its
     documentation-only ``Update<Keyword>Schema`` companion -- reproduces the golden section
     byte-for-byte, including the python-docstring-then-grammar assembly and the once-per-step-type
@@ -925,7 +922,7 @@ def test_stepaction_module_section_matches_golden_byte_for_byte(spec):
 
 def test_stepaction_render_specs_cover_every_registered_stepaction_except_options():
     """Falsifies :data:`_U3B_STEP_ACTION_SPECS` against drift: it names exactly the built-in
-    ``stepaction`` table minus ``options`` (still ``schema=None``, deferred to U3c -- see
+    ``stepaction`` table minus ``options`` (still ``schema=None`` and deliberately deferred -- see
     :data:`_SCHEMA_NONE_WITH_GOLDEN_SECTION`), so a 14th step action or a renamed one would be
     caught here rather than silently missing from the parametrized test above.
 
@@ -946,7 +943,7 @@ def test_stepaction_render_specs_cover_every_registered_stepaction_except_option
 def _meshplotExpectedSection() -> str:
     """Build the expected meshplot section: its real ``__doc__`` then its ``documentation`` dict
     rendered via :func:`~edelweissfe.utils.schemasurface.renderDictDocumentation` -- the dict itself
-    is untouched by U3b (see that module's own docstring on why it stays a placeholder), so this
+    is untouched (see that module's own docstring on why it stays a placeholder), so this
     reconstructs the section from the exact same object the legacy renderer already used.
     """
     import edelweissfe.outputmanagers.meshplot as meshplot
@@ -957,17 +954,17 @@ def _meshplotExpectedSection() -> str:
 
 
 def test_meshplot_dict_style_section_matches_golden_byte_for_byte():
-    """U3b's gate (A) for meshplot: :func:`renderDictDocumentation` over the module's own,
+    """:func:`renderDictDocumentation` over the module's own,
     untouched ``documentation`` dict reproduces the golden section byte-for-byte."""
     assert _meshplotExpectedSection() == _RAW_MODULE_DOC_GOLDEN_SECTIONS["edelweissfe.outputmanagers.meshplot"]
 
 
 def test_non_bracket_format_golden_section_is_now_fully_covered():
-    """End-to-end U3b assertion mirroring
+    """End-to-end assertion mirroring
     ``test_deferred_and_matching_module_sections_partition_every_schema_bearing_entry`` for the
     non-bracket-format shapes: every module the (now empty)
     :data:`_NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION` used to list is covered by one of the two
-    dedicated checks above, so U3b really did close every entry rather than the set having been
+    dedicated checks above, so every entry really was closed rather than the set having been
     emptied by mistake.
     """
     coveredByStepActionTest = {spec.modpath for spec in _U3B_STEP_ACTION_SPECS}

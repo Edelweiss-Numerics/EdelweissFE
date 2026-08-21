@@ -26,7 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""P3(c) safety net: audit every step action's L4 option handling against its declared grammar.
+"""Audits every step action's option handling against its declared grammar.
 
 Two failure modes are pinned here, both of which this project has been bitten by repeatedly and
 neither of which any simulation test reliably catches.
@@ -75,7 +75,7 @@ NON_OPTION_KEYS = frozenset({"name", "inputfile", "inputFile", "datalines", "exp
 #: entry is a latent bug, recorded rather than fixed because fixing means deciding what the option
 #: should *mean*, which is a product decision and not part of a behaviour-neutral port.
 #:
-#: Empty now that all twelve step actions are ported to L2 schemas: a schema-based module's
+#: Empty now that all twelve step actions use schema-based option handling: a schema-based module's
 #: genuinely-unread fields -- e.g. `distributedload`'s `field` (never consumed: `DistributedLoadBase`
 #: has no notion of a field), `bodyforce`'s `delta` (declared for an incremental update, but
 #: unreachable since `bodyforce` offers no `updatebodyforce` keyword, so a re-declaration is always
@@ -96,7 +96,7 @@ UNREAD_CHECK_EXEMPT_MODULES = {
     "options",
 }
 
-#: The two L2 validation entry points a ported module hands its `definition`/`self.schema` to (see
+#: The two validation entry points a schema-based module hands its `definition`/`self.schema` to (see
 #: ``utils/schema.py``). Neither can ``KeyError`` on a key its schema declares but the caller's
 #: dict happens to lack: ``buildSchemaFromOptions`` lets the dataclass default fill it in (its only
 #: failure mode for an absent key is "missing *required*", a distinct, already-enforced check), and
@@ -412,7 +412,7 @@ def test_every_builtin_step_action_declares_its_own_keyword(grammar):
 
 
 def test_every_step_action_is_ported_to_the_typed_constructor_seam(optionReads):
-    """Every step action overrides ``fromStepActionDefinition``, i.e. P3(c) is complete.
+    """Every step action overrides ``fromStepActionDefinition``.
 
     ``StepActionBase`` deliberately provides a legacy default for this hook so that the port could
     proceed one module at a time (see its docstring). This asserts the port is finished, so the

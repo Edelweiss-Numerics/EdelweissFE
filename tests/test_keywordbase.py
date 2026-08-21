@@ -25,13 +25,12 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Tests for ``edelweissfe/keywords/base/keywordbase.py`` (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``,
-U4).
+"""Tests for ``edelweissfe/keywords/base/keywordbase.py``.
 
 ``KeywordBase`` is not an ABC: construction from a parsed ``.inp`` definition happens in the
-existing per-category L4 adapters (``abqmodelconstructor``/``inputfilehelpers``/``StepManager``),
-not on this class (the ``fromKeywordDefinition`` seam U1-U3 explored was never wired to anything and
-was deleted in U4 -- see the plan's "U3d-2 -- SKIPPED" note). ``KeywordBase`` is therefore just an
+existing per-category adapters (``abqmodelconstructor``/``inputfilehelpers``/``StepManager``), not
+on this class -- a ``fromKeywordDefinition`` seam was explored on this class at one point but was
+never wired to anything and has since been removed. ``KeywordBase`` is therefore just an
 ``OptionSchemaProvider`` that additionally owns a keyword's own spelling/description, mirroring
 ``tests/test_registry.py``'s and ``test_schema.py``'s coverage of the equivalent property for
 ``GeneratorBase``/``StepActionBase``.

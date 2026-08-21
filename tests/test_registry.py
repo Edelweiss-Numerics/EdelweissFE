@@ -25,7 +25,7 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""P1 tests for ``edelweissfe/config/registry.py``, the L3 lazy registry.
+"""Tests for ``edelweissfe/config/registry.py``, the lazy registry.
 
 Covers: zero-eager-import (subprocess, since ``sys.modules`` pollution from other test modules
 would otherwise make an in-process check meaningless -- the same reasoning
@@ -51,11 +51,11 @@ from edelweissfe.utils.schema import schemaOf
 
 
 class _PluginSchema:
-    """Stand-in for a third-party package's L2 option schema."""
+    """Stand-in for a third-party package's option schema."""
 
 
 class _PluginOutputManagerWithoutSchema(OutputManagerBase):
-    """A plugin that has not declared an L2 schema, inheriting OptionSchemaProvider's None."""
+    """A plugin that has not declared an option schema, inheriting OptionSchemaProvider's None."""
 
     def __init__(self, name, definitionLines, model, fieldOutputController, journal, plotter):
         pass
@@ -170,8 +170,8 @@ def test_builtin_lookup_resolves_without_any_entry_point_metadata():
 
     assert target is OutputManager
     # What this test is about is the *target* resolving off the static table. The schema is asserted
-    # against what the class itself declares rather than against a literal, so that porting a module
-    # to L1/L2 (which gives it a non-None schema) cannot fail this test as a side effect -- the
+    # against what the class itself declares rather than against a literal, so that a module later
+    # gaining a non-None schema cannot fail this test as a side effect -- the
     # contract "the registry hands out exactly the schema the class declares" holds either way.
     assert schema is schemaOf(OutputManager)
 
@@ -325,7 +325,7 @@ def test_register_allows_manual_registration_bypassing_builtins_and_entrypoints(
 def test_schema_reaches_the_caller_through_the_builtin_dotted_string_path():
     """A schema declared as a class attribute on a *built-in* must come back from ``lookup``.
 
-    This is the P2 blocker's resolution: ``register(..., schema=...)`` writes straight into the
+    ``register(..., schema=...)`` writes straight into the
     memo cache and was previously the *only* way a non-``None`` schema could ever be returned, so
     the built-in table and the entry-point paths were structurally schema-blind. ``lookup`` now
     obtains the schema from the resolved target itself via ``schemaOf``.
@@ -369,7 +369,7 @@ def test_schema_reaches_the_caller_through_a_third_party_entry_point():
 
 
 def test_schema_is_none_for_a_class_that_declares_none():
-    """A class that has not been given an L2 schema inherits ``OptionSchemaProvider``'s ``None``
+    """A class that has not been given an option schema inherits ``OptionSchemaProvider``'s ``None``
     default rather than failing lookup -- which is what lets a base class adopt the mixin before its
     subclasses are ported.
 
@@ -544,16 +544,15 @@ def test_isRegistered_sees_all_three_registration_mechanisms():
     assert "inprocessaction" in registry.availableNames("stepaction")
 
 
-# --- the "keyword" category (U1 reserved it empty; U2a populated its first slice, the six
-# structural mesh/job keywords; U2b populates the remaining fifteen --
-# PLAN_INPUT_SYSTEM_UNIFICATION.md §1.3/§5) ---
+# --- the "keyword" category (populated with all 21 top-level keywords: six structural
+# mesh/job keywords plus fifteen pluggable-module/type-dispatch keywords) ---
 
 
 def test_keyword_category_covers_all_21_top_level_keywords_after_u2b():
-    """U2b completes ``"keyword"`` with all 21 top-level keywords -- U2a's six structural mesh/job
-    keywords plus the fifteen pluggable-module/type-dispatch keywords -- matching the full
-    ``printKeywords()`` surface exactly. This is now the final state of the category (U3 does not
-    add further names, only wires resolution into the running parser).
+    """The ``"keyword"`` category is populated with all 21 top-level keywords -- six structural
+    mesh/job keywords plus fifteen pluggable-module/type-dispatch keywords -- matching the full
+    ``printKeywords()`` surface exactly. This is the final state of the category; only wiring
+    resolution into the running parser remains.
     """
     assert registry.availableNames("keyword") == [
         "advancedmaterial",
@@ -581,7 +580,7 @@ def test_keyword_category_covers_all_21_top_level_keywords_after_u2b():
 
 
 def test_keyword_category_lookup_resolves_a_structural_keyword_to_its_KeywordBase_subclass():
-    """Each of the six U2a entries resolves to its ``KeywordBase`` subclass, declaring its own L2
+    """Each of the six structural keyword entries resolves to its ``KeywordBase`` subclass, declaring its own
     schema -- exactly like any other built-in category entry."""
     from edelweissfe.keywords.base.keywordbase import KeywordBase
     from edelweissfe.keywords.element import ElementKeyword
@@ -593,7 +592,7 @@ def test_keyword_category_lookup_resolves_a_structural_keyword_to_its_KeywordBas
 
 
 def test_keyword_category_lookup_fails_cleanly_for_an_unregistered_name():
-    """A name not among the six U2a entries must behave exactly like any other unknown name in a
+    """A name not among the six structural keyword entries must behave exactly like any other unknown name in a
     populated category (see ``test_lookup_failure_for_unknown_category_does_not_crash``) -- this
     module makes no special case for ``"keyword"``, so there is nothing to special-case in its
     failure path either."""
@@ -603,8 +602,8 @@ def test_keyword_category_lookup_fails_cleanly_for_an_unregistered_name():
 
 
 def test_keyword_category_accepts_manual_registration_like_any_other_category():
-    """The category is "valid" in the sense the plan means: nothing rejects it, so U2 can start
-    calling :func:`registry.register`/rely on :func:`registry.lookup` for it without any further
+    """The category is valid like any other: nothing rejects it, so callers can freely
+    call :func:`registry.register`/rely on :func:`registry.lookup` for it without any further
     change here."""
 
     class _FakeKeyword:
