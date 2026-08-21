@@ -26,13 +26,10 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*material``: the provider-dispatched keyword defining a material (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2b).
+"""``*material``: defines a material.
 
-Verbatim transcription of ``inputLanguage.addKeyword("material", ...)`` in
-``edelweissfe/utils/inputfileparser.py:261-265``. ``provider`` selects the resolver strategy (see
-``edelweissfe.keywords.element`` for the general note on this phase's scope); U2b mirrors only this
-keyword's own line args and dataline payload, not any provider-specific grammar.
+``provider`` selects the resolver strategy used to construct the material; any provider-specific
+options are validated by that provider, not by this schema.
 """
 
 from __future__ import annotations
@@ -45,11 +42,10 @@ from edelweissfe.utils.schema import datalineField, schemaField
 
 @dataclass(frozen=True)
 class MaterialSchema:
-    """L2: the options and dataline payload of the ``*material`` keyword.
+    """Options and dataline payload of the ``*material`` keyword.
 
-    ``materialId`` answers to the input-file option ``id``; a dataclass field literally called
-    ``id`` would shadow the builtin, which this project's conventions avoid (see
-    ``edelweissfe.keywords.element.ElementSchema.elementType`` for the identical precedent).
+    ``materialId`` corresponds to the input-file option ``id``; the field is not named ``id`` to
+    avoid shadowing the Python builtin.
     """
 
     name: str | None = schemaField(description="name of material", dtype=str, default=None, required=True)
@@ -63,7 +59,7 @@ class MaterialSchema:
 class MaterialKeyword(KeywordBase):
     """``*material``: definition of a material."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema class describing this keyword's options and dataline payload.
     schema = MaterialSchema
 
     keywordName = "material"

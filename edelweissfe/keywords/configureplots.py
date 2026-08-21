@@ -26,13 +26,10 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*configurePlots``: the keyword customizing figures and axes (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2b).
+"""``*configurePlots``: customizes figures and axes via key=value datalines.
 
-Verbatim transcription of ``inputLanguage.addKeyword("configurePlots", ...)`` in
-``edelweissfe/utils/inputfileparser.py:449-450`` -- a required dataline payload only, no line args
-at all (like ``*exportPlots``, see ``edelweissfe.keywords.exportplots``). See
-``edelweissfe.keywords.element`` for the general note on this phase's scope.
+Takes a required dataline payload only, no line options (like ``*exportPlots``, see
+``edelweissfe.keywords.exportplots``).
 """
 
 from __future__ import annotations
@@ -45,7 +42,7 @@ from edelweissfe.utils.schema import datalineField
 
 @dataclass(frozen=True)
 class ConfigurePlotsSchema:
-    """L2: the dataline payload of the ``*configurePlots`` keyword. No line args at all."""
+    """The dataline payload of the ``*configurePlots`` keyword. No line options."""
 
     datalines: list | None = datalineField(
         description="key=value pairs for configuration of figures and axes", required=True
@@ -55,7 +52,7 @@ class ConfigurePlotsSchema:
 class ConfigurePlotsKeyword(KeywordBase):
     """``*configurePlots``: customize the figures and axes."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema declared for the registry, per ``OptionSchemaProvider``.
     schema = ConfigurePlotsSchema
 
     keywordName = "configurePlots"

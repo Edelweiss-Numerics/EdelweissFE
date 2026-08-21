@@ -26,13 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*surface``: the structural keyword defining a surface set (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2a).
-
-Verbatim transcription of ``inputLanguage.addKeyword("surface", ...)`` in
-``edelweissfe/utils/inputfileparser.py:235-238``. See ``edelweissfe.keywords.element`` for the
-general note on U2a's scope (schema only, no runtime wiring).
-"""
+"""``*surface``: defines a surface set."""
 
 from __future__ import annotations
 
@@ -44,11 +38,10 @@ from edelweissfe.utils.schema import datalineField, schemaField
 
 @dataclass(frozen=True)
 class SurfaceSchema:
-    """L2: the options and dataline payload of the ``*surface`` keyword.
+    """Options and dataline payload of the ``*surface`` keyword.
 
-    ``surfaceType`` answers to the input-file option ``type``; a dataclass field literally called
-    ``type`` would shadow the builtin, which this project's conventions avoid (see
-    ``edelweissfe.keywords.element.ElementSchema.elementType`` for the identical precedent).
+    ``surfaceType`` corresponds to the input-file option ``type``; the field is not named ``type``
+    to avoid shadowing the Python builtin.
     """
 
     name: str | None = schemaField(description="name", dtype=str, default=None, required=True)
@@ -67,7 +60,7 @@ class SurfaceSchema:
 class SurfaceKeyword(KeywordBase):
     """``*surface``: definition of surface set."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema class describing this keyword's options and dataline payload.
     schema = SurfaceSchema
 
     keywordName = "surface"

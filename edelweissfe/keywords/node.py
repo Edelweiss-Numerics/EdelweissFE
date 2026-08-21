@@ -26,13 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*node``: the structural keyword defining nodes (see ``PLAN_INPUT_SYSTEM_UNIFICATION.md``,
-U2a).
-
-Verbatim transcription of ``inputLanguage.addKeyword("node", ...)`` in
-``edelweissfe/utils/inputfileparser.py:221-223``. See ``edelweissfe.keywords.element`` for the
-general note on U2a's scope (schema only, no runtime wiring).
-"""
+"""``*node``: defines nodes."""
 
 from __future__ import annotations
 
@@ -44,7 +38,7 @@ from edelweissfe.utils.schema import datalineField, schemaField
 
 @dataclass(frozen=True)
 class NodeSchema:
-    """L2: the options and dataline payload of the ``*node`` keyword."""
+    """Options and dataline payload of the ``*node`` keyword."""
 
     nSet: str | None = schemaField(description="name of nSet to be created", dtype=str, default=None)
     datalines: list | None = datalineField(
@@ -55,7 +49,7 @@ class NodeSchema:
 class NodeKeyword(KeywordBase):
     """``*node``: definition of nodes."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema class describing this keyword's options and dataline payload.
     schema = NodeSchema
 
     keywordName = "node"

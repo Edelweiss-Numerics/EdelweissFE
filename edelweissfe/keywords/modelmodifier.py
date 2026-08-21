@@ -26,14 +26,10 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*modelModifier``: the name-dispatched keyword defining a model modifier (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2b).
+"""``*modelModifier``: defines a model modifier, dispatched by ``type`` to a model-modifier class.
 
-Verbatim transcription of ``inputLanguage.addKeyword("modelModifier", ...)`` in
-``edelweissfe/utils/inputfileparser.py:436-439`` -- its own line args and dataline payload only.
-The resolved ``type=``-dispatched model-modifier class supplies its own schema for any further
-options, out of scope for U2b (see ``edelweissfe.keywords.element`` for the general note on this
-phase's scope).
+The resolved model-modifier class supplies its own schema for any further options beyond this
+keyword's own line args and dataline payload.
 """
 
 from __future__ import annotations
@@ -46,11 +42,10 @@ from edelweissfe.utils.schema import datalineField, schemaField
 
 @dataclass(frozen=True)
 class ModelModifierSchema:
-    """L2: the options and dataline payload of the ``*modelModifier`` keyword.
+    """Options and dataline payload of the ``*modelModifier`` keyword.
 
-    ``modelModifierType`` answers to the input-file option ``type``; a dataclass field literally
-    called ``type`` would shadow the builtin, which this project's conventions avoid (see
-    ``edelweissfe.keywords.element.ElementSchema.elementType`` for the identical precedent).
+    ``modelModifierType`` corresponds to the input-file option ``type``; the field is not named
+    ``type`` to avoid shadowing the Python builtin.
     """
 
     modelModifierType: str | None = schemaField(
@@ -63,7 +58,7 @@ class ModelModifierSchema:
 class ModelModifierKeyword(KeywordBase):
     """``*modelModifier``: define a model modifier."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema class describing this keyword's options and dataline payload.
     schema = ModelModifierSchema
 
     keywordName = "modelModifier"

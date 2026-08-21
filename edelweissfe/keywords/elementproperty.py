@@ -26,12 +26,9 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*elementProperty``: the structural keyword overriding a named property on all elements of an
-element set (see ``edelweissfe.elements.elementproperty.ElementProperty``, consumed by
+"""``*elementProperty``: overrides a named property on all elements of an element set (see
+``edelweissfe.elements.elementproperty.ElementProperty``, consumed by
 ``generators.abqmodelconstructor.AbqModelConstructor``).
-
-Verbatim transcription of the legacy ``inputLanguage.addKeyword("elementproperty", ...)`` grammar
--- missed by U2a/U2b's otherwise-exhaustive enumeration of top-level keywords.
 """
 
 from __future__ import annotations
@@ -44,7 +41,7 @@ from edelweissfe.utils.schema import datalineField, schemaField
 
 @dataclass(frozen=True)
 class ElementPropertySchema:
-    """L2: the options and dataline payload of the ``*elementProperty`` keyword."""
+    """The options and dataline payload of the ``*elementProperty`` keyword."""
 
     elSet: str | None = schemaField(
         description="element set the property is assigned to", dtype=str, default=None, required=True
@@ -61,7 +58,7 @@ class ElementPropertySchema:
 class ElementPropertyKeyword(KeywordBase):
     """``*elementProperty``: override a named property on all elements of an element set."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema declared for the registry, per ``OptionSchemaProvider``.
     schema = ElementPropertySchema
 
     keywordName = "elementProperty"

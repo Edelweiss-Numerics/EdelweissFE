@@ -26,13 +26,10 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*include``: the keyword loading the contents of an extra file (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2b).
+"""``*include``: loads the contents of another file into the input file being parsed.
 
-Verbatim transcription of ``inputLanguage.addKeyword("include", ...)`` in
-``edelweissfe/utils/inputfileparser.py:461-462``. No dataline payload -- the referenced file's
-contents are spliced into the parse, not carried as datalines of this keyword itself. See
-``edelweissfe.keywords.element`` for the general note on this phase's scope.
+No dataline payload -- the referenced file's contents are spliced into the parse, not carried as
+datalines of this keyword itself.
 """
 
 from __future__ import annotations
@@ -45,7 +42,7 @@ from edelweissfe.utils.schema import schemaField
 
 @dataclass(frozen=True)
 class IncludeSchema:
-    """L2: the options of the ``*include`` keyword. No dataline payload -- see the module
+    """The options of the ``*include`` keyword. No dataline payload -- see the module
     docstring."""
 
     input: str | None = schemaField(
@@ -56,7 +53,7 @@ class IncludeSchema:
 class IncludeKeyword(KeywordBase):
     """``*include``: load contents of extra file."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema declared for the registry, per ``OptionSchemaProvider``.
     schema = IncludeSchema
 
     keywordName = "include"

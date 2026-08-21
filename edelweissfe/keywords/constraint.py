@@ -26,14 +26,10 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*constraint``: the name-dispatched keyword defining a constraint (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2b).
+"""``*constraint``: defines a constraint, dispatched by its ``type`` option.
 
-Verbatim transcription of ``inputLanguage.addKeyword("constraint", ...)`` in
-``edelweissfe/utils/inputfileparser.py:412-415`` -- its own line args and dataline payload only.
-The resolved ``type=``-dispatched constraint class supplies its own schema for any further options,
-out of scope for U2b (see ``edelweissfe.keywords.element`` for the general note on this phase's
-scope).
+Declares only its own line options and dataline payload; the resolved ``type=`` constraint class
+supplies its own schema for any further options.
 """
 
 from __future__ import annotations
@@ -46,11 +42,11 @@ from edelweissfe.utils.schema import datalineField, schemaField
 
 @dataclass(frozen=True)
 class ConstraintSchema:
-    """L2: the options and dataline payload of the ``*constraint`` keyword.
+    """The options and dataline payload of the ``*constraint`` keyword.
 
     ``constraintType`` answers to the input-file option ``type``; a dataclass field literally
-    called ``type`` would shadow the builtin, which this project's conventions avoid (see
-    ``edelweissfe.keywords.element.ElementSchema.elementType`` for the identical precedent).
+    called ``type`` would shadow the builtin, so it is renamed (see also
+    ``edelweissfe.keywords.element.ElementSchema.elementType`` for the same convention).
     """
 
     constraintType: str | None = schemaField(
@@ -63,7 +59,7 @@ class ConstraintSchema:
 class ConstraintKeyword(KeywordBase):
     """``*constraint``: define a constraint."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema declared for the registry, per ``OptionSchemaProvider``.
     schema = ConstraintSchema
 
     keywordName = "constraint"

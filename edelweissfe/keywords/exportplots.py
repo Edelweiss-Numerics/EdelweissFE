@@ -26,13 +26,10 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*exportPlots``: the keyword exporting figures (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2b).
+"""``*exportPlots``: exports figures via key=value datalines.
 
-Verbatim transcription of ``inputLanguage.addKeyword("exportPlots", ...)`` in
-``edelweissfe/utils/inputfileparser.py:455-456`` -- a required dataline payload only, no line args
-at all (like ``*configurePlots``, see ``edelweissfe.keywords.configureplots``). See
-``edelweissfe.keywords.element`` for the general note on this phase's scope.
+Takes a required dataline payload only, no line options (like ``*configurePlots``, see
+``edelweissfe.keywords.configureplots``).
 """
 
 from __future__ import annotations
@@ -45,7 +42,7 @@ from edelweissfe.utils.schema import datalineField
 
 @dataclass(frozen=True)
 class ExportPlotsSchema:
-    """L2: the dataline payload of the ``*exportPlots`` keyword. No line args at all."""
+    """The dataline payload of the ``*exportPlots`` keyword. No line options."""
 
     datalines: list | None = datalineField(
         description="key=value pairs for exporting of figures and axes", required=True
@@ -55,7 +52,7 @@ class ExportPlotsSchema:
 class ExportPlotsKeyword(KeywordBase):
     """``*exportPlots``: export your figures."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema declared for the registry, per ``OptionSchemaProvider``.
     schema = ExportPlotsSchema
 
     keywordName = "exportPlots"

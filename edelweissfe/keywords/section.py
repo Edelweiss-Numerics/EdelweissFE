@@ -26,15 +26,10 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*section``: the pluggable-module keyword defining a section (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2b).
+"""``*section``: defines a section, dispatched by ``type`` (e.g. ``plane``, ``solid``).
 
-Verbatim transcription of ``inputLanguage.addKeyword("section", ...)`` in
-``edelweissfe/utils/inputfileparser.py:243-247`` -- its own line args and dataline payload only.
-``*section`` is a name-dispatched keyword (``type=plane``/``solid``/...): the hosted module's own
-extra args (e.g. ``plane``'s ``thickness``) are declared on that module's own schema, not here --
-U2b mirrors only the keyword's own grammar, not the dispatch target's (see
-``edelweissfe.keywords.element`` for the general note on this phase's scope).
+The hosted section module's own extra options (e.g. ``plane``'s ``thickness``) are declared on
+that module's own schema, not here.
 """
 
 from __future__ import annotations
@@ -47,11 +42,10 @@ from edelweissfe.utils.schema import datalineField, schemaField
 
 @dataclass(frozen=True)
 class SectionSchema:
-    """L2: the options and dataline payload of the ``*section`` keyword.
+    """Options and dataline payload of the ``*section`` keyword.
 
-    ``sectionType`` answers to the input-file option ``type``; a dataclass field literally called
-    ``type`` would shadow the builtin, which this project's conventions avoid (see
-    ``edelweissfe.keywords.element.ElementSchema.elementType`` for the identical precedent).
+    ``sectionType`` corresponds to the input-file option ``type``; the field is not named ``type``
+    to avoid shadowing the Python builtin.
     """
 
     name: str | None = schemaField(description="name", dtype=str, default=None, required=True)
@@ -67,7 +61,7 @@ class SectionSchema:
 class SectionKeyword(KeywordBase):
     """``*section``: definition of a section."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema class describing this keyword's options and dataline payload.
     schema = SectionSchema
 
     keywordName = "section"

@@ -35,20 +35,19 @@ class KeywordBase(OptionSchemaProvider):
     """Base class for top-level ``.inp`` keywords, discovered via the registry's ``"keyword"``
     category (see ``config/registry.py``).
 
-    A ``KeywordBase`` subclass carries the L2 :attr:`schema` -- the grammar's single source of
-    truth, built from :func:`~edelweissfe.utils.schema.schemaField`,
+    A ``KeywordBase`` subclass carries :attr:`schema` -- the grammar's single source of truth,
+    built from :func:`~edelweissfe.utils.schema.schemaField`,
     :func:`~edelweissfe.utils.schema.subKeywordField` and
     :func:`~edelweissfe.utils.schema.datalineField` -- plus its own spelling and description
     (:attr:`keywordName`/:attr:`keywordDescription`), consumed by
     :mod:`edelweissfe.utils.inputfileparser` for lexing/validation and by
     :mod:`edelweissfe.utils.schemasurface` for the rendered grammar surface. Construction from a
-    parsed ``.inp`` definition happens in the existing per-category L4 adapters
+    parsed ``.inp`` definition happens in the per-category adapters
     (``abqmodelconstructor``/``inputfilehelpers``/``StepManager``), not on this class: a keyword's
-    grammar and its construction are two separate concerns, and only the former needed unifying
-    across every keyword.
+    grammar and its construction are separate concerns.
     """
 
-    #: The L2 schema dataclass describing this keyword's own line options, dataline payload, and
+    #: The schema dataclass describing this keyword's own line options, dataline payload, and
     #: ``>>`` sub-blocks, or ``None`` if it declares none. See
     #: :class:`~edelweissfe.utils.schema.OptionSchemaProvider`.
     schema: ClassVar[type | None] = None

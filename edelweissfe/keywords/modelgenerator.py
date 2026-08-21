@@ -26,15 +26,10 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*modelGenerator``: the name-dispatched keyword defining a model generator (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2b).
+"""``*modelGenerator``: defines a model generator, dispatched by name to a generator module.
 
-Verbatim transcription of ``inputLanguage.addKeyword("modelGenerator", ...)`` in
-``edelweissfe/utils/inputfileparser.py:384-392`` -- its own line args only. The legacy
-declaration's ``# kw.addRequiredDatalines("keyword arguments", "")`` is commented out, i.e. dead --
-this keyword declares no dataline payload of its own. The resolved ``generator=``-dispatched
-generator class supplies its own schema for any further options, out of scope for U2b (see
-``edelweissfe.keywords.element`` for the general note on this phase's scope).
+``*modelGenerator`` declares no dataline payload of its own; the resolved generator class supplies
+its own schema for any further options.
 """
 
 from __future__ import annotations
@@ -47,8 +42,7 @@ from edelweissfe.utils.schema import schemaField
 
 @dataclass(frozen=True)
 class ModelGeneratorSchema:
-    """L2: the options of the ``*modelGenerator`` keyword. No dataline payload -- see the module
-    docstring."""
+    """Options of the ``*modelGenerator`` keyword. No dataline payload."""
 
     name: str | None = schemaField(description="name of the generator", dtype=str, default=None, required=True)
     generator: str | None = schemaField(description="name of generator module", dtype=str, default=None, required=True)
@@ -60,7 +54,7 @@ class ModelGeneratorSchema:
 class ModelGeneratorKeyword(KeywordBase):
     """``*modelGenerator``: define a model generator, loaded from a module."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema class describing this keyword's options.
     schema = ModelGeneratorSchema
 
     keywordName = "modelGenerator"

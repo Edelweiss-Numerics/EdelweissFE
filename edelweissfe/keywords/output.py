@@ -26,14 +26,10 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*output``: the name-dispatched keyword defining an output module (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2b).
+"""``*output``: defines an output module, dispatched by ``type`` (e.g. ``ensight``, ``monitor``).
 
-Verbatim transcription of ``inputLanguage.addKeyword("output", ...)`` in
-``edelweissfe/utils/inputfileparser.py:355-357`` -- its own line args only. The resolved
-``type=``-dispatched output-manager class (``ensight``, ``monitor``, ...) supplies its own schema
-for the rest of validation, out of scope for U2b (see ``edelweissfe.keywords.element`` for the
-general note on this phase's scope).
+The resolved output-manager class supplies its own schema for any options beyond this keyword's
+own line args.
 """
 
 from __future__ import annotations
@@ -46,11 +42,10 @@ from edelweissfe.utils.schema import schemaField
 
 @dataclass(frozen=True)
 class OutputSchema:
-    """L2: the options of the ``*output`` keyword. No dataline payload.
+    """Options of the ``*output`` keyword. No dataline payload.
 
-    ``outputType`` answers to the input-file option ``type``; a dataclass field literally called
-    ``type`` would shadow the builtin, which this project's conventions avoid (see
-    ``edelweissfe.keywords.element.ElementSchema.elementType`` for the identical precedent).
+    ``outputType`` corresponds to the input-file option ``type``; the field is not named ``type``
+    to avoid shadowing the Python builtin.
     """
 
     outputType: str | None = schemaField(
@@ -62,7 +57,7 @@ class OutputSchema:
 class OutputKeyword(KeywordBase):
     """``*output``: define an output module."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema class describing this keyword's options.
     schema = OutputSchema
 
     keywordName = "output"

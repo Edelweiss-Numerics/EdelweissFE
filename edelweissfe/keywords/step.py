@@ -26,15 +26,11 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*step``: the name-dispatched keyword defining an analysis step (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2b).
+"""``*step``: defines an analysis step, dispatched by ``type`` (e.g. ``adaptive``,
+``adaptiveForExplicitSimulations``).
 
-Verbatim transcription of ``inputLanguage.addKeyword("step", ...)`` in
-``edelweissfe/utils/inputfileparser.py:322-324`` -- its own line args only. ``*step`` hosts both a
-``type=``-dispatched step class (``adaptive``, ``adaptiveForExplicitSimulations``) and a large
-family of ``>>``-declared step actions; neither is part of this keyword's own grammar and both are
-out of scope for U2b (see ``edelweissfe.keywords.element`` for the general note on this phase's
-scope).
+The dispatched step class's own options, and the large family of ``>>``-declared step actions a
+step can host, are not part of this keyword's own schema.
 """
 
 from __future__ import annotations
@@ -47,11 +43,10 @@ from edelweissfe.utils.schema import schemaField
 
 @dataclass(frozen=True)
 class StepSchema:
-    """L2: the options of the ``*step`` keyword. No dataline payload.
+    """Options of the ``*step`` keyword. No dataline payload.
 
-    ``stepType`` answers to the input-file option ``type``; a dataclass field literally called
-    ``type`` would shadow the builtin, which this project's conventions avoid (see
-    ``edelweissfe.keywords.element.ElementSchema.elementType`` for the identical precedent).
+    ``stepType`` corresponds to the input-file option ``type``; the field is not named ``type`` to
+    avoid shadowing the Python builtin.
     """
 
     solver: str | None = schemaField(description="solver to be used", dtype=str, default=None, required=True)
@@ -61,7 +56,7 @@ class StepSchema:
 class StepKeyword(KeywordBase):
     """``*step``: define steps."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema class describing this keyword's options.
     schema = StepSchema
 
     keywordName = "step"

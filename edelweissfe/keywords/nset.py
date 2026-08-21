@@ -26,16 +26,11 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*nSet``: the structural keyword defining a node set (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2a).
+"""``*nSet``: defines a node set.
 
-Verbatim transcription of ``inputLanguage.addKeyword("nSet", ...)`` in
-``edelweissfe/utils/inputfileparser.py:225-233`` -- **including its bug**: the keyword's own
-description is copy-pasted from ``*elSet`` ("definition of an element set") rather than describing
-a node set. Reproduced here byte-for-byte, not corrected, per this phase's mandate to transcribe
-the existing grammar verbatim (``PLAN_INPUT_SYSTEM_UNIFICATION.md`` §6.5). See
-``edelweissfe.keywords.element`` for the general note on U2a's scope (schema only, no runtime
-wiring).
+Note: :attr:`NSetKeyword.keywordDescription` reads "definition of an element set" rather than
+"node set" -- a long-standing copy-paste artifact from ``*elSet`` that is kept as-is for backward
+compatibility, not a typo introduced here.
 """
 
 from __future__ import annotations
@@ -48,7 +43,7 @@ from edelweissfe.utils.schema import datalineField, schemaField
 
 @dataclass(frozen=True)
 class NSetSchema:
-    """L2: the options and dataline payload of the ``*nSet`` keyword."""
+    """Options and dataline payload of the ``*nSet`` keyword."""
 
     nSet: str | None = schemaField(description="name", dtype=str, default=None, required=True)
     generate: bool = schemaField(
@@ -62,13 +57,13 @@ class NSetSchema:
 class NSetKeyword(KeywordBase):
     """``*nSet``: definition of an element set.
 
-    The description above is transcribed verbatim from the legacy grammar's copy-pasted bug (see
-    the module docstring) -- it is not a typo introduced here.
+    See the module docstring: this description is kept as-is from a long-standing copy-paste
+    artifact, not a typo introduced here.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema class describing this keyword's options and dataline payload.
     schema = NSetSchema
 
     keywordName = "nSet"
-    # Verbatim from the legacy grammar, copy-paste bug included (it says "element set").
+    # Kept as-is (copy-paste artifact from *elSet); see the module docstring.
     keywordDescription = "definition of an element set"

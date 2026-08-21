@@ -26,13 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*elSet``: the structural keyword defining an element set (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2a).
-
-Verbatim transcription of ``inputLanguage.addKeyword("elSet", ...)`` in
-``edelweissfe/utils/inputfileparser.py:211-219``. See ``edelweissfe.keywords.element`` for the
-general note on U2a's scope (schema only, no runtime wiring).
-"""
+"""``*elSet``: defines an element set from explicit element numbers or a generated range."""
 
 from __future__ import annotations
 
@@ -44,7 +38,7 @@ from edelweissfe.utils.schema import datalineField, schemaField
 
 @dataclass(frozen=True)
 class ElSetSchema:
-    """L2: the options and dataline payload of the ``*elSet`` keyword."""
+    """The options and dataline payload of the ``*elSet`` keyword."""
 
     elSet: str | None = schemaField(description="name", dtype=str, default=None, required=True)
     generate: bool = schemaField(
@@ -58,7 +52,7 @@ class ElSetSchema:
 class ElSetKeyword(KeywordBase):
     """``*elSet``: definition of an element set."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema declared for the registry, per ``OptionSchemaProvider``.
     schema = ElSetSchema
 
     keywordName = "elSet"

@@ -26,13 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*updateConfiguration``: the keyword updating a previously defined configuration (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2b).
-
-Verbatim transcription of ``inputLanguage.addKeyword("updateConfiguration", ...)`` in
-``edelweissfe/utils/inputfileparser.py:377-379``. See ``edelweissfe.keywords.element`` for the
-general note on this phase's scope (schema only, no runtime wiring).
-"""
+"""``*updateConfiguration``: updates options of a previously defined configuration."""
 
 from __future__ import annotations
 
@@ -44,7 +38,7 @@ from edelweissfe.utils.schema import datalineField, schemaField
 
 @dataclass(frozen=True)
 class UpdateConfigurationSchema:
-    """L2: the options and dataline payload of the ``*updateConfiguration`` keyword."""
+    """Options and dataline payload of the ``*updateConfiguration`` keyword."""
 
     configuration: str | None = schemaField(
         description="name of configuration to be changed", dtype=str, default=None, required=True
@@ -55,7 +49,7 @@ class UpdateConfigurationSchema:
 class UpdateConfigurationKeyword(KeywordBase):
     """``*updateConfiguration``: update a configuration."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema class describing this keyword's options and dataline payload.
     schema = UpdateConfigurationSchema
 
     keywordName = "updateConfiguration"

@@ -26,14 +26,9 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*advancedmaterial``: the provider-dispatched keyword defining an advanced material (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2b).
+"""``*advancedmaterial``: defines an advanced material via a provider-specific option set.
 
-Verbatim transcription of ``inputLanguage.addKeyword("advancedmaterial", ...)`` in
-``edelweissfe/utils/inputfileparser.py:271-275`` -- a byte-for-byte duplicate of ``*material``'s own
-grammar in the legacy declaration (see ``edelweissfe.keywords.material``), reproduced here as its
-own schema/class rather than reused, mirroring the legacy source's own duplication rather than
-introducing a shared base the legacy grammar does not have.
+Uses the same option grammar as ``*material`` (see ``edelweissfe.keywords.material``).
 """
 
 from __future__ import annotations
@@ -46,11 +41,11 @@ from edelweissfe.utils.schema import datalineField, schemaField
 
 @dataclass(frozen=True)
 class AdvancedMaterialSchema:
-    """L2: the options and dataline payload of the ``*advancedmaterial`` keyword.
+    """The options and dataline payload of the ``*advancedmaterial`` keyword.
 
     ``materialId`` answers to the input-file option ``id``; a dataclass field literally called
-    ``id`` would shadow the builtin, which this project's conventions avoid (see
-    ``edelweissfe.keywords.element.ElementSchema.elementType`` for the identical precedent).
+    ``id`` would shadow the builtin, so it is renamed (see also
+    ``edelweissfe.keywords.element.ElementSchema.elementType`` for the same convention).
     """
 
     name: str | None = schemaField(description="name of material", dtype=str, default=None, required=True)
@@ -64,7 +59,7 @@ class AdvancedMaterialSchema:
 class AdvancedMaterialKeyword(KeywordBase):
     """``*advancedmaterial``: definition of an advanced material."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema declared for the registry, per ``OptionSchemaProvider``.
     schema = AdvancedMaterialSchema
 
     keywordName = "advancedmaterial"

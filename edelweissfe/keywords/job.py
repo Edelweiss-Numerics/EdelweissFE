@@ -26,15 +26,9 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*job``: the structural keyword defining an analysis job (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2a).
+"""``*job``: defines an analysis job (domain, start time, name, solver).
 
-Verbatim transcription of ``inputLanguage.addKeyword("job", ...)`` in
-``edelweissfe/utils/inputfileparser.py:305-309``. Unlike the other five structural keywords,
-``*job`` declares no ``addRequiredDatalines``/``addOptionalDatalines`` call in the legacy grammar,
-so this schema has no :func:`~edelweissfe.utils.schema.datalineField`. See
-``edelweissfe.keywords.element`` for the general note on U2a's scope (schema only, no runtime
-wiring).
+Unlike other structural keywords, ``*job`` has no dataline payload.
 """
 
 from __future__ import annotations
@@ -47,7 +41,7 @@ from edelweissfe.utils.schema import schemaField
 
 @dataclass(frozen=True)
 class JobSchema:
-    """L2: the options of the ``*job`` keyword. No dataline payload -- see the module docstring."""
+    """Options of the ``*job`` keyword. No dataline payload."""
 
     domain: str | None = schemaField(
         description="define spatial domain: 1d, 2d, 3d", dtype=str, default=None, required=True
@@ -60,7 +54,7 @@ class JobSchema:
 class JobKeyword(KeywordBase):
     """``*job``: definition of an analysis job."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema class describing this keyword's options.
     schema = JobSchema
 
     keywordName = "job"

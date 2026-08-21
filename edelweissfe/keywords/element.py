@@ -26,16 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*element``: the structural keyword defining element(s) (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2a).
-
-The schema below is a verbatim transcription of the ``inputLanguage.addKeyword("element", ...)``
-grammar hand-declared in ``edelweissfe/utils/inputfileparser.py:200-209`` -- descriptions, types
-and required/optional-ness are copied one-for-one, not re-derived. ``fromKeywordDefinition`` is a
-stub only: U2a mirrors the grammar as a schema without touching the running parser, which still
-resolves this keyword through ``inputlanguage.py``'s ``Module`` tree. Wiring the two element/node
-interpretation loops of ``abqmodelconstructor.py`` into this seam is U3's job.
-"""
+"""``*element``: defines element(s), assigning an element type and (optionally) an element set."""
 
 from __future__ import annotations
 
@@ -47,13 +38,13 @@ from edelweissfe.utils.schema import datalineField, schemaField
 
 @dataclass(frozen=True)
 class ElementSchema:
-    """L2: the options and dataline payload of the ``*element`` keyword.
+    """The options and dataline payload of the ``*element`` keyword.
 
     ``elementType`` answers to the input-file option ``type``; a dataclass field literally called
-    ``type`` would shadow the builtin, which this project's conventions avoid (see
-    ``edelweissfe.sections.base.sectionbase.MaterialParameterFromFieldSchema`` for the precedent).
-    It is declared ``required=True`` explicitly, but is still
-    given a ``default=None`` so the schema remains constructible with no arguments.
+    ``type`` would shadow the builtin, so it is renamed (see also
+    ``edelweissfe.sections.base.sectionbase.MaterialParameterFromFieldSchema`` for the same
+    convention). It is declared ``required=True`` explicitly, but still given a ``default=None``
+    so the schema remains constructible with no arguments.
     """
 
     elementType: str | None = schemaField(
@@ -73,7 +64,7 @@ class ElementSchema:
 class ElementKeyword(KeywordBase):
     """``*element``: definition of element(s)."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema declared for the registry, per ``OptionSchemaProvider``.
     schema = ElementSchema
 
     keywordName = "element"

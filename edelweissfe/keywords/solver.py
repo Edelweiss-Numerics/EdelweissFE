@@ -26,16 +26,10 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*solver``: the name-dispatched keyword defining a solver (see
-``PLAN_INPUT_SYSTEM_UNIFICATION.md``, U2b).
+"""``*solver``: defines a solver.
 
-Verbatim transcription of ``inputLanguage.addKeyword("solver", ...)`` in
-``edelweissfe/utils/inputfileparser.py:314-317``. Note the legacy grammar declares *two* required
-arguments, ``name`` (the solver instance's own name) and ``solver`` (the solver *type*, e.g.
-``"NIST"``) -- both transcribed verbatim, field name identical to option name in both cases since
-neither shadows a builtin. Its dataline payload is *optional* (``addOptionalDatalines``), unlike
-most other keywords ported so far. See ``edelweissfe.keywords.element`` for the general note on
-this phase's scope.
+Declares two required options: ``name`` (the solver instance's own name) and ``solver`` (the
+solver type, e.g. ``"NIST"``). Its dataline payload is optional, unlike most other keywords.
 """
 
 from __future__ import annotations
@@ -48,7 +42,7 @@ from edelweissfe.utils.schema import datalineField, schemaField
 
 @dataclass(frozen=True)
 class SolverSchema:
-    """L2: the options and dataline payload of the ``*solver`` keyword."""
+    """Options and dataline payload of the ``*solver`` keyword."""
 
     name: str | None = schemaField(description="solver name", dtype=str, default=None, required=True)
     solver: str | None = schemaField(description="solver type", dtype=str, default=None, required=True)
@@ -60,7 +54,7 @@ class SolverSchema:
 class SolverKeyword(KeywordBase):
     """``*solver``: define a solver."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema class describing this keyword's options and dataline payload.
     schema = SolverSchema
 
     keywordName = "solver"
