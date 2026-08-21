@@ -61,12 +61,11 @@ identification = "microgen"
 
 @dataclass(frozen=True)
 class MicrostructureGeneratorSchema:
-    """L2: the options this generator accepts, owned by this module and never mutated from
-    outside it.
+    """The options this generator accepts, owned by this module and never mutated from outside
+    it.
 
-    ``elType`` is declared ``required=True`` explicitly, but is
-    still given a ``default=None`` so the schema remains constructible for the L1 constructor's
-    default argument.
+    ``elType`` is declared ``required=True`` explicitly, but is still given a ``default=None`` so
+    the schema remains constructible for the constructor's default argument.
     """
 
     unitCellMeshFile: str | None = schemaField(description="Path to the unit cell mesh file.", dtype=str, default=None)
@@ -80,7 +79,7 @@ class MicrostructureGeneratorSchema:
 class Generator(GeneratorBase):
     """A mesh generator for generating a structure from a single unit cell mesh."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this generator, per OptionSchemaProvider.
     schema = MicrostructureGeneratorSchema
 
     def __init__(
@@ -91,7 +90,7 @@ class Generator(GeneratorBase):
         *,
         configuration: MicrostructureGeneratorSchema = MicrostructureGeneratorSchema(),
     ):
-        """L1: constructible standalone, with no parser involvement.
+        """Constructible standalone, with no parser involvement.
         Populates ``model`` directly; construction *is* the generation.
 
         Parameters

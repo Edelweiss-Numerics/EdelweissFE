@@ -334,8 +334,8 @@ def buildContactFacets(model: FEModel, surfaceName: str, prefix: str, triangulat
 
 @dataclass(frozen=True)
 class SurfaceElementGeneratorSchema:
-    """L2: the options this generator accepts, owned by this module and never mutated from
-    outside it.
+    """The options this generator accepts, owned by this module and never mutated from outside
+    it.
 
     Unlike every other generator, ``name`` here is a *required scalar option* (the facet-set name
     prefix), independent of the ``*modelGenerator`` keyword's own top-line ``name`` argument (which
@@ -365,7 +365,7 @@ class Generator(GeneratorBase):
     the full background.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this generator, per OptionSchemaProvider.
     schema = SurfaceElementGeneratorSchema
 
     def __init__(
@@ -376,7 +376,7 @@ class Generator(GeneratorBase):
         *,
         configuration: SurfaceElementGeneratorSchema = SurfaceElementGeneratorSchema(),
     ):
-        """L1: constructible standalone, with no parser involvement.
+        """Constructible standalone, with no parser involvement.
         Populates ``model`` directly (via :func:`buildContactFacets`); construction *is* the
         generation.
 

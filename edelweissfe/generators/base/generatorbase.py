@@ -42,23 +42,23 @@ class GeneratorBase(OptionSchemaProvider, ABC):
     generator must also implement.
 
     A generator is reached either from Python or from an ``.inp`` file, and the input file is a
-    *serialization* of the Python path, not a second way of building the model contribution. A
-    ported generator therefore declares a real typed ``__init__`` and an L2 :attr:`schema`; the
-    default :meth:`fromGeneratorDefinition` below is the only translation the ``.inp`` front-end
-    needs, for the common case (a flat set of scalar options, no structural name to resolve against
-    the model -- a generator *creates* sets/elements, it does not reference existing ones by name).
-    Override :meth:`fromGeneratorDefinition` for a generator whose datalines are not a flat option
-    mapping (e.g. ``executePythonCode``'s raw code lines).
+    *serialization* of the Python path, not a second way of building the model contribution. Each
+    generator declares a real typed ``__init__`` and an option :attr:`schema`; the default
+    :meth:`fromGeneratorDefinition` below is the only translation the ``.inp`` front-end needs, for
+    the common case (a flat set of scalar options, no structural name to resolve against the model
+    -- a generator *creates* sets/elements, it does not reference existing ones by name). Override
+    :meth:`fromGeneratorDefinition` for a generator whose datalines are not a flat option mapping
+    (e.g. ``executePythonCode``'s raw code lines).
     """
 
     @classmethod
     def fromGeneratorDefinition(cls, name: str, model: FEModel, journal: Journal, args: list, kwargs: dict) -> FEModel:
         """Create this generator from a parsed ``*modelGenerator`` definition.
 
-        This is the L4 seam: the one place a generator's input-file shape (string-typed datalines)
-        is turned into the typed arguments its real constructor takes. The default implementation
-        covers every generator whose datalines are a flat ``key=value`` option mapping, which is
-        every one built into EdelweissFE except ``executePythonCode``.
+        This is the one place a generator's input-file shape (string-typed datalines) is turned
+        into the typed arguments its real constructor takes. The default implementation covers
+        every generator whose datalines are a flat ``key=value`` option mapping, which is every
+        one built into EdelweissFE except ``executePythonCode``.
 
         Parameters
         ----------
@@ -85,8 +85,8 @@ class GeneratorBase(OptionSchemaProvider, ABC):
         Raises
         ------
         ValueError
-            If this generator declares no L2 schema -- the default implementation cannot translate
-            ``kwargs`` into a typed constructor call without one.
+            If this generator declares no option schema -- the default implementation cannot
+            translate ``kwargs`` into a typed constructor call without one.
         """
         if cls.schema is None:
             raise ValueError(
@@ -111,5 +111,5 @@ class GeneratorBase(OptionSchemaProvider, ABC):
         journal
             The journal object for logging.
         configuration
-            The L2 schema instance carrying this generator's options.
+            The schema instance carrying this generator's options.
         """

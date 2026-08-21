@@ -45,13 +45,13 @@ from edelweissfe.utils.schema import schemaField
 
 @dataclass(frozen=True)
 class PipegenSchema:
-    """L2: the options this generator accepts, owned by this module and never mutated from
-    outside it.
+    """The options this generator accepts, owned by this module and never mutated from outside
+    it.
 
     ``Ro(y)``/``Ri(y)`` are not valid Python identifiers, hence the ``optionName`` indirection --
     see ``optionName`` on :func:`~edelweissfe.utils.schema.schemaField`. ``elType`` is declared
-    ``required=True`` explicitly, but is still given a
-    ``default=None`` so the schema remains constructible for the L1 constructor's default argument.
+    ``required=True`` explicitly, but is still given a ``default=None`` so the schema remains
+    constructible for the constructor's default argument.
     """
 
     x0: float = schemaField(description="Origin along the x axis.", dtype=float, default=0.0)
@@ -77,11 +77,11 @@ class PipegenSchema:
 class Generator(GeneratorBase):
     """A structured hex mesh generator for pipe geometries."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this generator, per OptionSchemaProvider.
     schema = PipegenSchema
 
     def __init__(self, name: str, model: FEModel, journal: Journal, *, configuration: PipegenSchema = PipegenSchema()):
-        """L1: constructible standalone, with no parser involvement.
+        """Constructible standalone, with no parser involvement.
         Populates ``model`` directly; construction *is* the generation.
 
         Parameters

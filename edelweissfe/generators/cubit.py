@@ -44,12 +44,11 @@ from edelweissfe.utils.schema import schemaField
 
 @dataclass(frozen=True)
 class CubitSchema:
-    """L2: the options this generator accepts, owned by this module and never mutated from
-    outside it.
+    """The options this generator accepts, owned by this module and never mutated from outside
+    it.
 
-    ``jouFile`` is declared ``required=True`` explicitly, but
-    is still given a ``default=None`` so the schema remains constructible for the L1 constructor's
-    default argument.
+    ``jouFile`` is declared ``required=True`` explicitly, but is still given a ``default=None`` so
+    the schema remains constructible for the constructor's default argument.
     """
 
     cubitCmd: str = schemaField(description="Cubit executable.", dtype=str, default="cubit")
@@ -75,11 +74,11 @@ class CubitSchema:
 class Generator(GeneratorBase):
     """Interface to Cubit. Generate mesh using Cubit .jou files."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this generator, per OptionSchemaProvider.
     schema = CubitSchema
 
     def __init__(self, name: str, model: FEModel, journal: Journal, *, configuration: CubitSchema = CubitSchema()):
-        """L1: constructible standalone, with no parser involvement.
+        """Constructible standalone, with no parser involvement.
         Populates ``model`` directly; construction *is* the generation.
 
         Parameters

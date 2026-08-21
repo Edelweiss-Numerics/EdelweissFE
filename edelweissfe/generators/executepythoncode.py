@@ -46,7 +46,7 @@ class Generator(GeneratorBase):
     schema = None
 
     def __init__(self, name: str, model: FEModel, journal: Journal, *, codeLines: str = ""):
-        """L1: constructible standalone, with no parser involvement.
+        """Constructible standalone, with no parser involvement.
         Populates ``model`` directly; construction *is* the generation.
 
         Parameters

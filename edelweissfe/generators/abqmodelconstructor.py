@@ -451,9 +451,9 @@ class AbqModelConstructor:
                     "class attribute (see `edelweissfe.utils.schema.OptionSchemaProvider`)."
                 )
 
-            # L4 adapter over the L3 registry: parse -> validate/coerce into the module's own L2
-            # schema -> call its L1 constructor. `moduleOptions` carries the nested `>>` sub-keyword
-            # blocks (`>>materialParameterFromField`, `>>writeMaterialPropertiesToFile`).
+            # Validate/coerce the parsed options into the section's own schema, then construct it.
+            # `moduleOptions` carries the nested `>>` sub-keyword blocks
+            # (`>>materialParameterFromField`, `>>writeMaterialPropertiesToFile`).
             try:
                 configuration = buildSchemaFromOptions(
                     sectionSchema,

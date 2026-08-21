@@ -93,12 +93,11 @@ from edelweissfe.utils.schema import schemaField
 
 @dataclass(frozen=True)
 class CuboidLatticeGeneratorSchema:
-    """L2: the options this generator accepts, owned by this module and never mutated from
-    outside it.
+    """The options this generator accepts, owned by this module and never mutated from outside
+    it.
 
-    ``elType`` is declared ``required=True`` explicitly, but is
-    still given a ``default=None`` so the schema remains constructible for the L1 constructor's
-    default argument.
+    ``elType`` is declared ``required=True`` explicitly, but is still given a ``default=None`` so
+    the schema remains constructible for the constructor's default argument.
     """
 
     lX: float = schemaField(description="Length of the body along the x axis.", dtype=float, default=1.0)
@@ -120,7 +119,7 @@ class CuboidLatticeGeneratorSchema:
 class Generator(GeneratorBase):
     """A mesh generator for generating cuboid lattice structure."""
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this generator, per OptionSchemaProvider.
     schema = CuboidLatticeGeneratorSchema
 
     def __init__(
@@ -131,7 +130,7 @@ class Generator(GeneratorBase):
         *,
         configuration: CuboidLatticeGeneratorSchema = CuboidLatticeGeneratorSchema(),
     ):
-        """L1: constructible standalone, with no parser involvement.
+        """Constructible standalone, with no parser involvement.
         Populates ``model`` directly; construction *is* the generation.
 
         Parameters
