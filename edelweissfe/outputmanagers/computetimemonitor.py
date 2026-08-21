@@ -50,7 +50,7 @@ Prints the compute times per increment to the screen and writes them into a file
 
 @dataclass(frozen=True)
 class ComputeTimeMonitorSchema:
-    """L2: the options this output manager accepts, owned by this module and never mutated from
+    """The options this output manager accepts, owned by this module and never mutated from
     outside it.
     """
 
@@ -60,7 +60,7 @@ class ComputeTimeMonitorSchema:
 class OutputManager(OutputManagerBase):
     identification = "ComputeTimeMonitor"
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this output manager, per OptionSchemaProvider.
     schema = ComputeTimeMonitorSchema
 
     def __init__(
@@ -73,9 +73,8 @@ class OutputManager(OutputManagerBase):
         *,
         configuration: ComputeTimeMonitorSchema = ComputeTimeMonitorSchema(),
     ):
-        """L1: constructible standalone, with no parser involvement and
-        no ``moduleOptions``. Options arrive as an already-validated, already-typed schema instance,
-        so nothing here coerces strings or inspects dictionaries.
+        """Constructible standalone, with no parser involvement. Options arrive as an
+        already-validated, already-typed schema instance.
 
         Parameters
         ----------

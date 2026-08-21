@@ -61,7 +61,7 @@ For each part, perNode and perElement results can be exported, which are importe
 
 @dataclass(frozen=True)
 class EnsightPerNodeSchema:
-    """L2: the options of a single ``>>perNode`` block."""
+    """The options of a single ``>>perNode`` block."""
 
     fieldOutput: str | None = schemaField(
         description="Name of the result, defined on an elSet (also for perNode results!)",
@@ -73,7 +73,7 @@ class EnsightPerNodeSchema:
 
 @dataclass(frozen=True)
 class EnsightPerElementSchema:
-    """L2: the options of a single ``>>perElement`` block."""
+    """The options of a single ``>>perElement`` block."""
 
     fieldOutput: str | None = schemaField(
         description="Name of the result, defined on an elSet (also for perNode results!)",
@@ -85,7 +85,7 @@ class EnsightPerElementSchema:
 
 @dataclass(frozen=True)
 class EnsightConfigurationSchema:
-    """L2: the options of a single ``>>configuration`` block.
+    """The options of a single ``>>configuration`` block.
 
     These defaults are also what an ensight export uses when no ``>>configuration`` block is given
     at all. Note that ``overwrite`` defaults to ``False``, i.e. an export directory is by default
@@ -103,7 +103,7 @@ class EnsightConfigurationSchema:
 
 @dataclass(frozen=True)
 class EnsightSchema:
-    """L2: the options this output manager accepts, owned by this module and never mutated from
+    """The options this output manager accepts, owned by this module and never mutated from
     outside it.
 
     Ensight's grammar is not a flat option list: it is a set of repeatable ``>>`` sub-keyword
@@ -822,7 +822,7 @@ def createUnstructuredPartFromRigidBody(bodyName, rigidBody, partID: int):
 class OutputManager(OutputManagerBase):
     identification = "Ensight Export"
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this output manager, per OptionSchemaProvider.
     schema = EnsightSchema
 
     def __init__(
@@ -835,10 +835,8 @@ class OutputManager(OutputManagerBase):
         *,
         configuration: EnsightSchema = EnsightSchema(),
     ):
-        """L1: constructible standalone, with no parser involvement and
-        no ``moduleOptions``. Options arrive as an already-validated, already-typed schema instance,
-        so nothing here coerces strings, reads defaults out of the input language, or inspects
-        dictionaries.
+        """Constructible standalone, with no parser involvement. Options arrive as an
+        already-validated, already-typed schema instance.
 
         Parameters
         ----------
@@ -886,7 +884,7 @@ class OutputManager(OutputManagerBase):
 
         self.geometryParts = self._createGeometryParts(1)
 
-        # Defaults come directly from the L2 schema, with no input-language dependency.
+        # Defaults come directly from the schema.
         defaults = EnsightConfigurationSchema()
         val = defaults.intermediateSaveInterval
         self.intermediateSaveInterval = int(val) if val is not None else None

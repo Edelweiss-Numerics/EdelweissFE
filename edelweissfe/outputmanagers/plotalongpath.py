@@ -51,15 +51,13 @@ Corresponds to the plot along path functionality in Abaqus.
 
 @dataclass(frozen=True)
 class PlotAlongPathSchema:
-    """L2: the options this output manager accepts, owned by this module and never mutated from
+    """The options this output manager accepts, owned by this module and never mutated from
     outside it.
 
-    ``fieldOutput`` is declared ``required=True`` explicitly,
-    but is still given ``default=None`` -- purely so that ``PlotAlongPathSchema()`` (the fixed L1
-    constructor-default shape used by every ported output manager) is constructible without an
-    argument at import time. A caller going through the L4 adapter still must supply
-    ``fieldOutput`` (``buildSchemaFromOptions`` rejects a missing required field regardless of this
-    default).
+    ``fieldOutput`` is declared ``required=True`` explicitly, but is still given ``default=None``
+    so that ``PlotAlongPathSchema()`` is constructible without an argument at import time. A
+    caller going through ``buildSchemaFromOptions`` still must supply ``fieldOutput`` (a missing
+    required field is rejected regardless of this default).
 
     ``f_x`` answers to the input-file option name ``f(x)``, which is not a valid Python
     identifier and therefore cannot be the field name itself -- see ``optionName`` on
@@ -87,7 +85,7 @@ class PlotAlongPathSchema:
 class OutputManager(OutputManagerBase):
     identification = "PathPlotter"
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this output manager, per OptionSchemaProvider.
     schema = PlotAlongPathSchema
 
     def __init__(
@@ -100,9 +98,8 @@ class OutputManager(OutputManagerBase):
         *,
         configuration: PlotAlongPathSchema = PlotAlongPathSchema(),
     ):
-        """L1: constructible standalone, with no parser involvement and
-        no ``moduleOptions``. Options arrive as an already-validated, already-typed schema instance,
-        so nothing here coerces strings or inspects dictionaries.
+        """Constructible standalone, with no parser involvement. Options arrive as an
+        already-validated, already-typed schema instance.
 
         Parameters
         ----------
@@ -134,10 +131,9 @@ class OutputManager(OutputManagerBase):
         normalize = configuration.normalize
         label = configuration.label
 
-        # old outputManagerFactory treated a falsy "f(x)" (i.e. None or "") as "no transform
-        # requested" and substituted the identity expression "x", rather than passing the empty
-        # string on to createMathExpression; a schema default of "x" alone would not reproduce this
-        # for an explicitly-empty value, so the falsy-fallback is kept here.
+        # A falsy "f(x)" (i.e. None or "") is treated as "no transform requested" and substituted
+        # with the identity expression "x", rather than passed on to createMathExpression as-is.
+        # A schema default of "x" alone would not reproduce this for an explicitly-empty value.
         fx = configuration.f_x
         if not fx:
             fx = "x"

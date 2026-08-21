@@ -48,7 +48,7 @@ Writes the (generated) mesh data to a file.
 
 @dataclass(frozen=True)
 class MeshDataToFileSchema:
-    """L2: the options this output manager accepts, owned by this module and never mutated from
+    """The options this output manager accepts, owned by this module and never mutated from
     outside it.
     """
 
@@ -61,7 +61,7 @@ class OutputManager(OutputManagerBase):
     identification = "Meshdatatofile"
     printTemplate = "{:}, {:}: {:}"
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this output manager, per OptionSchemaProvider.
     schema = MeshDataToFileSchema
 
     def __init__(
@@ -74,9 +74,8 @@ class OutputManager(OutputManagerBase):
         *,
         configuration: MeshDataToFileSchema = MeshDataToFileSchema(),
     ):
-        """L1: constructible standalone, with no parser involvement and
-        no ``moduleOptions``. Options arrive as an already-validated, already-typed schema
-        instance, so nothing here coerces strings or inspects dictionaries.
+        """Constructible standalone, with no parser involvement. Options arrive as an
+        already-validated, already-typed schema instance.
 
         Parameters
         ----------
@@ -97,8 +96,7 @@ class OutputManager(OutputManagerBase):
         self.journal = journal
         self.model = model
 
-        # Behavior-preserving fallback carried over from the old outputManagerFactory: an
-        # unspecified filename (schema default None) still resolves to "<name>_mesh.inc", which
+        # An unspecified filename (schema default None) resolves to "<name>_mesh.inc", which
         # cannot be expressed as a static schema default since it depends on the instance's name.
         if configuration.filename is not None:
             self.filename = configuration.filename

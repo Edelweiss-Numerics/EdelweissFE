@@ -38,7 +38,6 @@ Records the model time at the end of every increment and writes the collected ti
 @author: Matthias Neuner
 """
 
-
 from dataclasses import dataclass
 
 import numpy as np
@@ -53,13 +52,12 @@ from edelweissfe.utils.schema import schemaField
 
 @dataclass(frozen=True)
 class TimeMonitorSchema:
-    """L2: the options this output manager accepts, owned by this module and never mutated from
+    """The options this output manager accepts, owned by this module and never mutated from
     outside it.
 
-    ``export`` is required, but is still given a default of ``None`` -- with ``required`` forced to
-    ``True`` -- so that ``TimeMonitorSchema()`` remains constructible for the L1 constructor's
-    default argument; the L4 adapter (``buildSchemaFromOptions``) still enforces that an ``.inp``
-    file supplies it.
+    ``export`` is required, but is still given a default of ``None`` -- with ``required`` forced
+    to ``True`` -- so that ``TimeMonitorSchema()`` remains constructible without arguments;
+    ``buildSchemaFromOptions`` still enforces that an ``.inp`` file supplies it.
     """
 
     export: str | None = schemaField(
@@ -70,7 +68,7 @@ class TimeMonitorSchema:
 class OutputManager(OutputManagerBase):
     identification = "TimeMonitor"
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this output manager, per OptionSchemaProvider.
     schema = TimeMonitorSchema
 
     def __init__(
@@ -83,9 +81,8 @@ class OutputManager(OutputManagerBase):
         *,
         configuration: TimeMonitorSchema = TimeMonitorSchema(),
     ):
-        """L1: constructible standalone, with no parser involvement and
-        no ``moduleOptions``. Options arrive as an already-validated, already-typed schema instance,
-        so nothing here coerces strings or inspects dictionaries.
+        """Constructible standalone, with no parser involvement. Options arrive as an
+        already-validated, already-typed schema instance.
 
         Parameters
         ----------
@@ -107,8 +104,6 @@ class OutputManager(OutputManagerBase):
         self.monitorJobs = []
         self.model = model
 
-        # old factory read the "export" option into a local variable named "filename"; kept as
-        # self.exportFile for behavioral parity.
         self.exportFile = configuration.export
         self.timeVals = []
 
@@ -118,9 +113,6 @@ class OutputManager(OutputManagerBase):
     def initializeStep(self, step):
         pass
 
-    # The three signatures below used to take (U, P), a call convention the solvers and the driver
-    # dropped long ago; every other output manager already matches OutputManagerBase. Nothing could
-    # reach this module while its Module name was shadowed, so the drift went unnoticed.
     def finalizeIncrement(self, **kwargs):
         self.timeVals.append(self.model.time)
 

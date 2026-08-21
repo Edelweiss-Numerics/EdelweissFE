@@ -55,16 +55,15 @@ Useful, e.g., for indirect displacement control.
 
 @dataclass(frozen=True)
 class ConditionalStopSchema:
-    """L2: the options this output manager accepts, owned by this module and never mutated from
+    """The options this output manager accepts, owned by this module and never mutated from
     outside it.
 
-    ``stop`` is declared ``required=True`` explicitly, but is
-    still given ``default=None`` -- purely so that ``ConditionalStopSchema()`` (the fixed L1
-    constructor-default shape used by every ported output manager) is constructible without an
-    argument at import time. A caller going through the L4 adapter still must supply ``stop``
-    (``buildSchemaFromOptions`` rejects a missing required field regardless of this default); a
-    caller constructing this schema directly with no arguments gets a manager that never stops the
-    analysis -- see :class:`OutputManager`.
+    ``stop`` is declared ``required=True`` explicitly, but is still given ``default=None`` so
+    that ``ConditionalStopSchema()`` is constructible without an argument at import time. A
+    caller going through ``buildSchemaFromOptions`` still must supply ``stop`` (a missing
+    required field is rejected regardless of this default); a caller constructing this schema
+    directly with no arguments gets a manager that never stops the analysis -- see
+    :class:`OutputManager`.
     """
 
     stop: str | None = schemaField(
@@ -79,7 +78,7 @@ class OutputManager(OutputManagerBase):
     identification = "ConditionalStop"
     printTemplate = "{:}, {:}: {:}"
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this output manager, per OptionSchemaProvider.
     schema = ConditionalStopSchema
 
     def __init__(
@@ -92,14 +91,13 @@ class OutputManager(OutputManagerBase):
         *,
         configuration: ConditionalStopSchema = ConditionalStopSchema(),
     ):
-        """L1: constructible standalone, with no parser involvement and
-        no ``moduleOptions``. Options arrive as an already-validated, already-typed schema instance,
-        so nothing here coerces strings or inspects dictionaries.
+        """Constructible standalone, with no parser involvement. Options arrive as an
+        already-validated, already-typed schema instance.
 
-        Building the stop-condition callable from ``configuration.stop`` is domain construction
-        (turning a user-written expression string into a callable that closes over ``model`` and
-        ``fieldOutputController.fieldOutputs``), not option coercion, so it happens here in L1 where
-        those collaborators are available -- exactly as the deleted ``outputManagerFactory`` did.
+        Building the stop-condition callable from ``configuration.stop`` turns a user-written
+        expression string into a callable that closes over ``model`` and
+        ``fieldOutputController.fieldOutputs``, so it happens here where those collaborators are
+        available.
 
         Parameters
         ----------

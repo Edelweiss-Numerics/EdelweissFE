@@ -52,14 +52,12 @@ A simple monitor to observe results (fieldOutputs) in the console during analysi
 
 @dataclass(frozen=True)
 class MonitorSchema:
-    """L2: the options this output manager accepts, owned by this module and never mutated from
+    """The options this output manager accepts, owned by this module and never mutated from
     outside it.
 
-    ``fieldOutput`` is declared ``required=True`` explicitly,
-    but is still given a ``default=None`` so that ``MonitorSchema()`` remains constructible for the
-    L1 constructor's default argument; the L4 adapter (``buildSchemaFromOptions``) still enforces
-    that an ``.inp`` file supplies it, exactly as ``caseInsensitiveKwargsChecker`` did against the
-    old ``required`` list.
+    ``fieldOutput`` is declared ``required=True`` explicitly, but is still given a
+    ``default=None`` so that ``MonitorSchema()`` remains constructible without arguments;
+    ``buildSchemaFromOptions`` still enforces that an ``.inp`` file supplies it.
     """
 
     fieldOutput: str | None = schemaField(
@@ -82,7 +80,7 @@ class OutputManager(OutputManagerBase):
     identification = "Monitor"
     printTemplate = "{:} ({:}): {:}"
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this output manager, per OptionSchemaProvider.
     schema = MonitorSchema
 
     def __init__(
@@ -95,9 +93,8 @@ class OutputManager(OutputManagerBase):
         *,
         configuration: MonitorSchema = MonitorSchema(),
     ):
-        """L1: constructible standalone, with no parser involvement and
-        no ``moduleOptions``. Options arrive as an already-validated, already-typed schema instance,
-        so nothing here coerces strings or inspects dictionaries.
+        """Constructible standalone, with no parser involvement. Options arrive as an
+        already-validated, already-typed schema instance.
 
         Parameters
         ----------
@@ -114,13 +111,10 @@ class OutputManager(OutputManagerBase):
         configuration
             The options this output manager accepts; defaults to all-defaults.
         """
-        # The old factory unconditionally did `name = kwargs["label"]` before constructing the
-        # output manager, discarding whatever `name` the caller passed in. Since `label` was an
-        # *optional* Module arg with a default of "Monitor", `kwargs["label"]` was never
-        # missing/None, so the `name` argument was *always* overridden -- never merely
-        # supplemented. That looks like a latent bug (a per-manager `label` option would more
-        # sensibly customize rather than fully replace the manager's name), but it is preserved
-        # here verbatim rather than fixed.
+        # `configuration.label` always overrides the `name` argument, since `label` defaults to
+        # "Monitor" and is thus never missing. A per-manager `label` option overriding the name
+        # entirely (rather than merely customizing it) looks like a latent bug, but the behavior
+        # is preserved here.
         self.name = configuration.label
 
         self.journal = journal
@@ -130,8 +124,8 @@ class OutputManager(OutputManagerBase):
         fx = configuration.f_x
         # A *falsy* value -- None (option absent) as well as an explicitly empty string --
         # falls back to the identity expression "x". A schema default of "x" alone would not
-        # reproduce this: an explicitly-empty option would then stay empty instead of falling
-        # back, unlike the old `if not fx: fx = "x"` factory logic.
+        # reproduce this, since an explicitly-empty option would then stay empty instead of
+        # falling back.
         if not fx:
             fx = "x"
 

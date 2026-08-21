@@ -54,15 +54,13 @@ A simple integrator to compute the fracture energy by integrating a load-displac
 
 @dataclass(frozen=True)
 class FractureEnergyIntegratorSchema:
-    """L2: the options this output manager accepts, owned by this module and never mutated from
-    outside it. The schema the L3 registry hands out for
-    ``("outputmanager", "fractureenergyintegrator")``.
+    """The options this output manager accepts, owned by this module and never mutated from
+    outside it.
     """
 
     # `forceFieldOutput`/`displacementFieldOutput` are declared `required=True` explicitly, but are
     # still given `default=None` so that `FractureEnergyIntegratorSchema()` remains constructible
-    # for the L1 constructor's default argument; the L4 adapter (`buildSchemaFromOptions`) still
-    # enforces that an `.inp` file supplies them.
+    # without arguments; `buildSchemaFromOptions` still enforces that an `.inp` file supplies them.
     forceFieldOutput: str | None = schemaField(
         description="fieldOutput for force (with time history).", dtype=str, default=None, required=True
     )
@@ -85,7 +83,7 @@ class OutputManager(OutputManagerBase):
     identification = "FEI"
     printTemplate = "{:}, {:}: {:}"
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this output manager, per OptionSchemaProvider.
     schema = FractureEnergyIntegratorSchema
 
     def __init__(
@@ -98,9 +96,8 @@ class OutputManager(OutputManagerBase):
         *,
         configuration: FractureEnergyIntegratorSchema = FractureEnergyIntegratorSchema(),
     ):
-        """L1: constructible standalone, with no parser involvement and
-        no ``moduleOptions``. Options arrive as an already-validated, already-typed schema instance,
-        so nothing here coerces strings or inspects dictionaries.
+        """Constructible standalone, with no parser involvement. Options arrive as an
+        already-validated, already-typed schema instance.
 
         Parameters
         ----------

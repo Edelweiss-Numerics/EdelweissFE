@@ -42,9 +42,9 @@ class OutputManagerBase(OptionSchemaProvider, ABC):
 
     Deriving from :class:`~edelweissfe.utils.schema.OptionSchemaProvider` means every output
     manager -- including one supplied by a third-party package via an entry point -- exposes a
-    ``schema`` class attribute, so the L3 registry can hand its L2 option schema to the caller
-    alongside the class itself. Subclasses that have not been ported to L1/L2 yet simply inherit
-    the default of ``None``.
+    ``schema`` class attribute, so the registry can hand its option schema to the caller alongside
+    the class itself. Subclasses that do not define their own option schema simply inherit the
+    default of ``None``.
 
     Parameters
     ----------

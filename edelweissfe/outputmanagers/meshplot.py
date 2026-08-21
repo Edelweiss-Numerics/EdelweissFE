@@ -187,7 +187,8 @@ class MeshPlotSchema(DatalineAggregatingSchema):
 
     One meshplot instance aggregates a heterogeneous list of jobs rather than describing a single
     one, which is why this schema is a :class:`~edelweissfe.utils.schema.DatalineAggregatingSchema`
-    -- see that class for why the arm dispatch lives here instead of in the generic L4 adapter.
+    -- see that class for why the job dispatch lives here instead of in the generic option-building
+    logic.
     """
 
     #: Maps the value of the ``create`` tag option to the job schema it selects.
