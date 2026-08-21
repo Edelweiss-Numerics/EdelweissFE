@@ -72,7 +72,7 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
         """Create this constraint from a parsed ``.inp`` constraint definition.
 
         See :meth:`edelweissfe.constraints.base.constraintbase.ConstraintBase.fromConstraintDefinition`
-        for the rationale; this is the same L4 seam for the multi-point-constraint hierarchy.
+        for the rationale; this is the same seam for the multi-point-constraint hierarchy.
 
         Parameters
         ----------

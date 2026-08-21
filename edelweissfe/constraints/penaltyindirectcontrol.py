@@ -51,13 +51,13 @@ A penalty based constraint used for indirect (displacement) control.
 
 @dataclass(frozen=True)
 class PenaltyIndirectControlSchema:
-    """L2: the options this constraint accepts, owned by this module and never mutated from
+    """The options this constraint accepts, owned by this module and never mutated from
     outside it.
 
     ``f_t`` is spelled ``f(t)`` in the input file, which is not a valid Python identifier -- hence
     the ``optionName`` indirection, see :func:`edelweissfe.utils.schema.schemaField`. Each required
-    field is declared ``required=True`` explicitly, but is still given a ``default=None`` so the
-    schema remains constructible for the L1 constructor's default argument.
+    field is declared ``required=True``, but is still given a ``default=None`` so the schema
+    remains constructible on its own.
     """
 
     field: str = schemaField(description="The field this constraint acts on.", dtype=str, default="displacement")
@@ -123,7 +123,7 @@ class Constraint(ConstraintBase):
         ``penaltyStiffness`` are still required, see :class:`PenaltyIndirectControlSchema`.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this constraint, per OptionSchemaProvider.
     schema = PenaltyIndirectControlSchema
 
     def __init__(

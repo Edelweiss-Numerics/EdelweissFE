@@ -49,13 +49,12 @@ of a node set to be equal.
 
 @dataclass(frozen=True)
 class EqualValuePenaltySchema:
-    """L2: the options this constraint accepts, owned by this module and never mutated from
-    outside it.
+    """The options this constraint accepts, owned by this module and never mutated from outside
+    it.
 
-    Each field is declared ``required=True`` explicitly, but is
-    still given a ``default=None`` so that ``EqualValuePenaltySchema()`` remains constructible for
-    the L1 constructor's default argument; the L4 adapter (``buildSchemaFromOptions``) still
-    enforces that an ``.inp`` file supplies each.
+    Each field is declared ``required=True``, but is still given a ``default=None`` so that
+    ``EqualValuePenaltySchema()`` remains constructible on its own; ``buildSchemaFromOptions``
+    still enforces that an ``.inp`` file supplies each.
     """
 
     field: str | None = schemaField(
@@ -88,7 +87,7 @@ class Constraint(ConstraintBase):
         :class:`EqualValuePenaltySchema`.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this constraint, per OptionSchemaProvider.
     schema = EqualValuePenaltySchema
 
     def __init__(

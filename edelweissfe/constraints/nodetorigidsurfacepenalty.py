@@ -53,15 +53,14 @@ boundary at the constraint's own next :meth:`updateConnectivity` tick -- no sepa
 
 @dataclass(frozen=True)
 class NodeToRigidSurfacePenaltySchema:
-    """L2: the options this constraint accepts, owned by this module and never mutated from
-    outside it.
+    """The options this constraint accepts, owned by this module and never mutated from outside
+    it.
 
     The update-type option is spelled ``type`` in the input file but the field is named
     ``contactType`` here -- a dataclass field literally called ``type`` would shadow the builtin,
-    which this project's conventions avoid. Each required field is declared ``required=True``
-    explicitly, but is still given a ``default=None`` so the schema remains constructible for the
-    L1 constructor's default argument; the L4 adapter (``buildSchemaFromOptions``) still enforces
-    that an ``.inp`` file supplies it.
+    which this project's conventions avoid. Each required field is declared ``required=True``, but
+    is still given a ``default=None`` so the schema remains constructible on its own;
+    ``buildSchemaFromOptions`` still enforces that an ``.inp`` file supplies it.
     """
 
     field: str | None = schemaField(
@@ -113,7 +112,7 @@ class Constraint(ConstraintBase, MeshDependent):
         required, see :class:`NodeToRigidSurfacePenaltySchema`.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this constraint, per OptionSchemaProvider.
     schema = NodeToRigidSurfacePenaltySchema
 
     def __init__(

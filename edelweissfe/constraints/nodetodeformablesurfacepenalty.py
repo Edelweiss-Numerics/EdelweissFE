@@ -80,17 +80,16 @@ _cosOfSmoothNormalChangeLimit = np.cos(np.deg2rad(30.0))
 
 @dataclass(frozen=True)
 class NodeToDeformableSurfacePenaltySchema:
-    """L2: the options this constraint accepts, owned by this module and never mutated from
+    """The options this constraint accepts, owned by this module and never mutated from
     outside it.
 
     The update-type option is spelled ``type`` in the input file but the field is named
     ``contactType`` here -- a dataclass field literally called ``type`` would shadow the builtin,
-    which this project's conventions avoid. ``penalty`` is declared ``required=True`` explicitly,
-    but is still given a ``default=None`` so the schema remains constructible for the L1
-    constructor's default argument; the L4 adapter (``buildSchemaFromOptions``) still enforces
-    that an ``.inp`` file supplies it. ``augmentedLagrange`` is a real ``bool`` field rather than
-    the hand-``strtobool``-cast ``str`` the legacy grammar declared it as (see
-    :func:`edelweissfe.utils.schema.coerceValue`).
+    which this project's conventions avoid. ``penalty`` is declared ``required=True``, but is
+    still given a ``default=None`` so the schema remains constructible on its own;
+    ``buildSchemaFromOptions`` still enforces that an ``.inp`` file supplies it.
+    ``augmentedLagrange`` is a real ``bool`` field (see :func:`edelweissfe.utils.schema.coerceValue`
+    for how string option values are coerced to it).
     """
 
     slaveSurface: str | None = schemaField(
@@ -270,10 +269,8 @@ class Constraint(ConstraintBase, MeshDependent):
     as :mod:`~edelweissfe.constraints.nodetodiscreterigidbodypenalty` does for rigid bodies -- no
     geometry is frozen across iterations within an increment.
 
-    Each slave is assigned at most *one* active facet at a time (reassigned each increment); this
-    is a deliberate simplification relative to a multi-candidate-per-slave design -- see the
-    project plan this was built from for the more elaborate alternative and why it was not needed
-    here. If the slave's assigned facet ever fails its exact in-facet containment test mid-Newton
+    Each slave is assigned at most *one* active facet at a time (reassigned each increment). If
+    the slave's assigned facet ever fails its exact in-facet containment test mid-Newton
     (the true contact point has moved onto a neighboring facet within the same increment), no
     contact contribution is assembled for that slave until the next connectivity update -- the
     same accepted non-smoothness at facet boundaries as the rigid-body case's mesh edges.
@@ -330,7 +327,7 @@ class Constraint(ConstraintBase, MeshDependent):
     whichever facet type populates the given surface element sets.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this constraint, per OptionSchemaProvider.
     schema = NodeToDeformableSurfacePenaltySchema
 
     def __init__(

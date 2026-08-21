@@ -91,7 +91,7 @@ def _facetCharacteristicSize(facetCoords: np.ndarray) -> float:
 
 @dataclass(frozen=True)
 class TieSchema:
-    """L2: the options this constraint accepts, owned by this module and never mutated from
+    """The options this constraint accepts, owned by this module and never mutated from
     outside it.
     """
 
@@ -190,7 +190,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
     facets) and 2D (Line2 facets).
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Schema declared for the registry, per OptionSchemaProvider.
     schema = TieSchema
 
     def __init__(
@@ -296,7 +296,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         characteristic facet size unless given explicitly, is used for every slave node regardless of
         when it is evaluated (matching Abaqus' *TIE, which always enforces some tolerance -- explicit
         or internally computed -- and never ties unconditionally regardless of distance). It is
-        deliberately NOT recomputed from ``masterFacetElements`` on a later reconcile() call: an
+        NOT recomputed from ``masterFacetElements`` on a later reconcile() call: an
         unrelated AMR refinement elsewhere on the master surface would otherwise shrink the mean facet
         size and retroactively tighten the tolerance for nodes evaluated afterwards, for a gap that
         never changed.

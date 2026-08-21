@@ -38,27 +38,26 @@ from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
-Acceptance test double for the "topological containers have stable identity" contract
-(see ``PLAN_TRANSPARENT_AMR.md``): caches a node set reference exactly the way an ordinary,
-AMR-unaware constraint would -- ``self._nodes = model.nodeSets[nSet]`` at construction, never
-re-fetched -- and implements neither :class:`~edelweissfe.models.modelchangeobserver.
-ModelChangeObserver` nor :class:`~edelweissfe.models.meshdependent.MeshDependent`. It contributes
-zero degrees of freedom and touches no field, so it never affects the converged solution; its only
-purpose is to raise if its cached node set ever fails to reflect a mid-run mesh refinement, which
-would mean AMR silently reintroduced replacing a set instead of mutating it in place. It has no use
-outside test suites and is not intended as a template for an actual boundary condition.
+Acceptance test double for the "topological containers have stable identity" contract: caches a
+node set reference exactly the way an ordinary, AMR-unaware constraint would --
+``self._nodes = model.nodeSets[nSet]`` at construction, never re-fetched -- and implements neither
+:class:`~edelweissfe.models.modelchangeobserver.ModelChangeObserver` nor
+:class:`~edelweissfe.models.meshdependent.MeshDependent`. It contributes zero degrees of freedom
+and touches no field, so it never affects the converged solution; its only purpose is to raise if
+its cached node set ever fails to reflect a mid-run mesh refinement, which would mean AMR mutates
+a set in place rather than replacing it. It has no use outside test suites and is not intended as
+a template for an actual boundary condition.
 """
 
 
 @dataclass(frozen=True)
 class AmrTransparencyProbeSchema:
-    """L2: the options this constraint accepts, owned by this module and never mutated from
-    outside it.
+    """The options this constraint accepts, owned by this module and never mutated from outside
+    it.
 
     Its only option is the structural ``nSet`` it watches -- a node set *name*, resolved to the
-    actual node set in :meth:`Constraint.fromConstraintDefinition`. It is declared ``required=True``
-    explicitly, but still given a ``default=None`` so the schema remains constructible for the L1
-    constructor's default argument."""
+    actual node set in :meth:`Constraint.fromConstraintDefinition`. It is declared ``required=True``,
+    but still given a ``default=None`` so the schema remains constructible on its own."""
 
     nSet: str | None = schemaField(
         description="The node set whose growth under AMR this probe verifies.",
@@ -86,7 +85,7 @@ class Constraint(ConstraintBase):
         The options this constraint accepts; there are none beyond ``nSet``.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this constraint, per OptionSchemaProvider.
     schema = AmrTransparencyProbeSchema
 
     def __init__(

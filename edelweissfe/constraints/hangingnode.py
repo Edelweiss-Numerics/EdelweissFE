@@ -58,9 +58,8 @@ from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 @dataclass(frozen=True)
 class HangingNodeSchema:
-    """L2: the options this constraint accepts, owned by this module and never mutated from
-    outside it.
-    """
+    """The options this constraint accepts, owned by this module and never mutated from outside
+    it."""
 
     recordsFile: str | None = schemaField(
         description="Path (relative to the input file) to the flattened hanging-node records: one "
@@ -89,7 +88,7 @@ class Constraint(MultiPointConstraintBase):
         The options this constraint accepts; defaults to all-defaults.
     """
 
-    #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
+    #: Option schema for this constraint, per OptionSchemaProvider.
     schema = HangingNodeSchema
 
     def __init__(self, name: str, model: FEModel, *, configuration: HangingNodeSchema = HangingNodeSchema()):
