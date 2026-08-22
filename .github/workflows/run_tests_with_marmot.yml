@@ -109,7 +109,7 @@ jobs:
           fi
 
           echo "Using Marmot branch: $TARGET_BRANCH"
-          git checkout "$TARGET_BRANCH"
+          git checkout --detach "origin/$TARGET_BRANCH"
 
           mkdir build
           cd build
