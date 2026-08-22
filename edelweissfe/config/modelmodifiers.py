@@ -29,11 +29,15 @@
 """ModelModifiers dynamically alter mesh topology, element/node sets, material states,
 or field allocations during an analysis step.
 """
-import importlib
+
+from edelweissfe.config import registry
 
 
 def getModelModifierClass(name: str) -> type:
-    """Get the class type of the requested model modifier.
+    """Return the class implementing model modifier ``name``.
+
+    Resolved through the registry (``modelmodifier`` category), which names the modifier's module
+    explicitly rather than guessing a subpackage.
 
     Parameters
     ----------
@@ -44,10 +48,13 @@ def getModelModifierClass(name: str) -> type:
     -------
     type
         The model modifier class type.
+
+    Raises
+    ------
+    edelweissfe.config.registry.RegistryLookupError
+        If no model modifier is registered under ``name``.
     """
-    name_lower = name.lower()
-    try:
-        module = importlib.import_module("edelweissfe.modelmodifiers." + name_lower)
-    except ModuleNotFoundError:
-        module = importlib.import_module("edelweissfe.modelmodifiers.adaptivity." + name_lower)
-    return module.ModelModifier
+
+    modelModifierClass, _ = registry.lookup("modelmodifier", name)
+
+    return modelModifierClass

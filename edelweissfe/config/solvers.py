@@ -46,26 +46,33 @@ Choose the solver in the ``*solver`` definition:
     *solver, name=mySolver, solver=NISTParallel
 """
 
-import importlib
-
-solverLibrary = {
-    "NIST": "nonlinearimplicitstatic",
-    "NEST": "nonlinearexplicitstatic",
-    "NED": "nonlinearexplicitdynamic",
-    "NISTParallel": "nonlinearimplicitstaticparallel",
-    "NESTParallel": "nonlinearexplicitstaticparallel",
-    "NEDParallel": "nonlinearexplicitdynamicparallel",
-    "NISTPArcLength": "nonlinearimplicitstaticparallelarclength",
-}
+from edelweissfe.config import registry
 
 
 def getSolverByName(name: str) -> type:
     """Get the class type of the requested solver.
 
+    Resolved through the registry (``solver`` category) rather than through a hand-maintained
+    table private to this module. Such a table could only ever list solvers living *inside* this
+    package, so an external package -- EdelweissMeshfree, a plugin -- had no way to contribute one;
+    going through the registry means a built-in, an entry point and an in-process
+    :func:`~edelweissfe.config.registry.register` call are all equally reachable here. An unknown
+    name now raises :class:`~edelweissfe.config.registry.RegistryLookupError` naming the available
+    solvers, instead of a ``KeyError``.
+
+    **Solver names are now case-insensitive, deliberately.** This resolver was the one
+    case-*sensitive* registry in the codebase: it indexed a table with CamelCase keys and then read
+    the class off the module under the *same* string, so the name doubled as the class
+    attribute name and e.g. ``"nist"`` failed twice over, while 12 of the 13 legacy ``config/*.py``
+    registries already casefolded the name at the resolver. That audit amends rule (c) to sanction
+    this: a name must not resolve differently depending on which front-end it arrived through, and
+    the registry is reached by callers with no ``.inp`` parser in the loop. The change is strictly
+    more permissive, so no existing input file changes meaning.
+
     Parameters
     ----------
     name
-        The name of the solver to load.
+        The name of the solver to load (case insensitive).
 
     Returns
     -------
@@ -73,10 +80,6 @@ def getSolverByName(name: str) -> type:
         The solver class type.
     """
 
-    try:
-        solverType = solverLibrary[name]
-    except KeyError:
-        raise KeyError(f"Solver {name} not found in library. Available solvers: " + ", ".join(solverLibrary.keys()))
+    solverClass, _ = registry.lookup("solver", name)
 
-    solver = importlib.import_module("edelweissfe.solvers.{:}".format(solverType))
-    return getattr(solver, name)
+    return solverClass

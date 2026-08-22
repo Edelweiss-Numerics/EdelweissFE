@@ -30,13 +30,41 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.vijentitybase import VIJEntityBase
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.schema import OptionSchemaProvider
 from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
-class ConstraintBase(ABC, VIJEntityBase):
+class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
+    @classmethod
+    def fromConstraintDefinition(
+        cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
+    ) -> "ConstraintBase":
+        """Create this constraint from a parsed ``.inp`` constraint definition.
+
+        The one place a module's input-file shape (set/surface *names*, string-typed booleans) is
+        turned into the typed arguments its real constructor takes. Override it together with a
+        typed ``__init__``; leave it alone and the dict-consuming constructor is used unchanged.
+
+        Parameters
+        ----------
+        name
+            The name of the constraint.
+        definition
+            The parsed option mapping for this constraint (the datalines-derived ``kwargs``).
+        model
+            The model tree.
+
+        Returns
+        -------
+        ConstraintBase
+            The constructed constraint.
+        """
+        return cls(name, model, **definition)
+
     @abstractmethod
     def __init__(self, name: str, model: FEModel, *args, **kwargs):
         """The constraint base class.

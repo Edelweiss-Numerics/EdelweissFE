@@ -26,6 +26,8 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+from dataclasses import dataclass
+
 import numpy as np
 from scipy.spatial import cKDTree
 
@@ -36,15 +38,10 @@ from edelweissfe.generators.surfaceelementgenerator import buildContactFacets
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
+from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.facetcontactgeometry import line2ClosestPoint, tria3ClosestPoint
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-    strtobool,
-)
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 An Abaqus-style surface-to-surface tie constraint, bonding the nodes of a slave surface rigidly to
@@ -71,86 +68,6 @@ for removing an initial geometric gap, not something to repeat on an already-loa
 node.
 """
 
-module = Module(
-    "tie",
-    "An Abaqus-style tie constraint, bonding a slave surface rigidly to a deformable master "
-    "surface via master-slave DOF elimination.",
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg(
-    "slaveSurface",
-    "The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) forming the "
-    "slave surface; its nodes are tied. For quadratic (hexa20/quad8) faces, generate the facets "
-    "with triangulation=midside on BOTH surfaces -- the corner triangulation excludes the midside "
-    "nodes from the facet node list entirely, leaving them untied.",
-    str,
-)
-module.addRequiredArg(
-    "masterSurface",
-    "The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) forming the " "master surface.",
-    str,
-)
-module.addOptionalArg(
-    "positionTolerance",
-    "Whether a slave node is tied at all: nodes whose reference-configuration closest-point "
-    "distance to the master surface exceeds this tolerance are left untied (recorded in the "
-    "constraint's untiedSlaveNodes), matching Abaqus' *TIE default behavior of silently dropping "
-    "out-of-range slave nodes. Applies independently of adjust -- whether a tied node's "
-    "coordinates additionally get snapped onto the master is a separate decision, see "
-    "adjust/adjustTolerance. If not given (the default), a tolerance is computed as "
-    "positionToleranceFactor times the master surface's characteristic facet size -- see "
-    "positionToleranceFactor. Set this explicitly to an absolute distance to override that.",
-    float,
-    None,
-)
-module.addOptionalArg(
-    "positionToleranceFactor",
-    "Used only when positionTolerance is not given: the default tolerance is this fraction of the "
-    "master surface's characteristic (mean, over all its facets) edge length, computed once and "
-    "used for every slave node. 0.25 comfortably exceeds the sub-percent gaps expected between two "
-    "compatible discretizations of the same surface (mismatched density, curvature/interpolation "
-    "error), while remaining well below the facet-size-or-larger gaps that indicate the surfaces "
-    "don't actually correspond (e.g. a slave surface extending beyond the master surface's actual "
-    "extent -- a partial-bond-length or otherwise partially-overlapping pair of surfaces).",
-    float,
-    0.25,
-)
-module.addOptionalArg(
-    "adjust",
-    "Whether a TIED node's coordinates additionally get snapped onto its projected master point "
-    "at construction (Abaqus-like default) -- a separate decision from whether the node is tied "
-    "at all (see positionTolerance). If False, no tied node is ever snapped: any initial geometric "
-    "gap is preserved rigidly (the displacements are tied, not the positions), regardless of size. "
-    "If True, a tied node is snapped only if its distance is also within adjustTolerance (default: "
-    "unconditionally, i.e. every tied node is snapped, matching plain Abaqus ADJUST=YES) -- see "
-    "adjustTolerance to snap away only small, effectively-numerical gaps while still tying "
-    "(without snapping) across larger, deliberate ones. Note that adjusting modifies the nodal "
-    "coordinates before the element geometry is initialized; avoid adjusting nodes that also "
-    "belong to an already-generated contact surface of another constraint.",
-    str,
-    "True",
-)
-module.addOptionalArg(
-    "adjustTolerance",
-    "Used only when adjust=True: a tied node's coordinates are snapped onto the master only if "
-    "its closest-point distance is also within this tolerance; beyond it, the node stays tied "
-    "(kinematically) but its position is left as found, preserving the gap. Independent of "
-    "positionTolerance -- a node can be tied across a fairly generous distance while only "
-    "genuinely small (e.g. sub-percent, mesh-discretization-scale) gaps within that get snapped "
-    "away. If not given (the default), any tied node is snapped, matching plain Abaqus ADJUST=YES "
-    "and this constraint's behavior before this option existed.",
-    float,
-    None,
-)
-
-documentation = [module]
-
 
 def _facetCharacteristicSize(facetCoords: np.ndarray) -> float:
     """Mean edge length of a facet (Line2: its one edge; Tria3: its three edges) -- the local
@@ -170,6 +87,80 @@ def _facetCharacteristicSize(facetCoords: np.ndarray) -> float:
     nNodes = facetCoords.shape[0]
     edgeLengths = [np.linalg.norm(facetCoords[i] - facetCoords[(i + 1) % nNodes]) for i in range(nNodes)]
     return np.mean(edgeLengths)
+
+
+@dataclass(frozen=True)
+class TieSchema:
+    """The options this constraint accepts, owned by this module and never mutated from
+    outside it.
+    """
+
+    slaveSurface: str | None = schemaField(
+        description="The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) "
+        "forming the slave surface; its nodes are tied. For quadratic (hexa20/quad8) faces, generate "
+        "the facets with triangulation=midside on BOTH surfaces -- the corner triangulation excludes "
+        "the midside nodes from the facet node list entirely, leaving them untied.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    masterSurface: str | None = schemaField(
+        description="The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) "
+        "forming the master surface.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    positionTolerance: float | None = schemaField(
+        description="Whether a slave node is tied at all: nodes whose reference-configuration "
+        "closest-point distance to the master surface exceeds this tolerance are left untied "
+        "(recorded in the constraint's untiedSlaveNodes), matching Abaqus' *TIE default behavior "
+        "of silently dropping out-of-range slave nodes. Applies independently of adjust -- whether "
+        "a tied node's coordinates additionally get snapped onto the master is a separate "
+        "decision, see adjust/adjustTolerance. If not given (the default), a tolerance is computed "
+        "as positionToleranceFactor times the master surface's characteristic facet size -- see "
+        "positionToleranceFactor. Set this explicitly to an absolute distance to override that.",
+        dtype=float,
+        default=None,
+    )
+    positionToleranceFactor: float = schemaField(
+        description="Used only when positionTolerance is not given: the default tolerance is this "
+        "fraction of the master surface's characteristic (mean, over all its facets) edge length, "
+        "computed once and used for every slave node. 0.25 comfortably exceeds the sub-percent gaps "
+        "expected between two compatible discretizations of the same surface (mismatched density, "
+        "curvature/interpolation error), while remaining well below the facet-size-or-larger gaps "
+        "that indicate the surfaces don't actually correspond (e.g. a slave surface extending "
+        "beyond the master surface's actual extent -- a partial-bond-length or otherwise "
+        "partially-overlapping pair of surfaces).",
+        dtype=float,
+        default=0.25,
+    )
+    adjust: bool = schemaField(
+        description="Whether a TIED node's coordinates additionally get snapped onto its projected "
+        "master point at construction (Abaqus-like default) -- a separate decision from whether "
+        "the node is tied at all (see positionTolerance). If False, no tied node is ever snapped: "
+        "any initial geometric gap is preserved rigidly (the displacements are tied, not the "
+        "positions), regardless of size. If True, a tied node is snapped only if its distance is "
+        "also within adjustTolerance (default: unconditionally, i.e. every tied node is snapped, "
+        "matching plain Abaqus ADJUST=YES) -- see adjustTolerance to snap away only small, "
+        "effectively-numerical gaps while still tying (without snapping) across larger, deliberate "
+        "ones. Note that adjusting modifies the nodal coordinates before the element geometry is "
+        "initialized; avoid adjusting nodes that also belong to an already-generated contact "
+        "surface of another constraint.",
+        dtype=bool,
+        default=True,
+    )
+    adjustTolerance: float | None = schemaField(
+        description="Used only when adjust=True: a tied node's coordinates are snapped onto the "
+        "master only if its closest-point distance is also within this tolerance; beyond it, the "
+        "node stays tied (kinematically) but its position is left as found, preserving the gap. "
+        "Independent of positionTolerance -- a node can be tied across a fairly generous distance "
+        "while only genuinely small (e.g. sub-percent, mesh-discretization-scale) gaps within that "
+        "get snapped away. If not given (the default), any tied node is snapped, matching plain "
+        "Abaqus ADJUST=YES and this constraint's behavior before this option existed.",
+        dtype=float,
+        default=None,
+    )
 
 
 class Constraint(MultiPointConstraintBase, MeshDependent):
@@ -199,43 +190,52 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
     facets) and 2D (Line2 facets).
     """
 
-    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-    @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name: str, model: FEModel, *args, **kwargs):
-        kwargs = CaseInsensitiveDict(kwargs)
+    #: Schema declared for the registry, per OptionSchemaProvider.
+    schema = TieSchema
 
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        slaveSurface: ElementSet,
+        masterSurface: ElementSet,
+        journal: Journal,
+        *,
+        configuration: TieSchema = TieSchema(),
+    ):
         self.name = name
         self.nDim = model.domainSize
 
-        self._journal = Journal()
-        self._slaveSurfaceSetName = kwargs["slaveSurface"]
-        self._masterSurfaceSetName = kwargs["masterSurface"]
-        self._positionTolerance = kwargs["positionTolerance"]
-        self._positionToleranceFactor = kwargs["positionToleranceFactor"]
-        self._adjustTolerance = kwargs["adjustTolerance"]
+        self._journal = journal
+        self._slaveSurfaceSetName = slaveSurface.name
+        self._masterSurfaceSetName = masterSurface.name
+        self._positionTolerance = configuration.positionTolerance
+        self._positionToleranceFactor = configuration.positionToleranceFactor
+        self._adjustTolerance = configuration.adjustTolerance
         #: References to the published tied/untied NodeSets, so a later reconcile() updates their
         #: membership in place (via replaceMembers) instead of colliding with its own earlier publish.
         self._tiedNodeSet = None
         self._untiedNodeSet = None
 
-        slaveFacetElements = list(model.elementSets[self._slaveSurfaceSetName])
-        masterFacetElements = list(model.elementSets[self._masterSurfaceSetName])
+        slaveFacetElements = list(slaveSurface)
+        masterFacetElements = list(masterSurface)
 
         if not masterFacetElements:
             raise ValueError(
-                f"Constraint '{name}': master surface '{kwargs['masterSurface']}' contains no facet elements."
+                f"Constraint '{name}': master surface '{self._masterSurfaceSetName}' contains no facet elements."
             )
         if not slaveFacetElements:
             raise ValueError(
-                f"Constraint '{name}': slave surface '{kwargs['slaveSurface']}' contains no facet elements."
+                f"Constraint '{name}': slave surface '{self._slaveSurfaceSetName}' contains no facet elements."
             )
 
         masterNodes = {node for el in masterFacetElements for node in el.nodes}
         slaveNodesForCheck = {node for el in slaveFacetElements for node in el.nodes}
         if not masterNodes.isdisjoint(slaveNodesForCheck):
             raise ValueError(
-                f"Constraint '{name}': slave surface '{kwargs['slaveSurface']}' and master surface "
-                f"'{kwargs['masterSurface']}' share nodes -- a node cannot be tied to itself."
+                f"Constraint '{name}': slave surface '{self._slaveSurfaceSetName}' and master "
+                f"surface '{self._masterSurfaceSetName}' share nodes -- a node cannot be tied to "
+                "itself."
             )
 
         # Frozen ONCE from the INITIAL (pre-any-AMR) master surface, not recomputed on every
@@ -252,7 +252,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
             )
 
         self.tiedRecords, self.untiedSlaveNodes = self._buildTiedRecords(
-            model, slaveFacetElements, masterFacetElements, adjust=strtobool(kwargs["adjust"])
+            model, slaveFacetElements, masterFacetElements, adjust=configuration.adjust
         )
         self._publishTiedUntiedNodeSets(model)
 
@@ -263,6 +263,21 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         # hatch: model.notifyModelChanged() calls onModelChanged() synchronously, from inside the
         # model modifier's own updateModel(), strictly before the rebuild decision is even made.
         model.registerObserver(self)
+
+    @classmethod
+    def fromConstraintDefinition(cls, name: str, definition: dict, model: FEModel, journal: Journal) -> "Constraint":
+        """Build this constraint from a parsed ``*constraint`` definition. See
+        :class:`~edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase`
+        for why this is separate from ``__init__``."""
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+        return cls(
+            name,
+            model,
+            model.elementSets[configuration.slaveSurface],
+            model.elementSets[configuration.masterSurface],
+            journal,
+            configuration=configuration,
+        )
 
     def onModelChanged(self, model: FEModel, changeType, change) -> None:
         if change is not None:
@@ -281,7 +296,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         characteristic facet size unless given explicitly, is used for every slave node regardless of
         when it is evaluated (matching Abaqus' *TIE, which always enforces some tolerance -- explicit
         or internally computed -- and never ties unconditionally regardless of distance). It is
-        deliberately NOT recomputed from ``masterFacetElements`` on a later reconcile() call: an
+        NOT recomputed from ``masterFacetElements`` on a later reconcile() call: an
         unrelated AMR refinement elsewhere on the master surface would otherwise shrink the mean facet
         size and retroactively tighten the tolerance for nodes evaluated afterwards, for a gap that
         never changed.

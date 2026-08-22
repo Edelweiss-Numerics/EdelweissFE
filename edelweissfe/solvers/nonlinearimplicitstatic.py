@@ -30,6 +30,7 @@
 # @author: Matthias Neuner
 
 import json
+from dataclasses import dataclass
 
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -44,7 +45,6 @@ from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.dirichlet import applyDirichletToStiffness
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.stepactions.options import inputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -56,36 +56,60 @@ from edelweissfe.utils.exceptions import (
     StepFailed,
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
-from edelweissfe.utils.misc import strCaseCmp
+from edelweissfe.utils.schema import schemaField
 
-kw = inputLanguage["step"].getModule("adaptive").getKeyword("options")
-kw.addOptionalArg("defaultMaxIter", "", int, 10)
-kw.addOptionalArg("defaultCriticalIter", "", int, 5)
-kw.addOptionalArg("defaultMaxGrowingIter", "", int, 10)
-kw.addOptionalArg("extrapolation", "", str, "linear")
-kw.addOptionalArg(
-    "extrapolateAfterModelChange",
-    "Whether to extrapolate the predictor on the increment FOLLOWING a model change (adaptive mesh "
-    "refinement). Default True keeps the previous behaviour; set False to start that increment from a "
-    "zero predictor, avoiding extrapolation of the one-off warm-start/remesh settling transient.",
-    bool,
-    True,
-)
-kw.addOptionalArg(
-    "equilibrateAfterModelChange",
-    "Whether to insert one constant-load, zero-time re-equilibration increment immediately after an "
-    "adaptive mesh refinement, before advancing the load. Default False. When True, the warm-started "
-    "refined mesh is first settled to equilibrium at the last converged load level (no load advance, "
-    "no Dirichlet increment, zero time increment) so the subsequent load-advancing increment starts "
-    "from an equilibrated state. Intended for softening problems where remeshing near the process "
-    "zone otherwise couples the load advance with the warm-start settling transient in one solve. "
-    "Note: the equilibration solve integrates materials with dT=0, which suits rate-independent "
-    "models; rate-dependent materials see no time advance during it (by design).",
-    bool,
-    False,
-)
-kw.addOptionalArg("linsolver", "", str, "pardiso")
-kw.addOptionalArg("linsolverConfigFile", "", str, "")
+
+@dataclass(frozen=True)
+class NISTSchema:
+    """The options of the ``*solver`` datalines and of an ``>>options`` block routed to this
+    solver, owned by this module and never mutated from outside it.
+
+    Mirrors :attr:`NIST.SolverSpecificOptions` one-for-one; that dict remains the actual source of
+    truth consulted at runtime (``self.options``, a plain mutable dict) -- this schema exists so the
+    registry and the name-based ``>>options`` override mechanism have a typed description of what
+    this solver accepts, without requiring every internal ``self.options[...]`` access to become a
+    dataclass attribute access.
+    """
+
+    defaultMaxIter: int | None = schemaField(
+        description="The default maximum number of iterations.", dtype=int, default=10
+    )
+    defaultCriticalIter: int | None = schemaField(
+        description="The default number of critical iterations.", dtype=int, default=5
+    )
+    defaultMaxGrowingIter: int | None = schemaField(
+        description="The default number of allowed residual growths.", dtype=int, default=10
+    )
+    extrapolation: str | None = schemaField(
+        description="The extrapolation strategy for new increments (off|linear).", dtype=str, default="linear"
+    )
+    extrapolateAfterModelChange: bool | None = schemaField(
+        description=(
+            "Whether to extrapolate the predictor on the increment FOLLOWING a model change (adaptive mesh "
+            "refinement). Set False to start that increment from a zero predictor, avoiding extrapolation of "
+            "the one-off warm-start/remesh settling transient."
+        ),
+        dtype=bool,
+        default=True,
+    )
+    equilibrateAfterModelChange: bool | None = schemaField(
+        description=(
+            "Whether to insert one constant-load, zero-time re-equilibration increment immediately after an "
+            "adaptive mesh refinement, before advancing the load. When True, the warm-started refined mesh is "
+            "first settled to equilibrium at the last converged load level (no load advance, no Dirichlet "
+            "increment, zero time increment) so the subsequent load-advancing increment starts from an "
+            "equilibrated state. Intended for softening problems where remeshing near the process zone "
+            "otherwise couples the load advance with the warm-start settling transient in one solve. Note: "
+            "the equilibration solve integrates materials with dT=0, which suits rate-independent models; "
+            "rate-dependent materials see no time advance during it (by design)."
+        ),
+        dtype=bool,
+        default=False,
+    )
+    linsolver: str | None = schemaField(description="The linear solver to be used.", dtype=str, default="pardiso")
+    linsolverConfigFile: str | None = schemaField(
+        description="A JSON configuration file for the linear solver.", dtype=str, default=""
+    )
 
 
 class NIST(NonlinearSolverBase):
@@ -103,6 +127,9 @@ class NIST(NonlinearSolverBase):
 
     supportsMPC = True
     supportsModelModifiers = True
+
+    #: Option schema for this solver, per OptionSchemaProvider.
+    schema = NISTSchema
 
     SolverSpecificOptions = {
         "defaultMaxIter": 10,
@@ -126,9 +153,6 @@ class NIST(NonlinearSolverBase):
         # the datalines of the *solver keyword belong exclusively to this solver, so unknown entries
         # are user typos and must not be swallowed
         self._updateOptions(kwargs, journal, strict=True)
-        # baseline (defaults + solver-construction options) to reset to at the start of each step, so
-        # a >>options block in one step does not leak into later steps that omit one
-        self._baseOptions = dict(self.options)
 
     def solveStep(
         self,
@@ -153,23 +177,10 @@ class NIST(NonlinearSolverBase):
             The field output controller.
         """
 
-        # Reset to the baseline so each step's options are independent (no leak across steps), then
-        # apply any >>options block routed to this solver. Options actions are auto-named (the
-        # 'options' keyword has no 'name' arg), so they are matched by their 'category' field rather
-        # than by dict key.
-        self.options = dict(self._baseOptions)
-        for optionsAction in step.actions.get("options", {}).values():
-            if strCaseCmp(optionsAction.get("category", ""), self.identification):
-                # only those options the user actually wrote down may be applied: the parser fills the
-                # defaults of every module registered on the shared 'options' keyword into the action,
-                # and applying those would silently reset options given in the *solver datalines
-                userDefinedOptions = {
-                    key: value
-                    for key, value in optionsAction.options.items()
-                    if key.casefold() in optionsAction.explicitlySetOptions
-                }
-                self._updateOptions(userDefinedOptions, self.journal)
-
+        # self.options already reflects every >>options, name=<this solver's name>, ... block applied
+        # so far: applyOptionsOverride pushes an override the moment such a block is constructed or
+        # re-declared (edelweissfe.stepactions.options.StepAction), and an override sticks until
+        # changed again -- there is nothing to reset or re-fetch here.
         extrapolation = self.options["extrapolation"]
         extrapolateAfterModelChange = self.options["extrapolateAfterModelChange"]
         equilibrateAfterModelChange = self.options["equilibrateAfterModelChange"]

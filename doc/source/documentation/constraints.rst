@@ -12,7 +12,7 @@ Module ``edelweissfe.constraints.equalvaluelagrangian``
 .. automodule:: edelweissfe.constraints.equalvaluelagrangian
     :members: __doc__
 
-.. pprint:: edelweissfe.constraints.equalvaluelagrangian.documentation
+.. pprint:: constraint:equalvaluelagrangian
     :caption: Options:
 
 .. literalinclude:: ../../../testfiles/marmot/EqualValueLagrangianConstraint/test.inp
@@ -28,7 +28,7 @@ Module ``edelweissfe.constraints.equalvaluepenalty``
 .. automodule:: edelweissfe.constraints.equalvaluepenalty
     :members: __doc__
 
-.. pprint:: edelweissfe.constraints.equalvaluepenalty.documentation
+.. pprint:: constraint:equalvaluepenalty
     :caption: Options:
 
 .. literalinclude:: ../../../testfiles/marmot/EqualValuePenaltyConstraint/test.inp
@@ -44,7 +44,7 @@ Module ``edelweissfe.constraints.linearizedrigidbody``
 .. automodule:: edelweissfe.constraints.linearizedrigidbody
     :members: __doc__
 
-.. pprint:: edelweissfe.constraints.linearizedrigidbody.documentation
+.. pprint:: constraint:linearizedrigidbody
     :caption: Options:
 
 .. literalinclude:: ../../../testfiles/marmot/LinearizedRigidBodyConstraint/test.inp
@@ -68,7 +68,7 @@ Module ``edelweissfe.constraints.rigidbody``
 .. automodule:: edelweissfe.constraints.rigidbody
     :members: __doc__
 
-.. pprint:: edelweissfe.constraints.rigidbody.documentation
+.. pprint:: constraint:rigidbody
     :caption: Options
 
 .. literalinclude:: ../../../testfiles/marmot/RigidBodyConstraintLargeDeformations3D/test.inp
@@ -83,7 +83,7 @@ Module ``edelweissfe.constraints.penaltyindirectcontrol``
 .. automodule:: edelweissfe.constraints.penaltyindirectcontrol
     :members: __doc__
 
-.. pprint:: edelweissfe.constraints.penaltyindirectcontrol.documentation
+.. pprint:: constraint:penaltyindirectcontrol
     :caption: Options
 
 .. literalinclude:: ../../../testfiles/marmot/PenaltyBasedIndirectControl/test.inp
@@ -99,7 +99,7 @@ Module ``edelweissfe.constraints.directionalspringpenalty``
 .. automodule:: edelweissfe.constraints.directionalspringpenalty
     :members: __doc__
 
-.. pprint:: edelweissfe.constraints.directionalspringpenalty.documentation
+.. pprint:: constraint:directionalspringpenalty
     :caption: Options:
 
 .. literalinclude:: ../../../testfiles/marmot/DirectionalSpringPenaltyConstraint/test.inp
@@ -114,7 +114,7 @@ Module ``edelweissfe.constraints.nodetorigidsurfacepenalty``
 .. automodule:: edelweissfe.constraints.nodetorigidsurfacepenalty
     :members: __doc__
 
-.. pprint:: edelweissfe.constraints.nodetorigidsurfacepenalty.documentation
+.. pprint:: constraint:nodetorigidsurfacepenalty
     :caption: Options:
 
 .. literalinclude:: ../../../testfiles/marmot/NodeToRigidSurfacePenaltyConstraintLinear/test.inp
@@ -219,7 +219,7 @@ derivative of the exponential map, is omitted; this affects only the convergence
 correctness of the converged solution. The per-block breakdown of the tangent is given in the inline
 comments of the ``applyConstraint`` method in the module source.
 
-.. pprint:: edelweissfe.constraints.nodetodiscreterigidbodypenalty.documentation
+.. pprint:: constraint:nodetodiscreterigidbodypenalty
     :caption: Options:
 
 .. literalinclude:: ../../../testfiles/edelweiss-only/NodeToDiscreteRigidBodyContact/test.inp
@@ -239,7 +239,7 @@ Module ``edelweissfe.constraints.nodetodeformablesurfacepenalty``
 .. automodule:: edelweissfe.constraints.nodetodeformablesurfacepenalty
     :members: __doc__
 
-.. pprint:: edelweissfe.constraints.nodetodeformablesurfacepenalty.documentation
+.. pprint:: constraint:nodetodeformablesurfacepenalty
     :caption: Options:
 
 .. literalinclude:: ../../../testfiles/edelweiss-only/NodeToDeformableSurfaceContact/test.inp
@@ -285,7 +285,7 @@ Module ``edelweissfe.constraints.tie``
 .. automodule:: edelweissfe.constraints.tie
     :members: __doc__
 
-.. pprint:: edelweissfe.constraints.tie.documentation
+.. pprint:: constraint:tie
     :caption: Options:
 
 .. literalinclude:: ../../../testfiles/edelweiss-only/TieHexa20Patch/test.inp
@@ -318,7 +318,7 @@ Module ``edelweissfe.constraints.hangingnode``
 .. automodule:: edelweissfe.constraints.hangingnode
     :members: __doc__
 
-.. pprint:: edelweissfe.constraints.hangingnode.documentation
+.. pprint:: constraint:hangingnode
     :caption: Options:
 
 .. literalinclude:: ../../../testfiles/marmot/AMR_PatchTestU/test.inp

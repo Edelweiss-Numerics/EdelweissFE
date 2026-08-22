@@ -29,12 +29,19 @@
 
 # @author: Matthias Neuner
 
-import numpy as np
-import sympy as sp
+from collections.abc import Callable
+from dataclasses import dataclass
 
+import numpy as np
+
+from edelweissfe.stepactions.base.amplitude import (
+    amplitudeFromExpression,
+    linearAmplitude,
+)
 from edelweissfe.stepactions.base.bodyloadbase import BodyLoadBase
-from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 Simple body force load.
@@ -42,46 +49,208 @@ If not modified in subsequent steps, the load held constant.
 """
 
 
-inputLanguage = InputLanguage()
-modules = [
-    inputLanguage["step"].getModule("adaptive"),
-    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
-]
+@dataclass(frozen=True)
+class BodyForceSchema:
+    """The scalar options of the ``bodyforce`` keyword, owned by this module and never mutated from
+    outside it.
 
-documentation = []
+    ``name`` and ``elSet`` are ``structuralOnly`` fields: ``elSet`` names an existing model object,
+    resolved by :meth:`fromStepActionDefinition` before the schema is even built, exactly like
+    every other category's structural names, and ``name`` is popped even earlier, by
+    ``helpers/inputfilehelpers.py``. Both are declared here purely so the rendered grammar surface
+    documents them -- :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` never actually sees
+    either key, since both are already gone from the definition mapping by the time it runs; see
+    :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.structuralOnly`. ``forceVector`` is declared
+    ``required=True`` explicitly, but is still given a ``default=None`` so the schema remains
+    constructible for the constructor's default argument.
+    """
 
-for module in modules:
-    kw = module.addOptionalKeyword("bodyforce", "Apply body forces on element sets.")
-    kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("elSet", "The element set for application of the boundary condition.", str)
-    kw.addRequiredArg("forceVector", "The force vector.", str)
-    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
-    kw.addOptionalArg("delta", "In subsequent steps only: define the updated force vector incrementally", str, 0)
-
-    documentation.append(kw)
+    name: str | None = schemaField(
+        description="Name of the step action.", dtype=str, default=None, required=True, structuralOnly=True
+    )
+    elSet: str | None = schemaField(
+        description="The element set for application of the boundary condition.",
+        dtype=str,
+        default=None,
+        required=True,
+        structuralOnly=True,
+    )
+    forceVector: str | None = schemaField(description="The force vector.", dtype=str, default=None, required=True)
+    f_t: str | None = schemaField(
+        description="Define an amplitude in the step progress interval [0...1]",
+        dtype=str,
+        default=None,
+        optionName="f(t)",
+    )
+    delta: str | None = schemaField(
+        description="In subsequent steps only: define the updated force vector incrementally",
+        dtype=str,
+        default=None,
+        # The documented default is `0`, but the actual runtime default is `None`, the sentinel
+        # `updateStepActionFromDefinition` checks for -- `delta` is unreachable via an input file
+        # anyway (see its docstring). `documentedDefault` reproduces the golden text without
+        # changing behavior. See SchemaFieldMeta.documentedDefault.
+        documentedDefault=0,
+    )
 
 
 class StepAction(BodyLoadBase):
-    def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
-        self._name = name
-        self._forceAtStepStart = 0.0
-        self._elSetName = action["elSet"]
-        self._elSet = model.elementSets[self._elSetName]
-        load = np.fromstring(action["forceVector"], sep=",", dtype=np.double)
+    """Body force load, based on an element set.
 
-        if len(load) < model.domainSize:
+    The constructor is typed: it takes the element set itself, the force vector as an
+    ``np.ndarray`` and the amplitude as a callable. Nothing here parses an input file -- turning
+    ``elSet=all``, ``forceVector='0.0, 10.0'`` and ``f(t)='t**2'`` into those arguments is the job of
+    :meth:`fromStepActionDefinition` below, which is the only part of this module the ``.inp``
+    front-end needs.
+
+    The load accumulates *over steps*: the force reached at the end of a step is remembered, and the
+    next step's declaration prescribes either a new total (``forceVector``) or an increment on top of
+    that total (``delta``). See :meth:`updateStepAction` for the exact convention.
+
+    Parameters
+    ----------
+    name
+        The name of this step action.
+    elSet
+        The element set the body force is applied to.
+    forceVector
+        The force vector, with one entry per spatial dimension.
+    model
+        The model tree.
+    journal
+        The journal object for logging.
+    f_t
+        The amplitude over the step progress interval ``[0...1]``. Defaults to the identity, i.e. the
+        force vector is reached linearly at the end of the step.
+    """
+
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
+    schema = BodyForceSchema
+
+    def __init__(
+        self,
+        name,
+        elSet,
+        forceVector: np.ndarray,
+        model,
+        journal,
+        f_t: Callable[[float], float] = None,
+    ):
+        self._name = name
+        self._elSet = elSet
+
+        self._journal = journal
+        self._model = model
+
+        if len(forceVector) < model.domainSize:
             raise Exception("BodyForce {:}: force vector has wrong dimension!".format(self._name))
 
-        self._delta = load
-        if action["f(t)"] is not None:
-            t = sp.symbols("t")
-            self._amplitude = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
-        else:
-            self._amplitude = lambda x: x
+        self._forceAtStepStart = 0.0
+
+        self.updateStepAction(forceVector=forceVector, f_t=f_t)
+
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build this body force from a parsed ``>>bodyforce`` definition. See
+        :class:`StepActionBase` for why this is separate from ``__init__``.
+
+        ``elSet`` is structural (it names a model object), so it is resolved directly and popped
+        before the remaining options are validated against :class:`BodyForceSchema`."""
+
+        definition = CaseInsensitiveDict(definition)
+        elSetName = definition.pop("elSet")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+
+        return cls(
+            name,
+            model.elementSets[elSetName],
+            np.fromstring(configuration.forceVector, sep=",", dtype=np.double),
+            model,
+            journal,
+            f_t=amplitudeFromExpression(configuration.f_t),
+        )
+
+    def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
+        """Update from a parsed ``>>bodyforce`` definition re-declared in a later step.
+
+        ``forceVector`` is a new *total*, ``delta`` an *increment*; the two are mutually exclusive
+        and ``forceVector`` wins.
+
+        A partial re-declaration supplying only ``delta`` is rejected at parse time: there is no
+        ``updatebodyforce`` keyword, so a re-declaration is always validated against the full
+        ``bodyforce`` keyword, which requires ``forceVector``. The ``delta`` branch below is
+        therefore unreachable in practice; it is kept for a future partial-redeclaration path.
+        """
+
+        definition = CaseInsensitiveDict(definition)
+        definition.pop("elSet")
+        configuration = buildSchemaFromOptions(self.schema, definition)
+
+        forceVector = None
+        delta = None
+
+        if configuration.forceVector is not None:
+            forceVector = np.fromstring(configuration.forceVector, sep=",", dtype=np.double)
+        elif configuration.delta is not None:
+            delta = np.fromstring(configuration.delta, sep=",", dtype=np.double)
+
+        self.updateStepAction(
+            forceVector=forceVector,
+            delta=delta,
+            f_t=amplitudeFromExpression(configuration.f_t),
+        )
+
+    def updateStepAction(
+        self,
+        forceVector: np.ndarray = None,
+        delta: np.ndarray = None,
+        f_t: Callable[[float], float] = None,
+    ):
+        """Prescribe a new force vector and amplitude on the same element set.
+
+        The load accumulated up to the start of this step stays untouched; what is prescribed here is
+        the increment applied on top of it during this step. ``forceVector`` and ``delta`` are two
+        ways of expressing that increment and ``forceVector`` takes precedence; supplying neither
+        leaves the increment as it is, which after a completed step means zero -- i.e. the load is
+        held constant at its accumulated level.
+
+        Parameters
+        ----------
+        forceVector
+            The new *total* force vector, i.e. the value to be reached at the end of this step. The
+            increment applied during the step is the difference to the accumulated force.
+        delta
+            The *increment* of the force vector to be applied during this step. Only consulted if
+            ``forceVector`` is omitted.
+        f_t
+            The amplitude over the step progress interval ``[0...1]``; the identity if omitted.
+        """
+
+        if forceVector is not None:
+            self._delta = forceVector - self._forceAtStepStart
+        elif delta is not None:
+            self._delta = delta
+
+        self._amplitude = f_t if f_t is not None else linearAmplitude
 
         self._idle = False
 
     def applyAtStepEnd(self, model, stepMagnitude=None):
+        """Fold this step's increment into the accumulated force and go idle.
+
+        Idle means "no increment pending": until a later step re-declares this load, it stays at the
+        accumulated level.
+
+        Parameters
+        ----------
+        model
+            The current state of the model.
+        stepMagnitude
+            The fraction of the increment that was actually applied. None means the full increment,
+            i.e. the amplitude evaluated at the end of the step; the arc length solvers pass their
+            load parameter here instead.
+        """
+
         if not self._idle:
             if stepMagnitude is None:
                 # standard case
@@ -93,21 +262,20 @@ class StepAction(BodyLoadBase):
             self._delta = 0
             self._idle = True
 
-    def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
-        if action["forceVector"] is not None:
-            self._delta = np.fromstring(action["forceVector"], sep=",", dtype=np.double) - self._forceAtStepStart
-        elif action["delta"] is not None:
-            self._delta = np.fromstring(action["delta"], sep=",", dtype=np.double)
+    def getCurrentLoad(self, timeStep: TimeStep) -> np.ndarray:
+        """The force vector at the current point of the step.
 
-        if action["f(t)"] is not None:
-            t = sp.symbols("t")
-            self._amplitude = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
-        else:
-            self._amplitude = lambda x: x
+        Parameters
+        ----------
+        timeStep
+            The current time step.
 
-        self._idle = False
+        Returns
+        -------
+        np.ndarray
+            The accumulated force plus the amplitude-scaled increment of this step.
+        """
 
-    def getCurrentLoad(self, timeStep: TimeStep):
         if self._idle is True:
             t = 1.0
         else:
@@ -117,4 +285,12 @@ class StepAction(BodyLoadBase):
 
     @property
     def elementSet(self) -> list:
+        """The elements this body force is acting on.
+
+        Returns
+        -------
+        list
+            The element set.
+        """
+
         return self._elSet

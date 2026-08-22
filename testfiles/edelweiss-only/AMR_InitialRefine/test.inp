@@ -36,6 +36,6 @@ maxLevel=1
 
 *step, solver=theSolver
 maxInc=1.0, minInc=1.0, maxNumInc=1, maxIter=25, stepLength=1
->>options, category=NISTSolver, extrapolation=off
+>>options, name=theSolver, extrapolation=off
 >>dirichlet, name=fixBack, nSet=fixed_back, field=displacement, 1=0.0, 2=0.0, 3=0.0
 >>dirichlet, name=moveFront, nSet=fixed_front, field=displacement, 1=0.1, 2=0.0, 3=0.0

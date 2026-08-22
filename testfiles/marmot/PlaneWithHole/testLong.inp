@@ -888,7 +888,7 @@ all
 
 *step, solver=theSolver
 maxInc=0.1, minInc=1e-6, maxNumInc=1000, maxIter=100
->>options, category=NISTSolver, extrapolation=off
+>>options, name=theSolver, extrapolation=off
 >>dirichlet, name=side, nSet=Set-2,  field=displacement, 1=0
 >>dirichlet, name=bottom, nSet=Set-1, field=displacement, 2=0
 >>nodeforces, name=load, nSet=load, components='28.125,0.', field=displacement

@@ -26,45 +26,45 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
-Acceptance test double for the "topological containers have stable identity" contract
-(see ``PLAN_TRANSPARENT_AMR.md``): caches a node set reference exactly the way an ordinary,
-AMR-unaware constraint would -- ``self._nodes = model.nodeSets[nSet]`` at construction, never
-re-fetched -- and implements neither :class:`~edelweissfe.models.modelchangeobserver.
-ModelChangeObserver` nor :class:`~edelweissfe.models.meshdependent.MeshDependent`. It contributes
-zero degrees of freedom and touches no field, so it never affects the converged solution; its only
-purpose is to raise if its cached node set ever fails to reflect a mid-run mesh refinement, which
-would mean AMR silently reintroduced replacing a set instead of mutating it in place. It has no use
-outside test suites and is not intended as a template for an actual boundary condition.
+Acceptance test double for the "topological containers have stable identity" contract: caches a
+node set reference exactly the way an ordinary, AMR-unaware constraint would --
+``self._nodes = model.nodeSets[nSet]`` at construction, never re-fetched -- and implements neither
+:class:`~edelweissfe.models.modelchangeobserver.ModelChangeObserver` nor
+:class:`~edelweissfe.models.meshdependent.MeshDependent`. It contributes zero degrees of freedom
+and touches no field, so it never affects the converged solution; its only purpose is to raise if
+its cached node set ever fails to reflect a mid-run mesh refinement, which would mean AMR mutates
+a set in place rather than replacing it. It has no use outside test suites and is not intended as
+a template for an actual boundary condition.
 """
 
-module = Module(
-    "amrtransparencyprobe",
-    "Test-only acceptance double verifying that a cached NodeSet reference survives AMR without "
-    "any observer registration.",
-)
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class AmrTransparencyProbeSchema:
+    """The options this constraint accepts, owned by this module and never mutated from outside
+    it.
 
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
+    Its only option is the structural ``nSet`` it watches -- a node set *name*, resolved to the
+    actual node set in :meth:`Constraint.fromConstraintDefinition`. It is declared ``required=True``,
+    but still given a ``default=None`` so the schema remains constructible on its own."""
 
-module.addRequiredArg("nSet", "The node set whose growth under AMR this probe verifies.", str)
-
-documentation = [module]
+    nSet: str | None = schemaField(
+        description="The node set whose growth under AMR this probe verifies.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
 
 
 class Constraint(ConstraintBase):
@@ -80,19 +80,37 @@ class Constraint(ConstraintBase):
     model
         The full finite element model.
     nSet
-        The name of the node set to watch; typically one AMR is expected to grow (e.g. a tracked
-        boundary set).
+        The node set to watch; typically one AMR is expected to grow (e.g. a tracked boundary set).
+    configuration
+        The options this constraint accepts; there are none beyond ``nSet``.
     """
 
-    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-    @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name: str, model: FEModel, *args, **kwargs):
-        super().__init__(name, model, *args, **kwargs)
+    #: Option schema for this constraint, per OptionSchemaProvider.
+    schema = AmrTransparencyProbeSchema
+
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        nSet: NodeSet,
+        *,
+        configuration: AmrTransparencyProbeSchema = AmrTransparencyProbeSchema(),
+    ):
+        super().__init__(name, model)
         self.name = name
-        kwargs = CaseInsensitiveDict(kwargs)
-        self._nodes = model.nodeSets[kwargs["nSet"]]
+        self._nodes = nSet
         self._initialNodeCount = len(self._nodes)
         self._lastSeenTopologyVersion = model.topologyVersion
+
+    @classmethod
+    def fromConstraintDefinition(
+        cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
+    ) -> "Constraint":
+        """Build this constraint from a parsed ``*constraint`` definition. See
+        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
+        separate from ``__init__``."""
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+        return cls(name, model, model.nodeSets[configuration.nSet], configuration=configuration)
 
     @property
     def nodes(self) -> list:

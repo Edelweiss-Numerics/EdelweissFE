@@ -29,104 +29,273 @@
 
 # @author: Matthias Neuner
 
+import dataclasses
+from collections.abc import Callable
+from dataclasses import dataclass
+
 import numpy as np
-import sympy as sp
 
 from edelweissfe.config.phenomena import getFieldSize
+from edelweissfe.stepactions.base.amplitude import amplitudeFromExpression
 from edelweissfe.stepactions.base.dirichletbase import DirichletBase
-from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import (
+    buildSchemaFromOptions,
+    coercePresentOptions,
+    schemaField,
+)
 
 """
 Standard Dirichlet boundary condition.
 If not modified in subsequent steps, the BC is held constant.
 """
 
-inputLanguage = InputLanguage()
 
-modules = [
-    inputLanguage["step"].getModule("adaptive"),
-    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
-]
+@dataclass(frozen=True)
+class DirichletSchema:
+    """The scalar options of the ``dirichlet`` keyword, owned by this module and never mutated from
+    outside it.
 
-documentation = []
+    ``name``, ``nSet`` and ``analyticalField`` are ``structuralOnly`` fields: ``nSet`` and
+    ``analyticalField`` each name an existing model object (a node set, an analytical field)
+    resolved by :meth:`fromStepActionDefinition` before the schema is even built, exactly like
+    every other category's structural names, and ``name`` is popped even earlier, by
+    ``helpers/inputfilehelpers.py``. All three are declared here purely so the rendered grammar
+    surface documents them -- :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` never
+    actually sees any of the three keys; see
+    :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.structuralOnly`. ``field`` stays an ordinary
+    schema field -- it is used as a plain string tag (to compute the field size), never looked up
+    in a model dict. The numbered components ``1``..``6`` are not valid Python identifiers, hence
+    the ``optionName`` indirection on ``component1``..``component6``.
+    """
 
-for module in modules:
-    kw = module.addOptionalKeyword("dirichlet", "Standard Dirichlet boundary condition.")
-    kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("nSet", "The node set for application of the boundary condition.", str)
-    kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
-
-    kw.addOptionalArg("1", "Prescribe first component of field.", float, None)
-    kw.addOptionalArg("2", "Prescribe second component of field.", float, None)
-    kw.addOptionalArg("3", "Prescribe third component of field.", float, None)
-    kw.addOptionalArg("4", "Prescribe fourth component of field.", float, None)
-    kw.addOptionalArg("5", "Prescribe fifth component of field.", float, None)
-    kw.addOptionalArg("6", "Prescribe sixth component of field.", float, None)
-
-    kw.addOptionalArg(
-        "components",
-        "Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
-        str,
-        None,
+    name: str | None = schemaField(
+        description="Name of the step action.", dtype=str, default=None, required=True, structuralOnly=True
     )
-    kw.addOptionalArg("analyticalField", "Scales the defined boundary condition", str, None)
-    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
-
-    documentation.append(kw)
-
-    kw = module.addOptionalKeyword("updateDirichlet", "Update a previously defined dirichlet definition.")
-    kw.addRequiredArg("name", "Name of the step action to update.", str)
-    # kw.addRequiredArg("nSet", "The node set for application of the boundary condition.", str)
-    # kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
-
-    kw.addOptionalArg("1", "Prescribe first component of field.", float, None)
-    kw.addOptionalArg("2", "Prescribe second component of field.", float, None)
-    kw.addOptionalArg("3", "Prescribe third component of field.", float, None)
-    kw.addOptionalArg("4", "Prescribe fourth component of field.", float, None)
-    kw.addOptionalArg("5", "Prescribe fifth component of field.", float, None)
-    kw.addOptionalArg("6", "Prescribe sixth component of field.", float, None)
-
-    kw.addOptionalArg(
-        "components",
-        "Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
-        str,
-        None,
+    nSet: str | None = schemaField(
+        description="The node set for application of the boundary condition.",
+        dtype=str,
+        default=None,
+        required=True,
+        structuralOnly=True,
     )
-    kw.addOptionalArg("analyticalField", "Scales the defined boundary condition", str, None)
-    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+    field: str | None = schemaField(
+        description="Field for which the boundary condition is active.", dtype=str, default=None, required=True
+    )
+    component1: float | None = schemaField(
+        description="Prescribe first component of field.", dtype=float, default=None, optionName="1"
+    )
+    component2: float | None = schemaField(
+        description="Prescribe second component of field.", dtype=float, default=None, optionName="2"
+    )
+    component3: float | None = schemaField(
+        description="Prescribe third component of field.", dtype=float, default=None, optionName="3"
+    )
+    component4: float | None = schemaField(
+        description="Prescribe fourth component of field.", dtype=float, default=None, optionName="4"
+    )
+    component5: float | None = schemaField(
+        description="Prescribe fifth component of field.", dtype=float, default=None, optionName="5"
+    )
+    component6: float | None = schemaField(
+        description="Prescribe sixth component of field.", dtype=float, default=None, optionName="6"
+    )
+    components: str | None = schemaField(
+        description="Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
+        dtype=str,
+        default=None,
+    )
+    analyticalField: str | None = schemaField(
+        description="Scales the defined boundary condition", dtype=str, default=None, structuralOnly=True
+    )
+    f_t: str | None = schemaField(
+        description="Define an amplitude in the step progress interval [0...1]",
+        dtype=str,
+        default=None,
+        optionName="f(t)",
+    )
 
-    documentation.append(kw)
+
+@dataclass(frozen=True)
+class UpdateDirichletSchema:
+    """Documentation-only: the ``updateDirichlet`` keyword's own grammar.
+
+    ``updateDirichlet`` is a genuinely different keyword from ``dirichlet`` -- a partial
+    re-declaration that restates only ``name`` (to identify which instance to update) plus the
+    same prescription arguments, dropping the ``nSet``/``field`` required on the initial
+    declaration. This class is **not** referenced by any runtime code:
+    :meth:`StepAction.updateStepActionFromDefinition` validates a
+    re-declaration via :func:`~edelweissfe.utils.schema.coercePresentOptions` against
+    :class:`DirichletSchema` itself, which does not enforce required-ness at all (an override is by
+    definition partial). It exists solely so :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface`
+    can reproduce the golden grammar surface's ``< updateDirichlet >`` block, which has its own
+    distinct required-arg set and therefore cannot be rendered from :class:`DirichletSchema` as-is.
+    """
+
+    name: str | None = schemaField(
+        description="Name of the step action to update.", dtype=str, default=None, required=True, structuralOnly=True
+    )
+    component1: float | None = schemaField(
+        description="Prescribe first component of field.", dtype=float, default=None, optionName="1"
+    )
+    component2: float | None = schemaField(
+        description="Prescribe second component of field.", dtype=float, default=None, optionName="2"
+    )
+    component3: float | None = schemaField(
+        description="Prescribe third component of field.", dtype=float, default=None, optionName="3"
+    )
+    component4: float | None = schemaField(
+        description="Prescribe fourth component of field.", dtype=float, default=None, optionName="4"
+    )
+    component5: float | None = schemaField(
+        description="Prescribe fifth component of field.", dtype=float, default=None, optionName="5"
+    )
+    component6: float | None = schemaField(
+        description="Prescribe sixth component of field.", dtype=float, default=None, optionName="6"
+    )
+    components: str | None = schemaField(
+        description="Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
+        dtype=str,
+        default=None,
+    )
+    analyticalField: str | None = schemaField(
+        description="Scales the defined boundary condition", dtype=str, default=None, structuralOnly=True
+    )
+    f_t: str | None = schemaField(
+        description="Define an amplitude in the step progress interval [0...1]",
+        dtype=str,
+        default=None,
+        optionName="f(t)",
+    )
 
 
 class StepAction(DirichletBase):
-    """Dirichlet boundary condition, based on a node set"""
+    """Dirichlet boundary condition, based on a node set.
 
-    def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
+    The constructor is typed: it takes the node set itself, the prescribed values as a mapping, and
+    the amplitude as a callable. Nothing here parses an input file -- turning ``nSet=bottom``,
+    ``2=0.5`` and ``f(t)='t**2'`` into those arguments is the job of
+    :meth:`fromStepActionDefinition` below, which is the only part of this module the ``.inp``
+    front-end needs. That split is what lets an external caller (EdelweissMeshfree, a script) use
+    this class directly; the signature matches EdelweissMeshfree's own
+    ``stepactions/dirichlet.py``.
+
+    Parameters
+    ----------
+    name
+        The name of this step action.
+    nSet
+        The node set the boundary condition is applied to.
+    field
+        The field the boundary condition acts on, e.g. ``"displacement"``.
+    prescribedComponents
+        Maps the zero-based component index of ``field`` to the value prescribed for it. Components
+        absent from the mapping are left free.
+    model
+        The model tree.
+    journal
+        The journal object for logging.
+    f_t
+        The amplitude over the step progress interval ``[0...1]``. Defaults to the identity, i.e. the
+        prescribed values are reached linearly at the end of the step.
+    analyticalField
+        Scales the prescribed values per node, evaluated at each node's coordinates.
+    """
+
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
+    schema = DirichletSchema
+
+    def __init__(
+        self,
+        name,
+        nSet,
+        field,
+        prescribedComponents: dict,
+        model,
+        journal,
+        f_t: Callable[[float], float] = None,
+        analyticalField=None,
+    ):
         self.name = name
 
-        self.field = action["field"]
-
-        self.action = action
-        self.nSet = model.nodeSets[action["nSet"]]
+        self.field = field
+        self.nSet = nSet
         self.fieldSize = getFieldSize(self.field, model.domainSize)
-        self.possibleComponents = [str(i + 1) for i in range(self.fieldSize)]
 
         self._components = None
         self._journal = journal
         self._model = model
 
-        self.updateStepAction(action, jobInfo, model, fieldOutputController, journal)
+        self.updateStepAction(prescribedComponents, f_t, analyticalField)
+
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build this boundary condition from a parsed ``>>dirichlet`` definition. See
+        :class:`StepActionBase` for why this is separate from ``__init__``.
+
+        ``name`` (already available as this method's own argument) and the parser's bookkeeping
+        keys are stripped, and ``nSet``/``analyticalField`` are structural (they name a model
+        object), so all four are popped before the remaining options are validated against
+        :class:`DirichletSchema`."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        nSetName = definition.pop("nSet")
+        analyticalFieldName = definition.pop("analyticalField")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+
+        return cls(
+            name,
+            model.nodeSets[nSetName],
+            configuration.field,
+            cls._prescribedComponentsFromDefinition(configuration, getFieldSize(configuration.field, model.domainSize)),
+            model,
+            journal,
+            f_t=amplitudeFromExpression(configuration.f_t),
+            analyticalField=model.analyticalFields[analyticalFieldName] if analyticalFieldName is not None else None,
+        )
+
+    def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
+        """Update from a parsed ``>>dirichlet`` definition re-declared in a later step.
+
+        A re-declaration is validated either against the full ``dirichlet`` keyword (restating
+        every required arg, including ``nSet``/``field``) or, if it omits them, against the
+        ``updateDirichlet`` schema instead (``utils/inputfileparser.py``,
+        ``parseModuleKeywordLine``) -- which declares no ``nSet``/``field`` of its own at all. So
+        this uses :func:`~edelweissfe.utils.schema.coercePresentOptions`, not
+        :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`: only whatever keys are actually
+        present are validated, and ``field`` is never required here regardless of which of the two
+        the parser matched -- its value is not read either way, since the node set and field are
+        fixed at construction. ``analyticalField``, like ``f(t)``, resets to its default (no
+        scaling / the identity amplitude) if omitted on this re-declaration -- it is not carried
+        over from the previous declaration."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        definition.pop("nSet", None)
+        analyticalFieldName = definition.pop("analyticalField", None)
+        configuration = dataclasses.replace(self.schema(), **coercePresentOptions(self.schema, definition))
+
+        self.updateStepAction(
+            self._prescribedComponentsFromDefinition(configuration, self.fieldSize),
+            amplitudeFromExpression(configuration.f_t),
+            model.analyticalFields[analyticalFieldName] if analyticalFieldName is not None else None,
+        )
 
     def _reconcileIfSetChanged(self):
         """Re-size the prescribed values if the node set was mutated in-place (e.g. AMR adding new
         boundary nodes) since the last check. Preserve the active/inactive flag: updateStepAction
         unconditionally activates, but a BC deactivated at a prior step end must stay inactive --
         otherwise a refinement in a later step would silently revive it. The node set itself needs
-        no re-fetch: it has stable identity (mutated in place), so ``self.nSet`` is already current."""
+        no re-fetch: it has stable identity (mutated in place), so ``self.nSet`` is already current.
+
+        Replays the *typed* state (``prescribedComponents``/``f_t``/``analyticalField``, kept as
+        attributes by ``__init__``) rather than a stashed definition dict."""
         if self._checkSetChanged(self.nSet):
             wasActive = self.active
-            self.updateStepAction(self.action, None, self._model, None, self._journal)
+            self.updateStepAction(self._prescribedComponents, self._f_t, self._analyticalField)
             self.active = wasActive
 
     @property
@@ -138,34 +307,48 @@ class StepAction(DirichletBase):
     def applyAtStepEnd(self, model):
         self.active = False
 
-    def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
+    def updateStepAction(
+        self,
+        prescribedComponents: dict,
+        f_t: Callable[[float], float] = None,
+        analyticalField=None,
+    ):
+        """Prescribe a new set of values, amplitude and analytical field on the same node set.
+
+        Parameters
+        ----------
+        prescribedComponents
+            Maps the zero-based component index of the field to the value prescribed for it.
+        f_t
+            The amplitude over the step progress interval ``[0...1]``; the identity if omitted.
+        analyticalField
+            Scales the prescribed values per node.
+        """
         self.active = True
 
         self._checkSetChanged(self.nSet)
-        self.action = action
 
-        if action["components"] is not None:
-            action = self._getDirectionsFromComponents(action)
+        outOfRange = [index for index in prescribedComponents if not 0 <= index < self.fieldSize]
+        if outOfRange:
+            raise ValueError(
+                f"Dirichlet '{self.name}': component index/indices {sorted(outOfRange)} do not exist on "
+                f"field '{self.field}', which has {self.fieldSize} component(s)."
+            )
 
-        components = [i for i, direction in enumerate(self.possibleComponents) if action[direction] is not None]
+        self._prescribedComponents = dict(prescribedComponents)
+        self._f_t = f_t
+        self._analyticalField = analyticalField
 
-        values = {
-            i: float(action[direction])
-            for i, direction in enumerate(self.possibleComponents)
-            if action[direction] is not None
-        }
+        self._components = sorted(self._prescribedComponents)
 
-        self.delta = np.tile(list(values.values()), (len(self.nSet), 1))
+        self.delta = np.tile([self._prescribedComponents[i] for i in self._components], (len(self.nSet), 1))
 
-        # for i, node in enumerate(self.nSet):
-        if action["analyticalField"] is not None:
-            self.analyticalField = model.analyticalFields[action["analyticalField"]]
+        if analyticalField is not None:
+            self.analyticalField = analyticalField
             for i, node in enumerate(self.nSet):
-                self.delta[i, :] *= self.analyticalField.evaluateAtCoordinates(node.coordinates)[0][0]
+                self.delta[i, :] *= analyticalField.evaluateAtCoordinates(node.coordinates)[0][0]
 
-        self._components = components
-
-        self.amplitude = self._getAmplitude(action)
+        self.amplitude = f_t if f_t is not None else lambda x: x
 
     def getPrescribedIncrement(self, timeStep: TimeStep):
         self._reconcileIfSetChanged()
@@ -177,48 +360,41 @@ class StepAction(DirichletBase):
         else:
             return self.delta * 0.0
 
-    def _getDirectionsFromComponents(self, action: dict) -> dict:
-        """Determine the direction components from a numpy array representation.
+    @staticmethod
+    def _prescribedComponentsFromDefinition(configuration: "DirichletSchema", fieldSize: int) -> dict:
+        """Collect the prescribed values from a validated ``DirichletSchema``'s ``component1``..
+        ``component6`` and ``components`` fields.
 
         Parameters
         ----------
-        action
-            The dictionary defining this step action.
+        configuration
+            The validated options of this step action.
+        fieldSize
+            The number of components the field has.
 
         Returns
         -------
         dict
-            The updated dictionary defining this step action containing the directional definitions.
+            Maps the zero-based component index to its prescribed value.
         """
 
-        components = np.array(eval(action["components"].replace("x", "np.nan")), dtype=float)
+        numberedComponents = (
+            configuration.component1,
+            configuration.component2,
+            configuration.component3,
+            configuration.component4,
+            configuration.component5,
+            configuration.component6,
+        )
 
-        for i, t in enumerate(components):
-            if not np.isnan(t):
-                action[str(i + 1)] = t
+        prescribed = {
+            index: numberedComponents[index] for index in range(fieldSize) if numberedComponents[index] is not None
+        }
 
-        return action
+        if configuration.components is not None:
+            # An entry of `x` marks a component as free; anything else overrides a numbered option
+            # for the same component.
+            values = np.array(eval(configuration.components.replace("x", "np.nan")), dtype=float)
+            prescribed.update({index: value for index, value in enumerate(values) if not np.isnan(value)})
 
-    def _getAmplitude(self, action: dict) -> callable:
-        """Determine the amplitude for the step, depending on a potentially specified function.
-
-        Parameters
-        ----------
-        action
-            The dictionary defining this step action.
-
-        Returns
-        -------
-        callable
-            The function defining the amplitude depending on the step propress.
-        """
-
-        if action["f(t)"] is not None:
-            t = sp.symbols("t")
-            amplitude = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
-        else:
-
-            def amplitude(x):
-                return x
-
-        return amplitude
+        return prescribed

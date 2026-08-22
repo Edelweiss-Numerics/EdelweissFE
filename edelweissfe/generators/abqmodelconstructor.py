@@ -43,12 +43,11 @@ employing an Abaqus-like syntax.
 
 import numpy as np
 
-from edelweissfe.config.analyticalfields import getAnalyticalFieldFactoryByName
+from edelweissfe.config import registry
 from edelweissfe.config.constraints import getConstraintClass
 from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.materiallibrary import getMaterialClass
 from edelweissfe.config.modelmodifiers import getModelModifierClass
-from edelweissfe.config.sections import getSectionFactoryByName
 from edelweissfe.constraints.base.multipointconstraintbase import (
     MultiPointConstraintBase,
 )
@@ -58,7 +57,7 @@ from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.surfaces.entitybasedsurface import EntityBasedSurface
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import (
+from edelweissfe.utils.inputfileparser import (
     keywordIdentifier,
     moduleLevelKeywordIdentifier,
 )
@@ -67,20 +66,12 @@ from edelweissfe.utils.misc import (
     convertLinesToMixedDictionary,
     convertLinesToStringDictionary,
     isInteger,
+    parseDatalinesToArgsAndKwargs,
     splitLineAtCommas,
+    splitLinesAtCommas,
+    withoutParserBookkeeping,
 )
-
-# isort: off
-from edelweissfe.utils.inputfileparser import inputLanguage  # noqa: F811
-
-from edelweissfe.analyticalfields.randomscalar import inputLanguage  # noqa: F811
-from edelweissfe.analyticalfields.fromvtk import inputLanguage  # noqa: F811
-from edelweissfe.analyticalfields.scalarexpression import inputLanguage  # noqa: F811
-
-from edelweissfe.sections.solid import inputLanguage  # noqa: F811
-from edelweissfe.sections.plane import inputLanguage  # noqa: F811
-
-# isort: on
+from edelweissfe.utils.schema import buildSchemaFromOptions
 
 
 class AbqModelConstructor:
@@ -358,12 +349,10 @@ class AbqModelConstructor:
             constraintType = constraintKwArgs.pop("type")
             data = constraintKwArgs.pop("datalines")
 
-            module = inputLanguage["constraint"].getModule(constraintType)
-
-            args, kwargs = module.parseDatalines(data)
+            args, kwargs = parseDatalinesToArgsAndKwargs(data)
 
             constraintClass = getConstraintClass(constraintType)
-            constraint = constraintClass(name, model, self.journal, **kwargs)
+            constraint = constraintClass.fromConstraintDefinition(name, kwargs, model, journal=self.journal)
 
             # Multi-point (DOF-elimination) constraints contribute nothing to the load vector or
             # system matrix and must stay outside the DofManager/assembly machinery.
@@ -397,9 +386,7 @@ class AbqModelConstructor:
             modifierType = modifierKwArgs.pop("type")
             data = modifierKwArgs.pop("datalines")
 
-            module = inputLanguage["modelModifier"].getModule(modifierType)
-
-            args, kwargs = module.parseDatalines(data)
+            args, kwargs = parseDatalinesToArgsAndKwargs(data)
             if "moduleOptions" in modifierKwArgs:
                 kwargs["moduleOptions"] = modifierKwArgs["moduleOptions"]
 
@@ -442,9 +429,7 @@ class AbqModelConstructor:
             if name in model.sections:
                 raise Exception(f"Section with name {name} already exists")
 
-            module = inputLanguage["section"].getModule(sectionType)
-
-            args, kwargs = module.parseDatalines(data)
+            args, kwargs = parseDatalinesToArgsAndKwargs(data)
             # sectionKwArgs.update(kwargs)
 
             for elSet in args:
@@ -458,15 +443,37 @@ class AbqModelConstructor:
                     f"During parsing of keyword {keywordIdentifier}section: Unexpected keyword arguments. Use module level keyword identifier {moduleLevelKeywordIdentifier} instead."
                 )
 
-            sectionFactory = getSectionFactoryByName(sectionType)
+            sectionClass, sectionSchema = registry.lookup("section", sectionType)
 
+            if sectionSchema is None:
+                raise ValueError(
+                    f"Section '{sectionType}' declares no option schema. Declare one as a `schema` "
+                    "class attribute (see `edelweissfe.utils.schema.OptionSchemaProvider`)."
+                )
+
+            # Validate/coerce the parsed options into the section's own schema, then construct it.
+            # `moduleOptions` carries the nested `>>` sub-keyword blocks
+            # (`>>materialParameterFromField`, `>>writeMaterialPropertiesToFile`).
             try:
-                section = sectionFactory(name, model, materialName, args, moduleOptions, **sectionKwArgs)
+                configuration = buildSchemaFromOptions(
+                    sectionSchema,
+                    sectionKwArgs,
+                    {name: withoutParserBookkeeping(blocks) for name, blocks in moduleOptions.items()},
+                )
             except ValueError as e:
                 e.args = (
                     f"Error during parsing of keyword {keywordIdentifier}section (type={sectionType}): " + e.args[0],
                 )
                 raise e
+
+            elementSetNames = splitLinesAtCommas(args)
+            section = sectionClass(
+                name,
+                model,
+                model.materials[materialName],
+                [model.elementSets[elSetName] for elSetName in elementSetNames],
+                configuration=configuration,
+            )
 
             model.sections[name] = section
 
@@ -499,8 +506,25 @@ class AbqModelConstructor:
             # analytical fields accept no module level keywords
             analyticalFieldKwargs = convertLinesToStringDictionary(data)
 
-            analyticalFieldFactory = getAnalyticalFieldFactoryByName(analyticalFieldType)
-            analyticalField = analyticalFieldFactory(analyticalFieldName, model, **analyticalFieldKwargs)
+            analyticalFieldClass, analyticalFieldSchema = registry.lookup("analyticalfield", analyticalFieldType)
+
+            if analyticalFieldSchema is None:
+                raise ValueError(
+                    f"Analytical field '{analyticalFieldType}' declares no option schema. Declare "
+                    "one as a `schema` class attribute (see "
+                    "`edelweissfe.utils.schema.OptionSchemaProvider`)."
+                )
+
+            try:
+                configuration = buildSchemaFromOptions(analyticalFieldSchema, analyticalFieldKwargs)
+            except ValueError as e:
+                e.args = (
+                    f"Error during parsing of keyword {keywordIdentifier}analyticalField "
+                    f"(type={analyticalFieldType}): " + e.args[0],
+                )
+                raise e
+
+            analyticalField = analyticalFieldClass(analyticalFieldName, model, configuration=configuration)
 
             model.analyticalFields[analyticalFieldName] = analyticalField
 

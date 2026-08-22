@@ -29,6 +29,7 @@
 
 
 from copy import deepcopy
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -48,6 +49,59 @@ from edelweissfe.utils.exceptions import (
     StepFailed,
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
+from edelweissfe.utils.schema import schemaField
+
+
+@dataclass(frozen=True)
+class NEDSchema:
+    """The options of the ``*solver`` datalines and of an ``>>options`` block routed to this
+    solver, owned by this module and never mutated from outside it.
+
+    Mirrors :attr:`NED.NEDOptions` one-for-one; the plain ``self.options`` dict remains the actual
+    source of truth consulted at runtime (see :class:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema`
+    for why). The ``*-fields``/``*-scheme``/``courant-number``/``output-frequency`` option names are
+    not valid Python identifiers, hence the ``optionName`` indirection. ``firstOrderFields``/
+    ``secondOrderFields`` are declared ``dtype=list`` to describe their real shape (a comma-separated
+    list, appended to rather than replaced -- see :meth:`NED._updateOptions`), even though nothing
+    coerces a raw string against this schema today.
+    """
+
+    firstOrderFields: list | None = schemaField(
+        description="Fields integrated with a first-order (forward-Euler) time scheme.",
+        dtype=list,
+        default_factory=list,
+        optionName="first-order-fields",
+    )
+    secondOrderFields: list | None = schemaField(
+        description="Fields integrated with a second-order (central-difference) time scheme.",
+        dtype=list,
+        default_factory=list,
+        optionName="second-order-fields",
+    )
+    firstOrderScheme: str | None = schemaField(
+        description="The time integration scheme for first-order fields.",
+        dtype=str,
+        default="forward-euler",
+        optionName="first-order-scheme",
+    )
+    secondOrderScheme: str | None = schemaField(
+        description="The time integration scheme for second-order fields.",
+        dtype=str,
+        default="central-difference",
+        optionName="second-order-scheme",
+    )
+    courantNumber: float | None = schemaField(
+        description="The fraction of the critical time step actually used.",
+        dtype=float,
+        default=0.8,
+        optionName="courant-number",
+    )
+    outputFrequency: int | None = schemaField(
+        description="The increment interval at which progress is logged.",
+        dtype=int,
+        default=1000,
+        optionName="output-frequency",
+    )
 
 
 class NED(NonlinearSolverBase):
@@ -64,6 +118,9 @@ class NED(NonlinearSolverBase):
     identification = "NEDSolver"
 
     supportsMPC = True
+
+    #: Option schema for this solver, per OptionSchemaProvider.
+    schema = NEDSchema
 
     NEDOptions = {
         "first-order-fields": [],
@@ -161,8 +218,9 @@ class NED(NonlinearSolverBase):
                 "scalar variables",
             ]
 
-        if "NEDSolver" in step.actions["options"].keys():
-            self._updateOptions(step.actions["options"]["NEDSolver"].options, self.journal)
+        # self.options already reflects every >>options, name=<this solver's name>, ... block applied
+        # so far, applied as each block is constructed or re-declared; there is nothing to reset or
+        # re-fetch here.
 
         self.mpcTransformation = self.buildMPCTransformation(model)
         self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)

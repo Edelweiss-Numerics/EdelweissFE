@@ -29,28 +29,15 @@
 
 # @author: Matthias Neuner
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
-
-module = Module("rigidbody", "A rigid body constraint tying nodes to a reference point.")
-
-inputLanguage = InputLanguage()
-
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg("nSet", "Node set to tie.", str)
-module.addRequiredArg("referencePoint", "Node set containing only the reference point.", str)
-
-documentation = [module]
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
+from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 
 class RigidBodyStiffnessView:
@@ -146,20 +133,41 @@ class RigidBodyStiffnessView:
         ]
 
 
+@dataclass(frozen=True)
+class RigidBodySchema:
+    """The options this constraint accepts, owned by this module and never mutated from
+    outside it.
+
+    Its only options are the structural ``nSet``/``referencePoint`` it ties -- node set *names*,
+    resolved to the actual node sets in :meth:`Constraint.fromConstraintDefinition`. Each is
+    declared ``required=True``, but still given a ``default=None`` so the schema remains
+    constructible on its own."""
+
+    nSet: str | None = schemaField(description="Node set to tie.", dtype=str, default=None, required=True)
+    referencePoint: str | None = schemaField(
+        description="Node set containing only the reference point.", dtype=str, default=None, required=True
+    )
+
+
 class Constraint(ConstraintBase):
     """
     Geometrically exact rigid body constraint: Constrains a nodeset to a reference point.
     Currently only available for spatialdomain = 3D.
     """
 
-    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-    @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name, model, *args, **kwargs):
-        super().__init__(name, model, *args, **kwargs)
+    #: Option schema for this constraint, per OptionSchemaProvider.
+    schema = RigidBodySchema
 
-        # self.name = name
-
-        kwargs = CaseInsensitiveDict(kwargs)
+    def __init__(
+        self,
+        name,
+        model: FEModel,
+        nSet: NodeSet,
+        referencePoint: NodeSet,
+        *,
+        configuration: RigidBodySchema = RigidBodySchema(),
+    ):
+        super().__init__(name, model)
 
         self.nDim = model.domainSize
         nDim = self.nDim
@@ -167,20 +175,16 @@ class Constraint(ConstraintBase):
         if nDim == 2:
             raise Exception("rigid body constraint not yet implemented for 2D")
 
-        rbNset = kwargs["nSet"]
-        nodeSets = model.nodeSets
-
-        if len(nodeSets[kwargs["referencePoint"]]) > 1:
+        if len(referencePoint) > 1:
             raise Exception(
-                "node set for reference point '{:}' contains more than one node".format(kwargs["referencePoint"])
+                "node set for reference point '{:}' contains more than one node".format(referencePoint.name)
             )
 
-        self.referencePoint = nodeSets[kwargs["referencePoint"]][0]
+        self.referencePoint = referencePoint[0]
 
-        slaveNodeSet = nodeSets[rbNset]  # slave node set may contain the reference point
-
-        # reference point is removed (if present) and node set is converted to list
-        self.slaveNodes = [node for node in slaveNodeSet if not node == self.referencePoint]
+        # slave node set may contain the reference point; reference point is removed (if present)
+        # and node set is converted to list
+        self.slaveNodes = [node for node in nSet if not node == self.referencePoint]
 
         nRot = 3
         nSlaves = len(self.slaveNodes)
@@ -188,13 +192,6 @@ class Constraint(ConstraintBase):
         self.indicesOfSlaveNodesInP = [[i * nDim + j for j in range(nDim)] for i in range(nSlaves)]
         self.indicesOfRPUinP = [nSlaves * nDim + j for j in range(nDim)]
         self.indicesOfRPPhiInP = [nSlaves * nDim + nDim + j for j in range(nRot)]
-
-        # all nodes
-
-        slaveNodeSet = nodeSets[rbNset]  # slave node set may contain the reference point
-
-        # reference point is removed (if present) and node set is converted to list
-        self.slaveNodes = [node for node in slaveNodeSet if not node == self.referencePoint]
 
         # list of all nodes including RP at end
         self._nodes = self.slaveNodes + [self.referencePoint]
@@ -222,6 +219,22 @@ class Constraint(ConstraintBase):
         self._nUCoupledPerSlave = nDim + nDim + nRot
 
         self._reactions = np.zeros(self.nRot + self.nDim)
+
+    @classmethod
+    def fromConstraintDefinition(
+        cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
+    ) -> "Constraint":
+        """Build this constraint from a parsed ``*constraint`` definition. See
+        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
+        separate from ``__init__``."""
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+        return cls(
+            name,
+            model,
+            model.nodeSets[configuration.nSet],
+            model.nodeSets[configuration.referencePoint],
+            configuration=configuration,
+        )
 
     @property
     def nodes(self) -> list:

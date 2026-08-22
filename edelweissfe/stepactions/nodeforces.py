@@ -29,85 +29,194 @@
 
 # @author: Matthias Neuner
 
+import dataclasses
+from collections.abc import Callable
+from dataclasses import dataclass
+
 import numpy as np
-import sympy as sp
 
 from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.stepactions.base.amplitude import (
+    amplitudeFromExpression,
+    linearAmplitude,
+)
 from edelweissfe.stepactions.base.nodalloadbase import NodalLoadBase
-from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import (
+    buildSchemaFromOptions,
+    coercePresentOptions,
+    schemaField,
+)
 
 """
 Apply node forces on a nSet.
 """
 
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class NodeForcesSchema:
+    """The scalar options of the ``nodeforces`` keyword, owned by this module and never mutated
+    from outside it.
 
-modules = [
-    inputLanguage["step"].getModule("adaptive"),
-    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
-]
+    ``name`` and ``nSet`` are ``structuralOnly`` fields: ``nSet`` names an existing model object,
+    resolved by :meth:`fromStepActionDefinition` before the schema is even built, exactly like
+    every other category's structural names, and ``name`` is popped even earlier, by
+    ``helpers/inputfilehelpers.py``. Both are declared here purely so the rendered grammar surface
+    documents them -- :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` never actually sees
+    either key. ``field`` stays an ordinary schema field -- it is used as a plain string tag (to
+    compute the field size), never looked up in a model dict. The numbered components ``1``..``6``
+    are not valid Python identifiers, hence the ``optionName`` indirection on ``component1``..
+    ``component6``.
+    """
 
-documentation = []
-
-for module in modules:
-    kw = module.addOptionalKeyword("nodeforces", "Apply node forces on node sets.")
-    kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("nSet", "The node set for application of the boundary condition.", str)
-    kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
-
-    kw.addOptionalArg("1", "Prescribe first component of field.", float, None)
-    kw.addOptionalArg("2", "Prescribe second component of field.", float, None)
-    kw.addOptionalArg("3", "Prescribe third component of field.", float, None)
-    kw.addOptionalArg("4", "Prescribe fourth component of field.", float, None)
-    kw.addOptionalArg("5", "Prescribe fifth component of field.", float, None)
-    kw.addOptionalArg("6", "Prescribe sixth component of field.", float, None)
-
-    kw.addOptionalArg(
-        "components",
-        "Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
-        str,
-        None,
+    name: str | None = schemaField(
+        description="Name of the step action.", dtype=str, default=None, required=True, structuralOnly=True
     )
-    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
-
-    documentation.append(kw)
-
-    kw = module.addOptionalKeyword("updateNodeforces", "Update a previously defined nodeforces definition.")
-    kw.addRequiredArg("name", "Name of the step action to update.", str)
-    # kw.addRequiredArg("nSet", "The node set for application of the boundary condition.", str)
-    # kw.addRequiredArg("field", "Field for which the boundary condition is active.", str)
-
-    kw.addOptionalArg("1", "Prescribe first component of field.", float, None)
-    kw.addOptionalArg("2", "Prescribe second component of field.", float, None)
-    kw.addOptionalArg("3", "Prescribe third component of field.", float, None)
-    kw.addOptionalArg("4", "Prescribe fourth component of field.", float, None)
-    kw.addOptionalArg("5", "Prescribe fifth component of field.", float, None)
-    kw.addOptionalArg("6", "Prescribe sixth component of field.", float, None)
-
-    kw.addOptionalArg(
-        "components",
-        "Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
-        str,
-        None,
+    nSet: str | None = schemaField(
+        description="The node set for application of the boundary condition.",
+        dtype=str,
+        default=None,
+        required=True,
+        structuralOnly=True,
     )
-    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
+    field: str | None = schemaField(
+        description="Field for which the boundary condition is active.", dtype=str, default=None, required=True
+    )
+    component1: float | None = schemaField(
+        description="Prescribe first component of field.", dtype=float, default=None, optionName="1"
+    )
+    component2: float | None = schemaField(
+        description="Prescribe second component of field.", dtype=float, default=None, optionName="2"
+    )
+    component3: float | None = schemaField(
+        description="Prescribe third component of field.", dtype=float, default=None, optionName="3"
+    )
+    component4: float | None = schemaField(
+        description="Prescribe fourth component of field.", dtype=float, default=None, optionName="4"
+    )
+    component5: float | None = schemaField(
+        description="Prescribe fifth component of field.", dtype=float, default=None, optionName="5"
+    )
+    component6: float | None = schemaField(
+        description="Prescribe sixth component of field.", dtype=float, default=None, optionName="6"
+    )
+    components: str | None = schemaField(
+        description="Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
+        dtype=str,
+        default=None,
+    )
+    f_t: str | None = schemaField(
+        description="Define an amplitude in the step progress interval [0...1]",
+        dtype=str,
+        default=None,
+        optionName="f(t)",
+    )
 
-    documentation.append(kw)
+
+@dataclass(frozen=True)
+class UpdateNodeforcesSchema:
+    """Documentation-only: the ``updateNodeforces`` keyword's own grammar.
+
+    ``updateNodeforces`` is a genuinely different keyword from ``nodeforces`` -- a partial
+    re-declaration that restates only ``name`` (to identify which instance to update) plus the
+    same prescription arguments, dropping the ``nSet``/``field`` required on the initial
+    declaration. This class is **not** referenced by any runtime code:
+    :meth:`StepAction.updateStepActionFromDefinition` validates a re-declaration via
+    :func:`~edelweissfe.utils.schema.coercePresentOptions` against :class:`NodeForcesSchema`
+    itself, which does not enforce required-ness at all (an override is by definition partial). It
+    exists solely so :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface` can reproduce the
+    golden grammar surface's ``< updateNodeforces >`` block, which has its own distinct
+    required-arg set and therefore cannot be rendered from :class:`NodeForcesSchema` as-is.
+    """
+
+    name: str | None = schemaField(
+        description="Name of the step action to update.", dtype=str, default=None, required=True, structuralOnly=True
+    )
+    component1: float | None = schemaField(
+        description="Prescribe first component of field.", dtype=float, default=None, optionName="1"
+    )
+    component2: float | None = schemaField(
+        description="Prescribe second component of field.", dtype=float, default=None, optionName="2"
+    )
+    component3: float | None = schemaField(
+        description="Prescribe third component of field.", dtype=float, default=None, optionName="3"
+    )
+    component4: float | None = schemaField(
+        description="Prescribe fourth component of field.", dtype=float, default=None, optionName="4"
+    )
+    component5: float | None = schemaField(
+        description="Prescribe fifth component of field.", dtype=float, default=None, optionName="5"
+    )
+    component6: float | None = schemaField(
+        description="Prescribe sixth component of field.", dtype=float, default=None, optionName="6"
+    )
+    components: str | None = schemaField(
+        description="Prescribe values using a numpy ndarray for representation; use 'x' for ignored values.",
+        dtype=str,
+        default=None,
+    )
+    f_t: str | None = schemaField(
+        description="Define an amplitude in the step progress interval [0...1]",
+        dtype=str,
+        default=None,
+        optionName="f(t)",
+    )
 
 
 class StepAction(NodalLoadBase):
-    """Defines node based load, defined on a nodeset."""
+    """Defines node based load, defined on a nodeset.
 
-    def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
+    The constructor is typed: it takes the node set itself, the per-node force vector as an
+    ``np.ndarray`` and the amplitude as a callable. Nothing here parses an input file -- turning
+    ``nSet=gen_top``, ``2=-50`` (or ``components='0,-1000'``) and ``f(t)='sin(t*2*pi)'`` into those
+    arguments is the job of :meth:`fromStepActionDefinition` below, which is the only part of this
+    module the ``.inp`` front-end needs.
+
+    The load accumulates *over steps*: the force reached at the end of a step is remembered, and what
+    a later step declares is applied on top of it. See :meth:`updateStepAction`.
+
+    Parameters
+    ----------
+    name
+        The name of this step action.
+    nSet
+        The node set the forces are applied to.
+    field
+        The field the forces act on, e.g. ``"displacement"``.
+    nodeForces
+        The force applied to every node of the set, with one entry per component of ``field``.
+    model
+        The model tree.
+    journal
+        The journal object for logging.
+    f_t
+        The amplitude over the step progress interval ``[0...1]``. Defaults to the identity, i.e. the
+        forces are reached linearly at the end of the step.
+    """
+
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
+    schema = NodeForcesSchema
+
+    def __init__(
+        self,
+        name,
+        nSet,
+        field,
+        nodeForces: np.ndarray,
+        model,
+        journal,
+        f_t: Callable[[float], float] = None,
+    ):
         self.name = name
-        nodeSets = model.nodeSets
 
-        self._field = action["field"]
-        self._nSetName = action["nSet"]
-        self._nSet = nodeSets[self._nSetName]
+        self._field = field
+        self._nSet = nSet
+
+        self._journal = journal
+        self._model = model
 
         self._fieldSize = getFieldSize(self._field, model.domainSize)
 
@@ -117,9 +226,53 @@ class StepAction(NodalLoadBase):
         self.nodeForcesDelta = np.zeros(shape)
         self._nSetNodeOrder = list(self._nSet)  # node identity per row, for the lazy resize below
 
-        self.possibleComponents = [str(i + 1) for i in range(self._fieldSize)]
+        self.updateStepAction(nodeForces, f_t=f_t)
 
-        self.updateStepAction(action, jobInfo, model, fieldOutputController, journal)
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build these node forces from a parsed ``>>nodeforces`` definition. See
+        :class:`StepActionBase` for why this is separate from ``__init__``.
+
+        ``name`` and the parser's bookkeeping keys are stripped, and ``nSet`` is structural (it
+        names a model object), so both are popped before the remaining options are validated
+        against :class:`NodeForcesSchema`."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        nSetName = definition.pop("nSet")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+
+        return cls(
+            name,
+            model.nodeSets[nSetName],
+            configuration.field,
+            cls._nodeForcesFromDefinition(configuration, getFieldSize(configuration.field, model.domainSize)),
+            model,
+            journal,
+            f_t=amplitudeFromExpression(configuration.f_t),
+        )
+
+    def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
+        """Update from a parsed ``>>nodeforces`` definition re-declared in a later step.
+
+        A re-declaration is validated either against the full ``nodeforces`` keyword (restating
+        every required arg, including ``nSet``/``field``) or, if it omits them, against the
+        ``updateNodeforces`` schema instead (``utils/inputfileparser.py``,
+        ``parseModuleKeywordLine``) -- which declares no ``nSet``/``field`` of its own at all. So
+        this uses :func:`~edelweissfe.utils.schema.coercePresentOptions`, not
+        :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`: only whatever keys are actually
+        present are validated, and ``field`` is never read here regardless of which of the two the
+        parser matched -- the field size comes from the instance instead, which is also the right
+        source, since the node set a load acts on cannot change."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        configuration = dataclasses.replace(self.schema(), **coercePresentOptions(self.schema, definition))
+
+        self.updateStepAction(
+            self._nodeForcesFromDefinition(configuration, self._fieldSize),
+            f_t=amplitudeFromExpression(configuration.f_t),
+        )
 
     def _reconcileIfSetChanged(self):
         """Re-size the load arrays if the node set was mutated in-place (e.g. AMR adding new
@@ -142,58 +295,117 @@ class StepAction(NodalLoadBase):
                 self.nodeForcesDelta[i] = oldDelta[node]
         self._nSetNodeOrder = newNodes
 
-    def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
-        """Update the step action.
+    def updateStepAction(self, nodeForces: np.ndarray, f_t: Callable[[float], float] = None):
+        """Prescribe a new force vector and amplitude on the same node set.
 
-        It is a reasonable requirement that the updated direction components cannot change.
+        The load accumulated up to the start of this step stays untouched; ``nodeForces`` is the
+        increment applied on top of it during this step -- unlike ``bodyforce``/``distributedload``,
+        which additionally accept a new *total*.
+
+        Parameters
+        ----------
+        nodeForces
+            The force *increment* applied to every node of the set during this step, with one entry
+            per component of the field.
+        f_t
+            The amplitude over the step progress interval ``[0...1]``; the identity if omitted.
         """
 
         self._reconcileIfSetChanged()
         self._idle = False
 
-        if action["components"] is not None:
-            nodeLoad = np.asarray(eval(action["components"].replace("x", "0")), dtype=float)
-        else:
-            nodeLoad = self._getComponentsFromDirection(action)
+        if len(nodeForces) != self._fieldSize:
+            raise ValueError(
+                f"NodeForces '{self.name}': {len(nodeForces)} force component(s) given, but field "
+                f"'{self._field}' has {self._fieldSize} component(s)."
+            )
 
-        nodeForcesDelta = np.tile(nodeLoad, (len(self._nSet), 1))
-
-        self.nodeForcesDelta = nodeForcesDelta
-        self.amplitude = self._getAmplitude(action)
+        self.nodeForcesDelta = np.tile(nodeForces, (len(self._nSet), 1))
+        self.amplitude = f_t if f_t is not None else linearAmplitude
 
     @property
     def field(self) -> str:
+        """The field these forces act on.
+
+        Returns
+        -------
+        str
+            The name of the field.
+        """
+
         return self._field
 
     @property
     def nodeSet(self) -> NodeSet:
-        return self._nSet
-
-    def _getAmplitude(self, action: dict) -> callable:
-        """Determine the amplitude for the step, depending on a potentially specified function.
-
-        Parameters
-        ----------
-        action
-            The dictionary defining this step action.
+        """The nodes these forces are acting on.
 
         Returns
         -------
-        callable
-            The function defining the amplitude depending on the step propress.
+        NodeSet
+            The node set.
         """
 
-        if action["f(t)"] is not None:
-            t = sp.symbols("t")
-            amplitude = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
-        else:
+        return self._nSet
 
-            def amplitude(x):
-                return x
+    @staticmethod
+    def _nodeForcesFromDefinition(configuration: "NodeForcesSchema", fieldSize: int) -> np.ndarray:
+        """Collect the per-node force vector from a validated ``NodeForcesSchema``'s ``component1``..
+        ``component6`` and ``components`` fields.
 
-        return amplitude
+        Note the deliberate difference to ``dirichlet``, which offers options of the same names: an
+        entry of ``x`` means *free* to a boundary condition, so dirichlet maps it to ``np.nan`` and
+        uses the result as a mask, whereas an unloaded component simply carries no force, so here
+        ``x`` means the value zero and the result is a dense vector. Do not unify the two.
+
+        Parameters
+        ----------
+        configuration
+            The validated options of this step action.
+        fieldSize
+            The number of components the field has.
+
+        Returns
+        -------
+        np.ndarray
+            The force applied to every node of the set, one entry per field component.
+        """
+
+        if configuration.components is not None:
+            return np.asarray(eval(configuration.components.replace("x", "0")), dtype=float)
+
+        numberedComponents = (
+            configuration.component1,
+            configuration.component2,
+            configuration.component3,
+            configuration.component4,
+            configuration.component5,
+            configuration.component6,
+        )
+
+        nodeForces = np.zeros(fieldSize)
+
+        for index in range(fieldSize):
+            if numberedComponents[index] is not None:
+                nodeForces[index] = numberedComponents[index]
+
+        return nodeForces
 
     def applyAtStepEnd(self, model, stepMagnitude=None):
+        """Fold this step's increment into the accumulated forces and go idle.
+
+        Idle means "no increment pending": until a later step re-declares this load, it stays at the
+        accumulated level.
+
+        Parameters
+        ----------
+        model
+            The current state of the model.
+        stepMagnitude
+            The fraction of the increment that was actually applied. None means the full increment,
+            i.e. the amplitude evaluated at the end of the step; the arc length solvers pass their
+            load parameter here instead.
+        """
+
         self._reconcileIfSetChanged()
         if not self._idle:
             if stepMagnitude is None:
@@ -206,7 +418,21 @@ class StepAction(NodalLoadBase):
             self.nodeForcesDelta[:] = 0
             self._idle = True
 
-    def getCurrentLoad(self, timeStep: TimeStep):
+    def getCurrentLoad(self, timeStep: TimeStep) -> np.ndarray:
+        """The nodal forces at the current point of the step.
+
+        Parameters
+        ----------
+        timeStep
+            The current time step.
+
+        Returns
+        -------
+        np.ndarray
+            The accumulated forces plus the amplitude-scaled increment of this step, one row per node
+            of the set.
+        """
+
         self._reconcileIfSetChanged()
         if self._idle:
             return self.nodeForcesStepStart
@@ -215,12 +441,3 @@ class StepAction(NodalLoadBase):
             amp = self.amplitude(t)
 
             return self.nodeForcesStepStart + self.nodeForcesDelta * amp
-
-    def _getComponentsFromDirection(self, action: dict) -> np.ndarray:
-        nodeLoad = np.zeros(self._fieldSize)
-
-        for i, comp in enumerate(self.possibleComponents):
-            if action[comp] is not None:
-                nodeLoad[i] = float(action[comp])
-
-        return nodeLoad

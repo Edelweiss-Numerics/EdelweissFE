@@ -32,6 +32,7 @@
 import datetime
 import os
 from collections import defaultdict
+from dataclasses import dataclass
 from io import TextIOBase
 
 import numpy as np
@@ -42,15 +43,13 @@ from edelweissfe.points.node import Node
 from edelweissfe.rigidbodies.rigidbody import RigidBody
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.fieldoutput import (
     ElementFieldOutput,
     NodeFieldOutput,
     _FieldOutputBase,
 )
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.meshtools import disassembleElsetToEnsightShapes
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker, strtobool
+from edelweissfe.utils.schema import schemaField, subKeywordField
 
 """
 Output manager for Ensight exports.
@@ -59,47 +58,91 @@ For each part, perNode and perElement results can be exported, which are importe
 
 """
 
-module = Module("ensight", "Ensight export.")
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class EnsightPerNodeSchema:
+    """The options of a single ``>>perNode`` block."""
 
-keyword = "output"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-kw = module.addOptionalKeyword("perNode", "Node-based Ensight export.")
-kw.addRequiredArg(
-    "fieldOutput",
-    "Name of the result, defined on an elSet (also for perNode results!)",
-    str,
-)
-
-kw = module.addOptionalKeyword("perElement", "Element-based Ensight export.")
-kw.addRequiredArg(
-    "fieldOutput",
-    "Name of the result, defined on an elSet (also for perNode results!)",
-    str,
-)
-
-kw = module.addOptionalKeyword("configuration", "")
-kw.addOptionalArg("overwrite", "Overwrite results.", bool, False)
-kw.addOptionalArg("intermediateSaveInterval", "Set intermediate save interval.", int, 10)
-kw.addOptionalArg("elSet", "Element set.", str, None)
-kw.addOptionalArg("nSet", "Node set.", str, None)
-kw.addOptionalArg("transient", "Set transient ensight output.", bool, True)
-
-documentation = [module]
+    fieldOutput: str | None = schemaField(
+        description="Name of the result, defined on an elSet (also for perNode results!)",
+        dtype=str,
+        default=None,
+        required=True,
+    )
 
 
-keyword = "step"
-if keyword in inputLanguage:
-    modules = [
-        inputLanguage["step"].getModule("adaptive").getKeyword("options"),
-        inputLanguage["step"].getModule("adaptiveForExplicitSimulations").getKeyword("options"),
-    ]
-    for optionsModule in modules:
-        optionsModule.addOptionalArg("intermediateSaveInterval", "", float, None)
-        optionsModule.addOptionalArg("minDTForOutput", "", float, None)
+@dataclass(frozen=True)
+class EnsightPerElementSchema:
+    """The options of a single ``>>perElement`` block."""
+
+    fieldOutput: str | None = schemaField(
+        description="Name of the result, defined on an elSet (also for perNode results!)",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+
+
+@dataclass(frozen=True)
+class EnsightConfigurationSchema:
+    """The options of a single ``>>configuration`` block.
+
+    These defaults are also what an ensight export uses when no ``>>configuration`` block is given
+    at all. Note that ``overwrite`` defaults to ``False``, i.e. an export directory is by default
+    suffixed with a timestamp rather than overwritten.
+    """
+
+    overwrite: bool = schemaField(description="Overwrite results.", dtype=bool, default=False)
+    intermediateSaveInterval: int | None = schemaField(
+        description="Set intermediate save interval.", dtype=int, default=10
+    )
+    elSet: str | None = schemaField(description="Element set.", dtype=str, default=None)
+    nSet: str | None = schemaField(description="Node set.", dtype=str, default=None)
+    transient: bool = schemaField(description="Set transient ensight output.", dtype=bool, default=True)
+
+
+@dataclass(frozen=True)
+class EnsightSchema:
+    """The options this output manager accepts, owned by this module and never mutated from
+    outside it.
+
+    Ensight's grammar is not a flat option list: it is a set of repeatable ``>>`` sub-keyword
+    blocks, mirrored one-for-one here via :func:`edelweissfe.utils.schema.subKeywordField`. Each
+    field therefore holds a *tuple* of per-block schema instances, in file order. ``configurations``
+    answers to the sub-keyword ``>>configuration`` (singular) but is a tuple like the others, since
+    repeating the block is not forbidden.
+
+    ``intermediateSaveInterval``/``minDTForOutput`` are not read at construction time: they exist so
+    a later ``>>options, name=<this export's name>, ...`` block (``stepactions/options.py``) has
+    something to validate against and :meth:`OutputManager.applyOptionsOverride` to apply --
+    adjusting the running export mid-job without repeating its full ``>>configuration``. Not writing
+    either leaves whatever the manager was already configured with in place, so both are marked
+    :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.optionsOverrideOnly`: reachable through
+    ``>>options`` but not part of this keyword's own line/``>>``-block grammar.
+    """
+
+    perNode: tuple[EnsightPerNodeSchema, ...] = subKeywordField(
+        description="Node-based Ensight export.", schema=EnsightPerNodeSchema
+    )
+    perElement: tuple[EnsightPerElementSchema, ...] = subKeywordField(
+        description="Element-based Ensight export.", schema=EnsightPerElementSchema
+    )
+    configurations: tuple[EnsightConfigurationSchema, ...] = subKeywordField(
+        description="", schema=EnsightConfigurationSchema, optionName="configuration"
+    )
+    intermediateSaveInterval: int | None = schemaField(
+        description="Set the intermediate save interval for the Ensight export. Not writing it "
+        "leaves whatever the '>>configuration' block set (or its own default) in place.",
+        dtype=int,
+        default=None,
+        optionsOverrideOnly=True,
+    )
+    minDTForOutput: float | None = schemaField(
+        description="Set the minimum time between two Ensight exports. Not writing it leaves no " "minimum in place.",
+        dtype=float,
+        default=None,
+        optionsOverrideOnly=True,
+    )
 
 
 def writeCFloat(f, ndarray):
@@ -776,50 +819,45 @@ def createUnstructuredPartFromRigidBody(bodyName, rigidBody, partID: int):
     return EnsightUnstructuredPart("RIGIDBODY_" + bodyName, partID, visualizationNodes, elementDict)
 
 
-required = [kw.name for kw in module.requiredArgs]
-required += [kw.name for kw in module.requiredKeywords]
-
-optional = [kw.name for kw in module.optionalArgs]
-optional += [kw.name for kw in module.optionalKeywords]
-
-
-@caseInsensitiveKwargsChecker(required, optional)
-def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
-    kwargs = CaseInsensitiveDict(kwargs)
-
-    perNodeDefs = moduleOptions.get("perNode", [])
-    perElementDefs = moduleOptions.get("perElement", [])
-    configurations = moduleOptions.get("configuration", [])
-
-    # datalineOptions = splitLinesAtCommas(datalines)
-
-    return OutputManager(
-        name,
-        FEModel,
-        fieldOutputController,
-        journal,
-        plotter,
-        perNodeDefs,
-        perElementDefs,
-        configurations,
-    )
-
-
 class OutputManager(OutputManagerBase):
     identification = "Ensight Export"
 
+    #: Option schema for this output manager, per OptionSchemaProvider.
+    schema = EnsightSchema
+
     def __init__(
         self,
-        name,
-        model,
+        name: str,
+        model: FEModel,
         fieldOutputController,
         journal,
         plotter,
-        perNodeDefs: list[dict] = None,
-        perElementDefs: list[dict] = None,
-        configurations: list[dict] = None,
-        **kwargs,
+        *,
+        configuration: EnsightSchema = EnsightSchema(),
     ):
+        """Constructible standalone, with no parser involvement. Options arrive as an
+        already-validated, already-typed schema instance.
+
+        Parameters
+        ----------
+        name
+            The name of this output manager.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controller instance.
+        journal
+            The journal instance for logging.
+        plotter
+            The plotter instance.
+        configuration
+            The options this output manager accepts, including its ``>>perNode``, ``>>perElement``
+            and ``>>configuration`` blocks.
+        """
+        perNodeDefs = configuration.perNode
+        perElementDefs = configuration.perElement
+        configurations = configuration.configurations
+
         self.name = name
 
         self.model = model
@@ -846,41 +884,28 @@ class OutputManager(OutputManagerBase):
 
         self.geometryParts = self._createGeometryParts(1)
 
-        val = kwargs.get(
-            "intermediateSaveInterval", module.getKeyword("configuration")["intermediateSaveInterval"].default
-        )
+        # Defaults come directly from the schema.
+        defaults = EnsightConfigurationSchema()
+        val = defaults.intermediateSaveInterval
         self.intermediateSaveInterval = int(val) if val is not None else None
-        self.overwrite = module.getKeyword("configuration")["overwrite"].default
-        transient = module.getKeyword("configuration")["transient"].default
+        self.overwrite = defaults.overwrite
+        transient = defaults.transient
         configSetName = None
         configIsNodeSet = None
 
-        if perNodeDefs is None:
-            perNodeDefs = []
+        # A repeated `>>configuration` is not rejected: every scalar option is last-wins, but
+        # `configSetName` carries over from an earlier block if the last one names neither nSet nor
+        # elSet.
+        for configurationBlock in configurations:
+            self.intermediateSaveInterval = configurationBlock.intermediateSaveInterval
+            transient = configurationBlock.transient
+            self.overwrite = configurationBlock.overwrite
 
-        if perElementDefs is None:
-            perElementDefs = []
-
-        if configurations is None:
-            configurations = []
-
-        # configuration keyword should only be allowed once
-        for configuration in configurations:
-            val = configuration["intermediateSaveInterval"]
-            self.intermediateSaveInterval = int(val) if val is not None else None
-            transient = configuration["transient"]
-            self.overwrite = configuration["overwrite"]
-
-            # if bool(definition["nSet"]) and bool(definition["elSet"]):
-            #     raise Exception(
-            #         f"During parsing of keyword {keywordIdentifier}output ({moduleLevelKeywordIdentifier}ensight): Specify either nSet OR elSet."
-            #     )
-
-            if configuration["nSet"]:
-                configSetName = configuration["nSet"]
+            if configurationBlock.nSet:
+                configSetName = configurationBlock.nSet
                 configIsNodeSet = True
-            elif configuration["elSet"]:
-                configSetName = configuration["elSet"]
+            elif configurationBlock.elSet:
+                configSetName = configurationBlock.elSet
                 configIsNodeSet = False
 
         if not self.overwrite:
@@ -895,7 +920,6 @@ class OutputManager(OutputManagerBase):
         self._configPart = None
         self._resolveConfigPart()
         self._transientCfg = transient
-        self._nameKwarg = kwargs.get("name", None)
         self._initialMeshSignature = (len(self.model.elements), len(self.model.nodes))
         self._meshSignature = None
         self._buildVariableJobs()
@@ -915,22 +939,14 @@ class OutputManager(OutputManagerBase):
         """(Re)create the per-node/per-element variable jobs from the stored definitions against the
         current geometry parts. Called at setup and again whenever the mesh changes (AMR)."""
         for definition in self._perNodeDefs:
-            fieldOutput = self._fieldOutputController.fieldOutputs[definition["fieldOutput"]]
-            _, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
-            if self.model.domainSize == 2 and varSize == 2:
-                varSize = 3
-            name = (self._nameKwarg or fieldOutput.name).replace(" ", "_")
-            self.createPerNodeOutput(fieldOutput, self._configPart, name, transient=self._transientCfg, varSize=varSize)
+            fieldOutput = self._fieldOutputController.fieldOutputs[definition.fieldOutput]
+            name = fieldOutput.name.replace(" ", "_")
+            self.createPerNodeOutput(fieldOutput, self._configPart, name, transient=self._transientCfg)
 
         for definition in self._perElementDefs:
-            fieldOutput = self._fieldOutputController.fieldOutputs[definition["fieldOutput"]]
-            _, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
-            if self.model.domainSize == 2 and varSize == 2:
-                varSize = 3
-            name = (self._nameKwarg or fieldOutput.name).replace(" ", "_")
-            self.createPerElementOutput(
-                fieldOutput, self._configPart, name, transient=self._transientCfg, varSize=varSize
-            )
+            fieldOutput = self._fieldOutputController.fieldOutputs[definition.fieldOutput]
+            name = fieldOutput.name.replace(" ", "_")
+            self.createPerElementOutput(fieldOutput, self._configPart, name, transient=self._transientCfg)
 
     def _rebuildForMeshChange(self):
         """Rebuild geometry parts + variable jobs after an AMR mesh change, so both stay consistent
@@ -943,38 +959,6 @@ class OutputManager(OutputManagerBase):
         self.geometryParts = self._createGeometryParts(1)
         self._resolveConfigPart()
         self._buildVariableJobs()
-
-    def updateDefinition(self, **kwargs: dict):
-        # Determine the type
-        if "create" in kwargs:
-            create = kwargs.pop("create")
-            fieldOutput = kwargs.pop("fieldOutput")
-            part = None
-            if "nSet" in kwargs:
-                part = self.nSetToEnsightPartMappings[kwargs.pop("nSet")]
-            elif "elSet" in kwargs:
-                part = self.elSetToEnsightPartMappings[kwargs.pop("elSet")]
-
-            name = kwargs.get("name", fieldOutput.name).replace(" ", "_")
-
-            nEntries, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
-
-            if self.model.domainSize == 2 and varSize == 2:
-                varSize = 3
-
-            transient = kwargs.get("transient", "True")
-            transient = strtobool(transient)
-
-            if create == "perElement":
-                self.createPerElementOutput(fieldOutput, part, name, transient=transient, varSize=varSize)
-            elif create == "perNode":
-                self.createPerNodeOutput(fieldOutput, part, name, transient=transient, varSize=varSize)
-
-        if "configuration" in kwargs:
-            # ensight output is overwritten by default
-            self.overwrite = strtobool(kwargs.get("overwrite", "True"))
-            if not self.overwrite:
-                self.exportName = "{:}_{:}".format(self.name, datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
 
     def createPerElementOutput(
         self,
@@ -997,7 +981,9 @@ class OutputManager(OutputManagerBase):
         transient
             Whether the output is transient.
         varSize
-            The size of the variable. If not specified, the size of the field output is taken.
+            The size of the variable. If not specified, the size of the field output is taken --
+            promoted from 2 to 3 components for a 2D-domain vector field, since Ensight expects a
+            3-component vector even in 2D (the implicit z-component is 0).
         """
 
         variableJob = dict()
@@ -1009,6 +995,8 @@ class OutputManager(OutputManagerBase):
         variableJob["transient"] = transient
 
         nEntries, varSizeFp = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
+        if self.model.domainSize == 2 and varSizeFp == 2:
+            varSizeFp = 3
 
         if not part:
             part = self._getTargetPartForFieldOutput(fieldOutput)
@@ -1053,7 +1041,9 @@ class OutputManager(OutputManagerBase):
         transient
             Whether the output is transient.
         varSize
-            The size of the variable. If not specified, the size of the field output is taken.
+            The size of the variable. If not specified, the size of the field output is taken --
+            promoted from 2 to 3 components for a 2D-domain vector field, since Ensight expects a
+            3-component vector even in 2D (the implicit z-component is 0).
         """
 
         variableJob = dict()
@@ -1065,6 +1055,8 @@ class OutputManager(OutputManagerBase):
         variableJob["transient"] = transient
 
         nEntries, varSizeFp = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
+        if self.model.domainSize == 2 and varSizeFp == 2:
+            varSizeFp = 3
         if not varSize:
             varSize = varSizeFp
 
@@ -1092,17 +1084,31 @@ class OutputManager(OutputManagerBase):
         # change with adaptive mesh refinement and stay 1:1 aligned with the variable time steps.
 
     def initializeStep(self, step):
-        if self.name in step.actions["options"] or "Ensight" in step.actions["options"]:
-            options = step.actions["options"].get(self.name, False) or step.actions["options"]["Ensight"].options
-            # options always carries these keys (module default None), so a plain options.get(key,
-            # self.attr) never falls back to self.attr -- guard the assignment instead, or any
-            # >>options, category=Ensight block silently wipes a previously configured value.
-            val = options.get("intermediateSaveInterval")
-            if val is not None:
-                self.intermediateSaveInterval = int(val)
-            val_dt = options.get("minDTForOutput")
-            if val_dt is not None:
-                self.minDTForOutput = float(val_dt)
+        # intermediateSaveInterval/minDTForOutput overrides are pushed directly by
+        # applyOptionsOverride as soon as a step's >>options block is constructed, so there is
+        # nothing to do here.
+        pass
+
+    def applyOptionsOverride(self, fieldValues: dict) -> None:
+        """Adjust the running export's intermediate-save interval and/or minimum output spacing.
+
+        See :meth:`~edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.applyOptionsOverride`
+        for the calling convention. Named fields, not a generic loop over ``fieldValues``: this class
+        has exactly two overridable options, and mapping schema-field-name to instance-attribute
+        generically would mean ``setattr``, which this codebase's conventions forbid.
+
+        Parameters
+        ----------
+        fieldValues
+            Maps schema field name (``intermediateSaveInterval``, ``minDTForOutput``) to its new,
+            already-coerced value; either may be absent (only whatever the user actually wrote is
+            present at all).
+        """
+
+        if "intermediateSaveInterval" in fieldValues:
+            self.intermediateSaveInterval = fieldValues["intermediateSaveInterval"]
+        if "minDTForOutput" in fieldValues:
+            self.minDTForOutput = fieldValues["minDTForOutput"]
 
     def finalizeIncrement(self, **kwargs):
         time = self.model.time

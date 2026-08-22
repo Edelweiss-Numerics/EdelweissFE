@@ -26,19 +26,18 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.rigidbodies.discreterigidbody import DiscreteRigidBody
+from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 A penalty based unilateral contact constraint between a node set of ordinary FE nodes and the
@@ -53,38 +52,48 @@ deformable-surface/tie facet constraints): every quantity is recomputed fresh fr
 geometry every Newton iteration.
 """
 
-module = Module(
-    "nodeToDiscreteRigidBodyPenalty",
-    "A penalty based unilateral contact constraint preventing nodes of a node set from penetrating "
-    "the surface of a discrete rigid body.",
-)
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class NodeToDiscreteRigidBodyPenaltySchema:
+    """The options this constraint accepts, owned by this module and never mutated from
+    outside it.
 
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
+    The update-type option is spelled ``type`` in the input file but the field is named
+    ``contactType`` here -- a dataclass field literally called ``type`` would shadow the builtin,
+    which this project's conventions avoid. ``penalty`` is declared ``required=True``, but is
+    still given a ``default=None`` so the schema remains constructible on its own;
+    ``buildSchemaFromOptions`` still enforces that an ``.inp`` file supplies it.
+    """
 
-module.addRequiredArg("nSet", "The (slave) node set to be protected from penetrating the rigid body.", str)
-module.addRequiredArg("rigidBody", "The name of the discrete rigid body (as registered in model.rigidBodies).", str)
-module.addRequiredArg("penalty", "The numerical penalty value.", float)
-
-module.addOptionalArg(
-    "type",
-    "The formulation type: 'linear' (linear force, constant stiffness with jump) or 'quadratic' (quadratic "
-    "force, linear stiffness).",
-    str,
-    "linear",
-)
-module.addOptionalArg(
-    "searchDistance",
-    "An optional broadphase distance (passed on to the rigid body's surface query) for culling nodes far "
-    "away from the rigid body. If not given, every slave node is queried exactly every iteration.",
-    float,
-    None,
-)
-
-documentation = [module]
+    nSet: str | None = schemaField(
+        description="The (slave) node set to be protected from penetrating the rigid body.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    rigidBody: str | None = schemaField(
+        description="The name of the discrete rigid body (as registered in model.rigidBodies).",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    penalty: float | None = schemaField(
+        description="The numerical penalty value.", dtype=float, default=None, required=True
+    )
+    contactType: str = schemaField(
+        description="The formulation type: 'linear' (linear force, constant stiffness with jump) "
+        "or 'quadratic' (quadratic force, linear stiffness).",
+        dtype=str,
+        default="linear",
+        optionName="type",
+    )
+    searchDistance: float | None = schemaField(
+        description="An optional broadphase distance (passed on to the rigid body's surface "
+        "query) for culling nodes far away from the rigid body. If not given, every slave node is "
+        "queried exactly every iteration.",
+        dtype=float,
+        default=None,
+    )
 
 
 def _skew(v: np.ndarray) -> np.ndarray:
@@ -234,44 +243,66 @@ class Constraint(ConstraintBase, MeshDependent):
     Currently only available for spatialdomain = 3D.
     """
 
-    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-    @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name: str, model: FEModel, *args, **kwargs):
-        super().__init__(name, model, *args, **kwargs)
+    #: Option schema for this constraint, per OptionSchemaProvider.
+    schema = NodeToDiscreteRigidBodyPenaltySchema
+
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        nSet: NodeSet,
+        rigidBody: DiscreteRigidBody,
+        *,
+        configuration: NodeToDiscreteRigidBodyPenaltySchema = NodeToDiscreteRigidBodyPenaltySchema(),
+    ):
+        super().__init__(name, model)
 
         if model.domainSize != 3:
             raise ValueError("nodeToDiscreteRigidBodyPenalty is currently only implemented for 3D models.")
 
-        kwargs = CaseInsensitiveDict(kwargs)
-
-        self.rigidBody = model.rigidBodies[kwargs["rigidBody"]]
+        self.rigidBody = rigidBody
         self.rpNode = self.rigidBody.rpNode
 
-        self._nSetName = kwargs["nSet"]
         rigidBodyNodes = set(self.rigidBody.surfaceNodes) | {self.rpNode}
-        slaveNodesRequested = model.nodeSets[self._nSetName]
-        if any(node in rigidBodyNodes for node in slaveNodesRequested):
+        if any(node in rigidBodyNodes for node in nSet):
             raise ValueError(
-                f"nSet '{kwargs['nSet']}' for constraint '{name}' contains nodes belonging to rigid body "
+                f"nSet '{nSet.name}' for constraint '{name}' contains nodes belonging to rigid body "
                 f"'{self.rigidBody.name}' (e.g. its surface or reference-point nodes) -- these carry no "
                 "field variables and cannot be slave nodes. Exclude them from the node set."
             )
-        self.slaveNodes = list(slaveNodesRequested)
 
-        self.penalty = kwargs["penalty"]
-        self.type = kwargs["type"].lower()
+        self.penalty = configuration.penalty
+        self.type = configuration.contactType.lower()
         if self.type not in ["linear", "quadratic"]:
             raise ValueError(f"Constraint type '{self.type}' is not supported. Use 'linear' or 'quadratic'.")
-        self.searchDistance = kwargs["searchDistance"]
+        self.searchDistance = configuration.searchDistance
 
         self.nDim = model.domainSize
         self.nRot = 3
         self.rprpDof = self.nDim + self.nRot
 
+        self._nSetName = nSet.name
         self._lastSeenTopologyVersion = model.topologyVersion
+        self.slaveNodes = list(nSet)
         self._rebuildFromSlaveNodes()
 
         self.totalNormalForce = 0.0
+
+    @classmethod
+    def fromConstraintDefinition(
+        cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
+    ) -> "Constraint":
+        """Build this constraint from a parsed ``*constraint`` definition. See
+        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
+        separate from ``__init__``."""
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+        return cls(
+            name,
+            model,
+            model.nodeSets[configuration.nSet],
+            model.rigidBodies[configuration.rigidBody],
+            configuration=configuration,
+        )
 
     def _rebuildFromSlaveNodes(self) -> None:
         """(Re)derive every quantity that depends on the slave node list/count."""

@@ -33,21 +33,14 @@ is handed down to its children. Selectable by name from the ``*modelModifier`` i
 :mod:`edelweissfe.adaptivity.statetransfer`.
 """
 
-from edelweissfe.adaptivity.statetransfer import (
-    NearestQuadraturePointCopy,
-    PolynomialProjection,
-    VirginState,
-)
-
-_STRATEGIES = {
-    "nearestqp": NearestQuadraturePointCopy,
-    "projection": PolynomialProjection,
-    "virgin": VirginState,
-}
+from edelweissfe.config import registry
 
 
 def getStateTransferStrategyClass(name: str) -> type:
-    """Get the class of the requested state-transfer strategy.
+    """Return the class implementing state-transfer strategy ``name``.
+
+    Resolved through the registry (``statetransferstrategy`` category), which holds dotted import
+    strings and imports the requested strategy on first use.
 
     Parameters
     ----------
@@ -58,10 +51,13 @@ def getStateTransferStrategyClass(name: str) -> type:
     -------
     type
         The :class:`~edelweissfe.adaptivity.statetransfer.base.StateTransferStrategy` subclass.
+
+    Raises
+    ------
+    edelweissfe.config.registry.RegistryLookupError
+        If no strategy is registered under ``name``.
     """
-    key = name.lower()
-    if key not in _STRATEGIES:
-        raise KeyError(
-            "unknown state-transfer strategy '{:}'; available: {:}".format(name, ", ".join(sorted(_STRATEGIES)))
-        )
-    return _STRATEGIES[key]
+
+    strategyClass, _ = registry.lookup("statetransferstrategy", name)
+
+    return strategyClass

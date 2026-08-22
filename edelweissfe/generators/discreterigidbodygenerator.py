@@ -36,114 +36,141 @@ generator in EdelweissFE/EdelweissMeshfree works -- so that
 only has to deal with rigid body kinematics, not with how it is instantiated.
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 import pyvista as pv
 
+from edelweissfe.generators.base.generatorbase import GeneratorBase
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.rigidbodies.discreterigidbody import DiscreteRigidBody
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.exceptions import WrongDomain
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
 from edelweissfe.utils.polyhedronmassproperties import computePolyhedronMassProperties
-
-module = Module(
-    "discreteRigidBodyGenerator",
-    "Generates a discrete rigid body from a surface mesh file (Exodus, STL, OBJ, or any other format readable by PyVista).",
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "modelGenerator"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg("filename", "The file path to the surface mesh (e.g., Exodus, STL, OBJ).", str)
-
-module.addOptionalArg(
-    "translation",
-    "A comma-separated 3D vector to translate the mesh globally upon initialization.",
-    str,
-    None,
-)
-module.addOptionalArg(
-    "density",
-    "The (uniform) mass density of the rigid body; if given, mass and rotary inertia are computed exactly "
-    "from the mesh geometry.",
-    float,
-    None,
-)
-module.addOptionalArg("mass", "The total mass of the rigid body. Overrides the density-based computation.", float, None)
-module.addOptionalArg(
-    "inertia",
-    "A comma-separated diagonal rotary inertia [Ixx, Iyy, Izz]. Overrides the density-based computation.",
-    str,
-    None,
-)
-module.addOptionalArg(
-    "rpCoordinate",
-    "A comma-separated explicit global coordinate for the reference point. Defaults to the (exact or "
-    "approximate) center of mass.",
-    str,
-    None,
-)
-
-documentation = [module]
+from edelweissfe.utils.schema import schemaField
 
 
 def _parseVector(value: str):
     return np.fromstring(value, sep=",", dtype=np.double) if value is not None else None
 
 
-@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-@castKwargsValuesAndAddDefaults(module)
-def generateModelData(generatorDefinition: dict, model, journal, *args, **kwargs) -> dict:
-    """Entry point for the ``*modelGenerator, generator=discreteRigidBodyGenerator`` input file keyword.
+@dataclass(frozen=True)
+class DiscreteRigidBodyGeneratorSchema:
+    """The options this generator accepts, owned by this module and never mutated from outside
+    it.
 
-    Thin wrapper around :func:`generateDiscreteRigidBodyFromMeshFile`, translating the ``.inp``
-    keyword arguments (comma-separated vector strings) to the native Python types it expects.
+    ``filename`` is declared ``required=True`` explicitly, but is still given a ``default=None``
+    so the schema remains constructible for the constructor's default argument. The comma-separated
+    vector options stay ``str`` here; parsing them (:func:`_parseVector`) is the constructor's job,
+    not the schema's.
     """
 
-    kwargs = CaseInsensitiveDict(kwargs)
-
-    # The rigid body's surface mesh and the node-to-discrete-rigid-body contact are inherently 3D.
-    if model.domainSize != 3:
-        raise WrongDomain("discreteRigidBodyGenerator is only available for 3D models.")
-
-    name = generatorDefinition.get("name", "discreteRigidBody")
-
-    translation = _parseVector(kwargs["translation"])
-    inertia = _parseVector(kwargs["inertia"])
-    rpCoordinate = _parseVector(kwargs["rpCoordinate"])
-
-    # All of these are 3-component quantities (Cartesian vectors, or the diagonal inertia
-    # [Ixx, Iyy, Izz]). Validate up front so a mistyped option fails clearly here rather than
-    # silently creating wrong-sized coordinate/inertia arrays that break downstream.
-    for argName, vector in (
-        ("translation", translation),
-        ("inertia", inertia),
-        ("rpCoordinate", rpCoordinate),
-    ):
-        if vector is not None and vector.shape[0] != 3:
-            raise WrongDomain(f"discreteRigidBodyGenerator option '{argName}' must have 3 components.")
-
-    generateDiscreteRigidBodyFromMeshFile(
-        model,
-        journal,
-        name=name,
-        filename=kwargs["filename"],
-        translation=translation,
-        density=kwargs["density"],
-        mass=kwargs["mass"],
-        inertia=inertia,
-        rpCoordinate=rpCoordinate,
+    filename: str | None = schemaField(
+        description="The file path to the surface mesh (e.g., Exodus, STL, OBJ).",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    translation: str | None = schemaField(
+        description="A comma-separated 3D vector to translate the mesh globally upon initialization.",
+        dtype=str,
+        default=None,
+    )
+    density: float | None = schemaField(
+        description="The (uniform) mass density of the rigid body; if given, mass and rotary "
+        "inertia are computed exactly from the mesh geometry.",
+        dtype=float,
+        default=None,
+    )
+    mass: float | None = schemaField(
+        description="The total mass of the rigid body. Overrides the density-based computation.",
+        dtype=float,
+        default=None,
+    )
+    inertia: str | None = schemaField(
+        description="A comma-separated diagonal rotary inertia [Ixx, Iyy, Izz]. Overrides the "
+        "density-based computation.",
+        dtype=str,
+        default=None,
+    )
+    rpCoordinate: str | None = schemaField(
+        description="A comma-separated explicit global coordinate for the reference point. "
+        "Defaults to the (exact or approximate) center of mass.",
+        dtype=str,
+        default=None,
     )
 
-    return model
+
+class Generator(GeneratorBase):
+    """Generates a discrete rigid body from a surface mesh file (Exodus, STL, OBJ, or any other
+    format readable by PyVista).
+
+    Loading the mesh, creating the surface/reference-point nodes, and mutating the model are all
+    handled here -- mirroring how every other model-populating generator in
+    EdelweissFE/EdelweissMeshfree works -- so that
+    :class:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody` itself only has to deal
+    with rigid body kinematics, not with how it is instantiated.
+    """
+
+    #: Option schema for this generator, per OptionSchemaProvider.
+    schema = DiscreteRigidBodyGeneratorSchema
+
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        journal: Journal,
+        *,
+        configuration: DiscreteRigidBodyGeneratorSchema = DiscreteRigidBodyGeneratorSchema(),
+    ):
+        """Constructible standalone, with no parser involvement.
+        Populates ``model`` directly (via :func:`generateDiscreteRigidBodyFromMeshFile`);
+        construction *is* the generation.
+
+        Parameters
+        ----------
+        name
+            The identifier name for the discrete rigid body.
+        model
+            The model tree to populate. Mutated in place.
+        journal
+            The journal instance used to report progress and warnings.
+        configuration
+            The options this generator accepts; ``filename`` is still required, see
+            :class:`DiscreteRigidBodyGeneratorSchema`.
+        """
+        # The rigid body's surface mesh and the node-to-discrete-rigid-body contact are inherently 3D.
+        if model.domainSize != 3:
+            raise WrongDomain("discreteRigidBodyGenerator is only available for 3D models.")
+
+        translation = _parseVector(configuration.translation)
+        inertia = _parseVector(configuration.inertia)
+        rpCoordinate = _parseVector(configuration.rpCoordinate)
+
+        # All of these are 3-component quantities (Cartesian vectors, or the diagonal inertia
+        # [Ixx, Iyy, Izz]). Validate up front so a mistyped option fails clearly here rather than
+        # silently creating wrong-sized coordinate/inertia arrays that break downstream.
+        for argName, vector in (
+            ("translation", translation),
+            ("inertia", inertia),
+            ("rpCoordinate", rpCoordinate),
+        ):
+            if vector is not None and vector.shape[0] != 3:
+                raise WrongDomain(f"discreteRigidBodyGenerator option '{argName}' must have 3 components.")
+
+        generateDiscreteRigidBodyFromMeshFile(
+            model,
+            journal,
+            name=name,
+            filename=configuration.filename,
+            translation=translation,
+            density=configuration.density,
+            mass=configuration.mass,
+            inertia=inertia,
+            rpCoordinate=rpCoordinate,
+        )
 
 
 def generateDiscreteRigidBodyFromMeshFile(

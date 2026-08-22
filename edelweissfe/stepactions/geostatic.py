@@ -34,51 +34,103 @@
 Initialize materials to an geostatic stress state
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.steps.adaptivestep import InputLanguage
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
-inputLanguage = InputLanguage()
 
-modules = [
-    inputLanguage["step"].getModule("adaptive"),
-    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
-]
+@dataclass(frozen=True)
+class GeostaticSchema:
+    """The scalar options of the ``geostatic`` keyword, owned by this module and never mutated from
+    outside it.
 
-documentation = []
+    ``name`` and ``elSet`` are ``structuralOnly`` fields: ``elSet`` names an existing model object,
+    resolved by :meth:`fromStepActionDefinition` before the schema is even built, exactly like
+    every other category's structural names, and ``name`` is popped even earlier, by
+    ``helpers/inputfilehelpers.py``. Both are declared here purely so the rendered grammar surface
+    documents them -- :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` never actually sees
+    either key; see :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.structuralOnly`.
+    """
 
-for module in modules:
-    kw = module.addOptionalKeyword("geostatic", "Initialize materials to an geostatic stress state.")
-    kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("p1", "sig_x=sig_y=sig_z in first point.", float)
-    kw.addOptionalArg("p2", "sig_x=sig_y=sig_z in second point.", float, None)
-    kw.addOptionalArg("h1", "y coordinate of first point", float, 1.0)
-    kw.addOptionalArg("h2", "y coordinate of second point", float, -1.0)
-    kw.addOptionalArg("xLateral", "ratio of sig_x/sig_y, default=1.0", float, 1.0)
-    kw.addOptionalArg("zLateral", "ratio of sig_z/sig_y, default=1.0", float, 1.0)
-    kw.addOptionalArg("elSet", "The element set for which the initaliziation is performed", str, "all")
-
-    documentation.append(kw)
+    name: str | None = schemaField(
+        description="Name of the step action.", dtype=str, default=None, required=True, structuralOnly=True
+    )
+    p1: float | None = schemaField(
+        description="sig_x=sig_y=sig_z in first point.", dtype=float, default=None, required=True
+    )
+    p2: float | None = schemaField(description="sig_x=sig_y=sig_z in second point.", dtype=float, default=None)
+    h1: float | None = schemaField(description="y coordinate of first point", dtype=float, default=1.0)
+    h2: float | None = schemaField(description="y coordinate of second point", dtype=float, default=-1.0)
+    xLateral: float | None = schemaField(description="ratio of sig_x/sig_y, default=1.0", dtype=float, default=1.0)
+    zLateral: float | None = schemaField(description="ratio of sig_z/sig_y, default=1.0", dtype=float, default=1.0)
+    elSet: str | None = schemaField(
+        description="The element set for which the initaliziation is performed",
+        dtype=str,
+        default="all",
+        structuralOnly=True,
+    )
 
 
 class StepAction(StepActionBase):
     """Initializes elements of set with an Abaqus-like geostatic stress state.
-    Is automatically deactivated at the end of the step."""
+    Is automatically deactivated at the end of the step.
 
-    def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
+    The constructor is typed: it takes the element set itself and the geostatic stress state as
+    plain floats. Nothing here parses an input file -- resolving ``elSet=all`` against the model,
+    and defaulting an omitted ``p2`` to ``p1``, is the job of :meth:`fromStepActionDefinition`
+    below, which is the only part of this module the ``.inp`` front-end needs.
+
+    Parameters
+    ----------
+    name
+        The name of this step action.
+    elementSet
+        The element set the geostatic stress state is applied to.
+    p1
+        sig_x=sig_y=sig_z in the first point.
+    p2
+        sig_x=sig_y=sig_z in the second point.
+    h1
+        y coordinate of the first point.
+    h2
+        y coordinate of the second point.
+    xLateral
+        Ratio of sig_x/sig_y.
+    zLateral
+        Ratio of sig_z/sig_y.
+    journal
+        The journal object for logging.
+    """
+
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
+    schema = GeostaticSchema
+
+    def __init__(
+        self,
+        name: str,
+        elementSet,
+        p1: float,
+        p2: float,
+        h1: float,
+        h2: float,
+        xLateral: float,
+        zLateral: float,
+        journal,
+    ):
         self.name = name
 
-        self.geostaticElements = model.elementSets[action["elSet"]]
-        self.p1 = action["p1"]
-        if action["p2"] is not None:
-            self.p2 = action["p2"]
-        else:
-            self.p2 = action["p1"]
-        self.level1 = action["h1"]
-        self.level2 = action["h2"]
-        self.xLateral = action["xLateral"]
-        self.zLateral = action["zLateral"]
+        self.geostaticElements = elementSet
+        self.p1 = p1
+        self.p2 = p2
+        self.level1 = h1
+        self.level2 = h2
+        self.xLateral = xLateral
+        self.zLateral = zLateral
 
         self.geostaticDefinition = np.array(
             [
@@ -94,6 +146,36 @@ class StepAction(StepActionBase):
         self.journal = journal
 
         self.active = True
+
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build this step action from a parsed ``>>geostatic`` definition. See
+        :class:`StepActionBase` for why this is separate from ``__init__``.
+
+        ``name`` and the parser's bookkeeping keys are stripped, and ``elSet`` is structural (it
+        names a model object), so both are popped before the remaining options are validated
+        against :class:`GeostaticSchema`. An omitted ``p2`` defaults to ``p1`` -- this is
+        input-file convenience, so the defaulting happens here rather than in ``__init__``, which
+        requires both to be passed explicitly."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        elSetName = definition.pop("elSet")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+
+        p2 = configuration.p2 if configuration.p2 is not None else configuration.p1
+
+        return cls(
+            name,
+            model.elementSets[elSetName],
+            configuration.p1,
+            p2,
+            configuration.h1,
+            configuration.h2,
+            configuration.xLateral,
+            configuration.zLateral,
+            journal,
+        )
 
     def applyAtStepEnd(self, model, stepMagnitude=None):
         if not self.active:

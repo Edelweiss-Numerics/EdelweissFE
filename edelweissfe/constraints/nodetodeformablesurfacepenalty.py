@@ -26,6 +26,8 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
@@ -34,20 +36,15 @@ from edelweissfe.generators.surfaceelementgenerator import buildContactFacets
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
+from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.facetcontactgeometry import (
     line2ClosestPoint,
     line2GapGradientHessian,
     tria3ClosestPoint,
     tria3GapGradientHessian,
 )
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-    strtobool,
-)
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 A penalty based unilateral contact constraint between a deformable slave surface and a deformable
@@ -67,92 +64,6 @@ identity) keeps its frictional history and augmented-Lagrange multiplier; a newl
 starts at rest.
 """
 
-module = Module(
-    "nodeToDeformableSurfacePenalty",
-    "A penalty based unilateral contact constraint preventing the nodes of a slave surface from "
-    "penetrating a deformable master surface, both represented by contact facet elements.",
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg(
-    "slaveSurface",
-    "The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) forming the "
-    "slave surface; its nodes act as the contact points, penalty-weighted by their tributary areas.",
-    str,
-)
-module.addRequiredArg(
-    "masterSurface",
-    "The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) forming the " "master surface.",
-    str,
-)
-module.addRequiredArg(
-    "penalty",
-    "The numerical penalty value, an interface stiffness modulus per unit slave surface area.",
-    float,
-)
-
-module.addOptionalArg(
-    "type",
-    "The formulation type: 'linear' (linear force, constant stiffness with jump) or 'quadratic' (quadratic "
-    "force, linear stiffness).",
-    str,
-    "linear",
-)
-module.addOptionalArg(
-    "searchDistance",
-    "An optional broadphase distance for the per-increment candidate-facet search. If not given, "
-    "every slave is always assigned its single closest facet, without a distance gate.",
-    float,
-    None,
-)
-module.addOptionalArg(
-    "sliding",
-    "The kinematic treatment of the contact geometry: 'finite' (gap, gradient and exact Hessian "
-    "recomputed from the current Newton iterate every iteration) or 'small' (Abaqus-style small "
-    "sliding: the closest-point projection -- facet, clamped local coordinates, and normal -- is "
-    "frozen once per increment from the last converged configuration, making the gap linear in "
-    "the displacement DOFs).",
-    str,
-    "finite",
-)
-module.addOptionalArg(
-    "mu",
-    "The Coulomb friction coefficient. Requires sliding=small; mu=0 disables friction. Strongly "
-    "recommended in combination with type=quadratic: the quadratic law's contact stiffness "
-    "vanishes continuously at gap activation, keeping the frictional tangent continuous for "
-    "slave nodes lifting off/touching down -- with type=linear, the activation stiffness jump "
-    "scaled by mu makes Newton prone to limit-cycling at such events.",
-    float,
-    0.0,
-)
-module.addOptionalArg(
-    "tangentPenalty",
-    "The tangential penalty stiffness per unit slave surface area for frictional stick. "
-    "Defaults to the normal penalty.",
-    float,
-    None,
-)
-module.addOptionalArg(
-    "augmentedLagrange",
-    "Augment the penalty force with a per-slave normal traction multiplier, updated once per "
-    "increment on acceptance (incremental Uzawa: lambda <- min(0, lambda + converged penalty "
-    "force part); the update is law-dependent -- penalty * A * g for the linear law, "
-    "-0.5 * penalty * A * g**2 for the quadratic law, since the textbook penalty * A * g rule "
-    "overshoots grossly for the quadratic one). "
-    "The multiplier is constant within an increment (zero tangent contribution), drives the "
-    "penetration toward zero over the increments at a fixed penalty, and sharpens the friction "
-    "cone mu * N. Requires sliding=small.",
-    str,
-    "False",
-)
-
-documentation = [module]
-
 # Angular threshold separating a *continuous* drift of the frozen contact frame between two
 # increments (the slave staying on its facet, or crossing onto a smoothly adjacent one of a curved
 # but adequately resolved master surface) from a genuine *crease* of the master surface, used in
@@ -165,6 +76,91 @@ documentation = [module]
 # creases of engineering geometries (45 degree chamfers, 90 degree steps, notch flanks) change it
 # by 45 degrees and more.
 _cosOfSmoothNormalChangeLimit = np.cos(np.deg2rad(30.0))
+
+
+@dataclass(frozen=True)
+class NodeToDeformableSurfacePenaltySchema:
+    """The options this constraint accepts, owned by this module and never mutated from
+    outside it.
+
+    The update-type option is spelled ``type`` in the input file but the field is named
+    ``contactType`` here -- a dataclass field literally called ``type`` would shadow the builtin,
+    which this project's conventions avoid. ``penalty`` is declared ``required=True``, but is
+    still given a ``default=None`` so the schema remains constructible on its own;
+    ``buildSchemaFromOptions`` still enforces that an ``.inp`` file supplies it.
+    ``augmentedLagrange`` is a real ``bool`` field (see :func:`edelweissfe.utils.schema.coerceValue`
+    for how string option values are coerced to it).
+    """
+
+    slaveSurface: str | None = schemaField(
+        description="The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) "
+        "forming the slave surface; its nodes act as the contact points, penalty-weighted by their "
+        "tributary areas.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    masterSurface: str | None = schemaField(
+        description="The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) "
+        "forming the master surface.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    penalty: float | None = schemaField(
+        description="The numerical penalty value, an interface stiffness modulus per unit slave " "surface area.",
+        dtype=float,
+        default=None,
+        required=True,
+    )
+    contactType: str = schemaField(
+        description="The formulation type: 'linear' (linear force, constant stiffness with jump) "
+        "or 'quadratic' (quadratic force, linear stiffness).",
+        dtype=str,
+        default="linear",
+        optionName="type",
+    )
+    searchDistance: float | None = schemaField(
+        description="An optional broadphase distance for the per-increment candidate-facet "
+        "search. If not given, every slave is always assigned its single closest facet, without a "
+        "distance gate.",
+        dtype=float,
+        default=None,
+    )
+    sliding: str = schemaField(
+        description="The kinematic treatment of the contact geometry: 'finite' (gap, gradient and "
+        "exact Hessian recomputed from the current Newton iterate every iteration) or 'small' "
+        "(Abaqus-style small sliding: the closest-point projection -- facet, clamped local "
+        "coordinates, and normal -- is frozen once per increment from the last converged "
+        "configuration, making the gap linear in the displacement DOFs).",
+        dtype=str,
+        default="finite",
+    )
+    mu: float = schemaField(
+        description="The Coulomb friction coefficient. Requires sliding=small; mu=0 disables "
+        "friction. Strongly recommended in combination with type=quadratic: the quadratic law's "
+        "contact stiffness vanishes continuously at gap activation, keeping the frictional "
+        "tangent continuous for slave nodes lifting off/touching down -- with type=linear, the "
+        "activation stiffness jump scaled by mu makes Newton prone to limit-cycling at such "
+        "events.",
+        dtype=float,
+        default=0.0,
+    )
+    tangentPenalty: float | None = schemaField(
+        description="The tangential penalty stiffness per unit slave surface area for frictional "
+        "stick. Defaults to the normal penalty.",
+        dtype=float,
+        default=None,
+    )
+    augmentedLagrange: bool = schemaField(
+        description="Augment the penalty force with a per-slave normal traction multiplier, "
+        "updated once per increment on acceptance (incremental Uzawa: lambda <- min(0, lambda + "
+        "penalty * A * g)). The multiplier is constant within an increment (zero tangent "
+        "contribution), drives the penetration toward zero over the increments at a fixed "
+        "penalty, and sharpens the friction cone mu * N. Requires sliding=small.",
+        dtype=bool,
+        default=False,
+    )
 
 
 class DeformableSurfaceContactStiffnessView:
@@ -273,10 +269,8 @@ class Constraint(ConstraintBase, MeshDependent):
     as :mod:`~edelweissfe.constraints.nodetodiscreterigidbodypenalty` does for rigid bodies -- no
     geometry is frozen across iterations within an increment.
 
-    Each slave is assigned at most *one* active facet at a time (reassigned each increment); this
-    is a deliberate simplification relative to a multi-candidate-per-slave design -- see the
-    project plan this was built from for the more elaborate alternative and why it was not needed
-    here. If the slave's assigned facet ever fails its exact in-facet containment test mid-Newton
+    Each slave is assigned at most *one* active facet at a time (reassigned each increment). If
+    the slave's assigned facet ever fails its exact in-facet containment test mid-Newton
     (the true contact point has moved onto a neighboring facet within the same increment), no
     contact contribution is assembled for that slave until the next connectivity update -- the
     same accepted non-smoothness at facet boundaries as the rigid-body case's mesh edges.
@@ -333,21 +327,29 @@ class Constraint(ConstraintBase, MeshDependent):
     whichever facet type populates the given surface element sets.
     """
 
-    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-    @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name: str, model: FEModel, journal: Journal, *args, **kwargs):
-        super().__init__(name, model, *args, **kwargs)
+    #: Option schema for this constraint, per OptionSchemaProvider.
+    schema = NodeToDeformableSurfacePenaltySchema
+
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        slaveSurface: ElementSet,
+        masterSurface: ElementSet,
+        journal: Journal,
+        *,
+        configuration: NodeToDeformableSurfacePenaltySchema = NodeToDeformableSurfacePenaltySchema(),
+    ):
+        super().__init__(name, model)
 
         self.name = name
         self.journal = journal
         self._lastSeenTopologyVersion = model.topologyVersion
 
-        kwargs = CaseInsensitiveDict(kwargs)
-
-        self._slaveSurfaceSetName = kwargs["slaveSurface"]
-        self._masterSurfaceSetName = kwargs["masterSurface"]
-        self.slaveFacetElements = list(model.elementSets[self._slaveSurfaceSetName])
-        self.facetElements = list(model.elementSets[self._masterSurfaceSetName])
+        self._slaveSurfaceSetName = slaveSurface.name
+        self._masterSurfaceSetName = masterSurface.name
+        self.slaveFacetElements = list(slaveSurface)
+        self.facetElements = list(masterSurface)
 
         # The contact points are the unique nodes of the slave surface, each weighted by its
         # tributary area: the sum of its area shares over its incident slave facets (assigned by
@@ -366,23 +368,24 @@ class Constraint(ConstraintBase, MeshDependent):
         masterNodes = {node for el in self.facetElements for node in el.nodes}
         if not masterNodes.isdisjoint(self.slaveNodes):
             raise ValueError(
-                f"Constraint '{name}': slave surface '{kwargs['slaveSurface']}' and master surface "
-                f"'{kwargs['masterSurface']}' share nodes -- self-contact is not supported."
+                f"Constraint '{name}': slave surface '{self._slaveSurfaceSetName}' and master "
+                f"surface '{self._masterSurfaceSetName}' share nodes -- self-contact is not "
+                "supported."
             )
 
-        self.penalty = kwargs["penalty"]
+        self.penalty = configuration.penalty
         if self.penalty <= 0.0:
             raise ValueError("The penalty must be positive: a non-positive penalty silently disables contact.")
-        self.type = kwargs["type"].lower()
+        self.type = configuration.contactType.lower()
         if self.type not in ["linear", "quadratic"]:
             raise ValueError(f"Constraint type '{self.type}' is not supported. Use 'linear' or 'quadratic'.")
-        self.searchDistance = kwargs["searchDistance"]
+        self.searchDistance = configuration.searchDistance
 
-        self.sliding = kwargs["sliding"].lower()
+        self.sliding = configuration.sliding.lower()
         if self.sliding not in ["finite", "small"]:
             raise ValueError(f"Constraint sliding '{self.sliding}' is not supported. Use 'finite' or 'small'.")
 
-        self.mu = kwargs["mu"]
+        self.mu = configuration.mu
         if self.mu < 0.0:
             raise ValueError("The friction coefficient mu must be non-negative.")
         if self.mu > 0.0 and self.sliding != "small":
@@ -390,14 +393,14 @@ class Constraint(ConstraintBase, MeshDependent):
                 "Coulomb friction (mu > 0) requires sliding=small: the frictional predictor/"
                 "corrector operates in the frozen tangent frame of the small-sliding formulation."
             )
-        self.tangentPenalty = kwargs["tangentPenalty"] if kwargs["tangentPenalty"] is not None else self.penalty
+        self.tangentPenalty = configuration.tangentPenalty if configuration.tangentPenalty is not None else self.penalty
         if self.mu > 0.0 and self.tangentPenalty <= 0.0:
             raise ValueError(
                 "The tangential penalty must be positive when mu > 0: a non-positive tangentPenalty "
                 "silently disables the frictional stick response."
             )
 
-        self.augmentedLagrange = strtobool(kwargs["augmentedLagrange"])
+        self.augmentedLagrange = configuration.augmentedLagrange
         if self.augmentedLagrange and self.sliding != "small":
             raise ValueError(
                 "augmentedLagrange requires sliding=small: the multiplier force acts along the "
@@ -442,6 +445,21 @@ class Constraint(ConstraintBase, MeshDependent):
             f"sliding={self.sliding}, type={self.type}, friction={'on' if self.mu > 0.0 else 'off'}, "
             f"augmentedLagrange={self.augmentedLagrange}",
             name,
+        )
+
+    @classmethod
+    def fromConstraintDefinition(cls, name: str, definition: dict, model: FEModel, journal: Journal) -> "Constraint":
+        """Build this constraint from a parsed ``*constraint`` definition. See
+        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
+        separate from ``__init__``."""
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+        return cls(
+            name,
+            model,
+            model.elementSets[configuration.slaveSurface],
+            model.elementSets[configuration.masterSurface],
+            journal,
+            configuration=configuration,
         )
 
     @property
