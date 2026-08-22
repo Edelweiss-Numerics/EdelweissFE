@@ -80,27 +80,36 @@ jobs:
       - name: Install Marmot
         shell: bash -l {0}
         run: |
-          # Use github.base_ref (target of PR).
-          # If not a PR (like a push to a feature branch), fall back to next_v26.11, the shared
-          # development branch - NOT github.ref_name, since the EdelweissFE branch
-          # name essentially never matches a Marmot branch name, and falling through to Marmot's
-          # default branch ("master") silently builds against a stale, possibly API-incompatible
-          # Marmot revision.
-          TARGET_BRANCH="${{ github.base_ref || 'next_v26.11' }}"
-
-          echo "Pull Request Target/Current Branch is: $TARGET_BRANCH"
+          # Try, in order: the branch actually under test (github.head_ref, set for a pull_request
+          # event), the PR's base branch (github.base_ref), then next_v26.11, the shared
+          # development branch - NOT github.ref_name, since the EdelweissFE branch name essentially
+          # never matches a Marmot branch name, and falling through to Marmot's default branch
+          # ("master") silently builds against a stale, possibly API-incompatible Marmot revision.
+          #
+          # head_ref must be tried before base_ref: for a PR whose head branch itself has a
+          # same-named Marmot branch (e.g. a "next_v26.11 -> master" promotion PR), the code under
+          # test depends on that head branch's Marmot revision, not the base branch's -- using
+          # base_ref there would silently build against the wrong (older/incompatible) Marmot.
+          CANDIDATE_BRANCHES=("${{ github.head_ref }}" "${{ github.base_ref }}" "next_v26.11")
 
           git clone --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/
           cd Marmot
 
-          # Attempt to switch to the branch matching the target branch
-          if git show-ref --verify --quiet refs/remotes/origin/$TARGET_BRANCH; then
-            echo "Matching branch found. Checking out $TARGET_BRANCH..."
-            git checkout $TARGET_BRANCH
-          else
-            echo "::error::Branch $TARGET_BRANCH not found in Marmot, and there is no safe default to fall back to."
+          TARGET_BRANCH=""
+          for candidate in "${CANDIDATE_BRANCHES[@]}"; do
+            if [ -n "$candidate" ] && git show-ref --verify --quiet "refs/remotes/origin/$candidate"; then
+              TARGET_BRANCH="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$TARGET_BRANCH" ]; then
+            echo "::error::None of the candidate branches (${CANDIDATE_BRANCHES[*]}) exist in Marmot, and there is no safe default to fall back to."
             exit 1
           fi
+
+          echo "Using Marmot branch: $TARGET_BRANCH"
+          git checkout --detach "origin/$TARGET_BRANCH"
 
           mkdir build
           cd build
