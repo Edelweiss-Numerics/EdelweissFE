@@ -19,7 +19,7 @@ splitFactor=3
 *solver, solver=NIST, name=S
 *fieldOutput
 >>perNode, elSet=all, field=displacement, result=U, name=U
->>perElement, elSet=all, result=stress, quadraturePoint=0:8, name=stressForAMR
+>>perElement, elSet=all, result=stress, quadraturePoint=0:8, name=stressForAMR, f(x)='np.abs(x)'
 
 *step, solver=S
 maxInc=0.5, minInc=1e-4, maxNumInc=50, maxIter=25,
