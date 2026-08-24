@@ -30,6 +30,7 @@
 # @author: Matthias Neuner
 
 import json
+from dataclasses import dataclass
 
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -41,10 +42,9 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
-from edelweissfe.solvers.base.dirichlet import applyDirichletK
+from edelweissfe.solvers.base.dirichlet import applyDirichletToStiffness
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.stepactions.options import inputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -56,14 +56,60 @@ from edelweissfe.utils.exceptions import (
     StepFailed,
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
+from edelweissfe.utils.schema import schemaField
 
-kw = inputLanguage["step"].getModule("adaptive").getKeyword("options")
-kw.addOptionalArg("defaultMaxIter", "", int, 10)
-kw.addOptionalArg("defaultCriticalIter", "", int, 5)
-kw.addOptionalArg("defaultMaxGrowingIter", "", int, 10)
-kw.addOptionalArg("extrapolation", "", str, "linear")
-kw.addOptionalArg("linsolver", "", str, "pardiso")
-kw.addOptionalArg("linsolverConfigFile", "", str, "")
+
+@dataclass(frozen=True)
+class NISTSchema:
+    """The options of the ``*solver`` datalines and of an ``>>options`` block routed to this
+    solver, owned by this module and never mutated from outside it.
+
+    Mirrors :attr:`NIST.SolverSpecificOptions` one-for-one; that dict remains the actual source of
+    truth consulted at runtime (``self.options``, a plain mutable dict) -- this schema exists so the
+    registry and the name-based ``>>options`` override mechanism have a typed description of what
+    this solver accepts, without requiring every internal ``self.options[...]`` access to become a
+    dataclass attribute access.
+    """
+
+    defaultMaxIter: int | None = schemaField(
+        description="The default maximum number of iterations.", dtype=int, default=10
+    )
+    defaultCriticalIter: int | None = schemaField(
+        description="The default number of critical iterations.", dtype=int, default=5
+    )
+    defaultMaxGrowingIter: int | None = schemaField(
+        description="The default number of allowed residual growths.", dtype=int, default=10
+    )
+    extrapolation: str | None = schemaField(
+        description="The extrapolation strategy for new increments (off|linear).", dtype=str, default="linear"
+    )
+    extrapolateAfterModelChange: bool | None = schemaField(
+        description=(
+            "Whether to extrapolate the predictor on the increment FOLLOWING a model change (adaptive mesh "
+            "refinement). Set False to start that increment from a zero predictor, avoiding extrapolation of "
+            "the one-off warm-start/remesh settling transient."
+        ),
+        dtype=bool,
+        default=True,
+    )
+    equilibrateAfterModelChange: bool | None = schemaField(
+        description=(
+            "Whether to insert one constant-load, zero-time re-equilibration increment immediately after an "
+            "adaptive mesh refinement, before advancing the load. When True, the warm-started refined mesh is "
+            "first settled to equilibrium at the last converged load level (no load advance, no Dirichlet "
+            "increment, zero time increment) so the subsequent load-advancing increment starts from an "
+            "equilibrated state. Intended for softening problems where remeshing near the process zone "
+            "otherwise couples the load advance with the warm-start settling transient in one solve. Note: "
+            "the equilibration solve integrates materials with dT=0, which suits rate-independent models; "
+            "rate-dependent materials see no time advance during it (by design)."
+        ),
+        dtype=bool,
+        default=False,
+    )
+    linsolver: str | None = schemaField(description="The linear solver to be used.", dtype=str, default="pardiso")
+    linsolverConfigFile: str | None = schemaField(
+        description="A JSON configuration file for the linear solver.", dtype=str, default=""
+    )
 
 
 class NIST(NonlinearSolverBase):
@@ -79,11 +125,19 @@ class NIST(NonlinearSolverBase):
 
     identification = "NISTSolver"
 
+    supportsMPC = True
+    supportsModelModifiers = True
+
+    #: Option schema for this solver, per OptionSchemaProvider.
+    schema = NISTSchema
+
     SolverSpecificOptions = {
         "defaultMaxIter": 10,
         "defaultCriticalIter": 5,
         "defaultMaxGrowingIter": 10,
         "extrapolation": "linear",
+        "extrapolateAfterModelChange": True,
+        "equilibrateAfterModelChange": False,
         "linsolver": "pardiso",
         "linsolverConfigFile": "",
     }
@@ -96,7 +150,9 @@ class NIST(NonlinearSolverBase):
         self.fluxResidualTolerancesAlt = jobInfo["fluxResidualToleranceAlternative"]
 
         self.options = self.SolverSpecificOptions.copy()
-        self._updateOptions(kwargs, journal)
+        # the datalines of the *solver keyword belong exclusively to this solver, so unknown entries
+        # are user typos and must not be swallowed
+        self._updateOptions(kwargs, journal, strict=True)
 
     def solveStep(
         self,
@@ -121,45 +177,13 @@ class NIST(NonlinearSolverBase):
             The field output controller.
         """
 
-        self.journal.message("Creating monolithic equation system", self.identification, 0)
-        self.theDofManager = DofManager(
-            model.nodeFields.values(),
-            model.scalarVariables.values(),
-            model.elements.values(),
-            model.constraints.values(),
-            model.nodeSets.values(),
-        )
-        self.journal.message(
-            "total size of eq. system: {:}".format(self.theDofManager.nDof),
-            self.identification,
-            0,
-        )
-
-        self.journal.printSeperationLine()
-
-        presentVariableNames = list(self.theDofManager.idcsOfFieldsInDofVector.keys())
-
-        if self.theDofManager.idcsOfScalarVariablesInDofVector:
-            presentVariableNames += [
-                "scalar variables",
-            ]
-
-        nVariables = len(presentVariableNames)
-        self.iterationHeader = ("{:^25}" * nVariables).format(*presentVariableNames)
-        self.iterationHeader2 = (" {:<10}  {:<10}  ").format("||R||∞", "||ddU||∞") * nVariables
-        self.iterationMessageTemplate = "{:11.2e}{:1}{:11.2e}{:1} "
-
-        U = self.theDofManager.constructDofVector()
-        K = self.theDofManager.constructVIJSystemMatrix()
-
-        self.csrGenerator = CSRGenerator(K)
-
-        try:
-            self._updateOptions(step.actions["options"]["NISTSolver"].options, self.journal)
-        except KeyError:
-            pass
-
+        # self.options already reflects every >>options, name=<this solver's name>, ... block applied
+        # so far: applyOptionsOverride pushes an override the moment such a block is constructed or
+        # re-declared (edelweissfe.stepactions.options.StepAction), and an override sticks until
+        # changed again -- there is nothing to reset or re-fetch here.
         extrapolation = self.options["extrapolation"]
+        extrapolateAfterModelChange = self.options["extrapolateAfterModelChange"]
+        equilibrateAfterModelChange = self.options["equilibrateAfterModelChange"]
         linsolverOptions = self.options["linsolverConfigFile"]
         linsolverOptionDict = json.load(open(linsolverOptions, "r")) if linsolverOptions else ""
         self.linSolver = (
@@ -173,22 +197,87 @@ class NIST(NonlinearSolverBase):
         maxGrowingIter = step.maxGrowIter
         cutbackFactor = step.cutbackFactor
 
-        U = self.theDofManager.constructDofVector()
-        P = self.theDofManager.constructDofVector()
-        dU = self.theDofManager.constructDofVector()
-
-        for fieldName, field in model.nodeFields.items():
-            U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
-
-        for variable in model.scalarVariables.values():
-            U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
+        # The equation system (DofManager, VIJ pattern, CSR structure) is (re)built lazily, at the
+        # start of whichever increment first needs it -- either the very first one, or any later
+        # one where a constraint's updateConnectivity() reports that its DOF footprint changed
+        # (e.g. a dynamic contact candidate list). This mirrors EdelweissMeshfree's
+        # NonlinearQuasistaticSolver, which already rebuilds its equation system per-increment on
+        # exactly this kind of signal. For every existing constraint (whose updateConnectivity()
+        # inherits ConstraintBase's no-op default), this is unconditionally built exactly once, on
+        # the first increment -- identical to the previous behavior.
+        self.theDofManager = None
+        self.mpcTransformation = None
+        U = dU = P = K = None
 
         prevTimeStep = None
+
+        self.validateModelCapabilities(model)
 
         self.applyStepActionsAtStepStart(model, step.actions)
 
         try:
             for timeStep in step.getTimeStep():
+                # NOTE: materialize the list before any() -- a generator would short-circuit at
+                # the first modifier/constraint reporting a change, silently skipping
+                # updateModel()/updateConnectivity() for every remaining one (their state/connectivity
+                # would stay stale/empty).
+                modelHasChanged = any(
+                    [modifier.updateModel(model, step, timeStep) for modifier in model.modelModifiers.values()]
+                )
+                connectivityHasChanged = any(
+                    [constraint.updateConnectivity(model) for constraint in model.constraints.values()]
+                )
+
+                if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
+                    self.journal.message("Creating monolithic equation system", self.identification, 0)
+                    self.theDofManager = DofManager(
+                        model.nodeFields.values(),
+                        model.scalarVariables.values(),
+                        model.elements.values(),
+                        model.constraints.values(),
+                        model.nodeSets.values(),
+                    )
+                    self.journal.message(
+                        "total size of eq. system: {:}".format(self.theDofManager.nDof),
+                        self.identification,
+                        0,
+                    )
+
+                    self.journal.printSeperationLine()
+
+                    presentVariableNames = list(self.theDofManager.idcsOfFieldsInDofVector.keys())
+
+                    if self.theDofManager.idcsOfScalarVariablesInDofVector:
+                        presentVariableNames += [
+                            "scalar variables",
+                        ]
+
+                    nVariables = len(presentVariableNames)
+                    self.iterationHeader = ("{:^25}" * nVariables).format(*presentVariableNames)
+                    self.iterationHeader2 = (" {:<10}  {:<10}  ").format("||R||∞", "||ddU||∞") * nVariables
+                    self.iterationMessageTemplate = "{:11.2e}{:1}{:11.2e}{:1} "
+
+                    K = self.theDofManager.constructVIJSystemMatrix()
+                    self.csrGenerator = CSRGenerator(K)
+
+                    U = self.theDofManager.constructDofVector()
+                    P = self.theDofManager.constructDofVector()
+                    dU = self.theDofManager.constructDofVector()
+
+                    for fieldName, field in model.nodeFields.items():
+                        U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
+
+                    for variable in model.scalarVariables.values():
+                        U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
+
+                    self.mpcTransformation = self.buildMPCTransformation(model)
+                    self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
+
+                    # The old dU/prevTimeStep no longer match the (possibly new) DOF layout, so
+                    # suppress extrapolation for this one increment -- the same fallback already
+                    # used elsewhere in this method after a failed/discarded increment.
+                    prevTimeStep = None
+
                 statusInfoDict = {
                     "step": step.number,
                     "inc": timeStep.number,
@@ -213,6 +302,70 @@ class NIST(NonlinearSolverBase):
                 )
                 self.journal.message(self.iterationHeader, self.identification, level=2)
                 self.journal.message(self.iterationHeader2, self.identification, level=2)
+
+                if modelHasChanged and equilibrateAfterModelChange:
+                    # Settle the warm-started refined mesh to equilibrium at the LAST converged load
+                    # before advancing the load. A synthetic time step with a zero step-progress
+                    # increment holds every load at its previous absolute level (getCurrentLoad reads
+                    # the absolute stepProgress) and yields a zero Dirichlet increment (getDelta reads
+                    # the difference), with a zero time increment -> a pure equilibration solve. The
+                    # settled U feeds the real increment below; its dU is reset there (prevTimeStep is
+                    # None on a rebuild increment, so extrapolation zeroes dU).
+                    equilibrationTimeStep = TimeStep(
+                        timeStep.number,
+                        0.0,
+                        timeStep.stepProgress - timeStep.stepProgressIncrement,
+                        0.0,
+                        timeStep.stepTime - timeStep.timeIncrement,
+                        timeStep.totalTime - timeStep.timeIncrement,
+                    )
+                    self.journal.message(
+                        "Model changed: re-equilibrating at constant load before advancing",
+                        self.identification,
+                        1,
+                    )
+                    try:
+                        U, dU, P, _, _ = self.solveIncrement(
+                            U,
+                            dU,
+                            P,
+                            K,
+                            step.actions,
+                            model,
+                            equilibrationTimeStep,
+                            None,
+                            extrapolation,
+                            maxIter,
+                            maxGrowingIter,
+                        )
+                    except (CutbackRequest, ReachedMaxIterations, DivergingSolution) as e:
+                        self.journal.message(
+                            "Re-equilibration after model change failed ({:}); cutting back".format(str(e)),
+                            self.identification,
+                            1,
+                        )
+                        step.discardAndChangeIncrement(cutbackFactor)
+                        prevTimeStep = None
+                        statusInfoDict["iters"] = np.inf
+                        statusInfoDict["notes"] = "re-equilibration failed: {:}".format(str(e))
+                        for man in outputmanagers:
+                            man.finalizeFailedIncrement(statusInfoDict=statusInfoDict)
+                        continue
+
+                    # Commit the settled state as a genuine converged (constant-load, zero-time)
+                    # sub-increment so the real increment builds on the equilibrated state. Elements
+                    # integrate strain incrementally from the COMMITTED state (computeKernels resets
+                    # the trial buffer each call and forms dE = B*dU), so without this commit the
+                    # settling deformation dU would be dropped from the strain/stress state while
+                    # remaining in U -- leaving U inconsistent with the internal state and making the
+                    # option a physics no-op. No output frame is emitted (it is an internal sub-step).
+                    for fieldName, field in model.nodeFields.items():
+                        self.theDofManager.writeDofVectorToNodeField(U, field, "U")
+                        self.theDofManager.writeDofVectorToNodeField(P, field, "P")
+                        self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
+                    for variable in model.scalarVariables.values():
+                        variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+                    model.advanceToTime(equilibrationTimeStep.totalTime)
 
                 try:
                     U, dU, P, iterationCounter, incrementResidualHistory = self.solveIncrement(
@@ -257,7 +410,14 @@ class NIST(NonlinearSolverBase):
                         )
 
                 else:
-                    prevTimeStep = timeStep
+                    # After an adaptive model change, the just-converged increment's dU conflates the
+                    # load advance with the one-off warm-start/remesh settling transient. Optionally
+                    # suppress extrapolation for the next increment (start it from a zero predictor)
+                    # instead of extrapolating that polluted dU.
+                    if modelHasChanged and not extrapolateAfterModelChange:
+                        prevTimeStep = None
+                    else:
+                        prevTimeStep = timeStep
 
                     if iterationCounter >= criticalIter:
                         step.preventIncrementIncrease()
@@ -270,6 +430,8 @@ class NIST(NonlinearSolverBase):
 
                     for variable in model.scalarVariables.values():
                         variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+
+                    self.updateRigidBodies(model, timeStep)
 
                     model.advanceToTime(timeStep.totalTime)
 
@@ -288,7 +450,10 @@ class NIST(NonlinearSolverBase):
                             statusInfoDict=statusInfoDict,
                         )
 
-        except (ReachedMaxIncrements, ReachedMinIncrementSize):
+        except ReachedMaxIncrements:
+            self.applyStepActionsAtStepEnd(model, step.actions)
+
+        except ReachedMinIncrementSize:
             self.journal.errorMessage("Incrementation failed", self.identification)
             raise StepFailed()
 
@@ -375,6 +540,9 @@ class NIST(NonlinearSolverBase):
         distributedLoads = stepActions["distributedload"].values()
         bodyForces = stepActions["bodyforce"].values()
 
+        # Find which global DOFs the Dirichlet BCs constrain, once up front.
+        self.locateConstrainedDofs(dirichlets)
+
         self.applyStepActionsAtIncrementStart(model, timeStep, stepActions)
 
         dU, isExtrapolatedIncrement = self.extrapolateLastIncrement(
@@ -397,13 +565,31 @@ class NIST(NonlinearSolverBase):
             R[:] = -P
             R += PExt
 
+            # Condense the residual BEFORE the Dirichlet handling below: T^T folds slave-row
+            # residuals into their master rows, which may themselves carry a prescribed delta --
+            # transforming afterwards would corrupt it.
+            if self.mpcTransformation is not None:
+                R[:] = self.mpcTransformation.transformResidual(R, dU)
+
+            # --- Impose the Dirichlet (prescribed-value) boundary conditions ---
+            # Row-replacement method: for each constrained DOF i we overwrite its
+            # row of the linearized system  K ddU = R  so that the linear solve
+            # returns a *known* value for the increment ddU[i]:
+            #     K: zero row i, set K[i, i] = 1   (see applyDirichletToStiffness)
+            #     R: set R[i] to the value ddU[i] must take
+            # Together these give  ddU[i] = R[i]  exactly.
             if iterationCounter == 0 and not isExtrapolatedIncrement and dirichlets:
-                # first iteration? apply dirichlet bcs and unconditionally solve
-                R = self.applyDirichlet(timeStep, R, dirichlets)
+                # First iteration: the constrained DOFs must still move by their
+                # prescribed increment for this step, so we ask the solve for it.
+                R = self.applyDirichletToResidual(timeStep, R, dirichlets)
             else:
-                # iteration cycle 1 or higher, time to check the convergence
+                # Later iterations: the constrained DOFs already sit at their
+                # prescribed value and must not move further, so we prescribe a
+                # zero increment. This also removes them from the convergence
+                # check below: there is no force equilibrium to satisfy at a DOF
+                # whose value we dictate.
                 for dirichlet in dirichlets:
-                    R[self.findDirichletIndices(dirichlet)] = 0.0
+                    R[dirichlet.constrainedDofIndices] = 0.0
 
                 converged, nodesWithLargestResidual = self.checkConvergence(
                     R, ddU, F, iterationCounter, incrementResidualHistory
@@ -421,7 +607,11 @@ class NIST(NonlinearSolverBase):
                     raise ReachedMaxIterations("Reached max. iterations in current increment, cutting back")
 
             K_ = self.assembleStiffnessCSR(K)
-            K_ = self.applyDirichletK(K_, dirichlets)
+
+            if self.mpcTransformation is not None:
+                K_ = self.mpcTransformation.transformSystemMatrix(K_)
+
+            K_ = self.applyDirichletToStiffness(K_, dirichlets)  # zero rows, unit diagonal
 
             ddU = self.linearSolve(K_, R)
             dU += ddU
@@ -523,8 +713,33 @@ class NIST(NonlinearSolverBase):
         return PExt, K
 
     @performancetiming.timeit("dirichlet K on CSR")
-    def applyDirichletK(self, K: csr_matrix, dirichlets: list[StepActionBase]) -> csr_matrix:
-        return applyDirichletK(self, K, dirichlets)
+    def applyDirichletToStiffness(self, K: csr_matrix, dirichlets: list[StepActionBase]) -> csr_matrix:
+        K = applyDirichletToStiffness(K, dirichlets)
+
+        # Compacting the just-zeroed entries out of K is a storage/performance concern,
+        # not part of applying the boundary condition -- and whether it's even safe
+        # depends on K's identity, which only the assembler/solver side knows:
+        #
+        # - No MPC transformation: K is self.csrGenerator's own persistent CSR matrix,
+        #   returned by reference (assembleStiffnessCSR/updateInPlace) and reused, in
+        #   place, every Newton iteration. eliminate_zeros() would shrink/compact its
+        #   data/indices arrays -- but the generator's C++ core scatters fresh values
+        #   into the ORIGINAL, full-length buffer on every subsequent update via a fixed
+        #   assembly map computed once at construction. After a shrink, that buffer and
+        #   the (now compacted) K.indices/K.indptr disagree about which stored slot
+        #   belongs to which (row, col) -- silently misaligned values from the next
+        #   iteration on. Must NOT eliminate.
+        # - MPC transformation active (hanging nodes / ties): K is the freshly computed,
+        #   disposable T^T @ K @ T + C from mpcTransformation.transformSystemMatrix,
+        #   independent of the generator's buffer and discarded after this solve.
+        #   Eliminating here is always safe, and PARDISO's reordering on these more
+        #   poorly conditioned, path-dependent (contact/friction) condensed systems is
+        #   sensitive enough to the extra explicit-zero structural entries to visibly
+        #   drift from the converged reference path if they are kept.
+        if self.mpcTransformation is not None:
+            K.eliminate_zeros()
+
+        return K
 
     @performancetiming.timeit("elements")
     def computeElements(

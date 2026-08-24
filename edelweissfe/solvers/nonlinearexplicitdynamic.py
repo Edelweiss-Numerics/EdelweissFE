@@ -29,10 +29,12 @@
 
 
 from copy import deepcopy
+from dataclasses import dataclass
 
 import numpy as np
 
 import edelweissfe.utils.performancetiming as performancetiming
+from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
@@ -47,6 +49,59 @@ from edelweissfe.utils.exceptions import (
     StepFailed,
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
+from edelweissfe.utils.schema import schemaField
+
+
+@dataclass(frozen=True)
+class NEDSchema:
+    """The options of the ``*solver`` datalines and of an ``>>options`` block routed to this
+    solver, owned by this module and never mutated from outside it.
+
+    Mirrors :attr:`NED.NEDOptions` one-for-one; the plain ``self.options`` dict remains the actual
+    source of truth consulted at runtime (see :class:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema`
+    for why). The ``*-fields``/``*-scheme``/``courant-number``/``output-frequency`` option names are
+    not valid Python identifiers, hence the ``optionName`` indirection. ``firstOrderFields``/
+    ``secondOrderFields`` are declared ``dtype=list`` to describe their real shape (a comma-separated
+    list, appended to rather than replaced -- see :meth:`NED._updateOptions`), even though nothing
+    coerces a raw string against this schema today.
+    """
+
+    firstOrderFields: list | None = schemaField(
+        description="Fields integrated with a first-order (forward-Euler) time scheme.",
+        dtype=list,
+        default_factory=list,
+        optionName="first-order-fields",
+    )
+    secondOrderFields: list | None = schemaField(
+        description="Fields integrated with a second-order (central-difference) time scheme.",
+        dtype=list,
+        default_factory=list,
+        optionName="second-order-fields",
+    )
+    firstOrderScheme: str | None = schemaField(
+        description="The time integration scheme for first-order fields.",
+        dtype=str,
+        default="forward-euler",
+        optionName="first-order-scheme",
+    )
+    secondOrderScheme: str | None = schemaField(
+        description="The time integration scheme for second-order fields.",
+        dtype=str,
+        default="central-difference",
+        optionName="second-order-scheme",
+    )
+    courantNumber: float | None = schemaField(
+        description="The fraction of the critical time step actually used.",
+        dtype=float,
+        default=0.8,
+        optionName="courant-number",
+    )
+    outputFrequency: int | None = schemaField(
+        description="The increment interval at which progress is logged.",
+        dtype=int,
+        default=1000,
+        optionName="output-frequency",
+    )
 
 
 class NED(NonlinearSolverBase):
@@ -61,6 +116,11 @@ class NED(NonlinearSolverBase):
     """
 
     identification = "NEDSolver"
+
+    supportsMPC = True
+
+    #: Option schema for this solver, per OptionSchemaProvider.
+    schema = NEDSchema
 
     NEDOptions = {
         "first-order-fields": [],
@@ -125,6 +185,16 @@ class NED(NonlinearSolverBase):
             The field output controller.
         """
 
+        self.validateModelCapabilities(model)
+
+        for constraintName, constraint in model.constraints.items():
+            if type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity:
+                raise Exception(
+                    f"Constraint '{constraintName}' requires a dynamic connectivity update "
+                    f"(contact) every increment, which {self.identification} never performs -- "
+                    "contact is not currently supported with this solver."
+                )
+
         self.journal.message("Creating monolithic equation system", self.identification, 0)
         self.theDofManager = DofManager(
             model.nodeFields.values(),
@@ -148,8 +218,12 @@ class NED(NonlinearSolverBase):
                 "scalar variables",
             ]
 
-        if "NEDSolver" in step.actions["options"].keys():
-            self._updateOptions(step.actions["options"]["NEDSolver"].options, self.journal)
+        # self.options already reflects every >>options, name=<this solver's name>, ... block applied
+        # so far, applied as each block is constructed or re-declared; there is nothing to reset or
+        # re-fetch here.
+
+        self.mpcTransformation = self.buildMPCTransformation(model)
+        self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
 
         # initialize mass and damping matrices
         M = self.theDofManager.constructDofVector()  # initialize lumped mass matrix
@@ -175,10 +249,21 @@ class NED(NonlinearSolverBase):
             raise ValueError(
                 "Zero mass found in mass vector. This can be caused by elements with zero density, or by elements with zero volume."
             )
+
+        # Kept before folding so the kinetic energy diagnostic accounts for the true velocities of
+        # all nodes (including tied slaves) rather than master-placed folded mass.
+        self._rawLumpedMass = M.copy()
+
+        # Slave DOFs of multi-point constraints carry no own inertia: their mass is folded onto
+        # their masters (row-sum lumping of T^T M T, mass-conserving), their Minv stays zero, and
+        # their kinematics are assigned directly from the masters each increment.
+        if self.mpcTransformation is not None:
+            self.mpcTransformation.foldLumpedMass(M)
+
         Minv[M != 0.0] = 1.0 / M[M != 0.0]
 
-        # delete M to save memory
-        del M
+        # kept (instead of 1/Minv) for the kinetic energy: slave DOFs have Minv = 0
+        self._lumpedMass = M
 
         for fieldName, field in model.nodeFields.items():
             U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
@@ -276,6 +361,8 @@ class NED(NonlinearSolverBase):
                     for variable in model.scalarVariables.values():
                         variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
 
+                    self.updateRigidBodies(model, timeStep)
+
                     model.advanceToTime(timeStep.totalTime)
 
                     if timeStep.number % self.options["output-frequency"] == 0:
@@ -285,7 +372,10 @@ class NED(NonlinearSolverBase):
                                 statusInfoDict=None,
                             )
 
-        except (ReachedMaxIncrements, ReachedMinIncrementSize):
+        except ReachedMaxIncrements:
+            self.applyStepActionsAtStepEnd(model, step.actions)
+
+        except ReachedMinIncrementSize:
             self.journal.errorMessage("Incrementation failed", self.identification)
             raise StepFailed()
 
@@ -354,6 +444,9 @@ class NED(NonlinearSolverBase):
         distributedLoads = stepActions["distributedload"].values()
         bodyForces = stepActions["bodyforce"].values()
 
+        # Find which global DOFs the Dirichlet BCs constrain, once up front.
+        self.locateConstrainedDofs(dirichlets)
+
         if timeStep.timeIncrement == 0.0:
             return U_n, V, P
 
@@ -368,10 +461,14 @@ class NED(NonlinearSolverBase):
                 timeStep.totalTime - timeStep.timeIncrement,
             )
 
-        # enforce dirichlet boundary conditions
+        # Enforce the Dirichlet boundary conditions on the constrained DOFs:
+        # there is no free equilibrium there, so their force P is set to zero,
+        # and their velocity is prescribed as (prescribed increment) / (time step).
         for dirichlet in dirichlets:
-            P[self.findDirichletIndices(dirichlet)] = 0.0
-            V[self.findDirichletIndices(dirichlet)] = dirichlet.getDelta(timeStep).flatten() / timeStep.timeIncrement
+            P[dirichlet.constrainedDofIndices] = 0.0
+            V[dirichlet.constrainedDofIndices] = (
+                dirichlet.getPrescribedIncrement(timeStep).flatten() / timeStep.timeIncrement
+            )
 
         if self.ids_1st is not None:
             V[self.ids_1st] = Minv[self.ids_1st] * P[self.ids_1st]
@@ -379,6 +476,13 @@ class NED(NonlinearSolverBase):
             V[self.ids_2nd] += (
                 Minv[self.ids_2nd] * P[self.ids_2nd] * 0.5 * (timeStep.timeIncrement + prevTimeStep.timeIncrement)
             )
+
+        # slave DOFs of multi-point constraints do not integrate their own equations of motion --
+        # they ride along on their masters (Minv is zero there, so the updates above left them
+        # untouched); displacements follow automatically via dU = V * dt
+        if self.mpcTransformation is not None:
+            self.mpcTransformation.applySlaveKinematics(V)
+
         # update displacement increment vector
         np.multiply(V, timeStep.timeIncrement, out=dU)
         np.add(U_n, dU, out=U_n)
@@ -393,9 +497,15 @@ class NED(NonlinearSolverBase):
         P[:] = -P[:]
         P = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_n, P, timeStep)
 
+        # fold the forces acting on slave DOFs onto their masters (action-reaction through the
+        # rigid interpolation link); done here so the Dirichlet handling at the start of the next
+        # increment operates on the already-folded vector
+        if self.mpcTransformation is not None:
+            P[:] = self.mpcTransformation.foldExplicitForce(P)
+
         if timeStep.number % self.options["output-frequency"] == 0:
             Wint = psi
-            Wkin = 0.5 * np.sum(1 / Minv * V**2)
+            Wkin = 0.5 * np.sum(self._rawLumpedMass * V**2)
             W = Wint + Wkin
             self.journal.message(
                 "Internal energy: {:e} ({:.2f} %)".format(Wint, Wint / W * 100), self.identification, 2

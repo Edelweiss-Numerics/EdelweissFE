@@ -1,0 +1,48 @@
+** AMR + rigid-contact integration test (PLAN_AMR_CONTACT.md §5/P4 test): a single C3D20 block sits
+** against an analytic rigid wall at its own left face (nodeToRigidSurfacePenalty, component=0,
+** direction=-1, value=0.0), watching nSet 'gen_left'. The block is refined mid-run by hAdaptivity
+** while the right face is being pushed left, compressing the block against the wall. Exercises
+** Constraint.reconcile(): the refined left face gains new boundary nodes (face-interior +
+** edge-midpoints of the octree split) that must be picked up into the watched node set and
+** protected from penetrating the wall -- before PLAN_AMR_CONTACT.md's P4, they would silently stay
+** unprotected (never added to the frozen slaveNodes list from construction).
+*material, name=linearelastic, id=mat
+30000, 0.15
+
+*section, name=sec, material=mat, type=solid
+all
+
+*modelGenerator, generator=boxGen, name=gen
+nX      =1
+nY      =1
+nZ      =1
+lX      =1
+lY      =1
+lZ      =1
+elType  =C3D20
+
+*constraint, type=nodetorigidsurfacepenalty, name=wall
+nSet=gen_left
+field=displacement
+component=0
+penalty=1e6
+value=0.0
+direction=-1
+type=linear
+
+*modelModifier, type=hAdaptivity, name=amr
+>>marker, type=fieldOutput, fieldOutput=stressForAMR, expression='abs(x) > 300.0'
+maxLevel=1
+
+*job, name=amrrigid, domain=3d
+*solver, solver=NIST, name=theSolver
+*fieldOutput
+>>perNode, elSet=all, field=displacement, result=U, name=U
+>>perElement, elSet=all, result=stress, quadraturePoint=0:27, name=stressForAMR
+
+*step, solver=theSolver
+maxInc=0.02, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=fixBottomLeftFront, nSet=gen_bottomLeftFront, field=displacement, 2=0.0, 3=0.0
+>>dirichlet, name=fixBottomLeftBack, nSet=gen_bottomLeftBack, field=displacement, 2=0.0
+>>dirichlet, name=pushRight, nSet=gen_right, field=displacement, 1=-0.1

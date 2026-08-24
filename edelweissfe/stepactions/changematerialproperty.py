@@ -26,12 +26,15 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-import sympy as sp
+from collections.abc import Callable
+from dataclasses import dataclass
 
+from edelweissfe.stepactions.base.amplitude import amplitudeFromExpression
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 Stepaction to change material properties.
@@ -39,74 +42,311 @@ Stepaction to change material properties.
 """
 
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class ChangeMaterialPropertySchema:
+    """The scalar options of the ``changematerialproperty`` keyword, owned by this module and never
+    mutated from outside it.
 
-modules = [
-    inputLanguage["step"].getModule("adaptive"),
-    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
-]
+    ``name`` and ``material`` are ``structuralOnly`` fields: ``material`` names an existing model
+    object, resolved by :meth:`fromStepActionDefinition` before the schema is even built, exactly
+    like every other category's structural names, and ``name`` is popped even earlier, by
+    ``helpers/inputfilehelpers.py``. Both are declared here purely so the rendered grammar surface
+    documents them -- :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` never actually sees
+    either key; see :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.structuralOnly`.
+    """
 
-documentation = []
-
-for module in modules:
-    kw = module.addOptionalKeyword("changematerialproperty", "Stepaction to change material properties.")
-    kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("material", "The id of the material to be changed", str)
-    kw.addRequiredArg("index", "The index of the property in the material properties vector", int)
-    kw.addOptionalArg("f(t)", "Define an amplitude in the step progress interval [0...1]", str, None)
-
-    documentation.append(kw)
+    name: str | None = schemaField(
+        description="Name of the step action.", dtype=str, default=None, required=True, structuralOnly=True
+    )
+    material: str | None = schemaField(
+        description="The id of the material to be changed",
+        dtype=str,
+        default=None,
+        required=True,
+        structuralOnly=True,
+    )
+    index: int | None = schemaField(
+        description="The index of the property in the material properties vector",
+        dtype=int,
+        default=None,
+        required=True,
+    )
+    f_t: str | None = schemaField(
+        description="Define an amplitude in the step progress interval [0...1]",
+        dtype=str,
+        default=None,
+        optionName="f(t)",
+    )
 
 
 class StepAction(StepActionBase):
-    """Action class for changing a material property"""
+    """Drive one entry of a material's property vector along a prescribed function of time.
 
-    def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
+    The constructor is typed: it takes the material itself and the property function as a callable.
+    Resolving ``material=myMaterial`` against the model and compiling ``f(t)='1000 - 500 * t'`` into
+    that callable is the job of :meth:`fromStepActionDefinition`, which is the only part of this
+    module the ``.inp`` front-end needs.
+
+    Parameters
+    ----------
+    name
+        The name of this step action.
+    material
+        The material whose property is changed, as the model holds it: a
+        ``{"name", "properties"}`` record for the Marmot material provider, or a material instance
+        for the edelweiss material provider.
+    index
+        The zero-based index of the property in the material's property vector.
+    f_t
+        The value of the property as a function of time. Required and positional, unlike the optional
+        ``f_t`` amplitude of the other step actions, because driving the property along it is this
+        action's entire purpose -- there is no meaningful default.
+
+        Note that ``f_t`` is evaluated at the **absolute step time**, not at the step progress in
+        ``[0...1]`` as everywhere else: it yields the property value itself rather than a factor
+        scaling one. That asymmetry is intentional, and is why the input file's ``f(t)`` for this
+        keyword means something different than for e.g. ``>>dirichlet``.
+    model
+        The model tree. Accepted for uniformity with the other step actions; the sections carrying
+        this material are looked up in the model handed to :meth:`applyAtIncrementStart`.
+    journal
+        The journal object for logging.
+    """
+
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
+    schema = ChangeMaterialPropertySchema
+
+    def __init__(self, name, material, index: int, f_t: Callable[[float], float], model, journal):
         self.name = name
-        self.theIndex = int(action["index"])
-        self.theMaterial = CaseInsensitiveDict(model.materials)[action["material"]]
+        self.theMaterial = material
+        self.theIndex = int(index)
 
-        self.updateStepAction(action, jobInfo, model, fieldOutputController, journal)
+        self._journal = journal
 
-        self.journal = journal
+        self.updateStepAction(f_t)
 
-    def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
-        """Update the function describing the material property"""
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build this step action from a parsed ``>>changeMaterialProperty`` definition. See
+        :class:`~edelweissfe.stepactions.base.stepactionbase.StepActionBase` for why this is separate
+        from ``__init__``.
+
+        Parameters
+        ----------
+        name
+            The name of the step action.
+        definition
+            The parsed option mapping for this step action.
+        jobInfo
+            A dictionary containing the information about the job.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controlling object.
+        journal
+            The journal object for logging.
+
+        Returns
+        -------
+        StepAction
+            The constructed step action.
+        """
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        materialName = definition.pop("material")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+
+        f_t = amplitudeFromExpression(configuration.f_t)
+
+        if f_t is None:
+            raise ValueError(
+                f"changeMaterialProperty '{name}': option 'f(t)' is required, as it defines the value "
+                "the material property is set to at a given time."
+            )
+
+        return cls(
+            name,
+            CaseInsensitiveDict(model.materials)[materialName],
+            configuration.index,
+            f_t,
+            model,
+            journal,
+        )
+
+    def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
+        """Update from a parsed ``>>changeMaterialProperty`` definition re-declared in a later step.
+
+        The re-declared ``material`` and ``index`` are ignored: only the property function can be
+        replaced, and the action is armed again.
+
+        Parameters
+        ----------
+        definition
+            The parsed option mapping for this step action.
+        jobInfo
+            A dictionary containing the information about the job.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controlling object.
+        journal
+            The journal object for logging.
+        """
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        definition.pop("material")
+        configuration = buildSchemaFromOptions(self.schema, definition)
+
+        self.updateStepAction(amplitudeFromExpression(configuration.f_t))
+
+    def updateStepAction(self, f_t: Callable[[float], float] = None):
+        """Prescribe a new property function, and set the action active again.
+
+        Parameters
+        ----------
+        f_t
+            The new value of the property as a function of the absolute step time. If None, the
+            function prescribed so far is kept -- which is what a re-declaration of this step action
+            without a ``f(t)`` option means. On construction it is required instead, since there is
+            then no function to keep.
+        """
+
         self.active = True
 
-        if action["f(t)"] is not None:
-            t = sp.symbols("t")
-            self.f_t = sp.lambdify(t, sp.sympify(action["f(t)"]), "numpy")
+        if f_t is not None:
+            self.f_t = f_t
 
     def applyAtStepEnd(self, model, stepMagnitude=None):
+        """Deactivate this step action at the end of the step it was declared in.
+
+        Parameters
+        ----------
+        model
+            The current state of the model.
+        stepMagnitude
+            Unused; present for signature compatibility with the other step actions.
+        """
+
         self.active = False
 
     def applyAtIncrementStart(self, model, timeStep: TimeStep):
-        """Change the actual properties depending on the current step time"""
+        """Change the actual properties depending on the current step time.
+
+        Parameters
+        ----------
+        model
+            The current state of the model.
+        timeStep
+            The definition of the time increment.
+        """
 
         if not self.active:
             return
 
         theCurrentProperty = self.f_t(timeStep.stepTime)
-        self.journal.message(
+        self._journal.message(
             "Changing property[{:}] of material {:} to {:}".format(
-                self.theIndex, self.theMaterial["name"], theCurrentProperty
+                self.theIndex, self._materialLabel(), theCurrentProperty
             ),
             self.name,
         )
 
-        self.theMaterial["properties"][self.theIndex] = theCurrentProperty
-        for secname, section in model.sections.items():
-            if section.material["name"] == self.theMaterial["name"]:
-                for elSet in section.elSets:
-                    for el in elSet:
-                        if isinstance(section.material, dict):  # for marmotmaterial provider
-                            modifiedMaterial = section.material.copy()
-                            modifiedMaterial["properties"] = self.theMaterial["properties"]
-                        else:  # for edelweissmaterial provider
-                            materialType = type(section.material)
-                            modifiedProperties = self.theMaterial["properties"]
-                            modifiedMaterial = materialType(modifiedProperties)
-                            if hasattr(self.material, "_materialEnergy"):  # for autodiff materials
-                                modifiedMaterial.setEnergyFunction(self.material._materialEnergy)
-                        section.assignSectionPropertiesToElement(el, material=modifiedMaterial)
+        modifiedProperties = self._propertyVector()
+        modifiedProperties[self.theIndex] = theCurrentProperty
+
+        for section in model.sections.values():
+            if not self._sectionUsesThisMaterial(section):
+                continue
+
+            for elSet in section.elSets:
+                for el in elSet:
+                    # The material is rebuilt per element on purpose: an edelweiss material instance
+                    # holds the state vars of the element it is assigned to, so one instance shared
+                    # across an element set would alias them.
+                    section.assignSectionPropertiesToElement(
+                        el, material=self._materialWithProperties(section.material, modifiedProperties)
+                    )
+
+    def _materialLabel(self) -> str:
+        """The name of the driven material, for logging.
+
+        Returns
+        -------
+        str
+            The Marmot material's name, or the class name of an edelweiss material instance, which
+            carries no name of its own.
+        """
+
+        if isinstance(self.theMaterial, dict):
+            return self.theMaterial["name"]
+
+        return type(self.theMaterial).__name__
+
+    def _propertyVector(self):
+        """The property vector of the driven material, to be modified in place.
+
+        Returns
+        -------
+        np.ndarray
+            The properties of the Marmot material record, or of the edelweiss material instance.
+        """
+
+        if isinstance(self.theMaterial, dict):
+            return self.theMaterial["properties"]
+
+        return self.theMaterial.materialProperties
+
+    def _sectionUsesThisMaterial(self, section) -> bool:
+        """Whether a section's elements are to be handed the modified material.
+
+        Parameters
+        ----------
+        section
+            The section to test.
+
+        Returns
+        -------
+        bool
+            True if the section uses the driven material. A Marmot material is matched by name, an
+            edelweiss material by identity, as an instance of it carries no name.
+        """
+
+        if isinstance(self.theMaterial, dict):
+            return isinstance(section.material, dict) and section.material["name"] == self.theMaterial["name"]
+
+        return section.material is self.theMaterial
+
+    @staticmethod
+    def _materialWithProperties(sectionMaterial, modifiedProperties):
+        """Create a copy of a section's material carrying the modified property vector.
+
+        Parameters
+        ----------
+        sectionMaterial
+            The material currently assigned to the section.
+        modifiedProperties
+            The modified property vector.
+
+        Returns
+        -------
+        The material to be assigned to the section's elements, of the same kind as
+        ``sectionMaterial``.
+
+        Notes
+        -----
+        The autodiff materials' energy density function needs no carrying over here, even though
+        :mod:`edelweissfe.sections.base.sectionbase` carries it over at the equivalent point:
+        re-running ``__init__`` on a property set that still carries ``psi_e`` installs the same
+        ``_materialEnergy`` function via ``setEnergyFunction``, so the carry-over in ``sectionbase``
+        is a no-op for materials rebuilt this way.
+        """
+
+        if isinstance(sectionMaterial, dict):  # for marmotmaterial provider
+            modifiedMaterial = sectionMaterial.copy()
+            modifiedMaterial["properties"] = modifiedProperties
+            return modifiedMaterial
+
+        # for edelweissmaterial provider: rebuild the instance from the modified properties
+        return type(sectionMaterial)(modifiedProperties)

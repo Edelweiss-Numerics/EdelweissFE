@@ -29,89 +29,156 @@
 
 # @author: Konstantin Basche
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.models.meshdependent import MeshDependent
+from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 A penalty based unilateral constraint used for preventing the nodes of a node set from penetrating a defined rigid boundary.
+
+This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if an AMR refinement
+adds nodes to the watched ``nSet``, the new nodes are picked up and protected from penetrating the
+boundary at the constraint's own next :meth:`updateConnectivity` tick -- no separate wiring needed.
 """
 
-module = Module(
-    "nodeToRigidSurfacePenalty",
-    "A penalty based unilateral constraint used for preventing the nodes of a node set from penetrating a defined rigid boundary.",
-)
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class NodeToRigidSurfacePenaltySchema:
+    """The options this constraint accepts, owned by this module and never mutated from outside
+    it.
 
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
+    The update-type option is spelled ``type`` in the input file but the field is named
+    ``contactType`` here -- a dataclass field literally called ``type`` would shadow the builtin,
+    which this project's conventions avoid. Each required field is declared ``required=True``, but
+    is still given a ``default=None`` so the schema remains constructible on its own;
+    ``buildSchemaFromOptions`` still enforces that an ``.inp`` file supplies it.
+    """
 
-module.addRequiredArg("field", "The field this constraint acts on.", str)
-module.addRequiredArg("component", "The component of the field.", int)
-module.addRequiredArg("penalty", "The numerical penalty value.", float)
-module.addRequiredArg("nSet", "The node set to be constrained.", str)
+    field: str | None = schemaField(
+        description="The field this constraint acts on.", dtype=str, default=None, required=True
+    )
+    component: int | None = schemaField(
+        description="The component of the field.", dtype=int, default=None, required=True
+    )
+    penalty: float | None = schemaField(
+        description="The numerical penalty value.", dtype=float, default=None, required=True
+    )
+    nSet: str | None = schemaField(
+        description="The node set to be constrained.", dtype=str, default=None, required=True
+    )
+    value: float = schemaField(
+        description="The prescribed distance to the rigid boundary. A value of 0.0 implies no "
+        "initial gap between the node set and the boundary.",
+        dtype=float,
+        default=0.0,
+    )
+    direction: float = schemaField(
+        description="The normal direction outward from the continuum towards the boundary (1.0 or -1.0).",
+        dtype=float,
+        default=1.0,
+    )
+    contactType: str = schemaField(
+        description="The formulation type: 'linear' (linear force, constant stiffness with jump) "
+        "or 'quadratic' (quadratic force, linear stiffness).",
+        dtype=str,
+        default="linear",
+        optionName="type",
+    )
 
-module.addOptionalArg(
-    "value",
-    "The prescribed distance to the rigid boundary. A value of 0.0 implies no initial gap between the node set and the boundary.",
-    float,
-    0.0,
-)
-module.addOptionalArg(
-    "direction", "The normal direction outward from the continuum towards the boundary (1.0 or -1.0).", float, 1.0
-)
-module.addOptionalArg(
-    "type",
-    "The formulation type: 'linear' (linear force, constant stiffness with jump) or 'quadratic' (quadratic force, linear stiffness).",
-    str,
-    "linear",
-)
 
-documentation = [module]
+class Constraint(ConstraintBase, MeshDependent):
+    """A penalty based unilateral constraint used for preventing the nodes of a node set from
+    penetrating a defined rigid boundary.
 
+    Parameters
+    ----------
+    name
+        The name of the constraint.
+    model
+        The model tree.
+    nSet
+        The node set to be constrained.
+    configuration
+        The options this constraint accepts; ``field``/``component``/``penalty`` are still
+        required, see :class:`NodeToRigidSurfacePenaltySchema`.
+    """
 
-class Constraint(ConstraintBase):
-    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-    @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name: str, model: FEModel, *args, **kwargs):
-        super().__init__(name, model, *args, **kwargs)
+    #: Option schema for this constraint, per OptionSchemaProvider.
+    schema = NodeToRigidSurfacePenaltySchema
 
-        kwargs = CaseInsensitiveDict(kwargs)
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        nSet: NodeSet,
+        journal: Journal,
+        *,
+        configuration: NodeToRigidSurfacePenaltySchema = NodeToRigidSurfacePenaltySchema(),
+    ):
+        super().__init__(name, model)
 
-        theField = kwargs["field"]
-        self.sizeField = getFieldSize(theField, model.domainSize)
-        self.component = kwargs["component"]
-        self.penalty = kwargs["penalty"]
-        self.value = kwargs["value"]
-        self.direction = kwargs["direction"]
-        self._nodes = model.nodeSets[kwargs["nSet"]]
-        self._nNodes = len(self._nodes)
-        self._nDof = self.sizeField * self._nNodes
+        self.journal = journal
 
-        self.type = kwargs["type"].lower()
+        self._field = configuration.field
+        self.sizeField = getFieldSize(self._field, model.domainSize)
+        self.component = configuration.component
+        self.penalty = configuration.penalty
+        self.value = configuration.value
+        self.direction = configuration.direction
+
+        self.type = configuration.contactType.lower()
         if self.type not in ["linear", "quadratic"]:
             raise ValueError(f"Constraint type '{self.type}' is not supported. Use 'linear' or 'quadratic'.")
 
-        self.indices_component = np.arange(self.component, self._nDof + self.component, self.sizeField)
-
-        self._fieldsOnNodes = [
-            [
-                theField,
-            ]
-        ] * self._nNodes
+        self._nSetName = nSet.name
+        self._lastSeenTopologyVersion = model.topologyVersion
+        self._nodes = nSet
+        self._rebuildFromNodes()
 
         self.active = True
+
+        self.journal.message(
+            f"{self._nNodes} nodes, field={self._field}, component={self.component}, "
+            f"type={self.type}, direction={self.direction:+.1f}",
+            name,
+        )
+
+    @classmethod
+    def fromConstraintDefinition(cls, name: str, definition: dict, model: FEModel, journal: "Journal") -> "Constraint":
+        """Build this constraint from a parsed ``*constraint`` definition. See
+        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
+        separate from ``__init__``."""
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+        return cls(name, model, model.nodeSets[configuration.nSet], journal, configuration=configuration)
+
+    def _rebuildFromNodes(self) -> None:
+        """(Re)derive every quantity that depends on the node set/count."""
+
+        self._nNodes = len(self._nodes)
+        self._nDof = self.sizeField * self._nNodes
+        self.indices_component = np.arange(self.component, self._nDof + self.component, self.sizeField)
+        self._fieldsOnNodes = [[self._field]] * self._nNodes
+
+    def reconcile(self, model: FEModel, change) -> bool:
+        """Refresh the node list from the (possibly grown) watched ``nSet``."""
+
+        if not change.touchesNodeSet(self._nSetName):
+            return False
+        self._nodes = model.nodeSets[self._nSetName]
+        self._rebuildFromNodes()
+        return True
+
+    def updateConnectivity(self, model: FEModel) -> bool:
+        return self.reconcileIfChanged(model)
 
     @property
     def nodes(self) -> list:

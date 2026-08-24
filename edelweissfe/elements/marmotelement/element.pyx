@@ -163,6 +163,25 @@ cdef class MarmotElementWrapper:
                         &self._elementProperties[0],
                         self._elementProperties.shape[0]))
 
+    def assignProperty(self, str propertyName, properties):
+        """Assign a single property of the element by name."""
+
+        cdef double[::1] _properties = np.atleast_1d(np.asarray(properties, dtype=np.float64))
+        self.marmotElement.assignProperty(
+                propertyName.encode("UTF-8"),
+                &_properties[0])
+
+    def getPropertyNames(self):
+        """Get the names of all the valid properties of the element."""
+
+        cdef vector[string] names = self.marmotElement.getPropertyNames()
+        return [name.decode("utf-8") for name in names]
+
+    @property
+    def propertyNames(self):
+        """Get the names of all the valid properties of the element."""
+        return self.getPropertyNames()
+
     def initializeElement(self, ):
         """Let the underlying MarmotElement initialize itself"""
         self.marmotElement.initializeYourself()
@@ -315,6 +334,23 @@ cdef class MarmotElementWrapper:
 
         self._stateVars[:] = self._stateVarsTemp
 
+    def getStateVars(self):
+        """Return a copy of the converged quadrature-point state-variable buffer."""
+
+        return np.asarray(self._stateVars).copy()
+
+    def setStateVars(self, double[::1] values):
+        """Overwrite the converged and trial state-variable buffers in place (so the MarmotElement's
+        assigned pointer to the trial buffer stays valid). Used by adaptive refinement to transfer
+        history to child elements."""
+
+        if values.shape[0] != self._stateVars.shape[0]:
+            raise ValueError(
+                "setStateVars: expected {:} state variables, got {:}".format(
+                    self._stateVars.shape[0], values.shape[0]))
+        self._stateVars[:] = values
+        self._stateVarsTemp[:] = values
+
     def resetToLastValidState(self, ):
         """Reset to the last valid state."""
 
@@ -337,6 +373,22 @@ cdef class MarmotElementWrapper:
         cdef StateView res = self.marmotElement.getStateView(result, quadraturePoint)
 
         return <double[:res.stateSize]> (res.stateLocation)
+
+    def getStateVarSlice(self, name):
+        """Locate a named state variable within one per-quadrature-point state block.
+
+        Returns the (offset, size) of the named variable relative to the start of a per-quadrature-
+        point block, computed from the pointer the MarmotElement hands out for quadrature point 0.
+        Used by adaptive refinement to route different state variables to different transfer
+        strategies (copy / project / reset)."""
+
+        if not self._hasMaterial:
+            raise Exception("Element {:} has no material assigned!".format(self._elNumber))
+
+        cdef string name_ = name.encode("UTF-8")
+        cdef StateView res = self.marmotElement.getStateView(name_, 0)
+        cdef Py_ssize_t offset = res.stateLocation - &self._stateVarsTemp[0]
+        return int(offset), int(res.stateSize)
 
     def getCoordinatesAtCenter(self):
         """Compute the underlying MarmotElement centroid coordinates."""

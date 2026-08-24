@@ -142,6 +142,7 @@ def finiteElementSimulation(
     plotter = createPlotterFromInputFile(inputfile, journal)
     stepManager = createStepManagerFromInputFile(inputfile)
     fieldOutputController = createFieldOutputFromInputFile(inputfile, model, journal)
+    model.fieldOutputController = fieldOutputController
     fieldOutputController.initializeJob()
 
     outputManagers = createOutputManagersFromInputFile(
@@ -164,8 +165,13 @@ def finiteElementSimulation(
     defaultSolver = getSolverByName(job["solver"])
     solvers["default"] = defaultSolver(jobInfo, journal)
 
+    # Looked up by name from a >>options block (edelweissfe.stepactions.options), which resolves
+    # directly against these two rather than scanning step actions for a category tag.
+    model.solvers = solvers
+    model.outputManagers = {outputManager.name: outputManager for outputManager in outputManagers}
+
     try:
-        for step in stepManager.dequeueStep(jobInfo, model, fieldOutputController, journal, solvers, outputManagers):
+        for step in stepManager.generateSteps(jobInfo, model, fieldOutputController, journal, solvers, outputManagers):
             tic = getCurrentTime()
             step.solve()
             toc = getCurrentTime()

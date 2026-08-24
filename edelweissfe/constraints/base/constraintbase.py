@@ -30,13 +30,41 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.vijentitybase import VIJEntityBase
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.schema import OptionSchemaProvider
 from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
-class ConstraintBase(ABC, VIJEntityBase):
+class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
+    @classmethod
+    def fromConstraintDefinition(
+        cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
+    ) -> "ConstraintBase":
+        """Create this constraint from a parsed ``.inp`` constraint definition.
+
+        The one place a module's input-file shape (set/surface *names*, string-typed booleans) is
+        turned into the typed arguments its real constructor takes. Override it together with a
+        typed ``__init__``; leave it alone and the dict-consuming constructor is used unchanged.
+
+        Parameters
+        ----------
+        name
+            The name of the constraint.
+        definition
+            The parsed option mapping for this constraint (the datalines-derived ``kwargs``).
+        model
+            The model tree.
+
+        Returns
+        -------
+        ConstraintBase
+            The constructed constraint.
+        """
+        return cls(name, model, **definition)
+
     @abstractmethod
     def __init__(self, name: str, model: FEModel, *args, **kwargs):
         """The constraint base class.
@@ -91,6 +119,38 @@ class ConstraintBase(ABC, VIJEntityBase):
     def nDof(self) -> int:
         """The total number of degrees of freedom this constraint is associated with."""
 
+    def updateConnectivity(self, model: FEModel) -> bool:
+        """Called once at the start of every increment, before the global equation system is
+        (re)created, so a constraint can refresh a dynamic candidate set (e.g. proximity-based
+        contact pairs) and declare whether its ``nodes``/``fieldsOnNodes``/``nDof`` footprint has
+        changed since the last call.
+
+        The default implementation does nothing and reports no change, which is correct for every
+        constraint whose DOF footprint is fixed at construction (i.e. every constraint that does
+        not override this method).
+
+        Parameters
+        ----------
+        model
+            The current model.
+
+        Returns
+        -------
+        bool
+            True if this constraint's contribution to the global system has changed and the
+            equation system must be rebuilt before the next Newton solve.
+        """
+
+        return False
+
+    def acceptLastState(self):
+        """Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` when an increment
+        is accepted, so a stateful constraint (e.g. frictional contact) can promote the state of
+        the last (converged) Newton iterate to its history.
+
+        The default implementation does nothing, which is correct for every stateless constraint
+        (i.e. every constraint that does not override this method)."""
+
     def getNumberOfAdditionalNeededScalarVariables(
         self,
     ) -> int:
@@ -117,6 +177,32 @@ class ConstraintBase(ABC, VIJEntityBase):
         """
 
         self.scalarVariables = scalarVariables
+
+    def _checkSetChanged(self, theSet) -> bool:
+        """Lazily detect whether ``theSet`` (a stable-identity
+        :class:`~edelweissfe.sets.nodeset.NodeSet` or :class:`~edelweissfe.sets.elementset.ElementSet`)
+        was mutated in-place (e.g. by AMR) since this constraint last checked it.
+
+        A constraint that pre-sizes a derived array to the set's size calls this at its own
+        per-increment entry point (e.g. :meth:`updateConnectivity`) to recompute that array
+        lazily, without registering as a
+        :class:`~edelweissfe.models.modelchangeobserver.ModelChangeObserver`.
+
+        Parameters
+        ----------
+        theSet
+            The set whose version is being tracked.
+
+        Returns
+        -------
+        bool
+            True once per version bump of ``theSet`` since the last call for this same set.
+        """
+        setVersions = self.__dict__.setdefault("_setVersions", {})
+        key = id(theSet)
+        changed = setVersions.get(key, theSet._version) != theSet._version
+        setVersions[key] = theSet._version
+        return changed
 
     @abstractmethod
     def applyConstraint(

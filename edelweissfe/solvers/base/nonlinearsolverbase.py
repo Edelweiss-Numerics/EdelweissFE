@@ -26,6 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+import dataclasses
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -35,12 +36,14 @@ from scipy.sparse import csr_matrix
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
+from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import DivergingSolution
+from edelweissfe.utils.schema import OptionSchemaProvider, fieldSchemaMeta
 
 
-class NonlinearSolverBase(ABC):
+class NonlinearSolverBase(OptionSchemaProvider, ABC):
     """This is the base class for all nonlinear solvers.
 
     Parameters
@@ -55,14 +58,45 @@ class NonlinearSolverBase(ABC):
 
     SolverSpecificOptions = {}
 
-    #: Cache for :meth:`findDirichletIndices`; lazily initialized since not all
-    #: subclasses call ``super().__init__()``.
-    _dirichletIndicesCache = None
+    #: Whether this solver supports master-slave condensation / multi-point constraints
+    #: (e.g. surface ties). Subclasses supporting MPCs must set this to True.
+    supportsMPC = False
+
+    #: Whether this solver polls model.modelModifiers (e.g. h-adaptivity) every increment.
+    #: Subclasses that call modifier.updateModel(...) in their solveStep loop must set this
+    #: to True; without it, a modifier silently never runs and the model never adapts.
+    supportsModelModifiers = False
+
+    #: The active multi-point-constraint (hanging node / tie) condensation, if any -- None
+    #: whenever there are no multi-point constraints in the model. Lets
+    #: applyDirichletToStiffness tell an MPC-transformed (fresh, disposable) system matrix
+    #: apart from the assembler's own persistent, in-place-updated one: both implicit and
+    #: explicit-dynamic solvers build one when needed (see NonlinearExplicitDynamic.solveStep),
+    #: the distinction is about which matrix is in play, not about the solver family.
+    mpcTransformation = None
 
     def __init__(self, jobInfo, journal, **kwargs):
         pass
 
-    def _updateOptions(self, updatedOptions: dict, journal):
+    def validateModelCapabilities(self, model: FEModel):
+        """Validate whether the solver supports the active features/constraints of the model.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        """
+        if model.multiPointConstraints and not self.supportsMPC:
+            raise NotImplementedError(
+                f"Multi-point constraints (e.g. surface ties) are not supported by the {self.identification} solver."
+            )
+
+        if model.modelModifiers and not self.supportsModelModifiers:
+            raise NotImplementedError(
+                f"Model modifiers (e.g. h-adaptivity) are not supported by the {self.identification} solver."
+            )
+
+    def _updateOptions(self, updatedOptions: dict, journal, strict: bool = False):
         """Update options of the solver using a string dict
 
         Parameters
@@ -71,14 +105,58 @@ class NonlinearSolverBase(ABC):
             The options dictionary.
         journal
             The journal module.
+        strict
+            If True, an unrecognised option raises an AttributeError instead of being ignored. Use it
+            for option sources which are exclusively owned by this solver (i.e. the datalines of the
+            *solver keyword), such that typos are not silently swallowed.
         """
 
+        # Input keywords arrive case-folded (the parser lowercases option keys), while the option
+        # names in SolverSpecificOptions are camelCase -- match them case-insensitively via their
+        # canonical spelling. A >>options block carries the UNION of every solver's options (they all
+        # register on the same 'options' keyword) plus routing/meta keys ('category', 'inputFile',
+        # 'datalines'), so keys not belonging to this solver are silently skipped rather than rejected.
+        canonicalByLower = {key.lower(): key for key in self.SolverSpecificOptions}
         for k, v in updatedOptions.items():
-            if k in self.SolverSpecificOptions:
-                journal.message("Updating option {:}={:}".format(k, v), self.identification)
-                self.options[k] = type(self.SolverSpecificOptions[k])(updatedOptions[k])
+            canonicalKey = canonicalByLower.get(k.lower())
+            if canonicalKey is None:
+                if strict:
+                    raise AttributeError("Invalid option {:} for {:}".format(k, self.identification))
+                continue
+            journal.message("Updating option {:}={:}".format(canonicalKey, v), self.identification)
+            defaultValue = self.SolverSpecificOptions[canonicalKey]
+            if isinstance(defaultValue, bool):
+                # bool("False") is truthy, so parse the string explicitly rather than via bool(...)
+                self.options[canonicalKey] = str(v).strip().lower() in ("true", "1", "yes", "on")
             else:
-                raise AttributeError("Invalid option {:} for {:}".format(k, self.identification))
+                self.options[canonicalKey] = type(defaultValue)(v)
+
+    def applyOptionsOverride(self, fieldValues: dict) -> None:
+        """Apply a partial override of this solver's own ``schema`` fields onto ``self.options``.
+
+        The counterpart, on the solver side, of the name-based ``>>options`` override mechanism
+        (``stepactions/options.py``): once that mechanism has resolved an ``>>options, name=X, ...``
+        block to this solver instance and validated the present keys against ``type(self).schema``
+        via :func:`~edelweissfe.utils.schema.coercePresentOptions`, it calls this method with the
+        result to actually apply them.
+
+        ``fieldValues`` is keyed by *schema field name* (e.g. ``rungeKuttaStages``), while
+        ``self.options`` -- read throughout ``solveStep``/``solveIncrement`` -- is keyed by the
+        option's ``.inp``-facing spelling (e.g. ``"runge-kutta-stages"``), which are not always the
+        same (a hyphenated name cannot be a Python identifier). The schema's ``optionName`` metadata
+        is the one place that mapping is recorded, so it is consulted here rather than duplicated.
+
+        Parameters
+        ----------
+        fieldValues
+            Maps schema field name to its new, already-coerced value.
+        """
+
+        fieldsByName = {field.name: field for field in dataclasses.fields(self.schema)}
+        for fieldName, value in fieldValues.items():
+            optionName = fieldSchemaMeta(fieldsByName[fieldName]).optionName or fieldName
+            self.journal.message("Updating option {:}={:}".format(optionName, value), self.identification)
+            self.options[optionName] = value
 
     @abstractmethod
     def solveStep(self, *args):
@@ -89,14 +167,19 @@ class NonlinearSolverBase(ABC):
         pass
 
     @performancetiming.timeit("dirichlet R")
-    def applyDirichlet(self, timeStep: TimeStep, R: DofVector, dirichlets: list[StepActionBase]):
-        """Apply the dirichlet bcs on the residual vector
-        Is called by solveStep() before solving the global equatuon system.
+    def applyDirichletToResidual(self, timeStep: TimeStep, R: DofVector, dirichlets: list[StepActionBase]):
+        """Impose the Dirichlet BCs on the residual using the row-replacement method.
+
+        For every constrained DOF we *overwrite* its residual entry with the
+        value we want the linear solve to return for that DOF's increment.
+        Together with :meth:`applyDirichletToStiffness` (which zeroes the DOF's
+        row of K and puts 1.0 on the diagonal), the linearized system
+        ``K ddU = R`` then reproduces exactly that increment for the DOF.
 
         Parameters
         ----------
-        increment
-            The increment.
+        timeStep
+            The current time step.
         R
             The residual vector of the global equation system to be modified.
         dirichlets
@@ -108,8 +191,7 @@ class NonlinearSolverBase(ABC):
             The modified residual vector.
         """
         for dirichlet in dirichlets:
-            delta = dirichlet.getDelta(timeStep)
-            R[self.findDirichletIndices(dirichlet)] = delta.flatten()
+            R[dirichlet.constrainedDofIndices] = dirichlet.getPrescribedIncrement(timeStep).flatten()
 
         return R
 
@@ -311,7 +393,7 @@ class NonlinearSolverBase(ABC):
 
         if extrapolation == "linear" and prevTimeStep and prevTimeStep.timeIncrement:
             dU *= timeStep.stepProgressIncrement / prevTimeStep.stepProgressIncrement
-            dU = self.applyDirichlet(timeStep, dU, dirichlets)
+            dU = self.applyDirichletToResidual(timeStep, dU, dirichlets)
             isExtrapolatedIncrement = True
         else:
             isExtrapolatedIncrement = False
@@ -374,6 +456,31 @@ class NonlinearSolverBase(ABC):
             for action in stepActionType.values():
                 action.applyAtStepStart(model)
 
+    def updateRigidBodies(self, model: FEModel, timeStep: TimeStep):
+        """Refresh the kinematics of all rigid bodies in the model after a converged increment.
+
+        A rigid body's surface (visualization) nodes are not degrees of freedom of their own; they
+        are fully determined by the rigid body's reference point. This propagates the just-converged
+        reference-point pose onto those surface nodes so that output managers write the transient
+        geometry of the moving body and any consumer relying on the surface nodes' ``coordinates``
+        (e.g. the fast-path AABB of :meth:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getAABB`)
+        sees the current configuration.
+
+        Every nonlinear solver must call this once per converged increment. It lives on the base
+        class so that solvers overriding :meth:`solveStep` (e.g. the parallel and arc-length
+        variants) stay consistent with the serial implementation instead of silently omitting it.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        timeStep
+            The converged time step.
+        """
+
+        for rigidBody in model.rigidBodies.values():
+            rigidBody.updateKinematics(timeStep)
+
     def applyStepActionsAtStepEnd(self, model: FEModel, stepActions: dict[str, StepActionBase]):
         """Called when all step actions should finish a step.
 
@@ -408,25 +515,96 @@ class NonlinearSolverBase(ABC):
             for action in stepActionType.values():
                 action.applyAtIncrementStart(model, timeStep)
 
-    def findDirichletIndices(self, dirichlet):
-        nSet = dirichlet.nSet
-        field = dirichlet.field
-        components = dirichlet.components
+    def locateConstrainedDofs(self, dirichlets: list[StepActionBase]):
+        """Determine, up front, which global DOFs each Dirichlet BC constrains.
 
-        # The result is fully determined by the boundary condition, its (mutable)
-        # components, and the current DofManager, so it is memoized. It is requested
-        # multiple times per Newton iteration (residual zeroing and system matrix
-        # modification), but only changes when the equation system is rebuilt or the
-        # boundary condition is updated between steps.
-        cache = self._dirichletIndicesCache
-        if cache is None:
-            cache = self._dirichletIndicesCache = {}
+        Called once when a step's boundary conditions are established. The result
+        is cached on each BC as :attr:`~DirichletBase.constrainedDofIndices`, so
+        that the Newton loop can address the constrained DOFs directly, instead
+        of recomputing the mapping on every residual update and every stiffness
+        modification.
 
-        key = (dirichlet, self.theDofManager, tuple(components))
-        indices = cache.get(key)
-        if indices is None:
-            fieldIndices = self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[field][nSet]
+        Parameters
+        ----------
+        dirichlets
+            The list of dirichlet boundary conditions active in this step.
+        """
+        for dirichlet in dirichlets:
+            dirichlet.constrainedDofIndices = self._constrainedDofsOf(dirichlet)
 
-            indices = cache[key] = fieldIndices.reshape((len(nSet), -1))[:, components].flatten()
+    def _constrainedDofsOf(self, dirichlet: StepActionBase) -> np.ndarray:
+        """Return the global DOF indices prescribed by a single Dirichlet BC.
 
-        return indices
+        The DofManager knows every DOF of ``field`` on ``nSet``, laid out node
+        by node in a single flat array::
+
+            [ node0: (u_x u_y u_z),  node1: (u_x u_y u_z),  ... ]
+
+        A BC usually prescribes only some of the per-node components (given by
+        ``dirichlet.components``, e.g. just u_x and u_z). So we view the flat
+        array as one row per node, keep only the prescribed component columns,
+        and flatten it back into a plain list of global DOF indices. The order
+        stays node-major, matching ``getPrescribedIncrement().flatten()``.
+        """
+        dofsOfFieldOnNodeSet = self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[dirichlet.field][dirichlet.nSet]
+        perNodeDofs = dofsOfFieldOnNodeSet.reshape((-1, dirichlet.fieldSize))
+
+        return perNodeDofs[:, dirichlet.components].flatten()
+
+    def buildMPCTransformation(self, model: FEModel):
+        """Collect the linear dependency records from all multi-point constraints of the model
+        and assemble the master-slave condensation operator for the current equation system.
+        Must be called whenever the DofManager is (re)built.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+
+        Returns
+        -------
+        MultiPointConstraintTransformation | None
+            The assembled transformation, or None if the model has no multi-point constraints.
+        """
+
+        if not model.multiPointConstraints:
+            return None
+
+        if not self.supportsMPC:
+            raise NotImplementedError(
+                f"Multi-point constraints (e.g. surface ties) are not supported by the {self.identification} solver."
+            )
+
+        records = [
+            record
+            for mpc in model.multiPointConstraints.values()
+            for record in mpc.getMultiPointConstraints(self.theDofManager)
+        ]
+
+        transformation = MultiPointConstraintTransformation(records, self.theDofManager.nDof)
+
+        self.journal.message(
+            "eliminating {:} slave DOF(s) via multi-point constraints".format(transformation.nEliminatedDof),
+            self.identification,
+            0,
+        )
+
+        return transformation
+
+    def checkMPCDirichletConflicts(self, transformation, stepActions):
+        """Raise if any Dirichlet boundary condition of the step prescribes a DOF that is a slave
+        DOF of a multi-point constraint.
+
+        Parameters
+        ----------
+        transformation
+            The assembled MultiPointConstraintTransformation (may be None).
+        stepActions
+            The step's actions dictionary.
+        """
+
+        if transformation is None:
+            return
+
+        for dirichlet in stepActions["dirichlet"].values():
+            transformation.checkDirichletConflicts(self._constrainedDofsOf(dirichlet))

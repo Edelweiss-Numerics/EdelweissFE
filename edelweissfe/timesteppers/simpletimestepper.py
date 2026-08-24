@@ -27,11 +27,12 @@
 # Created on Sat Jan  21 12:18:10 2017
 
 from edelweissfe.journal.journal import Journal
+from edelweissfe.timesteppers.base.timestepperbase import TimeStepperBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import ReachedMaxIncrements, ReachedMinIncrementSize
 
 
-class SimpleTimeStepper:
+class SimpleTimeStepper(TimeStepperBase):
     identification = "SimpleTimeStepper"
 
     def __init__(
@@ -99,7 +100,7 @@ class SimpleTimeStepper:
         if self.enforcedTimeIncrement is None:
             while self.finishedStepProgress < (1.0 - 1e-15):
                 if self.totalIncrements >= self.maxNumberIncrements:
-                    self.journal.errorMessage("Reached maximum number of increments", self.identification)
+                    self.journal.message("Reached maximum number of increments", self.identification)
                     raise ReachedMaxIncrements()
                 if self.increment > self.maxIncrement:
                     self.increment = self.maxIncrement
@@ -126,7 +127,7 @@ class SimpleTimeStepper:
         else:
             while self.finishedStepProgress < (1.0 - 1e-15):
                 if self.totalIncrements >= self.maxNumberIncrements:
-                    self.journal.errorMessage("Reached maximum number of increments", self.identification)
+                    self.journal.message("Reached maximum number of increments", self.identification)
                     raise ReachedMaxIncrements()
                 if self.increment > self.maxIncrement:
                     self.increment = self.maxIncrement
@@ -218,3 +219,7 @@ class SimpleTimeStepper:
             2,
         )
         self.totalIncrements -= 1
+
+    def preventIncrementIncrease(self):
+        """This time stepper never increases the increment size automatically,
+        hence this is a no-op."""

@@ -5,6 +5,7 @@ Documentation
    :maxdepth: 2
 
    syntax
+   inputsystem
    jobs
    models
    solvers
@@ -12,6 +13,8 @@ Documentation
    steps
    analyticalfields
    constraints
+   rigidbodies
+   contacttheory
    dofmanager
    fieldoutputmanager
    fields
@@ -21,6 +24,7 @@ Documentation
    journal
    materials
    mesh
+   modelmodifiers
    output
    parallelization
    phenomena

@@ -74,230 +74,252 @@ Generate meshes on the fly using the following syntax:
         nZ=2
 """
 
-
 import copy
+from dataclasses import dataclass
 
 import numpy as np
 
 from edelweissfe.config.elementlibrary import getElementClass
-from edelweissfe.generators.boxgen import generateModelData as generateBoxMesh
+from edelweissfe.generators.base.generatorbase import GeneratorBase
+from edelweissfe.generators.boxgen import BoxgenSchema
+from edelweissfe.generators.boxgen import Generator as BoxGenerator
 from edelweissfe.generators.microstructuregenerator import replicateMesh
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
-
-module = Module("cuboidlatticegenerator", "A mesh generator for generating cuboid lattice structure.")
-
-inputLanguage = InputLanguage()
-
-keyword = "modelGenerator"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-# module.addOptionalArg("x0", "Origin along the x axis.", float, 0.0)
-# module.addOptionalArg("y0", "Origin along the y axis.", float, 0.0)
-# module.addOptionalArg("z0", "Origin along the z axis.", float, 0.0)
-
-module.addOptionalArg("lX", "Length of the body along the x axis.", float, 1.0)
-module.addOptionalArg("lY", "Length of the body along the y axis.", float, 1.0)
-module.addOptionalArg("lZ", "Length of the body along the z axis.", float, 1.0)
-
-module.addOptionalArg("nEleX", "Number of elements along the x axis.", int, 1)
-module.addOptionalArg("nEleY", "Number of elements along the y axis.", int, 1)
-module.addOptionalArg("nEleZ", "Number of elements along the z axis.", int, 1)
-
-module.addOptionalArg("nEleStrutX", "Number of in struts along the x axis.", int, 1)
-module.addOptionalArg("nEleStrutY", "Number of in struts along the y axis.", int, 1)
-module.addOptionalArg("nEleStrutZ", "Number of in struts along the z axis.", int, 1)
-
-module.addOptionalArg("nX", "Number of replications along the x axis.", int, 1)
-module.addOptionalArg("nY", "Number of replications along the y axis.", int, 1)
-module.addOptionalArg("nZ", "Number of replications along the z axis.", int, 1)
-
-module.addRequiredArg("elType", "Element type.", str)
-module.addOptionalArg("elProvider", "Element provider.", str, None)
-
-documentation = [module]
+from edelweissfe.utils.schema import schemaField
 
 
-@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-@castKwargsValuesAndAddDefaults(module)
-def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args, **kwargs) -> dict:
-    kwargs = CaseInsensitiveDict(kwargs)
+@dataclass(frozen=True)
+class CuboidLatticeGeneratorSchema:
+    """The options this generator accepts, owned by this module and never mutated from outside
+    it.
 
-    name = generatorDefinition.get("name", "boxGen")
+    ``elType`` is declared ``required=True`` explicitly, but is still given a ``default=None`` so
+    the schema remains constructible for the constructor's default argument.
+    """
 
-    # x0 = kwargs["x0"]
-    # y0 = kwargs["y0"]
-    # z0 = kwargs["z0"]
+    lX: float = schemaField(description="Length of the body along the x axis.", dtype=float, default=1.0)
+    lY: float = schemaField(description="Length of the body along the y axis.", dtype=float, default=1.0)
+    lZ: float = schemaField(description="Length of the body along the z axis.", dtype=float, default=1.0)
+    nEleX: int = schemaField(description="Number of elements along the x axis.", dtype=int, default=1)
+    nEleY: int = schemaField(description="Number of elements along the y axis.", dtype=int, default=1)
+    nEleZ: int = schemaField(description="Number of elements along the z axis.", dtype=int, default=1)
+    nEleStrutX: int = schemaField(description="Number of in struts along the x axis.", dtype=int, default=1)
+    nEleStrutY: int = schemaField(description="Number of in struts along the y axis.", dtype=int, default=1)
+    nEleStrutZ: int = schemaField(description="Number of in struts along the z axis.", dtype=int, default=1)
+    nX: int = schemaField(description="Number of replications along the x axis.", dtype=int, default=1)
+    nY: int = schemaField(description="Number of replications along the y axis.", dtype=int, default=1)
+    nZ: int = schemaField(description="Number of replications along the z axis.", dtype=int, default=1)
+    elType: str | None = schemaField(description="Element type.", dtype=str, default=None, required=True)
+    elProvider: str | None = schemaField(description="Element provider.", dtype=str, default=None)
 
-    lX = kwargs["lX"]
-    lY = kwargs["lY"]
-    lZ = kwargs["lZ"]
 
-    nEleX = kwargs["nEleX"]
-    nEleY = kwargs["nEleY"]
-    nEleZ = kwargs["nEleZ"]
+class Generator(GeneratorBase):
+    """A mesh generator for generating cuboid lattice structure."""
 
-    nEleStrutX = kwargs["nEleStrutX"]
-    nEleStrutY = kwargs["nEleStrutY"]
-    nEleStrutZ = kwargs["nEleStrutZ"]
+    #: Option schema for this generator, per OptionSchemaProvider.
+    schema = CuboidLatticeGeneratorSchema
 
-    nX = kwargs["nX"]
-    nY = kwargs["nY"]
-    nZ = kwargs["nZ"]
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        journal: Journal,
+        *,
+        configuration: CuboidLatticeGeneratorSchema = CuboidLatticeGeneratorSchema(),
+    ):
+        """Constructible standalone, with no parser involvement.
+        Populates ``model`` directly; construction *is* the generation.
 
-    elementType = getElementClass(kwargs["elType"], kwargs["elProvider"])
+        Parameters
+        ----------
+        name
+            The name of this generator instance, used as the prefix for the generated sets.
+        model
+            The model tree to populate. Mutated in place.
+        journal
+            The journal object for logging.
+        configuration
+            The options this generator accepts; ``elType`` is still required, see
+            :class:`CuboidLatticeGeneratorSchema`.
+        """
+        lX = configuration.lX
+        lY = configuration.lY
+        lZ = configuration.lZ
 
-    boxgeneratorDefinition = generatorDefinition.copy()
-    boxgenKwargs = dict(
-        lX=lX,
-        lY=lY,
-        lZ=lZ,
-        nX=nEleX,
-        nY=nEleY,
-        nZ=nEleZ,
-        elType=kwargs["elType"],
-    )
-    if kwargs["elProvider"] is not None:
-        boxgenKwargs.update(dict(elProvider=kwargs["elProvider"]))
+        nEleX = configuration.nEleX
+        nEleY = configuration.nEleY
+        nEleZ = configuration.nEleZ
 
-    boxmodel = copy.deepcopy(model)
-    boxmodel = generateBoxMesh(boxgeneratorDefinition, boxmodel, journal, **boxgenKwargs)
+        nEleStrutX = configuration.nEleStrutX
+        nEleStrutY = configuration.nEleStrutY
+        nEleStrutZ = configuration.nEleStrutZ
 
-    lStrutX = nEleStrutX * lX / nEleX
-    lStrutY = nEleStrutY / (nEleY) * lY
-    lStrutZ = nEleStrutZ / (nEleZ) * lZ
+        nX = configuration.nX
+        nY = configuration.nY
+        nZ = configuration.nZ
 
-    # compute coordinates of nodes to keep
-    xToDelete = (lStrutX, lX - lStrutX)
-    yToDelete = (lStrutY, lY - lStrutY)
-    zToDelete = (lStrutZ, lZ - lStrutZ)
+        elementType = getElementClass(configuration.elType, configuration.elProvider)
 
-    elements = {}
-    nodes = {}
+        boxmodel = copy.deepcopy(model)
+        BoxGenerator(
+            name,
+            boxmodel,
+            journal,
+            configuration=BoxgenSchema(
+                lX=lX,
+                lY=lY,
+                lZ=lZ,
+                nX=nEleX,
+                nY=nEleY,
+                nZ=nEleZ,
+                elType=configuration.elType,
+                elProvider=configuration.elProvider,
+            ),
+        )
 
-    idx = 1
-    for el in boxmodel.elements.values():
-        nodeCoords = np.array([el.nodes[i].coordinates for i in range(len(el.nodes))])
-        xCoords = nodeCoords[:, 0]
-        yCoords = nodeCoords[:, 1]
-        zCoords = nodeCoords[:, 2]
+        lStrutX = nEleStrutX * lX / nEleX
+        lStrutY = nEleStrutY / (nEleY) * lY
+        lStrutZ = nEleStrutZ / (nEleZ) * lZ
 
-        deleteElement = False
-        # delete element if all x coords are in between xToDelete
-        if np.all((xCoords >= xToDelete[0] - 1e-8) & (xCoords <= xToDelete[1] + 1e-8)):
-            if np.all((yCoords >= yToDelete[0] - 1e-8) & (yCoords <= yToDelete[1] + 1e-8)) or np.all(
-                (zCoords >= zToDelete[0] - 1e-8) & (zCoords <= zToDelete[1] + 1e-8)
-            ):
-                deleteElement = True
+        # compute coordinates of nodes to keep
+        xToDelete = (lStrutX, lX - lStrutX)
+        yToDelete = (lStrutY, lY - lStrutY)
+        zToDelete = (lStrutZ, lZ - lStrutZ)
 
-        if np.all((yCoords >= yToDelete[0] - 1e-8) & (yCoords <= yToDelete[1] + 1e-8)):
-            if np.all((zCoords >= zToDelete[0] - 1e-8) & (zCoords <= zToDelete[1] + 1e-8)):
-                deleteElement = True
+        elements = {}
+        nodes = {}
 
-        if not deleteElement:
-            new = elementType(kwargs["elType"], idx)
-            new.setNodes([node for node in el.nodes])
-            elements[idx] = new
-            idx += 1
+        idx = 1
+        for el in boxmodel.elements.values():
+            nodeCoords = np.array([el.nodes[i].coordinates for i in range(len(el.nodes))])
+            xCoords = nodeCoords[:, 0]
+            yCoords = nodeCoords[:, 1]
+            zCoords = nodeCoords[:, 2]
 
-    idx = 1
-    for node in boxmodel.nodes.values():
-        # check if node is used by any remaining element
-        nodeUsed = False
-        for el in elements.values():
-            if node in el.nodes:
-                nodeUsed = True
-                break
-        if nodeUsed:
-            nodes[idx] = node
-            idx += 1
+            deleteElement = False
+            # delete element if all x coords are in between xToDelete
+            if np.all((xCoords >= xToDelete[0] - 1e-8) & (xCoords <= xToDelete[1] + 1e-8)):
+                if np.all((yCoords >= yToDelete[0] - 1e-8) & (yCoords <= yToDelete[1] + 1e-8)) or np.all(
+                    (zCoords >= zToDelete[0] - 1e-8) & (zCoords <= zToDelete[1] + 1e-8)
+                ):
+                    deleteElement = True
 
-    model.nodes = nodes
-    model.elements = elements
+            if np.all((yCoords >= yToDelete[0] - 1e-8) & (yCoords <= yToDelete[1] + 1e-8)):
+                if np.all((zCoords >= zToDelete[0] - 1e-8) & (zCoords <= zToDelete[1] + 1e-8)):
+                    deleteElement = True
 
-    # get unit cell dimensions
-    x_min = 0
-    x_max = lX
-    y_min = 0
-    y_max = lY
-    z_min = 0
-    z_max = lZ
+            if not deleteElement:
+                new = elementType(configuration.elType, idx)
+                new.setNodes([node for node in el.nodes])
+                elements[idx] = new
+                idx += 1
 
-    elementSets = []
-    elementSets.append(ElementSet("{:}_all".format(name), elements.values()))
+        idx = 1
+        for node in boxmodel.nodes.values():
+            # check if node is used by any remaining element
+            nodeUsed = False
+            for el in elements.values():
+                if node in el.nodes:
+                    nodeUsed = True
+                    break
+            if nodeUsed:
+                nodes[idx] = node
+                idx += 1
 
-    model.elementSets = {es.name: es for es in elementSets}
+        model.nodes = nodes
+        model.elements = elements
 
-    nodel_label_to_index = {node.label: idx for idx, node in enumerate(model.nodes.values())}
-    for node in model.nodes.values():
-        node.label = nodel_label_to_index[node.label] + 1  # re-label nodes to have continuous numbering
+        # get unit cell dimensions
+        x_min = 0
+        x_max = lX
+        y_min = 0
+        y_max = lY
+        z_min = 0
+        z_max = lZ
 
-    # replicate the mesh of the unit cell in x direction
-    model = replicateMesh(
-        model, direction=0, nReplications=nX, elementType=elementType, options=kwargs, journal=journal
-    )
-    model = replicateMesh(
-        model, direction=1, nReplications=nY, elementType=elementType, options=kwargs, journal=journal
-    )
-    model = replicateMesh(
-        model, direction=2, nReplications=nZ, elementType=elementType, options=kwargs, journal=journal
-    )
+        elementSets = []
+        elementSets.append(ElementSet("{:}_all".format(name), elements.values()))
 
-    model._populateNodeFieldVariablesFromElements()
+        model.elementSets = {es.name: es for es in elementSets}
 
-    # create node sets for boundary conditions
-    nSet_left = set()
-    nSet_right = set()
-    nSet_bottom = set()
-    nSet_top = set()
-    nSet_front = set()
-    nSet_back = set()
-    # add sets for edges as well
-    nSet_top_left = set()
-    nSet_top_right = set()
-    nSet_bottom_left = set()
-    nSet_bottom_right = set()
+        nodel_label_to_index = {node.label: idx for idx, node in enumerate(model.nodes.values())}
+        for node in model.nodes.values():
+            node.label = nodel_label_to_index[node.label] + 1  # re-label nodes to have continuous numbering
 
-    # create node sets for boundaries
-    for nodeID, node in model.nodes.items():
-        if np.isclose(node.coordinates[0], x_min, atol=1e-8):
-            nSet_left.add(node)
-        elif np.isclose(node.coordinates[0], x_max + (nX - 1) * lX, atol=1e-8):
-            nSet_right.add(node)
-        if np.isclose(node.coordinates[1], y_min, atol=1e-8):
-            nSet_bottom.add(node)
+        # replicate the mesh of the unit cell in x direction
+        replicateMesh(
+            model,
+            direction=0,
+            nReplications=nX,
+            elementType=elementType,
+            elTypeName=configuration.elType,
+            journal=journal,
+        )
+        replicateMesh(
+            model,
+            direction=1,
+            nReplications=nY,
+            elementType=elementType,
+            elTypeName=configuration.elType,
+            journal=journal,
+        )
+        replicateMesh(
+            model,
+            direction=2,
+            nReplications=nZ,
+            elementType=elementType,
+            elTypeName=configuration.elType,
+            journal=journal,
+        )
+
+        model._populateNodeFieldVariablesFromElements()
+
+        # create node sets for boundary conditions
+        nSet_left = set()
+        nSet_right = set()
+        nSet_bottom = set()
+        nSet_top = set()
+        nSet_front = set()
+        nSet_back = set()
+        # add sets for edges as well
+        nSet_top_left = set()
+        nSet_top_right = set()
+        nSet_bottom_left = set()
+        nSet_bottom_right = set()
+
+        # create node sets for boundaries
+        for nodeID, node in model.nodes.items():
             if np.isclose(node.coordinates[0], x_min, atol=1e-8):
-                nSet_bottom_left.add(node)
+                nSet_left.add(node)
             elif np.isclose(node.coordinates[0], x_max + (nX - 1) * lX, atol=1e-8):
-                nSet_bottom_right.add(node)
-        elif np.isclose(node.coordinates[1], y_max + (nY - 1) * lY, atol=1e-8):
-            nSet_top.add(node)
-            if np.isclose(node.coordinates[0], x_min, atol=1e-8):
-                nSet_top_left.add(node)
-            elif np.isclose(node.coordinates[0], x_max + (nX - 1) * lX, atol=1e-8):
-                nSet_top_right.add(node)
-        if np.isclose(node.coordinates[2], z_min, atol=1e-8):
-            nSet_front.add(node)
-        elif np.isclose(node.coordinates[2], z_max + (nZ - 1) * lZ, atol=1e-8):
-            nSet_back.add(node)
+                nSet_right.add(node)
+            if np.isclose(node.coordinates[1], y_min, atol=1e-8):
+                nSet_bottom.add(node)
+                if np.isclose(node.coordinates[0], x_min, atol=1e-8):
+                    nSet_bottom_left.add(node)
+                elif np.isclose(node.coordinates[0], x_max + (nX - 1) * lX, atol=1e-8):
+                    nSet_bottom_right.add(node)
+            elif np.isclose(node.coordinates[1], y_max + (nY - 1) * lY, atol=1e-8):
+                nSet_top.add(node)
+                if np.isclose(node.coordinates[0], x_min, atol=1e-8):
+                    nSet_top_left.add(node)
+                elif np.isclose(node.coordinates[0], x_max + (nX - 1) * lX, atol=1e-8):
+                    nSet_top_right.add(node)
+            if np.isclose(node.coordinates[2], z_min, atol=1e-8):
+                nSet_front.add(node)
+            elif np.isclose(node.coordinates[2], z_max + (nZ - 1) * lZ, atol=1e-8):
+                nSet_back.add(node)
 
-    model.nodeSets[f"{name}_left"] = NodeSet(f"{name}_left", nSet_left)
-    model.nodeSets[f"{name}_right"] = NodeSet(f"{name}_right", nSet_right)
-    model.nodeSets[f"{name}_bottom"] = NodeSet(f"{name}_bottom", nSet_bottom)
-    model.nodeSets[f"{name}_top"] = NodeSet(f"{name}_top", nSet_top)
-    model.nodeSets[f"{name}_front"] = NodeSet(f"{name}_front", nSet_front)
-    model.nodeSets[f"{name}_back"] = NodeSet(f"{name}_back", nSet_back)
-    model.nodeSets[f"{name}_bottom_left"] = NodeSet(f"{name}_bottom_left", nSet_bottom_left)
-    model.nodeSets[f"{name}_bottom_right"] = NodeSet(f"{name}_bottom_right", nSet_bottom_right)
-    model.nodeSets[f"{name}_top_left"] = NodeSet(f"{name}_top_left", nSet_top_left)
-    model.nodeSets[f"{name}_top_right"] = NodeSet(f"{name}_top_right", nSet_top_right)
-
-    return model
+        model.nodeSets[f"{name}_left"] = NodeSet(f"{name}_left", nSet_left)
+        model.nodeSets[f"{name}_right"] = NodeSet(f"{name}_right", nSet_right)
+        model.nodeSets[f"{name}_bottom"] = NodeSet(f"{name}_bottom", nSet_bottom)
+        model.nodeSets[f"{name}_top"] = NodeSet(f"{name}_top", nSet_top)
+        model.nodeSets[f"{name}_front"] = NodeSet(f"{name}_front", nSet_front)
+        model.nodeSets[f"{name}_back"] = NodeSet(f"{name}_back", nSet_back)
+        model.nodeSets[f"{name}_bottom_left"] = NodeSet(f"{name}_bottom_left", nSet_bottom_left)
+        model.nodeSets[f"{name}_bottom_right"] = NodeSet(f"{name}_bottom_right", nSet_bottom_right)
+        model.nodeSets[f"{name}_top_left"] = NodeSet(f"{name}_top_left", nSet_top_left)
+        model.nodeSets[f"{name}_top_right"] = NodeSet(f"{name}_top_right", nSet_top_right)

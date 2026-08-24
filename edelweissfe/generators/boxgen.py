@@ -63,401 +63,416 @@ are automatically generated
         elType  =C3D20R
 """
 
+from dataclasses import dataclass
 from operator import attrgetter
 
 import numpy as np
 
 from edelweissfe.config.elementlibrary import getElementClass
+from edelweissfe.generators.base.generatorbase import GeneratorBase
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
-
-module = Module("boxgen", "A mesh generator for cuboid geometries and structured hex meshes.")
-
-inputLanguage = InputLanguage()
-
-keyword = "modelGenerator"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addOptionalArg("x0", "Origin along the x axis.", float, 0.0)
-module.addOptionalArg("y0", "Origin along the y axis.", float, 0.0)
-module.addOptionalArg("z0", "Origin along the z axis.", float, 0.0)
-
-module.addOptionalArg("lX", "Length of the body along the x axis.", float, 1.0)
-module.addOptionalArg("lY", "Length of the body along the y axis.", float, 1.0)
-module.addOptionalArg("lZ", "Length of the body along the z axis.", float, 1.0)
-
-module.addOptionalArg("nX", "Number of elements along the x axis.", int, 1)
-module.addOptionalArg("nY", "Number of elements along the y axis.", int, 1)
-module.addOptionalArg("nZ", "Number of elements along the z axis.", int, 1)
-
-module.addRequiredArg("elType", "Element type.", str)
-module.addOptionalArg("elProvider", "Element provider.", str, None)
-
-documentation = [module]
+from edelweissfe.surfaces.entitybasedsurface import EntityBasedSurface
+from edelweissfe.utils.schema import schemaField
 
 
-@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-@castKwargsValuesAndAddDefaults(module)
-def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args, **kwargs) -> dict:
-    kwargs = CaseInsensitiveDict(kwargs)
+@dataclass(frozen=True)
+class BoxgenSchema:
+    """The options this generator accepts, owned by this module and never mutated from outside
+    it.
 
-    name = generatorDefinition.get("name", "boxGen")
+    ``elType`` is declared ``required=True`` explicitly, but is still given a ``default=None`` so
+    the schema remains constructible for the constructor's default argument.
+    """
 
-    x0 = kwargs["x0"]
-    y0 = kwargs["y0"]
-    z0 = kwargs["z0"]
-    lX = kwargs["lX"]
-    lY = kwargs["lY"]
-    lZ = kwargs["lZ"]
-    nX = kwargs["nX"]
-    nY = kwargs["nY"]
-    nZ = kwargs["nZ"]
-    elType = getElementClass(kwargs["elType"], kwargs["elProvider"])
+    x0: float = schemaField(description="Origin along the x axis.", dtype=float, default=0.0)
+    y0: float = schemaField(description="Origin along the y axis.", dtype=float, default=0.0)
+    z0: float = schemaField(description="Origin along the z axis.", dtype=float, default=0.0)
+    lX: float = schemaField(description="Length of the body along the x axis.", dtype=float, default=1.0)
+    lY: float = schemaField(description="Length of the body along the y axis.", dtype=float, default=1.0)
+    lZ: float = schemaField(description="Length of the body along the z axis.", dtype=float, default=1.0)
+    nX: int = schemaField(description="Number of elements along the x axis.", dtype=int, default=1)
+    nY: int = schemaField(description="Number of elements along the y axis.", dtype=int, default=1)
+    nZ: int = schemaField(description="Number of elements along the z axis.", dtype=int, default=1)
+    elType: str | None = schemaField(description="Element type.", dtype=str, default=None, required=True)
+    elProvider: str | None = schemaField(description="Element provider.", dtype=str, default=None)
 
-    testEl = elType(kwargs["elType"], 0)
 
-    if testEl.nNodes == 8:
-        nNodesX = nX + 1
-        nNodesY = nY + 1
-        nNodesZ = nZ + 1
-    elif testEl.nNodes == 20:
-        nNodesX = 2 * nX + 1
-        nNodesY = 2 * nY + 1
-        nNodesZ = 2 * nZ + 1
-    else:
-        return
+class Generator(GeneratorBase):
+    """A mesh generator for cuboid geometries and structured hex meshes."""
 
-    # coordinates of layers
-    xLayers = np.linspace(x0, x0 + lX, nNodesX)
-    yLayers = np.linspace(y0, y0 + lY, nNodesY)
-    zLayers = np.linspace(z0, z0 + lZ, nNodesZ)
+    #: Option schema for this generator, per OptionSchemaProvider.
+    schema = BoxgenSchema
 
-    nodes = []
-    currentNodeLabel = 1
-    if model.nodes:
-        currentNodeLabel += max(model.nodes.keys())
-    for ix in range(nNodesX):
-        for iy in range(nNodesY):
-            for iz in range(nNodesZ):
-                node = Node(currentNodeLabel, np.array([xLayers[ix], yLayers[iy], zLayers[iz]]))
-                nodes.append(node)
-                # only add node to model if it will be part of an element
-                if testEl.nNodes == 8 or testEl.nNodes == 20 and sum(np.mod([ix, iy, iz], 2)) < 2:
-                    model.nodes[currentNodeLabel] = node
-                    currentNodeLabel += 1
+    def __init__(self, name: str, model: FEModel, journal: Journal, *, configuration: BoxgenSchema = BoxgenSchema()):
+        """Constructible standalone, with no parser involvement.
+        Populates ``model`` directly; construction *is* the generation.
 
-    # # 3d plot of nodes; for debugging
-    # def plotNodeList( nodeList ):
-    #     nodeListFile = "nodes.dat"
-    #     with open( nodeListFile, "w+" ) as f:
-    #         for node in nodeList:
-    #             coords = node.coordinates
-    #             line = "{:5}, {:12}, {:12}, {:12}\n".format( node.label, coords[0], coords[1], coords[2] )
-    #             f.write( line )
+        Parameters
+        ----------
+        name
+            The name of this generator instance, used as the prefix for the generated sets.
+        model
+            The model tree to populate. Mutated in place.
+        journal
+            Unused.
+        configuration
+            The options this generator accepts; ``elType`` is still required, see
+            :class:`BoxgenSchema`.
+        """
+        x0 = configuration.x0
+        y0 = configuration.y0
+        z0 = configuration.z0
+        lX = configuration.lX
+        lY = configuration.lY
+        lZ = configuration.lZ
+        nX = configuration.nX
+        nY = configuration.nY
+        nZ = configuration.nZ
+        elType = getElementClass(configuration.elType, configuration.elProvider)
 
-    #     cmd = [ "gnuplot",
-    #             "plotConfig",
-    #             "-p",
-    #             "-e",
-    #             "\' filename=\"{}\"; splot filename using 4:2:3:(sprintf(\"(%i)\", $1)) with labels \'".format( nodeListFile ) ]
-    #     os.system( " ".join( cmd ) )
+        testEl = elType(configuration.elType, 0)
 
-    # plotNodeList( nodes )
-    # plotNodeList( [model.nodes[n] for n in model.nodes] )
+        if testEl.nNodes == 8:
+            nNodesX = nX + 1
+            nNodesY = nY + 1
+            nNodesZ = nZ + 1
+        elif testEl.nNodes == 20:
+            nNodesX = 2 * nX + 1
+            nNodesY = 2 * nY + 1
+            nNodesZ = 2 * nZ + 1
+        else:
+            return
 
-    # fmt: off
+        # coordinates of layers
+        xLayers = np.linspace(x0, x0 + lX, nNodesX)
+        yLayers = np.linspace(y0, y0 + lY, nNodesY)
+        zLayers = np.linspace(z0, z0 + lZ, nNodesZ)
 
-    elements = []
-    currentElementLabel = 1
-    if model.elements:
-        currentElementLabel += max(model.elements.keys())
-    for ix in range(nX):
-        for iy in range(nY):
-            for iz in range(nZ):
-                if testEl.nNodes == 8:
-                    nodeList = [
-                        nodes[0 + ix * (nNodesY * nNodesZ) + iy * nNodesZ + iz],
-                        nodes[1 + ix * (nNodesY * nNodesZ) + iy * nNodesZ + iz],
-                        nodes[1 + (1 + ix) * (nNodesY * nNodesZ) + iy * nNodesZ + iz],
-                        nodes[0 + (1 + ix) * (nNodesY * nNodesZ) + iy * nNodesZ + iz],
-                        nodes[0 + ix * (nNodesY * nNodesZ) + (1 + iy) * nNodesZ + iz],
-                        nodes[1 + ix * (nNodesY * nNodesZ) + (1 + iy) * nNodesZ + iz],
-                        nodes[
-                            1 + (1 + ix) * (nNodesY * nNodesZ) + (1 + iy) * nNodesZ + iz
-                        ],
-                        nodes[
-                            0 + (1 + ix) * (nNodesY * nNodesZ) + (1 + iy) * nNodesZ + iz
-                        ],
-                    ]
-                elif testEl.nNodes == 20:
-                    nodeList = [
-                        nodes[
-                            0 + 2 * ix * (nNodesY * nNodesZ) + 2 * iy * nNodesZ + 2 * iz
-                        ],
-                        nodes[
-                            2 + 2 * ix * (nNodesY * nNodesZ) + 2 * iy * nNodesZ + 2 * iz
-                        ],
-                        nodes[
-                            2
-                            + 2 * (1 + ix) * (nNodesY * nNodesZ)
-                            + 2 * iy * nNodesZ
-                            + 2 * iz
-                        ],
-                        nodes[
-                            0
-                            + 2 * (1 + ix) * (nNodesY * nNodesZ)
-                            + 2 * iy * nNodesZ
-                            + 2 * iz
-                        ],
-                        nodes[
-                            0
-                            + 2 * ix * (nNodesY * nNodesZ)
-                            + 2 * (1 + iy) * nNodesZ
-                            + 2 * iz
-                        ],
-                        nodes[
-                            2
-                            + 2 * ix * (nNodesY * nNodesZ)
-                            + 2 * (1 + iy) * nNodesZ
-                            + 2 * iz
-                        ],
-                        nodes[
-                            2
-                            + 2 * (1 + ix) * (nNodesY * nNodesZ)
-                            + 2 * (1 + iy) * nNodesZ
-                            + 2 * iz
-                        ],
-                        nodes[
-                            0
-                            + 2 * (1 + ix) * (nNodesY * nNodesZ)
-                            + 2 * (1 + iy) * nNodesZ
-                            + 2 * iz
-                        ],
-                        nodes[
-                            1 + 2 * ix * (nNodesY * nNodesZ) + 2 * iy * nNodesZ + 2 * iz
-                        ],
-                        nodes[
-                            2
-                            + (1 + 2 * ix) * (nNodesY * nNodesZ)
-                            + 2 * iy * nNodesZ
-                            + 2 * iz
-                        ],
-                        nodes[
-                            1
-                            + 2 * (1 + ix) * (nNodesY * nNodesZ)
-                            + 2 * iy * nNodesZ
-                            + 2 * iz
-                        ],
-                        nodes[
-                            0
-                            + (1 + 2 * ix) * (nNodesY * nNodesZ)
-                            + 2 * iy * nNodesZ
-                            + 2 * iz
-                        ],
-                        nodes[
-                            1
-                            + 2 * ix * (nNodesY * nNodesZ)
-                            + 2 * (1 + iy) * nNodesZ
-                            + 2 * iz
-                        ],
-                        nodes[
-                            2
-                            + (1 + 2 * ix) * (nNodesY * nNodesZ)
-                            + 2 * (1 + iy) * nNodesZ
-                            + 2 * iz
-                        ],
-                        nodes[
-                            1
-                            + 2 * (1 + ix) * (nNodesY * nNodesZ)
-                            + 2 * (1 + iy) * nNodesZ
-                            + 2 * iz
-                        ],
-                        nodes[
-                            0
-                            + (1 + 2 * ix) * (nNodesY * nNodesZ)
-                            + 2 * (1 + iy) * nNodesZ
-                            + 2 * iz
-                        ],
-                        nodes[
-                            0
-                            + 2 * ix * (nNodesY * nNodesZ)
-                            + (1 + 2 * iy) * nNodesZ
-                            + 2 * iz
-                        ],
-                        nodes[
-                            2
-                            + 2 * ix * (nNodesY * nNodesZ)
-                            + (1 + 2 * iy) * nNodesZ
-                            + 2 * iz
-                        ],
-                        nodes[
-                            2
-                            + 2 * (1 + ix) * (nNodesY * nNodesZ)
-                            + (1 + 2 * iy) * nNodesZ
-                            + 2 * iz
-                        ],
-                        nodes[
-                            0
-                            + 2 * (1 + ix) * (nNodesY * nNodesZ)
-                            + (1 + 2 * iy) * nNodesZ
-                            + 2 * iz
-                        ],
-                    ]
-                else:
-                    return
+        nodes = []
+        currentNodeLabel = 1
+        if model.nodes:
+            currentNodeLabel += max(model.nodes.keys())
+        for ix in range(nNodesX):
+            for iy in range(nNodesY):
+                for iz in range(nNodesZ):
+                    node = Node(currentNodeLabel, np.array([xLayers[ix], yLayers[iy], zLayers[iz]]))
+                    nodes.append(node)
+                    # only add node to model if it will be part of an element
+                    if testEl.nNodes == 8 or testEl.nNodes == 20 and sum(np.mod([ix, iy, iz], 2)) < 2:
+                        model.nodes[currentNodeLabel] = node
+                        currentNodeLabel += 1
 
-                # plotNodeList( nodeList )
+        # # 3d plot of nodes; for debugging
+        # def plotNodeList( nodeList ):
+        #     nodeListFile = "nodes.dat"
+        #     with open( nodeListFile, "w+" ) as f:
+        #         for node in nodeList:
+        #             coords = node.coordinates
+        #             line = "{:5}, {:12}, {:12}, {:12}\n".format( node.label, coords[0], coords[1], coords[2] )
+        #             f.write( line )
 
-                # newEl = elType(options["elType"], nodeList, currentElementLabel)
-                newEl = elType(kwargs["elType"], currentElementLabel)
-                newEl.setNodes(nodeList)
+        #     cmd = [ "gnuplot",
+        #             "plotConfig",
+        #             "-p",
+        #             "-e",
+        #             "\' filename=\"{}\"; splot filename using 4:2:3:(sprintf(\"(%i)\", $1)) with labels \'".format( nodeListFile ) ]
+        #     os.system( " ".join( cmd ) )
 
-                elements.append(newEl)
-                model.elements[currentElementLabel] = newEl
+        # plotNodeList( nodes )
+        # plotNodeList( [model.nodes[n] for n in model.nodes] )
 
-                # for i, node in enumerate(newEl.nodes):
-                #     node.fields.update([(f, True) for f in newEl.fields[i]])
+        # fmt: off
 
-                currentElementLabel += 1
+        elements = []
+        currentElementLabel = 1
+        if model.elements:
+            currentElementLabel += max(model.elements.keys())
+        for ix in range(nX):
+            for iy in range(nY):
+                for iz in range(nZ):
+                    if testEl.nNodes == 8:
+                        nodeList = [
+                            nodes[0 + ix * (nNodesY * nNodesZ) + iy * nNodesZ + iz],
+                            nodes[1 + ix * (nNodesY * nNodesZ) + iy * nNodesZ + iz],
+                            nodes[1 + (1 + ix) * (nNodesY * nNodesZ) + iy * nNodesZ + iz],
+                            nodes[0 + (1 + ix) * (nNodesY * nNodesZ) + iy * nNodesZ + iz],
+                            nodes[0 + ix * (nNodesY * nNodesZ) + (1 + iy) * nNodesZ + iz],
+                            nodes[1 + ix * (nNodesY * nNodesZ) + (1 + iy) * nNodesZ + iz],
+                            nodes[
+                                1 + (1 + ix) * (nNodesY * nNodesZ) + (1 + iy) * nNodesZ + iz
+                            ],
+                            nodes[
+                                0 + (1 + ix) * (nNodesY * nNodesZ) + (1 + iy) * nNodesZ + iz
+                            ],
+                        ]
+                    elif testEl.nNodes == 20:
+                        nodeList = [
+                            nodes[
+                                0 + 2 * ix * (nNodesY * nNodesZ) + 2 * iy * nNodesZ + 2 * iz
+                            ],
+                            nodes[
+                                2 + 2 * ix * (nNodesY * nNodesZ) + 2 * iy * nNodesZ + 2 * iz
+                            ],
+                            nodes[
+                                2
+                                + 2 * (1 + ix) * (nNodesY * nNodesZ)
+                                + 2 * iy * nNodesZ
+                                + 2 * iz
+                            ],
+                            nodes[
+                                0
+                                + 2 * (1 + ix) * (nNodesY * nNodesZ)
+                                + 2 * iy * nNodesZ
+                                + 2 * iz
+                            ],
+                            nodes[
+                                0
+                                + 2 * ix * (nNodesY * nNodesZ)
+                                + 2 * (1 + iy) * nNodesZ
+                                + 2 * iz
+                            ],
+                            nodes[
+                                2
+                                + 2 * ix * (nNodesY * nNodesZ)
+                                + 2 * (1 + iy) * nNodesZ
+                                + 2 * iz
+                            ],
+                            nodes[
+                                2
+                                + 2 * (1 + ix) * (nNodesY * nNodesZ)
+                                + 2 * (1 + iy) * nNodesZ
+                                + 2 * iz
+                            ],
+                            nodes[
+                                0
+                                + 2 * (1 + ix) * (nNodesY * nNodesZ)
+                                + 2 * (1 + iy) * nNodesZ
+                                + 2 * iz
+                            ],
+                            nodes[
+                                1 + 2 * ix * (nNodesY * nNodesZ) + 2 * iy * nNodesZ + 2 * iz
+                            ],
+                            nodes[
+                                2
+                                + (1 + 2 * ix) * (nNodesY * nNodesZ)
+                                + 2 * iy * nNodesZ
+                                + 2 * iz
+                            ],
+                            nodes[
+                                1
+                                + 2 * (1 + ix) * (nNodesY * nNodesZ)
+                                + 2 * iy * nNodesZ
+                                + 2 * iz
+                            ],
+                            nodes[
+                                0
+                                + (1 + 2 * ix) * (nNodesY * nNodesZ)
+                                + 2 * iy * nNodesZ
+                                + 2 * iz
+                            ],
+                            nodes[
+                                1
+                                + 2 * ix * (nNodesY * nNodesZ)
+                                + 2 * (1 + iy) * nNodesZ
+                                + 2 * iz
+                            ],
+                            nodes[
+                                2
+                                + (1 + 2 * ix) * (nNodesY * nNodesZ)
+                                + 2 * (1 + iy) * nNodesZ
+                                + 2 * iz
+                            ],
+                            nodes[
+                                1
+                                + 2 * (1 + ix) * (nNodesY * nNodesZ)
+                                + 2 * (1 + iy) * nNodesZ
+                                + 2 * iz
+                            ],
+                            nodes[
+                                0
+                                + (1 + 2 * ix) * (nNodesY * nNodesZ)
+                                + 2 * (1 + iy) * nNodesZ
+                                + 2 * iz
+                            ],
+                            nodes[
+                                0
+                                + 2 * ix * (nNodesY * nNodesZ)
+                                + (1 + 2 * iy) * nNodesZ
+                                + 2 * iz
+                            ],
+                            nodes[
+                                2
+                                + 2 * ix * (nNodesY * nNodesZ)
+                                + (1 + 2 * iy) * nNodesZ
+                                + 2 * iz
+                            ],
+                            nodes[
+                                2
+                                + 2 * (1 + ix) * (nNodesY * nNodesZ)
+                                + (1 + 2 * iy) * nNodesZ
+                                + 2 * iz
+                            ],
+                            nodes[
+                                0
+                                + 2 * (1 + ix) * (nNodesY * nNodesZ)
+                                + (1 + 2 * iy) * nNodesZ
+                                + 2 * iz
+                            ],
+                        ]
+                    else:
+                        return
 
-    # fmt: on
-    # model.initializeNodeFields()
-    model._populateNodeFieldVariablesFromElements()
+                    # plotNodeList( nodeList )
 
-    nG = np.asarray(nodes).reshape(nNodesX, nNodesY, nNodesZ)
+                    # newEl = elType(options["elType"], nodeList, currentElementLabel)
+                    newEl = elType(configuration.elType, currentElementLabel)
+                    newEl.setNodes(nodeList)
 
-    # nodesets:
-    nodeSets = []
+                    elements.append(newEl)
+                    model.elements[currentElementLabel] = newEl
 
-    # 6 faces
-    getFields = np.vectorize(attrgetter("fields"))
-    getLength = np.vectorize(len)
-    filterGrid = getLength(getFields(nG)) > 0
+                    # for i, node in enumerate(newEl.nodes):
+                    #     node.fields.update([(f, True) for f in newEl.fields[i]])
 
-    def getFilteredNodes(s):
-        return nG[s][filterGrid[s]]
+                    currentElementLabel += 1
 
-    nodeSets.append(NodeSet("{:}_top".format(name), getFilteredNodes(np.s_[:, -1, :])))
-    nodeSets.append(NodeSet("{:}_bottom".format(name), getFilteredNodes(np.s_[:, 0, :])))
-    nodeSets.append(NodeSet("{:}_right".format(name), getFilteredNodes(np.s_[-1, :, :])))
-    nodeSets.append(NodeSet("{:}_left".format(name), getFilteredNodes(np.s_[0, :, :])))
-    nodeSets.append(NodeSet("{:}_front".format(name), getFilteredNodes(np.s_[:, :, -1])))
-    nodeSets.append(NodeSet("{:}_back".format(name), getFilteredNodes(np.s_[:, :, 0])))
+        # fmt: on
+        # model.initializeNodeFields()
+        model._populateNodeFieldVariablesFromElements()
 
-    # 12 edges
-    nodeSets.append(NodeSet("{:}_bottomRight".format(name), getFilteredNodes(np.s_[-1, 0, :])))
-    nodeSets.append(NodeSet("{:}_bottomLeft".format(name), getFilteredNodes(np.s_[0, 0, :])))
-    nodeSets.append(NodeSet("{:}_bottomFront".format(name), getFilteredNodes(np.s_[:, 0, -1])))
-    nodeSets.append(NodeSet("{:}_bottomBack".format(name), getFilteredNodes(np.s_[:, 0, 0])))
+        nG = np.asarray(nodes).reshape(nNodesX, nNodesY, nNodesZ)
 
-    nodeSets.append(NodeSet("{:}_topRight".format(name), getFilteredNodes(np.s_[-1, -1, :])))
-    nodeSets.append(NodeSet("{:}_topLeft".format(name), getFilteredNodes(np.s_[0, -1, :])))
-    nodeSets.append(NodeSet("{:}_topFront".format(name), getFilteredNodes(np.s_[:, -1, -1])))
-    nodeSets.append(NodeSet("{:}_topBack".format(name), getFilteredNodes(np.s_[:, -1, 0])))
+        # nodesets:
+        nodeSets = []
 
-    nodeSets.append(NodeSet("{:}_rightBack".format(name), getFilteredNodes(np.s_[-1, :, 0])))
-    nodeSets.append(NodeSet("{:}_rightFront".format(name), getFilteredNodes(np.s_[-1, :, -1])))
+        # 6 faces
+        getFields = np.vectorize(attrgetter("fields"))
+        getLength = np.vectorize(len)
+        filterGrid = getLength(getFields(nG)) > 0
 
-    nodeSets.append(NodeSet("{:}_leftBack".format(name), getFilteredNodes(np.s_[0, :, 0])))
-    nodeSets.append(NodeSet("{:}_leftFront".format(name), getFilteredNodes(np.s_[0, :, -1])))
+        def getFilteredNodes(s):
+            return nG[s][filterGrid[s]]
 
-    nodeSets.append(NodeSet("{:}_centerX".format(name), getFilteredNodes(np.s_[int(nNodesX / 2), :, :])))
-    nodeSets.append(NodeSet("{:}_centerY".format(name), getFilteredNodes(np.s_[:, int(nNodesY / 2), :])))
-    nodeSets.append(NodeSet("{:}_centerZ".format(name), getFilteredNodes(np.s_[:, :, int(nNodesZ / 2)])))
+        nodeSets.append(NodeSet("{:}_top".format(name), getFilteredNodes(np.s_[:, -1, :])))
+        nodeSets.append(NodeSet("{:}_bottom".format(name), getFilteredNodes(np.s_[:, 0, :])))
+        nodeSets.append(NodeSet("{:}_right".format(name), getFilteredNodes(np.s_[-1, :, :])))
+        nodeSets.append(NodeSet("{:}_left".format(name), getFilteredNodes(np.s_[0, :, :])))
+        nodeSets.append(NodeSet("{:}_front".format(name), getFilteredNodes(np.s_[:, :, -1])))
+        nodeSets.append(NodeSet("{:}_back".format(name), getFilteredNodes(np.s_[:, :, 0])))
 
-    # 8 vertices
-    nodeSets.append(NodeSet("{:}_bottomRightFront".format(name), nG[-1, 0, -1]))
-    nodeSets.append(NodeSet("{:}_bottomRightBack".format(name), nG[-1, 0, 0]))
-    nodeSets.append(NodeSet("{:}_bottomLeftFront".format(name), nG[0, 0, -1]))
-    nodeSets.append(NodeSet("{:}_bottomLeftBack".format(name), nG[0, 0, 0]))
+        # 12 edges
+        nodeSets.append(NodeSet("{:}_bottomRight".format(name), getFilteredNodes(np.s_[-1, 0, :])))
+        nodeSets.append(NodeSet("{:}_bottomLeft".format(name), getFilteredNodes(np.s_[0, 0, :])))
+        nodeSets.append(NodeSet("{:}_bottomFront".format(name), getFilteredNodes(np.s_[:, 0, -1])))
+        nodeSets.append(NodeSet("{:}_bottomBack".format(name), getFilteredNodes(np.s_[:, 0, 0])))
 
-    nodeSets.append(NodeSet("{:}_topRightFront".format(name), nG[-1, -1, -1]))
-    nodeSets.append(NodeSet("{:}_topRightBack".format(name), nG[-1, -1, 0]))
-    nodeSets.append(NodeSet("{:}_topLeftFront".format(name), nG[0, -1, -1]))
-    nodeSets.append(NodeSet("{:}_topLeftBack".format(name), nG[0, -1, 0]))
+        nodeSets.append(NodeSet("{:}_topRight".format(name), getFilteredNodes(np.s_[-1, -1, :])))
+        nodeSets.append(NodeSet("{:}_topLeft".format(name), getFilteredNodes(np.s_[0, -1, :])))
+        nodeSets.append(NodeSet("{:}_topFront".format(name), getFilteredNodes(np.s_[:, -1, -1])))
+        nodeSets.append(NodeSet("{:}_topBack".format(name), getFilteredNodes(np.s_[:, -1, 0])))
 
-    for nodeSet in nodeSets:
-        model.nodeSets[nodeSet.name] = nodeSet
+        nodeSets.append(NodeSet("{:}_rightBack".format(name), getFilteredNodes(np.s_[-1, :, 0])))
+        nodeSets.append(NodeSet("{:}_rightFront".format(name), getFilteredNodes(np.s_[-1, :, -1])))
 
-    # element sets
-    elementSets = []
-    elementSets.append(ElementSet("{:}_all".format(name), elements))
+        nodeSets.append(NodeSet("{:}_leftBack".format(name), getFilteredNodes(np.s_[0, :, 0])))
+        nodeSets.append(NodeSet("{:}_leftFront".format(name), getFilteredNodes(np.s_[0, :, -1])))
 
-    elGrid = np.asarray(elements).reshape(nX, nY, nZ)
-    elementSets.append(ElementSet("{:}_bottom".format(name), np.ravel(elGrid[:, 0, :])))
-    elementSets.append(ElementSet("{:}_top".format(name), np.ravel(elGrid[:, -1, :])))
-    elementSets.append(ElementSet("{:}_right".format(name), np.ravel(elGrid[-1, :, :])))
-    elementSets.append(ElementSet("{:}_left".format(name), np.ravel(elGrid[0, :, :])))
-    elementSets.append(ElementSet("{:}_front".format(name), np.ravel(elGrid[:, :, -1])))
-    elementSets.append(ElementSet("{:}_back".format(name), np.ravel(elGrid[:, :, 0])))
+        nodeSets.append(NodeSet("{:}_centerX".format(name), getFilteredNodes(np.s_[int(nNodesX / 2), :, :])))
+        nodeSets.append(NodeSet("{:}_centerY".format(name), getFilteredNodes(np.s_[:, int(nNodesY / 2), :])))
+        nodeSets.append(NodeSet("{:}_centerZ".format(name), getFilteredNodes(np.s_[:, :, int(nNodesZ / 2)])))
 
-    elementSets.append(
-        ElementSet(
-            "{:}_centralFrontToBack".format(name),
-            np.ravel(elGrid[int(nX / 2), int(nY / 2), 0:nZ]),
-        )
-    )
+        # 8 vertices
+        nodeSets.append(NodeSet("{:}_bottomRightFront".format(name), nG[-1, 0, -1]))
+        nodeSets.append(NodeSet("{:}_bottomRightBack".format(name), nG[-1, 0, 0]))
+        nodeSets.append(NodeSet("{:}_bottomLeftFront".format(name), nG[0, 0, -1]))
+        nodeSets.append(NodeSet("{:}_bottomLeftBack".format(name), nG[0, 0, 0]))
 
-    elementSets.append(ElementSet("{:}_centerSliceX".format(name), np.ravel(elGrid[int(nX / 2), :, :])))
-    elementSets.append(ElementSet("{:}_centerSliceY".format(name), np.ravel(elGrid[:, int(nY / 2), :])))
-    elementSets.append(ElementSet("{:}_centerSliceZ".format(name), np.ravel(elGrid[:, :, int(nZ / 2)])))
+        nodeSets.append(NodeSet("{:}_topRightFront".format(name), nG[-1, -1, -1]))
+        nodeSets.append(NodeSet("{:}_topRightBack".format(name), nG[-1, -1, 0]))
+        nodeSets.append(NodeSet("{:}_topLeftFront".format(name), nG[0, -1, -1]))
+        nodeSets.append(NodeSet("{:}_topLeftBack".format(name), nG[0, -1, 0]))
 
-    nShearBand = min(nX, nY)
-    if nShearBand > 3:
-        shearBand = []
-        for i1 in range(nShearBand):
-            shearBand.extend(
-                np.ravel(
-                    elGrid[
-                        int(nX / 2 + i1 - nShearBand / 2),
-                        int(nY / 2 + i1 - nShearBand / 2),
-                        0:nZ,
-                    ]
-                )
-            )
-        elementSets.append(ElementSet("{:}_shearBandFrontToBack".format(name), [e for e in shearBand]))
+        for nodeSet in nodeSets:
+            model.nodeSets[nodeSet.name] = nodeSet
+
+        # element sets
+        elementSets = []
+        elementSets.append(ElementSet("{:}_all".format(name), elements))
+
+        elGrid = np.asarray(elements).reshape(nX, nY, nZ)
+        elementSets.append(ElementSet("{:}_bottom".format(name), np.ravel(elGrid[:, 0, :])))
+        elementSets.append(ElementSet("{:}_top".format(name), np.ravel(elGrid[:, -1, :])))
+        elementSets.append(ElementSet("{:}_right".format(name), np.ravel(elGrid[-1, :, :])))
+        elementSets.append(ElementSet("{:}_left".format(name), np.ravel(elGrid[0, :, :])))
+        elementSets.append(ElementSet("{:}_front".format(name), np.ravel(elGrid[:, :, -1])))
+        elementSets.append(ElementSet("{:}_back".format(name), np.ravel(elGrid[:, :, 0])))
+
         elementSets.append(
             ElementSet(
-                "{:}_shearBandCenterFrontToBack".format(name),
-                [e for e in shearBand[(int(nShearBand / 2) - 1) * nZ : (int(nShearBand / 2) + 2) * nZ]],
+                "{:}_centralFrontToBack".format(name),
+                np.ravel(elGrid[int(nX / 2), int(nY / 2), 0:nZ]),
             )
         )
 
-    # model.elementSets["{:}_sandwichHorizontal".format(name)] = []
-    # for elList in elGrid[1:-1, :]:
-    #     for e in elList:
-    #         model.elementSets["{:}_sandwichHorizontal".format(name)].append(e)
+        elementSets.append(ElementSet("{:}_centerSliceX".format(name), np.ravel(elGrid[int(nX / 2), :, :])))
+        elementSets.append(ElementSet("{:}_centerSliceY".format(name), np.ravel(elGrid[:, int(nY / 2), :])))
+        elementSets.append(ElementSet("{:}_centerSliceZ".format(name), np.ravel(elGrid[:, :, int(nZ / 2)])))
 
-    # model.elementSets["{:}_sandwichVertical".format(name)] = []
-    # for elList in elGrid[:, 1:-1]:
-    #     for e in elList:
-    #         model.elementSets["{:}_sandwichVertical".format(name)].append(e)
+        nShearBand = min(nX, nY)
+        if nShearBand > 3:
+            shearBand = []
+            for i1 in range(nShearBand):
+                shearBand.extend(
+                    np.ravel(
+                        elGrid[
+                            int(nX / 2 + i1 - nShearBand / 2),
+                            int(nY / 2 + i1 - nShearBand / 2),
+                            0:nZ,
+                        ]
+                    )
+                )
+            elementSets.append(ElementSet("{:}_shearBandFrontToBack".format(name), [e for e in shearBand]))
+            elementSets.append(
+                ElementSet(
+                    "{:}_shearBandCenterFrontToBack".format(name),
+                    [e for e in shearBand[(int(nShearBand / 2) - 1) * nZ : (int(nShearBand / 2) + 2) * nZ]],
+                )
+            )
 
-    # model.elementSets["{:}_core".format(name)] = []
-    # for elList in elGrid[1:-1, 1:-1]:
-    #     for e in elList:
-    #         model.elementSets["{:}_core".format(name)].append(e)
+        # model.elementSets["{:}_sandwichHorizontal".format(name)] = []
+        # for elList in elGrid[1:-1, :]:
+        #     for e in elList:
+        #         model.elementSets["{:}_sandwichHorizontal".format(name)].append(e)
 
-    for elementSet in elementSets:
-        model.elementSets[elementSet.name] = elementSet
+        # model.elementSets["{:}_sandwichVertical".format(name)] = []
+        # for elList in elGrid[:, 1:-1]:
+        #     for e in elList:
+        #         model.elementSets["{:}_sandwichVertical".format(name)].append(e)
 
-    # surfaces
-    model.surfaces["{:}_bottom".format(name)] = {1: model.elementSets["{:}_bottom".format(name)]}
-    model.surfaces["{:}_top".format(name)] = {2: model.elementSets["{:}_top".format(name)]}
+        # model.elementSets["{:}_core".format(name)] = []
+        # for elList in elGrid[1:-1, 1:-1]:
+        #     for e in elList:
+        #         model.elementSets["{:}_core".format(name)].append(e)
 
-    model.surfaces["{:}_right".format(name)] = {5: model.elementSets["{:}_right".format(name)]}
-    model.surfaces["{:}_left".format(name)] = {3: model.elementSets["{:}_left".format(name)]}
+        for elementSet in elementSets:
+            model.elementSets[elementSet.name] = elementSet
 
-    model.surfaces["{:}_front".format(name)] = {4: model.elementSets["{:}_front".format(name)]}
-    model.surfaces["{:}_back".format(name)] = {6: model.elementSets["{:}_back".format(name)]}
+        # surfaces
+        surfaceName = "{:}_bottom".format(name)
+        model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {1: model.elementSets[surfaceName]})
+        surfaceName = "{:}_top".format(name)
+        model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {2: model.elementSets[surfaceName]})
 
-    return model
+        surfaceName = "{:}_right".format(name)
+        model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {5: model.elementSets[surfaceName]})
+        surfaceName = "{:}_left".format(name)
+        model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {3: model.elementSets[surfaceName]})
+
+        surfaceName = "{:}_front".format(name)
+        model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {4: model.elementSets[surfaceName]})
+        surfaceName = "{:}_back".format(name)
+        model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {6: model.elementSets[surfaceName]})

@@ -12,7 +12,7 @@ Relevant module: ``edelweissfe.stepactions.bodyforce``
 .. automodule:: edelweissfe.stepactions.bodyforce
    :members: __doc__
 
-.. pprint:: edelweissfe.stepactions.bodyforce.documentation
+.. pprint:: stepaction:bodyforce
    :caption: Options:
 
 .. literalinclude:: ../../../testfiles/marmot/BodyForce3D/test.inp
@@ -27,7 +27,7 @@ Relevant module: ``edelweissfe.stepactions.dirichlet``
 .. automodule:: edelweissfe.stepactions.dirichlet
    :members: __doc__
 
-.. pprint:: edelweissfe.stepactions.dirichlet.documentation
+.. pprint:: stepaction:dirichlet
    :caption: Options:
 
 ``distributedload`` - Distributed surface loads
@@ -38,7 +38,7 @@ Relevant module: ``edelweissfe.stepactions.distributedload``
 .. automodule:: edelweissfe.stepactions.distributedload
     :members: __doc__
 
-.. pprint:: edelweissfe.stepactions.distributedload.documentation
+.. pprint:: stepaction:distributedload
    :caption: Options:
 
 
@@ -54,7 +54,7 @@ Relevant module: ``edelweissfe.stepactions.geostatic``
 .. automodule:: edelweissfe.stepactions.geostatic
     :members: __doc__
 
-.. pprint:: edelweissfe.stepactions.geostatic.documentation
+.. pprint:: stepaction:geostatic
    :caption: Options:
 
 
@@ -70,7 +70,7 @@ Relevant module: ``edelweissfe.stepactions.indirectcontrol``
 .. automodule:: edelweissfe.stepactions.indirectcontrol
     :members: __doc__
 
-.. pprint:: edelweissfe.stepactions.indirectcontrol.documentation
+.. pprint:: stepaction:indirectcontrol
    :caption: Options:
 
 
@@ -86,7 +86,7 @@ Relevant module: ``edelweissfe.stepactions.indirectcontrol``
 .. automodule:: edelweissfe.stepactions.indirectcontractioncontrol
     :members: __doc__
 
-.. pprint:: edelweissfe.stepactions.indirectcontractioncontrol.documentation
+.. pprint:: stepaction:indirectcontractioncontrol
    :caption: Options:
 
 ``initializematerial`` - Initialize materials
@@ -105,7 +105,7 @@ Relevant module: ``edelweissfe.stepactions.modelupdate``
 .. automodule:: edelweissfe.stepactions.modelupdate
     :members: __doc__
 
-.. pprint:: edelweissfe.stepactions.modelupdate.documentation
+.. pprint:: stepaction:modelupdate
    :caption: Options:
 
 ``nodeforces`` - Concentrated node forces
@@ -116,7 +116,7 @@ Relevant module: ``edelweissfe.stepactions.nodeforces``
 .. automodule:: edelweissfe.stepactions.nodeforces
     :members: __doc__
 
-.. pprint:: edelweissfe.stepactions.nodeforces.documentation
+.. pprint:: stepaction:nodeforces
    :caption: Options:
 
 
@@ -132,7 +132,7 @@ Relevant module: ``edelweissfe.stepactions.setfield``
 .. automodule:: edelweissfe.stepactions.setfield
     :members: __doc__
 
-.. pprint:: edelweissfe.stepactions.setfield.documentation
+.. pprint:: stepaction:setfield
    :caption: Options:
 
 ``setinitialconditions`` - Set initial conditions to elements
@@ -143,7 +143,7 @@ Relevant module: ``edelweissfe.stepactions.setinitialconditions``
 .. automodule:: edelweissfe.stepactions.setinitialconditions
     :members: __doc__
 
-.. pprint:: edelweissfe.stepactions.setinitialconditions.documentation
+.. pprint:: stepaction:setinitialconditions
    :caption: Options:
 
 ``changematerialproperty`` - Change a material property during a step
@@ -154,7 +154,7 @@ Relevant module: ``edelweissfe.stepactions.changematerialproperty``
 .. automodule:: edelweissfe.stepactions.changematerialproperty
     :members: __doc__
 
-.. pprint:: edelweissfe.stepactions.changematerialproperty.documentation
+.. pprint:: stepaction:changematerialproperty
    :caption: Options:
 
 .. literalinclude:: ../../../testfiles/marmot/ChangeMaterialProperties/test.inp

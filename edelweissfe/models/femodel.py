@@ -38,6 +38,7 @@ import numpy as np
 from edelweissfe.config.phenomena import getFieldSize, phenomena
 from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.journal.journal import Journal
+from edelweissfe.models.modelchange import ModelChange, coalesce
 from edelweissfe.variables.fieldvariable import FieldVariable
 from edelweissfe.variables.scalarvariable import ScalarVariable
 
@@ -67,11 +68,59 @@ class FEModel:
         self.surfaces = {}  #: Surface definitions in the model.
         self.constraints = {}  #: Constraints in the model.
         self.constraintSets = {}  #: ConstraintsSets in the model.
+        self.multiPointConstraints = {}  #: Multi-point (DOF-elimination) constraints in the model.
+        self.modelModifiers = {}  #: Model modifiers (dynamic topology / mesh mutation entities) in the model.
+        self._modelChangeObservers = []  #: Observers notified when the model is mutated (e.g. AMR).
+        self.topologyVersion = 0  #: Bumped on every structural mutation; drives pull-based reconcile.
+        self._changeLog = []  #: Recorded :class:`ModelChange` per mutation, newest last.
+        self.contactFacetRecipes = {}  #: facet elSet name -> (surfaceName, prefix, triangulation).
         self.materials = {}  #: Materials in the model.
         self.analyticalFields = {}  #: AnalyticalFields in the model.
         self.scalarVariables = {}  #: ScalarVariables in the model.
         self.additionalParameters = {}  #: Additional information.
+        self.rigidBodies = {}  #: RigidBodies in the model.
+        self.elementProperties = []  #: Element properties.
         self.domainSize = dimension  #: Spatial dimension of the model
+        self.fieldOutputController = None  #: Set once by the driver; lets in-model entities (e.g. AMR markers) look up a named *fieldOutput by value, not just by declaration.
+
+    def registerObserver(self, observer):
+        """Register a :class:`~edelweissfe.models.modelchangeobserver.ModelChangeObserver` to be
+        notified when the model is mutated (e.g. by adaptive mesh refinement)."""
+        if not any(observer is obs for obs in self._modelChangeObservers):
+            self._modelChangeObservers.append(observer)
+
+    def unregisterObserver(self, observer):
+        self._modelChangeObservers = [obs for obs in self._modelChangeObservers if obs is not observer]
+
+    def notifyModelChanged(self, changeType, change: ModelChange = None):
+        """Record a model mutation (bumping :attr:`topologyVersion`, so a pull-based consumer can
+        catch up later via :meth:`changesSince`) and notify all registered push observers.
+
+        Parameters
+        ----------
+        changeType
+            The :class:`~edelweissfe.models.modelchangeobserver.ModelChangeType` of the mutation.
+        change
+            The structured :class:`ModelChange` describing what changed. If omitted, an empty one
+            (bare ``changeType`` marker only, e.g. for a modifier that hasn't adopted the changeset
+            yet) is recorded instead.
+        """
+        self.topologyVersion += 1
+        if change is None:
+            change = ModelChange(kind=changeType)
+        change.version = self.topologyVersion
+        self._changeLog.append(change)
+        for observer in list(self._modelChangeObservers):
+            observer.onModelChanged(self, changeType, change)
+
+    def changesSince(self, version: int) -> ModelChange:
+        """The :class:`ModelChange` coalesced across every mutation recorded after ``version``, or
+        ``None`` if the model hasn't changed since. A pull-based consumer compares its own
+        last-seen version against :attr:`topologyVersion` and, on a mismatch, reconciles from this,
+        then adopts the new :attr:`topologyVersion` as its own last-seen version."""
+        if version >= self.topologyVersion:
+            return None
+        return coalesce([c for c in self._changeLog if c.version > version])
 
     def _populateNodeFieldVariablesFromElements(
         self,
@@ -210,6 +259,52 @@ class FEModel:
         self.scalarVariables = dict()
         self._createAndAssignScalarVariableForConstraints(journal)
 
+    def _resizeNodeFieldsForNodes(self, journal: Journal):
+        """Resize the existing NodeFields in place for the current ``self.nodeSets["all"]``,
+        instead of rebuilding :attr:`nodeFields` from scratch as :meth:`_prepareVariablesAndFields`
+        does. Used by mesh mutators (e.g. AMR's ``hadaptivity._materialize``) so that NodeField
+        identity -- and hence any :class:`~edelweissfe.fields.nodefield.NodeFieldSubset` or
+        reference a consumer cached -- survives a topology change. ScalarVariables (e.g. Lagrange
+        multipliers of constraints) are rebuilt, but values are preserved by name for constraints
+        that still exist, so their converged state survives the refinement too.
+
+        Parameters
+        ----------
+        journal
+            The journal instance.
+        """
+        journal.message(
+            "Activating fields on nodes from Elements and Constraints",
+            self.identification,
+        )
+        self._populateNodeFieldVariablesFromElements()
+        self._populateNodeFieldVariablesFromConstraints()
+
+        journal.message("Resizing NodeFields", self.identification)
+        nodes = self.nodeSets["all"]
+        for nodeField in self.nodeFields.values():
+            nodeField.resize(nodes)
+
+        # a phenomenon activated for the first time (e.g. by a newly materialized constraint) has
+        # no NodeField yet -- create it exactly as _prepareVariablesAndFields would
+        for field in phenomena.keys():
+            if field not in self.nodeFields:
+                newNodeField = NodeField(field, getFieldSize(field, self.domainSize), nodes)
+                if newNodeField.nodes:
+                    self.nodeFields[field] = newNodeField
+
+        journal.message("Assembling ScalarVariables", self.identification)
+        # rebuilding scalarVariables cold-starts every value (ScalarVariable() defaults to 0.0), which
+        # would silently discard converged Lagrange-multiplier values on every AMR refinement, even
+        # though node fields are warm-started. Snapshot by name and restore the overlapping subset so
+        # unchanged constraints keep their converged multiplier and only genuinely new ones cold-start.
+        previousScalarVariableValues = {name: v.value for name, v in self.scalarVariables.items()}
+        self.scalarVariables = dict()
+        self._createAndAssignScalarVariableForConstraints(journal)
+        for name, v in self.scalarVariables.items():
+            if name in previousScalarVariableValues:
+                v.value = previousScalarVariableValues[name]
+
     def _prepareElements(self, journal: Journal):
         """Prepare elements for a simulation.
         In detail, sections are assigned.
@@ -222,6 +317,9 @@ class FEModel:
         """
         for section in self.sections.values():
             section.assignSectionPropertiesToModel(self)
+
+        for elementProperty in self.elementProperties:
+            elementProperty.assignElementPropertiesToModel(self)
 
         # check if all elements are assigned a material
         materialAssigned = np.fromiter(map(attrgetter("hasMaterial"), self.elements.values()), dtype=bool)
@@ -258,6 +356,12 @@ class FEModel:
 
         for el in self.elements.values():
             el.acceptLastState()
+
+        for constraint in self.constraints.values():
+            constraint.acceptLastState()
+
+        for mpc in self.multiPointConstraints.values():
+            mpc.acceptLastState()
 
     def writeRestart(self, restartFile: h5py.File):
         """Write the current state of the model to a restart file.
@@ -346,6 +450,12 @@ def printPrettyModelSummary(model: FEModel, journal: Journal):
     if model.constraints:
         journal.message(
             " {:<20}{:<15}".format("constraints: ", len(model.constraints)),
+            identification,
+            0,
+        )
+    if model.multiPointConstraints:
+        journal.message(
+            " {:<20}{:<15}".format("multi-point constraints: ", len(model.multiPointConstraints)),
             identification,
             0,
         )

@@ -33,11 +33,18 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.plotter import Plotter
+from edelweissfe.utils.schema import OptionSchemaProvider
 
 
-class OutputManagerBase(ABC):
+class OutputManagerBase(OptionSchemaProvider, ABC):
     """This is the abstract base class for all output managers.
     User defined output managers must implement the abstract methods.
+
+    Deriving from :class:`~edelweissfe.utils.schema.OptionSchemaProvider` means every output
+    manager -- including one supplied by a third-party package via an entry point -- exposes a
+    ``schema`` class attribute, so the registry can hand its option schema to the caller alongside
+    the class itself. Subclasses that do not define their own option schema simply inherit the
+    default of ``None``.
 
     Parameters
     ----------
@@ -69,9 +76,41 @@ class OutputManagerBase(ABC):
     ):
         pass
 
-    # @abstractmethod
-    # def updateDefinition(self, **kwargs: dict):
-    #     pass
+    def applyOptionsOverride(self, fieldValues: dict) -> None:
+        """Apply a partial override of this output manager's own ``schema`` fields.
+
+        The counterpart, on the output manager side, of the name-based ``>>options`` override
+        mechanism (``stepactions/options.py``): once that mechanism has resolved an ``>>options,
+        name=X, ...`` block to this output manager instance and validated the present keys against
+        ``type(self).schema`` via :func:`~edelweissfe.utils.schema.coercePresentOptions`, it calls
+        this method with the result to actually apply them.
+
+        Concrete output managers vary in how (or whether) they store overridable runtime options --
+        unlike a solver's uniform ``self.options`` dict, there is no single shared storage shape to
+        update generically here, so a subclass that wants ``>>options`` support overrides this with
+        its own named fields (ordinary polymorphism, not attribute probing -- see
+        :class:`OutputManager` in ``ensight.py`` for the one concrete case that needs this today).
+
+        The default here raises rather than silently doing nothing: without an override, a
+        ``>>options, name=X, someField=...`` block against ``X`` would otherwise validate cleanly
+        against ``type(X).schema`` (``stepactions/options.py``) and then apply no change at all --
+        indistinguishable, from the ``.inp`` author's side, from success.
+
+        Parameters
+        ----------
+        fieldValues
+            Maps schema field name to its new, already-coerced value.
+
+        Raises
+        ------
+        NotImplementedError
+            If ``fieldValues`` is non-empty and the subclass has not overridden this method.
+        """
+        if fieldValues:
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support '>>options' overrides for "
+                f"{sorted(fieldValues)} -- applyOptionsOverride is not implemented for this output manager."
+            )
 
     @abstractmethod
     def initializeJob(self):

@@ -28,3 +28,15 @@ run_tests_edelweissfe = "edelweissfe._cli._run_tests_edelweissfe:main"
 [tool.black]
 line-length = 120
 target-version = ["py312"]
+
+[tool.pytest.ini_options]
+# This is a new, separate pytest suite (see tests/), distinct from the bespoke
+# `run_tests_edelweissfe` .inp-driven CLI runner (testfiles/) and the unrelated legacy `test/`
+# data directory. Pin testpaths explicitly so a plain `python -m pytest` from the repo root does
+# not also try to collect the many stray ad-hoc `test_*.py` scripts scattered at the repo root.
+testpaths = ["tests"]
+markers = [
+    # Tests that spawn one fresh interpreter per module to check an import-order property, which
+    # cannot be done in-process. Deselect with `-m "not slow"` while iterating.
+    "slow: spawns many subprocesses; seconds rather than milliseconds",
+]

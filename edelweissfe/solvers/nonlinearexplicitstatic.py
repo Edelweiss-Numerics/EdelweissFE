@@ -27,12 +27,14 @@
 #  ---------------------------------------------------------------------
 
 import json
+from dataclasses import dataclass
 
 import numpy as np
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.linsolve import getLinSolverByName
 from edelweissfe.config.timing import createTimingDict
+from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
@@ -47,6 +49,7 @@ from edelweissfe.utils.exceptions import (
     StepFailed,
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
+from edelweissfe.utils.schema import schemaField
 
 
 def getRungeKuttaParameters(rungeKuttaStages: int) -> tuple[dict, dict, dict]:
@@ -149,6 +152,38 @@ def getRungeKuttaParameters(rungeKuttaStages: int) -> tuple[dict, dict, dict]:
     return _alpha, _omega, _lambda
 
 
+@dataclass(frozen=True)
+class NESTSchema:
+    """The options of the ``*solver`` datalines and of an ``>>options`` block routed to this
+    solver, owned by this module and never mutated from outside it.
+
+    Mirrors :attr:`NEST.SolverSpecificOptions` one-for-one; the plain ``self.options`` dict remains
+    the actual source of truth consulted at runtime (see :class:`NISTSchema` for why). The
+    ``runge-kutta-*`` option names are not valid Python identifiers, hence the ``optionName``
+    indirection.
+    """
+
+    rungeKuttaStages: int | None = schemaField(
+        description="The number of Runge-Kutta stages.", dtype=int, default=2, optionName="runge-kutta-stages"
+    )
+    rungeKuttaErrorTolerance: float | None = schemaField(
+        description="The error tolerance for the Runge-Kutta error control.",
+        dtype=float,
+        default=1e-3,
+        optionName="runge-kutta-error-tolerance",
+    )
+    rungeKuttaErrorControl: str | None = schemaField(
+        description="Activate the Runge-Kutta error control (on|off).",
+        dtype=str,
+        default="on",
+        optionName="runge-kutta-error-control",
+    )
+    linsolver: str | None = schemaField(description="The linear solver to be used.", dtype=str, default="pardiso")
+    linsolverConfigFile: str | None = schemaField(
+        description="A JSON configuration file for the linear solver.", dtype=str, default=""
+    )
+
+
 class NEST(NIST):
     """This is the Nonlinear Explicit STatic -- solver.
 
@@ -162,6 +197,12 @@ class NEST(NIST):
 
     identification = "NESTSolver"
 
+    supportsMPC = False
+    supportsModelModifiers = False
+
+    #: Option schema for this solver, per OptionSchemaProvider.
+    schema = NESTSchema
+
     SolverSpecificOptions = {
         "runge-kutta-stages": 2,
         "runge-kutta-error-tolerance": 1e-3,
@@ -174,7 +215,9 @@ class NEST(NIST):
         self.journal = journal
 
         self.options = self.SolverSpecificOptions.copy()
-        self._updateOptions(kwargs, journal)
+        # the datalines of the *solver keyword belong exclusively to this solver, so unknown entries
+        # are user typos and must not be swallowed
+        self._updateOptions(kwargs, journal, strict=True)
 
     def solveStep(
         self,
@@ -198,6 +241,16 @@ class NEST(NIST):
         fieldOutputController
             The field output controller.
         """
+
+        self.validateModelCapabilities(model)
+
+        for constraintName, constraint in model.constraints.items():
+            if type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity:
+                raise Exception(
+                    f"Constraint '{constraintName}' requires a dynamic connectivity update "
+                    f"(contact) every increment, which {self.identification} never performs -- "
+                    "contact is not currently supported with this solver."
+                )
 
         self.journal.message("Creating monolithic equation system", self.identification, 0)
         self.theDofManager = DofManager(
@@ -229,8 +282,9 @@ class NEST(NIST):
 
         self.computationTimes = createTimingDict()
 
-        _optionsUpdate = step.actions["options"].get("NESTSolver", {})
-        self._updateOptions(_optionsUpdate, self.journal)
+        # self.options already reflects every >>options, name=<this solver's name>, ... block applied
+        # so far, applied as each block is constructed or re-declared; there is nothing to reset or
+        # re-fetch here.
 
         # get parameters for runge kutta scheme
         self.rkAlpha, self.rkOmega, self.rkLambda = getRungeKuttaParameters(self.options.get("runge-kutta-stages", 2))
@@ -326,6 +380,8 @@ class NEST(NIST):
                     for variable in model.scalarVariables.values():
                         variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
 
+                    self.updateRigidBodies(model, timeStep)
+
                     model.advanceToTime(timeStep.totalTime)
 
                     fieldOutputController.finalizeIncrement()
@@ -335,7 +391,10 @@ class NEST(NIST):
                             statusInfoDict=statusInfoDict,
                         )
 
-        except (ReachedMaxIncrements, ReachedMinIncrementSize):
+        except ReachedMaxIncrements:
+            self.applyStepActionsAtStepEnd(model, step.actions)
+
+        except ReachedMinIncrementSize:
             self.journal.errorMessage("Incrementation failed", self.identification)
             raise StepFailed()
 
@@ -411,6 +470,9 @@ class NEST(NIST):
         distributedLoads = stepActions["distributedload"].values()
         bodyForces = stepActions["bodyforce"].values()
 
+        # Find which global DOFs the Dirichlet BCs constrain, once up front.
+        self.locateConstrainedDofs(dirichlets)
+
         self.applyStepActionsAtIncrementStart(model, timeStep, stepActions)
 
         for geostatic in stepActions["geostatic"].values():
@@ -439,10 +501,10 @@ class NEST(NIST):
             R[:] = -P
             R += PExt
 
-            R = self.applyDirichlet(timeStep, R, dirichlets)
+            R = self.applyDirichletToResidual(timeStep, R, dirichlets)
 
             K_ = self.assembleStiffnessCSR(K)
-            K_ = self.applyDirichletK(K_, dirichlets)
+            K_ = self.applyDirichletToStiffness(K_, dirichlets)  # zero rows, unit diagonal
 
             # solve for increment
             dU_[k] = self.linearSolve(K_, R)

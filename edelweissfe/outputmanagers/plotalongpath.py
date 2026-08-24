@@ -29,114 +29,117 @@
 
 # @author: Matthias Neuner
 
+from dataclasses import dataclass
+
 import numpy as np
 
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
+from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.math import createMathExpression
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.plotter import Plotter
+from edelweissfe.utils.schema import schemaField
 
 """
 Plot result for a nodeSet or an elementSet along the true geometrical distance.
 Corresponds to the plot along path functionality in Abaqus.
 """
 
-module = Module(
-    "plotAlongPath",
-    "Plot result for a nodeSet or an elementSet along the true geometrical distance.",
-)
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class PlotAlongPathSchema:
+    """The options this output manager accepts, owned by this module and never mutated from
+    outside it.
 
-keyword = "output"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
+    ``fieldOutput`` is declared ``required=True`` explicitly, but is still given ``default=None``
+    so that ``PlotAlongPathSchema()`` is constructible without an argument at import time. A
+    caller going through ``buildSchemaFromOptions`` still must supply ``fieldOutput`` (a missing
+    required field is rejected regardless of this default).
 
-module.addRequiredArg("fieldOutput", "Name of the field output.", str)
+    ``f_x`` answers to the input-file option name ``f(x)``, which is not a valid Python
+    identifier and therefore cannot be the field name itself -- see ``optionName`` on
+    :func:`edelweissfe.utils.schema.schemaField`.
+    """
 
-module.addOptionalArg("figure", "Figure of the plotter.", int, 1)
-module.addOptionalArg("axSpec", "AxSpec (MATLAB syntax) in the figure.", int, 111)
-module.addOptionalArg("normalize", "Normalize results.", int, 111)
-module.addOptionalArg("label", "Label.", str, None)
+    fieldOutput: str | None = schemaField(
+        description="Name of the field output.", dtype=str, default=None, required=True
+    )
 
-module.addOptionalArg("f(x)", "Function to apply in each increment.", str, None)
-module.addOptionalArg("nStages", "", int, 1)
-module.addOptionalArg("export", "Export the field output to a file at the end of the job.", str, None)
+    figure: int = schemaField(description="Figure of the plotter.", dtype=int, default=1)
+    axSpec: int = schemaField(description="AxSpec (MATLAB syntax) in the figure.", dtype=int, default=111)
+    normalize: int = schemaField(description="Normalize results.", dtype=int, default=111)
+    label: str | None = schemaField(description="Label.", dtype=str, default=None)
 
-documentation = [module]
-
-required = [kw.name for kw in module.requiredArgs]
-required += [kw.name for kw in module.requiredKeywords]
-
-optional = [kw.name for kw in module.optionalArgs]
-optional += [kw.name for kw in module.optionalKeywords]
-
-
-@caseInsensitiveKwargsChecker(required, optional)
-@castKwargsValuesAndAddDefaults(module)
-def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
-    kwargs = CaseInsensitiveDict(kwargs)
-
-    fieldOutputName = kwargs["fieldOutput"]
-    figure = kwargs["figure"]
-    axSpec = kwargs["axSpec"]
-    normalize = kwargs["normalize"]
-    label = kwargs["label"]
-    fx = kwargs["f(x)"]
-    if not fx:
-        fx = "x"
-    nStages = kwargs["nStages"]
-    export = kwargs["export"]
-
-    return OutputManager(
-        name,
-        FEModel,
-        fieldOutputController,
-        journal,
-        plotter,
-        fieldOutputName,
-        figure,
-        axSpec,
-        normalize,
-        label,
-        fx,
-        nStages,
-        export,
+    f_x: str | None = schemaField(
+        description="Function to apply in each increment.", dtype=str, default=None, optionName="f(x)"
+    )
+    nStages: int = schemaField(description="", dtype=int, default=1)
+    export: str | None = schemaField(
+        description="Export the field output to a file at the end of the job.", dtype=str, default=None
     )
 
 
 class OutputManager(OutputManagerBase):
     identification = "PathPlotter"
 
+    #: Option schema for this output manager, per OptionSchemaProvider.
+    schema = PlotAlongPathSchema
+
     def __init__(
         self,
-        name,
-        model,
-        fieldOutputController,
-        journal,
-        plotter,
-        fieldOutputName,
-        figure,
-        axSpec,
-        normalize,
-        label,
-        # nSet,
-        # elSet,
-        fx,
-        nStages,
-        export,
+        name: str,
+        model: FEModel,
+        fieldOutputController: FieldOutputController,
+        journal: Journal,
+        plotter: Plotter,
+        *,
+        configuration: PlotAlongPathSchema = PlotAlongPathSchema(),
     ):
+        """Constructible standalone, with no parser involvement. Options arrive as an
+        already-validated, already-typed schema instance.
+
+        Parameters
+        ----------
+        name
+            The name of this output manager.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controller instance.
+        journal
+            The journal instance for logging.
+        plotter
+            The plotter instance.
+        configuration
+            The options this output manager accepts; ``fieldOutput`` is required by the input
+            language but defaults to ``None`` here so that the schema remains constructible with no
+            arguments.
+        """
+        self.name = name
         self.journal = journal
         self.monitorJobs = []
         self.plotter = plotter
         self.fieldOutputController = fieldOutputController
         self.model = model
+
+        fieldOutputName = configuration.fieldOutput
+        figure = configuration.figure
+        axSpec = configuration.axSpec
+        normalize = configuration.normalize
+        label = configuration.label
+
+        # A falsy "f(x)" (i.e. None or "") is treated as "no transform requested" and substituted
+        # with the identity expression "x", rather than passed on to createMathExpression as-is.
+        # A schema default of "x" alone would not reproduce this for an explicitly-empty value.
+        fx = configuration.f_x
+        if not fx:
+            fx = "x"
+
+        nStages = configuration.nStages
+        export = configuration.export
 
         entry = dict()
         entry["fieldOutput"] = fieldOutputController.fieldOutputs[fieldOutputName]

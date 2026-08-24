@@ -26,14 +26,14 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+from dataclasses import dataclass
+
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.fieldoutput import FieldOutputController
+from edelweissfe.utils.plotter import Plotter
+from edelweissfe.utils.schema import schemaField
 
 """
 Writes the (generated) mesh data to a file.
@@ -45,33 +45,14 @@ Writes the (generated) mesh data to a file.
         filename=myMesh.inc
 """
 
-module = Module("meshdatatofile", "Writes the (generated) mesh data to a file.")
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class MeshDataToFileSchema:
+    """The options this output manager accepts, owned by this module and never mutated from
+    outside it.
+    """
 
-keyword = "output"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addOptionalArg("filename", "Name of file for writing output.", str, None)
-
-documentation = [module]
-
-required = [kw.name for kw in module.requiredArgs]
-required += [kw.name for kw in module.requiredKeywords]
-
-optional = [kw.name for kw in module.optionalArgs]
-optional += [kw.name for kw in module.optionalKeywords]
-
-
-@caseInsensitiveKwargsChecker(required, optional)
-@castKwargsValuesAndAddDefaults(module)
-def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
-    kwargs = CaseInsensitiveDict(kwargs)
-
-    filename = kwargs["filename"]
-
-    return OutputManager(name, FEModel, fieldOutputController, journal, plotter, filename)
+    filename: str | None = schemaField(description="Name of file for writing output.", dtype=str, default=None)
 
 
 class OutputManager(OutputManagerBase):
@@ -80,12 +61,45 @@ class OutputManager(OutputManagerBase):
     identification = "Meshdatatofile"
     printTemplate = "{:}, {:}: {:}"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter, filename):
+    #: Option schema for this output manager, per OptionSchemaProvider.
+    schema = MeshDataToFileSchema
+
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        fieldOutputController: FieldOutputController,
+        journal: Journal,
+        plotter: Plotter,
+        *,
+        configuration: MeshDataToFileSchema = MeshDataToFileSchema(),
+    ):
+        """Constructible standalone, with no parser involvement. Options arrive as an
+        already-validated, already-typed schema instance.
+
+        Parameters
+        ----------
+        name
+            The name of this output manager.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controller instance.
+        journal
+            The journal instance for logging.
+        plotter
+            The plotter instance.
+        configuration
+            The options this output manager accepts; defaults to all-defaults.
+        """
+        self.name = name
         self.journal = journal
         self.model = model
 
-        if filename is not None:
-            self.filename = filename
+        # An unspecified filename (schema default None) resolves to "<name>_mesh.inc", which
+        # cannot be expressed as a static schema default since it depends on the instance's name.
+        if configuration.filename is not None:
+            self.filename = configuration.filename
         else:
             self.filename = f"{name}_mesh.inc"
 

@@ -29,85 +29,164 @@
 
 # @author: Matthias Neuner
 
+from dataclasses import dataclass
+
 import numpy as np
-import sympy as sp
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
-from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
+from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.stepactions.base.amplitude import (
+    amplitudeFromExpression,
+    linearAmplitude,
 )
+from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 A penalty based constraint used for indirect (displacement) control.
 """
 
-module = Module("penaltyindirectcontrol", "A penalty based constraint used for indirect (displacement) control.")
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class PenaltyIndirectControlSchema:
+    """The options this constraint accepts, owned by this module and never mutated from
+    outside it.
 
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
+    ``f_t`` is spelled ``f(t)`` in the input file, which is not a valid Python identifier -- hence
+    the ``optionName`` indirection, see :func:`edelweissfe.utils.schema.schemaField`. Each required
+    field is declared ``required=True``, but is still given a ``default=None`` so the schema
+    remains constructible on its own.
+    """
 
-module.addOptionalArg("field", "The field this constraint acts on.", str, "displacement")
-module.addRequiredArg("cVector", "The projection vector for the constrained nodes (e.g., CMOD).", str)
-module.addRequiredArg("constrainedNSet", "The node set for determining the constraint (e.g., CMOD).", str)
-module.addRequiredArg("loadNSet", "The node set for application of the controlled load.", str)
-module.addRequiredArg(
-    "loadVector", "The vector (in correct) dimensions and tensorial order  determining the load.", str
-)
-module.addRequiredArg("length", "The value of the constraint (e.g., CMOD).", float)
-module.addRequiredArg("penaltyStiffness", "The stiffness for formulating the constraint.", float)
-module.addOptionalArg(
-    "offset", "A correction value for the computation of the constraint (e.g, initial displacement).", float, 0.0
-)
-module.addOptionalArg(
-    "normalizeLoad",
-    "Normalize the applied force per node w. r. t. the number of nodes, i.e., apply a load irrespective of the total number of nodes in ``loadNSet``.",
-    bool,
-    True,
-)
-module.addOptionalArg("f(t)", "Amplitude function.", str, None)
-
-documentation = [module]
+    field: str = schemaField(description="The field this constraint acts on.", dtype=str, default="displacement")
+    cVector: str | None = schemaField(
+        description="The projection vector for the constrained nodes (e.g., CMOD).",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    constrainedNSet: str | None = schemaField(
+        description="The node set for determining the constraint (e.g., CMOD).",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    loadNSet: str | None = schemaField(
+        description="The node set for application of the controlled load.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    loadVector: str | None = schemaField(
+        description="The vector (in correct) dimensions and tensorial order  determining the load.",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    length: float | None = schemaField(
+        description="The value of the constraint (e.g., CMOD).", dtype=float, default=None, required=True
+    )
+    penaltyStiffness: float | None = schemaField(
+        description="The stiffness for formulating the constraint.", dtype=float, default=None, required=True
+    )
+    offset: float = schemaField(
+        description="A correction value for the computation of the constraint (e.g, initial displacement).",
+        dtype=float,
+        default=0.0,
+    )
+    normalizeLoad: bool = schemaField(
+        description="Normalize the applied force per node w. r. t. the number of nodes, i.e., "
+        "apply a load irrespective of the total number of nodes in ``loadNSet``.",
+        dtype=bool,
+        default=True,
+    )
+    f_t: str | None = schemaField(description="Amplitude function.", dtype=str, default=None, optionName="f(t)")
 
 
 class Constraint(ConstraintBase):
-    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-    @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name, model, *args, **kwargs):
-        super().__init__(name, model, *args, **kwargs)
+    """A penalty based constraint used for indirect (displacement) control.
 
-        kwargs = CaseInsensitiveDict(kwargs)
+    Parameters
+    ----------
+    name
+        The name of the constraint.
+    model
+        The model tree.
+    constrainedNSet
+        The node set for determining the constraint (e.g., CMOD).
+    loadNSet
+        The node set for application of the controlled load.
+    configuration
+        The options this constraint accepts; ``cVector``/``loadVector``/``length``/
+        ``penaltyStiffness`` are still required, see :class:`PenaltyIndirectControlSchema`.
+    """
 
-        self.theField = kwargs["field"]
+    #: Option schema for this constraint, per OptionSchemaProvider.
+    schema = PenaltyIndirectControlSchema
 
-        self.cVector = np.fromstring(kwargs["cVector"], dtype=float, sep=",")
-        self.constrainedNSet = model.nodeSets[kwargs["constrainedNSet"]]
-        self.loadNSet = model.nodeSets[kwargs["loadNSet"]]
+    def __init__(
+        self,
+        name,
+        model: FEModel,
+        constrainedNSet: NodeSet,
+        loadNSet: NodeSet,
+        *,
+        configuration: PenaltyIndirectControlSchema = PenaltyIndirectControlSchema(),
+    ):
+        super().__init__(name, model)
 
-        self.loadVector = np.fromstring(kwargs["loadVector"], dtype=float, sep=",")
+        self.theField = configuration.field
 
-        # we may normalize in order to end up with an identical load irrespective of the number of nodes
-        # in the load node set
-        if kwargs["normalizeLoad"]:
-            self.loadVector *= 1.0 / len(self.loadNSet)
+        self.cVector = np.fromstring(configuration.cVector, dtype=float, sep=",")
+        self.constrainedNSet = constrainedNSet
+        self.loadNSet = loadNSet
 
-        self.penaltyStiffness = kwargs["penaltyStiffness"]
-        self.length = kwargs["length"]
+        # the target total load, never mutated -- the per-node share (self.unitResidual, built in
+        # _rebuildDerivedState) is (re)derived from this against the *current* size of loadNSet, so
+        # a mid-run AMR growth of loadNSet keeps the documented normalizeLoad semantics (constant
+        # total load, or a fixed per-node load) instead of freezing them at construction-time size
+        self._targetLoadVector = np.fromstring(configuration.loadVector, dtype=float, sep=",")
+        self._normalizeLoad = configuration.normalizeLoad
 
-        if kwargs["f(t)"] is not None:
-            t = sp.symbols("t")
-            self.amplitude = sp.lambdify(t, sp.sympify(kwargs["f(t)"]), "numpy")
-        else:
-            self.amplitude = lambda x: x
+        self.penaltyStiffness = configuration.penaltyStiffness
+        self.length = configuration.length
 
-        self.offset = kwargs["offset"]
+        self.amplitude = amplitudeFromExpression(configuration.f_t) or linearAmplitude
 
+        self.offset = configuration.offset
+
+        self._nDim = model.domainSize
+
+        self.active = True
+
+        self.constrainedValue = 0.0
+
+        self._rebuildDerivedState()
+
+    @classmethod
+    def fromConstraintDefinition(
+        cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
+    ) -> "Constraint":
+        """Build this constraint from a parsed ``*constraint`` definition. See
+        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
+        separate from ``__init__``."""
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+        return cls(
+            name,
+            model,
+            model.nodeSets[configuration.constrainedNSet],
+            model.nodeSets[configuration.loadNSet],
+            configuration=configuration,
+        )
+
+    def _rebuildDerivedState(self):
+        """(Re)derive every array/index sized to ``loadNSet``/``constrainedNSet`` -- the node
+        list, the field list, the DOF-block boundaries, ``nDof`` and the per-node unit residual --
+        from their *current* size. Called once at construction and again, lazily, from
+        :meth:`updateConnectivity` whenever either watched node set was mutated in-place (e.g. by
+        AMR) since the last increment."""
         self._nodes = list(self.loadNSet) + list(self.constrainedNSet)
 
         self._fieldsOnNodes = [
@@ -116,23 +195,22 @@ class Constraint(ConstraintBase):
             ]
         ] * len(self._nodes)
 
-        nDim = model.domainSize
-
-        sizeBlock_loadNodes = nDim * len(self.loadNSet)
+        sizeBlock_loadNodes = self._nDim * len(self.loadNSet)
         self.startBlock_loadNodes = 0
         self.endBlock_loadNodes = sizeBlock_loadNodes
 
-        sizeBlock_constrainedNodes = nDim * len(self.constrainedNSet)
+        sizeBlock_constrainedNodes = self._nDim * len(self.constrainedNSet)
         self.startBlock_constrainedNodes = self.endBlock_loadNodes
         self.endBlock_constrainedNodes = self.startBlock_constrainedNodes + sizeBlock_constrainedNodes
 
         self._nDof = self.endBlock_constrainedNodes
 
-        self.active = True
-
-        self.constrainedValue = 0.0
-
-        self.unitResidual = np.tile(self.loadVector, len(self.loadNSet))
+        # we may normalize in order to end up with an identical total load irrespective of the
+        # number of nodes in the load node set
+        perNodeLoad = self._targetLoadVector
+        if self._normalizeLoad:
+            perNodeLoad = perNodeLoad / len(self.loadNSet)
+        self.unitResidual = np.tile(perNodeLoad, len(self.loadNSet))
 
     @property
     def nodes(self) -> list:
@@ -145,6 +223,18 @@ class Constraint(ConstraintBase):
     @property
     def nDof(self) -> int:
         return self._nDof
+
+    def updateConnectivity(self, model) -> bool:
+        """Called once per increment, before the equation system is (re)built. Recomputes the
+        node lists, DOF-block boundaries and unit residual (see :meth:`_rebuildDerivedState`) if
+        either watched node set was mutated in-place since the last check, and reports the change
+        so the caller rebuilds the equation system even on an increment where nothing else did."""
+        loadChanged = self._checkSetChanged(self.loadNSet)
+        constrainedChanged = self._checkSetChanged(self.constrainedNSet)
+        if loadChanged or constrainedChanged:
+            self._rebuildDerivedState()
+            return True
+        return False
 
     def applyConstraint(self, U_np, dU, PExt, K, timeStep: TimeStep):
         if not self.active:
