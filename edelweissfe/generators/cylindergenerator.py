@@ -66,62 +66,71 @@ Generate meshes on the fly using the following syntax:
 """
 
 import math
+from dataclasses import dataclass
 
 import numpy as np
 import scipy.sparse as sp
 
 from edelweissfe.config.elementlibrary import getElementClass
+from edelweissfe.generators.base.generatorbase import GeneratorBase
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.surfaces.entitybasedsurface import EntityBasedSurface
+from edelweissfe.utils.schema import schemaField
 
-module = Module("cylindergenerator", "A structured hex mesh generator for cylindrical geometries.")
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class CylinderGeneratorSchema:
+    """The options this generator accepts, owned by this module and never mutated from outside
+    it.
 
-keyword = "modelGenerator"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
+    ``elType`` is declared ``required=True`` explicitly, but is still given a ``default=None`` so
+    the schema remains constructible for the constructor's default argument.
+    """
 
-module.addOptionalArg("x0", "Origin along the x axis (center of the cylinder's cross section).", float, 0.0)
-module.addOptionalArg("y0", "Origin along the y axis (bottom face of the cylinder).", float, 0.0)
-module.addOptionalArg("z0", "Origin along the z axis (center of the cylinder's cross section).", float, 0.0)
+    x0: float = schemaField(
+        description="Origin along the x axis (center of the cylinder's cross section).", dtype=float, default=0.0
+    )
+    y0: float = schemaField(
+        description="Origin along the y axis (bottom face of the cylinder).", dtype=float, default=0.0
+    )
+    z0: float = schemaField(
+        description="Origin along the z axis (center of the cylinder's cross section).", dtype=float, default=0.0
+    )
 
-module.addOptionalArg("radius", "Radius of the cylinder.", float, 1.0)
-module.addOptionalArg("lY", "Height of the cylinder along the y axis.", float, 1.0)
+    radius: float = schemaField(description="Radius of the cylinder.", dtype=float, default=1.0)
+    lY: float = schemaField(description="Height of the cylinder along the y axis.", dtype=float, default=1.0)
 
-module.addOptionalArg(
-    "nR",
-    "Number of elements along the radius, i.e., along a straight line from the center to the outer "
-    "(lateral) surface. This is split automatically between the central square core block and the "
-    "concentric rings surrounding it, keeping their element sizes similar.",
-    int,
-    4,
-)
-module.addOptionalArg("nY", "Number of elements along the height (y axis).", int, 4)
+    nR: int = schemaField(
+        description=(
+            "Number of elements along the radius, i.e., along a straight line from the center to the outer "
+            "(lateral) surface. This is split automatically between the central square core block and the "
+            "concentric rings surrounding it, keeping their element sizes similar."
+        ),
+        dtype=int,
+        default=4,
+    )
+    nY: int = schemaField(description="Number of elements along the height (y axis).", dtype=int, default=4)
 
-module.addOptionalArg(
-    "coreFraction", "Half-width of the central square core block, as a fraction of the radius.", float, 0.7
-)
-module.addOptionalArg(
-    "curvedBoundary",
-    "For quadratic elements only: place mid-side nodes on the outer surface exactly on the circle "
-    "instead of at the straight-line midpoint.",
-    bool,
-    True,
-)
+    coreFraction: float = schemaField(
+        description="Half-width of the central square core block, as a fraction of the radius.",
+        dtype=float,
+        default=0.7,
+    )
+    curvedBoundary: bool = schemaField(
+        description=(
+            "For quadratic elements only: place mid-side nodes on the outer surface exactly on the circle "
+            "instead of at the straight-line midpoint."
+        ),
+        dtype=bool,
+        default=True,
+    )
 
-module.addRequiredArg("elType", "Element type.", str)
-module.addOptionalArg("elProvider", "Element provider.", str, None)
-
-documentation = [module]
+    elType: str | None = schemaField(description="Element type.", dtype=str, default=None, required=True)
+    elProvider: str | None = schemaField(description="Element provider.", dtype=str, default=None)
 
 
 def _generateOGridMesh(radius, nCore, nRing, coreFraction):
@@ -261,244 +270,271 @@ def _addMidsideNodes(nodes, quads, radius, curvedBoundary):
     return np.array(nodesOut), np.array(quads8, dtype=int)
 
 
-@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-@castKwargsValuesAndAddDefaults(module)
-def generateModelData(generatorDefinition: dict, model: FEModel, journal, *args, **kwargs) -> dict:
-    kwargs = CaseInsensitiveDict(kwargs)
+class Generator(GeneratorBase):
+    """A structured hex mesh generator for cylindrical geometries."""
 
-    name = generatorDefinition.get("name", "cylinderGen")
+    #: Option schema for this generator, per OptionSchemaProvider.
+    schema = CylinderGeneratorSchema
 
-    x0 = kwargs["x0"]
-    y0 = kwargs["y0"]
-    z0 = kwargs["z0"]
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        journal: Journal,
+        *,
+        configuration: CylinderGeneratorSchema = CylinderGeneratorSchema(),
+    ):
+        """Constructible standalone, with no parser involvement.
+        Populates ``model`` directly; construction *is* the generation.
 
-    radius = kwargs["radius"]
-    lY = kwargs["lY"]
+        Parameters
+        ----------
+        name
+            The name of this generator instance, used as the prefix for the generated sets.
+        model
+            The model tree to populate. Mutated in place.
+        journal
+            Unused.
+        configuration
+            The options this generator accepts; ``elType`` is still required, see
+            :class:`CylinderGeneratorSchema`.
+        """
+        x0 = configuration.x0
+        y0 = configuration.y0
+        z0 = configuration.z0
 
-    nR = kwargs["nR"]
-    nY = kwargs["nY"]
+        radius = configuration.radius
+        lY = configuration.lY
 
-    coreFraction = kwargs["coreFraction"]
-    curvedBoundary = kwargs["curvedBoundary"]
+        nR = configuration.nR
+        nY = configuration.nY
 
-    if radius <= 0 or lY <= 0:
-        raise Exception("radius and lY must be positive.")
-    if nR < 2 or nY < 1:
-        raise Exception("nR must be >= 2 (at least one element in the core block and one ring) and nY >= 1.")
-    if not (0 < coreFraction < 1 / math.sqrt(2)):
-        raise Exception("coreFraction must be in (0, 1/sqrt(2)) so the core block stays inside the cylinder.")
+        coreFraction = configuration.coreFraction
+        curvedBoundary = configuration.curvedBoundary
 
-    # split nR (elements along the radius, center to outer surface) between the core block's own
-    # half-width subdivision and the rings, keeping elements in both regions similarly sized: since
-    # the core spans [0, coreFraction*radius] and the rings span [coreFraction*radius, radius], an
-    # even element size along the full radius gives nCoreHalf = round(coreFraction * nR).
-    nCoreHalf = max(1, min(nR - 1, round(coreFraction * nR)))
-    nRing = nR - nCoreHalf
-    nCore = 2 * nCoreHalf
+        if radius <= 0 or lY <= 0:
+            raise Exception("radius and lY must be positive.")
+        if nR < 2 or nY < 1:
+            raise Exception("nR must be >= 2 (at least one element in the core block and one ring) and nY >= 1.")
+        if not (0 < coreFraction < 1 / math.sqrt(2)):
+            raise Exception("coreFraction must be in (0, 1/sqrt(2)) so the core block stays inside the cylinder.")
 
-    elTypeName = kwargs["elType"]
-    elProvider = kwargs["elProvider"]
-    elType = getElementClass(elTypeName, elProvider)
+        # split nR (elements along the radius, center to outer surface) between the core block's own
+        # half-width subdivision and the rings, keeping elements in both regions similarly sized: since
+        # the core spans [0, coreFraction*radius] and the rings span [coreFraction*radius, radius], an
+        # even element size along the full radius gives nCoreHalf = round(coreFraction * nR).
+        nCoreHalf = max(1, min(nR - 1, round(coreFraction * nR)))
+        nRing = nR - nCoreHalf
+        nCore = 2 * nCoreHalf
 
-    testEl = elType(elTypeName, 0)
+        elTypeName = configuration.elType
+        elProvider = configuration.elProvider
+        elType = getElementClass(elTypeName, elProvider)
 
-    if testEl.nNodes == 8:
-        order = 1
-    elif testEl.nNodes == 20:
-        order = 2
-    else:
-        return
+        testEl = elType(elTypeName, 0)
 
-    # --- in-plane O-grid mesh (core block + radial rings) ---------------------
-    nodesLin, quadsLin, nBoundary = _generateOGridMesh(radius, nCore, nRing, coreFraction)
-    nodesLin = _smoothOGridMesh(nodesLin, quadsLin, radius)
+        if testEl.nNodes == 8:
+            order = 1
+        elif testEl.nNodes == 20:
+            order = 2
+        else:
+            return
 
-    # quads are appended core-first, then ring by ring; the last `nBoundary` quads are
-    # therefore always the outermost ring, i.e., the elements touching the outer surface.
-    outerQuadMask = np.zeros(len(quadsLin), dtype=bool)
-    outerQuadMask[-nBoundary:] = True
+        # --- in-plane O-grid mesh (core block + radial rings) ---------------------
+        nodesLin, quadsLin, nBoundary = _generateOGridMesh(radius, nCore, nRing, coreFraction)
+        nodesLin = _smoothOGridMesh(nodesLin, quadsLin, radius)
 
-    if order == 1:
-        nodes2D = nodesLin
-        quads2D = quadsLin
-    else:
-        nodes2D, quads2D = _addMidsideNodes(nodesLin, quadsLin, radius, curvedBoundary)
+        # quads are appended core-first, then ring by ring; the last `nBoundary` quads are
+        # therefore always the outermost ring, i.e., the elements touching the outer surface.
+        outerQuadMask = np.zeros(len(quadsLin), dtype=bool)
+        outerQuadMask[-nBoundary:] = True
 
-    nCorners2D = len(nodesLin)
+        if order == 1:
+            nodes2D = nodesLin
+            quads2D = quadsLin
+        else:
+            nodes2D, quads2D = _addMidsideNodes(nodesLin, quadsLin, radius, curvedBoundary)
 
-    # the last `nBoundary` corner nodes are, by construction, exactly the outer boundary loop.
-    # For quadratic elements, the outer mid-side node of an outer-ring quad (c0,c1,c2,c3,m01,m12,m23,m30)
-    # is m12 (the mid-node of edge c1-c2, which is always the outer edge of that quad, see the ring
-    # construction in `_generateOGridMesh`). Determining the outer node set this way (rather than by
-    # checking coordinates against `radius`) keeps it correct even if curvedBoundary=False.
-    isOuterCorner2D = np.zeros(nCorners2D, dtype=bool)
-    isOuterCorner2D[nCorners2D - nBoundary :] = True
+        nCorners2D = len(nodesLin)
 
-    isOuter2D = np.zeros(len(nodes2D), dtype=bool)
-    isOuter2D[:nCorners2D] = isOuterCorner2D
-    if order == 2:
-        isOuter2D[quads2D[outerQuadMask, 5]] = True
+        # the last `nBoundary` corner nodes are, by construction, exactly the outer boundary loop.
+        # For quadratic elements, the outer mid-side node of an outer-ring quad (c0,c1,c2,c3,m01,m12,m23,m30)
+        # is m12 (the mid-node of edge c1-c2, which is always the outer edge of that quad, see the ring
+        # construction in `_generateOGridMesh`). Determining the outer node set this way (rather than by
+        # checking coordinates against `radius`) keeps it correct even if curvedBoundary=False.
+        isOuterCorner2D = np.zeros(nCorners2D, dtype=bool)
+        isOuterCorner2D[nCorners2D - nBoundary :] = True
 
-    # the mesh is exactly symmetric about both local axes (`nCore` is always even), so the two
-    # diametral lines through the center, parallel to the x and z axes, consist of nodes with
-    # local Z=0 and local X=0, respectively; their intersection is the single center node. Only
-    # needed on the top/bottom (always "full") layers, hence based on `nodes2D` only.
-    tol = radius * 1e-6
-    isCenterLineX2D = np.isclose(nodes2D[:, 1], 0.0, atol=tol)
-    isCenterLineZ2D = np.isclose(nodes2D[:, 0], 0.0, atol=tol)
-    isCenter2D = isCenterLineX2D & isCenterLineZ2D
+        isOuter2D = np.zeros(len(nodes2D), dtype=bool)
+        isOuter2D[:nCorners2D] = isOuterCorner2D
+        if order == 2:
+            isOuter2D[quads2D[outerQuadMask, 5]] = True
 
-    currentNodeLabel = 1
-    if model.nodes:
-        currentNodeLabel += max(model.nodes.keys())
-    currentElementLabel = 1
-    if model.elements:
-        currentElementLabel += max(model.elements.keys())
+        # the mesh is exactly symmetric about both local axes (`nCore` is always even), so the two
+        # diametral lines through the center, parallel to the x and z axes, consist of nodes with
+        # local Z=0 and local X=0, respectively; their intersection is the single center node. Only
+        # needed on the top/bottom (always "full") layers, hence based on `nodes2D` only.
+        tol = radius * 1e-6
+        isCenterLineX2D = np.isclose(nodes2D[:, 1], 0.0, atol=tol)
+        isCenterLineZ2D = np.isclose(nodes2D[:, 0], 0.0, atol=tol)
+        isCenter2D = isCenterLineX2D & isCenterLineZ2D
 
-    elements = []
-    elementsTop = []
-    elementsBottom = []
-    elementsOuter = []
-    nodesTop = []
-    nodesBottom = []
-    nodesOuter = []
-    nodesCenterBottom = []
-    nodesCenterTop = []
-    nodesCenterLineXTop = []
-    nodesCenterLineXBottom = []
-    nodesCenterLineZTop = []
-    nodesCenterLineZBottom = []
+        currentNodeLabel = 1
+        if model.nodes:
+            currentNodeLabel += max(model.nodes.keys())
+        currentElementLabel = 1
+        if model.elements:
+            currentElementLabel += max(model.elements.keys())
 
-    if order == 1:
-        nNodesY = nY + 1
-        yLayers = np.linspace(y0, y0 + lY, nNodesY)
+        elements = []
+        elementsTop = []
+        elementsBottom = []
+        elementsOuter = []
+        nodesTop = []
+        nodesBottom = []
+        nodesOuter = []
+        nodesCenterBottom = []
+        nodesCenterTop = []
+        nodesCenterLineXTop = []
+        nodesCenterLineXBottom = []
+        nodesCenterLineZTop = []
+        nodesCenterLineZBottom = []
 
-        layerNodes = []
-        for iy in range(nNodesY):
-            layer = []
-            for X, Z in nodes2D:
-                node = Node(currentNodeLabel, np.array([x0 + X, yLayers[iy], z0 + Z]))
-                layer.append(node)
-                model.nodes[currentNodeLabel] = node
-                currentNodeLabel += 1
-            layerNodes.append(layer)
-            if iy == 0:
-                nodesBottom.extend(layer)
-                nodesCenterBottom.extend(n for n, isC in zip(layer, isCenter2D) if isC)
-                nodesCenterLineXBottom.extend(n for n, isC in zip(layer, isCenterLineX2D) if isC)
-                nodesCenterLineZBottom.extend(n for n, isC in zip(layer, isCenterLineZ2D) if isC)
-            if iy == nNodesY - 1:
-                nodesTop.extend(layer)
-                nodesCenterTop.extend(n for n, isC in zip(layer, isCenter2D) if isC)
-                nodesCenterLineXTop.extend(n for n, isC in zip(layer, isCenterLineX2D) if isC)
-                nodesCenterLineZTop.extend(n for n, isC in zip(layer, isCenterLineZ2D) if isC)
-            nodesOuter.extend(n for n, isOuter in zip(layer, isOuter2D) if isOuter)
+        if order == 1:
+            nNodesY = nY + 1
+            yLayers = np.linspace(y0, y0 + lY, nNodesY)
 
-        for iy in range(nY):
-            for iq, (c0, c1, c2, c3) in enumerate(quads2D):
-                rc = (c0, c3, c2, c1)  # reverse in-plane order: normal then points from iy -> iy+1
-                nodeList = [layerNodes[iy][idx] for idx in rc] + [layerNodes[iy + 1][idx] for idx in rc]
-
-                newEl = elType(elTypeName, currentElementLabel)
-                newEl.setNodes(nodeList)
-
-                elements.append(newEl)
-                model.elements[currentElementLabel] = newEl
-
+            layerNodes = []
+            for iy in range(nNodesY):
+                layer = []
+                for X, Z in nodes2D:
+                    node = Node(currentNodeLabel, np.array([x0 + X, yLayers[iy], z0 + Z]))
+                    layer.append(node)
+                    model.nodes[currentNodeLabel] = node
+                    currentNodeLabel += 1
+                layerNodes.append(layer)
                 if iy == 0:
-                    elementsBottom.append(newEl)
-                if iy == nY - 1:
-                    elementsTop.append(newEl)
-                if outerQuadMask[iq]:
-                    elementsOuter.append(newEl)
-
-                currentElementLabel += 1
-
-    else:
-        nNodesYTotal = 2 * nY + 1
-        yLayers = np.linspace(y0, y0 + lY, nNodesYTotal)
-
-        layerNodes = []
-        for t in range(nNodesYTotal):
-            fullLayer = t % 2 == 0
-            coordsXZ = nodes2D if fullLayer else nodesLin
-            isOuter = isOuter2D if fullLayer else isOuterCorner2D
-            layer = []
-            for X, Z in coordsXZ:
-                node = Node(currentNodeLabel, np.array([x0 + X, yLayers[t], z0 + Z]))
-                layer.append(node)
-                model.nodes[currentNodeLabel] = node
-                currentNodeLabel += 1
-            layerNodes.append(layer)
-            if fullLayer:
-                if t == 0:
                     nodesBottom.extend(layer)
                     nodesCenterBottom.extend(n for n, isC in zip(layer, isCenter2D) if isC)
                     nodesCenterLineXBottom.extend(n for n, isC in zip(layer, isCenterLineX2D) if isC)
                     nodesCenterLineZBottom.extend(n for n, isC in zip(layer, isCenterLineZ2D) if isC)
-                if t == nNodesYTotal - 1:
+                if iy == nNodesY - 1:
                     nodesTop.extend(layer)
                     nodesCenterTop.extend(n for n, isC in zip(layer, isCenter2D) if isC)
                     nodesCenterLineXTop.extend(n for n, isC in zip(layer, isCenterLineX2D) if isC)
                     nodesCenterLineZTop.extend(n for n, isC in zip(layer, isCenterLineZ2D) if isC)
-            nodesOuter.extend(n for n, isOut in zip(layer, isOuter) if isOut)
+                nodesOuter.extend(n for n, isOuter in zip(layer, isOuter2D) if isOuter)
 
-        for iy in range(nY):
-            tBottom, tMid, tTop = 2 * iy, 2 * iy + 1, 2 * iy + 2
-            for iq, (c0, c1, c2, c3, m01, m12, m23, m30) in enumerate(quads2D):
-                rc = (c0, c3, c2, c1)
-                rm = (m30, m23, m12, m01)  # mid-side nodes of edges (rc0-rc1, rc1-rc2, rc2-rc3, rc3-rc0)
+            for iy in range(nY):
+                for iq, (c0, c1, c2, c3) in enumerate(quads2D):
+                    rc = (c0, c3, c2, c1)  # reverse in-plane order: normal then points from iy -> iy+1
+                    nodeList = [layerNodes[iy][idx] for idx in rc] + [layerNodes[iy + 1][idx] for idx in rc]
 
-                bottomCorners = [layerNodes[tBottom][idx] for idx in rc]
-                topCorners = [layerNodes[tTop][idx] for idx in rc]
-                bottomMids = [layerNodes[tBottom][idx] for idx in rm]
-                topMids = [layerNodes[tTop][idx] for idx in rm]
-                verticalMids = [layerNodes[tMid][idx] for idx in rc]
+                    newEl = elType(elTypeName, currentElementLabel)
+                    newEl.setNodes(nodeList)
 
-                nodeList = bottomCorners + topCorners + bottomMids + topMids + verticalMids
+                    elements.append(newEl)
+                    model.elements[currentElementLabel] = newEl
 
-                newEl = elType(elTypeName, currentElementLabel)
-                newEl.setNodes(nodeList)
+                    if iy == 0:
+                        elementsBottom.append(newEl)
+                    if iy == nY - 1:
+                        elementsTop.append(newEl)
+                    if outerQuadMask[iq]:
+                        elementsOuter.append(newEl)
 
-                elements.append(newEl)
-                model.elements[currentElementLabel] = newEl
+                    currentElementLabel += 1
 
-                if iy == 0:
-                    elementsBottom.append(newEl)
-                if iy == nY - 1:
-                    elementsTop.append(newEl)
-                if outerQuadMask[iq]:
-                    elementsOuter.append(newEl)
+        else:
+            nNodesYTotal = 2 * nY + 1
+            yLayers = np.linspace(y0, y0 + lY, nNodesYTotal)
 
-                currentElementLabel += 1
+            layerNodes = []
+            for t in range(nNodesYTotal):
+                fullLayer = t % 2 == 0
+                coordsXZ = nodes2D if fullLayer else nodesLin
+                isOuter = isOuter2D if fullLayer else isOuterCorner2D
+                layer = []
+                for X, Z in coordsXZ:
+                    node = Node(currentNodeLabel, np.array([x0 + X, yLayers[t], z0 + Z]))
+                    layer.append(node)
+                    model.nodes[currentNodeLabel] = node
+                    currentNodeLabel += 1
+                layerNodes.append(layer)
+                if fullLayer:
+                    if t == 0:
+                        nodesBottom.extend(layer)
+                        nodesCenterBottom.extend(n for n, isC in zip(layer, isCenter2D) if isC)
+                        nodesCenterLineXBottom.extend(n for n, isC in zip(layer, isCenterLineX2D) if isC)
+                        nodesCenterLineZBottom.extend(n for n, isC in zip(layer, isCenterLineZ2D) if isC)
+                    if t == nNodesYTotal - 1:
+                        nodesTop.extend(layer)
+                        nodesCenterTop.extend(n for n, isC in zip(layer, isCenter2D) if isC)
+                        nodesCenterLineXTop.extend(n for n, isC in zip(layer, isCenterLineX2D) if isC)
+                        nodesCenterLineZTop.extend(n for n, isC in zip(layer, isCenterLineZ2D) if isC)
+                nodesOuter.extend(n for n, isOut in zip(layer, isOuter) if isOut)
 
-    model._populateNodeFieldVariablesFromElements()
+            for iy in range(nY):
+                tBottom, tMid, tTop = 2 * iy, 2 * iy + 1, 2 * iy + 2
+                for iq, (c0, c1, c2, c3, m01, m12, m23, m30) in enumerate(quads2D):
+                    rc = (c0, c3, c2, c1)
+                    rm = (m30, m23, m12, m01)  # mid-side nodes of edges (rc0-rc1, rc1-rc2, rc2-rc3, rc3-rc0)
 
-    # node sets
-    model.nodeSets["{:}_top".format(name)] = NodeSet("{:}_top".format(name), nodesTop)
-    model.nodeSets["{:}_bottom".format(name)] = NodeSet("{:}_bottom".format(name), nodesBottom)
-    model.nodeSets["{:}_outer".format(name)] = NodeSet("{:}_outer".format(name), nodesOuter)
-    model.nodeSets["{:}_centerTop".format(name)] = NodeSet("{:}_centerTop".format(name), nodesCenterTop)
-    model.nodeSets["{:}_centerBottom".format(name)] = NodeSet("{:}_centerBottom".format(name), nodesCenterBottom)
-    model.nodeSets["{:}_centerLineXTop".format(name)] = NodeSet("{:}_centerLineXTop".format(name), nodesCenterLineXTop)
-    model.nodeSets["{:}_centerLineXBottom".format(name)] = NodeSet(
-        "{:}_centerLineXBottom".format(name), nodesCenterLineXBottom
-    )
-    model.nodeSets["{:}_centerLineZTop".format(name)] = NodeSet("{:}_centerLineZTop".format(name), nodesCenterLineZTop)
-    model.nodeSets["{:}_centerLineZBottom".format(name)] = NodeSet(
-        "{:}_centerLineZBottom".format(name), nodesCenterLineZBottom
-    )
+                    bottomCorners = [layerNodes[tBottom][idx] for idx in rc]
+                    topCorners = [layerNodes[tTop][idx] for idx in rc]
+                    bottomMids = [layerNodes[tBottom][idx] for idx in rm]
+                    topMids = [layerNodes[tTop][idx] for idx in rm]
+                    verticalMids = [layerNodes[tMid][idx] for idx in rc]
 
-    # element sets
-    model.elementSets["{:}_all".format(name)] = ElementSet("{:}_all".format(name), elements)
-    model.elementSets["{:}_top".format(name)] = ElementSet("{:}_top".format(name), elementsTop)
-    model.elementSets["{:}_bottom".format(name)] = ElementSet("{:}_bottom".format(name), elementsBottom)
-    model.elementSets["{:}_outer".format(name)] = ElementSet("{:}_outer".format(name), elementsOuter)
+                    nodeList = bottomCorners + topCorners + bottomMids + topMids + verticalMids
 
-    # surfaces: S1/S2 are the bottom/top faces, S5 the outward-radial face of the outer-ring elements
-    # (both hold regardless of element order, since Abaqus face numbering only depends on corner connectivity)
-    model.surfaces["{:}_bottom".format(name)] = {1: model.elementSets["{:}_bottom".format(name)]}
-    model.surfaces["{:}_top".format(name)] = {2: model.elementSets["{:}_top".format(name)]}
-    model.surfaces["{:}_outer".format(name)] = {5: model.elementSets["{:}_outer".format(name)]}
+                    newEl = elType(elTypeName, currentElementLabel)
+                    newEl.setNodes(nodeList)
 
-    return model
+                    elements.append(newEl)
+                    model.elements[currentElementLabel] = newEl
+
+                    if iy == 0:
+                        elementsBottom.append(newEl)
+                    if iy == nY - 1:
+                        elementsTop.append(newEl)
+                    if outerQuadMask[iq]:
+                        elementsOuter.append(newEl)
+
+                    currentElementLabel += 1
+
+        model._populateNodeFieldVariablesFromElements()
+
+        # node sets
+        model.nodeSets["{:}_top".format(name)] = NodeSet("{:}_top".format(name), nodesTop)
+        model.nodeSets["{:}_bottom".format(name)] = NodeSet("{:}_bottom".format(name), nodesBottom)
+        model.nodeSets["{:}_outer".format(name)] = NodeSet("{:}_outer".format(name), nodesOuter)
+        model.nodeSets["{:}_centerTop".format(name)] = NodeSet("{:}_centerTop".format(name), nodesCenterTop)
+        model.nodeSets["{:}_centerBottom".format(name)] = NodeSet("{:}_centerBottom".format(name), nodesCenterBottom)
+        model.nodeSets["{:}_centerLineXTop".format(name)] = NodeSet(
+            "{:}_centerLineXTop".format(name), nodesCenterLineXTop
+        )
+        model.nodeSets["{:}_centerLineXBottom".format(name)] = NodeSet(
+            "{:}_centerLineXBottom".format(name), nodesCenterLineXBottom
+        )
+        model.nodeSets["{:}_centerLineZTop".format(name)] = NodeSet(
+            "{:}_centerLineZTop".format(name), nodesCenterLineZTop
+        )
+        model.nodeSets["{:}_centerLineZBottom".format(name)] = NodeSet(
+            "{:}_centerLineZBottom".format(name), nodesCenterLineZBottom
+        )
+
+        # element sets
+        model.elementSets["{:}_all".format(name)] = ElementSet("{:}_all".format(name), elements)
+        model.elementSets["{:}_top".format(name)] = ElementSet("{:}_top".format(name), elementsTop)
+        model.elementSets["{:}_bottom".format(name)] = ElementSet("{:}_bottom".format(name), elementsBottom)
+        model.elementSets["{:}_outer".format(name)] = ElementSet("{:}_outer".format(name), elementsOuter)
+
+        # surfaces: S1/S2 are the bottom/top faces, S5 the outward-radial face of the outer-ring elements
+        # (both hold regardless of element order, since Abaqus face numbering only depends on corner connectivity)
+        surfaceName = "{:}_bottom".format(name)
+        model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {1: model.elementSets[surfaceName]})
+        surfaceName = "{:}_top".format(name)
+        model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {2: model.elementSets[surfaceName]})
+        surfaceName = "{:}_outer".format(name)
+        model.surfaces[surfaceName] = EntityBasedSurface(surfaceName, {5: model.elementSets[surfaceName]})
