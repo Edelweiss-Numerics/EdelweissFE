@@ -162,10 +162,11 @@ def _perElementFieldOutputResult(model, fieldOutputName):
     elements = list(fieldOutput.associatedSet)
     values = np.asarray(fieldOutput.getLastResult())
 
-    if values.shape[0] != len(elements):
+    if values.ndim < 1 or values.shape[0] != len(elements):
+        rowCount = values.shape[0] if values.ndim >= 1 else 0
         raise ValueError(
-            f"hAdaptivity marker: fieldOutput {fieldOutputName!r} reports {values.shape[0]} "
-            f"result row(s) for {len(elements)} element(s) in its associated set; refusing to mark "
+            f"hAdaptivity marker: fieldOutput {fieldOutputName!r} reports {rowCount} "
+            f"result row(s) (shape {values.shape}) for {len(elements)} element(s) in its associated set; refusing to mark "
             "against a mismatched fieldOutput."
         )
     return elements, values
@@ -362,18 +363,20 @@ class SurfaceMarker(MarkerBase):
 # See examples/WinklerL_AMR.
 
 
-def _spr_polynomial_basis(localCoords, order):
+def _sprPolynomialBasis(localCoords, order):
     """Complete polynomial basis (3D) evaluated at ``localCoords`` (shape ``(n, 3)``, relative to a
-    patch centre). ``order=1`` -> ``[1, x, y, z]`` (4 terms); ``order=2`` -> that plus
-    ``[x^2, y^2, z^2, xy, yz, zx]`` (10 terms)."""
-    x, y, z = localCoords[:, 0], localCoords[:, 1], localCoords[:, 2]
-    ones = np.ones(len(localCoords))
+    patch centre). ``order=0`` -> ``[1]`` (1 term); ``order=1`` -> that plus ``[x, y, z]`` (4 terms);
+    ``order=2`` -> that plus ``[x^2, y^2, z^2, xy, yz, zx]`` (10 terms)."""
+    ones = np.ones((len(localCoords), 1))
+    if order == 0:
+        return ones
+    x, y, z = localCoords[:, 0:1], localCoords[:, 1:2], localCoords[:, 2:3]
     if order == 1:
-        return np.stack([ones, x, y, z], axis=1)
-    return np.stack([ones, x, y, z, x * x, y * y, z * z, x * y, y * z, z * x], axis=1)
+        return np.concatenate([ones, x, y, z], axis=1)
+    return np.concatenate([ones, x, y, z, x * x, y * y, z * z, x * y, y * z, z * x], axis=1)
 
 
-def _recover_averaging(coordsAll, valuesAll, connectivity, nGlobalNodes, dim, volume):
+def _recoverAveraging(coordsAll, valuesAll, connectivity, nGlobalNodes, dim, volume):
     """Volume-weighted nodal averaging recovery (ZZ 1987): the recovered nodal gradient is the
     volume-weighted mean of the FE gradient sampled at that node by every element sharing it.
     Returns ``(recovered (nGlobalNodes, dim, 3), hasRecovery (nGlobalNodes,))``."""
@@ -393,7 +396,7 @@ def _recover_averaging(coordsAll, valuesAll, connectivity, nGlobalNodes, dim, vo
     return recovered, hasRecovery
 
 
-def _recover_spr(coordsAll, connectivity, nGlobalNodes, dim, gaussCoords, gradGauss):
+def _recoverSpr(coordsAll, connectivity, nGlobalNodes, dim, gaussCoords, gradGauss):
     """Superconvergent patch recovery (Zienkiewicz-Zhu 1992). For each corner (vertex) node a least-
     squares polynomial is fitted to the FE gradient at the superconvergent Gauss points of the patch
     of elements sharing that node; the recovered corner value is the fit at the node. Each edge
@@ -429,7 +432,7 @@ def _recover_spr(coordsAll, connectivity, nGlobalNodes, dim, gaussCoords, gradGa
 
     # fit one polynomial per corner patch; the value at the corner is the constant term (the fit is
     # centred on the corner, so the basis reduces to [1, 0, ...] there)
-    cornerFit = {}  # global corner -> (order, coeffs (nBasis, nComponents)) or ("mean", value (nComponents,))
+    cornerFit = {}  # global corner -> (order, coeffs (nBasis, nComponents))
     recovered = np.zeros((nGlobalNodes, dim, 3))
     for corner, elements in cornerElements.items():
         elements = np.asarray(elements)
@@ -437,12 +440,7 @@ def _recover_spr(coordsAll, connectivity, nGlobalNodes, dim, gaussCoords, gradGa
         sampleValues = gaussValues[elements].reshape(-1, nComponents)
         nSamples = sampleCoords.shape[0]
         order = 2 if nSamples >= 10 else (1 if nSamples >= 4 else 0)
-        if order == 0:  # too few points even for a linear fit -> fall back to the plain mean
-            meanValue = sampleValues.mean(axis=0)
-            cornerFit[corner] = ("mean", meanValue)
-            recovered[corner] = meanValue.reshape(dim, 3)
-            continue
-        basis = _spr_polynomial_basis(sampleCoords, order)
+        basis = _sprPolynomialBasis(sampleCoords, order)
         coeffs, _, _, _ = np.linalg.lstsq(basis, sampleValues, rcond=None)  # (nBasis, nComponents)
         cornerFit[corner] = (order, coeffs)
         recovered[corner] = coeffs[0].reshape(dim, 3)
@@ -453,13 +451,9 @@ def _recover_spr(coordsAll, connectivity, nGlobalNodes, dim, gaussCoords, gradGa
         values = []
         for corner in (cornerA, cornerB):
             fit = cornerFit.get(corner)
-            if fit is None:
-                continue
-            if fit[0] == "mean":
-                values.append(fit[1])
-            else:
+            if fit is not None:
                 order, coeffs = fit
-                basis = _spr_polynomial_basis((nodeCoords[midside] - nodeCoords[corner])[None, :], order)
+                basis = _sprPolynomialBasis((nodeCoords[midside] - nodeCoords[corner])[None, :], order)
                 values.append((basis @ coeffs).ravel())
         if values:
             recovered[midside] = np.mean(values, axis=0).reshape(dim, 3)
@@ -468,12 +462,12 @@ def _recover_spr(coordsAll, connectivity, nGlobalNodes, dim, gaussCoords, gradGa
     return recovered, hasRecovery
 
 
-def _recovery_indicators(coordsAll, valuesAll, connectivity, nGlobalNodes, recovery="averaging"):
+def _recoveryIndicators(coordsAll, valuesAll, connectivity, nGlobalNodes, recovery="averaging"):
     r"""Zienkiewicz-Zhu recovered-gradient error indicator, over all elements at once.
 
     The FE gradient at the 2x2x2 Gauss points and the final error norm are batched into single
     ``numpy`` calls; the recovery of the continuous gradient ``grad*`` is delegated to
-    :func:`_recover_averaging` (``recovery='averaging'``) or :func:`_recover_spr` (``'spr'``).
+    :func:`_recoverAveraging` (``recovery='averaging'``) or :func:`_recoverSpr` (``'spr'``).
 
     Parameters
     ----------
@@ -512,9 +506,9 @@ def _recovery_indicators(coordsAll, valuesAll, connectivity, nGlobalNodes, recov
 
     if recovery == "spr":
         gaussCoords = np.einsum("ga,ead->egd", _GP_N, coordsAll)  # (nElem, 8, 3) physical Gauss coords
-        recovered, hasRecovery = _recover_spr(coordsAll, connectivity, nGlobalNodes, dim, gaussCoords, gradH)
+        recovered, hasRecovery = _recoverSpr(coordsAll, connectivity, nGlobalNodes, dim, gaussCoords, gradH)
     else:
-        recovered, hasRecovery = _recover_averaging(coordsAll, valuesAll, connectivity, nGlobalNodes, dim, volume)
+        recovered, hasRecovery = _recoverAveraging(coordsAll, valuesAll, connectivity, nGlobalNodes, dim, volume)
 
     # eta_K = || grad* - grad^h ||_{L2(K)}, integrated at the Gauss points
     gradStar = np.einsum("ga,eadi->egdi", _GP_N, recovered[connectivity])  # (nElem, 8, dim, 3)
@@ -581,7 +575,9 @@ class RecoveryErrorMarkerSchema(MarkerOptionsBase):
     maxRefinedFraction: float = schemaField(
         description=(
             "Hard cap on the fraction of elements a single pass may mark (bounds the direct-solver "
-            "factorization cost)."
+            "factorization cost). Note that a non-zero 'halo' adds neighbor rings around these marks "
+            "and can increase the final count beyond this fraction. Refinement may also be deferred "
+            "across increments until 'minMarkedElements' accumulate at the model-modifier level."
         ),
         dtype=float,
         default=0.1,
@@ -622,6 +618,11 @@ class RecoveryErrorMarkerSchema(MarkerOptionsBase):
         ),
         dtype=str,
         default="averaging",
+    )
+    entry: str = schemaField(
+        description="Node-field value entry to read ('U', the current converged field, by default).",
+        dtype=str,
+        default="U",
     )
 
 
@@ -711,6 +712,7 @@ class RecoveryErrorMarker(MarkerBase):
             relTol=opts.relTol,
             halo=opts.halo,
             recovery=opts.recovery,
+            entry=opts.entry,
             initialOnly=opts.initialOnly,
         )
 
@@ -784,7 +786,7 @@ class RecoveryErrorMarker(MarkerBase):
         coordsAll = np.asarray(coordsList, dtype=float)  # (nElem, 20, 3)
         valuesAll = np.asarray(valuesList, dtype=float)  # (nElem, 20, dim)
         connectivity = np.asarray(connectivity, dtype=np.intp)  # (nElem, 20)
-        indicators, gradEnergy = _recovery_indicators(
+        indicators, gradEnergy = _recoveryIndicators(
             coordsAll, valuesAll, connectivity, len(nodeToIndex), self.recovery
         )
 

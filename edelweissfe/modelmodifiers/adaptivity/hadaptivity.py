@@ -119,8 +119,9 @@ class HAdaptivitySchema:
             "triggered. Marked elements persist (accumulate) across increments -- across calls where "
             "fewer than this many are marked, no refinement happens and no equation system rebuild is "
             "triggered -- until the accumulated count reaches this threshold, at which point all of "
-            "them are refined together in a single pass. Default 1 refines as soon as any element is "
-            "marked (previous behavior)."
+            "them are refined together in a single pass. Note that individual markers may cap their "
+            "own marks per pass (e.g. 'maxRefinedFraction') or expand them (e.g. 'halo') before "
+            "accumulating here. Default 1 refines as soon as any element is marked (previous behavior)."
         ),
         dtype=int,
         default=1,
