@@ -10,6 +10,7 @@ Documentation
    models
    solvers
    linsolvers
+   blockamgtheory
    steps
    analyticalfields
    constraints
