@@ -261,9 +261,9 @@ def makePrettyTable(maxLevels: int = 4) -> PrettyTable:
         prettytable.add_row(
             (
                 "{:}{:}".format(" " * level, cat),
-                "{:}{:10.5f} s".format(" " * level, t),
+                "{:.5f}s".format(t),
                 calls,
-                "{:10.5f} s".format(t_per_call),
+                "{:.5f}s".format(t_per_call),
             )
         )
 
@@ -313,9 +313,7 @@ def extractIncrementTimes(maxLevels: int = 4) -> PrettyTable:
     prettytable.align = "l"
     for level, cat, t, calls in delta_rows:
         t_per_call = t / calls if calls > 0 else 0.0
-        prettytable.add_row(
-            [" " * level + cat, "{:}{:10.5f} s".format(" " * level, t), calls, "{:10.5f} s".format(t_per_call)]
-        )
+        prettytable.add_row([" " * level + cat, "{:.5f}s".format(t), calls, "{:.5f}s".format(t_per_call)])
 
     return prettytable
 

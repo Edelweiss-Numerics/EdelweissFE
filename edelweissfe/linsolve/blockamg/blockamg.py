@@ -415,7 +415,7 @@ class BlockAMGSolver(LinearSolver):
         self._outerRestart = outerRestart
         self._outerMaxiter = outerMaxiter
         if outerSolver not in ("scipy", "amgcl_lgmres"):
-            raise ValueError("outerSolver must be 'scipy' or 'amgcl_lgmres', got {:!r}".format(outerSolver))
+            raise ValueError("outerSolver must be 'scipy' or 'amgcl_lgmres', got {!r}".format(outerSolver))
         self._outerSolver = outerSolver
         self._lgmresM = lgmresM
         self._lgmresK = lgmresK
@@ -437,7 +437,7 @@ class BlockAMGSolver(LinearSolver):
         self._gapSafetyFactor = gapSafetyFactor
         self._trueResidualMaxContinuations = trueResidualMaxContinuations
         if verbosity not in _VERBOSITY_LEVELS:
-            raise ValueError("verbosity must be one of {:}, got {:!r}".format(_VERBOSITY_LEVELS, verbosity))
+            raise ValueError("verbosity must be one of {:}, got {!r}".format(_VERBOSITY_LEVELS, verbosity))
         self._verbosityIndex = _VERBOSITY_LEVELS.index(verbosity)
         self._warnOuterIterationsThreshold = warnOuterIterationsThreshold
 
@@ -791,7 +791,7 @@ class BlockAMGSolver(LinearSolver):
         )
         self._refreshNext = False
 
-        with performancetiming.timeit("blockamg: equilibration"):
+        with performancetiming.timeit("equilibration"):
             if mustRefresh:
                 # Symmetric diagonal equilibration. Solve A x = b as (D A D)(D^-1 x) = D b, i.e.
                 # As z = bs with x = D z; D = diag(dinv), dinv = 1/sqrt(|diag A|).
@@ -819,13 +819,13 @@ class BlockAMGSolver(LinearSolver):
         # not amortized across solves -- As's sparsity pattern churns every solve on a model with
         # contact/tie constraints, so there is no stable pattern to cache a threaded build against --
         # so it is paid fresh here every call, same as equilibration above.
-        with performancetiming.timeit("blockamg: threaded operator build"):
+        with performancetiming.timeit("threaded operator build"):
             threadedAs = PyAMGCLMatrix()
             threadedAs.build(As)
         outerOperator = LinearOperator((n, n), matvec=threadedAs.matvec, dtype=As.dtype)
 
         # Off-diagonal couplings (for the sweep) are needed every solve regardless of refresh/reuse.
-        with performancetiming.timeit("blockamg: off-diagonal split"):
+        with performancetiming.timeit("off-diagonal split"):
             offBlocks = {}
             for i in range(len(slices)):
                 rowBlock = As[slices[i], :]
@@ -839,7 +839,7 @@ class BlockAMGSolver(LinearSolver):
                         offBlocks[(i, j)] = threadedOffBlock
 
         if mustRefresh:
-            with performancetiming.timeit("blockamg: hierarchy build"):
+            with performancetiming.timeit("hierarchy build"):
                 # One AMG hierarchy per field, built fresh. A vector field gets its translations as the
                 # near null-space; a scalar field the default constant.
                 diagBlocks = [As[sl, :][:, sl].tocsr() for sl in slices]
@@ -851,7 +851,7 @@ class BlockAMGSolver(LinearSolver):
                         # p-two-grid: opted in via the constructor's p1Maps (offline-probe path) or
                         # p1FieldNames (live path: computed lazily here from self._model -- set by
                         # setModel -- on first need, instead of waiting for a push from the driver).
-                        with performancetiming.timeit("blockamg: p1 topology"):
+                        with performancetiming.timeit("p1 topology"):
                             p1Map = self._getP1Map(block.name)
                     if p1Map is not None:
                         from edelweissfe.linsolve.blockamg.ptwogrid import (
@@ -887,7 +887,7 @@ class BlockAMGSolver(LinearSolver):
                     # own near-null-space path is unimplemented for block value types; untouched by the
                     # rigid-body-basis choice below since backendBlockSize > 1 stays opt-in.
                     if isVectorField and backendBlockSize == 1:
-                        with performancetiming.timeit("blockamg: nullspace construction"):
+                        with performancetiming.timeit("nullspace construction"):
                             # Coordinates come from self._model (set by setModel), read fresh every
                             # rebuild rather than pushed in ahead of time.
                             coords = self._getNodeCoordinates(block.name)
@@ -962,7 +962,7 @@ class BlockAMGSolver(LinearSolver):
         # matching scipy's semantics bit-for-bit. blockGaussSeidel itself
         # is reused unchanged for both paths -- it already has exactly the "1D array in, 1D array out"
         # shape AMGCL's callback needs, with no LinearOperator indirection required.
-        with performancetiming.timeit("blockamg: outer GMRES"):
+        with performancetiming.timeit("outer GMRES"):
             history = []
             if self._outerSolver == "scipy":
                 z, info = gmres(
@@ -1029,7 +1029,7 @@ class BlockAMGSolver(LinearSolver):
         if np.isfinite(_measuredGap) and _measuredGap > 0.0:
             self._trueResidualGap = max(0.5 * self._trueResidualGap + 0.5 * _measuredGap, 1.0)
 
-        with performancetiming.timeit("blockamg: true-residual continuations"):
+        with performancetiming.timeit("true-residual continuations"):
             continuationEta = min(eta, firstPassEta) if self._gapCompensatedTolerance else eta
             continuations = 0
             while trueResidual > eta and continuations < self._trueResidualMaxContinuations:
