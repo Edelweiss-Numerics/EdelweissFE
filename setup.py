@@ -214,15 +214,9 @@ extensions += [
 ]
 
 print("Gather the AMGCL interface")
-# Defaults to no arch flags here, unlike this extension's siblings above (still reads
-# EDELWEISSFE_ARCH_FLAGS if the user sets one explicitly, same override mechanism as every
-# other extension -- only the unset-env-var default differs): measured on a Xeon Gold 6140
-# (Skylake-SP) -- -march=native resolves to skylake-avx512 there, and AMGCL SpMV/relaxation
-# inner loops issue enough sustained 512-bit vector instructions to trigger that CPU generation's
-# well-documented package-wide AVX-512 downclock, making the whole solve slower, not faster (measured:
-# 811s -> 1134s baseline, 302s -> 412s with the power_iters=300 fix, both +~40%, same iteration counts
-# either way -- a pure clock-speed effect, not a numerics one). Set EDELWEISSFE_ARCH_FLAGS=-march=native
-# explicitly on hardware confirmed not to have this erratum.
+# No arch flags by default: -march=native measured ~40% SLOWER here on Skylake-SP, where AMGCL's
+# sustained 512-bit inner loops trigger that generation's package-wide AVX-512 downclock. Set
+# EDELWEISSFE_ARCH_FLAGS explicitly to opt in.
 extensions += [
     Extension(
         "*",
