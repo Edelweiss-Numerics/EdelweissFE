@@ -35,6 +35,22 @@ therefore imports it lazily; see :func:`createSolver`.
 
 from collections.abc import Callable
 
+from edelweissfe.linsolve.base import LinearSolver
+
+
+class MumpsSolver(LinearSolver):
+    """The MUMPS direct solver. Callable as ``(A, b) -> x``.
+
+    Takes no options; ``setJournal``/``setFieldStructure`` are inherited no-ops (this solver has no
+    field-split structure and does not log).
+    """
+
+    def __init__(self, solveFunction):
+        self._solveFunction = solveFunction
+
+    def __call__(self, A, b):
+        return self._solveFunction(A, b)
+
 
 def createSolver(opts) -> Callable:
     """Create a MUMPS-backed linear solver.
@@ -52,18 +68,18 @@ def createSolver(opts) -> Callable:
     Returns
     -------
     Callable
-        :func:`~edelweissfe.linsolve.mumps.mumps.mumpsSolve`, i.e. a stateless ``(A, b) -> x``
-        function.
+        A :class:`MumpsSolver`, callable as ``(A, b) -> x``, delegating to
+        :func:`~edelweissfe.linsolve.mumps.mumps.mumpsSolve`.
 
     Raises
     ------
     ImportError
-        If the optional ``mumps`` dependency is not installed.
+        If the optional ``mumps`` dependency is not installed -- raised here, at construction time
+        (matching the pre-refactor behaviour), not deferred to the first solve.
     """
-
     # Imported inside the function body, not at module scope: the `mumps` bindings are an optional
     # dependency, so at module scope their absence would break anyone who merely resolves a
     # `linsolver` registry name rather than this one.
     from edelweissfe.linsolve.mumps.mumps import mumpsSolve
 
-    return mumpsSolve
+    return MumpsSolver(mumpsSolve)

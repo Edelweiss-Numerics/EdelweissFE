@@ -35,6 +35,23 @@ just may not produce an UMFPACK-backed one.
 
 from collections.abc import Callable
 
+from edelweissfe.linsolve.base import LinearSolver
+
+
+class UMFPACKSolver(LinearSolver):
+    """SciPy's UMFPACK-backed direct solver. Callable as ``(A, b) -> x``.
+
+    Takes no options; ``setJournal``/``setFieldStructure`` are inherited no-ops (this solver has no
+    field-split structure and does not log).
+    """
+
+    def __call__(self, A, b):
+        # Imported inside the call, not at module scope -- see the note in the `superlu` sibling for
+        # why every one of the factories does it this way.
+        from scipy.sparse.linalg import spsolve
+
+        return spsolve(A, b, use_umfpack=True)
+
 
 def createSolver(opts) -> Callable:
     """Create an UMFPACK-backed linear solver.
@@ -53,12 +70,7 @@ def createSolver(opts) -> Callable:
     Returns
     -------
     Callable
-        A callable ``(A, b) -> x`` solving ``A x = b`` via
+        A :class:`UMFPACKSolver`, callable as ``(A, b) -> x``, solving ``A x = b`` via
         :func:`scipy.sparse.linalg.spsolve` with ``use_umfpack=True``.
     """
-
-    # Imported inside the function body, not at module scope -- see the note in the `superlu`
-    # sibling for why every one of the nine factories does it this way.
-    from scipy.sparse.linalg import spsolve
-
-    return lambda A, b: spsolve(A, b, use_umfpack=True)
+    return UMFPACKSolver()

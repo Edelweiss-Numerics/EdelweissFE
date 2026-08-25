@@ -61,6 +61,10 @@ marmot_dir = expanduser(os.environ.get("MARMOT_INSTALL_DIR", default_install_pre
 mkl_include = expanduser(os.environ.get("MKL_INCLUDE_DIR", join(default_install_prefix, "include")))
 eigen_include = expanduser(os.environ.get("EIGEN_INCLUDE_DIR", join(default_install_prefix, "include/eigen3")))
 arch_flags = os.environ.get("EDELWEISSFE_ARCH_FLAGS", "-march=native").split()
+# AMGCL specifically defaults to no arch flags (see the comment at its Extension below) but
+# still honors an explicit EDELWEISSFE_ARCH_FLAGS override, consistent with every other
+# extension above -- only the *default* differs, not the override mechanism.
+amgcl_arch_flags = os.environ.get("EDELWEISSFE_ARCH_FLAGS", "").split()
 print("Marmot install directory (overwrite via environment var. MARMOT_INSTALL_DIR):")
 print(marmot_dir)
 print("MKL include directory (overwrite via environment var. MKL_INCLUDE_DIR):")
@@ -69,6 +73,8 @@ print("Eigen include directory (overwrite via environment var. EIGEN_INCLUDE_DIR
 print(eigen_include)
 print("Architecture compile flags (overwrite via environment var. EDELWEISSFE_ARCH_FLAGS):")
 print(arch_flags)
+print("AMGCL architecture compile flags (overwrite via the same environment variable; defaults to none, see below):")
+print(amgcl_arch_flags)
 print("*" * 80)
 
 print("Gather the extension for the MarmotElement base element, linked to the Marmot library")
@@ -208,13 +214,22 @@ extensions += [
 ]
 
 print("Gather the AMGCL interface")
+# Defaults to no arch flags here, unlike this extension's siblings above (still reads
+# EDELWEISSFE_ARCH_FLAGS if the user sets one explicitly, same override mechanism as every
+# other extension -- only the unset-env-var default differs): measured on a Xeon Gold 6140
+# (Skylake-SP) -- -march=native resolves to skylake-avx512 there, and AMGCL SpMV/relaxation
+# inner loops issue enough sustained 512-bit vector instructions to trigger that CPU generation's
+# well-documented package-wide AVX-512 downclock, making the whole solve slower, not faster (measured:
+# 811s -> 1134s baseline, 302s -> 412s with the power_iters=300 fix, both +~40%, same iteration counts
+# either way -- a pure clock-speed effect, not a numerics one). Set EDELWEISSFE_ARCH_FLAGS=-march=native
+# explicitly on hardware confirmed not to have this erratum.
 extensions += [
     Extension(
         "*",
         sources=["edelweissfe/linsolve/amgcl/amgcl.pyx"],
         include_dirs=[numpy.get_include(), join(default_install_prefix, "include"), "."],
         language="c++",
-        extra_compile_args=["-std=c++11", "-fopenmp", "-O3"],
+        extra_compile_args=["-std=c++11", "-fopenmp", "-O3", *amgcl_arch_flags],
         extra_link_args=["-fopenmp"],
     )
 ]

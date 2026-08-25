@@ -55,9 +55,8 @@ def createSolver(opts) -> Callable:
     Returns
     -------
     Callable
-        The bound :meth:`~edelweissfe.linsolve.gmres.gmres.Gmres.gmresSolve` method of a
-        :class:`~edelweissfe.linsolve.gmres.gmres.Gmres` configured from ``opts``, i.e. a
-        ``(A, b) -> x`` callable holding onto those options.
+        A :class:`~edelweissfe.linsolve.gmres.gmres.Gmres` configured from ``opts``, callable as
+        ``(A, b) -> x``.
 
     Raises
     ------
@@ -70,4 +69,4 @@ def createSolver(opts) -> Callable:
     # rather than this one.
     from edelweissfe.linsolve.gmres.gmres import Gmres
 
-    return Gmres(opts).gmresSolve
+    return Gmres(opts)

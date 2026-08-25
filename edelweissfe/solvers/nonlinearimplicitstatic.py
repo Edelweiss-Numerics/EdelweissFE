@@ -110,6 +110,41 @@ class NISTSchema:
     linsolverConfigFile: str | None = schemaField(
         description="A JSON configuration file for the linear solver.", dtype=str, default=""
     )
+    pruneCondensedMatrixZeros: bool | None = schemaField(
+        description=(
+            "Compact explicitly stored zeros out of the multi-point-constraint-condensed system "
+            "matrix before solving (default True, the long-standing behaviour). Setting this False "
+            "keeps the pattern the assembly produced, which is what makes it stable enough across "
+            "Newton iterations for a linear solver to reuse a symbolic factorization -- pruning "
+            "removes whichever entries happen to be exactly zero this iteration, so the pattern "
+            "changes every iteration and reuse can never engage. Off by default because the pruning "
+            "was introduced deliberately: PARDISO's reordering is sensitive to the extra structural "
+            "entries on these path-dependent condensed systems, and keeping them has been observed "
+            "to drift from the converged reference path. Only set False together with a solver that "
+            "actually freezes its reordering, and verify the load path against a reference run."
+        ),
+        dtype=bool,
+        default=True,
+    )
+    useAmgclMPCCondensation: bool | None = schemaField(
+        description=(
+            "Condense the multi-point-constraint system matrix via the direct T^T K T + C "
+            "expression, but through AMGCL's own OpenMP-threaded product()/sum() "
+            "instead of SciPy's single-threaded CSR sparse routines. Offline-measured on a "
+            "reference 280k-dof model at ~2.4-2.6x faster than the direct SciPy expression, "
+            "correctness-verified to floating-point precision. Leaves ~1.6x more raw nnz than the "
+            "plain expression (AMGCL's product()/sum() do not prune exact-cancellation zeros the "
+            "way SciPy's do) -- not eliminated at the MPC-transform step itself, since "
+            "applyDirichletToStiffness already prunes immediately after, gated by the existing "
+            "pruneCondensedMatrixZeros option (default True), uniformly for both condensation "
+            "strategies; that gate exists precisely because PARDISO's reordering on these path-"
+            "dependent condensed systems is known to drift with unpruned explicit-zero structural "
+            "entries, and blockamg's hierarchy-reuse gates on raw nnz. Off by default pending a "
+            "live gate (offline-validated only so far)."
+        ),
+        dtype=bool,
+        default=False,
+    )
 
 
 class NIST(NonlinearSolverBase):
@@ -140,6 +175,8 @@ class NIST(NonlinearSolverBase):
         "equilibrateAfterModelChange": False,
         "linsolver": "pardiso",
         "linsolverConfigFile": "",
+        "pruneCondensedMatrixZeros": True,
+        "useAmgclMPCCondensation": False,
     }
 
     def __init__(self, jobInfo, journal, **kwargs):
@@ -191,6 +228,9 @@ class NIST(NonlinearSolverBase):
             if "linsolver" in self.options
             else getDefaultLinSolver()
         )
+        # Every registered linsolver inherits LinearSolver's setJournal() (a safe no-op-ish default for
+        # solvers that do not log), so this is unconditional -- no isinstance check needed.
+        self.linSolver.setJournal(self.journal)
 
         maxIter = step.maxIter
         criticalIter = step.criticalIter
@@ -247,7 +287,28 @@ class NIST(NonlinearSolverBase):
                         0,
                     )
 
+                    # The per-field block extents, not just the total. Fields are laid out
+                    # field-major in contiguous slices, so this states the block structure of the
+                    # equation system -- which is what a field-split preconditioner needs, and what
+                    # tells you at a glance how a coupled model's DOFs are actually distributed.
+                    for fieldName, fieldIndices in self.theDofManager.idcsOfFieldsInDofVector.items():
+                        self.journal.message(
+                            "  field '{:}': {:} dofs, [{:}, {:})".format(
+                                fieldName,
+                                fieldIndices.stop - fieldIndices.start,
+                                fieldIndices.start,
+                                fieldIndices.stop,
+                            ),
+                            self.identification,
+                            0,
+                        )
+
                     self.journal.printSeperationLine()
+
+                    # The one interface point a solver needs beyond the plain (A, b) call: it
+                    # derives whatever it wants (field layout, node coordinates, topology) from
+                    # these itself. Re-pushed on every (re)build so it tracks the mesh across AMR.
+                    self.linSolver.setModel(model, self.theDofManager)
 
                     presentVariableNames = list(self.theDofManager.idcsOfFieldsInDofVector.keys())
 
@@ -740,7 +801,16 @@ class NIST(NonlinearSolverBase):
         #   poorly conditioned, path-dependent (contact/friction) condensed systems is
         #   sensitive enough to the extra explicit-zero structural entries to visibly
         #   drift from the converged reference path if they are kept.
-        if self.mpcTransformation is not None:
+        #
+        # The pruning has a measured cost, though, which is why it is now switchable: it removes
+        # whichever entries happen to be exactly zero on *this* iteration, so the pattern differs from
+        # one Newton iteration to the next (observed swings of ~200k nnz within a single increment)
+        # and a linear solver can never reuse its symbolic factorization -- worth ~35% of each
+        # iteration on a 280k-dof model. Turning it off is only half the story: it pays off solely in
+        # combination with a solver that then actually freezes its reordering, and the drift the
+        # comment above describes has to be re-checked against a reference load path before it is
+        # adopted. Hence default True.
+        if self.mpcTransformation is not None and self.options["pruneCondensedMatrixZeros"]:
             K.eliminate_zeros()
 
         return K

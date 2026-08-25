@@ -35,6 +35,22 @@ optional -- it needs SuiteSparse at build time. The factory below therefore impo
 
 from collections.abc import Callable
 
+from edelweissfe.linsolve.base import LinearSolver
+
+
+class KLUSolver(LinearSolver):
+    """SuiteSparse's KLU direct solver. Callable as ``(A, b) -> x``.
+
+    A plain Python wrapper around the bare Cython function :func:`~edelweissfe.linsolve.klu.klu.kluSolve`
+    -- not touching the ``.pyx`` itself keeps this trivially testable without a rebuild.
+    """
+
+    def __init__(self, solveFunction):
+        self._solveFunction = solveFunction
+
+    def __call__(self, A, b):
+        return self._solveFunction(A, b)
+
 
 def createSolver(opts) -> Callable:
     """Create a KLU-backed linear solver.
@@ -52,12 +68,14 @@ def createSolver(opts) -> Callable:
     Returns
     -------
     Callable
-        :func:`~edelweissfe.linsolve.klu.klu.kluSolve`, i.e. a stateless ``(A, b) -> x`` function.
+        A :class:`KLUSolver` wrapping :func:`~edelweissfe.linsolve.klu.klu.kluSolve`, callable as
+        ``(A, b) -> x``.
 
     Raises
     ------
     ImportError
-        If the optional ``klu`` extension was not built.
+        If the optional ``klu`` extension was not built -- raised here, at construction time
+        (matching the pre-refactor behaviour), not deferred to the first solve.
     """
 
     # Imported inside the function body, not at module scope: this extension is optional, so at
@@ -65,4 +83,4 @@ def createSolver(opts) -> Callable:
     # rather than this one.
     from edelweissfe.linsolve.klu.klu import kluSolve
 
-    return kluSolve
+    return KLUSolver(kluSolve)

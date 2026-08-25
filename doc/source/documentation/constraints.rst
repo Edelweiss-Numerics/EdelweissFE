@@ -266,6 +266,16 @@ mechanism serves the implicit solvers (system matrix transformation
 dynamics (mass-conserving row-sum folding of slave masses and forces onto the masters, direct
 kinematic slaving -- the critical time step is untouched).
 
+The implicit solver's ``useAmgclMPCCondensation`` option (:doc:`solvers`, ``NIST``) offers an
+alternative way to compute :math:`T^T K T + C` through AMGCL's own OpenMP-threaded sparse
+matrix-matrix product/sum instead of SciPy's single-threaded CSR routines (correctness-equivalent
+to floating-point precision; measured ~2.4--2.6x faster offline and ~7.3% faster end-to-end live on
+a large-scale contact+AMR+tie model). It is off by default, pending a live gate at more thread
+counts. An earlier cached-pattern alternative was tried first and removed: it restricted the
+SpGEMMs to the eliminated DOFs, but their cost still tracked the full system size, not the
+(typically much smaller) number of eliminated DOFs, making it measurably *slower* than the direct
+expression -- now superseded by the AMGCL-threaded option on every axis measured.
+
 On matching interface meshes, tying is exactly equivalent to merging the interface nodes: the
 patch test passes to machine precision, and both the implicit and the explicit (central
 difference) solutions reproduce the monolithic mesh identically. On non-matching meshes the

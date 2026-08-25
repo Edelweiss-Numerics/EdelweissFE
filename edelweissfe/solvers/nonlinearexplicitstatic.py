@@ -182,6 +182,17 @@ class NESTSchema:
     linsolverConfigFile: str | None = schemaField(
         description="A JSON configuration file for the linear solver.", dtype=str, default=""
     )
+    # Inherited behaviour, so it needs an entry here too: NEST reuses NIST.applyDirichletK, which
+    # reads this option, but replaces SolverSpecificOptions wholesale rather than extending it -- so
+    # an option missing from that list is a KeyError at solve time, not a silent default.
+    pruneCondensedMatrixZeros: bool | None = schemaField(
+        description=(
+            "Compact explicitly stored zeros out of the multi-point-constraint-condensed system "
+            "matrix before solving. See NISTSchema for the trade-off; default True."
+        ),
+        dtype=bool,
+        default=True,
+    )
 
 
 class NEST(NIST):
@@ -209,6 +220,7 @@ class NEST(NIST):
         "runge-kutta-error-control": "on",
         "linsolver": "pardiso",
         "linsolverConfigFile": "",
+        "pruneCondensedMatrixZeros": True,
     }
 
     def __init__(self, jobInfo, journal, **kwargs):

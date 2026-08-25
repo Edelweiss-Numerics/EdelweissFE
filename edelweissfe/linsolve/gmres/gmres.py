@@ -30,6 +30,8 @@ import numpy as np
 import pyamg as pa
 import scipy.sparse as spa
 
+from edelweissfe.linsolve.base import LinearSolver
+
 """
 This module provides an interface to the gmres solver.
 """
@@ -44,7 +46,7 @@ def convertListsToTuples(obj):
         return obj
 
 
-class Gmres:
+class Gmres(LinearSolver):
     def __init__(self, opts: dict):
         """Initialize gmres with options.
 
@@ -87,3 +89,6 @@ class Gmres:
         ml = pa.smoothed_aggregation_solver(A, **self.precondOpts)  # get preconditioner
         x, exitCode = spa.linalg.gmres(A, b, atol=1e-9, M=ml.aspreconditioner(), **self.linSolveOpts)
         return np.reshape(x, b.shape)
+
+    def __call__(self, A: np.ndarray, b: np.ndarray) -> np.ndarray:
+        return self.gmresSolve(A, b)
