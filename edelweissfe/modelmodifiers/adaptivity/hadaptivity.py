@@ -34,15 +34,11 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.adaptivity.hex20topology import Hex20Topology
-from edelweissfe.adaptivity.marking import (
-    ElementSetMarker,
-    FieldOutputMarker,
-    NodeSetMarker,
-    SurfaceMarker,
-)
 from edelweissfe.adaptivity.refinement import AdaptiveMesh
 from edelweissfe.adaptivity.statetransfer.perstatevar import PerStateVarStateTransfer
 from edelweissfe.config.elementlibrary import getElementClass
+from edelweissfe.config.markerlibrary import getMarkerClass
+from edelweissfe.config.registry import RegistryLookupError
 from edelweissfe.config.statetransferstrategies import getStateTransferStrategyClass
 from edelweissfe.constraints.hangingnode import Constraint as HangingNodeConstraint
 from edelweissfe.journal.journal import Journal
@@ -61,26 +57,29 @@ from edelweissfe.utils.schema import (
 
 @dataclass(frozen=True)
 class HAdaptivityMarkerSchema:
-    """The options of a single ``>>marker`` block."""
+    """The grammar common to every ``>>marker`` block.
+
+    A ``>>marker`` block is polymorphic on ``type``: the remaining options depend on which marker
+    that selects, and are owned/validated by that marker's own schema (a
+    :class:`~edelweissfe.adaptivity.marking.MarkerOptionsBase` subclass, e.g.
+    :class:`~edelweissfe.adaptivity.marking.RecoveryErrorMarkerSchema`) rather than being flattened
+    into one union here. This schema therefore declares only the two options every marker shares --
+    ``type`` (the dispatch key) and ``initialOnly`` -- with the type-specific options documented on
+    each marker in :mod:`edelweissfe.adaptivity.marking` and reachable through the ``marker``
+    registry category (:mod:`edelweissfe.config.markerlibrary`).
+    """
 
     type: str | None = schemaField(
-        description="Type of marker: fieldOutput, elementSet, nodeSet, surface", dtype=str, default=None, required=True
-    )
-    initialOnly: bool = schemaField(description="Evaluate only once at simulation start", dtype=bool, default=False)
-    fieldOutput: str | None = schemaField(
         description=(
-            "Name of an already-declared 'perElement' *fieldOutput (covering every quadrature point "
-            "of interest, no 'f(x)') to mark on."
+            "Marker type, resolved through the 'marker' registry: fieldOutput, elementSet, nodeSet, "
+            "surface, recoveryError. The type-specific options are defined by the selected marker's "
+            "own schema."
         ),
         dtype=str,
         default=None,
+        required=True,
     )
-    expression: str | None = schemaField(
-        description="Boolean expression in x (the fieldOutput's raw per-element result).", dtype=str, default=None
-    )
-    elSet: str | None = schemaField(description="Element set to mark", dtype=str, default=None)
-    nSet: str | None = schemaField(description="Node set to mark", dtype=str, default=None)
-    surface: str | None = schemaField(description="Surface to mark", dtype=str, default=None)
+    initialOnly: bool = schemaField(description="Evaluate only once at simulation start", dtype=bool, default=False)
 
 
 @dataclass(frozen=True)
@@ -114,6 +113,19 @@ class HAdaptivitySchema:
         default=None,
     )
     maxLevel: int = schemaField(description="Maximum refinement level.", dtype=int, default=1)
+    minMarkedElements: int = schemaField(
+        description=(
+            "Minimum number of eligible elements that must be marked before a refinement pass is "
+            "triggered. Marked elements persist (accumulate) across increments -- across calls where "
+            "fewer than this many are marked, no refinement happens and no equation system rebuild is "
+            "triggered -- until the accumulated count reaches this threshold, at which point all of "
+            "them are refined together in a single pass. Note that individual markers may cap their "
+            "own marks per pass (e.g. 'maxRefinedFraction') or expand them (e.g. 'halo') before "
+            "accumulating here. Default 1 refines as soon as any element is marked (previous behavior)."
+        ),
+        dtype=int,
+        default=1,
+    )
     splitFactor: int = schemaField(
         description=(
             "Number of equal parts per axis a marked element is split into (2 = octree bisection "
@@ -221,26 +233,28 @@ class ModelModifier(ModelModifierBase):
         self._model = model
         self._journal = journal
 
+        # Markers are resolved by 'type' through the L3 marker registry and each builds itself from
+        # its own >>marker options via fromOptions (validated against that marker's own schema), so
+        # this loop is marker-agnostic: adding a marker means registering it, not editing an if/elif
+        # here. The 'type' key is the dispatch key, not a marker option, so it is stripped before the
+        # marker validates the rest.
         self.markers = []
         for m_opt in options.moduleOptions.get("marker", []):
-            m_type = m_opt.get("type", "")
-            init_only = m_opt.get("initialOnly", False)
-            if isinstance(init_only, str):
-                init_only = init_only.lower() in ("true", "yes", "1")
-
-            if m_type == "fieldOutput":
-                self.markers.append(FieldOutputMarker(m_opt["fieldOutput"], m_opt["expression"], initialOnly=init_only))
-            elif m_type == "elementSet":
-                self.markers.append(ElementSetMarker(m_opt["elSet"], initialOnly=init_only))
-            elif m_type == "nodeSet":
-                self.markers.append(NodeSetMarker(m_opt["nSet"], initialOnly=init_only))
-            elif m_type == "surface":
-                self.markers.append(SurfaceMarker(m_opt["surface"], initialOnly=init_only))
-            else:
+            m_type = m_opt.get("type")
+            if not m_type:
                 raise ValueError(
-                    f"hAdaptivity modifier {name!r}: unknown '>>marker' type {m_type!r}; expected one "
-                    "of 'fieldOutput', 'elementSet', 'nodeSet', 'surface'."
+                    f"hAdaptivity modifier {name!r}: a '>>marker' block is missing its required "
+                    "'type' (e.g. 'type=fieldOutput', 'type=recoveryError', 'type=nodeSet')."
                 )
+            try:
+                markerClass = getMarkerClass(m_type)
+            except RegistryLookupError as e:
+                raise ValueError(f"hAdaptivity modifier {name!r}: {e}") from e
+            # 'type' is the dispatch key (already consumed above); 'inputFile' is parser bookkeeping
+            # stamped onto every module keyword's options. Everything else is a real marker option,
+            # validated against the marker's own schema inside fromOptions.
+            markerOptions = {key: value for key, value in m_opt.items() if key.casefold() not in ("type", "inputfile")}
+            self.markers.append(markerClass.fromOptions(markerOptions))
         if not self.markers:
             raise ValueError(
                 f"hAdaptivity modifier {name!r} defines no '>>marker' block. At least one is required, "
@@ -249,6 +263,8 @@ class ModelModifier(ModelModifierBase):
             )
 
         self.maxLevel = options.maxLevel
+        self.minMarkedElements = max(1, options.minMarkedElements)
+        self._pendingMarkedElements = set()  # elements marked but not yet refined (below minMarkedElements)
         self.splitFactor = options.splitFactor
         self._stateTransfer = _buildStateTransferStrategy(options.stateTransfer, options.stateTransferOverrides)
         self._provider = options.elementProvider
@@ -393,18 +409,36 @@ class ModelModifier(ModelModifierBase):
 
         self._isFirstCall = False
 
-        if not marked_elements:
+        # freshly marked elements accumulate onto any still-pending ones from earlier increments; a
+        # stale pending element that another path already refined/removed is dropped by the
+        # elForEid/maxLevel filter below, same as a freshly marked one would be.
+        self._pendingMarkedElements.update(marked_elements)
+
+        if not self._pendingMarkedElements:
             return False
 
         # keep only active elements below maxLevel
         with timeit("marking filter"):
-            markedEids = [
-                elForEid[el]
-                for el in sorted(marked_elements, key=lambda e: e.elNumber)
+            eligible = [
+                el
+                for el in sorted(self._pendingMarkedElements, key=lambda e: e.elNumber)
                 if el in elForEid and self._mesh.elements[elForEid[el]]["level"] < self.maxLevel
             ]
-        if not markedEids:
+        self._pendingMarkedElements = set(eligible)
+
+        if len(eligible) < self.minMarkedElements:
+            if eligible:
+                self._journal.message(
+                    "AMR ModelModifier: {:} element(s) marked, deferring refinement until {:} accumulate".format(
+                        len(eligible), self.minMarkedElements
+                    ),
+                    "hadaptivity",
+                    1,
+                )
             return False
+
+        markedEids = [elForEid[el] for el in eligible]
+        self._pendingMarkedElements = set()
 
         # refine + 2:1 balance in the mirror
         nBefore = len(self._mesh.active())

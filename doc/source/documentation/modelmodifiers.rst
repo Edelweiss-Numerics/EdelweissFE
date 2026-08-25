@@ -60,7 +60,7 @@ Module ``edelweissfe.modelmodifiers.adaptivity.hadaptivity``
 
 Dynamic adaptive :math:`h`-refinement of 20-node serendipity hexahedra (``GC3D20`` / ``GC3D20R``)
 in the small-strain, multifield (displacement + nonlocal damage) regime. Each increment the
-modifier evaluates a user marking expression on a quadrature-point result, subdivides every marked
+modifier evaluates one or more **markers** (see below), subdivides every marked
 element into ``splitFactor**3`` children (default ``splitFactor=2``, i.e. eight octree children;
 ``splitFactor=3`` gives a 3x3x3 split into 27, and so on -- honouring curved edges via the parent
 isoparametric map), enforces a one-level face-balance, transfers the converged nodal values (parent isoparametric
@@ -88,6 +88,16 @@ The same field-independent weights apply to every field on the node (equal-order
 single record per hanging node covers displacement and nonlocal damage alike. The constraint itself
 (``*constraint, type=hangingnode``) is documented under :doc:`constraints`.
 
+**Refinement markers.** Which elements are refined each increment is decided by one or more
+``>>marker`` sub-keywords; the modifier refines the *union* of their marked sets. The available
+types are ``elementSet`` / ``nodeSet`` / ``surface`` (geometric, typically ``initialOnly`` for a
+fixed pre-refinement), ``fieldOutput`` (a boolean threshold on a ``perElement`` field output), and
+``recoveryError`` (a Zienkiewicz--Zhu recovered-gradient error estimator on a nodal field, with
+Dörfler bulk marking -- for gradient-enhanced damage). The theory of error-estimator marking, the
+``averaging`` vs ``spr`` recovery, and why a *reactive* ``recoveryError`` marker is best paired with
+a *predictive* ``fieldOutput`` marker ahead of a propagating front are all covered under
+:doc:`adaptivitytheory`.
+
 .. pprint:: modelmodifier:hadaptivity
     :caption: Options:
 
@@ -95,6 +105,26 @@ single record per hanging node covers displacement and nonlocal damage alike. Th
     :language: edelweiss
     :caption: Example (dynamic refinement of a two-field GC3D20R cantilever):
               ``testfiles/marmot/AMR_DynamicRefinement/test.inp``
+
+Batching refinement across increments
+--------------------------------------
+
+Every refinement pass forces the solver to rebuild the equation system (DOF manager, sparsity
+pattern, solution vectors and any multi-point-constraint transformation), which is expensive on a
+large model. Left unchecked, a marker whose criterion is crossed by elements one at a time --
+rather than in a single burst -- triggers that rebuild on every increment a lone element newly
+qualifies. ``minMarkedElements`` (default ``1``, i.e. the previous behaviour: refine as soon as
+anything is marked) raises the bar: newly marked elements accumulate across increments, and the
+modifier defers refining until the accumulated count reaches ``minMarkedElements``, at which point
+all of them are refined together in a single pass. This trades refinement latency (a marked element
+may sit unrefined, still on the coarse mesh, for a few extra increments) for fewer, larger equation-
+system rebuilds.
+
+.. literalinclude:: ../../../testfiles/marmot/AMR_MinMarkedElements/test.inp
+    :language: edelweiss
+    :caption: Example (refinement deferred indefinitely because only one of the two elements ever
+              crosses the marker threshold, so the accumulated count never reaches
+              ``minMarkedElements=2``): ``testfiles/marmot/AMR_MinMarkedElements/test.inp``
 
 State-variable transfer strategies
 ----------------------------------
@@ -202,7 +232,7 @@ The rigid-body contact constraints (:mod:`~edelweissfe.constraints.nodetorigidsu
 :mod:`~edelweissfe.constraints.nodetodiscreterigidbodypenalty`) are likewise ``MeshDependent``, but
 lighter still: their master geometry is rigid (an analytic plane, or a triangulated rigid body), so
 refinement only ever grows their watched slave ``nSet`` -- no facet regeneration, no per-slave
-history, just a refreshed node list at the next :meth:`updateConnectivity` tick::
+history, just a refreshed node list at the next :meth:`updateConnectivity` tick.
 
 .. literalinclude:: ../../../testfiles/marmot/AMR_RigidContactRefine/test.inp
     :language: edelweiss

@@ -1,15 +1,9 @@
-** Dynamic h-adaptivity + constant-load re-equilibration regression test. Same cantilever and marker
-** as AMR_DynamicRefinement, but with the NIST option equilibrateAfterModelChange=True: after the
-** octree refinement fires, the solver inserts one zero-time, constant-load re-equilibration increment
-** (no load advance, zero Dirichlet increment) that settles the warm-started refined mesh to
-** equilibrium -- and COMMITS that settled state as a genuine converged sub-increment -- before the
-** load is advanced. This cantilever stays purely elastic (linearelastic, no history-dependent state),
-** so the re-equilibration is non-destructive: it reproduces the non-equilibrated AMR_DynamicRefinement
-** solution to machine precision (~1e-17). That is the strongest correctness signal -- it proves the
-** option is wired end to end AND that the settled deformation is correctly committed (an earlier
-** implementation dropped it from the strain state, leaving U inconsistent). On a history-dependent
-** material near a softening front the committed settling instead yields a distinct, relaxed path --
-** the intended effect.
+** minMarkedElements regression test -- same cantilever/marker setup as AMR_DynamicRefinement, but
+** with minMarkedElements=2 while only ONE of the two coarse C3D20R elements ever crosses the
+** stress threshold (bending concentrates stress at the fixed end only). Refinement must therefore
+** never trigger for the whole run -- the accumulated marked-element count (1) never reaches the
+** threshold (2) -- pinning the deferred/unrefined solution against U.ref. A regression here (e.g.
+** the threshold gate silently refining anyway) would change U.ref to the refined solution.
 *material, name=linearelastic, id=mat
 20000, 0.2
 
@@ -19,16 +13,16 @@ all
 *modelModifier, type=hAdaptivity, name=amr
 >>marker, type=fieldOutput, fieldOutput=stressForAMR, operator='>', threshold=0.6
 maxLevel=1
+minMarkedElements=2
 
 *job, name=amr, domain=3d
 *solver, solver=NIST, name=S
 *fieldOutput
 >>perNode, elSet=all, field=displacement, result=U, name=U
->>perElement, elSet=all, result=stress, quadraturePoint=0:8, name=stressForAMR, f(x)='np.abs(x)'
+>>perElement, elSet=all, result=stress, quadraturePoint=0:8, name=stressForAMR
 
 *step, solver=S
 maxInc=0.5, minInc=1e-4, maxNumInc=50, maxIter=25,
->>options, name=S, equilibrateAfterModelChange=True
 >>dirichlet, name=x0, nSet=x0, field=displacement, 1=0.0, 2=0.0, 3=0.0
 >>dirichlet, name=x1, nSet=x1, field=displacement, 3=0.0005
 

@@ -60,12 +60,15 @@ print("*" * 80)
 marmot_dir = expanduser(os.environ.get("MARMOT_INSTALL_DIR", default_install_prefix))
 mkl_include = expanduser(os.environ.get("MKL_INCLUDE_DIR", join(default_install_prefix, "include")))
 eigen_include = expanduser(os.environ.get("EIGEN_INCLUDE_DIR", join(default_install_prefix, "include/eigen3")))
+arch_flags = os.environ.get("EDELWEISSFE_ARCH_FLAGS", "-march=native").split()
 print("Marmot install directory (overwrite via environment var. MARMOT_INSTALL_DIR):")
 print(marmot_dir)
 print("MKL include directory (overwrite via environment var. MKL_INCLUDE_DIR):")
 print(mkl_include)
 print("Eigen include directory (overwrite via environment var. EIGEN_INCLUDE_DIR):")
 print(eigen_include)
+print("Architecture compile flags (overwrite via environment var. EDELWEISSFE_ARCH_FLAGS):")
+print(arch_flags)
 print("*" * 80)
 
 print("Gather the extension for the MarmotElement base element, linked to the Marmot library")
@@ -78,7 +81,7 @@ extensions = [
         library_dirs=[join(marmot_dir, "lib")],
         runtime_library_dirs=[join(marmot_dir, "lib")],
         language="c++",
-        extra_compile_args=["-O3", "-march=native"],
+        extra_compile_args=["-O3", *arch_flags],
     )
 ]
 
@@ -119,7 +122,7 @@ extensions += [
         ["edelweissfe/utils/elementresultcollector.pyx"],
         include_dirs=[numpy.get_include()],
         language="c++",
-        extra_compile_args=["-O3", "-march=native"],
+        extra_compile_args=["-O3", *arch_flags],
     )
 ]
 
@@ -140,7 +143,7 @@ extensions += [
         ["edelweissfe/numerics/csrgeneratorv2.pyx"],
         include_dirs=[numpy.get_include()],
         language="c++",
-        extra_compile_args=["-O3", "-std=c++20", "-march=native", "-fopenmp"],
+        extra_compile_args=["-O3", "-std=c++20", *arch_flags, "-fopenmp"],
         extra_link_args=["-fopenmp"],
     )
 ]
@@ -154,7 +157,7 @@ extensions += [
         language="c++",
         extra_compile_args=[
             "-O3",
-            "-march=native",
+            *arch_flags,
             "-fopenmp",
             "-Wno-maybe-uninitialized",
         ],

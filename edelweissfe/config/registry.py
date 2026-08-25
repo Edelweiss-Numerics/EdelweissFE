@@ -269,6 +269,19 @@ _BUILTINS[("statetransferstrategy", "nearestqp")] = "edelweissfe.adaptivity.stat
 _BUILTINS[("statetransferstrategy", "projection")] = "edelweissfe.adaptivity.statetransfer:PolynomialProjection"
 _BUILTINS[("statetransferstrategy", "virgin")] = "edelweissfe.adaptivity.statetransfer:VirginState"
 
+# AMR refinement markers -- resolved by a ``>>marker, type=<name>`` block, one module (marking.py)
+# per marker class. Kept a registry category, like statetransferstrategy, so any adaptivity
+# mechanism (or a third-party package via entry points) constructs markers by name rather than
+# through a hardcoded if/elif living inside one model modifier.
+for _markerName, _markerClass in {
+    "fieldOutput": "FieldOutputMarker",
+    "elementSet": "ElementSetMarker",
+    "nodeSet": "NodeSetMarker",
+    "surface": "SurfaceMarker",
+    "recoveryError": "RecoveryErrorMarker",
+}.items():
+    _BUILTINS[("marker", _markerName.casefold())] = f"edelweissfe.adaptivity.marking:{_markerClass}"
+
 # The element category is keyed by element *type*, and 42 types share just 2 formulation classes, so
 # `_addBuiltins`'s "one module per name, fixed attribute name" convention does not apply -- hence two
 # explicit lists. This table is the single source of truth for type -> class, pinned against
