@@ -4,16 +4,20 @@ anaconda::intel-openmp
 boost-cpp
 cmake
 compilers
-cython
+cython>=3.1
+# header-only, needed for the Marmot-enabled installation (Marmot requires Eigen >= 3.4)
+eigen=3.4
 gstools
 make
-numpy
+numpy>=2
 numpydoc
 python=3.14
 python-freethreading
 pytest
 prettytable
 scipy
+# build backend for pip install --no-build-isolation
+setuptools>=77
 suitesparse
 sphinx
 sphinx_rtd_theme>=3.1.0
