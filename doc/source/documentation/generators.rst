@@ -78,6 +78,21 @@ Relevant module ``edelweissfe.generators.findclosestnode``
    :caption: Options:
 
 
+``cylindergenerator`` - A structured hex mesh generator for cylindrical geometries
+------------------------------------------------------------------------------------
+
+Relevant module ``edelweissfe.generators.cylindergenerator``
+
+.. automodule:: edelweissfe.generators.cylindergenerator
+    :members: __doc__
+
+.. pprint:: generator:cylindergenerator
+   :caption: Options:
+
+.. literalinclude:: ../../../testfiles/marmot/CylinderGen/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/marmot/CylinderGen/test.inp``
+
 ``cuboidlatticegenerator`` - A cuboid lattice mesh generator
 ------------------------------------------------------------
 

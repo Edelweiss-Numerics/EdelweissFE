@@ -61,7 +61,7 @@ Built-in coverage
 The ``_BUILTINS`` table below covers these categories:
 
 ``outputmanager`` (10), ``section`` (3), ``constraint`` (12), ``stepaction`` (13),
-``generator`` (10), ``analyticalfield`` (3), ``solver`` (7), ``step`` (2), ``modelmodifier`` (1),
+``generator`` (11), ``analyticalfield`` (3), ``solver`` (7), ``step`` (2), ``modelmodifier`` (1),
 ``statetransferstrategy`` (3), ``element`` (42), ``material`` (7), ``linsolver`` (9).
 
 ``keyword`` is the single source the ``.inp`` parser consults for every top-level keyword
@@ -226,6 +226,7 @@ _addBuiltins(
         "boxgen",
         "cubit",
         "cuboidlatticegenerator",
+        "cylindergenerator",
         "discreterigidbodygenerator",
         "executepythoncode",
         "findclosestnode",

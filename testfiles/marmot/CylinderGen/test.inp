@@ -1,0 +1,28 @@
+*material, name=LinearElastic, id=linearelastic
+2.0e4, 0.2
+
+*job, name=job, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=cylinderGenerator, name=gen
+    radius  =5.0
+    lY      =10.0
+    nR      =3
+    nY      =5
+    elType  =C3D20R
+
+*section, name=section1, material=linearelastic, type=solid
+all
+
+*fieldOutput
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
+
+*output, type=ensight, name=test
+>>perNode, fieldOutput=displacement
+>>configuration, overwrite=yes
+
+*step, solver=theSolver
+maxInc=1.0, minInc=1.0, maxNumInc=100, maxIter=25, stepLength=1
+>>dirichlet,        name=fixBottom,   nSet=gen_bottom, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet,        name=axialTop,    nSet=gen_top,    field=displacement, 2=-0.05
+>>distributedload,  name=confinement, surface=gen_outer, magnitude=1.0, f(t)=1, type=pressure
