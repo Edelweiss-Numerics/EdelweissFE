@@ -26,11 +26,13 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+import json
 from dataclasses import dataclass
 
 import numpy as np
 
 import edelweissfe.utils.performancetiming as performancetiming
+from edelweissfe.config.linsolve import getLinSolverByName
 from edelweissfe.config.timing import createTimingDict
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
@@ -176,6 +178,10 @@ class NESTSchema:
         default="on",
         optionName="runge-kutta-error-control",
     )
+    linsolver: str | None = schemaField(description="The linear solver to be used.", dtype=str, default="pardiso")
+    linsolverConfigFile: str | None = schemaField(
+        description="A JSON configuration file for the linear solver.", dtype=str, default=""
+    )
     # Inherited behaviour, so it needs an entry here too: NEST reuses NIST.applyDirichletK, which
     # reads this option, but replaces SolverSpecificOptions wholesale rather than extending it -- so
     # an option missing from that list is a KeyError at solve time, not a silent default.
@@ -212,6 +218,8 @@ class NEST(NIST):
         "runge-kutta-stages": 2,
         "runge-kutta-error-tolerance": 1e-3,
         "runge-kutta-error-control": "on",
+        "linsolver": "pardiso",
+        "linsolverConfigFile": "",
         "pruneCondensedMatrixZeros": True,
     }
 
@@ -295,6 +303,21 @@ class NEST(NIST):
         self.rkStages = self.options.get("runge-kutta-stages", 2)
 
         self.tol = self.options.get("runge-kutta-error-tolerance", 1e-3)
+
+        linsolverOptions = self.options["linsolverConfigFile"]
+        linsolverOptionDict = {}
+        if linsolverOptions:
+            with open(linsolverOptions, "r") as f:
+                linsolverOptionDict = json.load(f)
+        self.linSolver = getLinSolverByName(self.options.get("linsolver", "default"), linsolverOptionDict)
+        # NEST solves a linear system per Runge-Kutta stage (see solveIncrement, via the inherited
+        # linearSolve()), so its linear solver needs the same initialization NIST gives its own:
+        # setJournal for solvers that log, and setModel for solvers that derive anything beyond the
+        # plain (A, b) call -- a field-split solver such as blockamg raises without the field
+        # structure setModel supplies. NEST's equation system is built once here rather than being
+        # rebuilt on connectivity changes, so one call at construction is enough.
+        self.linSolver.setJournal(self.journal)
+        self.linSolver.setModel(model, self.theDofManager)
 
         U = self.theDofManager.constructDofVector()
         P = self.theDofManager.constructDofVector()
