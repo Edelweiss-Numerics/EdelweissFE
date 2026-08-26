@@ -425,7 +425,11 @@ class BlockAMGSolver(LinearSolver):
         self._symmetric = symmetric
         self._fieldPreconds = fieldPreconds or {}
         self._useRigidBodyNullspace = useRigidBodyNullspace
+        # Explicitly supplied offline maps: never invalidated, since they are not derived from any
+        # model this solver was handed. Lazily computed ones go here too but are tracked in
+        # _lazyP1MapNames so setModel() can drop exactly those on an AMR/connectivity rebuild.
         self._p1Maps = p1Maps or {}
+        self._lazyP1MapNames = set()
         self._p1FieldNamesRequested = set(p1FieldNames or [])
         self._etaMin = etaMin
         self._etaMax = etaMax
@@ -530,6 +534,21 @@ class BlockAMGSolver(LinearSolver):
 
         return min(self._etaMax, max(self._etaMin, eta))
 
+    def setModel(self, model, dofManager) -> None:
+        """Take the live model/DOF layout, and drop any P1 topology map derived from the previous one.
+
+        The base class stores the references and the field-block structure. On top of that, every
+        lazily computed P1 map has to go: this is called again after each AMR/connectivity rebuild,
+        and a map built for the old mesh carries the old node ordering and length, which would either
+        fail :meth:`~edelweissfe.linsolve.blockamg.ptwogrid.PTwoGridPreconditioner.build`'s size
+        check or, worse, silently build the wrong prolongation if the sizes happened to agree.
+        Explicitly supplied ``p1Maps`` are kept -- they were never derived from this model.
+        """
+        super().setModel(model, dofManager)
+        for fieldName in self._lazyP1MapNames:
+            self._p1Maps.pop(fieldName, None)
+        self._lazyP1MapNames.clear()
+
     def _getNodeCoordinates(self, fieldName: str) -> "np.ndarray | None":
         """This field's node coordinates, node-major, or ``None`` if unavailable.
 
@@ -564,6 +583,7 @@ class BlockAMGSolver(LinearSolver):
 
             isCorner, edgeEndpoints, p1Warnings = buildP1Map(self._model, fieldName)
             self._p1Maps[fieldName] = (isCorner, edgeEndpoints)
+            self._lazyP1MapNames.add(fieldName)
             for warning in p1Warnings:
                 self._log("warning", warning)
         return self._p1Maps.get(fieldName)
@@ -889,8 +909,10 @@ class BlockAMGSolver(LinearSolver):
                     if isVectorField and backendBlockSize == 1:
                         with performancetiming.timeit("nullspace construction"):
                             # Coordinates come from self._model (set by setModel), read fresh every
-                            # rebuild rather than pushed in ahead of time.
-                            coords = self._getNodeCoordinates(block.name)
+                            # rebuild rather than pushed in ahead of time. Gated on
+                            # useRigidBodyNullspace so that opting out really does fall through to
+                            # translations-only below, exactly as the p1Map path above does.
+                            coords = self._getNodeCoordinates(block.name) if self._useRigidBodyNullspace else None
                             if coords is not None:
                                 # Full rigid-body basis (translations + rotations): measured ~28-31%
                                 # fewer isolated outer iterations than translations alone on two real
@@ -1141,8 +1163,12 @@ class BlockAMGSolver(LinearSolver):
             self._recentSolveHistory.append(
                 {
                     "solveCount": self._solveCount,
-                    "A": A,
-                    "b": b,
+                    # Copied, not referenced: NIST hands the same CSR matrix and residual buffer back
+                    # every Newton iteration (CSRGenerator.updateInPlace, and `R[:] = ...`), so storing
+                    # references would make every history entry alias the trigger-time values -- the
+                    # exact opposite of the authentic preceding-solve sequence this window exists for.
+                    "A": A.copy(),
+                    "b": np.array(b, copy=True),
                     "blocks": blocks,
                     "outerIters": outerIters,
                     "trueResidual": trueResidual,

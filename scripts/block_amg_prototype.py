@@ -96,7 +96,12 @@ Bdisp[np.arange(d), np.arange(d) % 3] = 1.0
 # Under symmetric scaling the near null-space transforms as B -> D^1/2 B (so that A_hat (D^1/2 v) =
 # D^-1/2 A v ~ 0). Without this the AMG is handed the wrong near-null-space on the scaled operator.
 if scale == "on":
-    Bdisp = Bdisp * np.sqrt(np.abs(Add.diagonal()))[:, None]
+    # Divide by the *pre-equilibration* scaling, matching what the production path does
+    # (edelweissfe.linsolve.nullspace: `B / blockDinv[:, None]`). Scaling by Add.diagonal() here
+    # would be a near no-op: Add is sliced from the already-equilibrated A, whose diagonal is ~1,
+    # so the basis would stay effectively unscaled and this prototype would benchmark a different
+    # near-null-space than production.
+    Bdisp = Bdisp / dinv[:d][:, None]
 
 
 def buildAMG(label, block, B):

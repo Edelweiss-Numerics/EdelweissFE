@@ -37,9 +37,15 @@ scatter-map-specific ones have no equivalent in the AMGCL path, which has no cac
 import os
 
 import numpy as np
+import pytest
 import scipy.sparse as sp
 
 from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
+
+# Every test here drives the AMGCL-threaded condensation path, which needs the compiled `amgcl`
+# extension. setup.py builds that one as optional, so a SciPy-only install is supported and must
+# skip these rather than fail them.
+pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
 
 def _randomSparseK(n, density=0.02, seed=0):

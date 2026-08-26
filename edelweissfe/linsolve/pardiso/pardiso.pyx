@@ -268,6 +268,14 @@ cdef class PardisoSolver:
         cdef int idum = 0
         cdef double ddum = 0
 
+        # This one-shot solve is about to overwrite PARDISO's numeric factors for a different
+        # matrix, which invalidates anything a previous explicit factorize() stored: keeping that
+        # state would let a later solveFactorized() pair these new factors with the old matrix's
+        # values. Drop it before factorizing, so solveFactorized() raises "no factorization
+        # available" instead of returning a silently wrong result.
+        self.hasNumericFactorization = False
+        self.currentData = None
+
         # numerical factorization
         phase = 22
         with performancetiming.timeit("pardiso phase 22 (numeric factorization)"):
