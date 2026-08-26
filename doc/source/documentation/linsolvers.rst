@@ -126,7 +126,12 @@ The block structure -- which DOFs belong to which field, and each field's dimens
         "symmetric": true
     }
 
-The method, the near-null-space construction, the adaptive outer tolerance, hierarchy reuse, every configuration key with its default, and the experimental p-multigrid variant are documented in detail on the dedicated page linked at the bottom of this page.
+The method, the near-null-space construction, the adaptive outer tolerance, hierarchy reuse, every configuration key with its default, and the experimental p-multigrid variant are documented in detail on their own page:
+
+.. toctree::
+   :maxdepth: 1
+
+   blockamgtheory
 
 
 The ``amgcl`` solver
@@ -139,9 +144,3 @@ The ``matrixdump`` diagnostic solver
 ------------------------------------
 
 ``matrixdump`` is not a solver but a diagnostic wrapper: it writes the equation systems it is handed to disk and then delegates the actual solve to a real linear solver, so a sequence of authentic ``(A, b)`` pairs can be replayed offline instead of by rerunning the simulation. Its ``linsolverConfigFile`` selects the ``delegate`` solver, the dump ``directory``, and which solves to capture (``dumpAt`` / ``skipFirst`` / ``maxDumps`` / ``instances``).
-
-
-.. toctree::
-   :maxdepth: 1
-
-   blockamgtheory
