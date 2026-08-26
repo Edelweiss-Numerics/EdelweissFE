@@ -138,6 +138,30 @@ class MatrixDumpSolver(LinearSolver):
         """Forward the model/DOF-manager references to the delegate -- see :meth:`setJournal`."""
         self._delegate.setModel(model, dofManager)
 
+    def factorize(self, A: csr_matrix) -> None:
+        """Dump ``A``, then forward the factorization to the delegate.
+
+        Needed for the same reason :meth:`__call__` is wrapped: a caller using the phase-split path
+        (``scripts/benchmark_linsolve.py``'s ``lagged`` subcommand) never goes through
+        :meth:`__call__`, so without forwarding these this wrapper could not sit in front of it --
+        exactly the combination it exists for, capturing matrices while the run proceeds normally.
+        A non-factorizing delegate raises from the base-class default, naming itself.
+
+        No right hand side exists yet, so the dump records ``A`` against a zero ``b``; the real ones
+        arrive one per :meth:`solveFactorized` call.
+        """
+        ordinal = self._solveCounter
+        self._solveCounter += 1
+
+        if self._shouldDump(ordinal):
+            self._dump(ordinal, A, np.zeros(A.shape[0]))
+
+        self._delegate.factorize(A)
+
+    def solveFactorized(self, b: np.ndarray) -> np.ndarray:
+        """Forward a solve against the delegate's standing factorization -- see :meth:`factorize`."""
+        return self._delegate.solveFactorized(b)
+
     def _shouldDump(self, ordinal: int) -> bool:
         """Decide whether the solve with this ordinal gets dumped."""
 

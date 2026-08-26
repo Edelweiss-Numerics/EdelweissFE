@@ -430,6 +430,10 @@ class BlockAMGSolver(LinearSolver):
         # _lazyP1MapNames so setModel() can drop exactly those on an AMR/connectivity rebuild.
         self._p1Maps = p1Maps or {}
         self._lazyP1MapNames = set()
+        # Per-field node coordinates, derived from self._model; dropped in setModel().
+        self._nodeCoordinateCache = {}
+        # Per-field p-two-grid restriction operators, derived from the P1 topology; ditto.
+        self._pNodeCache = {}
         self._p1FieldNamesRequested = set(p1FieldNames or [])
         self._etaMin = etaMin
         self._etaMax = etaMax
@@ -548,6 +552,8 @@ class BlockAMGSolver(LinearSolver):
         for fieldName in self._lazyP1MapNames:
             self._p1Maps.pop(fieldName, None)
         self._lazyP1MapNames.clear()
+        self._nodeCoordinateCache.clear()
+        self._pNodeCache.clear()
 
     def _getNodeCoordinates(self, fieldName: str) -> "np.ndarray | None":
         """This field's node coordinates, node-major, or ``None`` if unavailable.
@@ -561,10 +567,19 @@ class BlockAMGSolver(LinearSolver):
         """
         if self._model is None:
             return None
+        cached = self._nodeCoordinateCache.get(fieldName)
+        if cached is not None:
+            return cached
         field = self._model.nodeFields.get(fieldName)
         if field is None:
             return None
-        return np.array([node.coordinates for node in field.nodes], dtype=float)
+        # Cached per field: node coordinates do not change, but this is reached from the hierarchy
+        # refresh, which fires essentially every Newton iteration on contact/tie models whose
+        # sparsity pattern churns -- so the O(nNodes) Python loop below would otherwise rerun on
+        # every linear solve. Invalidated by setModel(), the one point where the mesh can differ.
+        coordinates = np.array([node.coordinates for node in field.nodes], dtype=float)
+        self._nodeCoordinateCache[fieldName] = coordinates
+        return coordinates
 
     def _getP1Map(self, fieldName: str):
         """This field's P1 corner/midside topology map, computed lazily on first need and
@@ -815,7 +830,29 @@ class BlockAMGSolver(LinearSolver):
             if mustRefresh:
                 # Symmetric diagonal equilibration. Solve A x = b as (D A D)(D^-1 x) = D b, i.e.
                 # As z = bs with x = D z; D = diag(dinv), dinv = 1/sqrt(|diag A|).
-                dinv = 1.0 / np.sqrt(np.abs(A.diagonal()))
+                diagonal = np.abs(A.diagonal())
+                # A zero diagonal entry cannot be equilibrated: 1/sqrt(0) is inf, which would poison
+                # As and bs with non-finite values before the hierarchy build, and the failure would
+                # surface much later as a NaN correction (i.e. as DivergingSolution, which reads like
+                # a physics problem rather than an unsupported system). Flooring the divisor is not a
+                # fix either -- a 1e-300 floor merely turns inf into ~1e150 and blows the scaled
+                # operator up to ~1e149, which is finite and equally useless. The honest answer is
+                # that a system with a structurally zero diagonal is a saddle-point system (e.g. the
+                # multiplier block of a Lagrangian constraint, which never writes its own diagonal),
+                # and smoothed-aggregation AMG on a zero block is not something this solver does.
+                # Say so, and name the offending dofs.
+                zeroDiagonal = np.nonzero(diagonal == 0.0)[0]
+                if zeroDiagonal.size:
+                    raise ValueError(
+                        "blockamg: {:} dof(s) have a zero diagonal entry (first at index {:}) and "
+                        "cannot be diagonally equilibrated. This is characteristic of a saddle-point "
+                        "system -- a Lagrange-multiplier constraint, for instance, couples the "
+                        "multiplier without ever writing its own diagonal -- which this field-split "
+                        "AMG scheme does not support. Use a direct solver for such a model.".format(
+                            zeroDiagonal.size, int(zeroDiagonal[0])
+                        )
+                    )
+                dinv = 1.0 / np.sqrt(diagonal)
             else:
                 # Reuse the equilibration the standing hierarchies were built for. This stays a valid
                 # diagonal similarity scaling of the *current* A x = b regardless of how it was chosen,
@@ -879,7 +916,10 @@ class BlockAMGSolver(LinearSolver):
                         )
 
                         isCorner, edgeEndpoints = p1Map
-                        solver = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+                        pNode = self._pNodeCache.get(block.name)
+                        solver = PTwoGridPreconditioner(isCorner, edgeEndpoints, pNode=pNode)
+                        if pNode is None:
+                            self._pNodeCache[block.name] = solver.pNode
                         # Give p-two-grid's coarse solve the same rigid-body-vs-translations choice
                         # the full field gets below -- None here (useRigidBodyNullspace disabled, or
                         # no coordinates available) makes build() fall back to translations-only

@@ -220,5 +220,30 @@ class LinearSolver:
         """
         self._fieldStructure = list(fields)
 
+    def factorize(self, A):
+        """Factorize ``A`` and keep the factorization for later :meth:`solveFactorized` calls.
+
+        The phase-split half of the contract, used instead of :meth:`__call__` by a caller that
+        reuses one factorization across several right-hand sides -- today
+        ``scripts/benchmark_linsolve.py``'s ``lagged`` subcommand. Declared here rather than only on
+        the solvers that implement it so that a wrapper (e.g.
+        :class:`~edelweissfe.linsolve.matrixdump.matrixdump.MatrixDumpSolver`) can forward it
+        polymorphically, without an out-of-band capability check.
+
+        Default raises: most solvers have no phase split, and a caller reaching this has asked a
+        solver for something it cannot do, which should say so rather than fail obscurely later.
+        """
+        raise NotImplementedError(
+            "{:} does not support phase-split factorization; use a direct solver such as pardiso "
+            "for callers that need factorize()/solveFactorized().".format(type(self).__name__)
+        )
+
+    def solveFactorized(self, b):
+        """Solve for ``b`` against the factorization :meth:`factorize` stored. See :meth:`factorize`."""
+        raise NotImplementedError(
+            "{:} does not support phase-split factorization; use a direct solver such as pardiso "
+            "for callers that need factorize()/solveFactorized().".format(type(self).__name__)
+        )
+
     def __call__(self, A, b):
         raise NotImplementedError

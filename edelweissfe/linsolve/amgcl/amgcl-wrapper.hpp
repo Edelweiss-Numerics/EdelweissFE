@@ -38,10 +38,6 @@ public:
 
   // Cached solver and matrix structure information
   std::unique_ptr< Solver > solver_;
-  int                       cached_n;
-  int                       cached_nnz;
-  std::vector< int >        cached_ptr_;
-  std::vector< int >        cached_col_;
 
   // Near null-space vectors, kept alive here because the property tree only stores a raw pointer to
   // them (AMGCL copies from it when the hierarchy is built). Must outlive every solver construction.
@@ -52,7 +48,7 @@ public:
   std::vector< double > nullspace_;
 
   // Constructor: Just stores the parameters
-  LinearSolverT( const char* json_params ) : solver_(), cached_n( -1 ), cached_nnz( -1 )
+  LinearSolverT( const char* json_params ) : solver_()
   {
     std::string json_str( json_params );
     if ( !json_str.empty() ) {
@@ -95,10 +91,6 @@ public:
                               amgcl::make_iterator_range( col, col + nnz ),
                               amgcl::make_iterator_range( val, val + nnz ) );
     solver_.reset( new Solver( A, prm ) );
-    cached_n   = n;
-    cached_nnz = nnz;
-    cached_ptr_.assign( ptr, ptr + n + 1 );
-    cached_col_.assign( col, col + nnz );
   }
 
   // Apply one preconditioner (AMG) cycle to rhs: x <- M^-1 rhs, where M is the hierarchy built by
@@ -147,27 +139,13 @@ public:
 
     auto A = std::make_tuple( n, ptr_rng, col_rng, val_rng );
 
-    // (Re)build or update the cached solver depending on matrix structure
-    if ( !solver_ ) {
-      // First call: construct the solver and cache matrix structure
-      solver_.reset( new Solver( A, prm ) );
-      cached_n   = n;
-      cached_nnz = nnz;
-      cached_ptr_.assign( ptr, ptr + n + 1 );
-      cached_col_.assign( col, col + nnz );
-    }
-    else if ( n != cached_n || nnz != cached_nnz || !std::equal( ptr, ptr + n + 1, cached_ptr_.begin() ) ||
-              !std::equal( col, col + nnz, cached_col_.begin() ) ) {
-      // Matrix structure changed: rebuild solver to preserve behavior
-      solver_.reset( new Solver( A, prm ) );
-      cached_n   = n;
-      cached_nnz = nnz;
-      cached_ptr_.assign( ptr, ptr + n + 1 );
-      cached_col_.assign( col, col + nnz );
-    }
-    else {
-      solver_.reset( new Solver( A, prm ) );
-    }
+    // Rebuilt unconditionally, and the sparsity pattern is deliberately not consulted: amgcl's
+    // make_solver binds the matrix *values* at construction and ( *solver_ )( rhs, x ) takes no
+    // matrix, so a solver kept across calls would solve the system it was built for. Values change
+    // on every Newton iteration even when the pattern does not, so an unchanged pattern buys nothing
+    // here -- reusing on that basis would silently return the previous iteration's answer. (Callers
+    // that do want to control refresh timing use build()/apply() instead of solve().)
+    solver_.reset( new Solver( A, prm ) );
 
     std::vector< ValueType > rhs_v( rhs, rhs + n );
     std::vector< ValueType > x_v( n, ValueType( 0 ) );
@@ -211,12 +189,8 @@ public:
 
   boost::property_tree::ptree prm;
   std::unique_ptr< Solver >   solver_;
-  int                         cached_n;
-  int                         cached_nnz;
-  std::vector< int >          cached_ptr_;
-  std::vector< int >          cached_col_;
 
-  LinearSolverBlockT( const char* json_params ) : solver_(), cached_n( -1 ), cached_nnz( -1 )
+  LinearSolverBlockT( const char* json_params ) : solver_()
   {
     std::string json_str( json_params );
     if ( !json_str.empty() ) {
@@ -256,10 +230,6 @@ public:
                               amgcl::make_iterator_range( col, col + nnz ),
                               amgcl::make_iterator_range( val, val + nnz ) );
     solver_.reset( new Solver( amgcl::adapter::block_matrix< BlockType >( A ), prm ) );
-    cached_n   = n;
-    cached_nnz = nnz;
-    cached_ptr_.assign( ptr, ptr + n + 1 );
-    cached_col_.assign( col, col + nnz );
   }
 
   void applyPreconditioner( int n, const double* rhs, double* x )
@@ -299,17 +269,13 @@ public:
                               amgcl::make_iterator_range( col, col + nnz ),
                               amgcl::make_iterator_range( val, val + nnz ) );
 
-    if ( !solver_ || n != cached_n || nnz != cached_nnz || !std::equal( ptr, ptr + n + 1, cached_ptr_.begin() ) ||
-         !std::equal( col, col + nnz, cached_col_.begin() ) ) {
-      solver_.reset( new Solver( amgcl::adapter::block_matrix< BlockType >( A ), prm ) );
-      cached_n   = n;
-      cached_nnz = nnz;
-      cached_ptr_.assign( ptr, ptr + n + 1 );
-      cached_col_.assign( col, col + nnz );
-    }
-    else {
-      solver_.reset( new Solver( amgcl::adapter::block_matrix< BlockType >( A ), prm ) );
-    }
+    // Rebuilt unconditionally, and the sparsity pattern is deliberately not consulted: amgcl's
+    // make_solver binds the matrix *values* at construction and ( *solver_ )( rhs, x ) takes no
+    // matrix, so a solver kept across calls would solve the system it was built for. Values change
+    // on every Newton iteration even when the pattern does not, so an unchanged pattern buys nothing
+    // here -- reusing on that basis would silently return the previous iteration's answer. (Callers
+    // that do want to control refresh timing use build()/apply() instead of solve().)
+    solver_.reset( new Solver( amgcl::adapter::block_matrix< BlockType >( A ), prm ) );
 
     std::vector< double > rhs_v( rhs, rhs + n );
     std::vector< double > x_v( n, 0.0 );

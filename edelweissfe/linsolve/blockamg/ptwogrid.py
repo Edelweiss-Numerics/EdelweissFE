@@ -185,9 +185,15 @@ class PTwoGridPreconditioner:
         fineDegree: int = _DEFAULT_FINE_DEGREE,
         coarsePrecond: dict = None,
         useCoarseNullspace: bool = True,
+        pNode: "sp.csr_matrix | None" = None,
     ):
         self._isCorner = isCorner
-        self._P_node = buildNodeLevelP(isCorner, edgeEndpoints)
+        # ``pNode`` lets the caller supply an already-built restriction operator. It is a pure
+        # function of (isCorner, edgeEndpoints) -- both fixed for a given mesh -- while this class is
+        # reconstructed on every hierarchy refresh, i.e. potentially every Newton iteration on a
+        # churning contact model. Rebuilding it there would repeat the same O(nNodes) Python loop for
+        # an identical result; see BlockAMGSolver's own cache.
+        self._P_node = buildNodeLevelP(isCorner, edgeEndpoints) if pNode is None else pNode
         self._nu = nu
         self._fineDegree = fineDegree
         self._coarsePrecond = dict(coarsePrecond) if coarsePrecond is not None else dict(_DEFAULT_COARSE_PRECOND)
@@ -198,6 +204,16 @@ class PTwoGridPreconditioner:
         self.fineSeconds = 0.0
         self.coarseSeconds = 0.0
         self.applyCalls = 0
+
+    @property
+    def pNode(self):
+        """The node-level P1 restriction operator this preconditioner uses.
+
+        Exposed so a caller that reconstructs this object per hierarchy refresh can cache the
+        operator and hand it back via the ``pNode`` constructor argument -- it depends only on the
+        mesh topology, not on the matrix.
+        """
+        return self._P_node
 
     def build(self, A: sp.csr_matrix, dinv: np.ndarray, coords: np.ndarray = None) -> None:
         """Build the free submatrix, the restricted ``P``, the Galerkin coarse operator, its AMGCL
