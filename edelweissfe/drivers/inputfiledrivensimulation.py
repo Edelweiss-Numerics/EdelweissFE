@@ -173,18 +173,23 @@ def finiteElementSimulation(
     try:
         for step in stepManager.generateSteps(jobInfo, model, fieldOutputController, journal, solvers, outputManagers):
             tic = getCurrentTime()
-            step.solve()
-            toc = getCurrentTime()
-            stepTime = toc - tic
-            jobInfo["computationTime"] += stepTime
+            try:
+                step.solve()
+            finally:
+                # Record inside finally so a step that raises (e.g. via a deliberate
+                # maxNumInc cap) still counts its elapsed time -- previously this sat after
+                # step.solve() outside any try and was skipped whenever a step failed.
+                toc = getCurrentTime()
+                stepTime = toc - tic
+                jobInfo["computationTime"] += stepTime
 
-            journal.printTable(
-                [
-                    ("Step computation time", "{:10.4f}s".format(stepTime)),
-                ],
-                identification,
-                level=0,
-            )
+                journal.printTable(
+                    [
+                        ("Step computation time", "{:10.4f}s".format(stepTime)),
+                    ],
+                    identification,
+                    level=0,
+                )
 
     except KeyboardInterrupt:
         print("")

@@ -389,8 +389,7 @@ class NED(NonlinearSolverBase):
         finally:
             prettyTable = performancetiming.makePrettyTable()
             self.journal.printPrettyTable(prettyTable, self.identification)
-            performancetiming.times.clear()
-            performancetiming.extractIncrementTimes._last_snapshot = None
+            performancetiming.reset()
 
     @performancetiming.timeit("increment")
     def solveIncrement(
