@@ -164,13 +164,15 @@ class Generator(GeneratorBase):
 
         nG = np.asarray(nodes).reshape(nNodesX, nNodesY)
 
-        currentElementLabel = 1
-        if model.elements:
-            currentElementLabel += max(model.elements.keys())
+        # Element numbers come from the model's monotonic allocator (FEModel.reserveElementNumbers),
+        # not from max(model.elements) -- see PLAN_TOPOLOGY_PIPELINE.md. Reserved one at a time so
+        # the count need not be predicted; nothing else mints during this loop, so the numbers are
+        # consecutive exactly as before.
 
         elements = []
         for x in range(nX):
             for y in range(nY):
+                (currentElementLabel,) = model.reserveElementNumbers(1)
                 if testEl.nNodes == 4:
                     newEl = elType(elTypeName, currentElementLabel)
                     newEl.setNodes([nG[x, y], nG[x + 1, y], nG[x + 1, y + 1], nG[x, y + 1]])
@@ -193,9 +195,7 @@ class Generator(GeneratorBase):
                         ]
                     )
                 elements.append(newEl)
-                model.elements[currentElementLabel] = newEl
-
-                currentElementLabel += 1
+                model.createElement(newEl)
 
         model._populateNodeFieldVariablesFromElements()
 

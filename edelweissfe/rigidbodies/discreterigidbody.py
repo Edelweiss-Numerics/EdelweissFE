@@ -79,12 +79,11 @@ class DiscreteRigidBody(RigidBody):
         if self.mass is not None:
             from edelweissfe.elements.pointmass import PointMass
 
-            # NOTE: assumes no other generator assigns element labels from its own counter
-            # after this one runs; a shared label allocator on the model would remove this
-            # class of collision risk entirely.
-            el_num = max(model.elements.keys()) + 1 if model.elements else 1
+            # Element numbers come from the model allocator (topology pipeline), which removes the
+            # label-collision risk the old max()+1 counter carried.
+            (el_num,) = model.reserveElementNumbers(1)
             self.pointMassElement = PointMass(el_num, [self.rpNode], model, self.mass, self.inertia)
-            model.elements[el_num] = self.pointMassElement
+            model.createElement(self.pointMassElement)
 
     def getCurrentKinematics(self):
         """Return the current rigid body motion.

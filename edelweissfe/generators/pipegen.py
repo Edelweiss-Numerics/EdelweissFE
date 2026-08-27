@@ -232,9 +232,10 @@ class Generator(GeneratorBase):
 
         elements = []
         nNodesC -= extraNode
-        currentElementLabel = 1
-        if model.elements:
-            currentElementLabel += max(model.elements.keys())
+        # Element numbers come from the model's monotonic allocator (FEModel.reserveElementNumbers),
+        # not from max(model.elements) -- see PLAN_TOPOLOGY_PIPELINE.md. Reserved one at a time so
+        # the count need not be predicted; nothing else mints during this loop, so the numbers are
+        # consecutive exactly as before.
         for it in range(nT):
             for iy in range(nY):
                 for ic in range(nC):
@@ -288,16 +289,15 @@ class Generator(GeneratorBase):
                     # plotNodeList( nodeList )
 
                     # newEl = elType(options["elType"], nodeList, currentElementLabel)
+                    (currentElementLabel,) = model.reserveElementNumbers(1)
                     newEl = elType(elTypeName, currentElementLabel)
                     newEl.setNodes(nodeList)
 
                     elements.append(newEl)
-                    model.elements[currentElementLabel] = newEl
+                    model.createElement(newEl)
 
                     # for i, node in enumerate(newEl.nodes):
                     #     node.fields.update([(f, True) for f in newEl.fields[i]])
-
-                    currentElementLabel += 1
 
         # fmt: on
         # model.initializeNodeFields()

@@ -157,6 +157,22 @@ class HAdaptivitySchema:
     )
 
 
+@dataclass(frozen=True)
+class RefinementPlan:
+    """One refinement decision, as octree element ids.
+
+    Eids rather than element numbers: an eid is this modifier's own identifier for a cell, minted by
+    its private octree counter and reproduced exactly by replaying the same decisions. Element
+    numbers are assigned by the model's allocator in an order that also depends on what else minted,
+    so they are not a decision this modifier can record and re-apply.
+    """
+
+    eids: tuple
+
+    def __init__(self, eids):
+        object.__setattr__(self, "eids", tuple(int(eid) for eid in eids))
+
+
 def _buildStateTransferStrategy(defaultName, overridesSpec):
     """Construct the state-transfer strategy from the input arguments. With no per-variable
     overrides this is just the named default strategy; otherwise a
@@ -265,6 +281,9 @@ class ModelModifier(ModelModifierBase):
         self.maxLevel = options.maxLevel
         self.minMarkedElements = max(1, options.minMarkedElements)
         self._pendingMarkedElements = set()  # elements marked but not yet refined (below minMarkedElements)
+        # Diagnostics only, for the journal and for tests. The authoritative record of what this
+        # modifier did -- the one a restart replays -- is model.topologyHistory.
+        self._committedOccasions = []
         self.splitFactor = options.splitFactor
         self._stateTransfer = _buildStateTransferStrategy(options.stateTransfer, options.stateTransferOverrides)
         self._provider = options.elementProvider
@@ -290,34 +309,16 @@ class ModelModifier(ModelModifierBase):
                 "'refineElSet' (or 'elSet') to select the solid element set explicitly."
             )
 
-        # two hAdaptivity instances cannot independently own overlapping elements: each maintains
-        # its own AdaptiveMesh mirror and materializes/deletes elements directly in the model, so a
-        # second instance refining/removing an element the first still tracks leaves the first with
-        # a stale reference (an Element object no longer in model.elements) -- which later corrupts
-        # element-set membership (a "deleted" element gets carried back into e.g. 'fixed_all') and
-        # can surface as a node simultaneously Dirichlet-prescribed and a hanging-node MPC slave.
-        # Fail loud at construction time instead of silently corrupting state deep in the solve loop.
-        refineElementNumbers = {el.elNumber for el in refineElements}
-        for otherName, otherModifier in model.modelModifiers.items():
-            if isinstance(otherModifier, ModelModifier):
-                overlap = refineElementNumbers & otherModifier._refineElementNumbers
-                if overlap:
-                    raise ValueError(
-                        f"hAdaptivity modifier {name!r} and existing modifier {otherName!r} both "
-                        f"claim {len(overlap)} of the same element(s) (e.g. label "
-                        f"{sorted(overlap)[0]}) as refineable roots via overlapping 'refineElSet'/"
-                        "'elSet' (or no restriction at all). Combine all markers -- including "
-                        "'initialOnly' ones -- into a single hAdaptivity block via multiple "
-                        "'>>marker' lines instead of stacking separate modifiers over the same "
-                        "elements."
-                    )
-        self._refineElementNumbers = refineElementNumbers
+        # Which elements this instance owns. Checked pairwise against every other modifier by
+        # FEModel.checkModelModifierDomains at the end of setup -- two hAdaptivity instances cannot
+        # independently own overlapping elements, since each maintains its own AdaptiveMesh mirror
+        # and materializes/deletes elements directly in the model.
+        self._refineElementNumbers = {el.elNumber for el in refineElements}
 
         # element type: infer from a refineable element if not given
         anyEl = refineElements[0]
         self._elementType = options.elementType or anyEl.elType
         self._elementClass = getElementClass(self._elementType, self._provider)
-        self._nextElLabel = max(model.elements.keys()) + 1
 
         # bodies of the refineable mesh: node labels are namespaced per body, so coincident nodes of
         # two bodies (a tied interface -- 'adjust' makes it flush by default --, a zero-gap contact
@@ -330,6 +331,8 @@ class ModelModifier(ModelModifierBase):
         self._topology = Hex20Topology()
         self._mesh = AdaptiveMesh(splitFactor=self.splitFactor, topology=self._topology)
         self._eidToEl = {}  # mesh element id -> live element
+        #: Diagnostics only, parallel to _committedOccasions; see there.
+        self._committedOccasionEids = []
         for el in refineElements:
             componentId = componentOfElement[el]
             for n in el.nodes:
@@ -381,11 +384,32 @@ class ModelModifier(ModelModifierBase):
         # parent-parametric coords of each child's nodes (used for warm-start interpolation)
         self._octantParams = self._topology.subdivision_children_param(self.splitFactor)
 
+    def declaredDomain(self, model: FEModel) -> set:
+        """The refineable roots this instance owns; see
+        :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.declaredDomain`.
+        Two hAdaptivity blocks over the same elements must be combined into one with several
+        ``>>marker`` lines instead -- including ``initialOnly`` ones."""
+
+        return self._refineElementNumbers
+
     @timeit("AMR")
-    def updateModel(self, model: FEModel, step, timeStep: float) -> bool:
+    def plan(self, model: FEModel, change, step, timeStep: float) -> "RefinementPlan | None":
+        """Evaluate the markers and decide which octree cells to refine. See
+        :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan`.
+
+        The decision is returned as octree eids rather than element numbers: eids are this
+        modifier's own stable identifiers, reproducible by its replay, whereas element numbers are
+        assigned by the model's allocator in an order that depends on what else minted.
+        """
+
+        # Nothing this modifier cares about changed since it last planned in this topology update
+        # -- another modifier's mutation. Returning None here is what lets the pipeline settle.
+        if change is not None and not (change.addedElements or change.removedElements):
+            return None
+
         # Do not re-refine if the solver is re-trying the exact same time state after a cutback
         if self._lastRefinedTime is not None and abs(model.time - self._lastRefinedTime) < 1e-12:
-            return False
+            return None
 
         elForEid = {v: k for k, v in self._eidToEl.items()}
         marked_elements = set()
@@ -415,7 +439,7 @@ class ModelModifier(ModelModifierBase):
         self._pendingMarkedElements.update(marked_elements)
 
         if not self._pendingMarkedElements:
-            return False
+            return None
 
         # keep only active elements below maxLevel
         with timeit("marking filter"):
@@ -435,10 +459,45 @@ class ModelModifier(ModelModifierBase):
                     "hadaptivity",
                     1,
                 )
-            return False
+            return None
 
-        markedEids = [elForEid[el] for el in eligible]
         self._pendingMarkedElements = set()
+
+        # Stamped here, not in apply(): it guards the *next* planning pass against re-refining after
+        # a cutback, and apply() must not read solution state (model.time included).
+        self._lastRefinedTime = float(model.time)
+
+        elForEid = {v: k for k, v in self._eidToEl.items()}
+        return RefinementPlan(eids=[elForEid[el] for el in eligible])
+
+    @timeit("AMR")
+    def apply(self, model: FEModel, plan: "RefinementPlan"):
+        """Refine exactly the cells named by ``plan`` and materialize the resulting children: the
+        octree split, 2:1 balance, hanging-node MPCs, element/node/set bookkeeping, and the
+        :class:`ModelChange` notification.
+
+        Pure octree/topology mechanics with no dependence on solution history, which is what lets a
+        live run and a restart replay share it: given the same plan they produce byte-identical
+        topology, element numbers included. See
+        :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply`.
+
+        Parameters
+        ----------
+        model
+            The FEModel object, mutated in place.
+        plan
+            The refinement decision, as octree eids.
+
+        Returns
+        -------
+        ModelChange
+            The changeset this refinement produced.
+        """
+
+        markedEids = list(plan.eids)
+        # Captured now, not at the end: the refined parents are popped from _eidToEl during
+        # materialisation, so afterwards their element numbers are no longer resolvable here.
+        markedElementNumbers = [self._eidToEl[eid].elNumber for eid in markedEids if eid in self._eidToEl]
 
         # refine + 2:1 balance in the mirror
         nBefore = len(self._mesh.active())
@@ -465,25 +524,29 @@ class ModelModifier(ModelModifierBase):
             "hadaptivity",
             0,
         )
-        self._lastRefinedTime = float(model.time)
-        return True
+        self._committedOccasions.append(markedElementNumbers)
+        self._committedOccasionEids.append(list(markedEids))
+        return change
 
     def _materialize(self, model: FEModel, records: dict):
         mesh = self._mesh
         reg = mesh.registry
 
-        # Resync against the model's current label range before claiming any new ones. Other
-        # components can legitimately claim element labels between two refinements -- notably a
-        # tied surface's facets, rebuilt via the observer/MeshDependent escape hatches fired at the
-        # end of THIS very call (see below), which pick their labels fresh from max(model.elements).
-        # self._nextElLabel is otherwise a plain running counter that would stay oblivious to that
-        # and, on the next call, collide with (and silently overwrite) those facets -- which then
-        # get erroneously deleted as "stale" the next time they are rebuilt, orphaning the solid
-        # elements (and their nodes) that stole their labels. Only ever advance the counter.
-        self._nextElLabel = max(self._nextElLabel, max(model.elements.keys(), default=0) + 1)
+        # Element numbers come from the model's single monotonic allocator
+        # (FEModel.reserveElementNumbers). This modifier deliberately keeps no counter of its own:
+        # the one it used to keep had to be resynced against max(model.elements) on every call,
+        # because a tied surface's facets -- rebuilt via the observer/MeshDependent escape hatches
+        # fired at the end of THIS very call -- claim labels in between, and a private counter would
+        # collide with (and silently overwrite) them, after which they were deleted as "stale",
+        # orphaning the solid elements that had taken their labels.
 
         # snapshot the converged nodal values BEFORE the mesh mutates, for the warm start
         oldValues = {}
+        # Runs on the replay path too. It is dead work there -- readRestart overwrites every node
+        # field right afterwards -- but apply() is ONE code path, and a "skip this on replay" branch
+        # is exactly the kind of live/replay divergence that made a resumed run rebuild a different
+        # mesh. If this ever costs measurably, the flag belongs in the recorded plan, not in an
+        # ambient replay mode.
         for fieldName, nodeField in model.nodeFields.items():
             if "U" in nodeField:
                 U = np.asarray(nodeField["U"])
@@ -502,25 +565,32 @@ class ModelModifier(ModelModifierBase):
         active = set(mesh.active())
         materialized = set(self._eidToEl.keys())
         newValues = {fieldName: {} for fieldName in oldValues}  # interpolated values for new nodes
-        newChildEids = active - materialized
+        # Only children whose parent is already materialised: the batched restart replay can leave
+        # several refinement levels pending at once, and this keeps each pass to one level.
+        newChildEids = {eid for eid in (active - materialized) if mesh.elements[eid]["parent"] in self._eidToEl}
 
         # the changeset this call produces (its faceMap/*Sets entries reflect the tracked element
         # sets and surfaces above)
         change = ModelChange(kind=ModelChangeType.REFINEMENT, addedNodes=set(newNodes.keys()))
 
         # new child elements (single level of new refinement per call -> parents are materialized)
-        # Iterate SORTED: element labels are handed out in this order, so an unordered set here would
-        # make which child gets which label depend on set iteration order rather than on the mesh.
+        # Sorted, with the whole batch's numbers reserved up front: which octree child gets which
+        # element number is then a pure function of this sorted list of eids -- not of the order an
+        # unordered set happened to iterate in, and not of what else claimed a number partway
+        # through the loop.
+        newChildEidsInOrder = sorted(newChildEids)
+        childNumbers = model.reserveElementNumbers(len(newChildEidsInOrder)) if newChildEidsInOrder else []
         with timeit("elements & state transfer"):
-            for eid in sorted(newChildEids):
+            for eid, elNumber in zip(newChildEidsInOrder, childNumbers):
                 e = mesh.elements[eid]
                 parentEid = e["parent"]
                 parentEl = self._eidToEl[parentEid]
-                child = self._elementClass(self._elementType, self._nextElLabel)
-                self._nextElLabel += 1
+                child = self._elementClass(self._elementType, elNumber)
                 child.setNodes([model.nodes[label] for label in e["conn"]])
                 self._sectionOf[parentEl].assignSectionPropertiesToElement(child)
-                self._stateTransfer.transferState(parentEl, [child], self._topology)  # state transfer
+                # Runs on replay too, identically: apply() is one code path, and element state is
+                # restored by number afterwards either way.
+                self._stateTransfer.transferState(parentEl, [child], self._topology)  # WS-F (state)
 
                 # warm start: interpolate each NEW node's field values from the parent via the
                 # HEX20 isoparametric map, so the increment restarts from a consistent state, not zero
@@ -535,7 +605,7 @@ class ModelModifier(ModelModifierBase):
                                 parentVals = np.array([vals[pn] for pn in parentEl.nodes])
                                 newValues[fieldName][node] = N @ parentVals
 
-                model.elements[child.elNumber] = child
+                model.createElement(child)
                 self._eidToEl[eid] = child
                 self._sectionOf[child] = self._sectionOf[parentEl]
 
@@ -554,10 +624,10 @@ class ModelModifier(ModelModifierBase):
                 ]
                 change.faceMap[(parentLabel, faceID)] = [(label, faceID) for label in childLabels]
 
-        # remove refined parents
-        for eid in materialized - active:
+        # remove refined parents (sorted, so the changeset is built in a reproducible order)
+        for eid in sorted(materialized - active):
             el = self._eidToEl.pop(eid)
-            del model.elements[el.elNumber]
+            model.removeElement(el.elNumber)
             change.removedElements.add(el.elNumber)
 
         # keep model.surfaces in sync: parent (eid,faceID) -> child faces
@@ -630,5 +700,37 @@ class ModelModifier(ModelModifierBase):
                         U[idx] = new[node]
                         P[idx] = new[node]
 
+        # Separately timed: this relinks EVERY node's field variables, so its cost scales with the
+        # whole mesh rather than with what this refinement actually changed (P0, PLAN §6).
+        with timeit("relink field variables"):
             model._linkFieldVariableObjects(model.nodeSets["all"])
         return change
+
+    def encodePlan(self, plan: "RefinementPlan") -> dict:
+        """Serialize a :class:`RefinementPlan` -- just the octree eids it names."""
+
+        return {"eids": np.array(plan.eids, dtype=int)}
+
+    def decodePlan(self, data: dict) -> "RefinementPlan":
+        """Inverse of :meth:`encodePlan`."""
+
+        return RefinementPlan(eids=[int(eid) for eid in data["eids"]])
+
+    def restoreDecisionState(self, records) -> None:
+        """Re-establish what the *next* decision needs, after a restart replay.
+
+        Two things, neither of which touches the mesh:
+
+        - the cutback guard, so the first post-resume call does not re-refine at a time this
+          modifier already refined at;
+        - the initial-marker latch, since a checkpoint only exists after an increment converged, so
+          a resumed run is never truly making its first call.
+
+        Notably absent: the pending marks. Those are re-derived by the next :meth:`plan` from the
+        restored solution state -- which is exactly what the live run would have done -- so they need
+        no checkpointing at all.
+        """
+
+        if records:
+            self._lastRefinedTime = float(records[-1].time)
+        self._isFirstCall = False

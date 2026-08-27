@@ -43,6 +43,7 @@ from edelweissfe.adaptivity.geometry import (
     point_in_convex_quad,
     quadratic_edge_parameter,
 )
+from edelweissfe.utils.performancetiming import timeit
 
 
 class NodeRegistry:
@@ -341,6 +342,12 @@ class AdaptiveMesh:
         """
         act = self.active()
         coords = self.registry.coordinates
+        # Timed separately from the scan below: these indices are rebuilt from scratch on every
+        # call, over the WHOLE active mesh, whereas the scan itself is restricted to the refined
+        # interface shell. If the index build dominates, the cost to attack is incrementality, not
+        # the search (P0, PLAN_TOPOLOGY_PIPELINE.md §6).
+        timerIndex = timeit("hanging: whole-mesh index build")
+        timerIndex.__enter__()
         used = {lab for eid in act for lab in self.elements[eid]["conn"]}
 
         # spatial hash of nodes, so each element only tests nearby candidate nodes (local, not O(n*N))
@@ -362,21 +369,46 @@ class AdaptiveMesh:
         comp = {eid: self.elements[eid]["componentId"] for eid in act}
         componentOf = self.registry.componentOf
         elemGrid = defaultdict(set)
+        # Highest refinement level present in each (grid cell, body). Built in the same pass as the
+        # grid itself, for a few dict compares per element, and it is what keeps the scan below from
+        # paying for the conforming majority of the mesh -- see hasFinerNeighbour.
+        cellMaxLevel = {}
         for eid in act:
+            level, componentId = lev[eid], comp[eid]
             for cell in _grid_cells_for_box(box[eid][0], box[eid][1], h_cell, pad=0):
                 elemGrid[cell].add(eid)
+                key = (cell, componentId)
+                if cellMaxLevel.get(key, -1) < level:
+                    cellMaxLevel[key] = level
 
         def hasFinerNeighbour(eid):
+            level, componentId = lev[eid], comp[eid]
+            cells = _grid_cells_for_box(box[eid][0], box[eid][1], h_cell)
+
+            # Cheap necessary condition first: if no cell this element's box touches holds ANY
+            # strictly finer element of the same body, it cannot have a finer neighbour. Away from
+            # a refinement front -- i.e. almost everywhere -- this exits before the set unions
+            # below, which otherwise ran for every active element and made this scan the second
+            # largest per-round cost (P0, PLAN_TOPOLOGY_PIPELINE.md §6).
+            if not any(cellMaxLevel.get((cell, componentId), -1) > level for cell in cells):
+                return False
+
+            # ... and only then the exact test, unchanged: the filter above is necessary, not
+            # sufficient (a finer element may sit in a shared cell without its box overlapping).
             neighbours = set()
-            for cell in _grid_cells_for_box(box[eid][0], box[eid][1], h_cell):
+            for cell in cells:
                 neighbours |= elemGrid.get(cell, set())
             return any(
-                lev[f] > lev[eid] and _boxes_overlap(box[eid], box[f])
+                lev[f] > level and _boxes_overlap(box[eid], box[f])
                 for f in neighbours
-                if f != eid and comp[f] == comp[eid]
+                if f != eid and comp[f] == componentId
             )
 
+        timerIndex.__exit__(None, None, None)
+
         best = {}  # slave -> (dim, level, masters)
+        timerScan = timeit("hanging: interface-shell scan")
+        timerScan.__enter__()
         for eid in act:
             if not hasFinerNeighbour(eid):
                 continue  # no level jump here -> this element cannot host a hanging node
@@ -408,6 +440,8 @@ class AdaptiveMesh:
                 cur = best.get(h["slave"])
                 if cur is None or key < (cur[0], cur[1]):
                     best[h["slave"]] = (dim, E["level"], h["masters"])
+
+        timerScan.__exit__(None, None, None)
 
         return [{"slave": s, "kind": "edge" if v[0] == 1 else "face", "masters": v[2]} for s, v in best.items()]
 

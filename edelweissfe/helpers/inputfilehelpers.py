@@ -241,6 +241,15 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
         The updated, filled model tree.
     """
 
+    # Model setup is a topology change: it is the one phase besides a model modifier's own update in
+    # which elements may be created (see FEModel.topologyChanges). Everything below runs inside it.
+    with model.topologyChanges():
+        return _fillFEModelFromInputFile(model, inputfile, journal)
+
+
+def _fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) -> FEModel:
+    """The body of :func:`fillFEModelFromInputFile`, run inside an open topology window."""
+
     # call individual optional model generators with executeAfterManualGeneration == True
     for definition in inputfile["modelGenerator"]:
         if definition.get("executeAfterManualGeneration", False):
@@ -262,6 +271,13 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
     # the standard 'Abaqus like' model generator is invoked unconditionally, and it has direct access to the inputfile
     abqModelConstructor = AbqModelConstructor(journal)
     model = abqModelConstructor.createGeometryFromInputFile(model, inputfile)
+
+    # The base mesh is complete here, and it numbers its elements from the input file rather than
+    # from the allocator (see FEModel.adoptSetupElementNumbers). Raise the allocator above it now,
+    # so that everything created from this point on -- contact facets, rigid-body point masses, and
+    # later every model modifier -- draws numbers that cannot collide with it.
+    model.adoptSetupElementNumbers()
+
     model = abqModelConstructor.createMaterialsFromInputFile(model, inputfile)
     model = abqModelConstructor.createAdvancedMaterialsFromInputFile(model, inputfile)
     model = abqModelConstructor.createAnalyticalFieldsFromInputFile(model, inputfile)

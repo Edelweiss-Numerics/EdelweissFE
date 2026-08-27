@@ -283,7 +283,8 @@ class Constraint(ConstraintBase, MeshDependent):
 
         self._nSetName = nSet.name
         self._lastSeenTopologyVersion = model.topologyVersion
-        self.slaveNodes = list(nSet)
+        model.registerMeshDependent(self)
+        self.slaveNodes = [node for node in nSet if node is not self.rpNode]
         self._rebuildFromSlaveNodes()
 
         self.totalNormalForce = 0.0
@@ -322,7 +323,7 @@ class Constraint(ConstraintBase, MeshDependent):
         )
         self._indicesOfRPInLocal = self._indicesOfRPDispInLocal + self._indicesOfRPRotInLocal
 
-    def reconcile(self, model: FEModel, change) -> bool:
+    def refresh(self, model: FEModel, change) -> bool:
         """Refresh the slave node list from the (possibly grown) watched ``nSet``."""
 
         if not change.touchesNodeSet(self._nSetName):
@@ -332,7 +333,8 @@ class Constraint(ConstraintBase, MeshDependent):
         return True
 
     def updateConnectivity(self, model: FEModel) -> bool:
-        return self.reconcileIfChanged(model)
+        # refreshed by FEModel.refreshMeshDependents; nothing extra to do at this tick
+        return False
 
     @property
     def nodes(self) -> list:

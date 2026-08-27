@@ -210,7 +210,7 @@ class StepActionBase(OptionSchemaProvider, ABC):
         A step action that pre-sizes a derived array to ``len(theSet)`` (e.g. Dirichlet's
         ``delta``) calls this at its own per-increment entry point to recompute that array lazily,
         without registering as a
-        :class:`~edelweissfe.models.modelchangeobserver.ModelChangeObserver`. A step action that
+        :class:`~edelweissfe.models.meshdependent.MeshDependent`. A step action that
         merely iterates ``theSet`` needs no such check -- it sees new members automatically.
 
         Parameters

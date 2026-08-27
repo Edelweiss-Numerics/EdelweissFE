@@ -159,11 +159,12 @@ class Generator(GeneratorBase):
         for block_id, el_ids in block_elements_assignments.items():
             elements_per_block = []
             for local_el_id in el_ids:
-                newEl = elementType(configuration.elType, idx + 1)
+                (elNumber,) = model.reserveElementNumbers(1)
+                newEl = elementType(configuration.elType, elNumber)
                 nodeList = [_nodes[nid] for nid in all_elements[local_el_id]]
                 newEl.setNodes(nodeList)
 
-                model.elements[idx + 1] = newEl
+                model.createElement(newEl)
                 # add element to corresponding element set
                 elements_per_block.append(newEl)
                 idx += 1
@@ -321,10 +322,14 @@ def replicateMesh(
                 for nid in el:
                     k = np.where(associated_nodes_array[:, 0] == nid)[0][0]
                     new_el.append(int(associated_nodes_array[k, 1]))
-                newEl = elementType(elTypeName, len(model.elements) + 1)
+                # len(model.elements) + 1 was not merely unidiomatic: element numbers are never
+                # recycled, so the dict has gaps, and len()+1 could land on a live element and
+                # silently overwrite it.
+                (elNumber,) = model.reserveElementNumbers(1)
+                newEl = elementType(elTypeName, elNumber)
                 nodeList = [model.nodes[nid + 1] for nid in new_el]
                 newEl.setNodes(nodeList)
-                model.elements[len(model.elements) + 1] = newEl
+                model.createElement(newEl)
                 # add element to corresponding element set
                 new_el_ids.append(len(model.elements) - 1)
 

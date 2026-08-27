@@ -51,13 +51,28 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
         return self._name
 
     @abstractmethod
-    def updateModel(self, model: FEModel, step, timeStep: float) -> bool:
-        """Invoked by the solver at designated lifecycle hooks (e.g. start of increment).
+    def plan(self, model: FEModel, change, step, timeStep: float):
+        """Decide what, if anything, this modifier wants to change about the model -- without
+        changing it.
+
+        This half is allowed to read solution state: markers, node fields, the current time, the
+        step. It must return a **serializable** description of the decision, which
+        :meth:`apply` can carry out on its own, or ``None`` if there is nothing to do.
+
+        A restart replay never calls this. It reads the recorded plan and calls :meth:`apply`
+        directly, which is what makes a resumed run reproduce the original topology exactly instead
+        of re-deciding from state that may not be identical.
 
         Parameters
         ----------
         model
-            The FEModel object.
+            The FEModel object. Read only -- do not mutate it here.
+        change
+            The net :class:`~edelweissfe.models.modelchange.ModelChange` since this modifier last
+            planned within the current topology update, or ``None`` on the first round. **Return
+            ``None`` when it does not touch this modifier's domain** -- that is what lets the
+            pipeline reach a fixed point instead of looping (see
+            :meth:`~edelweissfe.models.femodel.FEModel.updateTopology`).
         step
             The current step.
         timeStep
@@ -65,14 +80,113 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
 
         Returns
         -------
-        bool
-            True if the model topology, element/node count, or DOF system changed,
-            signaling the solver to rebuild equation system structures (DofManager,
-            CSR matrices, solution vectors, and MPC transformations).
+        object | None
+            A plan for :meth:`apply`, or ``None``.
         """
+
+    @abstractmethod
+    def apply(self, model: FEModel, plan):
+        """Carry out ``plan``, mutating the model.
+
+        **Must not read solution state.** A pure function of ``(model, plan)`` -- everything the
+        decision depended on belongs in the plan. This is the single code path shared by a live run
+        and a restart replay, and the reason a replayed mesh is numbered identically: there is no
+        second implementation to drift apart from this one.
+
+        Runs inside an open topology window (see
+        :meth:`~edelweissfe.models.femodel.FEModel.topologyChanges`), so it may create and delete
+        elements -- through :meth:`~edelweissfe.models.femodel.FEModel.reserveElementNumbers` and
+        :meth:`~edelweissfe.models.femodel.FEModel.createElement`, never by writing
+        ``model.elements`` directly.
+
+        Parameters
+        ----------
+        model
+            The FEModel object, mutated in place.
+        plan
+            A plan previously returned by :meth:`plan` (live) or restored from the recorded
+            topology history (replay).
+
+        Returns
+        -------
+        ModelChange
+            The changeset this mutation produced.
+        """
+
+    @abstractmethod
+    def encodePlan(self, plan) -> dict:
+        """Serialize a plan for the topology history, as a flat mapping of name to
+        :class:`numpy.ndarray` (or scalar).
+
+        Everything :meth:`apply` needs must be here: on a restart, the plan is rebuilt from this and
+        nothing else -- :meth:`plan` is not called.
+        """
+
+    @abstractmethod
+    def decodePlan(self, data: dict):
+        """Inverse of :meth:`encodePlan`."""
+
+    def declaredDomain(self, model: FEModel) -> set:
+        """The element numbers this modifier claims exclusive authority over.
+
+        Two modifiers that both own an element will fight over it: each mutates ``model.elements``
+        directly, so one deleting or subdividing an element the other still tracks leaves the second
+        holding a stale reference, which later corrupts element-set membership and can surface as a
+        node that is simultaneously Dirichlet-prescribed and a multi-point-constraint slave.
+
+        :meth:`~edelweissfe.models.femodel.FEModel.checkModelModifierDomains` compares these
+        pairwise once, at the end of setup, and refuses the model rather than letting the conflict
+        appear deep in the solve loop. The default claims nothing, which is correct for a modifier
+        that only ever *adds* entities.
+        """
+
+        return set()
+
+    def restoreDecisionState(self, records):
+        """Restore whatever *decision-side* state :meth:`plan` needs, from this modifier's own
+        records, after a restart replay.
+
+        Optional -- the default does nothing, which is correct for any modifier whose next decision
+        depends only on the model and the solution state, both of which the restart restores anyway.
+        Deliberately separate from :meth:`apply`: this is about how the *next* decision is made, not
+        about reconstructing the model, so getting it wrong cannot corrupt the mesh.
+
+        Parameters
+        ----------
+        records
+            This modifier's :class:`~edelweissfe.models.modelchange.TopologyRecord` entries, in
+            order. Empty if it never changed anything.
+        """
+
+    def updateModel(self, model: FEModel, step, timeStep: float) -> bool:
+        """Plan, then apply, in one call.
+
+        A convenience for callers outside the pipeline (and for tests). The pipeline itself --
+        :meth:`~edelweissfe.models.femodel.FEModel.updateTopology` -- calls :meth:`plan` and
+        :meth:`apply` separately, so that it can run the modifiers to a fixed point and record each
+        plan for restart.
+
+        Returns
+        -------
+        bool
+            True if the topology changed.
+        """
+
+        plan = self.plan(model, None, step, timeStep)
+        if plan is None:
+            return False
+        self.apply(model, plan)
+        return True
 
     def onStepStart(self, model: FEModel, step):
         """Optional lifecycle hook called at the start of an analysis step."""
 
     def onIncrementEnd(self, model: FEModel, step, timeStep: float):
         """Optional lifecycle hook called after an increment converges."""
+
+    # getRestartData/setRestartData are gone. A modifier no longer serializes its own history, nor
+    # implements its own replay: FEModel records every applied plan in model.topologyHistory and
+    # replays it through this class's apply(). The previous arrangement had each modifier
+    # reimplementing the mutation for the replay path, which is precisely why a resumed run could
+    # rebuild a differently-numbered mesh -- two implementations of one mutation always drift.
+    # Decision-side state that plan() needs goes through restoreDecisionState() instead.

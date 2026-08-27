@@ -230,7 +230,12 @@ class Generator(GeneratorBase):
                 idx += 1
 
         model.nodes = nodes
+        # This generator REPLACES the element dict wholesale, with its own 1..N numbering, rather
+        # than creating elements through the model. Tell the allocator about those numbers, so that
+        # everything minted afterwards (contact facets, rigid-body point masses, model modifiers)
+        # cannot collide with them. See FEModel.adoptSetupElementNumbers.
         model.elements = elements
+        model.adoptSetupElementNumbers()
 
         # get unit cell dimensions
         x_min = 0

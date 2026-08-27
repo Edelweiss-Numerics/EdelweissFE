@@ -44,6 +44,28 @@ from edelweissfe.models.modelchangeobserver import ModelChangeType
 
 
 @dataclass
+class TopologyRecord:
+    """One applied model-modifier decision, as recorded in
+    :attr:`~edelweissfe.models.femodel.FEModel.topologyHistory`.
+
+    This is the authoritative record of how the model's topology came to be what it is -- not a
+    debugging aid kept alongside one. A restart replays these through the modifier's own
+    :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply`, which is the
+    same code path the live run used, so there is no second implementation to drift from it.
+    """
+
+    modifier: str  #: name of the model modifier that made this decision
+    roundNumber: int  #: which round of the topology update it was applied in
+    time: float  #: model time at which it was applied
+    plan: dict  #: the decision, encoded by the modifier (see ModelModifierBase.encodePlan)
+    fingerprint: str = ""  #: model.topologyFingerprint() immediately after applying it
+    #: summary fields, for the log and for forensics only -- never used to reconstruct anything
+    nElementsAdded: int = 0
+    nElementsRemoved: int = 0
+    nNodesAdded: int = 0
+
+
+@dataclass
 class ModelChange:
     """One model mutation (or, from :meth:`~edelweissfe.models.femodel.FEModel.changesSince`,
     several coalesced into one net change)."""

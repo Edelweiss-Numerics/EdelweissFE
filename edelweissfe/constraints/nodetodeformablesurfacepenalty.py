@@ -32,7 +32,6 @@ import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.elements.contactsurfaceelement import facetNormalAndMeasure
-from edelweissfe.generators.surfaceelementgenerator import buildContactFacets
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
@@ -345,6 +344,7 @@ class Constraint(ConstraintBase, MeshDependent):
         self.name = name
         self.journal = journal
         self._lastSeenTopologyVersion = model.topologyVersion
+        model.registerMeshDependent(self)
 
         self._slaveSurfaceSetName = slaveSurface.name
         self._masterSurfaceSetName = masterSurface.name
@@ -489,7 +489,7 @@ class Constraint(ConstraintBase, MeshDependent):
         source solid elements) first, at this natural per-increment tick -- see
         :class:`~edelweissfe.models.meshdependent.MeshDependent`."""
 
-        self.reconcileIfChanged(model)
+        # refreshed by FEModel.refreshMeshDependents; nothing extra to do at this tick
 
         slaveCoords = self._currentCoordinates(self.slaveNodes, model, self._referenceCoordsSlaves)
         facetCoords = [
@@ -595,7 +595,7 @@ class Constraint(ConstraintBase, MeshDependent):
 
         return hasChanged
 
-    def reconcile(self, model: FEModel, change) -> bool:
+    def refresh(self, model: FEModel, change) -> bool:
         """Regenerate whichever side's facets were affected by ``change`` (via its recorded
         :attr:`~edelweissfe.models.femodel.FEModel.contactFacetRecipes`) and rebind the cached
         per-slave/per-facet arrays to match. A currently-tracked slave node keeps its frictional
@@ -612,11 +612,11 @@ class Constraint(ConstraintBase, MeshDependent):
         if not (touchedSlave or touchedMaster):
             return False
 
+        # Facets are regenerated in the topology-update phase by the implicit surfaceFacets
+        # modifier; this constraint only rebinds to whichever side changed.
         if touchedSlave:
-            buildContactFacets(model, *slaveRecipe, self.journal)
             self._rebindSlave(model)
         if touchedMaster:
-            buildContactFacets(model, *masterRecipe, self.journal)
             self._rebindMaster(model)
         return True
 

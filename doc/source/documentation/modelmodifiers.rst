@@ -7,10 +7,16 @@ Model modifiers
 Unlike constraints, step actions or output managers -- which act on a *fixed* mesh -- a model
 modifier may change the mesh topology itself during an analysis: adding or removing nodes and
 elements, re-partitioning element/node sets and surfaces, and reallocating the solution fields.
-A modifier is declared with the ``*modelModifier`` keyword and is invoked by the solver at the
-start of every increment via :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.updateModel`;
-when it reports a change, the solver rebuilds the equation system (DOF manager, sparsity pattern,
-solution vectors and any multi-point-constraint transformation) before continuing.
+A modifier is declared with the ``*modelModifier`` keyword. At the start of every increment the
+solver runs **all** modifiers to a fixed point via
+:meth:`~edelweissfe.models.femodel.FEModel.updateTopology`, then lets mesh-dependent consumers catch
+up, then solves; when the topology changed, the equation system (DOF manager, sparsity pattern,
+solution vectors and any multi-point-constraint transformation) is rebuilt first. A modifier itself
+is written as two halves -- :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan`,
+which decides and may read solution state, and
+:meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply`, which carries the
+decision out and may not. **See** :doc:`topologypipeline` **for the full contract, why it is split
+that way, and what a new modifier must implement**; this page covers the individual modifiers.
 
 **Topological containers have stable identity.** :class:`~edelweissfe.sets.nodeset.NodeSet`,
 :class:`~edelweissfe.sets.elementset.ElementSet`, :class:`~edelweissfe.surfaces.entitybasedsurface.
@@ -34,21 +40,19 @@ the container on its own. Two mechanisms remain, narrowed to exactly these cases
   see :mod:`~edelweissfe.stepactions.dirichlet`, :mod:`~edelweissfe.stepactions.nodeforces` and
   :class:`~edelweissfe.utils.fieldoutput.ElementFieldOutput` for examples. This needs no
   registration and therefore has no observer lifecycle to leak.
-* **Push notification** -- for derived *geometry* that must be regenerated strictly before the next
-  equation-system rebuild decision (facet-based contact and tie; see below), a modifier still
-  broadcasts a :class:`~edelweissfe.models.modelchangeobserver.ModelChangeType` event, together with
-  a structured :class:`~edelweissfe.models.modelchange.ModelChange` describing exactly what
-  changed, through the model's observer mechanism
-  (:meth:`~edelweissfe.models.femodel.FEModel.notifyModelChanged`); the few remaining push
-  observers re-bind themselves in their ``onModelChanged`` callbacks. Most consumers with their own
-  per-increment tick instead pull: compare their own last-seen value against
-  :attr:`~edelweissfe.models.femodel.FEModel.topologyVersion` (bumped on every mutation) and, on a
-  mismatch, fetch the net change since then via
-  :meth:`~edelweissfe.models.femodel.FEModel.changesSince`, which coalesces every mutation missed
-  into a single :class:`~edelweissfe.models.modelchange.ModelChange` -- added/removed nodes and
-  elements, the parent -> children map, the per-face child tiling, and which node/element sets or
-  surfaces were touched (with ``touchesSurface``/``touchesNodeSet``/``touchesElementSet``
-  early-outs so a consumer can skip a change that doesn't concern it).
+* **Registered mesh dependent** -- for derived *geometry* that must be regenerated before the next
+  equation-system rebuild (facet-based contact and tie; see below), a component registers itself via
+  :meth:`~edelweissfe.models.femodel.FEModel.registerMeshDependent` and implements
+  :meth:`~edelweissfe.models.meshdependent.MeshDependent.refresh`. Once per increment, after every
+  modifier has settled, :meth:`~edelweissfe.models.femodel.FEModel.refreshMeshDependents` hands it
+  the *net* change since it last looked -- added/removed nodes and elements, the parent -> children
+  map, the per-face child tiling, and which node/element sets or surfaces were touched (with
+  ``touchesSurface``/``touchesNodeSet``/``touchesElementSet`` early-outs so a consumer can skip a
+  change that doesn't concern it).
+
+  The synchronous push notification that used to exist alongside this has been removed: with
+  modifiers running to a fixed point, a per-mutation callback fires mid-pipeline and hands the
+  consumer a state that no longer exists by the time the solve begins. See :doc:`topologypipeline`.
 
 ``hAdaptivity`` - Hanging-node h-adaptivity for HEX20
 -----------------------------------------------------
@@ -251,6 +255,26 @@ amrtransparencyprobe``) that does exactly this, registers no observer and implem
 ``MeshDependent``, yet raises if its cached node set is ever found not to have grown across a
 refinement it should have seen -- guarding against a regression that reintroduces replacing a set
 instead of mutating it.
+
+Restart / checkpointing
+------------------------
+
+A model modifier that mutates topology, like ``hAdaptivity``, cannot rely on the plain
+reconstruct-then-overwrite scheme every other checkpointed component uses (see ``*restart``): a
+refined mesh's new elements and nodes aren't in the ``.inp`` file to rebuild from. Instead, the
+checkpoint records only the *decisions* that drove each past change -- and the resumed run replays
+them through the modifier's own
+:meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply`, the very same
+code the live run executed. The marker evaluation that produced a decision is never re-run.
+
+**A modifier does not implement its own restart.** It implements
+:meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.encodePlan` and
+:meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.decodePlan` so that its
+decision survives a checkpoint; :class:`~edelweissfe.models.femodel.FEModel` records every applied
+decision in :attr:`~edelweissfe.models.femodel.FEModel.topologyHistory` and replays it. An earlier
+design had each modifier serializing its own history and implementing its own replay, which is
+precisely how a resumed run came to rebuild a differently-numbered mesh -- two implementations of
+one mutation always drift. See :doc:`topologypipeline`.
 
 Implementing your own model modifiers
 -------------------------------------
