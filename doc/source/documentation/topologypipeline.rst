@@ -104,6 +104,12 @@ update, meaning "evaluate freshly".
 :meth:`~edelweissfe.models.femodel.FEModel.createElement` and
 :meth:`~edelweissfe.models.femodel.FEModel.removeElement`.
 
+**Say so if your modifier is purely reactive.** A modifier that can only act in response to another
+one's mutation -- the implicit surface-facet retiling is the only current example -- sets
+``initiatesTopologyChanges = False``. A solver that never runs the topology update (the explicit
+ones) then still accepts a model carrying it, while still refusing one whose modifiers would
+silently never run.
+
 
 Why the split exists: restart
 ------------------------------

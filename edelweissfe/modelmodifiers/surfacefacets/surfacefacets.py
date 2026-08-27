@@ -72,6 +72,9 @@ class FacetPlan:
 class ModelModifier(ModelModifierBase):
     """Retiles contact/tie surfaces whose source elements changed."""
 
+    #: Purely reactive: plan() returns None unless another modifier already changed the mesh.
+    initiatesTopologyChanges = False
+
     def __init__(self, name: str, model: FEModel, journal: Journal, **kwargs):
         super().__init__(name, model, journal, **kwargs)
 

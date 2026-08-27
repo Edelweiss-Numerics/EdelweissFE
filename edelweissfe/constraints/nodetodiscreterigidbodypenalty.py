@@ -284,7 +284,7 @@ class Constraint(ConstraintBase, MeshDependent):
         self._nSetName = nSet.name
         self._lastSeenTopologyVersion = model.topologyVersion
         model.registerMeshDependent(self)
-        self.slaveNodes = [node for node in nSet if node is not self.rpNode]
+        self.slaveNodes = self._slaveNodesFrom(nSet)
         self._rebuildFromSlaveNodes()
 
         self.totalNormalForce = 0.0
@@ -304,6 +304,12 @@ class Constraint(ConstraintBase, MeshDependent):
             model.rigidBodies[configuration.rigidBody],
             configuration=configuration,
         )
+
+    def _slaveNodesFrom(self, nSet) -> list:
+        """The slave nodes of ``nSet``. The rigid body's reference point is never one of them: it
+        carries the body's own degrees of freedom and cannot be in contact with itself."""
+
+        return [node for node in nSet if node is not self.rpNode]
 
     def _rebuildFromSlaveNodes(self) -> None:
         """(Re)derive every quantity that depends on the slave node list/count."""
@@ -328,7 +334,7 @@ class Constraint(ConstraintBase, MeshDependent):
 
         if not change.touchesNodeSet(self._nSetName):
             return False
-        self.slaveNodes = list(model.nodeSets[self._nSetName])
+        self.slaveNodes = self._slaveNodesFrom(model.nodeSets[self._nSetName])
         self._rebuildFromSlaveNodes()
         return True
 

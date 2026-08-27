@@ -25,17 +25,16 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Round-trip test for HAdaptivity.getRestartData/setRestartData directly (unlike
+"""Round-trip test for the recorded topology history of an h-adaptive model (unlike
 tests/test_restart_integration.py's AMR case, which drives the same feature end-to-end through a
 real solve). Builds two independent models from the same .inp via fillFEModelFromInputFile
 (mirroring the driver's own setup sequence, minus solvers/steps, which this doesn't need), drives
-one real refinement on the first via the live updateModel path, and asserts that replaying the
-captured getRestartData() onto the second -- freshly rebuilt, unrefined -- reproduces the same
-topology.
+one real refinement on the first through the live topology update, and asserts that replaying its
+recorded history onto the second -- freshly rebuilt, unrefined -- reproduces the same topology.
 
 Uses an `initialOnly` marker (edelweissfe.adaptivity.marking) so refinement triggers
-deterministically on the very first updateModel call, regardless of field state -- avoids
-depending on a real solve's marker-evaluation timing, which the full-solve integration test in
+deterministically on the very first topology update, regardless of field state -- avoids depending
+on a real solve's marker-evaluation timing, which the full-solve integration test in
 test_restart_integration.py already covers separately.
 """
 
@@ -158,6 +157,24 @@ def test_replay_detects_a_tampered_plan_and_names_it(tmp_path):
     modelB = _buildModel(tmp_path, "b.inp")
     with pytest.raises(TopologyError, match="replay diverged at record 0"):
         modelB.replayTopologyHistory(tampered)
+
+
+def test_replay_keeps_the_time_each_decision_was_originally_made_at(tmp_path):
+    """A resumed run re-records everything it replays, and that re-recorded history is what its own
+    next checkpoint holds. Stamping the resume time onto it would claim every past decision happened
+    at the moment of resuming -- and hand the modifier a cutback guard set to the wrong time."""
+
+    modelA = _buildModel(tmp_path, "a.inp")
+    modelA.advanceToTime(3.5)
+    modelA.updateTopology(step=None, timeStep=0.0)
+    assert [record.time for record in modelA.topologyHistory] == [3.5]
+
+    modelB = _buildModel(tmp_path, "b.inp")
+    modelB.advanceToTime(9.0)
+    modelB.replayTopologyHistory(modelA.topologyHistory)
+
+    assert [record.time for record in modelB.topologyHistory] == [3.5]
+    assert modelB.modelModifiers["amr"]._lastRefinedTime == 3.5
 
 
 def test_pending_marks_are_not_checkpointed_but_re_derived(tmp_path):

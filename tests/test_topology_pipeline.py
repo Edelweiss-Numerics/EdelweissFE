@@ -28,7 +28,7 @@
 
 """The element number allocator and the topology mutation window.
 
-These pin the two properties the restart replay is built on (plan §2.6): element numbering is a pure
+These pin the two properties the restart replay is built on: element numbering is a pure
 function of the ordered *creation* sequence -- never of the deletion history, never of
 ``max(model.elements)`` -- and entities may only be created or deleted inside a topology change.
 """
@@ -38,10 +38,14 @@ from pathlib import Path as _Path
 import numpy as np
 import pytest
 
+from edelweissfe.modelmodifiers.surfacefacets.surfacefacets import (
+    ModelModifier as _SurfaceFacetsModifier,
+)
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.models.modelchange import ModelChange
 from edelweissfe.models.modelchangeobserver import ModelChangeType as _MCT
+from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.utils.exceptions import TopologyError
 
 _REPO_ROOT = _Path(__file__).resolve().parents[1]
@@ -231,6 +235,8 @@ def test_parsed_element_set_keeps_its_declaration_order():
 class _StubModifier:
     """A modifier that plans a fixed number of times, then settles."""
 
+    initiatesTopologyChanges = True
+
     def __init__(self, name, plansLeft, log, reactsToOthers=False):
         self.name = name
         self._plansLeft = plansLeft
@@ -257,11 +263,14 @@ class _StubModifier:
         pass
 
     def apply(self, model, plan):
+        # A modifier reports what it did in exactly one way: by returning the change. Notifying here
+        # as well would record it twice; see FEModel.recordTopologyChange.
         self._log.append(plan["who"])
         (number,) = model.reserveElementNumbers(1)
         model.createElement(_StubElement(number))
-        model.notifyModelChanged(_MCT.REFINEMENT)
-        return None
+        change = ModelChange(kind=_MCT.REFINEMENT)
+        change.addedElements.add(number)
+        return change
 
 
 def _modelWithModifiers(**modifiers) -> FEModel:
@@ -327,6 +336,24 @@ class _StubMeshDependent:
         return self._relevant
 
     refreshIfMeshChanged = MeshDependent.refreshIfMeshChanged
+
+
+def test_the_pipeline_records_exactly_the_change_a_modifier_returns():
+    """The whole contract in one test: a modifier only ever returns its change, and the pipeline is
+    what records it. If that recording is dropped, changesSince() sees nothing and every
+    mesh-dependent silently misses the update; if it happens twice, the version count is wrong."""
+
+    model = _modelWithModifiers(amr=_OwningModifier("amr", [], owns={1}, touches={99}))
+    consumer = _StubMeshDependent()
+    model.registerMeshDependent(consumer)
+    versionBefore = model.topologyVersion
+
+    model.updateTopology(step=None, timeStep=0.0)
+
+    assert model.topologyVersion == versionBefore + 1, "one apply, recorded exactly once"
+    assert model.changesSince(versionBefore).addedElements == {99}
+    assert model.refreshMeshDependents() is True
+    assert [change.addedElements for change in consumer.refreshes] == [{99}]
 
 
 def test_consumers_refresh_once_on_the_net_change_of_all_rounds():
@@ -470,7 +497,6 @@ class _OwningModifier(_StubModifier):
         self._log.append(plan["who"])
         change = ModelChange(kind=_MCT.REFINEMENT)
         change.addedElements |= self._touches
-        model.notifyModelChanged(_MCT.REFINEMENT, change)
         return change
 
 
@@ -520,8 +546,8 @@ def test_the_same_modifier_may_touch_an_element_in_successive_rounds():
 
 def test_a_consumer_cannot_mutate_the_topology():
     """Phase 2 runs with the window closed, so a mesh-dependent that tries to create an element
-    raises instead of quietly mutating behind the pipeline's back. This is what P3 bought by moving
-    facet regeneration out of constraint refresh and into its own modifier."""
+    raises instead of quietly mutating behind the pipeline's back -- which is what moving facet
+    regeneration out of constraint refresh and into its own modifier bought."""
 
     class _MutatingConsumer(_StubMeshDependent):
         def refresh(self, model, change):
@@ -565,3 +591,34 @@ def test_a_purely_reactive_modifier_sees_the_first_round_change():
     assert seen, "the reactive modifier was never asked to plan"
     assert seen[0] is not None, "round 1 handed it None despite an earlier modifier having changed the model"
     assert 7 in seen[0].addedElements
+
+
+class _NonAdaptingSolver:
+    """A solver that never runs the topology update -- the explicit ones, which do support ties."""
+
+    identification = "nonAdapting"
+    supportsMPC = True
+    supportsModelModifiers = False
+    validateModelCapabilities = NonlinearSolverBase.validateModelCapabilities
+
+
+def test_the_implicit_facet_retiling_does_not_disqualify_a_non_adapting_solver():
+    """Every ``*surface`` recipe brings the facet modifier along, whether or not anything adapts the
+    mesh. It is purely reactive, so a solver that never runs the topology update loses nothing by
+    not polling it -- and refusing the model would rule out plain contact and tie analyses on the
+    explicit solvers, which do support them."""
+
+    model = _modelWithModifiers(surfaceFacets=_SurfaceFacetsModifier("surfaceFacets", FEModel(3), None))
+    _NonAdaptingSolver().validateModelCapabilities(model)  # must not raise
+
+
+def test_a_self_starting_modifier_is_refused_by_a_non_adapting_solver_and_named():
+    """The guard still has to fire for a modifier that would act on its own: silently never
+    adapting a model the user asked to adapt is the failure it exists to prevent."""
+
+    model = _modelWithModifiers(
+        amr=_StubModifier("amr", 1, []),
+        surfaceFacets=_SurfaceFacetsModifier("surfaceFacets", FEModel(3), None),
+    )
+    with pytest.raises(NotImplementedError, match=r"does not run the topology update.*\bamr\b"):
+        _NonAdaptingSolver().validateModelCapabilities(model)

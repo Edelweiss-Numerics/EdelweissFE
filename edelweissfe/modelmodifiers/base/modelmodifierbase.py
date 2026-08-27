@@ -40,6 +40,12 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
     mesh, or state variables during analysis steps.
     """
 
+    #: Whether this modifier can start a topology change by itself. A purely reactive modifier sets
+    #: this to False: it only ever plans in response to another modifier's mutation, so in a solver
+    #: that never runs the topology update it cannot do anything, and its presence alone must not
+    #: disqualify that solver. See NonlinearSolverBase.validateModelCapabilities.
+    initiatesTopologyChanges = True
+
     def __init__(self, name: str, model: FEModel, journal: Journal, **kwargs):
         self._name = name
         self._model = model
@@ -157,26 +163,6 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
             This modifier's :class:`~edelweissfe.models.modelchange.TopologyRecord` entries, in
             order. Empty if it never changed anything.
         """
-
-    def updateModel(self, model: FEModel, step, timeStep: float) -> bool:
-        """Plan, then apply, in one call.
-
-        A convenience for callers outside the pipeline (and for tests). The pipeline itself --
-        :meth:`~edelweissfe.models.femodel.FEModel.updateTopology` -- calls :meth:`plan` and
-        :meth:`apply` separately, so that it can run the modifiers to a fixed point and record each
-        plan for restart.
-
-        Returns
-        -------
-        bool
-            True if the topology changed.
-        """
-
-        plan = self.plan(model, None, step, timeStep)
-        if plan is None:
-            return False
-        self.apply(model, plan)
-        return True
 
     def onStepStart(self, model: FEModel, step):
         """Optional lifecycle hook called at the start of an analysis step."""

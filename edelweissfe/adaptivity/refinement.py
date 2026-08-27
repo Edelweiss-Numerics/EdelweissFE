@@ -345,7 +345,7 @@ class AdaptiveMesh:
         # Timed separately from the scan below: these indices are rebuilt from scratch on every
         # call, over the WHOLE active mesh, whereas the scan itself is restricted to the refined
         # interface shell. If the index build dominates, the cost to attack is incrementality, not
-        # the search (P0, PLAN_TOPOLOGY_PIPELINE.md §6).
+        # the search.
         timerIndex = timeit("hanging: whole-mesh index build")
         timerIndex.__enter__()
         used = {lab for eid in act for lab in self.elements[eid]["conn"]}
@@ -389,7 +389,7 @@ class AdaptiveMesh:
             # strictly finer element of the same body, it cannot have a finer neighbour. Away from
             # a refinement front -- i.e. almost everywhere -- this exits before the set unions
             # below, which otherwise ran for every active element and made this scan the second
-            # largest per-round cost (P0, PLAN_TOPOLOGY_PIPELINE.md §6).
+            # largest per-round cost.
             if not any(cellMaxLevel.get((cell, componentId), -1) > level for cell in cells):
                 return False
 

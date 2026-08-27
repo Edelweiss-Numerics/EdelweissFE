@@ -421,11 +421,11 @@ class ModelModifier(ModelModifierBase):
                 marked_elements.update(elements)
 
         # dynamic markers (not initialOnly) evaluate the converged solution, so they need at least
-        # one increment to have actually converged -- on the very first call, updateModel() runs
-        # before increment 1 is solved and model fields still hold the pre-solve initial condition,
-        # which is meaningless to mark on regardless of which field a given marker evaluates.
-        # Gating on displacement magnitude instead would wrongly skip markers that evaluate other
-        # fields (stress, strain, ...) whenever displacement itself happens to stay tiny.
+        # one increment to have actually converged -- on the very first call, the topology update
+        # runs before increment 1 is solved and model fields still hold the pre-solve initial
+        # condition, which is meaningless to mark on regardless of which field a given marker
+        # evaluates. Gating on displacement magnitude instead would wrongly skip markers that
+        # evaluate other fields (stress, strain, ...) whenever displacement itself stays tiny.
         if not self._isFirstCall:
             dynamic_markers = [m for m in self.markers if not m.initialOnly]
             for m in dynamic_markers:
@@ -467,7 +467,6 @@ class ModelModifier(ModelModifierBase):
         # a cutback, and apply() must not read solution state (model.time included).
         self._lastRefinedTime = float(model.time)
 
-        elForEid = {v: k for k, v in self._eidToEl.items()}
         return RefinementPlan(eids=[elForEid[el] for el in eligible])
 
     @timeit("AMR")
@@ -700,7 +699,7 @@ class ModelModifier(ModelModifierBase):
                         P[idx] = new[node]
 
         # Separately timed: this relinks EVERY node's field variables, so its cost scales with the
-        # whole mesh rather than with what this refinement actually changed (P0, PLAN §6).
+        # whole mesh rather than with what this refinement actually changed.
         with timeit("relink field variables"):
             model._linkFieldVariableObjects(model.nodeSets["all"])
         return change

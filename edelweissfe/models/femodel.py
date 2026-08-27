@@ -213,7 +213,6 @@ class FEModel:
 
         del self.elements[elNumber]
 
-    @timeit("topology update")
     def ensureSurfaceFacetModifier(self, journal: Journal):
         """Create the implicit facet-regeneration modifier, if any facet recipe was declared.
 
@@ -372,7 +371,9 @@ class FEModel:
             digest.update(np.asarray(self.nodes[label].coordinates, dtype=float).tobytes())
         return digest.hexdigest()
 
-    def recordTopologyChange(self, roundNumber: int, name: str, modifier, plan, modelChange) -> TopologyRecord:
+    def recordTopologyChange(
+        self, roundNumber: int, name: str, modifier, plan, modelChange, time: float = None
+    ) -> TopologyRecord:
         """Register everything an applied decision produced: the replay record and the changeset.
 
         Two things are recorded here, deliberately in one place:
@@ -394,6 +395,13 @@ class FEModel:
         changesets in the same order as the run it replays.
 
         Cost is one fingerprint per *applied* decision -- a handful per analysis, not per iteration.
+
+        Parameters
+        ----------
+        time
+            Model time to stamp the record with. Defaults to the current :attr:`time`; a replay
+            passes the recorded time instead, so a resumed run's history carries the times the
+            decisions were originally made rather than the time it was resumed at.
         """
 
         if modelChange is not None:
@@ -402,7 +410,7 @@ class FEModel:
         record = TopologyRecord(
             modifier=name,
             roundNumber=roundNumber,
-            time=float(self.time),
+            time=float(self.time if time is None else time),
             plan=modifier.encodePlan(plan),
             fingerprint=self.topologyFingerprint(),
             nElementsAdded=len(modelChange.addedElements) if modelChange is not None else 0,
@@ -446,7 +454,9 @@ class FEModel:
                     )
                 plan = modifier.decodePlan(record.plan)
                 modelChange = modifier.apply(self, plan)
-                replayed = self.recordTopologyChange(record.roundNumber, record.modifier, modifier, plan, modelChange)
+                replayed = self.recordTopologyChange(
+                    record.roundNumber, record.modifier, modifier, plan, modelChange, time=record.time
+                )
                 if self.verifyTopologyFingerprints and record.fingerprint:
                     if replayed.fingerprint != record.fingerprint:
                         raise TopologyError(

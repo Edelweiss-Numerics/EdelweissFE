@@ -165,9 +165,8 @@ class Generator(GeneratorBase):
         nG = np.asarray(nodes).reshape(nNodesX, nNodesY)
 
         # Element numbers come from the model's monotonic allocator (FEModel.reserveElementNumbers),
-        # not from max(model.elements) -- see PLAN_TOPOLOGY_PIPELINE.md. Reserved one at a time so
-        # the count need not be predicted; nothing else mints during this loop, so the numbers are
-        # consecutive exactly as before.
+        # not from max(model.elements). Reserved one at a time so the count need not be predicted;
+        # nothing else mints during this loop, so the numbers are consecutive exactly as before.
 
         elements = []
         for x in range(nX):
