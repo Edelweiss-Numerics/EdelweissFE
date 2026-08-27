@@ -373,13 +373,31 @@ class FEModel:
         return digest.hexdigest()
 
     def recordTopologyChange(self, roundNumber: int, name: str, modifier, plan, modelChange) -> TopologyRecord:
-        """Append an applied decision to :attr:`topologyHistory`.
+        """Register everything an applied decision produced: the replay record and the changeset.
 
-        Records the plan in the modifier's own serializable form plus the resulting topology
-        fingerprint, which is what lets a resumed run be checked round by round instead of only at
-        the end. Cost is one fingerprint per *applied* decision -- a handful per analysis, not per
-        iteration.
+        Two things are recorded here, deliberately in one place:
+
+        * an entry in :attr:`topologyHistory`, holding the plan in the modifier's own serializable
+          form plus the resulting topology fingerprint -- which is what lets a resumed run be
+          checked round by round instead of only at the end;
+        * the ``modelChange`` itself, via :meth:`notifyModelChanged`, so :meth:`changesSince` and
+          :meth:`refreshMeshDependents` can see it.
+
+        A model modifier therefore reports what it did in exactly one way: by returning a
+        :class:`~edelweissfe.models.modelchange.ModelChange` from
+        :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply`. It must
+        not call :meth:`notifyModelChanged` itself -- there is no second channel to keep in sync,
+        and so no way to update one and forget the other.
+
+        Both callers of ``apply`` (the live :meth:`updateTopology` loop and
+        :meth:`replayTopologyHistory`) route through here, so a replayed run records the same
+        changesets in the same order as the run it replays.
+
+        Cost is one fingerprint per *applied* decision -- a handful per analysis, not per iteration.
         """
+
+        if modelChange is not None:
+            self.notifyModelChanged(modelChange.kind, modelChange)
 
         record = TopologyRecord(
             modifier=name,
@@ -426,10 +444,9 @@ class FEModel:
                         "does not define -- the input file must declare the same modifiers as the run "
                         "being resumed".format(record.modifier)
                     )
-                modelChange = modifier.apply(self, modifier.decodePlan(record.plan))
-                replayed = self.recordTopologyChange(
-                    record.roundNumber, record.modifier, modifier, modifier.decodePlan(record.plan), modelChange
-                )
+                plan = modifier.decodePlan(record.plan)
+                modelChange = modifier.apply(self, plan)
+                replayed = self.recordTopologyChange(record.roundNumber, record.modifier, modifier, plan, modelChange)
                 if self.verifyTopologyFingerprints and record.fingerprint:
                     if replayed.fingerprint != record.fingerprint:
                         raise TopologyError(
@@ -489,6 +506,10 @@ class FEModel:
         """Record a model mutation: bump :attr:`topologyVersion` and append the changeset, so that
         every :class:`~edelweissfe.models.meshdependent.MeshDependent` can catch up from
         :meth:`changesSince` at the end of the topology update.
+
+        **Model modifiers must not call this.** :meth:`recordTopologyChange` calls it for them, from
+        the :class:`~edelweissfe.models.modelchange.ModelChange` their ``apply`` returns; see there.
+        It remains available for code that mutates the model outside the modifier pipeline.
 
         Recording only -- there is no synchronous callback. Consumers are refreshed once, by
         :meth:`refreshMeshDependents`, after the modifiers have settled; see there for why.

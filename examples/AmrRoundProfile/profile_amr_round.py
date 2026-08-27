@@ -159,7 +159,9 @@ def runOne(n: int, workdir: Path, template=None, tag="") -> dict[str, float]:
         match = re.search(re.escape(stage) + r"\s*\|\s*([0-9.eE+-]+)\s*s", out)
         if match:
             timings[stage] = float(match.group(1))
-    timings["_elements"] = float(len(re.findall(r"^", out)))  # placeholder, replaced below
+    # Left as NaN when the element count cannot be parsed, so a scaling summary shows a gap
+    # instead of silently dividing by a made-up count.
+    timings["_elements"] = float("nan")
     match = re.search(r"elements:\s*(\d+)", out)
     if match:
         timings["_elements"] = float(match.group(1))

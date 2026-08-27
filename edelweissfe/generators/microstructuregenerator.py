@@ -315,7 +315,7 @@ def replicateMesh(
 
         # create elements per block
         for elset_name, el_ids in elements_in_block.items():
-            new_el_ids = []
+            newElements = []
             for local_el_id in el_ids:
                 el = all_elements_to_copy[local_el_id]
                 new_el = []
@@ -330,14 +330,16 @@ def replicateMesh(
                 nodeList = [model.nodes[nid + 1] for nid in new_el]
                 newEl.setNodes(nodeList)
                 model.createElement(newEl)
-                # add element to corresponding element set
-                new_el_ids.append(len(model.elements) - 1)
+                # Keep the element itself, not a positional guess: element numbers come from the
+                # allocator and are never recycled, so len(model.elements) says nothing about which
+                # number this element got (the same reason the creation above no longer uses it).
+                newElements.append(newEl)
 
             # create new element set becaus elsets are immutable -- not set(...): ElementSet already
             # deduplicates and keeps the order it is fed (see the block-assignment loop above)
             model.elementSets[elset_name] = ElementSet(
                 elset_name,
-                list(model.elementSets[elset_name].elements) + [model.elements[el_id + 1] for el_id in new_el_ids],
+                list(model.elementSets[elset_name].elements) + newElements,
             )
 
         # remove nodes that are now internal

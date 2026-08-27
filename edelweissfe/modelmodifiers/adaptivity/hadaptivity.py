@@ -514,9 +514,8 @@ class ModelModifier(ModelModifierBase):
             change = self._materialize(model, records)
 
         self._hanging.setRecords(records)
-        # notify observers (e.g. Dirichlet BCs, Ensight output manager) so they re-index against the mutated mesh
-        with timeit("notify observers"):
-            model.notifyModelChanged(ModelChangeType.REFINEMENT, change)
+        # The change is not announced here: it is returned below, and the pipeline records it (see
+        # FEModel.recordTopologyChange). Consumers re-index later, once, in refreshMeshDependents.
         self._journal.message(
             "AMR ModelModifier: marked {:}, refined -> active elements {:} -> {:}, {:} hanging nodes".format(
                 len(markedEids), nBefore, len(self._mesh.active()), len(records)
