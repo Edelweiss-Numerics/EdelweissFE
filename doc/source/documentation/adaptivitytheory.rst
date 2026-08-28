@@ -18,8 +18,11 @@ zero indicator; symmetric mesh and field :math:`\to` equal indicators on mirror 
 The adaptive loop and where markers sit
 ---------------------------------------
 
-At the start of every increment the solver calls the modifier's
-:meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.updateModel`. That method
+At the start of every increment the solver runs
+:meth:`~edelweissfe.models.femodel.FEModel.updateTopology`, which asks the modifier to
+:meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan` and then to
+:meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply` its decision.
+That update
 
 #. evaluates each configured **marker**, obtaining from each a *set* of elements to refine,
 #. **unions** those sets (see :ref:`multiple-markers`),
@@ -208,7 +211,7 @@ per-increment factorisation cost predictable.
 Reactive and predictive marking: why more than one marker
 ---------------------------------------------------------
 
-Markers are **composable**: :meth:`updateModel` refines the *union* of all configured markers'
+Markers are **composable**: one topology update refines the *union* of all configured markers'
 sets. For a *stationary* problem one ``recoveryError`` marker is enough. For a **propagating**
 localization -- the usual case in damage -- a single marker is not, and the recommended
 configuration uses **two markers together**, for a reason worth stating carefully.

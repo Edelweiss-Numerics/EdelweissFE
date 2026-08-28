@@ -43,6 +43,7 @@ from edelweissfe.adaptivity.geometry import (
     point_in_convex_quad,
     quadratic_edge_parameter,
 )
+from edelweissfe.utils.performancetiming import timeit
 
 
 class NodeRegistry:
@@ -53,12 +54,18 @@ class NodeRegistry:
     legitimately share one coordinate, and must not be deduplicated into a single label.
     """
 
-    def __init__(self, decimals: int = 8):
+    def __init__(self, decimals: int = 8, reserve_labels=None):
         self.decimals = decimals
         self._byKey = {}  # (componentId, rounded-coord) key -> label
         self.coordinates = {}  # label -> np.ndarray(coord)
         self.componentOf = {}  # label -> componentId of the body the node belongs to
         self._maxLabel = 0
+        # ``count -> range`` allocator of the model this registry mirrors, i.e.
+        # FEModel.reserveNodeNumbers. Given one, the registry stops being a second, independent
+        # source of node labels: model and octree then draw from one counter and cannot drift into
+        # a collision. Left out (the standalone octree, and its tests, own no model) it falls back
+        # to minting max+1 itself, which is only safe while nothing else mints.
+        self._reserveLabels = reserve_labels
 
     def _key(self, coord, componentId: int):
         return (componentId, tuple(round(float(v), self.decimals) for v in coord))
@@ -94,16 +101,36 @@ class NodeRegistry:
         self._maxLabel = max(self._maxLabel, label)
 
     def label(self, coord, componentId: int = 0) -> int:
-        """Return the label of a coordinate within one body, minting a fresh (max+1) label if unseen."""
+        """Return the label of a coordinate within one body, minting a fresh label if unseen.
+
+        Only the minting branch draws a number; a coordinate that is already known -- the common
+        case, since every interior node is shared by several elements -- consumes nothing.
+        """
         key = self._key(coord, componentId)
         lab = self._byKey.get(key)
         if lab is None:
-            self._maxLabel += 1
-            lab = self._maxLabel
+            lab = self._mint()
             self._byKey[key] = lab
             self.coordinates[lab] = np.array(coord, dtype=float)
             self.componentOf[lab] = componentId
         return lab
+
+    def _mint(self) -> int:
+        """One fresh label, from the model's allocator if this registry was given one."""
+        if self._reserveLabels is None:
+            label = self._maxLabel + 1
+        else:
+            (label,) = self._reserveLabels(1)
+            if label <= self._maxLabel:
+                # The allocator is monotonic and was told about every label the registry knows (see
+                # reserve_labels_up_to), so this cannot happen -- unless the two were wired up to
+                # different models, which would silently alias two nodes onto one label.
+                raise ValueError(
+                    "the node allocator handed out label {:d}, which the refinement registry "
+                    "already uses; registry and model are out of sync".format(label)
+                )
+        self._maxLabel = label
+        return label
 
     def connectivity(self, coords, componentId: int = 0) -> list:
         """Map a list/array of node coordinates of one body to their labels (registering as needed)."""
@@ -171,13 +198,13 @@ class AdaptiveMesh:
     require topological (shared-face) adjacency instead; that is future work.
     """
 
-    def __init__(self, decimals: int = 8, splitFactor: int = 2, topology=None):
+    def __init__(self, decimals: int = 8, splitFactor: int = 2, topology=None, reserve_labels=None):
         if topology is None:
             from edelweissfe.adaptivity.hex20topology import Hex20Topology
 
             topology = Hex20Topology()
         self.topology = topology
-        self.registry = NodeRegistry(decimals)
+        self.registry = NodeRegistry(decimals, reserve_labels=reserve_labels)
         self.splitFactor = splitFactor  # n: each refined element is split into n**3 children per axis
         self.elements = {}  # eid -> dict(conn, coords, level, active, parent, children)
         self.elementSets = {}  # name -> set(eid)      (children inherit membership on refine)
@@ -341,6 +368,12 @@ class AdaptiveMesh:
         """
         act = self.active()
         coords = self.registry.coordinates
+        # Timed separately from the scan below: these indices are rebuilt from scratch on every
+        # call, over the WHOLE active mesh, whereas the scan itself is restricted to the refined
+        # interface shell. If the index build dominates, the cost to attack is incrementality, not
+        # the search.
+        timerIndex = timeit("hanging: whole-mesh index build")
+        timerIndex.__enter__()
         used = {lab for eid in act for lab in self.elements[eid]["conn"]}
 
         # spatial hash of nodes, so each element only tests nearby candidate nodes (local, not O(n*N))
@@ -362,21 +395,46 @@ class AdaptiveMesh:
         comp = {eid: self.elements[eid]["componentId"] for eid in act}
         componentOf = self.registry.componentOf
         elemGrid = defaultdict(set)
+        # Highest refinement level present in each (grid cell, body). Built in the same pass as the
+        # grid itself, for a few dict compares per element, and it is what keeps the scan below from
+        # paying for the conforming majority of the mesh -- see hasFinerNeighbour.
+        cellMaxLevel = {}
         for eid in act:
+            level, componentId = lev[eid], comp[eid]
             for cell in _grid_cells_for_box(box[eid][0], box[eid][1], h_cell, pad=0):
                 elemGrid[cell].add(eid)
+                key = (cell, componentId)
+                if cellMaxLevel.get(key, -1) < level:
+                    cellMaxLevel[key] = level
 
         def hasFinerNeighbour(eid):
+            level, componentId = lev[eid], comp[eid]
+            cells = _grid_cells_for_box(box[eid][0], box[eid][1], h_cell)
+
+            # Cheap necessary condition first: if no cell this element's box touches holds ANY
+            # strictly finer element of the same body, it cannot have a finer neighbour. Away from
+            # a refinement front -- i.e. almost everywhere -- this exits before the set unions
+            # below, which otherwise ran for every active element and made this scan the second
+            # largest per-round cost.
+            if not any(cellMaxLevel.get((cell, componentId), -1) > level for cell in cells):
+                return False
+
+            # ... and only then the exact test, unchanged: the filter above is necessary, not
+            # sufficient (a finer element may sit in a shared cell without its box overlapping).
             neighbours = set()
-            for cell in _grid_cells_for_box(box[eid][0], box[eid][1], h_cell):
+            for cell in cells:
                 neighbours |= elemGrid.get(cell, set())
             return any(
-                lev[f] > lev[eid] and _boxes_overlap(box[eid], box[f])
+                lev[f] > level and _boxes_overlap(box[eid], box[f])
                 for f in neighbours
-                if f != eid and comp[f] == comp[eid]
+                if f != eid and comp[f] == componentId
             )
 
+        timerIndex.__exit__(None, None, None)
+
         best = {}  # slave -> (dim, level, masters)
+        timerScan = timeit("hanging: interface-shell scan")
+        timerScan.__enter__()
         for eid in act:
             if not hasFinerNeighbour(eid):
                 continue  # no level jump here -> this element cannot host a hanging node
@@ -408,6 +466,8 @@ class AdaptiveMesh:
                 cur = best.get(h["slave"])
                 if cur is None or key < (cur[0], cur[1]):
                     best[h["slave"]] = (dim, E["level"], h["masters"])
+
+        timerScan.__exit__(None, None, None)
 
         return [{"slave": s, "kind": "edge" if v[0] == 1 else "face", "masters": v[2]} for s, v in best.items()]
 

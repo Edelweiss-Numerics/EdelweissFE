@@ -217,11 +217,16 @@ def buildContactFacets(model: FEModel, surfaceName: str, prefix: str, triangulat
 
     # remove any facets a previous call under this prefix created, so re-running is idempotent
     for staleFacet in model.elementSets.get(facetsSetName, []):
-        model.elements.pop(staleFacet.elNumber, None)
+        if staleFacet.elNumber in model.elements:
+            model.removeElement(staleFacet.elNumber)
 
     surfaceDef = model.surfaces[surfaceName]
 
-    nextElNumber = max(model.elements.keys(), default=0) + 1
+    # Facet numbers come from the model's monotonic allocator, NOT from max(model.elements)+1. The
+    # old expression read the maximum *after* the stale facets above were deleted, so a rebuild
+    # handed the dead facets' numbers straight back out -- making element numbering a function of
+    # the deletion history, which a restart replay cannot reproduce. See
+    # FEModel.reserveElementNumbers.
     newElements = {}
 
     for faceNumber, elementSet in surfaceDef.items():
@@ -258,13 +263,13 @@ def buildContactFacets(model: FEModel, surfaceName: str, prefix: str, triangulat
                         f"{len(localIndices)} for element type '{sourceElement.ensightType}'."
                     )
 
-                facetElement = facetClass(facetElementType, nextElNumber)
+                (elNumber,) = model.reserveElementNumbers(1)
+                facetElement = facetClass(facetElementType, elNumber)
                 facetElement.setNodes(facetNodes)
                 facetElement.initializeElement()
 
                 faceFacets.append(facetElement)
-                newElements[nextElNumber] = facetElement
-                nextElNumber += 1
+                newElements[elNumber] = facetElement
 
             if len(faceFacets) == 2 and all(len(f.nodes) == 3 for f in faceFacets):
                 # Two Tria3 from a linear quad face (fixed diagonal split): the per-triangle
@@ -289,7 +294,8 @@ def buildContactFacets(model: FEModel, surfaceName: str, prefix: str, triangulat
                 # can reproduce (see the constraint documentation).
                 _assignQuadConsistentShares(faceFacets[4:])
 
-    model.elements.update(newElements)
+    for facetElement in newElements.values():
+        model.createElement(facetElement)
 
     # this function is the one that mutates model.elements outside the mesh modifier (removing the
     # stale facets above and inserting newElements here), so model.elementSets["all"] must be

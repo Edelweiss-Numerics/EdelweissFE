@@ -186,7 +186,7 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         A constraint that pre-sizes a derived array to the set's size calls this at its own
         per-increment entry point (e.g. :meth:`updateConnectivity`) to recompute that array
         lazily, without registering as a
-        :class:`~edelweissfe.models.modelchangeobserver.ModelChangeObserver`.
+        :class:`~edelweissfe.models.meshdependent.MeshDependent`.
 
         Parameters
         ----------

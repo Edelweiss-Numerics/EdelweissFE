@@ -258,15 +258,22 @@ class NIST(NonlinearSolverBase):
         try:
             for timeStep in step.getTimeStep():
                 # NOTE: materialize the list before any() -- a generator would short-circuit at
-                # the first modifier/constraint reporting a change, silently skipping
-                # updateModel()/updateConnectivity() for every remaining one (their state/connectivity
-                # would stay stale/empty).
-                modelHasChanged = any(
-                    [modifier.updateModel(model, step, timeStep) for modifier in model.modelModifiers.values()]
-                )
-                connectivityHasChanged = any(
-                    [constraint.updateConnectivity(model) for constraint in model.constraints.values()]
-                )
+                # the first modifier/constraint reporting a change.
+                # Phase 1: model modifiers, run to a fixed point inside a topology window.
+                modelHasChanged = model.updateTopology(step, timeStep)
+
+                # Phase 2: mesh-dependent consumers catch up, once, on the net change. Order is
+                # irrelevant here -- they are pure readers of a settled model.
+                #
+                # NO topology window here. Since facet regeneration moved into its own model
+                # modifier, nothing in this phase may create or delete an element -- and the closed
+                # window enforces that rather than asking for it. A consumer that tries now raises
+                # instead of quietly mutating behind the pipeline's back.
+                #
+                # materialise both: neither sweep may be short-circuited by the other
+                refreshed = model.refreshMeshDependents()
+                ticked = any([constraint.updateConnectivity(model) for constraint in model.constraints.values()])
+                connectivityHasChanged = refreshed or ticked
 
                 if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
                     self.journal.message("Creating monolithic equation system", self.identification, 0)

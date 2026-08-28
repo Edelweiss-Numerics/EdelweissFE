@@ -62,8 +62,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     #: (e.g. surface ties). Subclasses supporting MPCs must set this to True.
     supportsMPC = False
 
-    #: Whether this solver polls model.modelModifiers (e.g. h-adaptivity) every increment.
-    #: Subclasses that call modifier.updateModel(...) in their solveStep loop must set this
+    #: Whether this solver runs the topology update (e.g. h-adaptivity) every increment.
+    #: Subclasses that call model.updateTopology(...) in their solveStep loop must set this
     #: to True; without it, a modifier silently never runs and the model never adapts.
     supportsModelModifiers = False
 
@@ -91,9 +91,15 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 f"Multi-point constraints (e.g. surface ties) are not supported by the {self.identification} solver."
             )
 
-        if model.modelModifiers and not self.supportsModelModifiers:
+        # Only modifiers that can act on their own matter here. A purely reactive one (the implicit
+        # surface-facet retiling, which every *surface recipe brings along) cannot plan anything
+        # unless another modifier changed the mesh first, so it loses nothing in a solver that never
+        # runs the topology update -- and must not be the reason a model is refused.
+        selfStarting = sorted(name for name, m in model.modelModifiers.items() if m.initiatesTopologyChanges)
+        if selfStarting and not self.supportsModelModifiers:
             raise NotImplementedError(
-                f"Model modifiers (e.g. h-adaptivity) are not supported by the {self.identification} solver."
+                "The {:} solver does not run the topology update, so the model modifier(s) {:} "
+                "would never modify the model.".format(self.identification, ", ".join(selfStarting))
             )
 
     def _updateOptions(self, updatedOptions: dict, journal, strict: bool = False):

@@ -44,6 +44,28 @@ from edelweissfe.models.modelchangeobserver import ModelChangeType
 
 
 @dataclass
+class TopologyRecord:
+    """One applied model-modifier decision, as recorded in
+    :attr:`~edelweissfe.models.femodel.FEModel.topologyHistory`.
+
+    This is the authoritative record of how the model's topology came to be what it is -- not a
+    debugging aid kept alongside one. A restart replays these through the modifier's own
+    :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply`, which is the
+    same code path the live run used, so there is no second implementation to drift from it.
+    """
+
+    modifier: str  #: name of the model modifier that made this decision
+    roundNumber: int  #: which round of the topology update it was applied in
+    time: float  #: model time at which it was applied
+    plan: dict  #: the decision, encoded by the modifier (see ModelModifierBase.encodePlan)
+    fingerprint: str = ""  #: model.topologyFingerprint() immediately after applying it
+    #: summary fields, for the log and for forensics only -- never used to reconstruct anything
+    nElementsAdded: int = 0
+    nElementsRemoved: int = 0
+    nNodesAdded: int = 0
+
+
+@dataclass
 class ModelChange:
     """One model mutation (or, from :meth:`~edelweissfe.models.femodel.FEModel.changesSince`,
     several coalesced into one net change)."""
@@ -64,6 +86,26 @@ class ModelChange:
     def geometryChanged(self) -> bool:
         """True if any node or element was added or removed."""
         return bool(self.addedNodes or self.removedNodes or self.addedElements or self.removedElements)
+
+    @property
+    def isEmpty(self) -> bool:
+        """True if this changeset records no mutation at all -- every collection is empty.
+
+        A modifier can legitimately plan and then find nothing left to do, and returning an empty
+        changeset is how it says so. ``kind`` is deliberately not consulted: it is always set, and a
+        label alone is not a change.
+        """
+        return not (
+            self.addedNodes
+            or self.removedNodes
+            or self.addedElements
+            or self.removedElements
+            or self.parentToChildren
+            or self.faceMap
+            or self.changedNodeSets
+            or self.changedElementSets
+            or self.changedSurfaces
+        )
 
     def touchesSurface(self, name: str) -> bool:
         return name in self.changedSurfaces

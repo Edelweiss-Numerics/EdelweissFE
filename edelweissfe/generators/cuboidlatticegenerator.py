@@ -230,7 +230,12 @@ class Generator(GeneratorBase):
                 idx += 1
 
         model.nodes = nodes
+        # This generator REPLACES the element dict wholesale, with its own 1..N numbering, rather
+        # than creating elements through the model. Tell the allocator about those numbers, so that
+        # everything minted afterwards (contact facets, rigid-body point masses, model modifiers)
+        # cannot collide with them. See FEModel.adoptSetupElementNumbers.
         model.elements = elements
+        model.adoptSetupElementNumbers()
 
         # get unit cell dimensions
         x_min = 0
@@ -248,6 +253,9 @@ class Generator(GeneratorBase):
         nodel_label_to_index = {node.label: idx for idx, node in enumerate(model.nodes.values())}
         for node in model.nodes.values():
             node.label = nodel_label_to_index[node.label] + 1  # re-label nodes to have continuous numbering
+        # Same story as the elements above, for the node dict this generator also replaces
+        # wholesale: the replications below mint their labels from the allocator.
+        model.adoptSetupNodeNumbers()
 
         # replicate the mesh of the unit cell in x direction
         replicateMesh(

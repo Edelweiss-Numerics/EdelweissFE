@@ -152,18 +152,32 @@ class Generator(GeneratorBase):
         yLayers = np.linspace(y0, y0 + lY, nNodesY)
         zLayers = np.linspace(z0, z0 + lZ, nNodesZ)
 
+        def carriesElementNode(ix, iy, iz):
+            # A 20-node hexahedron has nodes at corners and edge midpoints only, i.e. at grid
+            # positions with at most one odd index. The remaining positions are kept in the local
+            # grid (it is sliced into node sets further below) but never become model nodes.
+            return testEl.nNodes == 8 or testEl.nNodes == 20 and sum(np.mod([ix, iy, iz], 2)) < 2
+
+        # Node labels come from the model's monotonic allocator (FEModel.reserveNodeNumbers), not
+        # from max(model.nodes). Only the positions that carry an element node consume a label, so
+        # the batch is sized by that count and the labels are exactly the ones handed out before.
+        nElementNodes = sum(
+            1
+            for ix in range(nNodesX)
+            for iy in range(nNodesY)
+            for iz in range(nNodesZ)
+            if carriesElementNode(ix, iy, iz)
+        )
+
         nodes = []
-        currentNodeLabel = 1
-        if model.nodes:
-            currentNodeLabel += max(model.nodes.keys())
+        currentNodeLabel = model.reserveNodeNumbers(nElementNodes).start
         for ix in range(nNodesX):
             for iy in range(nNodesY):
                 for iz in range(nNodesZ):
                     node = Node(currentNodeLabel, np.array([xLayers[ix], yLayers[iy], zLayers[iz]]))
                     nodes.append(node)
-                    # only add node to model if it will be part of an element
-                    if testEl.nNodes == 8 or testEl.nNodes == 20 and sum(np.mod([ix, iy, iz], 2)) < 2:
-                        model.nodes[currentNodeLabel] = node
+                    if carriesElementNode(ix, iy, iz):
+                        model.createNode(node)
                         currentNodeLabel += 1
 
         # # 3d plot of nodes; for debugging
@@ -188,9 +202,9 @@ class Generator(GeneratorBase):
         # fmt: off
 
         elements = []
-        currentElementLabel = 1
-        if model.elements:
-            currentElementLabel += max(model.elements.keys())
+        # Element numbers come from the model's monotonic allocator (FEModel.reserveElementNumbers),
+        # not from max(model.elements). Reserved one at a time so the count need not be predicted;
+        # nothing else mints during this loop, so the numbers are consecutive exactly as before.
         for ix in range(nX):
             for iy in range(nY):
                 for iz in range(nZ):
@@ -329,16 +343,15 @@ class Generator(GeneratorBase):
                     # plotNodeList( nodeList )
 
                     # newEl = elType(options["elType"], nodeList, currentElementLabel)
+                    (currentElementLabel,) = model.reserveElementNumbers(1)
                     newEl = elType(configuration.elType, currentElementLabel)
                     newEl.setNodes(nodeList)
 
                     elements.append(newEl)
-                    model.elements[currentElementLabel] = newEl
+                    model.createElement(newEl)
 
                     # for i, node in enumerate(newEl.nodes):
                     #     node.fields.update([(f, True) for f in newEl.fields[i]])
-
-                    currentElementLabel += 1
 
         # fmt: on
         # model.initializeNodeFields()

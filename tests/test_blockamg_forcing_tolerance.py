@@ -27,13 +27,12 @@
 #  ---------------------------------------------------------------------
 """Regression test for BlockAMGSolver._forcingTolerance's zero-residual guard.
 
-Found while adding a restart+blockamg integration test (tests/test_restart_integration.py): a
-linear-elastic-like problem (VonMises before yielding) can converge with an exactly-zero residual
-on one Newton iteration, and the very next call's ``ratio = residualNorm / self._lastResidualNorm``
-then divides by that stored zero -- a ZeroDivisionError unrelated to restart itself, just first
-surfaced by that test's simple mesh. Constructs a bare instance via __new__, bypassing
-BlockAMGSolver.__init__ (which needs a live model/AMG setup), since _forcingTolerance only reads
-plain scalar attributes.
+Found while exercising blockamg on a restart: a linear-elastic-like problem (VonMises before
+yielding) can converge with an exactly-zero residual on one Newton iteration, and the very next
+call's ``ratio = residualNorm / self._lastResidualNorm`` then divides by that stored zero -- a
+ZeroDivisionError unrelated to restart itself, just first surfaced by a simple enough mesh.
+Constructs a bare instance via __new__, bypassing BlockAMGSolver.__init__ (which needs a live
+model/AMG setup), since _forcingTolerance only reads plain scalar attributes.
 """
 
 from edelweissfe.linsolve.blockamg.blockamg import BlockAMGSolver

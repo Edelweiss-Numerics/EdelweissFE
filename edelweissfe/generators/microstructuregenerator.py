@@ -150,20 +150,21 @@ class Generator(GeneratorBase):
 
         # create nodes and elements for the unit cell
         _nodes = []
-        for idx, node in enumerate(all_nodes):
-            _node = Node(idx + 1, np.array(node))
+        for label, node in zip(model.reserveNodeNumbers(len(all_nodes)), all_nodes):
+            _node = Node(label, np.array(node))
             _nodes.append(_node)
-            model.nodes[idx + 1] = _node
+            model.createNode(_node)
 
         idx = 0
         for block_id, el_ids in block_elements_assignments.items():
             elements_per_block = []
             for local_el_id in el_ids:
-                newEl = elementType(configuration.elType, idx + 1)
+                (elNumber,) = model.reserveElementNumbers(1)
+                newEl = elementType(configuration.elType, elNumber)
                 nodeList = [_nodes[nid] for nid in all_elements[local_el_id]]
                 newEl.setNodes(nodeList)
 
-                model.elements[idx + 1] = newEl
+                model.createElement(newEl)
                 # add element to corresponding element set
                 elements_per_block.append(newEl)
                 idx += 1
@@ -292,9 +293,13 @@ def replicateMesh(
 
         for k, node in nodes_to_shift:
             new_nodes.append(node + shift)
-            associated_nodes.append([k, len(model.nodes)])
-            _node = Node(len(model.nodes) + 1, np.array(new_nodes[-1]))
-            model.nodes[len(model.nodes) + 1] = _node
+            # len(model.nodes) + 1 was a positional guess, not an allocator, and would silently
+            # overwrite a live node the moment the label range had a gap. The rest of this function
+            # addresses nodes as `label - 1` into all_nodes, so keep the association in that form.
+            (label,) = model.reserveNodeNumbers(1)
+            associated_nodes.append([k, label - 1])
+            _node = Node(label, np.array(new_nodes[-1]))
+            model.createNode(_node)
 
         new_nodes = np.array(new_nodes)
 
@@ -314,25 +319,31 @@ def replicateMesh(
 
         # create elements per block
         for elset_name, el_ids in elements_in_block.items():
-            new_el_ids = []
+            newElements = []
             for local_el_id in el_ids:
                 el = all_elements_to_copy[local_el_id]
                 new_el = []
                 for nid in el:
                     k = np.where(associated_nodes_array[:, 0] == nid)[0][0]
                     new_el.append(int(associated_nodes_array[k, 1]))
-                newEl = elementType(elTypeName, len(model.elements) + 1)
+                # len(model.elements) + 1 was not merely unidiomatic: element numbers are never
+                # recycled, so the dict has gaps, and len()+1 could land on a live element and
+                # silently overwrite it.
+                (elNumber,) = model.reserveElementNumbers(1)
+                newEl = elementType(elTypeName, elNumber)
                 nodeList = [model.nodes[nid + 1] for nid in new_el]
                 newEl.setNodes(nodeList)
-                model.elements[len(model.elements) + 1] = newEl
-                # add element to corresponding element set
-                new_el_ids.append(len(model.elements) - 1)
+                model.createElement(newEl)
+                # Keep the element itself, not a positional guess: element numbers come from the
+                # allocator and are never recycled, so len(model.elements) says nothing about which
+                # number this element got (the same reason the creation above no longer uses it).
+                newElements.append(newEl)
 
             # create new element set becaus elsets are immutable -- not set(...): ElementSet already
             # deduplicates and keeps the order it is fed (see the block-assignment loop above)
             model.elementSets[elset_name] = ElementSet(
                 elset_name,
-                list(model.elementSets[elset_name].elements) + [model.elements[el_id + 1] for el_id in new_el_ids],
+                list(model.elementSets[elset_name].elements) + newElements,
             )
 
         # remove nodes that are now internal

@@ -25,6 +25,7 @@ Documentation
    materials
    mesh
    modelmodifiers
+   topologypipeline
    adaptivitytheory
    output
    parallelization

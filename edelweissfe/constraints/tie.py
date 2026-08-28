@@ -34,7 +34,6 @@ from scipy.spatial import cKDTree
 from edelweissfe.constraints.base.multipointconstraintbase import (
     MultiPointConstraintBase,
 )
-from edelweissfe.generators.surfaceelementgenerator import buildContactFacets
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
@@ -58,11 +57,7 @@ explicit dynamics untouched.
 This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if either surface's
 source solid elements are refined mid-run (e.g. by :mod:`~edelweissfe.modelmodifiers.adaptivity.
 hadaptivity`), it regenerates that side's facets and re-projects the tied records -- no separate
-wiring needed. Unlike the penalty contact constraint, a tie has no per-increment tick of its own
-that runs *before* the DofManager/system matrix is rebuilt (its only hook,
-:meth:`getMultiPointConstraints`, is called from inside that rebuild -- too late to safely swap in
-freshly regenerated facet elements), so it reconciles via the model's push notification instead,
-synchronously as part of the mesh-mutating modifier's own call. The re-projection never re-adjusts
+wiring needed beyond registering once. The re-projection never re-adjusts
 slave node coordinates regardless of the ``adjust`` setting: that snap is a setup-time convenience
 for removing an initial geometric gap, not something to repeat on an already-loaded, already-tied
 node.
@@ -212,7 +207,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         self._positionTolerance = configuration.positionTolerance
         self._positionToleranceFactor = configuration.positionToleranceFactor
         self._adjustTolerance = configuration.adjustTolerance
-        #: References to the published tied/untied NodeSets, so a later reconcile() updates their
+        #: References to the published tied/untied NodeSets, so a later refresh() updates their
         #: membership in place (via replaceMembers) instead of colliding with its own earlier publish.
         self._tiedNodeSet = None
         self._untiedNodeSet = None
@@ -239,8 +234,8 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
             )
 
         # Frozen ONCE from the INITIAL (pre-any-AMR) master surface, not recomputed on every
-        # reconcile(): computing it fresh from whatever the master surface's mean facet size happens
-        # to be at reconcile time is unsafe under AMR -- a node evaluated after an unrelated
+        # refresh(): computing it fresh from whatever the master surface's mean facet size happens
+        # to be at refresh time is unsafe under AMR -- a node evaluated after an unrelated
         # refinement has already shrunk that mean would get an artificially tight tolerance unrelated
         # to its actual (unchanged) gap.
         if self._positionTolerance is not None:
@@ -256,13 +251,12 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         )
         self._publishTiedUntiedNodeSets(model)
 
-        # A tie has no per-increment tick of its own that runs before the DofManager/VIJSystemMatrix
-        # rebuild -- getMultiPointConstraints() is only called from inside that rebuild, too late to
-        # safely swap in newly regenerated facet elements (the just-built system wouldn't know about
-        # them). So, unlike nodeToDeformableSurfacePenalty, a tie reconciles via the push escape
-        # hatch: model.notifyModelChanged() calls onModelChanged() synchronously, from inside the
-        # model modifier's own updateModel(), strictly before the rebuild decision is even made.
-        model.registerObserver(self)
+        # Registration is what gets a tie refreshed at all: multi-point constraints live in
+        # model.multiPointConstraints, which no per-increment sweep iterates, and
+        # getMultiPointConstraints() is called from inside the DofManager/VIJSystemMatrix rebuild --
+        # too late to safely swap in newly regenerated facet elements. FEModel.refreshMeshDependents
+        # runs after the model modifiers have settled and strictly before that rebuild decision.
+        model.registerMeshDependent(self)
 
     @classmethod
     def fromConstraintDefinition(cls, name: str, definition: dict, model: FEModel, journal: Journal) -> "Constraint":
@@ -279,15 +273,11 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
             configuration=configuration,
         )
 
-    def onModelChanged(self, model: FEModel, changeType, change) -> None:
-        if change is not None:
-            self.reconcile(model, change)
-
     def _buildTiedRecords(self, model: FEModel, slaveFacetElements, masterFacetElements, adjust: bool):
         """Project every unique slave-surface node onto its closest master facet (reference
         configuration) and freeze the resulting clamped weights. With ``adjust``, additionally snap
         each tied node onto its projected point (only if also within ``adjustTolerance``), removing
-        any initial geometric gap -- a setup-time convenience, never applied on a reconcile-triggered
+        any initial geometric gap -- a setup-time convenience, never applied on a refresh-triggered
         re-projection.
 
         Tie MEMBERSHIP (is this node tied at all) is independent of adjust (does a tied node get
@@ -296,7 +286,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         characteristic facet size unless given explicitly, is used for every slave node regardless of
         when it is evaluated (matching Abaqus' *TIE, which always enforces some tolerance -- explicit
         or internally computed -- and never ties unconditionally regardless of distance). It is
-        NOT recomputed from ``masterFacetElements`` on a later reconcile() call: an
+        NOT recomputed from ``masterFacetElements`` on a later refresh() call: an
         unrelated AMR refinement elsewhere on the master surface would otherwise shrink the mean facet
         size and retroactively tighten the tolerance for nodes evaluated afterwards, for a gap that
         never changed.
@@ -319,7 +309,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         masterFacetCoords = [np.array([n.coordinates for n in el.nodes]) for el in masterFacetElements]
 
         # Frozen at construction (see __init__) -- NOT recomputed from the current (possibly
-        # AMR-refined, and therefore shrunk) masterFacetCoords passed in here on a reconcile() call.
+        # AMR-refined, and therefore shrunk) masterFacetCoords passed in here on a refresh() call.
         membershipTolerance = self._membershipTolerance
 
         # Projecting every slave node onto its closest master facet by brute force is O(nSlave *
@@ -397,7 +387,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         empty: Ensight's export is unconditional over every node set, so a tie whose untied side is
         (as is typical) always empty would otherwise get its own empty, useless part in every export.
 
-        Called again after every :meth:`reconcile` (AMR may change which nodes are tied/untied): an
+        Called again after every :meth:`refresh` (AMR may change which nodes are tied/untied): an
         already-published set is updated in place via :meth:`~edelweissfe.sets.orderedset.OrderedSet.
         replaceMembers` rather than recreated, so a reference elsewhere in the model keeps seeing
         current membership, and the "does this name already exist" collision check below only ever
@@ -423,7 +413,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
                     )
                 self._untiedNodeSet = model.nodeSets[untiedSetName] = NodeSet(untiedSetName, self.untiedSlaveNodes)
 
-    def reconcile(self, model: FEModel, change) -> bool:
+    def refresh(self, model: FEModel, change) -> bool:
         """Regenerate whichever side's facets were affected by ``change`` (via its recorded
         :attr:`~edelweissfe.models.femodel.FEModel.contactFacetRecipes`) and re-project the tied
         records from scratch against the rebuilt surfaces -- never adjusting coordinates, since the
@@ -436,11 +426,9 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         if not (touchedSlave or touchedMaster):
             return False
 
-        if touchedSlave:
-            buildContactFacets(model, *slaveRecipe, self._journal)
-        if touchedMaster:
-            buildContactFacets(model, *masterRecipe, self._journal)
-
+        # The facets themselves were already regenerated, in the topology-update phase, by the
+        # implicit surfaceFacets modifier (see FEModel.ensureSurfaceFacetModifier). This constraint
+        # is a pure reader: it re-projects onto whatever now tiles the surface.
         slaveFacetElements = list(model.elementSets[self._slaveSurfaceSetName])
         masterFacetElements = list(model.elementSets[self._masterSurfaceSetName])
         self.tiedRecords, self.untiedSlaveNodes = self._buildTiedRecords(
