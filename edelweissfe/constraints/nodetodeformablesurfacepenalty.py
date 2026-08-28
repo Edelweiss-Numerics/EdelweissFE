@@ -945,3 +945,22 @@ class Constraint(ConstraintBase, MeshDependent):
                     penaltyForcePart = -0.5 * penaltyTimesArea * g**2
 
                 self._lambdaN[s] = min(0.0, self._lambdaN[s] + penaltyForcePart)
+
+    def getRestartData(self) -> dict[str, np.ndarray]:
+        """Return the converged frictional-force and augmented-Lagrange-multiplier history.
+
+        ``_assignedFacetIdx``, ``_gapCurrent``, ``_frozenWeights``/``_frozenNormals`` are excluded:
+        they are recomputed from scratch every increment by :meth:`updateConnectivity` /
+        :meth:`applyConstraint` from the (already-restored) node positions, before they are read,
+        so they carry no cross-increment history of their own."""
+
+        return {
+            "tangentialForceConverged": self._tangentialForceConverged,
+            "lambdaN": self._lambdaN,
+        }
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore the converged frictional-force and augmented-Lagrange-multiplier history."""
+
+        self._tangentialForceConverged[:] = data["tangentialForceConverged"]
+        self._lambdaN[:] = data["lambdaN"]

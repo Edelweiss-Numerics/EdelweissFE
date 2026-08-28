@@ -151,6 +151,35 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         The default implementation does nothing, which is correct for every stateless constraint
         (i.e. every constraint that does not override this method)."""
 
+    def getRestartData(self) -> dict[str, np.ndarray] | None:
+        """Return this constraint's converged internal history (state not covered by its
+        :attr:`scalarVariables`, e.g. frictional-contact history) to be serialized by
+        :meth:`~edelweissfe.models.femodel.FEModel.writeRestart`, or ``None`` if the constraint is
+        stateless.
+
+        The default implementation returns ``None``, which is correct for every constraint that
+        does not override it (its full state is either recomputed each increment or already covered
+        by :attr:`scalarVariables`).
+
+        Returns
+        -------
+        dict[str, np.ndarray] | None
+            A flat mapping of array name to array, or ``None``.
+        """
+
+        return None
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore this constraint's converged internal history from a restart checkpoint.
+
+        Parameters
+        ----------
+        data
+            The mapping previously returned by :meth:`getRestartData`.
+        """
+
+        raise NotImplementedError("This constraint does not carry restartable internal history.")
+
     def getNumberOfAdditionalNeededScalarVariables(
         self,
     ) -> int:

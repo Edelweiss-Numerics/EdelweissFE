@@ -97,6 +97,8 @@ from edelweissfe.utils.schemasurface import (
 #: category dict happens to be declared in (that dict groups ``job`` next to the other structural
 #: keywords; the legacy parser declared it later, interleaved with ``section``/``material``). This
 #: list is the single place that order is pinned now that no ``Module`` tree exists to iterate.
+#: ``restart`` has no legacy position -- it is appended last, after every keyword the U2 gate
+#: covered.
 _TOP_LEVEL_KEYWORDS_IN_LEGACY_ORDER = [
     "element",
     "elSet",
@@ -119,6 +121,7 @@ _TOP_LEVEL_KEYWORDS_IN_LEGACY_ORDER = [
     "configurePlots",
     "exportPlots",
     "include",
+    "restart",
 ]
 
 
@@ -400,6 +403,13 @@ _BRACKET_MODULE_SPECS = [
         "plotalongpath",
         "plotAlongPath",
         "Plot result for a nodeSet or an elementSet along the true geometrical distance.",
+    ),
+    _BracketModuleSpec(
+        "edelweissfe.outputmanagers.restart",
+        "outputmanager",
+        "restart",
+        "restart",
+        "Writes restart checkpoints during the analysis.",
     ),
     _BracketModuleSpec(
         "edelweissfe.outputmanagers.statusfile",

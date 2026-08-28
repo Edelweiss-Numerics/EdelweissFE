@@ -861,43 +861,84 @@ class FEModel:
             mpc.acceptLastState()
 
     def writeRestart(self, restartFile: h5py.File):
-        """Write the current state of the model to a restart file.
+        """Write the current (converged) state of the model to a restart checkpoint.
+
+        Does not serialize model topology (nodes/elements/sets/sections/materials) -- only state
+        that a rebuild from the original ``.inp`` file cannot reproduce: node field values, element
+        quadrature-point history, scalar variables (e.g. Lagrange multipliers), and stateful
+        constraints' internal history (e.g. frictional contact).
 
         Parameters
         ----------
-        fileName
-            The name of the restart file.
+        restartFile
+            An open, writable :class:`h5py.File` (or group) to write the checkpoint into.
         """
 
         f = restartFile
 
         f.attrs["time"] = self.time
 
-        # node fields
-        f.create_group("nodeFields")
+        nodeFieldsGroup = f.create_group("nodeFields")
         for nf in self.nodeFields.values():
-            f["nodeFields"].create_group(nf.name)
-            for entryName, entryValues in nf._values.items():  # TODO
-                f["nodeFields"][nf.name].create_dataset(entryName, data=entryValues)
+            nodeFieldGroup = nodeFieldsGroup.create_group(nf.name)
+            for entryName, entryValues in nf._values.items():
+                nodeFieldGroup.create_dataset(entryName, data=entryValues)
+
+        scalarVariablesGroup = f.create_group("scalarVariables")
+        for name, scalarVariable in self.scalarVariables.items():
+            scalarVariablesGroup.attrs[name] = scalarVariable.value
+
+        elementsGroup = f.create_group("elements")
+        for elNumber, element in self.elements.items():
+            try:
+                stateVars = element.getStateVars()
+            except NotImplementedError:
+                continue
+            elementsGroup.create_dataset(str(elNumber), data=stateVars)
+
+        constraintsGroup = f.create_group("constraints")
+        for name, constraint in self.constraints.items():
+            restartData = constraint.getRestartData()
+            if restartData is None:
+                continue
+            constraintGroup = constraintsGroup.create_group(name)
+            for entryName, entryValues in restartData.items():
+                constraintGroup.create_dataset(entryName, data=entryValues)
 
     def readRestart(self, restartFile: h5py.File):
-        """Read the state of the model from a restart file.
+        """Read the state of the model from a restart checkpoint written by :meth:`writeRestart`.
+
+        The model must already have been rebuilt from the original ``.inp`` file (same topology)
+        and :meth:`prepareYourself` called, before this is called.
 
         Parameters
         ----------
-        fileName
-            The name of the restart file.
+        restartFile
+            An open, readable :class:`h5py.File` (or group) to read the checkpoint from.
         """
 
         f = restartFile
 
         self.time = f.attrs["time"]
 
-        # node fields
         for nf in self.nodeFields.values():
             for entryName, entryValues in nf._values.items():
-                entryValues = f["nodeFields"][nf.name][entryName]
-                nf[entryName][:] = entryValues
+                nf[entryName][:] = f["nodeFields"][nf.name][entryName]
+
+        for name, scalarVariable in self.scalarVariables.items():
+            scalarVariable.value = f["scalarVariables"].attrs[name]
+
+        for elNumber, element in self.elements.items():
+            elementKey = str(elNumber)
+            if elementKey not in f["elements"]:
+                continue
+            element.setStateVars(f["elements"][elementKey][:])
+
+        for name, constraint in self.constraints.items():
+            if name not in f["constraints"]:
+                continue
+            restartData = {entryName: values[:] for entryName, values in f["constraints"][name].items()}
+            constraint.setRestartData(restartData)
 
 
 def printPrettyModelSummary(model: FEModel, journal: Journal):

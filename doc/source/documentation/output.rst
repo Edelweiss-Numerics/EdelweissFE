@@ -95,3 +95,12 @@ Outputmanagers
 .. pprint:: outputmanager:computetimemonitor
     :caption: Options:
 
+``restart`` - Write restart checkpoints during the analysis
+-------------------------------------------------------------
+
+.. automodule:: edelweissfe.outputmanagers.restart
+   :members: __doc__
+
+.. pprint:: outputmanager:restart
+    :caption: Options:
+

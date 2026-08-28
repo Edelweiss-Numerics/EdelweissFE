@@ -114,6 +114,21 @@
     include    load contents of extra file
         input                 string              path to file (use relative
                                                   path to current .inp)
+
+
+    restart    configure checkpoint/restart
+        write                 boolean             write restart checkpoints
+                                                  during the analysis
+        writeInterval         integer             write a checkpoint every N
+                                                  converged increments
+        baseName              string              base file name for restart
+                                                  checkpoints
+        numberOfFilesToKeep   integer             number of most recent restart
+                                                  checkpoints to keep (ring
+                                                  buffer)
+        readFrom              string              path to an existing restart
+                                                  checkpoint to resume the
+                                                  analysis from
 ===== module documentation: edelweissfe.analyticalfields.fromvtk =====
 Use PyVista to interpolate from vtk data.
 [fromVtk] Use PyVista to interpolate from vtk data.
@@ -611,6 +626,12 @@ Module meshplot divided into classes:
     [f(x)] Function to apply in each increment. (<class 'str'>, default = None)
     [nStages]  (<class 'int'>, default = 1)
     [export] Export the field output to a file at the end of the job. (<class 'str'>, default = None)
+===== module documentation: edelweissfe.outputmanagers.restart =====
+[restart] Writes restart checkpoints during the analysis.
+  optional arguments
+    [writeInterval] write a checkpoint every N converged increments (<class 'int'>, default = 1)
+    [baseName] base file name for restart checkpoints (<class 'str'>, default = restart)
+    [numberOfFilesToKeep] number of most recent restart checkpoints to keep (ring buffer) (<class 'int'>, default = 3)
 ===== module documentation: edelweissfe.outputmanagers.statusfile =====
 [statusfile] Writes a status file during the analysis.
   optional arguments

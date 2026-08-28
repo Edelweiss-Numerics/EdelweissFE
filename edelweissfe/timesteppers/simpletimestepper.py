@@ -223,3 +223,42 @@ class SimpleTimeStepper(TimeStepperBase):
     def preventIncrementIncrease(self):
         """This time stepper never increases the increment size automatically,
         hence this is a no-op."""
+
+    def writeRestart(self, restartFile):
+        """Write this time stepper's progress within the step to a restart checkpoint.
+
+        Deliberately restricted to the *dynamic* progress state (``currentTime``, ``totalIncrements``,
+        ``finishedStepProgress``, ``increment``, ``dT``), not the step's *configuration*
+        (``stepLength``, ``startIncrement``, ``maxIncrement``, ``minIncrement``,
+        ``maxNumberIncrements``) -- see :meth:`~edelweissfe.timesteppers.adaptivetimestepper.
+        AdaptiveTimeStepper.writeRestart`'s docstring for why.
+
+        Parameters
+        ----------
+        restartFile
+            The file to write the restart information to.
+        """
+        f = restartFile
+        f.create_group("timestepper")
+
+        f["timestepper"].attrs["currentTime"] = self.currentTime
+        f["timestepper"].attrs["totalIncrements"] = self.totalIncrements
+        f["timestepper"].attrs["finishedStepProgress"] = self.finishedStepProgress
+        f["timestepper"].attrs["increment"] = self.increment
+        f["timestepper"].attrs["dT"] = self.dT
+
+    def readRestart(self, restartFile):
+        """Restore this time stepper's progress within the step from a restart checkpoint written
+        by :meth:`writeRestart`.
+
+        Parameters
+        ----------
+        restartFile
+            The file to read the restart information from.
+        """
+        f = restartFile
+        self.currentTime = f["timestepper"].attrs["currentTime"]
+        self.totalIncrements = f["timestepper"].attrs["totalIncrements"]
+        self.finishedStepProgress = f["timestepper"].attrs["finishedStepProgress"]
+        self.increment = f["timestepper"].attrs["increment"]
+        self.dT = f["timestepper"].attrs["dT"]

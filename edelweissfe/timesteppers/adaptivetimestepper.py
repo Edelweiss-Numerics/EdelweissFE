@@ -221,7 +221,18 @@ class AdaptiveTimeStepper(TimeStepperBase):
         self.reduceNextIncrement(scaleFactor)
 
     def writeRestart(self, restartFile):
-        """Write restart information to a file.
+        """Write this time stepper's progress within the step to a restart checkpoint.
+
+        Deliberately restricted to the *dynamic* progress state (``currentTime`` -- the step's own
+        absolute start time, fixed once the step began -- ``finishedStepProgress``,
+        ``incrementCounter``, ``nPassedGoodIncrements``, ``increment``, ``allowedToIncreasedNext``,
+        ``dT``), not the step's *configuration* (``stepLength``, ``startIncrement``,
+        ``maxIncrement``, ``minIncrement``, ``maxNumberIncrements``): resuming reconstructs the step
+        from the (possibly since-edited, e.g. a raised ``maxNumberIncrements`` after a run that hit
+        it) ``.inp`` file being used to resume, exactly like :meth:`~edelweissfe.models.femodel.
+        FEModel.readRestart` only overwrites converged state and never the model's own structural
+        definition. Restoring the configuration fields here would silently re-clobber any such
+        edit with whatever was in effect when the checkpoint was written.
 
         Parameters
         ----------
@@ -232,11 +243,6 @@ class AdaptiveTimeStepper(TimeStepperBase):
         f.create_group("timestepper")
 
         f["timestepper"].attrs["currentTime"] = self.currentTime
-        f["timestepper"].attrs["stepLength"] = self.stepLength
-        f["timestepper"].attrs["startIncrement"] = self.startIncrement
-        f["timestepper"].attrs["maxIncrement"] = self.maxIncrement
-        f["timestepper"].attrs["minIncrement"] = self.minIncrement
-        f["timestepper"].attrs["maxNumberIncrements"] = self.maxNumberIncrements
         f["timestepper"].attrs["nPassedGoodIncrements"] = self.nPassedGoodIncrements
         f["timestepper"].attrs["incrementCounter"] = self.incrementCounter
         f["timestepper"].attrs["finishedStepProgress"] = self.finishedStepProgress
@@ -245,7 +251,9 @@ class AdaptiveTimeStepper(TimeStepperBase):
         f["timestepper"].attrs["dT"] = self.dT
 
     def readRestart(self, restartFile):
-        """Read restart information from a file.
+        """Restore this time stepper's progress within the step from a restart checkpoint written
+        by :meth:`writeRestart`. See that method's docstring for why the step's configuration
+        fields are deliberately left untouched (kept from this instance's own construction).
 
         Parameters
         ----------
@@ -254,11 +262,6 @@ class AdaptiveTimeStepper(TimeStepperBase):
         """
         f = restartFile
         self.currentTime = f["timestepper"].attrs["currentTime"]
-        self.stepLength = f["timestepper"].attrs["stepLength"]
-        self.startIncrement = f["timestepper"].attrs["startIncrement"]
-        self.maxIncrement = f["timestepper"].attrs["maxIncrement"]
-        self.minIncrement = f["timestepper"].attrs["minIncrement"]
-        self.maxNumberIncrements = f["timestepper"].attrs["maxNumberIncrements"]
         self.nPassedGoodIncrements = f["timestepper"].attrs["nPassedGoodIncrements"]
         self.incrementCounter = f["timestepper"].attrs["incrementCounter"]
         self.finishedStepProgress = f["timestepper"].attrs["finishedStepProgress"]
