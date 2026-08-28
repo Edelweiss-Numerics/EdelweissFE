@@ -274,6 +274,37 @@ class BlockAMGSolver(LinearSolver):
         topology map computed on first need (via :func:`edelweissfe.numerics.p1topology.buildP1Map` on
         ``self._model``) and cached for this instance's lifetime. Ignored for a field also present in
         ``p1Maps`` (that field's map is already known; nothing to compute).
+    hierarchyDropTol
+        Build the AMG hierarchies from a *sparsified* copy of each diagonal block: drop off-diagonal
+        ``a_ij`` where ``|a_ij| < hierarchyDropTol * sqrt(|a_ii| |a_jj|)``. Zero (the default) keeps the
+        block as-is.
+
+        Why this exists. The RKPM operators this solver is used on store ~1643 entries per row at 43,350
+        DOF (3.79% dense) while the *median* off-diagonal is **1.29e-06 of the diagonal** -- numerically
+        far sparser than structurally. Smoothed aggregation then has to weigh 1643 candidates per row
+        where a handful matter, and the Galerkin product carries the rest down to every coarse level.
+        Measured on such a matrix: ``1e-6`` keeps 50.8% of the entries, ``1e-4`` keeps 29.6%, ``1e-3``
+        keeps 17.4%, and no row loses all of its off-diagonals even at ``1e-2``.
+
+        Only the *preconditioner* is sparsified; the operator the Krylov method applies, and therefore
+        the residual it drives to zero, is the unmodified matrix. So this cannot change the converged
+        solution beyond the outer tolerance -- it can only change how many iterations reaching it takes.
+
+        The criterion is scale-invariant and, for a symmetric matrix, symmetric in ``(i, j)``, so the
+        sparsified block stays symmetric -- which smoothed aggregation and the Chebyshev smoother both
+        assume. Verified: zero asymmetric mask entries at 1e-6, 1e-4 and 1e-2.
+    hierarchyDropLumping
+        When dropping entries (see ``hierarchyDropTol``), add each discarded off-diagonal onto its row's
+        diagonal instead of discarding it outright. This preserves row sums exactly, so
+        ``A_filtered @ 1 == A @ 1`` and the constant near-null-space vector survives filtering -- which
+        is what the AMG literature's "filtered matrix" construction does, and the reason it is preferred
+        over plain truncation.
+
+        Note the caveat for elasticity: off-diagonals are typically negative, so lumping *reduces* the
+        diagonal and therefore weakens diagonal dominance. Whether that helps or hurts is a property of
+        the operator, which is why this is a separate switch rather than folded into
+        ``hierarchyDropTol``. Defaults to ``False``, i.e. plain truncation, which is what the published
+        measurements for this solver used.
     etaMin, etaMax
         Clamp on the Eisenstat--Walker forcing tolerance (ignored if ``outerTol`` is given). ``etaMax``
         is also the tolerance used whenever there is no residual history to base a ratio on (the first
@@ -391,6 +422,8 @@ class BlockAMGSolver(LinearSolver):
         lgmresResetOnNewIncrement: bool = False,
         sweeps: int = 1,
         symmetric: bool = True,
+        hierarchyDropTol: float = 0.0,
+        hierarchyDropLumping: bool = False,
         fieldPreconds: dict = None,
         useRigidBodyNullspace: bool = True,
         p1Maps: dict = None,
@@ -435,6 +468,8 @@ class BlockAMGSolver(LinearSolver):
         # Per-field p-two-grid restriction operators, derived from the P1 topology; ditto.
         self._pNodeCache = {}
         self._p1FieldNamesRequested = set(p1FieldNames or [])
+        self._hierarchyDropTol = hierarchyDropTol
+        self._hierarchyDropLumping = hierarchyDropLumping
         self._etaMin = etaMin
         self._etaMax = etaMax
         self._ewGamma = ewGamma
@@ -513,6 +548,36 @@ class BlockAMGSolver(LinearSolver):
             self._journal.message(message, _IDENTIFICATION, level=_JOURNAL_LEVEL[level])
         else:
             print(message, flush=True)
+
+    def _dropSmallEntries(self, block):
+        """Return `block` with off-diagonals below the relative drop tolerance removed.
+
+        Runs only on a hierarchy refresh, not on every solve, so a few array passes over nnz are cheap
+        against the hierarchy build they feed. The diagonal is always kept, so no row can be emptied.
+        """
+        tau = self._hierarchyDropTol
+        diagonal = np.abs(block.diagonal())
+        coo = block.tocoo()
+        scale = np.sqrt(diagonal[coo.row] * diagonal[coo.col])
+        keep = (coo.row == coo.col) | (np.abs(coo.data) >= tau * scale)
+        dropped = sp.coo_matrix((coo.data[keep], (coo.row[keep], coo.col[keep])), shape=block.shape).tocsr()
+
+        lumped = ""
+        if self._hierarchyDropLumping:
+            # Row-sum-preserving filtering: the discarded content of each row goes onto its diagonal, so
+            # A_filtered @ 1 == A @ 1 exactly and the constant vector is unaffected by filtering. The
+            # diagonal is always kept, so this does not change the sparsity pattern.
+            discardedRowSums = np.bincount(coo.row[~keep], weights=coo.data[~keep], minlength=block.shape[0])
+            dropped = (dropped + sp.diags(discardedRowSums, format="csr")).tocsr()
+            lumped = ", lumped onto the diagonal"
+
+        self._log(
+            "info",
+            "blockamg: hierarchy drop tol {:.0e}: nnz {:,} -> {:,} ({:.1f}%){:}".format(
+                tau, block.nnz, dropped.nnz, 100.0 * dropped.nnz / max(block.nnz, 1), lumped
+            ),
+        )
+        return dropped
 
     def _forcingTolerance(self, residualNorm: float, newIncrement: bool) -> float:
         """The Eisenstat--Walker "choice 2" forcing tolerance for this solve, clamped and safeguarded.
@@ -881,10 +946,16 @@ class BlockAMGSolver(LinearSolver):
             threadedAs.build(As)
         outerOperator = LinearOperator((n, n), matvec=threadedAs.matvec, dtype=As.dtype)
 
+        # A single field has no off-diagonal couplings at all: the `i != j` test below can never
+        # fire, but `As[slices[i], :]` still copies the whole matrix to populate a dict that stays
+        # empty -- measured at 12% of this solver's wall clock, and 11.40 s of 225.02 s on one
+        # reference model. Skipping it is not a tuning decision; there is provably nothing to compute.
+        singleField = len(slices) == 1 and blocks[0].start == 0 and blocks[0].stop == n
+
         # Off-diagonal couplings (for the sweep) are needed every solve regardless of refresh/reuse.
         with performancetiming.timeit("off-diagonal split"):
             offBlocks = {}
-            for i in range(len(slices)):
+            for i in range(len(slices)) if not singleField else ():
                 rowBlock = As[slices[i], :]
                 for j in range(len(slices)):
                     if i != j:
@@ -900,6 +971,8 @@ class BlockAMGSolver(LinearSolver):
                 # One AMG hierarchy per field, built fresh. A vector field gets its translations as the
                 # near null-space; a scalar field the default constant.
                 diagBlocks = [As[sl, :][:, sl].tocsr() for sl in slices]
+                if self._hierarchyDropTol > 0.0:
+                    diagBlocks = [self._dropSmallEntries(block) for block in diagBlocks]
                 preconditioners = []
                 for i, block in enumerate(blocks):
                     isVectorField = block.dimension > 1
@@ -991,6 +1064,25 @@ class BlockAMGSolver(LinearSolver):
                     if j != i:
                         localResidual -= offBlocks[(i, j)].matvecRect(x[j])  # INV4: threaded
                 x[i] = preconditioners[i].applyPreconditioner(localResidual)
+
+        # A single-field fast path for the apply itself was tried here and **rejected on measurement**,
+        # which is worth recording so it is not re-attempted blind. For one field with sweeps=1 and
+        # symmetric=False, `blockGaussSeidel` below reduces to exactly one `applyPreconditioner` call, so
+        # replacing it with that call directly looks free. It is measurably not:
+        #
+        #   baseline                  4431 outer iterations, linear solve 382.39 s
+        #   off-diagonal split only   4435 (+0.09%, inside the 0.13% run-to-run floor), 360.17 s
+        #   + this apply fast path    4563 (+2.9%, i.e. 22x the floor),                 351.09 s
+        #
+        # It is 2.5% faster in wall clock but shifts the outer iteration count by 2.9% against a
+        # measured 0.13% floor between identical runs -- a real change in the Krylov trajectory, not
+        # noise -- while the reaction force stays inside its own 9.8e-13 floor. Copying the output (to
+        # match what `np.concatenate` guarantees) reduced the shift but did not remove it, and no
+        # mechanism has been identified. 2.5% is not worth an unexplained numerical footprint in a
+        # preconditioner, where the failure mode is a slightly different answer rather than a crash.
+        #
+        # The off-diagonal split elimination above is a separate change and is clean: iterations inside
+        # the floor, 5.8% faster on its own.
 
         def blockGaussSeidel(residual):
             x = [np.zeros(sizes[i]) for i in range(nFields)]

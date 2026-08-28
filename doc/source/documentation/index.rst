@@ -16,6 +16,7 @@ Documentation
    rigidbodies
    contacttheory
    dofmanager
+   assembly
    fieldoutputmanager
    fields
    elements
