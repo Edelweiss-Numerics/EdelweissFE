@@ -330,7 +330,11 @@ class ModelModifier(ModelModifierBase):
         # the refineable elements are seeded: a node the octree does not own must not be able to
         # claim a coordinate key, and only an octree-owned node can be seeded with a body.
         self._topology = Hex20Topology()
-        self._mesh = AdaptiveMesh(splitFactor=self.splitFactor, topology=self._topology)
+        # The mirror mints its new node labels from the model's own allocator, so octree and
+        # model share one monotonic node counter instead of each keeping their own.
+        self._mesh = AdaptiveMesh(
+            splitFactor=self.splitFactor, topology=self._topology, reserve_labels=model.reserveNodeNumbers
+        )
         self._eidToEl = {}  # mesh element id -> live element
         #: Diagnostics only, parallel to _committedOccasions; see there.
         self._committedOccasionEids = []
@@ -558,7 +562,7 @@ class ModelModifier(ModelModifierBase):
         for label, coord in reg.coordinates.items():
             if label not in model.nodes:
                 node = Node(label, np.asarray(coord, dtype=float))
-                model.nodes[label] = node
+                model.createNode(node)
                 newNodes[label] = node
 
         active = set(mesh.active())

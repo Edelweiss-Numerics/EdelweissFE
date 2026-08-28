@@ -54,12 +54,18 @@ class NodeRegistry:
     legitimately share one coordinate, and must not be deduplicated into a single label.
     """
 
-    def __init__(self, decimals: int = 8):
+    def __init__(self, decimals: int = 8, reserve_labels=None):
         self.decimals = decimals
         self._byKey = {}  # (componentId, rounded-coord) key -> label
         self.coordinates = {}  # label -> np.ndarray(coord)
         self.componentOf = {}  # label -> componentId of the body the node belongs to
         self._maxLabel = 0
+        # ``count -> range`` allocator of the model this registry mirrors, i.e.
+        # FEModel.reserveNodeNumbers. Given one, the registry stops being a second, independent
+        # source of node labels: model and octree then draw from one counter and cannot drift into
+        # a collision. Left out (the standalone octree, and its tests, own no model) it falls back
+        # to minting max+1 itself, which is only safe while nothing else mints.
+        self._reserveLabels = reserve_labels
 
     def _key(self, coord, componentId: int):
         return (componentId, tuple(round(float(v), self.decimals) for v in coord))
@@ -95,16 +101,36 @@ class NodeRegistry:
         self._maxLabel = max(self._maxLabel, label)
 
     def label(self, coord, componentId: int = 0) -> int:
-        """Return the label of a coordinate within one body, minting a fresh (max+1) label if unseen."""
+        """Return the label of a coordinate within one body, minting a fresh label if unseen.
+
+        Only the minting branch draws a number; a coordinate that is already known -- the common
+        case, since every interior node is shared by several elements -- consumes nothing.
+        """
         key = self._key(coord, componentId)
         lab = self._byKey.get(key)
         if lab is None:
-            self._maxLabel += 1
-            lab = self._maxLabel
+            lab = self._mint()
             self._byKey[key] = lab
             self.coordinates[lab] = np.array(coord, dtype=float)
             self.componentOf[lab] = componentId
         return lab
+
+    def _mint(self) -> int:
+        """One fresh label, from the model's allocator if this registry was given one."""
+        if self._reserveLabels is None:
+            label = self._maxLabel + 1
+        else:
+            (label,) = self._reserveLabels(1)
+            if label <= self._maxLabel:
+                # The allocator is monotonic and was told about every label the registry knows (see
+                # reserve_labels_up_to), so this cannot happen -- unless the two were wired up to
+                # different models, which would silently alias two nodes onto one label.
+                raise ValueError(
+                    "the node allocator handed out label {:d}, which the refinement registry "
+                    "already uses; registry and model are out of sync".format(label)
+                )
+        self._maxLabel = label
+        return label
 
     def connectivity(self, coords, componentId: int = 0) -> list:
         """Map a list/array of node coordinates of one body to their labels (registering as needed)."""
@@ -172,13 +198,13 @@ class AdaptiveMesh:
     require topological (shared-face) adjacency instead; that is future work.
     """
 
-    def __init__(self, decimals: int = 8, splitFactor: int = 2, topology=None):
+    def __init__(self, decimals: int = 8, splitFactor: int = 2, topology=None, reserve_labels=None):
         if topology is None:
             from edelweissfe.adaptivity.hex20topology import Hex20Topology
 
             topology = Hex20Topology()
         self.topology = topology
-        self.registry = NodeRegistry(decimals)
+        self.registry = NodeRegistry(decimals, reserve_labels=reserve_labels)
         self.splitFactor = splitFactor  # n: each refined element is split into n**3 children per axis
         self.elements = {}  # eid -> dict(conn, coords, level, active, parent, children)
         self.elementSets = {}  # name -> set(eid)      (children inherit membership on refine)

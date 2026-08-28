@@ -38,6 +38,7 @@ from pathlib import Path as _Path
 import numpy as np
 import pytest
 
+from edelweissfe.adaptivity.refinement import NodeRegistry
 from edelweissfe.modelmodifiers.surfacefacets.surfacefacets import (
     ModelModifier as _SurfaceFacetsModifier,
 )
@@ -694,3 +695,82 @@ def test_a_self_starting_modifier_is_refused_by_a_non_adapting_solver_and_named(
     )
     with pytest.raises(NotImplementedError, match=r"does not run the topology update.*\bamr\b"):
         _NonAdaptingSolver().validateModelCapabilities(model)
+
+
+# ---------------------------------------------------------------------------------------------
+# The node allocator, as seen through the adaptive refinement registry
+# ---------------------------------------------------------------------------------------------
+
+
+class _StubNode:
+    """The registry only ever reads a node's label and coordinates."""
+
+    def __init__(self, label: int, coordinates):
+        self.label = label
+        self.coordinates = np.asarray(coordinates, dtype=float)
+
+
+def _modelWithSetupNodes(*labels: int) -> FEModel:
+    """A model carrying nodes as the base mesh generators leave them, with the allocator raised
+    above them exactly as the end of model setup does."""
+
+    model = FEModel(3)
+    for label in labels:
+        model.nodes[label] = _StubNode(label, [float(label), 0.0, 0.0])
+    model.adoptSetupNodeNumbers()
+    return model
+
+
+def test_a_standalone_registry_still_mints_on_its_own():
+    """The octree layer is model-agnostic and must stay usable without one."""
+
+    registry = NodeRegistry()
+    registry.seed(7, [0.0, 0.0, 0.0])
+
+    assert registry.label([1.0, 0.0, 0.0]) == 8
+
+
+def test_a_registry_label_cannot_collide_with_one_the_model_hands_out():
+    """The reason the registry takes an allocator at all: minting max+1 by itself made the octree a
+    second, independent source of node labels, free to drift into the model's."""
+
+    model = _modelWithSetupNodes(1, 2, 3)
+    registry = NodeRegistry(reserve_labels=model.reserveNodeNumbers)
+    for node in model.nodes.values():
+        registry.seed(node.label, node.coordinates)
+
+    with model.topologyChanges():
+        minted = [registry.label([0.0, float(i), 0.0]) for i in range(3)]
+        fromModel = list(model.reserveNodeNumbers(3))
+        mintedAfterwards = [registry.label([0.0, 0.0, float(i) + 1.0]) for i in range(3)]
+
+    assert not set(minted) & set(model.nodes)
+    assert not set(minted) & set(fromModel)
+    assert not set(mintedAfterwards) & set(fromModel)
+    assert sorted(minted + fromModel + mintedAfterwards) == list(range(4, 13))
+
+
+def test_an_already_known_coordinate_consumes_no_label():
+    """Most label() calls are lookups of a node shared by several elements; only the minting branch
+    may draw a number, or refinement would burn labels at a wild rate."""
+
+    model = _modelWithSetupNodes(1)
+    registry = NodeRegistry(reserve_labels=model.reserveNodeNumbers)
+    registry.seed(1, [0.0, 0.0, 0.0])
+
+    with model.topologyChanges():
+        assert registry.label([0.0, 0.0, 0.0]) == 1
+        (afterwards,) = model.reserveNodeNumbers(1)
+
+    assert afterwards == 2
+
+
+def test_minting_outside_a_topology_change_raises():
+    """A registry wired to a model inherits the model's mutation window: new nodes appear only where
+    the pipeline can see them."""
+
+    model = _modelWithSetupNodes(1)
+    registry = NodeRegistry(reserve_labels=model.reserveNodeNumbers)
+
+    with pytest.raises(TopologyError, match="topology change"):
+        registry.label([5.0, 0.0, 0.0])

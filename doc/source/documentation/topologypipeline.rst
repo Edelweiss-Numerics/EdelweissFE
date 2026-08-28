@@ -203,6 +203,13 @@ phase 1. Outside it, creating or deleting an element or a node raises
 :class:`~edelweissfe.utils.exceptions.TopologyError`. This is what makes "only model modifiers
 change the topology" an enforced property rather than a convention.
 
+There is exactly one allocator per model, and everything that mints draws from it: the mesh
+generators (which run in a setup-time window opened around model setup), and the coordinate-keyed
+node registry of adaptive refinement. That registry lives in the model-agnostic octree layer, so it
+is handed :meth:`~edelweissfe.models.femodel.FEModel.reserveNodeNumbers` as a plain ``count -> range``
+callable rather than a model. Without one it falls back to minting ``max + 1`` itself, which keeps
+the octree usable standalone but is only safe while nothing else mints.
+
 
 Reacting to a change: three tiers, deliberately
 ------------------------------------------------

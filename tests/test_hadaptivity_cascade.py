@@ -106,18 +106,22 @@ def _childTowards(mesh, eid, x):
     return min(mesh.elements[eid]["children"], key=lambda k: abs(mesh.elements[k]["coords"][:, 0].min() - x))
 
 
-def _driveMirrorAhead(modifier, levels: int):
+def _driveMirrorAhead(model, modifier, levels: int):
     """Refine one corner of the bar down ``levels`` levels in the mirror only, leaving the model
     behind. This is the state 2:1 balancing produces for itself when it cascades; doing it directly
     keeps the test about what ``_materialize`` must cope with, not about how the mirror got there.
+
+    Inside the model's topology window, since the mirror draws its new node labels from the model's
+    allocator.
     """
 
     mesh = modifier._mesh
     deepest = max(mesh.active(), key=lambda e: mesh.elements[e]["coords"][:, 0].min())
     interface = mesh.elements[deepest]["coords"][:, 0].min()
-    for _ in range(levels):
-        mesh.refine(deepest)
-        deepest = _childTowards(mesh, deepest, interface)
+    with model.topologyChanges():
+        for _ in range(levels):
+            mesh.refine(deepest)
+            deepest = _childTowards(mesh, deepest, interface)
 
 
 def test_a_cascade_materialises_every_level_it_produced(tmp_path):
@@ -129,7 +133,7 @@ def test_a_cascade_materialises_every_level_it_produced(tmp_path):
     amr = model.modelModifiers["amr"]
     mesh = amr._mesh
 
-    _driveMirrorAhead(amr, 3)
+    _driveMirrorAhead(model, amr, 3)
     createdBefore = set(mesh.elements)
 
     with model.topologyChanges():
@@ -169,9 +173,10 @@ def test_a_fully_resplit_parent_leaves_nothing_behind(tmp_path):
     mesh = amr._mesh
 
     root = max(mesh.active(), key=lambda e: mesh.elements[e]["coords"][:, 0].min())
-    mesh.refine(root)
-    for child in list(mesh.elements[root]["children"]):
-        mesh.refine(child)
+    with model.topologyChanges():  # the mirror mints its node labels from the model's allocator
+        mesh.refine(root)
+        for child in list(mesh.elements[root]["children"]):
+            mesh.refine(child)
     assert not any(mesh.elements[c]["active"] for c in mesh.elements[root]["children"])
 
     with model.topologyChanges():
@@ -215,7 +220,7 @@ def test_the_warm_start_reaches_the_deepest_new_nodes(tmp_path):
         nodeField["U"][idx, 0] = node.coordinates[0]
         nodeField["P"][idx, 0] = node.coordinates[0]
 
-    _driveMirrorAhead(amr, 3)
+    _driveMirrorAhead(model, amr, 3)
     with model.topologyChanges():
         amr.apply(model, RefinementPlan(eids=[]))
 
