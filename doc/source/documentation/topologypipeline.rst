@@ -64,6 +64,16 @@ A modifier that keeps planning in response to its own output would never settle.
 the modifier, and :attr:`~edelweissfe.models.femodel.FEModel.maxTopologyRounds` turns it into a loud
 error naming the offender rather than a hang.
 
+Two modifiers must not change the same element within one update, in *any* round -- whichever ran
+second silently wins, and which that is depends on declaration order. The pipeline refuses it,
+naming both modifiers, the element, and the rounds they touched it in. Reacting to another
+modifier's change in a later round is fine; mutating the same element it mutated is not.
+
+An ``apply`` that returns an *empty*
+:class:`~edelweissfe.models.modelchange.ModelChange` counts as nothing having happened: it is not
+recorded in the history, it does not bump the version, and it does not trigger an equation-system
+rebuild. Planning and then finding nothing left to do is a legitimate outcome, not a change.
+
 
 Writing a model modifier: ``plan`` and ``apply``
 ------------------------------------------------
@@ -99,10 +109,12 @@ Two rules follow from the signatures and are worth stating explicitly:
 the pipeline reach a fixed point instead of looping. ``change`` is ``None`` on the first round of an
 update, meaning "evaluate freshly".
 
-**Never write** ``model.elements`` **directly.** Use
+**Never write** ``model.elements`` **or** ``model.nodes`` **directly.** Use
 :meth:`~edelweissfe.models.femodel.FEModel.reserveElementNumbers`,
 :meth:`~edelweissfe.models.femodel.FEModel.createElement` and
-:meth:`~edelweissfe.models.femodel.FEModel.removeElement`.
+:meth:`~edelweissfe.models.femodel.FEModel.removeElement`, and their node-side counterparts
+:meth:`~edelweissfe.models.femodel.FEModel.reserveNodeNumbers` and
+:meth:`~edelweissfe.models.femodel.FEModel.createNode`.
 
 **Say so if your modifier is purely reactive.** A modifier that can only act in response to another
 one's mutation -- the implicit surface-facet retiling is the only current example -- sets
@@ -155,7 +167,9 @@ through :meth:`~edelweissfe.models.femodel.FEModel.replayTopologyHistory`, which
 
 The fingerprint is not decoration. Recorded per decision, it turns *"the resumed run diverged
 somewhere"* into *"it diverged at record 12, modifier* ``amr`` *, round 2"* -- a divergence you can
-bisect rather than hunt.
+bisect rather than hunt. It is not free either: it walks the whole mesh, measured at 0.188 s on 64k
+elements / 69k nodes, and that is paid once per *applied* decision -- not per iteration, but often
+enough to notice on a large model.
 
 **What is not checkpointed:** decision-side state, such as a marker's buffer of pending marks. The
 next ``plan`` re-derives it from the restored solution state -- exactly as the live run would have.
@@ -165,12 +179,14 @@ That is deliberately separate from ``apply``: it affects how the *next* decision
 it wrong cannot corrupt the mesh.
 
 
-Element numbers
----------------
+Element and node numbers
+------------------------
 
 Element numbers come from one monotonic allocator,
 :meth:`~edelweissfe.models.femodel.FEModel.reserveElementNumbers`. They are **never recycled**, and
-never derived from ``max(model.elements)``.
+never derived from ``max(model.elements)``. Node labels get exactly the same treatment from
+:meth:`~edelweissfe.models.femodel.FEModel.reserveNodeNumbers`, for exactly the same reasons; the
+rest of this section says "element" for both.
 
 That is not tidiness. Deriving the next number from the current maximum makes numbering a function
 of the *deletion* history as well as the creation history -- a contact facet set that is deleted and
@@ -183,7 +199,7 @@ reference cached by number cannot silently come to mean something else.
 
 Numbers may only be reserved inside a **topology window**
 (:meth:`~edelweissfe.models.femodel.FEModel.topologyChanges`), which the pipeline opens around
-phase 1. Outside it, creating or deleting an element raises
+phase 1. Outside it, creating or deleting an element or a node raises
 :class:`~edelweissfe.utils.exceptions.TopologyError`. This is what makes "only model modifiers
 change the topology" an enforced property rather than a convention.
 

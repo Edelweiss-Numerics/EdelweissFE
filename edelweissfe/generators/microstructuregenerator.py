@@ -150,10 +150,10 @@ class Generator(GeneratorBase):
 
         # create nodes and elements for the unit cell
         _nodes = []
-        for idx, node in enumerate(all_nodes):
-            _node = Node(idx + 1, np.array(node))
+        for label, node in zip(model.reserveNodeNumbers(len(all_nodes)), all_nodes):
+            _node = Node(label, np.array(node))
             _nodes.append(_node)
-            model.nodes[idx + 1] = _node
+            model.createNode(_node)
 
         idx = 0
         for block_id, el_ids in block_elements_assignments.items():
@@ -293,9 +293,13 @@ def replicateMesh(
 
         for k, node in nodes_to_shift:
             new_nodes.append(node + shift)
-            associated_nodes.append([k, len(model.nodes)])
-            _node = Node(len(model.nodes) + 1, np.array(new_nodes[-1]))
-            model.nodes[len(model.nodes) + 1] = _node
+            # len(model.nodes) + 1 was a positional guess, not an allocator, and would silently
+            # overwrite a live node the moment the label range had a gap. The rest of this function
+            # addresses nodes as `label - 1` into all_nodes, so keep the association in that form.
+            (label,) = model.reserveNodeNumbers(1)
+            associated_nodes.append([k, label - 1])
+            _node = Node(label, np.array(new_nodes[-1]))
+            model.createNode(_node)
 
         new_nodes = np.array(new_nodes)
 

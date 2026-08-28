@@ -92,6 +92,8 @@ class FEModel:
         self.fieldOutputController = None  #: Set once by the driver; lets in-model entities (e.g. AMR markers) look up a named *fieldOutput by value, not just by declaration.
         #: High-water mark of the element number allocator; see :meth:`reserveElementNumbers`.
         self._nextElementNumber = 1
+        #: High-water mark of the node number allocator; see :meth:`reserveNodeNumbers`.
+        self._nextNodeNumber = 1
         self._topologyOpen = False  #: True only inside :meth:`topologyChanges`; see there.
         #: Guard against a model modifier that keeps planning in response to its own output.
         self.maxTopologyRounds = 16
@@ -173,6 +175,65 @@ class FEModel:
         """
 
         self._nextElementNumber = max(self._nextElementNumber, max(self.elements.keys(), default=0) + 1)
+
+    def reserveNodeNumbers(self, count: int = 1) -> range:
+        """Reserve ``count`` fresh node labels. The node-side counterpart of
+        :meth:`reserveElementNumbers`, monotonic for the same reasons.
+
+        The pattern this replaces is ``len(model.nodes) + 1``, which is a positional guess, not an
+        allocator: once anything is deleted the dict has gaps, and the "next" label lands on a live
+        node and silently overwrites it.
+
+        Parameters
+        ----------
+        count
+            How many consecutive labels to reserve.
+
+        Returns
+        -------
+        range
+            The reserved labels, in ascending order.
+        """
+
+        if not self._topologyOpen:
+            raise TopologyError(
+                "node labels may only be reserved during a topology change -- see FEModel.topologyChanges()"
+            )
+        if count < 1:
+            raise ValueError("cannot reserve {:} node labels".format(count))
+
+        first = self._nextNodeNumber
+        self._nextNodeNumber += count
+        return range(first, self._nextNodeNumber)
+
+    def adoptSetupNodeNumbers(self):
+        """Raise the node allocator above every label setup has already handed out; the node-side
+        counterpart of :meth:`adoptSetupElementNumbers`, called alongside it.
+        """
+
+        self._nextNodeNumber = max(self._nextNodeNumber, max(self.nodes.keys(), default=0) + 1)
+
+    def createNode(self, node):
+        """Add a freshly created node to the model.
+
+        Parameters
+        ----------
+        node
+            The node, already carrying a label obtained from :meth:`reserveNodeNumbers`.
+        """
+
+        if not self._topologyOpen:
+            raise TopologyError(
+                "node {:} was created outside a topology change: only model modifiers may create "
+                "or delete nodes, inside FEModel.topologyChanges()".format(node.label)
+            )
+        if node.label in self.nodes:
+            raise TopologyError(
+                "node label {:} is already taken -- node labels are reserved via "
+                "FEModel.reserveNodeNumbers() and never recycled".format(node.label)
+            )
+
+        self.nodes[node.label] = node
 
     def createElement(self, element):
         """Add a freshly created element to the model.
@@ -295,16 +356,17 @@ class FEModel:
             # round 1 -- after the change it needed to see had already happened -- and then had its
             # version stamped, so round 2 showed nothing new either. It never reacted at all.
             lastPlannedVersion = {name: self.topologyVersion for name in self.modelModifiers}
+            # Which modifier touched which element, over the WHOLE update rather than one round.
+            # Two modifiers mutating one element is a conflict even when their declared domains are
+            # disjoint -- e.g. one deleting what the other just created -- and the result depends on
+            # their order, which is exactly the kind of thing that must not decide a simulation
+            # quietly. Spanning all rounds matters because the rounds exist precisely so that a
+            # modifier can react to another's output, which is when the collision is most likely.
+            touchedBy = {}  # element number -> (modifier name, round it was touched in)
             roundNumber = 0
             while True:
                 roundNumber += 1
                 plannedThisRound = []
-                # Which modifier touched which element in THIS round. Two modifiers mutating one
-                # element within a round is a conflict even when their declared domains are
-                # disjoint -- e.g. one deleting what the other just created -- and the result
-                # depends on their order, which is exactly the kind of thing that must not decide a
-                # simulation quietly.
-                touchedBy = {}
                 for name, modifier in self.modelModifiers.items():
                     change = self.changesSince(lastPlannedVersion[name])
                     lastPlannedVersion[name] = self.topologyVersion
@@ -312,16 +374,22 @@ class FEModel:
                     if plan is None:
                         continue
                     modelChange = modifier.apply(self, plan)
+                    # A modifier may plan and then find nothing left to do. Recording that would
+                    # rebuild the equation system for nothing, pay a topology fingerprint for
+                    # nothing, and let the no-op modifier burn through maxTopologyRounds and be
+                    # named as the one that would not settle.
+                    if modelChange is not None and modelChange.isEmpty:
+                        continue
                     if modelChange is not None:
                         for elNumber in modelChange.addedElements | modelChange.removedElements:
-                            previous = touchedBy.setdefault(elNumber, name)
-                            if previous != name:
+                            previousName, previousRound = touchedBy.setdefault(elNumber, (name, roundNumber))
+                            if previousName != name:
                                 raise TopologyError(
-                                    "model modifiers {!r} and {!r} both changed element {:} in round "
-                                    "{:} of one topology update. Whichever ran second silently won; "
-                                    "make their domains disjoint, or have one react to the other's "
-                                    "change in a later round instead of the same one.".format(
-                                        previous, name, elNumber, roundNumber
+                                    "model modifiers {!r} (round {:}) and {!r} (round {:}) both changed "
+                                    "element {:} in one topology update. Whichever ran second silently "
+                                    "won; make their domains disjoint, or have one react to the other's "
+                                    "change without mutating the same element.".format(
+                                        previousName, previousRound, name, roundNumber, elNumber
                                     )
                                 )
                     self.recordTopologyChange(roundNumber, name, modifier, plan, modelChange)
@@ -350,7 +418,10 @@ class FEModel:
 
         Recorded per round in the topology history, this turns "the resumed run diverged somewhere"
         into "increment 471, round 2, modifier amr" -- a divergence you can bisect rather than hunt.
-        Cheap enough to leave enabled in CI.
+
+        Not cheap: it walks the whole mesh, measured at 0.188 s on 64k elements / 69k nodes, and
+        :meth:`recordTopologyChange` pays it unconditionally for every *applied* modifier decision
+        (``verifyTopologyFingerprints`` gates only the replay-time comparison, not this).
 
         Uses blake2b rather than :func:`hash`, whose string hashing is randomised per process and
         would make the digest differ between two runs of the *same* code.
@@ -394,7 +465,8 @@ class FEModel:
         :meth:`replayTopologyHistory`) route through here, so a replayed run records the same
         changesets in the same order as the run it replays.
 
-        Cost is one fingerprint per *applied* decision -- a handful per analysis, not per iteration.
+        Cost is one :meth:`topologyFingerprint` per *applied* decision -- not per iteration, but not
+        free either: 0.188 s measured on 64k elements / 69k nodes.
 
         Parameters
         ----------

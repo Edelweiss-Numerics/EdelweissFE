@@ -272,11 +272,12 @@ def _fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal)
     abqModelConstructor = AbqModelConstructor(journal)
     model = abqModelConstructor.createGeometryFromInputFile(model, inputfile)
 
-    # The base mesh is complete here, and it numbers its elements from the input file rather than
-    # from the allocator (see FEModel.adoptSetupElementNumbers). Raise the allocator above it now,
-    # so that everything created from this point on -- contact facets, rigid-body point masses, and
-    # later every model modifier -- draws numbers that cannot collide with it.
+    # The base mesh is complete here, and it numbers its nodes and elements from the input file
+    # rather than from the allocators (see FEModel.adoptSetupElementNumbers). Raise both allocators
+    # above it now, so that everything created from this point on -- contact facets, rigid-body
+    # point masses, and later every model modifier -- draws numbers that cannot collide with it.
     model.adoptSetupElementNumbers()
+    model.adoptSetupNodeNumbers()
 
     model = abqModelConstructor.createMaterialsFromInputFile(model, inputfile)
     model = abqModelConstructor.createAdvancedMaterialsFromInputFile(model, inputfile)

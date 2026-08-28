@@ -87,6 +87,26 @@ class ModelChange:
         """True if any node or element was added or removed."""
         return bool(self.addedNodes or self.removedNodes or self.addedElements or self.removedElements)
 
+    @property
+    def isEmpty(self) -> bool:
+        """True if this changeset records no mutation at all -- every collection is empty.
+
+        A modifier can legitimately plan and then find nothing left to do, and returning an empty
+        changeset is how it says so. ``kind`` is deliberately not consulted: it is always set, and a
+        label alone is not a change.
+        """
+        return not (
+            self.addedNodes
+            or self.removedNodes
+            or self.addedElements
+            or self.removedElements
+            or self.parentToChildren
+            or self.faceMap
+            or self.changedNodeSets
+            or self.changedElementSets
+            or self.changedSurfaces
+        )
+
     def touchesSurface(self, name: str) -> bool:
         return name in self.changedSurfaces
 

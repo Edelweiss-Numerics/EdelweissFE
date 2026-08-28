@@ -531,7 +531,37 @@ def test_two_modifiers_changing_one_element_in_a_round_is_refused():
         # round -- which is the only way two modifiers can collide within one round at all
         second=_OwningModifier("second", log, owns={2}, touches={99}, reactsToOthers=True),
     )
-    with pytest.raises(TopologyError, match="both changed element 99 in round 1"):
+    with pytest.raises(TopologyError, match=r"'first' \(round 1\) and 'second' \(round 1\).*element 99"):
+        model.updateTopology(step=None, timeStep=0.0)
+
+
+class _LateModifier(_OwningModifier):
+    """An owning modifier that holds off until the given round, so its mutation lands in a different
+    round than the one it collides with."""
+
+    def __init__(self, name, log, owns, touches, fromRound):
+        super().__init__(name, log, owns=owns, touches=touches, reactsToOthers=True)
+        self._fromRound = fromRound
+        self._roundsSeen = 0
+
+    def plan(self, model, change, step, timeStep):
+        self._roundsSeen += 1
+        if self._roundsSeen < self._fromRound:
+            return None
+        return super().plan(model, change, step, timeStep)
+
+
+def test_two_modifiers_changing_one_element_in_different_rounds_is_refused():
+    """The rounds exist so a modifier can react to another's output, which is exactly when two of
+    them are most likely to reach for the same element -- so the guard has to span the whole update,
+    not just one round, and has to say which rounds collided."""
+
+    log = []
+    model = _modelWithModifiers(
+        first=_OwningModifier("first", log, owns={1}, touches={99}),
+        second=_LateModifier("second", log, owns={2}, touches={99}, fromRound=2),
+    )
+    with pytest.raises(TopologyError, match=r"'first' \(round 1\) and 'second' \(round 2\).*element 99"):
         model.updateTopology(step=None, timeStep=0.0)
 
 
@@ -542,6 +572,48 @@ def test_the_same_modifier_may_touch_an_element_in_successive_rounds():
     model = _modelWithModifiers(solo=_OwningModifier("solo", log, owns={1}, touches={99}))
     model.updateTopology(step=None, timeStep=0.0)
     assert log == ["solo"]
+
+
+def test_an_empty_changeset_is_not_a_change():
+    """A modifier may plan and then find nothing left to do. Counting that as a change would rebuild
+    the equation system for nothing, pay a topology fingerprint for nothing, and record a decision a
+    restart would then faithfully replay to no effect."""
+
+    class _NoOpModifier(_StubModifier):
+        def apply(self, model, plan):
+            self._log.append(plan["who"])
+            return ModelChange(kind=_MCT.REFINEMENT)  # planned, then found nothing to do
+
+    log = []
+    model = _modelWithModifiers(noop=_NoOpModifier("noop", plansLeft=1, log=log))
+    assert model.updateTopology(step=None, timeStep=0.0) is False
+    assert log == ["noop"], "it did plan and apply -- what must not follow is being counted"
+    assert model.topologyHistory == []
+    assert model.topologyVersion == 0
+
+
+@pytest.mark.parametrize(
+    "populate",
+    [
+        lambda c: c.addedNodes.add(1),
+        lambda c: c.removedNodes.add(1),
+        lambda c: c.addedElements.add(1),
+        lambda c: c.removedElements.add(1),
+        lambda c: c.parentToChildren.update({1: [2]}),
+        lambda c: c.faceMap.update({(1, 2): [(3, 2)]}),
+        lambda c: c.changedNodeSets.add("nodes"),
+        lambda c: c.changedElementSets.add("elements"),
+        lambda c: c.changedSurfaces.add("surface"),
+    ],
+)
+def test_a_changeset_is_empty_only_if_every_collection_is(populate):
+    """``kind`` alone is not a change, but any one populated collection is -- a modifier that only
+    re-tiled a surface, or only changed an element set's membership, did change the model."""
+
+    change = ModelChange(kind=_MCT.REFINEMENT)
+    assert change.isEmpty
+    populate(change)
+    assert not change.isEmpty
 
 
 def test_a_consumer_cannot_mutate_the_topology():

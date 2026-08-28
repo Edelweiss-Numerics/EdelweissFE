@@ -25,17 +25,15 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Round-trip test for the recorded topology history of an h-adaptive model (unlike
-tests/test_restart_integration.py's AMR case, which drives the same feature end-to-end through a
-real solve). Builds two independent models from the same .inp via fillFEModelFromInputFile
-(mirroring the driver's own setup sequence, minus solvers/steps, which this doesn't need), drives
-one real refinement on the first through the live topology update, and asserts that replaying its
-recorded history onto the second -- freshly rebuilt, unrefined -- reproduces the same topology.
+"""Round-trip test for the recorded topology history of an h-adaptive model. Builds two independent
+models from the same .inp via fillFEModelFromInputFile (mirroring the driver's own setup sequence,
+minus solvers/steps, which this doesn't need), drives one real refinement on the first through the
+live topology update, and asserts that replaying its recorded history onto the second -- freshly
+rebuilt, unrefined -- reproduces the same topology.
 
 Uses an `initialOnly` marker (edelweissfe.adaptivity.marking) so refinement triggers
-deterministically on the very first topology update, regardless of field state -- avoids depending
-on a real solve's marker-evaluation timing, which the full-solve integration test in
-test_restart_integration.py already covers separately.
+deterministically on the very first topology update, regardless of field state -- which keeps the
+test independent of a real solve's marker-evaluation timing.
 """
 
 from pathlib import Path

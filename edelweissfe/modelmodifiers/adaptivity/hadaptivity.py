@@ -44,9 +44,10 @@ from edelweissfe.constraints.hangingnode import Constraint as HangingNodeConstra
 from edelweissfe.journal.journal import Journal
 from edelweissfe.modelmodifiers.base.modelmodifierbase import ModelModifierBase
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.models.modelchange import ModelChange
+from edelweissfe.models.modelchange import ModelChange, coalesce
 from edelweissfe.models.modelchangeobserver import ModelChangeType
 from edelweissfe.points.node import Node
+from edelweissfe.utils.exceptions import TopologyError
 from edelweissfe.utils.performancetiming import timeit
 from edelweissfe.utils.schema import (
     buildSchemaFromOptions,
@@ -561,72 +562,121 @@ class ModelModifier(ModelModifierBase):
                 newNodes[label] = node
 
         active = set(mesh.active())
-        materialized = set(self._eidToEl.keys())
         newValues = {fieldName: {} for fieldName in oldValues}  # interpolated values for new nodes
-        # Only children whose parent is already materialised: the batched restart replay can leave
-        # several refinement levels pending at once, and this keeps each pass to one level.
-        newChildEids = {eid for eid in (active - materialized) if mesh.elements[eid]["parent"] in self._eidToEl}
 
-        # the changeset this call produces (its faceMap/*Sets entries reflect the tracked element
-        # sets and surfaces above)
-        change = ModelChange(kind=ModelChangeType.REFINEMENT, addedNodes=set(newNodes.keys()))
+        # Every octree cell that must become a model element but is not one yet. Usually that is
+        # exactly the children of the cells refined in this call. It is not always: 2:1 balancing
+        # refines until the mesh is graded, and can therefore split a cell it created earlier in
+        # the same call, leaving an active leaf whose parent is itself brand new. Walking each such
+        # leaf up to its nearest materialised ancestor collects those intermediate cells as well;
+        # they are created below and removed again with the other refined parents, so however many
+        # levels a cascade went, every one of them is handled by the same "split a materialised
+        # parent into its children" code.
+        pending = set()
+        for eid in active - set(self._eidToEl):
+            ancestor = eid
+            while ancestor is not None and ancestor not in self._eidToEl and ancestor not in pending:
+                pending.add(ancestor)
+                ancestor = mesh.elements[ancestor]["parent"]
 
-        # new child elements (single level of new refinement per call -> parents are materialized)
-        # Sorted, with the whole batch's numbers reserved up front: which octree child gets which
-        # element number is then a pure function of this sorted list of eids -- not of the order an
-        # unordered set happened to iterate in, and not of what else claimed a number partway
-        # through the loop.
-        newChildEidsInOrder = sorted(newChildEids)
-        childNumbers = model.reserveElementNumbers(len(newChildEidsInOrder)) if newChildEidsInOrder else []
-        with timeit("elements & state transfer"):
-            for eid, elNumber in zip(newChildEidsInOrder, childNumbers):
-                e = mesh.elements[eid]
-                parentEid = e["parent"]
-                parentEl = self._eidToEl[parentEid]
-                child = self._elementClass(self._elementType, elNumber)
-                child.setNodes([model.nodes[label] for label in e["conn"]])
-                self._sectionOf[parentEl].assignSectionPropertiesToElement(child)
-                # Runs on replay too, identically: apply() is one code path, and element state is
-                # restored by number afterwards either way.
-                self._stateTransfer.transferState(parentEl, [child], self._topology)  # WS-F (state)
+        # One changeset per materialised level, coalesced at the end: the merge is what resolves an
+        # intermediate's create-then-remove into the direct parent -> grandchild relation a consumer
+        # needs, rather than leaving a phantom element in both the added and the removed set (see
+        # ModelChange.mergedWith).
+        levelChanges = []
+        newChildEids = set()
+        while pending:
+            # Sorted, with the whole level's numbers reserved up front: which octree child gets
+            # which element number is then a pure function of this sorted list of eids -- not of the
+            # order an unordered set happened to iterate in, and not of what else claimed a number
+            # partway through the loop.
+            levelEids = sorted(eid for eid in pending if mesh.elements[eid]["parent"] in self._eidToEl)
+            if not levelEids:
+                raise TopologyError(
+                    "AMR: {:} active octree cell(s) (e.g. {:}) have no materialised ancestor, so "
+                    "they cannot be turned into elements. The octree mirror and the model would "
+                    "disagree about which elements exist.".format(len(pending), sorted(pending)[0])
+                )
+            change = ModelChange(kind=ModelChangeType.REFINEMENT)
+            childNumbers = model.reserveElementNumbers(len(levelEids))
+            with timeit("elements & state transfer"):
+                for eid, elNumber in zip(levelEids, childNumbers):
+                    e = mesh.elements[eid]
+                    parentEid = e["parent"]
+                    parentEl = self._eidToEl[parentEid]
+                    child = self._elementClass(self._elementType, elNumber)
+                    child.setNodes([model.nodes[label] for label in e["conn"]])
+                    self._sectionOf[parentEl].assignSectionPropertiesToElement(child)
+                    # Runs on replay too, identically: apply() is one code path, and element state
+                    # is restored by number afterwards either way.
+                    self._stateTransfer.transferState(parentEl, [child], self._topology)
 
-                # warm start: interpolate each NEW node's field values from the parent via the
-                # HEX20 isoparametric map, so the increment restarts from a consistent state, not zero
-                octant = mesh.elements[parentEid]["children"].index(eid)
-                childParams = self._octantParams[octant]
-                for i, label in enumerate(e["conn"]):
-                    node = model.nodes[label]
-                    if label in newNodes and any(node not in newValues[f] for f in oldValues):
-                        N = self._topology.shape_functions(*childParams[i])
-                        for fieldName, vals in oldValues.items():
-                            if all(pn in vals for pn in parentEl.nodes):
-                                parentVals = np.array([vals[pn] for pn in parentEl.nodes])
-                                newValues[fieldName][node] = N @ parentVals
+                    # warm start: interpolate each NEW node's field values from the parent via the
+                    # HEX20 isoparametric map, so the increment restarts from a consistent state,
+                    # not zero
+                    octant = mesh.elements[parentEid]["children"].index(eid)
+                    childParams = self._octantParams[octant]
+                    for i, label in enumerate(e["conn"]):
+                        node = model.nodes[label]
+                        if label in newNodes and any(node not in newValues[f] for f in oldValues):
+                            N = self._topology.shape_functions(*childParams[i])
+                            for fieldName, vals in oldValues.items():
+                                # An intermediate parent's own nodes are new, so they are not in the
+                                # pre-mutation snapshot -- the level above interpolated them, and the
+                                # next level down interpolates from that in turn.
+                                interpolated = newValues[fieldName]
+                                parentVals = [vals[pn] if pn in vals else interpolated.get(pn) for pn in parentEl.nodes]
+                                if all(v is not None for v in parentVals):
+                                    newValues[fieldName][node] = N @ np.array(parentVals)
 
-                model.createElement(child)
-                self._eidToEl[eid] = child
-                self._sectionOf[child] = self._sectionOf[parentEl]
+                    model.createElement(child)
+                    self._eidToEl[eid] = child
+                    self._sectionOf[child] = self._sectionOf[parentEl]
 
-                change.addedElements.add(child.elNumber)
-                change.parentToChildren.setdefault(parentEl.elNumber, []).append(child.elNumber)
+                    change.addedElements.add(child.elNumber)
+                    change.parentToChildren.setdefault(parentEl.elNumber, []).append(child.elNumber)
 
-        # per-face parent -> child tiling (the faceMap), while parents are still materialized
-        newlyRefinedParentEids = {mesh.elements[eid]["parent"] for eid in newChildEids}
-        for parentEid in newlyRefinedParentEids:
-            parentLabel = self._eidToEl[parentEid].elNumber
-            childEids = mesh.elements[parentEid]["children"]
-            for faceID, faceIndex in self._topology.faceid_to_face.items():
-                childLabels = [
-                    self._eidToEl[childEids[j]].elNumber
-                    for j in self._topology.face_child_indices(faceIndex, self.splitFactor)
-                ]
-                change.faceMap[(parentLabel, faceID)] = [(label, faceID) for label in childLabels]
+            # per-face parent -> child tiling (the faceMap), while parents are still materialized
+            for parentEid in {mesh.elements[eid]["parent"] for eid in levelEids}:
+                parentLabel = self._eidToEl[parentEid].elNumber
+                childEids = mesh.elements[parentEid]["children"]
+                for faceID, faceIndex in self._topology.faceid_to_face.items():
+                    childLabels = [
+                        self._eidToEl[childEids[j]].elNumber
+                        for j in self._topology.face_child_indices(faceIndex, self.splitFactor)
+                    ]
+                    change.faceMap[(parentLabel, faceID)] = [(label, faceID) for label in childLabels]
 
-        # remove refined parents (sorted, so the changeset is built in a reproducible order)
-        for eid in sorted(materialized - active):
+            levelChanges.append(change)
+            newChildEids |= set(levelEids)
+            pending -= set(levelEids)
+
+        # The new nodes and the removals ride on the LAST level's changeset: nothing created there
+        # is transient (only intermediates are, and they always have a level below them), so the
+        # coalesce below cannot drop them.
+        change = levelChanges[-1] if levelChanges else ModelChange(kind=ModelChangeType.REFINEMENT)
+        change.addedNodes |= set(newNodes.keys())
+
+        # remove refined parents, transient intermediates included (sorted, so the changeset is
+        # built in a reproducible order)
+        for eid in sorted(set(self._eidToEl) - active):
             el = self._eidToEl.pop(eid)
             model.removeElement(el.elNumber)
             change.removedElements.add(el.elNumber)
+
+        if len(levelChanges) > 1:
+            change = coalesce(levelChanges)
+
+        # The octree mirror decides which elements exist; if the model no longer agrees, every
+        # consumer downstream is reading a mesh that is not the one being refined. Cheap next to
+        # everything else in here, and it turns a silent desync into a located failure.
+        if set(self._eidToEl) != active:
+            raise TopologyError(
+                "AMR: the octree mirror and the model disagree after materialisation -- {:} active "
+                "cell(s) without an element, {:} element(s) without an active cell".format(
+                    len(active - set(self._eidToEl)), len(set(self._eidToEl) - active)
+                )
+            )
 
         # keep model.surfaces in sync: parent (eid,faceID) -> child faces
         for surfaceName, pairs in mesh.surfaces.items():
