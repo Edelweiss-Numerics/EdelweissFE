@@ -41,14 +41,10 @@ from edelweissfe.config.phenomena import getFieldSize, phenomena
 from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.modelchange import ModelChange, TopologyRecord, coalesce
-from edelweissfe.utils.exceptions import RestartError, TopologyError
+from edelweissfe.utils.exceptions import TopologyError
 from edelweissfe.utils.performancetiming import timeit
 from edelweissfe.variables.fieldvariable import FieldVariable
 from edelweissfe.variables.scalarvariable import ScalarVariable
-
-#: Checkpoint layout this build writes and reads. A checkpoint stamped with anything else is
-#: refused rather than partially restored -- see FEModel.readRestart.
-RESTART_FORMAT_VERSION = 2
 
 
 class FEModel:
@@ -876,7 +872,6 @@ class FEModel:
         f = restartFile
 
         f.attrs["time"] = self.time
-        f.attrs["restartFormatVersion"] = RESTART_FORMAT_VERSION
 
         # node fields
         f.create_group("nodeFields")
@@ -895,16 +890,6 @@ class FEModel:
         """
 
         f = restartFile
-
-        version = int(f.attrs.get("restartFormatVersion", 0))
-        if version != RESTART_FORMAT_VERSION:
-            raise RestartError(
-                "this checkpoint is format version {:}, this build reads version {:}. Restart "
-                "checkpoints are not a stable format yet -- regenerate it rather than resuming from "
-                "it, which would restore a topology history this build cannot interpret.".format(
-                    version or "pre-versioning", RESTART_FORMAT_VERSION
-                )
-            )
 
         self.time = f.attrs["time"]
 
