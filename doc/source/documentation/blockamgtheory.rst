@@ -612,6 +612,23 @@ Hierarchy reuse
       - ``1.5``
       - Refresh the hierarchies before the *next* solve if this solve's outer iteration count
         exceeded this factor times the previous solve's.
+    * - ``hierarchyDropTol``
+      - ``0.0`` (off)
+      - Build each field's AMG hierarchy from a *sparsified* copy of its diagonal block: drop
+        off-diagonal :math:`a_{ij}` where :math:`|a_{ij}| < \text{tol}\cdot\sqrt{|a_{ii}| |a_{jj}|}`.
+        Only the preconditioner is sparsified -- the operator the Krylov method applies is
+        untouched -- so this cannot change the converged solution, only the iteration count needed
+        to reach it. Worth up to **1.81x on the linear solve** on operators that store many
+        numerically negligible entries (meshfree RKPM discretisations are the motivating case). Off
+        by default because the useful range is operator-dependent.
+    * - ``hierarchyDropLumping``
+      - ``false``
+      - When ``hierarchyDropTol`` drops an entry, add it onto its row's diagonal instead of
+        discarding it, so row sums are preserved exactly and the constant near-null-space vector
+        survives filtering -- the AMG literature's preferred filtered-matrix construction. Measured
+        neutral at best on operators tested so far (no change at ``1e-4``, 8.1% *slower* at
+        ``1e-2``, with outer GMRES iteration count unchanged either way): the whole penalty is the
+        extra pass over the matrix. Off by default; plain truncation is simpler and faster.
 
 Diagnostics
 ~~~~~~~~~~~
