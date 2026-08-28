@@ -78,6 +78,19 @@ def test_assembleFromVIJ_matches_the_staged_generator_bit_for_bit():
     np.testing.assert_array_equal(directResult.toarray(), staged.toarray())
 
 
+def test_registerEntities_rejects_mismatched_mapStarts_and_nDofs_lengths():
+    """Both arrays are read by raw pointer on the C++ side, indexed by the same entity count -- a
+    length mismatch would read past the end of the shorter one rather than raising."""
+
+    systemMatrix, V = _syntheticSystem()
+    generator = CSRGenerator(systemMatrix)
+    generator.updateCSR(V)
+    direct = DirectCSRAssembler(generator, systemMatrix, numThreads=1)
+
+    with pytest.raises(ValueError):
+        direct.registerEntities(np.array([0, 4, 8], dtype=np.int64), np.array([2, 2], dtype=np.intc))
+
+
 def test_fused_scatter_reduce_path_matches_the_staged_generator():
     """The path a threaded entity loop actually uses: registerEntities() once, then
     beginAssembly()/scatterBlock() per entity/reduce() -- rather than assembleFromVIJ's one-shot COO

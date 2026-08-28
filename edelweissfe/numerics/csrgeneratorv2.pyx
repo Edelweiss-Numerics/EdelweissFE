@@ -393,6 +393,11 @@ cdef class DirectCSRAssembler:
         ``mapStarts[e]`` is entity e's offset into the VIJ ordering -- the same value the DofManager
         already records in ``idcsOfHigherOrderEntitiesInVIJ`` -- and ``nDofs[e]`` its local DOF count.
         """
+        if mapStarts.shape[0] != nDofs.shape[0]:
+            raise ValueError(
+                "registerEntities: mapStarts and nDofs must have the same length (one entry per "
+                "entity), got {:} and {:}".format(mapStarts.shape[0], nDofs.shape[0])
+            )
         cdef int[::1] I = self._I
         self.asm_.registerEntities(&mapStarts[0], &nDofs[0], mapStarts.shape[0], &I[0])
 

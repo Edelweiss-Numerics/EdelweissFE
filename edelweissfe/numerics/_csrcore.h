@@ -537,7 +537,7 @@ struct CSRDirectAssembler {
     // The entity block is stored COLUMN-major: initializeVIJContribution writes
     // I[k] = idcs[k % nDof] and J[k] = idcs[k / nDof], so the row index varies fastest and the
     // first nDof entries of I are exactly the entity's global row list.
-#pragma omp          parallel for schedule( static )
+#pragma omp parallel for schedule( static )
     for ( int e = 0; e < nEntities; ++e ) {
       const int64_t ms = entityMapStart[e];
       const int     nd = entityNDof[e];
@@ -553,6 +553,9 @@ struct CSRDirectAssembler {
 
   void beginAssembly()
   {
+    // clang-format off
+    // The pinned clang-format version mis-indents the closing brace/else that follow a
+    // #pragma omp block used as an if-statement's compound body; formatted by hand instead.
     if ( !useAtomics ) {
       // one copy per thread: each thread clears its own, which is both perfectly parallel and
       // keeps the pages it will later write on its own NUMA node
@@ -561,8 +564,8 @@ struct CSRDirectAssembler {
         double* my = priv[omp_get_thread_num()].data();
         std::fill( my, my + nnz, 0.0 );
       }
-             }
-             else {
+    }
+    else {
       // shared copies: no thread owns one, so clear each with all threads
       for ( int b = 0; b < nBuffers; ++b ) {
         double* my = priv[b].data();
@@ -571,6 +574,7 @@ struct CSRDirectAssembler {
           my[i] = 0.0;
       }
     }
+    // clang-format on
   }
 
   // Called from inside the entity loop, once per entity, by the thread that computed the block.
