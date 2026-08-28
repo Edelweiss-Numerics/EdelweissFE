@@ -148,7 +148,7 @@ def finiteElementSimulation(
     # exist (createFieldValueEntry above) and after advanceToTime's cold-start bookkeeping, which
     # would otherwise clobber model.time back to job['startTime'].
     #
-    # v1 limitation: resuming skips *solving* every step before the checkpoint's step entirely --
+    # Limitation: resuming skips *solving* every step before the checkpoint's step entirely --
     # correct for the common case, but a `modelupdate` step action (or any other topology mutation)
     # in a skipped step's `solve()` never runs, so restart is only supported for analyses whose
     # topology is static across the resumed run.
