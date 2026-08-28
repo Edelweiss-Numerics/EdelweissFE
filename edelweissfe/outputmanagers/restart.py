@@ -56,9 +56,9 @@ the last converged increment written via ``*restart, readFrom=...``.
 @dataclass(frozen=True)
 class RestartOutputManagerSchema:
     """L2: the options this output manager accepts, owned by this module and never mutated from
-    outside it. Mirrors the ``*restart`` keyword's own writing-related fields
-    (``edelweissfe.keywords.restart.RestartSchema``) rather than duplicating their definitions --
-    the parsed ``*restart`` config is handed to this output manager's constructor directly.
+    outside it -- independent of the ``*restart`` keyword's own schema
+    (``edelweissfe.keywords.restart.RestartSchema``), which only configures *resuming*
+    (``readFrom``); writing is configured entirely here.
     """
 
     writeInterval: int = schemaField(
@@ -149,6 +149,12 @@ class OutputManager(OutputManagerBase):
         configuration
             The options this output manager accepts; defaults to all-defaults.
         """
+        if configuration.writeInterval < 1:
+            raise ValueError("writeInterval must be >= 1: a non-positive interval never converges to a write.")
+        if configuration.numberOfFilesToKeep < 1:
+            raise ValueError(
+                "numberOfFilesToKeep must be >= 1: a non-positive ring buffer size cannot hold a checkpoint."
+            )
         self.name = name
         self.model = model
         self.journal = journal

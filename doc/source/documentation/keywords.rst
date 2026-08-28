@@ -283,7 +283,7 @@
       - ``string``
       - filename where yData is given
 
-.. list-table:: ``*restart`` : configure checkpoint/restart
+.. list-table:: ``*restart`` : configure resuming from a checkpoint
     :width: 100%
     :widths: 25 25 40
     :header-rows: 1
@@ -291,18 +291,6 @@
     * - Option
       - Type
       - Description
-    * - ``write``
-      - ``boolean``
-      - (optional) write restart checkpoints during the analysis, standard = False
-    * - ``writeinterval``
-      - ``integer``
-      - (optional) write a checkpoint every N converged increments, standard = 1
-    * - ``basename``
-      - ``string``
-      - (optional) base file name for restart checkpoints, standard = restart
-    * - ``numberoffilestokeep``
-      - ``integer``
-      - (optional) number of most recent restart checkpoints to keep (ring buffer), standard = 3
     * - ``readfrom``
       - ``string``
       - (optional) path to an existing restart checkpoint to resume the analysis from

@@ -116,16 +116,17 @@
                                                   path to current .inp)
 
 
-    restart    configure checkpoint/restart
-        write                 boolean             write restart checkpoints
-                                                  during the analysis
-        writeInterval         integer             write a checkpoint every N
-                                                  converged increments
-        baseName              string              base file name for restart
-                                                  checkpoints
-        numberOfFilesToKeep   integer             number of most recent restart
-                                                  checkpoints to keep (ring
-                                                  buffer)
+    elementProperty    override a named property on all elements of an element
+                       set
+        elSet                 string              element set the property is
+                                                  assigned to
+        propertyName          string              name of the property, as
+                                                  understood by the target
+                                                  elements' assignProperty
+                                                  method
+
+
+    restart    configure resuming from a checkpoint
         readFrom              string              path to an existing restart
                                                   checkpoint to resume the
                                                   analysis from

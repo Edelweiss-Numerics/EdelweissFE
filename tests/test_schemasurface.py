@@ -274,7 +274,7 @@ def test_a_schemaless_keyword_renders_only_its_header_line():
     assert rendered == "[fieldOutput]"
 
 
-# --- all 21 top-level keywords' printKeywords()-format blocks, proven byte-identical against -------
+# --- all 23 top-level keywords' printKeywords()-format blocks, proven byte-identical against -------
 # the frozen golden file. This is the *second* legacy rendering format -- ``inputfileparser.printKeywords()``'s
 # hand-rolled dump of the structural/type-dispatch keywords declared directly in that file -- as opposed to the
 # ``Module.__doc__`` format every test above this one exercises.
@@ -283,7 +283,8 @@ _GOLDEN_PATH = Path(__file__).parent / "golden" / "inputlanguage_surface.txt"
 
 #: Every top-level keyword covered by U2a (the six structural mesh/job keywords) and U2b (the
 #: remaining fifteen pluggable-module/type-dispatch keywords) -- the complete ``printKeywords()``
-#: surface -- plus ``restart``, the first top-level keyword added after that gate.
+#: surface -- plus ``elementProperty`` and ``restart``, the two top-level keywords added after that
+#: gate, in the order they were actually added.
 _ALL_TOP_LEVEL_KEYWORDS = [
     "element",
     "elSet",
@@ -306,6 +307,7 @@ _ALL_TOP_LEVEL_KEYWORDS = [
     "configurePlots",
     "exportPlots",
     "include",
+    "elementProperty",
     "restart",
 ]
 
@@ -381,19 +383,19 @@ def test_registered_keyword_category_matches_the_golden_printKeywords_surface_ex
     """The end-to-end assertion: every header the golden ``printKeywords()`` section actually
     contains resolves to a registered ``"keyword"`` entry whose rendered block matches, and every
     registered ``"keyword"`` entry is exercised above -- i.e. the registry's ``keyword`` category
-    and the golden's ``printKeywords()`` section describe exactly the same 22 names, not merely a
+    and the golden's ``printKeywords()`` section describe exactly the same 23 names, not merely a
     subset of each other.
     """
     from edelweissfe.config import registry
 
     registeredDisplayNames = {registry.lookup("keyword", name)[0].keywordName for name in _ALL_TOP_LEVEL_KEYWORDS}
     assert registeredDisplayNames == set(_PRINT_KEYWORDS_GOLDEN_BLOCKS)
-    assert len(_ALL_TOP_LEVEL_KEYWORDS) == 22
+    assert len(_ALL_TOP_LEVEL_KEYWORDS) == 23
 
 
 # --- the ``Module.__doc__`` "module documentation" sections, over every registry entry that --------
 # declares a real (non-``None``) schema -- as opposed to the ``printKeywords()`` surface above, which
-# only ever covered the 21 top-level keywords. This is the *other* legacy rendering format
+# only ever covered the 23 top-level keywords. This is the *other* legacy rendering format
 # (``renderSchemaSurface``, not ``renderPrintKeywordsBlock``), and it is checked across every
 # category discovered to carry both a schema and a golden "module documentation:" section --
 # ``outputmanager``, ``section``, ``analyticalfield``, ``generator``, ``modelmodifier``,
