@@ -313,28 +313,22 @@ A degree of freedom eliminated by a multi-point constraint -- a ``tie`` slave, a
 slave -- cannot also be prescribed by a Dirichlet boundary condition: the constraint already
 determines it from its masters, and a prescribed value would be a second, independent equation for
 the same unknown. Where a boundary condition's node set overlaps a constraint's slave nodes, the
-implicit solvers therefore either reject the model or resolve the overlap, governed by the ``NIST``
-option ``mpcDirichletConflicts`` (:doc:`solvers`):
+implicit solvers resolve the overlap automatically: the conflicting constraint equation is dropped,
+for that component only, so that the boundary condition takes precedence. This is how Abaqus
+resolves the same overlap, and it needs no configuration.
 
-``error`` (default)
-    Raise, naming the number of offending DOFs. The model must be changed so that no prescribed DOF
-    is a constraint slave -- typically by subtracting the constraint's slave nodes from the boundary
-    condition's node set.
+The alternative -- rejecting such a model and requiring the user to subtract the constraint's slave
+nodes from the boundary condition's node set -- is worth understanding, because input files written
+for solvers that demand it often carry such a subtraction. It is a snapshot: computed against one
+mesh, one tie tolerance and one refinement state, and silently no longer correct when any of them
+changes, with no diagnostic, because what remains is a plain list of node labels that no longer
+records why those labels were chosen. It also interferes with :math:`h`-adaptivity, which extends a
+node set to newly created nodes only where the *whole* parent face or edge already lies within the
+set: every face touching a subtracted node stops propagating the boundary condition to its children,
+so the boundary condition thins out with each refinement. Such subtractions should be removed rather
+than maintained.
 
-``reconcile``
-    Drop the conflicting constraint equation, for that component only, so the boundary condition
-    takes precedence. This is how Abaqus resolves the same overlap.
-
-Subtracting slave nodes by hand, to satisfy the ``error`` policy, is worth avoiding where the
-``reconcile`` policy can be used instead. Such a subtraction is a snapshot: it is computed against
-one mesh, one tie tolerance and one refinement state, and silently ceases to be correct when any of
-them changes -- with no diagnostic, because the resulting set is a plain list of node labels that no
-longer records why those labels were chosen. It also interferes with :math:`h`-adaptivity, which
-propagates a node set to newly created nodes only where the *whole* parent face or edge lies within
-the set: every face touching a subtracted node stops propagating the boundary condition to its
-children, so the boundary condition thins out with each refinement.
-
-Under ``reconcile``, dropped equations are reported in two classes, and the distinction matters:
+Dropped equations are reported in two classes, and the distinction matters:
 
 *redundant*
     Every master carrying non-negligible weight is itself prescribed, and the weighted sum

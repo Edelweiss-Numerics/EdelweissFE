@@ -126,19 +126,6 @@ class NISTSchema:
         dtype=bool,
         default=True,
     )
-    mpcDirichletConflicts: str | None = schemaField(
-        description="What to do when a Dirichlet boundary condition prescribes a DOF that a "
-        "multi-point constraint (a tie, a hanging node) also eliminates -- a DOF cannot be both. "
-        "'error' (the default) rejects the model, which forces the constraint's slave nodes to be "
-        "subtracted from the boundary condition's node set by hand: a snapshot that goes stale when "
-        "the mesh, the constraint tolerance or an adaptive refinement changes, and that additionally "
-        "blocks propagation of the boundary condition to nodes created later. 'reconcile' drops the "
-        "conflicting constraint equation so the boundary condition takes precedence (what Abaqus "
-        "does with the same conflict), reporting redundant drops quietly and non-redundant ones -- "
-        "which genuinely change the model -- as a warning.",
-        dtype=str,
-        default="error",
-    )
     useAmgclMPCCondensation: bool | None = schemaField(
         description=(
             "Condense the multi-point-constraint system matrix via the direct T^T K T + C "
@@ -190,7 +177,6 @@ class NIST(NonlinearSolverBase):
         "linsolverConfigFile": "",
         "pruneCondensedMatrixZeros": True,
         "useAmgclMPCCondensation": False,
-        "mpcDirichletConflicts": "error",
     }
 
     def __init__(self, jobInfo, journal, **kwargs):

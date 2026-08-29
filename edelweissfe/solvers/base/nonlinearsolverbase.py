@@ -570,8 +570,9 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         model
             The model tree.
         stepActions
-            The step's actions, needed only for ``mpcDirichletConflicts='reconcile'``; without them
-            (or under the default ``'error'`` policy) the records are used exactly as collected.
+            The step's actions, against which conflicting records are reconciled (see
+            :meth:`_reconcileMPCDirichletConflicts`). Without them the records are used exactly as
+            collected -- there is nothing to reconcile against.
 
         Returns
         -------
@@ -593,7 +594,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             for record in mpc.getMultiPointConstraints(self.theDofManager)
         ]
 
-        if stepActions is not None and self.options.get("mpcDirichletConflicts", "error") == "reconcile":
+        if stepActions is not None:
             records = self._reconcileMPCDirichletConflicts(records, stepActions)
 
         transformation = MultiPointConstraintTransformation(
@@ -642,12 +643,13 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         """Drop the multi-point-constraint records whose slave DOF is also Dirichlet-prescribed, so
         the boundary condition takes precedence -- and report what was dropped.
 
-        A DOF cannot be both eliminated by a constraint and prescribed. Rejecting the model outright
-        (the default ``mpcDirichletConflicts='error'``) forces the user to subtract the constraint's
-        slave nodes from the boundary condition's node set by hand, offline -- a snapshot that goes
-        stale the moment the mesh, the constraint tolerance or an adaptive refinement changes, and
-        which additionally blocks the propagation of that boundary condition to nodes created later.
-        Resolving in favour of the boundary condition is what Abaqus does with the same conflict.
+        A DOF cannot be both eliminated by a constraint and prescribed. The alternative -- rejecting
+        the model -- forces the user to subtract the constraint's slave nodes from the boundary
+        condition's node set by hand, offline: a snapshot that goes stale the moment the mesh, the
+        constraint tolerance or an adaptive refinement changes, and which additionally blocks the
+        propagation of that boundary condition to nodes created later, since refinement extends a
+        node set only where the whole parent face already lies within it. Resolving in favour of the
+        boundary condition is what Abaqus does with the same conflict.
 
         Records are classified, not silently dropped:
 
@@ -739,5 +741,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         if transformation is None:
             return
 
+        # A post-condition, not a gate: _reconcileMPCDirichletConflicts has already removed every
+        # conflicting record by the time the transformation is assembled, so this can only fire if
+        # that reconciliation missed one. Cheap enough to keep as a guard against exactly that.
         for dirichlet in stepActions["dirichlet"].values():
             transformation.checkDirichletConflicts(self._constrainedDofsOf(dirichlet))
