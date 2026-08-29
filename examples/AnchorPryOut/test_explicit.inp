@@ -325,8 +325,14 @@ contact-update-frequency=500
 >>perElement, name=damage, elSet=concrete, result=omega, quadraturePoint=0:8, f(x)='np.max(x,axis=1)'
 >>perNode, name=displacement, elSet=all, field=displacement, result=U
 >>perNode, name=nonlocalDamage, elSet=concrete, field=nonlocal damage, result=U
->>perNode, name=RF_loading, nSet=plate_left_loading, field=displacement, result=P, f(x)='np.sum(x[:,0])', saveHistory=True
->>perNode, name=U_loading, nSet=plate_left_loading, field=displacement, result=U, f(x)='np.mean(x[:,0])', saveHistory=True
+>>perNode, name=RF_loading, nSet=plate_left_loading, field=displacement, result=P, f(x)='np.sum(x[:,0])', saveHistory=True, export=RF_loading
+>>perNode, name=U_loading, nSet=plate_left_loading, field=displacement, result=U, f(x)='np.mean(x[:,0])', saveHistory=True, export=U_loading
+** The peak kinetic energy has to be compared against the work the loading actually did, and the
+** solver's internal-energy figure cannot supply that: GCDP never populates a strain energy, so the
+** internal/kinetic split it prints is identically zero on the internal side. Integrating RF_loading
+** against U_loading (trapezoidal, from these two CSVs) needs no cooperation from the material and is
+** the criterion to use when choosing stepLength.
+>>perElement, name=maxDamage, elSet=concrete, result=omega, quadraturePoint=0:8, f(x)='np.max(x)', saveHistory=True, export=maxDamage
 >>perElement, elSet=concrete, name=stressForAMR, result=stress, quadraturePoint=0:8, f(x)='eigVal(x.reshape(-1,6))[:,0].reshape(x.shape[0],x.shape[1])'
 
 *output, type=ensight, name=esExport
