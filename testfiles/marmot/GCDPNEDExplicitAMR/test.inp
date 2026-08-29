@@ -54,10 +54,15 @@ gen_all
 
 *job, name=nedGcdpJob, domain=3d
 
+** COURANT NUMBER: 0.1, not the 0.8 default. The l/c critical-time-step estimate is a LINEAR-
+** element formula. For a 20-node element the highest free eigenfrequency is far above what it
+** predicts, and a convergence study on this very case shows the answer only settles around 0.1-0.2:
+** the final reaction is 4.49 at courant 0.8, 84.6 at 0.4, 118.5 at 0.2, 120.7 at 0.1, 118.0 at 0.05.
+** The 0.8 run does not fail, it just quietly returns a number 26x too small. Do not raise this.
 *solver, solver=NEDParallel, name=theSolver
 second-order-fields="displacement"
 first-order-fields="nonlocal damage"
-courant-number=0.8
+courant-number=0.1
 output-frequency=50
 
 *modelModifier, type=hAdaptivity, name=amr
@@ -86,6 +91,6 @@ fieldOutput=RF
 fieldOutput=Uend
 
 *step, type=adaptiveForExplicitSimulations, solver=theSolver
-maxInc=1, minInc=1e-12, maxNumInc=2000, maxIter=25, stepLength=1e-3
+maxInc=1, minInc=1e-12, maxNumInc=40000, maxIter=25, stepLength=1e-3
 >>dirichlet, name=fixLeft,  nSet=gen_left,  field=displacement, 1=0, 2=0, 3=0
 >>dirichlet, name=pullRight, nSet=gen_right, field=displacement, 1=0.05

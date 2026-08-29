@@ -236,6 +236,21 @@ def _connectedComponents(elements: list) -> dict:
     return componentOfElement
 
 
+#: The node-field value entries carried across a refinement by isoparametric interpolation from the
+#: parent element. ``"U"`` is the solution and is always present. ``"V"`` is the velocity, which only
+#: exists when an explicit dynamic solver put it there -- and it *has* to be carried, because unlike
+#: an implicit solver, which reconstructs everything it needs from ``"U"``, a central-difference
+#: scheme holds kinetic state that nothing else can reproduce: a new node whose velocity defaulted to
+#: zero would silently lose it. Interpolating it with the same operator as ``"U"`` is also what keeps
+#: the two consistent -- the shape functions are a partition of unity, so a uniform velocity field is
+#: reproduced exactly and the patch's momentum is conserved exactly in that case (the general case
+#: differs at second order in the velocity gradient across the parent, which is discretisation error,
+#: not a defect).
+#:
+#: An entry absent from a given node field is skipped, so this list is safe to extend.
+WARM_STARTED_NODE_FIELD_ENTRIES = ("U", "V")
+
+
 class ModelModifier(ModelModifierBase):
     #: Option schema for this model modifier, per OptionSchemaProvider. Documentation-only
     #: (see HAdaptivitySchema's own docstring) -- construction still goes through the
@@ -568,11 +583,12 @@ class ModelModifier(ModelModifierBase):
         # mesh. If this ever costs measurably, the flag belongs in the recorded plan, not in an
         # ambient replay mode.
         for fieldName, nodeField in model.nodeFields.items():
-            if "U" in nodeField:
-                U = np.asarray(nodeField["U"])
-                oldValues[fieldName] = {
-                    node: U[nodeField._indicesOfNodesInArray[node]].copy() for node in nodeField.nodes
-                }
+            for entryName in WARM_STARTED_NODE_FIELD_ENTRIES:
+                if entryName in nodeField:
+                    entryValues = np.asarray(nodeField[entryName])
+                    oldValues[(fieldName, entryName)] = {
+                        node: entryValues[nodeField._indicesOfNodesInArray[node]].copy() for node in nodeField.nodes
+                    }
 
         # new nodes
         newNodes = {}
@@ -583,7 +599,7 @@ class ModelModifier(ModelModifierBase):
                 newNodes[label] = node
 
         active = set(mesh.active())
-        newValues = {fieldName: {} for fieldName in oldValues}  # interpolated values for new nodes
+        newValues = {key: {} for key in oldValues}  # interpolated values for new nodes, per (field, entry)
 
         # Every octree cell that must become a model element but is not one yet. Usually that is
         # exactly the children of the cells refined in this call. It is not always: 2:1 balancing
@@ -641,14 +657,14 @@ class ModelModifier(ModelModifierBase):
                         node = model.nodes[label]
                         if label in newNodes and any(node not in newValues[f] for f in oldValues):
                             N = self._topology.shape_functions(*childParams[i])
-                            for fieldName, vals in oldValues.items():
+                            for key, vals in oldValues.items():
                                 # An intermediate parent's own nodes are new, so they are not in the
                                 # pre-mutation snapshot -- the level above interpolated them, and the
                                 # next level down interpolates from that in turn.
-                                interpolated = newValues[fieldName]
+                                interpolated = newValues[key]
                                 parentVals = [vals[pn] if pn in vals else interpolated.get(pn) for pn in parentEl.nodes]
                                 if all(v is not None for v in parentVals):
-                                    newValues[fieldName][node] = N @ np.array(parentVals)
+                                    newValues[key][node] = N @ np.array(parentVals)
 
                     model.createElement(child)
                     self._eidToEl[eid] = child
@@ -758,8 +774,8 @@ class ModelModifier(ModelModifierBase):
                     nodeField.createFieldValueEntry("P")
                 U = nodeField["U"]
                 P = nodeField["P"]
-                old = oldValues.get(fieldName, {})
-                new = newValues.get(fieldName, {})
+                old = oldValues.get((fieldName, "U"), {})
+                new = newValues.get((fieldName, "U"), {})
                 for node in nodeField.nodes:
                     idx = nodeField._indicesOfNodesInArray[node]
                     if node in old:
@@ -768,6 +784,23 @@ class ModelModifier(ModelModifierBase):
                     elif node in new:
                         U[idx] = new[node]
                         P[idx] = new[node]
+
+                # Every other warm-started entry gets the interpolation and nothing else -- in
+                # particular NOT the "P := U" trick above, which exists only so an implicit solver
+                # sees a sane first residual. An entry that is not present here (the usual case for
+                # "V", which only an explicit solver creates) is simply skipped.
+                for entryName in WARM_STARTED_NODE_FIELD_ENTRIES:
+                    if entryName == "U" or entryName not in nodeField:
+                        continue
+                    entryValues = nodeField[entryName]
+                    oldEntry = oldValues.get((fieldName, entryName), {})
+                    newEntry = newValues.get((fieldName, entryName), {})
+                    for node in nodeField.nodes:
+                        idx = nodeField._indicesOfNodesInArray[node]
+                        if node in oldEntry:
+                            entryValues[idx] = oldEntry[node]
+                        elif node in newEntry:
+                            entryValues[idx] = newEntry[node]
 
         # Separately timed: this relinks EVERY node's field variables, so its cost scales with the
         # whole mesh rather than with what this refinement actually changed.
