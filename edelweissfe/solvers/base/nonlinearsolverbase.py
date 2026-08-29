@@ -62,9 +62,12 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     #: (e.g. surface ties). Subclasses supporting MPCs must set this to True.
     supportsMPC = False
 
-    #: Whether this solver runs the topology update (e.g. h-adaptivity) every increment.
-    #: Subclasses that call model.updateTopology(...) in their solveStep loop must set this
-    #: to True; without it, a modifier silently never runs and the model never adapts.
+    #: Whether this solver runs the topology update (e.g. h-adaptivity) at all. Subclasses that
+    #: call model.updateTopology(...) anywhere in solveStep must set this to True; without it, a
+    #: modifier silently never runs and the model never adapts. Setting it does not promise the
+    #: update runs every increment: a solver that runs it once, before its increment loop, sets this
+    #: and then refuses the modifiers that would need it later -- see
+    #: ModelModifierBase.actsOnlyAtSimulationStart and NED.validateModelCapabilities.
     supportsModelModifiers = False
 
     #: The active multi-point-constraint (hanging node / tie) condensation, if any -- None

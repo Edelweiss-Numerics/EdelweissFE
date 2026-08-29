@@ -397,6 +397,23 @@ class ModelModifier(ModelModifierBase):
 
         return self._refineElementNumbers
 
+    @property
+    def actsOnlyAtSimulationStart(self) -> bool:
+        """True exactly when every marker is an ``initialOnly`` one.
+
+        Not an approximation: :meth:`plan` evaluates *only* the ``initialOnly`` markers on its first
+        call and *only* the others on every later one, so a modifier whose markers are all
+        ``initialOnly`` provably plans nothing after that first call. See
+        :attr:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.actsOnlyAtSimulationStart`.
+
+        Returns
+        -------
+        bool
+            Whether this modifier is fully served by a single topology update at the start.
+        """
+
+        return all(marker.initialOnly for marker in self.markers)
+
     @timeit("AMR")
     def plan(self, model: FEModel, change, step, timeStep: float) -> "RefinementPlan | None":
         """Evaluate the markers and decide which octree cells to refine. See
