@@ -557,6 +557,17 @@ class DisplacementElement(BaseElement):
     ):
         """Reset to the last valid state."""
 
+    def getStateVars(self) -> np.ndarray:
+        """Return a copy of the converged quadrature-point state-variable buffer."""
+
+        return self._stateVarsRef.reshape(-1).copy()
+
+    def setStateVars(self, values: np.ndarray):
+        """Overwrite the converged quadrature-point state-variable buffer in place, so
+        the ``_stateVars`` per-quadrature-point views (stress/strain/materialstate) stay valid."""
+
+        self._stateVarsRef[:] = np.asarray(values).reshape(self._stateVarsRef.shape)
+
     def getResultArray(self, result: str, quadraturePoint: int, getPersistentView: bool = True) -> np.ndarray:
         """Get the array of a result, possibly as a persistent view which is continiously
         updated by the element.

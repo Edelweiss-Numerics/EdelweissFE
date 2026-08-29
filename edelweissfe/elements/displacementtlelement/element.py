@@ -635,6 +635,21 @@ class DisplacementTLElement(BaseElement):
     ):
         """Reset to the last valid state."""
 
+    def getStateVars(self) -> np.ndarray:
+        """Return a copy of the converged quadrature-point state-variable buffer, including the
+        converged Green-Lagrange strain (``_Eold``) needed to resume the total-Lagrangian
+        incremental-strain computation."""
+
+        return np.concatenate([self._stateVarsRef.reshape(-1), self._Eold.reshape(-1)]).copy()
+
+    def setStateVars(self, values: np.ndarray):
+        """Overwrite the converged quadrature-point state-variable buffer and ``_Eold`` in place."""
+
+        values = np.asarray(values)
+        nStateVars = self._stateVarsRef.size
+        self._stateVarsRef[:] = values[:nStateVars].reshape(self._stateVarsRef.shape)
+        self._Eold[:] = values[nStateVars:].reshape(self._Eold.shape)
+
     def getResultArray(self, result: str, quadraturePoint: int, getPersistentView: bool = True) -> np.ndarray:
         """Get the array of a result, possibly as a persistent view which is continiously
         updated by the element.

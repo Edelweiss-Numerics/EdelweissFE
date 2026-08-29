@@ -28,6 +28,8 @@
 
 from abc import ABC, abstractmethod
 
+import numpy as np
+
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -175,3 +177,35 @@ class OutputManagerBase(OptionSchemaProvider, ABC):
         P
             The final reaction vector.
         """
+
+    def getRestartData(self) -> dict[str, np.ndarray] | None:
+        """Return this output manager's own sequence/bookkeeping state needed to continue its
+        output correctly after a resume (e.g. Ensight's per-time-set history of already-written
+        time values, which its file/frame numbering is derived from), to be bundled into a restart
+        checkpoint by the restart-writing output manager (``outputmanagers/restart.py``), or
+        ``None`` if this output manager has nothing that would otherwise go stale on resume.
+
+        The default implementation returns ``None`` -- correct for most output managers, whose own
+        state is either trivially re-derivable (e.g. a status file that just keeps appending) or
+        irrelevant to correctness (only Ensight's transient sequence numbering silently corrupts
+        without this, since a resumed run's fresh instance would otherwise restart file/frame
+        numbering from zero, orphaning-and/or corrupting the pre-resume portion of the sequence).
+
+        Returns
+        -------
+        dict[str, np.ndarray] | None
+            A flat mapping of array name to array, or ``None``.
+        """
+
+        return None
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore this output manager's own sequence/bookkeeping state from a restart checkpoint.
+
+        Parameters
+        ----------
+        data
+            The mapping previously returned by :meth:`getRestartData`.
+        """
+
+        raise NotImplementedError("This output manager does not carry restartable sequence state.")

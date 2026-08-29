@@ -283,6 +283,18 @@
       - ``string``
       - filename where yData is given
 
+.. list-table:: ``*restart`` : configure resuming from a checkpoint
+    :width: 100%
+    :widths: 25 25 40
+    :header-rows: 1
+
+    * - Option
+      - Type
+      - Description
+    * - ``readfrom``
+      - ``string``
+      - (optional) path to an existing restart checkpoint to resume the analysis from
+
 .. list-table:: ``*section`` : definition of an section
     :width: 100%
     :widths: 25 25 40

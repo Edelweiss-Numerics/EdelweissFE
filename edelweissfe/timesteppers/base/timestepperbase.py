@@ -84,3 +84,25 @@ class TimeStepperBase(ABC):
     def preventIncrementIncrease(self):
         """May be called before an increment is requested, to prevent
         an automatic increase of the increment size, e.g., in case of bad convergence."""
+
+    @abstractmethod
+    def writeRestart(self, restartFile):
+        """Write this time stepper's bookkeeping (current time, increment size, progress within
+        the step, ...) to a restart checkpoint.
+
+        Parameters
+        ----------
+        restartFile
+            An open, writable :class:`h5py.File` (or group) to write the checkpoint into.
+        """
+
+    @abstractmethod
+    def readRestart(self, restartFile):
+        """Restore this time stepper's bookkeeping from a restart checkpoint written by
+        :meth:`writeRestart`.
+
+        Parameters
+        ----------
+        restartFile
+            An open, readable :class:`h5py.File` (or group) to read the checkpoint from.
+        """

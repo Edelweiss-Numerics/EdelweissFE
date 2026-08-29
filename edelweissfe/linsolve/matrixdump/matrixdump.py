@@ -67,6 +67,13 @@ class MatrixDumpSolver(LinearSolver):
     process-wide rather than per instance -- a disk guard is only a guard if a second instance cannot
     grant itself a fresh budget.
 
+    Caveat with ``*restart``: both counters above (``_instancesCreated``, ``_totalDumpsWritten``)
+    are process-wide, not persisted in the checkpoint. A resumed run is a fresh process, so its
+    instance/dump ordinals restart at zero and can collide with -- i.e. overwrite -- dump files
+    from the original, interrupted run if pointed at the same ``directory``. This is a diagnostic
+    tool, not simulation state, so it is not wired into checkpoint/resume; point a resumed analysis
+    using ``matrixdump`` at a fresh ``directory`` if you need both runs' dumps kept.
+
     Parameters
     ----------
     directory
