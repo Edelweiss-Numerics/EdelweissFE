@@ -233,6 +233,40 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         setVersions[key] = theSet._version
         return changed
 
+    def applyConstraintForcesOnly(
+        self,
+        U_np: np.ndarray,
+        dU: np.ndarray,
+        PExt: np.ndarray,
+        timeStep: TimeStep,
+    ):
+        """Evaluate this constraint's nodal forces without producing a tangent.
+
+        What an explicit solver needs: it assembles no system matrix, so any tangent a constraint
+        computes is built and discarded. The default implementation below still asks for one, through
+        the same ``getVIJContributionSize``/``shapeVIJContribution`` protocol the implicit system
+        matrix uses, so every existing constraint keeps working without change.
+
+        A constraint for which the tangent is a material part of the cost should override this.
+        ``nodeToDeformableSurfacePenalty`` does: its per-slave outer product and four block writes are
+        2.5 ms per increment on a 280k-dof contact model, and its container another 1.2 ms, all of it
+        thrown away.
+
+        Parameters
+        ----------
+        U_np
+            The current solution, restricted to this constraint's degrees of freedom.
+        dU
+            The current solution increment, likewise restricted.
+        PExt
+            The local force vector to augment.
+        timeStep
+            The current time step.
+        """
+
+        K = self.shapeVIJContribution(np.zeros(self.getVIJContributionSize()))
+        self.applyConstraint(U_np, dU, PExt, K, timeStep)
+
     @abstractmethod
     def applyConstraint(
         self,
