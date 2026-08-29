@@ -203,6 +203,7 @@ class NED(NonlinearSolverBase):
         self._updateOptions(kwargs, journal)
         self.ids_1st = None
         self.ids_2nd = None
+        self._warnedAboutMissingInternalEnergy = False
 
     def _updateOptions(self, updatedOptions: dict, journal):
         """Update options of the solver using a string dict
@@ -510,14 +511,38 @@ class NED(NonlinearSolverBase):
 
         if timeStep.number % self.options["output-frequency"] == 0:
             Wint = psi
-            Wkin = 0.5 * np.sum(self._rawLumpedMass * V**2)
+
+            # Restricted to the second-order fields, which are the only ones carrying inertia in the
+            # mechanical sense. Summing over the whole vector also collected the first-order fields,
+            # whose "mass" is a viscosity (the gradient-enhanced nonlocal field's eta) and whose
+            # "velocity" is that field's rate -- a product with no energy meaning, and one that can
+            # be orders of magnitude larger than the real term (eta ~ 1e-4 against a density
+            # ~ 1e-9). On any gradient-enhanced model that made the split read as 100 % kinetic
+            # regardless of what the structure was actually doing.
+            Wkin = 0.5 * float(np.sum(self._rawLumpedMass[self.ids_2nd] * V[self.ids_2nd] ** 2))
+
             W = Wint + Wkin
-            self.journal.message(
-                "Internal energy: {:e} ({:.2f} %)".format(Wint, Wint / W * 100), self.identification, 2
-            )
-            self.journal.message(
-                "Kinetic energy:  {:e} ({:.2f} %)".format(Wkin, Wkin / W * 100), self.identification, 2
-            )
+            if W > 0.0:
+                self.journal.message(
+                    "Internal energy: {:e} ({:.2f} %)".format(Wint, Wint / W * 100), self.identification, 2
+                )
+                self.journal.message(
+                    "Kinetic energy:  {:e} ({:.2f} %)".format(Wkin, Wkin / W * 100), self.identification, 2
+                )
+
+            # Said once, loudly, because a silent zero here reads as "no strain energy yet" rather
+            # than "this quantity is not being reported", and the ratio above is the usual way one
+            # decides whether an explicit run is quasi-static enough.
+            if Wint == 0.0 and not self._warnedAboutMissingInternalEnergy:
+                self._warnedAboutMissingInternalEnergy = True
+                self.journal.message(
+                    "The internal energy is identically zero: no material in this model populates a "
+                    "strain energy, so the internal/kinetic split above is NOT usable as a "
+                    "quasi-static criterion. Integrate a reaction force against its prescribed "
+                    "displacement instead -- both are available as saveHistory field outputs.",
+                    self.identification,
+                    1,
+                )
 
         return U_n, V, P
 
