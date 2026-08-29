@@ -152,6 +152,92 @@ def test_restart_resume_matches_uninterrupted_reference(tmp_path, linsolver):
     np.testing.assert_allclose(resumedU, referenceU, atol=1e-10)
 
 
+_AMR_MATERIAL_AND_MESH = """
+*material, name=linearelastic, id=mat
+30000, 0.15
+
+*section, name=sec, material=mat, type=solid
+all
+
+*modelGenerator, generator=boxGen, name=gen
+nX      =1
+nY      =1
+nZ      =1
+lX      =1
+lY      =1
+lZ      =1
+elType  =C3D20
+
+*modelModifier, type=hAdaptivity, name=amr
+>>marker, type=fieldOutput, fieldOutput=stressForAMR, operator='>', threshold=300.0
+maxLevel=1
+
+*job, name=amrRestartTestJob, domain=3d
+*solver, solver=NIST, name=theSolver
+*fieldOutput
+>>perNode, elSet=all, field=displacement, result=U, name=U
+>>perElement, elSet=all, result=stress, quadraturePoint=0:27, name=stressForAMR, f(x)='np.abs(x)'
+"""
+
+
+def _amrStep(maxNumInc) -> str:
+    # A single 1x1x1 C3D20 block, pushed on its right face against a fixed left face -- stress
+    # crosses the marker's threshold partway through, refining 1 -> 8 active elements mid-step (not
+    # at model setup, so this actually exercises replay -- unlike an initialOnly marker, which would
+    # refine identically on every fresh rebuild regardless of whether restart's replay mechanism
+    # works at all; see tests/test_hadaptivity_restart.py for the initialOnly-marker, lower-level
+    # round-trip instead).
+    return f"""
+*step, solver=theSolver
+maxInc=0.02, minInc=1e-6, maxNumInc={maxNumInc}, maxIter=25, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=fixLeft, nSet=gen_left, field=displacement, 1=0.0
+>>dirichlet, name=fixBottomLeftFront, nSet=gen_bottomLeftFront, field=displacement, 2=0.0, 3=0.0
+>>dirichlet, name=fixBottomLeftBack, nSet=gen_bottomLeftBack, field=displacement, 2=0.0
+>>dirichlet, name=pushRight, nSet=gen_right, field=displacement, 1=-0.1
+"""
+
+
+def test_restart_resume_matches_uninterrupted_reference_with_amr(tmp_path):
+    """The gap #97 shipped without: AMR-refined topology can't be reconstructed from the .inp file,
+    so a checkpoint records FEModel.topologyHistory (the refinement decisions) instead, and a
+    resumed run replays them through hAdaptivity's own apply() before restoring node/element state.
+    This is the actual read/write of that history through a real checkpoint file -- the lower-level
+    replayTopologyHistory() round-trip in test_hadaptivity_restart.py never touches an HDF5 file.
+    """
+
+    fullPath = tmp_path / "full.inp"
+    fullPath.write_text(_AMR_MATERIAL_AND_MESH + _amrStep(maxNumInc=10000))
+    referenceModel = _runInputFile(fullPath)
+    referenceU = referenceModel.nodeFields["displacement"]["U"].copy()
+    assert len(referenceModel.elements) > 1, "the stress marker never triggered a refinement"
+
+    checkpointBaseName = tmp_path / "ckpt"
+
+    truncatedPath = tmp_path / "truncated.inp"
+    truncatedPath.write_text(
+        _AMR_MATERIAL_AND_MESH + f"\n*output, type=restart, name=restartwriter\n"
+        f"writeInterval=1, baseName={checkpointBaseName}, numberOfFilesToKeep=3\n"
+        + _amrStep(maxNumInc=6)  # deliberately too low: truncates before the step finishes
+    )
+    truncatedModel = _runInputFile(truncatedPath)
+    # the truncation point must be past the refinement, or this test would not exercise replay at
+    # all -- resuming an unrefined checkpoint doesn't touch the new code paths this is meant to pin.
+    assert len(truncatedModel.elements) > 1, "truncated too early: refinement had not happened yet"
+    assert truncatedModel.time < 1.0, "the step already finished within maxNumInc -- not a real truncation"
+
+    checkpoint = _mostRecentCheckpoint(tmp_path)
+
+    resumePath = tmp_path / "resume.inp"
+    resumePath.write_text(_AMR_MATERIAL_AND_MESH + f"\n*restart, readFrom={checkpoint}\n" + _amrStep(maxNumInc=10000))
+    resumedModel = _runInputFile(resumePath)
+    resumedU = resumedModel.nodeFields["displacement"]["U"]
+
+    assert set(resumedModel.elements.keys()) == set(referenceModel.elements.keys())
+    assert set(resumedModel.nodes.keys()) == set(referenceModel.nodes.keys())
+    np.testing.assert_allclose(resumedU, referenceU, atol=1e-10)
+
+
 def test_restart_ensight_output_continues_across_resume(tmp_path):
     """Found via a real end-to-end validation run (AnchorPryOut): a resumed run's Ensight output
     used to restart its transient sequence numbering from zero -- since a fresh OutputManager

@@ -41,7 +41,7 @@ from edelweissfe.config.phenomena import getFieldSize, phenomena
 from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.modelchange import ModelChange, TopologyRecord, coalesce
-from edelweissfe.utils.exceptions import TopologyError
+from edelweissfe.utils.exceptions import RestartError, TopologyError
 from edelweissfe.utils.performancetiming import timeit
 from edelweissfe.variables.fieldvariable import FieldVariable
 from edelweissfe.variables.scalarvariable import ScalarVariable
@@ -905,6 +905,21 @@ class FEModel:
             for entryName, entryValues in restartData.items():
                 constraintGroup.create_dataset(entryName, data=entryValues)
 
+        # The ordered record of every applied model-modifier decision (e.g. AMR refinements). A
+        # resumed run replays these through the modifiers' own apply() -- see readRestart and
+        # replayTopologyHistory -- rather than serializing the resulting topology directly, so there
+        # is exactly one code path that mutates topology, live or replayed.
+        historyGroup = f.create_group("topologyHistory")
+        historyGroup.attrs["count"] = len(self.topologyHistory)
+        for index, record in enumerate(self.topologyHistory):
+            recordGroup = historyGroup.create_group("{:06d}".format(index))
+            recordGroup.attrs["modifier"] = record.modifier
+            recordGroup.attrs["roundNumber"] = record.roundNumber
+            recordGroup.attrs["time"] = record.time
+            recordGroup.attrs["fingerprint"] = record.fingerprint
+            for entryName, entryValues in record.plan.items():
+                recordGroup.create_dataset(entryName, data=entryValues)
+
     def readRestart(self, restartFile: h5py.File):
         """Read the state of the model from a restart checkpoint written by :meth:`writeRestart`.
 
@@ -921,6 +936,25 @@ class FEModel:
 
         self.time = f.attrs["time"]
 
+        # Must run before every restore below: replaying the topology history can materialize
+        # elements/nodes a plain rebuild from the .inp file cannot reproduce (e.g. AMR-refined
+        # children) -- the node-field and element-statevar restores that follow address elements by
+        # label and would silently miss anything not already in self.elements/self.nodeFields yet.
+        records = []
+        historyGroup = f["topologyHistory"]
+        for index in range(int(historyGroup.attrs["count"])):
+            recordGroup = historyGroup["{:06d}".format(index)]
+            records.append(
+                TopologyRecord(
+                    modifier=str(recordGroup.attrs["modifier"]),
+                    roundNumber=int(recordGroup.attrs["roundNumber"]),
+                    time=float(recordGroup.attrs["time"]),
+                    plan={entryName: values[:] for entryName, values in recordGroup.items()},
+                    fingerprint=str(recordGroup.attrs["fingerprint"]),
+                )
+            )
+        self.replayTopologyHistory(records)
+
         for nf in self.nodeFields.values():
             for entryName, entryValues in nf._values.items():
                 nf[entryName][:] = f["nodeFields"][nf.name][entryName]
@@ -928,11 +962,19 @@ class FEModel:
         for name, scalarVariable in self.scalarVariables.items():
             scalarVariable.value = f["scalarVariables"].attrs[name]
 
-        for elNumber, element in self.elements.items():
-            elementKey = str(elNumber)
-            if elementKey not in f["elements"]:
-                continue
-            element.setStateVars(f["elements"][elementKey][:])
+        # One uniform loop, by element number, with no skip set and nothing swallowed -- sound only
+        # because the replay above reproduces the original numbering exactly, verified round by
+        # round via each record's own fingerprint. A missing element here means the replayed model
+        # does not match the one checkpointed, which must be reported, not silently skipped.
+        for elementKey, stateVars in f["elements"].items():
+            elNumber = int(elementKey)
+            element = self.elements.get(elNumber)
+            if element is None:
+                raise RestartError(
+                    "the checkpoint holds state for element {:}, which does not exist after the "
+                    "topology replay -- the replayed model does not match the one checkpointed".format(elNumber)
+                )
+            element.setStateVars(stateVars[:])
 
         for name, constraint in self.constraints.items():
             if name not in f["constraints"]:
