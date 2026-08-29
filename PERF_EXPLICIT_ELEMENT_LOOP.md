@@ -112,3 +112,87 @@ What its explicit worker does differently is the *body*:
 
 Given dead end 2, the interesting part of that design is not the avoided allocation but the avoided
 *gather*: one fewer random-access read of the global vector per entity.
+
+---
+
+## What was actually fixed, and by how much
+
+### 1. The connectivity search: 7.05x (committed)
+
+`updateConnectivity` swept every slave against every facet, one clamped closest-point call per pair —
+778,000 calls, **5.98 s per call**. A `cKDTree` over facet centroids now supplies candidates, under a
+bound that makes the result bit-identical rather than merely close: a triangle's centroid lies inside
+its own closed domain, so `d* <= d0`, hence `|x - C*| <= d* + r* <= d0 + rMax`. Every facet that could
+win or tie has its centroid in that ball.
+
+**5.98 s -> 0.848 s per call.** All 13 contact test cases unchanged, including the implicit ones that
+run this every increment.
+
+The point is not only the time. At the frequency the explicit input had to use (500) the search cost
+12 ms per increment; it is now 1.7 ms — and the *default* frequency of 100 costs 8.5 ms, less than the
+old compromise did, so the compromise can be dropped whenever the contact resolution matters more than
+the last 7 ms.
+
+### 2. A force-only constraint path: 19.4 % of the constraint assembly (committed)
+
+An explicit increment assembles no system matrix, so every tangent a constraint computes is discarded.
+Measured on this model, that waste was 2.5 ms of tangent arithmetic (`np.outer(w, w)` plus four block
+writes per slave) and 1.2 ms of container construction.
+
+`ConstraintBase.applyConstraintForcesOnly` now says so. Its default still builds a throwaway container
+through the implicit matrix' own protocol, so no constraint had to change; the deformable-surface
+contact overrides it by running its single loop with `K=None` and guarding the tangent — one loop, so
+the implicit and explicit paths cannot drift apart.
+
+**`assemble constraints` 18.93 -> 15.25 ms, increment 66.4 -> 63.9 ms**, exactly the 3.7 ms predicted.
+
+---
+
+## Dead end 4: load imbalance is not the problem either
+
+The chunk factor gives 4 chunks per thread. With GCDP costing wildly different amounts per element
+(elastic vs return mapping), imbalance looked plausible. Swept at 64 threads:
+
+| chunks per thread | `elements` |
+|--:|--:|
+| **4 (current)** | **0.0436 s** |
+| 16 | 0.0445 s |
+| 64 | 0.0716 s |
+| 256 | 0.2890 s |
+
+The current value is already optimal; finer chunking is catastrophic (6.6x worse at 256), dominated by
+dispatch. Do not touch it.
+
+---
+
+## The element loop: what is left, and what it is not
+
+`elements` is 43 ms at 64 threads and **scales 6.44x from 1 to 64 threads** — near-linear to 4 threads,
+saturating at 8. An earlier note in this document quoted "1.42x", which was the 8-to-64 range only,
+i.e. the already-saturated tail. The loop is not broken; it is saturated.
+
+Ruled out, each by measurement:
+
+| hypothesis | verdict |
+|:--|:--|
+| serial scatter buffer + `np.bincount` reduction | 2.04 ms of 43 ms |
+| per-element gather allocation | no NumPy alternative is faster; `np.take(out=)` is 0.58x |
+| per-element `computeInternalEnergy()` | zero measurable cost |
+| Cython call / memoryview overhead | ruled out by the above — 14,036 fewer calls changed nothing |
+| load imbalance / chunk granularity | current factor already optimal |
+
+Of the 43 ms, roughly 6 ms is the worker's own bookkeeping and gather (measured in isolation, and the
+gather part does scale 4x). **The remaining ~37 ms is the Marmot C++ kernel**, and its memory traffic
+(~17 MB per increment of quadrature-point state) is far below this machine's bandwidth, so the
+saturation is not obviously bandwidth either.
+
+Pursuing it needs C++-level profiling (`perf record` on the element pass), not more Python-side
+theories. That is the next step, and it is a different kind of investigation from everything above.
+
+## Remaining, with measured potential
+
+| item | worth |
+|:--|--:|
+| vectorise the contact force loop across slaves (frozen `w`, indices, gaps) | ~15 ms of 64 ms |
+| profile the Marmot kernel's thread scaling in C++ | up to ~37 ms, unknown |
+| early termination in the candidate loop (needs explicit tie-breaking to stay bit-identical) | ~1 ms |

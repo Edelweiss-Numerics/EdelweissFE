@@ -1153,13 +1153,15 @@ class NED(NonlinearSolverBase):
         which is why this is called after :meth:`assembleLoads`, on a ``P`` that already holds
         ``-P_internal``.
 
-        A tangent is requested and discarded. An explicit increment solves no linear system, so a
-        penalty constraint's stiffness enters nothing -- but ``applyConstraint`` is one interface and
-        takes the tangent container regardless, so it is created here through the same protocol the
-        implicit system matrix uses (``getVIJContributionSize``/``shapeVIJContribution``), which is
-        what gives each constraint the structured view its own implementation writes into rather than
-        a bare array it would not recognise. A constraint that could act *only* through its tangent
-        would contribute nothing here; that is precisely the class
+        No tangent is requested. An explicit increment solves no linear system, so a constraint's
+        stiffness enters nothing, and
+        :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintForcesOnly`
+        is the entry point that says so. Its default still builds a throwaway container through the
+        implicit system matrix' own protocol, so every constraint works unchanged; a constraint for
+        which the tangent is a real cost overrides it, as the deformable-surface contact does -- there
+        the per-slave outer product and block writes were 2.5 ms per increment on a 280k-dof model,
+        and the container another 1.2 ms, all discarded. A constraint that could act *only* through
+        its tangent would contribute nothing here; that is precisely the class
         :meth:`validateModelCapabilities` refuses.
 
         Parameters
@@ -1183,9 +1185,8 @@ class NED(NonlinearSolverBase):
 
         for constraint in constraints.values():
             Pc = np.zeros(constraint.nDof)
-            Kc = constraint.shapeVIJContribution(np.zeros(constraint.getVIJContributionSize()))
 
-            constraint.applyConstraint(U_np[constraint], dU[constraint], Pc, Kc, timeStep)
+            constraint.applyConstraintForcesOnly(U_np[constraint], dU[constraint], Pc, timeStep)
 
             # np.add.at rather than +=: a constraint may name the same DOF more than once (a slave
             # node that also appears in its own master facet's node list), and += would keep only the

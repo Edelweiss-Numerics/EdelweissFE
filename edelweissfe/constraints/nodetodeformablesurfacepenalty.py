@@ -775,14 +775,30 @@ class Constraint(ConstraintBase, MeshDependent):
                     J_[k] = pIdcs[j]
                     k += 1
 
+    def applyConstraintForcesOnly(
+        self,
+        U_np: np.ndarray,
+        dU: np.ndarray,
+        PExt: np.ndarray,
+        timeStep: TimeStep,
+    ):
+        """Forces without a tangent, by running the one loop with ``K=None``. Overrides the base
+        implementation, which would build a container this constraint then fills at real cost -- see
+        :meth:`applyConstraint`'s guards. One loop rather than two, so the physics cannot drift
+        between the implicit and explicit paths."""
+
+        self.applyConstraint(U_np, dU, PExt, None, timeStep)
+
     def applyConstraint(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
         PExt: np.ndarray,
-        K: DeformableSurfaceContactStiffnessView,
+        K: DeformableSurfaceContactStiffnessView | None,
         timeStep: TimeStep,
     ):
+        """Evaluate the contact forces, and the tangent unless ``K`` is None."""
+
         self.totalNormalForce = 0.0
 
         localOffset = 0
@@ -863,22 +879,30 @@ class Constraint(ConstraintBase, MeshDependent):
                 stiffness = -penaltyTimesArea * g
 
             PLocal = -f_n * w
-            KLocal = stiffness * np.outer(w, w)
-            if H is not None:
-                KLocal += f_n * H
+
+            # K is None when the caller discards the tangent -- see
+            # ConstraintBase.applyConstraintForcesOnly. The outer product below is (nDim*(1+nNodes))^2
+            # per slave, so skipping it is worth having rather than tidy.
+            KLocal = None
+            if K is not None:
+                KLocal = stiffness * np.outer(w, w)
+                if H is not None:
+                    KLocal += f_n * H
 
             if self.mu > 0.0:
                 PFriction, KFriction = self._computeFriction(s, c, nBar, f_n, stiffness, w, dU, pIdcs, fIdcs)
                 PLocal += PFriction
-                KLocal += KFriction
+                if KLocal is not None:
+                    KLocal += KFriction
 
             globalIdcs = pIdcs + fIdcs
             PExt[globalIdcs] += PLocal
 
-            K.K_pp[activeIdx] += KLocal[: self.nDim, : self.nDim]
-            K.K_ff[activeIdx] += KLocal[self.nDim :, self.nDim :]
-            K.K_pf[activeIdx] += KLocal[: self.nDim, self.nDim :]
-            K.K_fp[activeIdx] += KLocal[self.nDim :, : self.nDim]
+            if KLocal is not None:
+                K.K_pp[activeIdx] += KLocal[: self.nDim, : self.nDim]
+                K.K_ff[activeIdx] += KLocal[self.nDim :, self.nDim :]
+                K.K_pf[activeIdx] += KLocal[: self.nDim, self.nDim :]
+                K.K_fp[activeIdx] += KLocal[self.nDim :, : self.nDim]
 
             self._normalForceCurrent[s] = f_n
             self.totalNormalForce += f_n
