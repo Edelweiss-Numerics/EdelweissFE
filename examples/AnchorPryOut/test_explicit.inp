@@ -298,7 +298,29 @@ minMarkedElements=10
 *solver, solver=NEDParallel, name=theSolver
 second-order-fields="displacement"
 first-order-fields="nonlocal damage"
-courant-number=0.5
+** COURANT NUMBER: 0.1, and this is the expensive decision in this file -- READ THIS BEFORE RAISING IT.
+**
+** The solver's critical time step is l / c, which is a LINEAR-element formula: it is the stable
+** increment for an element whose mass is spread uniformly over its nodes and whose highest
+** eigenfrequency is c/l. A 20-node element satisfies neither. The mass part is now handled in Marmot
+** (HRZ lumping gives a hexa20 corner half the uniform share, so the estimate carries a 0.7071
+** factor), but the polynomial-order part is NOT: a quadratic element's highest free eigenfrequency is
+** several times what l / c predicts.
+**
+** Measured on testfiles/marmot/GCDPNEDExplicit, same element and material as this model's concrete,
+** final reaction against courant number:
+**
+**     0.8 -> 4.49      0.4 -> 84.6      0.2 -> 118.5      0.1 -> 120.7      0.05 -> 118.0
+**
+** It converges at 0.1-0.2. At the 0.8 default it returns a number 26x too small AND DOES NOT FAIL --
+** the run completes, the reaction curve looks smooth, and it is wrong. Note also that the divergence
+** only becomes visible at all on a material with no damping: GC3D20R + gcdp sat above the stability
+** limit for 800 increments looking healthy because the nonlocal viscosity absorbed it.
+**
+** 0.1 makes this run roughly 5x more expensive than the 0.5 an earlier version of this file used
+** (~11 h rather than ~2.2 h at 64 threads). That is the cost of an answer that does not depend on the
+** time step. Do not raise it without repeating the study above on THIS mesh.
+courant-number=0.1
 output-frequency=50
 ** MEASURED on this model (500-increment smoke test, 16 threads, 280155 dof): one connectivity
 ** search costs 5.98 s, because nodeToDeformableSurfacePenalty.updateConnectivity is an
