@@ -542,7 +542,7 @@ class DisplacementElement(BaseElement):
         elif self.nSpatialDimensions == 2:
             return np.sqrt(4 * self.detJ[qp])
         elif self.nSpatialDimensions == 3:
-            return np.qbrt(8 * self.detJ[qp])
+            return np.cbrt(8 * self.detJ[qp])
 
     def acceptLastState(
         self,
