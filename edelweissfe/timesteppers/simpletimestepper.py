@@ -154,6 +154,27 @@ class SimpleTimeStepper(TimeStepperBase):
                     endTimeOfIncrementInTotal,
                 )
 
+    def enforceTimeIncrement(self, timeIncrement: float):
+        """Replace the enforced time increment for the remaining increments. See
+        :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.enforceTimeIncrement`.
+
+        The generator reads ``self.enforcedTimeIncrement`` afresh on every iteration, so assigning it
+        here takes effect from the next increment on -- the one already yielded is untouched, which is
+        what the caller wants: an increment that has been computed is not retroactively resized.
+
+        Parameters
+        ----------
+        timeIncrement
+            The new enforced time increment.
+        """
+
+        if self.enforcedTimeIncrement is None:
+            raise NotImplementedError(
+                "This step is not running on an enforced time increment, so it cannot be given a new " "one mid-step."
+            )
+
+        self.enforcedTimeIncrement = timeIncrement
+
     def changeIncrementSize(self, scaleFactor: float):
         """Change increment size between minIncrement and
         maxIncrement by a given scale factor.

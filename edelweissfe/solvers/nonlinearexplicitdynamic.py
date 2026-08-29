@@ -102,6 +102,16 @@ class NEDSchema:
         default=1000,
         optionName="output-frequency",
     )
+    topologyCheckFrequency: int | None = schemaField(
+        description=(
+            "The increment interval at which model modifiers are offered a chance to change the mesh. "
+            "0 runs the topology update only once, before the increment loop. Must be a multiple of "
+            "output-frequency, because a marker reads the last finalized field output."
+        ),
+        dtype=int,
+        default=0,
+        optionName="topology-check-frequency",
+    )
     contactUpdateFrequency: int | None = schemaField(
         description=(
             "The increment interval at which constraints whose connectivity is the outcome of a "
@@ -193,6 +203,7 @@ class NED(NonlinearSolverBase):
         "courant-number": 0.8,
         "output-frequency": 1000,
         "contact-update-frequency": 100,
+        "topology-check-frequency": 0,
     }
 
     def __init__(self, jobInfo, journal, **kwargs):
@@ -260,6 +271,14 @@ class NED(NonlinearSolverBase):
             if type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity
         ]
 
+        # Modifiers that can still act once the analysis is running. Collected once, so a model whose
+        # refinement is all up-front pays nothing for the periodic check below.
+        self._liveTopologyModifiers = [
+            modifier
+            for modifier in model.modelModifiers.values()
+            if modifier.initiatesTopologyChanges and not modifier.actsOnlyAtSimulationStart
+        ]
+
         # Step actions before the equation system, matching NIST: nothing they do depends on it.
         self.applyStepActionsAtStepStart(model, step.actions)
 
@@ -280,6 +299,7 @@ class NED(NonlinearSolverBase):
         criticalTimeStep = theSystem.criticalTimeStep
 
         contactUpdateFrequency = self.options["contact-update-frequency"]
+        topologyCheckFrequency = self.options["topology-check-frequency"]
         UAtLastConnectivitySearch = np.array(U)
 
         prevTimeStep = None
@@ -364,6 +384,13 @@ class NED(NonlinearSolverBase):
                         self.theDofManager.writeDofVectorToNodeField(U, field, "U")
                         self.theDofManager.writeDofVectorToNodeField(P, field, "P")
 
+                        # Published every increment, not only on output increments, for two reasons:
+                        # an h-adaptivity event can fall on any increment and its interpolation reads
+                        # this entry, and a restart checkpoint written from a node field is the only
+                        # way an explicit run can resume with its kinetic state intact. It is an
+                        # O(nDof) copy.
+                        self.theDofManager.writeDofVectorToNodeField(V, field, "V")
+
                     for variable in model.scalarVariables.values():
                         variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
 
@@ -377,6 +404,62 @@ class NED(NonlinearSolverBase):
                             man.finalizeIncrement(
                                 statusInfoDict=None,
                             )
+
+                    # --- h-adaptivity, mid-run ------------------------------------------------
+                    # Placed exactly here for three independent reasons. The marker refines on the
+                    # last *finalized* field output, so anywhere earlier it would decide on stale
+                    # results. The cutback path restores U/V/P from vectors sized by the old equation
+                    # system, so a topology change interleaved with a cutback would restore the wrong
+                    # length -- ending a successful increment keeps the two paths disjoint. And the
+                    # pairing of U with the half-step-staggered V is unambiguous only between
+                    # increments.
+                    #
+                    # Increment 0 is excluded deliberately. The time stepper yields a zero-length
+                    # increment first, before it has even taken up the enforced time increment, and
+                    # nothing has been solved at that point -- a live marker evaluated there would
+                    # refine on the initial condition, and revising the time increment there raises.
+                    if (
+                        self._liveTopologyModifiers
+                        and topologyCheckFrequency
+                        and timeStep.number > 0
+                        and timeStep.number % topologyCheckFrequency == 0
+                    ):
+                        massBefore = float(np.sum(self._rawLumpedMass))
+                        momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, V, model)
+                        kineticBefore = 0.5 * float(np.sum(self._rawLumpedMass[self.ids_2nd] * V[self.ids_2nd] ** 2))
+
+                        if self.updateTopologyAndConnectivity(model, step):
+                            theSystem = self.buildEquationSystem(model, step)
+
+                            Minv = theSystem.Minv
+                            U, dU, V, P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
+                            U_old, V_old, P_old = theSystem.U_old, theSystem.V_old, theSystem.P_old
+                            UAtLastConnectivitySearch = np.array(U)
+
+                            # The net force is deliberately NOT re-evaluated on the new mesh. It
+                            # could be, with one extra element pass -- but that would run the
+                            # constitutive law off-cycle, with a zero strain increment, purely to
+                            # obtain a force, and the material state is what that call writes into.
+                            # Zeroing costs exactly one increment of force contribution to the
+                            # velocity update: an O(dT) error confined to the increment following an
+                            # event, after which it is computed normally. A bounded known error is
+                            # preferable to an unbounded unknown one.
+                            P[:] = 0.0
+
+                            self.reportTopologyChangeConservation(massBefore, momentumBefore, kineticBefore, V, model)
+
+                            # Lower only. Refinement shrinks the smallest element and tightens the
+                            # limit, which must be honoured; softening raises it, and taking that up
+                            # mid-step would change the integrator's dispersion for no benefit.
+                            if theSystem.criticalTimeStep < criticalTimeStep:
+                                self.journal.message(
+                                    "Refinement lowered the stable time increment from {:e} to "
+                                    "{:e}".format(criticalTimeStep, theSystem.criticalTimeStep),
+                                    self.identification,
+                                    1,
+                                )
+                                criticalTimeStep = theSystem.criticalTimeStep
+                                step.enforceTimeIncrement(criticalTimeStep)
 
         except ReachedMaxIncrements:
             self.applyStepActionsAtStepEnd(model, step.actions)
@@ -746,18 +829,43 @@ class NED(NonlinearSolverBase):
 
         super().validateModelCapabilities(model)
 
+        # A modifier that acts only at the start of the analysis is served by the single topology
+        # update before the increment loop. One that acts later needs the update re-run, which this
+        # solver does -- but only if it has been told how often, because a marker reads the last
+        # *finalized* field output and finalization is itself on a cadence. Refusing to guess is the
+        # point: a silently-never-refining run looks exactly like a converged one.
         lateModifiers = sorted(
             name
             for name, modifier in model.modelModifiers.items()
             if modifier.initiatesTopologyChanges and not modifier.actsOnlyAtSimulationStart
         )
-        if lateModifiers:
-            raise NotImplementedError(
-                "The {:} solver runs the topology update only once, before its increment loop, so "
-                "the model modifier(s) {:} would not act when they are meant to. Restrict them to "
-                "the start of the analysis (e.g. initialOnly markers) to use them with this "
-                "solver.".format(self.identification, ", ".join(lateModifiers))
+        topologyCheckFrequency = self.options["topology-check-frequency"]
+        outputFrequency = self.options["output-frequency"]
+
+        if lateModifiers and not topologyCheckFrequency:
+            raise ValueError(
+                "The model modifier(s) {:} act after the analysis has started, but "
+                "topology-check-frequency is 0, so {:} would run the topology update only once and "
+                "they would never act. Set topology-check-frequency to a multiple of "
+                "output-frequency ({:}).".format(", ".join(lateModifiers), self.identification, outputFrequency)
             )
+
+        if topologyCheckFrequency:
+            if topologyCheckFrequency % outputFrequency:
+                raise ValueError(
+                    "topology-check-frequency ({:}) must be a multiple of output-frequency ({:}): a "
+                    "marker refines on the last finalized field output, and field outputs are "
+                    "finalized on the output-frequency cadence, so a check that does not land on one "
+                    "would decide on stale results.".format(topologyCheckFrequency, outputFrequency)
+                )
+            if not lateModifiers:
+                self.journal.message(
+                    "topology-check-frequency is set but no model modifier acts after the start of "
+                    "the analysis; the topology update will run once and the periodic check will "
+                    "find nothing to do.",
+                    self.identification,
+                    1,
+                )
 
         for constraintName, constraint in model.constraints.items():
             nScalarVariables = constraint.getNumberOfAdditionalNeededScalarVariables()
@@ -949,6 +1057,15 @@ class NED(NonlinearSolverBase):
                 U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
                 P = self.theDofManager.writeNodeFieldToDofVector(P, field, "P")
 
+                # The velocity entry exists only once this solver has published one, i.e. from the
+                # second build onwards. Reading it back is what carries the kinetic state across an
+                # h-adaptivity event: the modifier interpolated it onto the new nodes with the same
+                # operator it used for U (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES), and there
+                # is nowhere else it could come from -- a fresh vector would silently resume from
+                # rest.
+                if "V" in field:
+                    V = self.theDofManager.writeNodeFieldToDofVector(V, field, "V")
+
             for variable in model.scalarVariables.values():
                 U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
         else:
@@ -1076,6 +1193,118 @@ class NED(NonlinearSolverBase):
             np.add.at(P, P.entitiesInDofVector[constraint], Pc)
 
         return P
+
+    def secondOrderMomentum(self, mass: DofVector, V: DofVector, model: FEModel) -> np.ndarray:
+        """The linear momentum of the second-order fields, per spatial component.
+
+        Per component, not summed over the whole block: adding a momentum's x, y and z contributions
+        together produces a number with no physical meaning and would hide a component-wise error
+        behind a cancellation. A field occupies a contiguous slice of the dof vector, node-major with
+        the component innermost -- that is what ``writeNodeFieldToDofVector``'s ``flatten()``
+        establishes -- so reshaping the slice recovers the per-node vectors.
+
+        Parameters
+        ----------
+        mass
+            The lumped mass to weight with. Pass the *unfolded* mass: a multi-point-constraint slave
+            carries real velocity, and folding its mass onto its masters would drop its momentum.
+        V
+            The velocity vector.
+        model
+            The model tree, for the fields' spatial dimension.
+
+        Returns
+        -------
+        np.ndarray
+            The momentum, one entry per spatial component.
+        """
+
+        total = None
+        for fieldName in self.options["second-order-fields"]:
+            indices = self.theDofManager.idcsOfFieldsInDofVector[fieldName]
+            dimension = model.nodeFields[fieldName].dimension
+            perNodeMass = np.asarray(mass[indices]).reshape((-1, dimension))
+            perNodeVelocity = np.asarray(V[indices]).reshape((-1, dimension))
+            contribution = np.sum(perNodeMass * perNodeVelocity, axis=0)
+            total = contribution if total is None else total + contribution
+
+        return total if total is not None else np.zeros(0)
+
+    def reportTopologyChangeConservation(
+        self,
+        massBefore: float,
+        momentumBefore: np.ndarray,
+        kineticBefore: float,
+        V: DofVector,
+        model: FEModel,
+    ):
+        """Report what a topology change did to the quantities that ought to survive it.
+
+        Refinement interpolates the velocity onto new nodes and re-lumps the mass, and the three
+        invariants behave differently under that:
+
+        * **Total mass is conserved exactly.** The children of a refined element tile it and carry the
+          same density, so this is an identity rather than an approximation -- which makes it the
+          cheapest correctness check on the entire transfer, and the one that catches a connectivity
+          or geometry error nothing else would notice. Violating it raises.
+        * **Linear momentum is conserved exactly for a spatially uniform velocity field**, because
+          the shape functions are a partition of unity and the child masses sum to the parent's. For
+          a general field the discrepancy is second order in the velocity gradient across the parent:
+          discretisation error, not a defect. Reported, not enforced.
+        * **Kinetic energy is not conserved** by interpolation plus re-lumping, and it is the most
+          sensitive of the three, being quadratic in the interpolation error. Reported as a relative
+          jump; more than roughly a percent is a reason to look at the transfer rather than to
+          believe the physics.
+
+        Parameters
+        ----------
+        massBefore
+            Total lumped mass before the change.
+        momentumBefore
+            Per-component momentum before the change.
+        kineticBefore
+            Kinetic energy before the change.
+        V
+            The velocity vector of the rebuilt system.
+        model
+            The model tree.
+
+        Raises
+        ------
+        RuntimeError
+            If the total lumped mass changed.
+        """
+
+        massAfter = float(np.sum(self._rawLumpedMass))
+        momentumAfter = self.secondOrderMomentum(self._rawLumpedMass, V, model)
+        kineticAfter = 0.5 * float(np.sum(self._rawLumpedMass[self.ids_2nd] * V[self.ids_2nd] ** 2))
+
+        relativeMassChange = abs(massAfter - massBefore) / massBefore if massBefore > 0.0 else 0.0
+        if relativeMassChange > 1e-10:
+            raise RuntimeError(
+                "A topology change did not conserve the total lumped mass: {:e} became {:e}, a "
+                "relative change of {:e}. The children of a refined element tile it and carry the "
+                "same density, so this is an identity -- a violation means the refinement or the mass "
+                "lumping is wrong, not that the model moved.".format(massBefore, massAfter, relativeMassChange)
+            )
+
+        momentumChange = float(np.max(np.abs(momentumAfter - momentumBefore))) if momentumBefore.size else 0.0
+        momentumScale = float(np.max(np.abs(momentumBefore))) if momentumBefore.size else 0.0
+        relativeKineticJump = abs(kineticAfter - kineticBefore) / kineticBefore if kineticBefore > 0.0 else 0.0
+
+        self.journal.message(
+            "Topology change: mass conserved to {:.1e} relative; largest momentum component change "
+            "{:.3e} (of {:.3e}); kinetic energy {:.6e} -> {:.6e} ({:+.2f} %)".format(
+                relativeMassChange,
+                momentumChange,
+                momentumScale,
+                kineticBefore,
+                kineticAfter,
+                relativeKineticJump * 100.0 * (1.0 if kineticAfter >= kineticBefore else -1.0),
+            ),
+            self.identification,
+            1,
+        )
 
     def getCriticalTimeStepForExplicitDynamics(self, model: FEModel, U: DofVector) -> float:
         """Compute the critical time step for explicit dynamics.

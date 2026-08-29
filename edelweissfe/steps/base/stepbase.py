@@ -200,6 +200,18 @@ class StepBase(ABC):
 
         return self.timeStepper.discardAndChangeIncrement(cutbackFactor)
 
+    def enforceTimeIncrement(self, timeIncrement: float):
+        """Revise the enforced time increment for the remaining increments of this step. See
+        :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.enforceTimeIncrement`.
+
+        Parameters
+        ----------
+        timeIncrement
+            The new enforced time increment.
+        """
+
+        return self.timeStepper.enforceTimeIncrement(timeIncrement)
+
     def changeIncrementSize(self, scaleFactor: float):
         """Modify the size of the next increment by a given scale factor.
 
