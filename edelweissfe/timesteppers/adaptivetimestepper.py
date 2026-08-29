@@ -93,7 +93,20 @@ class AdaptiveTimeStepper(TimeStepperBase):
         self.makeZeroIncrementFirst = makeZeroIncrementFirst
 
     def doesZeroIncrement(self):
-        return True
+        """Whether the *next* generated time step will be a zero increment.
+
+        This reports what will actually happen, not merely that zero increments are configured: the
+        zero increment is only emitted as the very first step of a step, so after a restart -- which
+        restores a non-zero increment counter -- there is none. Callers that require a zero increment
+        in order to initialise themselves have to know the difference.
+
+        Returns
+        -------
+        bool
+            True if the next generated time step will have a zero increment.
+        """
+
+        return self.makeZeroIncrementFirst and self.incrementCounter == 0
 
     def generateTimeStep(self, enforcedTimeIncrement: float = None) -> TimeStep:
         """
