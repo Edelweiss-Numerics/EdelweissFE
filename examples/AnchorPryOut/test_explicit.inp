@@ -64,7 +64,7 @@
 **=================================================================================================
 *include, input=./mesh/concrete_edelweissfe.inp
 *include, input=./mesh/steel_edelweissfe.inp
-*include, input=./zsymm_free_block.txt
+*include, input=./zsymm_complete.txt
 
 **=================================================================================================
 ** MATERIALS
@@ -390,6 +390,5 @@ maxInc=1, minInc=1e-14, maxNumInc=500, maxIter=25, stepLength=1e-2
 >>dirichlet, name=fixRight,       nSet=right,          field=displacement, 1=0, 2=0, 3=0
 >>dirichlet, name=fixBack,        nSet=back,           field=displacement, 1=0, 2=0, 3=0
 >>dirichlet, name=fixBottom,      nSet=bottom,         field=displacement, 1=0, 2=0, 3=0
->>dirichlet, name=zSymmConcrete,  nSet=z_symm_concrete_free, field=displacement, 3=0
->>dirichlet, name=zSymmSteel,     nSet=z_symm_steel_free,    field=displacement, 3=0
+>>dirichlet, name=zSymm,          nSet=z_symm_all,     field=displacement, 3=0
 >>dirichlet, name=plateXFix,      nSet=plate_left_loading, field=displacement, 1=5.0, f(t)='6*t**5 - 15*t**4 + 10*t**3'
