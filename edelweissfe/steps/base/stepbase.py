@@ -227,3 +227,9 @@ class StepBase(ABC):
         """Prevent an automatic increase of the increment size for the next increment."""
 
         return self.timeStepper.preventIncrementIncrease()
+
+    def restoredTimeIncrement(self) -> float | None:
+        """The increment size already completed if this step resumed from a restart checkpoint,
+        or None if it is starting cold."""
+
+        return self.timeStepper.restoredTimeIncrement()

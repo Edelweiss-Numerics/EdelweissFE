@@ -245,6 +245,19 @@ class SimpleTimeStepper(TimeStepperBase):
         """This time stepper never increases the increment size automatically,
         hence this is a no-op."""
 
+    def restoredTimeIncrement(self) -> float | None:
+        """See :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.
+        restoredTimeIncrement`.
+
+        The discriminator is ``totalIncrements``: readRestart sets it to the value the
+        checkpoint recorded, while a cold start leaves it at zero.
+        """
+
+        if self.totalIncrements <= 0:
+            return None
+
+        return self.stepLength * self.increment
+
     def writeRestart(self, restartFile):
         """Write this time stepper's progress within the step to a restart checkpoint.
 
