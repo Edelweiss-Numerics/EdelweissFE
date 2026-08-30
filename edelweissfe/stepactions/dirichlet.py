@@ -284,9 +284,15 @@ class StepAction(DirichletBase):
             model.analyticalFields[analyticalFieldName] if analyticalFieldName is not None else None,
         )
 
-    def _reconcileIfSetChanged(self):
+    def reconcileIfSetChanged(self):
         """Re-size the prescribed values if the node set was mutated in-place (e.g. AMR adding new
-        boundary nodes) since the last check. Preserve the active/inactive flag: updateStepAction
+        boundary nodes) since the last check.
+
+        Public, because it is part of this step action's contract with the solver: anything reading
+        the prescribed values alongside the DOF indices derived from ``nSet`` must be able to demand
+        that the two agree first. ``getDelta`` calls it, but a caller that needs the values *without*
+        a time step (e.g. reconciling Dirichlet/constraint conflicts while the equation system is
+        rebuilt) has no other way to ask. Preserve the active/inactive flag: updateStepAction
         unconditionally activates, but a BC deactivated at a prior step end must stay inactive --
         otherwise a refinement in a later step would silently revive it. The node set itself needs
         no re-fetch: it has stable identity (mutated in place), so ``self.nSet`` is already current.
@@ -351,7 +357,7 @@ class StepAction(DirichletBase):
         self.amplitude = f_t if f_t is not None else lambda x: x
 
     def getPrescribedIncrement(self, timeStep: TimeStep):
-        self._reconcileIfSetChanged()
+        self.reconcileIfSetChanged()
         if self.active:
             return self.delta * (
                 self.amplitude(timeStep.stepProgress)

@@ -342,7 +342,7 @@ class NIST(NonlinearSolverBase):
                     for variable in model.scalarVariables.values():
                         U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
 
-                    self.mpcTransformation = self.buildMPCTransformation(model)
+                    self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
                     self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
 
                     # The old dU/prevTimeStep no longer match the (possibly new) DOF layout, so

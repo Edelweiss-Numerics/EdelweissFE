@@ -1033,7 +1033,7 @@ class NED(NonlinearSolverBase):
         # so far, applied as each block is constructed or re-declared; there is nothing to reset or
         # re-fetch here.
 
-        self.mpcTransformation = self.buildMPCTransformation(model)
+        self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
         self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
 
         # initialize mass and damping matrices
