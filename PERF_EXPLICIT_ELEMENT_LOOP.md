@@ -196,3 +196,85 @@ theories. That is the next step, and it is a different kind of investigation fro
 | vectorise the contact force loop across slaves (frozen `w`, indices, gaps) | ~15 ms of 64 ms |
 | profile the Marmot kernel's thread scaling in C++ | up to ~37 ms, unknown |
 | early termination in the candidate loop (needs explicit tie-breaking to stay bit-identical) | ~1 ms |
+
+---
+
+# 2026-08-30: the section above had the attribution backwards
+
+Everything up to here concluded that ~37 ms of the 43 ms element phase was the Marmot C++
+kernel and that its saturation was unexplained. **That was wrong, and the experiment that
+settled it took four minutes**: run the loop with the kernel call removed and keep only the
+Python gathers.
+
+| loop | 8 threads, 1 CCD | 8 threads, 4 CCDs |
+| --- | --- | --- |
+| gather only (no kernel) | 0.03765 s | 0.08788 s |
+| full loop | 0.05834 s | 0.10510 s |
+| **C++ kernel (difference)** | **0.02069 s** | **0.01722 s** |
+
+The Marmot kernel scales **7.8x on 8x threads** and is ~6 % of the element phase at 64
+threads. The Python gather layer is the rest, and it had *negative* thread scaling
+(0.03765 s at 8 threads, 0.04049 s at 64). Every thread-scaling number in the sections
+above was measuring Python bookkeeping, not physics.
+
+## 5. The entity lookup returned a numpy subclass: 1.48x (committed 207260eb)
+
+`DofVector[entity]` cost 0.78 us per call. Broken down on a 280155-dof model:
+
+| component | cost | share |
+| --- | --- | --- |
+| numpy subclass wrapping (`__array_finalize__`) | ~0.43 us | 54 % |
+| the gather itself | 0.205 us | 26 % |
+| the `isinstance` chain | 0.137 us | 17 % |
+| entity dict lookup | 0.030 us | 4 % |
+
+Trying the dict first and returning a plain ndarray view removes the first and third:
+0.78 -> 0.26 us, element phase 0.04315 -> 0.02722 s, increment 0.06394 -> 0.04335 s.
+**Bit-identical** on the full model (KE and RF matched to every digit at increment 10000).
+
+## 6. One gather per chunk instead of two per element: 1.13x (committed c81c118c)
+
+The win is reduced allocator contention, not fewer numpy calls: batching is worth 1.05x
+single-threaded (the gather is memory bound at ~3 ns/dof) but 1.76x at 64 threads and
+4.79x at 8. **Always test an allocation hypothesis with threads** -- single-threaded it is
+invisible. Element phase 0.02742 -> 0.02344 s; increment 0.04379 -> 0.03893 s.
+
+The plan is cached and a stale one would gather the wrong DOFs *silently*. Invalidation is
+keyed on the identity of the entity mapping, which the DofManager replaces wholesale on
+every topology change, so live h-adaptivity invalidates it by construction.
+
+## Dead end 5: CPU pinning gains nothing (and hurts at 16 threads)
+
+CPU placement matters enormously when threads are *deliberately* scattered -- the same 8
+threads cost 0.05834 s packed onto one CCD and 0.10510 s spread over four (1.80x; 1.40x
+after 207260eb). It is tempting to conclude the pool should pin its workers. It should not:
+
+| config | elements | increment |
+| --- | --- | --- |
+| 64 threads, pinned per cache domain | 0.02787 s | 0.04363 s |
+| 64 threads, unpinned | 0.02742 s | 0.04379 s |
+| 16 threads, pinned | 0.03951 s | 0.05494 s |
+| 16 threads, unpinned | 0.03579 s | 0.05100 s |
+
+The Linux scheduler already packs threads, so explicit pinning recovers nothing and only
+removes its freedom -- which is why 16 threads confined to one CCD (8 physical + SMT) lose
+to 16 threads on 16 physical cores. Note also that most of the 1.80x was shared-object
+contention removed by 207260eb, not cache geometry. **An effect measured on an old build
+is not evidence about a new one.**
+
+## Cumulative
+
+| | s/increment |
+| --- | --- |
+| before any of this work | 0.0786 |
+| after cKDTree + force-only path | 0.06394 |
+| after the plain-ndarray entity lookup | 0.04379 |
+| after the batched per-chunk gather | **0.03893** |
+
+~2.0x, all of it bit-identical or reference-verified.
+
+## What is left
+
+The gather is still the bulk of the element phase and is now close to memory bound.
+Moving it into Marmot C++ was measured as **not** worth it: C++ faces identical memory
+traffic and its only gain is the allocation reduction the batching already captures.
