@@ -110,6 +110,23 @@ class TimeStepperBase(ABC):
         """May be called before an increment is requested, to prevent
         an automatic increase of the increment size, e.g., in case of bad convergence."""
 
+    def restoredTimeIncrement(self) -> float | None:
+        """The size of the increment already completed when this time stepper was restored from a
+        restart checkpoint.
+
+        A multi-step integrator needs the previous increment size to continue, and on a resumed run
+        that increment belongs to the run that wrote the checkpoint. Deliberately NOT abstract: a
+        time stepper that does not persist its progress inherits the cold-start answer rather than
+        being forced to implement something it has no state for.
+
+        Returns
+        -------
+        float | None
+            The completed increment size, or None if this time stepper is starting cold.
+        """
+
+        return None
+
     @abstractmethod
     def writeRestart(self, restartFile):
         """Write this time stepper's bookkeeping (current time, increment size, progress within

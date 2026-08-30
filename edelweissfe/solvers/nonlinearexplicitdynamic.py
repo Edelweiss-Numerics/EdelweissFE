@@ -323,7 +323,17 @@ class NED(NonlinearSolverBase):
         topologyCheckFrequency = self.options["topology-check-frequency"]
         UAtLastConnectivitySearch = np.array(U)
 
-        prevTimeStep = None
+        # The central-difference velocity update reads 0.5 * (dT + dT_prev). Leaving this None
+        # makes the solver synthesise dT_prev = 0 further down, so the first increment gets dT/2 --
+        # the half step that starts a leapfrog correctly on a COLD start. A resumed run must not
+        # repeat that: the velocity in the checkpoint already carries the half-step offset, so
+        # starting again applies one half-impulse too few. Measured on an anchor pry-out resume,
+        # that alone left the final reaction force 2.34e-04 wrong while every other piece of state
+        # restored correctly.
+        restoredTimeIncrement = step.restoredTimeIncrement()
+        prevTimeStep = (
+            None if restoredTimeIncrement is None else TimeStep(0, 0.0, 0.0, restoredTimeIncrement, 0.0, model.time)
+        )
 
         try:
             for timeStep in step.getTimeStep(enforcedTimeIncrement=criticalTimeStep):
@@ -399,7 +409,12 @@ class NED(NonlinearSolverBase):
                     V[:] = V_old
                     P[:] = P_old
                 else:
-                    prevTimeStep = timeStep
+                    # A zero increment is not a completed step: the generator yields one before the
+                    # first real increment, and the velocity update returns early for it. Recording
+                    # it here would overwrite the increment a RESUMED run was seeded with, putting
+                    # the run back on the cold-start half step it must not repeat.
+                    if timeStep.timeIncrement > 0.0:
+                        prevTimeStep = timeStep
 
                     for fieldName, field in model.nodeFields.items():
                         self.theDofManager.writeDofVectorToNodeField(U, field, "U")
