@@ -1326,14 +1326,48 @@ class NED(NonlinearSolverBase):
                 )
             )
 
+        # Minv = 1/M is formed wherever M != 0.0 and only negative mass is rejected, so a master
+        # DOF left with a tiny positive mass yields an enormous Minv and integrates itself to
+        # infinity. Report the smallest inertia actually carried by an integrating DOF, and how far
+        # it sits below the median, so a collapsing mass is visible when it appears.
+        integrating = self._lumpedMass[self._lumpedMass > 0.0]
+        smallestMass = float(np.min(integrating)) if integrating.size else 0.0
+        medianMass = float(np.median(integrating)) if integrating.size else 0.0
+        massRatio = smallestMass / medianMass if medianMass > 0.0 else 0.0
+
+        # Split by integration scheme. The second-order (displacement) field carries rho-based
+        # inertia and integrates with central difference; the first-order (nonlocal damage) field
+        # carries eta_nl-based inertia and integrates with forward Euler, whose stability limit is
+        # a completely different expression. A collapsing mass means something different in each,
+        # so the aggregate minimum above cannot be acted on without knowing which field it is in.
+        def smallestOf(indices):
+            if not indices.size:
+                return 0.0, 0.0
+            entries = self._lumpedMass[indices]
+            entries = entries[entries > 0.0]
+            if not entries.size:
+                return 0.0, 0.0
+            return float(np.min(entries)), float(np.median(entries))
+
+        smallest2nd, median2nd = smallestOf(self.ids_2nd)
+        smallest1st, median1st = smallestOf(self.ids_1st)
+
         momentumChange = float(np.max(np.abs(momentumAfter - momentumBefore))) if momentumBefore.size else 0.0
         momentumScale = float(np.max(np.abs(momentumBefore))) if momentumBefore.size else 0.0
         relativeKineticJump = abs(kineticAfter - kineticBefore) / kineticBefore if kineticBefore > 0.0 else 0.0
 
         self.journal.message(
-            "Topology change: mass conserved to {:.1e} relative; largest momentum component change "
+            "Topology change: mass conserved to {:.1e} relative; smallest integrating mass {:.3e} "
+            "({:.1e} of median) [2nd-order {:.3e} of median {:.3e}; 1st-order {:.3e} of median "
+            "{:.3e}]; largest momentum component change "
             "{:.3e} (of {:.3e}); kinetic energy {:.6e} -> {:.6e} ({:+.2f} %)".format(
                 relativeMassChange,
+                smallestMass,
+                massRatio,
+                smallest2nd,
+                median2nd,
+                smallest1st,
+                median1st,
                 momentumChange,
                 momentumScale,
                 kineticBefore,
