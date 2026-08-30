@@ -956,8 +956,21 @@ class FEModel:
         self.replayTopologyHistory(records)
 
         for nf in self.nodeFields.values():
-            for entryName, entryValues in nf._values.items():
-                nf[entryName][:] = f["nodeFields"][nf.name][entryName]
+            storedField = f["nodeFields"].get(nf.name)
+            if storedField is None:
+                continue
+
+            # Iterate what the CHECKPOINT holds, not what this model has created so far. The two
+            # differ: writeRestart stores every entry a node field has at write time, while at read
+            # time the driver has created only 'U' and 'P'. The explicit solver's velocity entry 'V'
+            # is created later, the first time the solver writes it -- so keying this loop on the
+            # model silently dropped 'V' from every resume, leaving the run to integrate from zero
+            # velocity with no error anywhere. Entries the model has not created yet are created
+            # here, so they are populated before any solver asks for them.
+            for entryName, storedValues in storedField.items():
+                if entryName not in nf:
+                    nf.createFieldValueEntry(entryName)
+                nf[entryName][:] = storedValues
 
         for name, scalarVariable in self.scalarVariables.items():
             scalarVariable.value = f["scalarVariables"].attrs[name]
