@@ -52,6 +52,23 @@ from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
 
 
+#: Tolerance on the relative change of the total lumped mass across a single topology
+#: change. The children of a refined element tile it and carry the same density, so the
+#: mass is a geometric identity -- but it is assembled by Gauss quadrature, which is exact
+#: only up to a polynomial order. A distorted hexa20 has a non-polynomial Jacobian, so
+#: repartitioning a parent into children changes the quadrature truncation error. Measured
+#: on the anchor pry-out model, one live refinement moves the total mass by 4.63e-08
+#: relative; this bound leaves more than an order of magnitude of headroom above that
+#: while still catching a refinement or lumping error, which would be O(1), not O(1e-8).
+_MASS_CONSERVATION_TOLERANCE = 1e-6
+
+#: Tolerance on the accumulated relative mass drift over a whole step. A single change
+#: being within tolerance does not bound a run with hundreds of refinements, so the drift
+#: is summed and checked separately. At the measured 4.63e-08 per change, this permits
+#: over two thousand refinements before tripping.
+_CUMULATIVE_MASS_DRIFT_TOLERANCE = 1e-4
+
+
 @dataclass(frozen=True)
 class NEDSchema:
     """The options of the ``*solver`` datalines and of an ``>>options`` block routed to this
@@ -215,6 +232,10 @@ class NED(NonlinearSolverBase):
         self.ids_1st = None
         self.ids_2nd = None
         self._warnedAboutMissingInternalEnergy = False
+        #: Summed relative mass drift over every topology change, checked against
+        #: _CUMULATIVE_MASS_DRIFT_TOLERANCE so that many individually-tolerable changes
+        #: cannot silently add up to a meaningful one.
+        self._cumulativeMassDrift = 0.0
 
     def _updateOptions(self, updatedOptions: dict, journal):
         """Update options of the solver using a string dict
@@ -1281,12 +1302,28 @@ class NED(NonlinearSolverBase):
         kineticAfter = 0.5 * float(np.sum(self._rawLumpedMass[self.ids_2nd] * V[self.ids_2nd] ** 2))
 
         relativeMassChange = abs(massAfter - massBefore) / massBefore if massBefore > 0.0 else 0.0
-        if relativeMassChange > 1e-10:
+        self._cumulativeMassDrift += relativeMassChange
+
+        if relativeMassChange > _MASS_CONSERVATION_TOLERANCE:
             raise RuntimeError(
                 "A topology change did not conserve the total lumped mass: {:e} became {:e}, a "
-                "relative change of {:e}. The children of a refined element tile it and carry the "
-                "same density, so this is an identity -- a violation means the refinement or the mass "
-                "lumping is wrong, not that the model moved.".format(massBefore, massAfter, relativeMassChange)
+                "relative change of {:e} against a tolerance of {:e}. The children of a refined "
+                "element tile it and carry the same density, so the mass is conserved geometrically; "
+                "the quadrature that assembles it is exact only up to a polynomial order, which "
+                "admits a small change. A violation of this size is not quadrature -- it means the "
+                "refinement or the mass lumping is wrong.".format(
+                    massBefore, massAfter, relativeMassChange, _MASS_CONSERVATION_TOLERANCE
+                )
+            )
+
+        if self._cumulativeMassDrift > _CUMULATIVE_MASS_DRIFT_TOLERANCE:
+            raise RuntimeError(
+                "The accumulated relative lumped-mass drift over this step has reached {:e}, above "
+                "the tolerance of {:e}. Each individual topology change was within its own bound, so "
+                "this is many small quadrature changes adding up rather than one bad refinement; the "
+                "model mass is no longer the one the step started with.".format(
+                    self._cumulativeMassDrift, _CUMULATIVE_MASS_DRIFT_TOLERANCE
+                )
             )
 
         momentumChange = float(np.max(np.abs(momentumAfter - momentumBefore))) if momentumBefore.size else 0.0
