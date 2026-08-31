@@ -62,6 +62,14 @@ from edelweissfe.utils.schema import schemaField
 #: while still catching a refinement or lumping error, which would be O(1), not O(1e-8).
 _MASS_CONSERVATION_TOLERANCE = 1e-6
 
+#: Fractional margin by which the kinetic energy may exceed the external work before it is
+#: reported as energy creation. KE <= W_ext is exact in the continuum, but the discrete run has
+#: two legitimate sources of small violation: lumping the mass matrix, and the interpolate-then-
+#: re-lump of a topology change, which does not conserve kinetic energy exactly (see
+#: reportTopologyChangeConservation). One per cent is far above both and far below the runaway an
+#: unstable time step produces -- v5 of the anchor pry-out reached 1e+38 mm.
+_ENERGY_CREATION_TOLERANCE = 1e-2
+
 #: Tolerance on the accumulated relative mass drift over a whole step. A single change
 #: being within tolerance does not bound a run with hundreds of refinements, so the drift
 #: is summed and checked separately. At the measured 4.63e-08 per change, this permits
@@ -236,6 +244,10 @@ class NED(NonlinearSolverBase):
         #: _CUMULATIVE_MASS_DRIFT_TOLERANCE so that many individually-tolerable changes
         #: cannot silently add up to a meaningful one.
         self._cumulativeMassDrift = 0.0
+        #: Work done on the model by its prescribed degrees of freedom, accumulated every
+        #: increment. Compared against the kinetic energy to detect energy creation; see
+        #: _ENERGY_CREATION_TOLERANCE.
+        self._externalWork = 0.0
 
     def _updateOptions(self, updatedOptions: dict, journal):
         """Update options of the solver using a string dict
@@ -600,10 +612,17 @@ class NED(NonlinearSolverBase):
         # there is no free equilibrium there, so their force P is set to zero,
         # and their velocity is prescribed as (prescribed increment) / (time step).
         for dirichlet in dirichlets:
+            prescribedIncrement = dirichlet.getPrescribedIncrement(timeStep).flatten()
+
+            # The work put into the model at a prescribed degree of freedom is the reaction there
+            # times the motion it is dragged through. P still holds the internal force at this
+            # point, and the support reaction is its negative -- so this has to be accumulated
+            # HERE, immediately before the zeroing below, which is the only moment the reaction
+            # is available.
+            self._externalWork -= float(np.dot(P[dirichlet.constrainedDofIndices], prescribedIncrement))
+
             P[dirichlet.constrainedDofIndices] = 0.0
-            V[dirichlet.constrainedDofIndices] = (
-                dirichlet.getPrescribedIncrement(timeStep).flatten() / timeStep.timeIncrement
-            )
+            V[dirichlet.constrainedDofIndices] = prescribedIncrement / timeStep.timeIncrement
 
         if self.ids_1st is not None:
             V[self.ids_1st] = Minv[self.ids_1st] * P[self.ids_1st]
@@ -651,13 +670,46 @@ class NED(NonlinearSolverBase):
             # regardless of what the structure was actually doing.
             Wkin = 0.5 * float(np.sum(self._rawLumpedMass[self.ids_2nd] * V[self.ids_2nd] ** 2))
 
-            W = Wint + Wkin
-            if W > 0.0:
+            Wext = self._externalWork
+
+            # Everything the model absorbed that no reported term accounts for: strain energy the
+            # material does not publish, plastic and viscous dissipation, and damage. It must stay
+            # non-negative -- a negative value means the kinetic energy has overtaken the work put
+            # in, i.e. energy is being created.
+            unaccounted = Wext - Wkin - Wint
+
+            def _share(value):
+                return "{:7.2f} %".format(value / Wext * 100) if Wext > 0.0 else "      -- "
+
+            self.journal.printTable(
+                [
+                    ["energy", "value", "share of W_ext"],
+                    ["external work W_ext", "{:+.6e}".format(Wext), _share(Wext)],
+                    ["kinetic", "{:+.6e}".format(Wkin), _share(Wkin)],
+                    ["internal (strain)", "{:+.6e}".format(Wint), _share(Wint)],
+                    ["unaccounted", "{:+.6e}".format(unaccounted), _share(unaccounted)],
+                ],
+                self.identification,
+                2,
+            )
+
+            # KE <= W_ext is exact in the continuum because the missing terms are non-negative, so
+            # a violation is not a modelling subtlety -- it is energy appearing from nowhere, which
+            # for an explicit scheme means the time step is above the true stability limit. This
+            # catches the contributions dt_crit does not see: the nonlocal field (whose limit
+            # nothing checks), contact penalty stiffness, and any element shape it misjudges.
+            if Wext > 0.0 and Wkin > Wext * (1.0 + _ENERGY_CREATION_TOLERANCE):
                 self.journal.message(
-                    "Internal energy: {:e} ({:.2f} %)".format(Wint, Wint / W * 100), self.identification, 2
-                )
-                self.journal.message(
-                    "Kinetic energy:  {:e} ({:.2f} %)".format(Wkin, Wkin / W * 100), self.identification, 2
+                    "ENERGY IS BEING CREATED: the kinetic energy {:e} exceeds the external work "
+                    "{:e} by {:.1f} %. That is impossible -- the unreported terms (strain energy, "
+                    "dissipation, damage) can only add to the balance. The time step is above the "
+                    "true stability limit, which dt_crit does not see in full: it ignores the "
+                    "nonlocal field entirely and never sees contact penalty stiffness. Reduce "
+                    "courant-number, or resume from a checkpoint with a smaller one.".format(
+                        Wkin, Wext, (Wkin / Wext - 1.0) * 100
+                    ),
+                    self.identification,
+                    0,
                 )
 
             # Said once, loudly, because a silent zero here reads as "no strain energy yet" rather
