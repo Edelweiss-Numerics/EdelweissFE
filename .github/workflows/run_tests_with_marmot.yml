@@ -18,17 +18,17 @@ jobs:
           activate-environment: anaconda-client-env
 
       - name: Install conda packages
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           mamba install --file conda_requirements.txt
 
       - name: Install pip packages
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           pip install -r pip_requirements.txt
 
       - name: Install Eigen
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           cd ..
           git clone --branch 3.4.0 https://gitlab.com/libeigen/eigen.git
@@ -40,7 +40,7 @@ jobs:
           cd ../..
 
       - name: Install Autodiff
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           git clone --branch v1.1.0 https://github.com/autodiff/autodiff.git
           cd autodiff
@@ -56,7 +56,7 @@ jobs:
           cd ../..
 
       - name: Install Fastor
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           git clone https://github.com/romeric/Fastor.git
           cd Fastor
@@ -67,7 +67,7 @@ jobs:
           cd ../..
 
       - name: Install AMGCL
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           git clone --branch 1.4.7 --depth 1 https://github.com/ddemidov/amgcl.git
           cd amgcl
@@ -78,7 +78,7 @@ jobs:
           cd ../..
 
       - name: Install Marmot
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           # Try, in order: the branch actually under test (github.head_ref, set for a pull_request
           # event), the PR's base branch (github.base_ref), then next_v26.11, the shared
@@ -118,12 +118,12 @@ jobs:
           cd ../../
 
       - name: Build EdelweissFE
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           pip install -v .
 
       - name: Run tests
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           run_tests_edelweissfe ./testfiles/marmot/
           run_tests_edelweissfe ./testfiles/edelweiss-only/
