@@ -395,19 +395,30 @@ class NED(NonlinearSolverBase):
                     )
 
                 except CutbackRequest as e:
-                    self.journal.message(str(e), self.identification, 1)
-                    cutback = getattr(e, "cutbackSize", 0.25)
-                    step.discardAndChangeIncrement(max(cutback, 0.25))
-                    prevTimeStep = None
-
+                    # A cutback answers a CONVERGENCE failure, and an explicit scheme has no
+                    # convergence to fail: its time step is dictated by stability, courant *
+                    # dt_crit from the mesh and the wave speed. Shrinking it does nothing for a
+                    # material that could not integrate, and doing so was actively destructive --
+                    # discardAndChangeIncrement overwrites enforcedTimeIncrement with the reduced
+                    # value, the generator reuses that value every iteration afterwards, and
+                    # nothing raises it back (the critical step is enforced "lower only", and
+                    # SimpleTimeStepper.preventIncrementIncrease is a no-op). One failed
+                    # quadrature point permanently crippled the analysis: of three production runs
+                    # of the anchor pry-out model, two cut back to minInc and died, and the third
+                    # spent 291000 of 300000 increments at ~1e-14 s, covering 6e-09 s of loading.
+                    #
+                    # So the request is refused and the failure is surfaced where it happened.
                     for man in outputmanagers:
                         man.finalizeFailedIncrement(
                             statusInfoDict=None,
                         )
-                    # reset to old state
-                    U[:] = U_old
-                    V[:] = V_old
-                    P[:] = P_old
+                    raise StepFailed(
+                        "A material requested a cutback in increment {:}: {:}. The explicit time "
+                        "step is set by stability, not by convergence, so it cannot be reduced in "
+                        "response -- either the material cannot integrate at the stable step, or "
+                        "the state reaching it is already wrong. Both need the material or the "
+                        "model looked at, not a smaller step.".format(timeStep.number, e)
+                    ) from e
                 else:
                     # A zero increment is not a completed step: the generator yields one before the
                     # first real increment, and the velocity update returns early for it. Recording
