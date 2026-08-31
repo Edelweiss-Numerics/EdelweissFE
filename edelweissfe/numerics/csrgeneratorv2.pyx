@@ -28,6 +28,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 cimport numpy as np
+from libc.stdint cimport int64_t
 from libcpp.vector cimport vector
 
 
@@ -121,7 +122,7 @@ cdef extern from "_csrcore.h":
                            const int* I, const int* J, long nPairs, int nThreads) except +
 
         void assembleFromVIJ(const double* V, const int* I, double* csr_data) nogil
-        void registerEntities(const long* mapStarts, const int* nDofs, int nEntities, const int* I)
+        void registerEntities(const int64_t* mapStarts, const int* nDofs, int nEntities, const int* I)
         void beginAssembly() nogil
         void scatterBlock(int tid, int entity, const double* block) nogil
         void reduce(double* csr_data) nogil
@@ -387,7 +388,7 @@ cdef class DirectCSRAssembler:
             self.asm_.assembleFromVIJ(&V[0], &I[0], &out[0])
         return self.csrMatrix
 
-    def registerEntities(self, long[::1] mapStarts, int[::1] nDofs):
+    def registerEntities(self, int64_t[::1] mapStarts, int[::1] nDofs):
         """Give each entity its slice of the offset map, once per connectivity change.
 
         ``mapStarts[e]`` is entity e's offset into the VIJ ordering -- the same value the DofManager
