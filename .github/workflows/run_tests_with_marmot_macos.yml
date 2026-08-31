@@ -1,0 +1,154 @@
+# Run the full test suite on macOS / arm64 (Apple Silicon).
+#
+# Mirrors run_tests_with_marmot.yml. Its purpose is to keep Apple Silicon support from
+# regressing: it exercises environment creation, the Marmot build, the Cython build and both
+# test suites on arm64 with clang/libc++, none of which the ubuntu-latest jobs cover.
+#
+# Every dependency is cloned into the parent directory, never into the checkout. Marmot ships
+# a committed symlink, _codeql_detected_source_root -> ., so a Marmot clone inside the
+# checkout makes `pip install .` follow that symlink into itself indefinitely while collecting
+# files for the wheel:
+#
+#     error: could not create 'build/.../Marmot/_codeql_detected_source_root/
+#     _codeql_detected_source_root/...': File name too long
+#
+# Linux tolerates this only because its path limit is four times macOS's; the recursion is
+# there either way, and the dependency sources do not belong in the wheel regardless.
+name: Run tests with Marmot (macOS/arm64)
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    # macos-latest is arm64 (Apple Silicon); macos-13 would be an Intel runner.
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Mambaforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          use-mamba: true
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
+          activate-environment: anaconda-client-env
+
+      # NOTE: the osx-arm64 requirements file, not conda_requirements.txt. The latter pins
+      # anaconda::mkl, anaconda::mkl-include and anaconda::intel-openmp, none of which has an
+      # osx-arm64 build, so it fails to solve before installing anything.
+      - name: Install conda packages
+        shell: bash -leo pipefail {0}
+        run: |
+          mamba install --file conda_requirements_osx-arm64.txt
+
+      - name: Install pip packages
+        shell: bash -leo pipefail {0}
+        run: |
+          pip install -r pip_requirements.txt
+
+      - name: Install Eigen
+        shell: bash -leo pipefail {0}
+        run: |
+          cd ..
+          git clone --branch 3.4.0 https://gitlab.com/libeigen/eigen.git
+          cd eigen
+          mkdir build
+          cd build
+          cmake -DBUILD_TESTING=OFF -DINCLUDE_INSTALL_DIR=$CONDA_PREFIX/include -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
+          make install
+          cd ../..
+
+      # NOTE: the build directory is deliberately not called `build` here. autodiff ships a
+      # Bazel `BUILD` file in its repository root, and the macOS filesystem is case-insensitive,
+      # so `mkdir build` fails with "File exists" and `cd build` with "Not a directory". On Linux
+      # the two names are distinct, which is why the ubuntu jobs are unaffected.
+      - name: Install Autodiff
+        shell: bash -leo pipefail {0}
+        run: |
+          cd ..
+          git clone --branch v1.1.0 https://github.com/autodiff/autodiff.git
+          cd autodiff
+          mkdir build-cmake
+          cd build-cmake
+          cmake -DAUTODIFF_BUILD_TESTS=OFF \
+            -DAUTODIFF_BUILD_PYTHON=OFF \
+            -DAUTODIFF_BUILD_EXAMPLES=OFF \
+            -DAUTODIFF_BUILD_DOCS=OFF \
+            -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \
+            ..
+          make install
+          cd ../..
+
+      # NOTE: upstream Fastor does not compile on arm64 - it reaches x86 `cpuid` and `rdtsc`
+      # inline assembly on every non-Windows platform, and its scalar fallback backend has
+      # further defects that only surface off x86. This fork is upstream `master` plus the
+      # minimal patch fixing exactly that, and nothing else. The fixes are offered upstream in
+      # romeric/Fastor#182 and #183; switch this step back once either is merged. Marmot's own
+      # build_macos.yml uses the same fork for the same reason.
+      - name: Install Fastor (arm64-compatible fork)
+        shell: bash -leo pipefail {0}
+        run: |
+          cd ..
+          git clone --branch arm64/apple-silicon-master https://github.com/BOKU-CMP-MEC-MAT/Fastor.git
+          cd Fastor
+          mkdir build
+          cd build
+          cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
+          make install
+          cd ../..
+
+      - name: Install AMGCL
+        shell: bash -leo pipefail {0}
+        run: |
+          cd ..
+          git clone --branch 1.4.7 --depth 1 https://github.com/ddemidov/amgcl.git
+          cd amgcl
+          mkdir build
+          cd build
+          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
+          make install
+          cd ../..
+
+      - name: Install Marmot
+        shell: bash -leo pipefail {0}
+        run: |
+          # Branch selection is identical to run_tests_with_marmot.yml; see the comment there.
+          CANDIDATE_BRANCHES=("${{ github.head_ref }}" "${{ github.base_ref }}" "next_v26.11")
+
+          cd ..
+          git clone --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/
+          cd Marmot
+
+          TARGET_BRANCH=""
+          for candidate in "${CANDIDATE_BRANCHES[@]}"; do
+            if [ -n "$candidate" ] && git show-ref --verify --quiet "refs/remotes/origin/$candidate"; then
+              TARGET_BRANCH="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$TARGET_BRANCH" ]; then
+            echo "::error::None of the candidate branches (${CANDIDATE_BRANCHES[*]}) exist in Marmot, and there is no safe default to fall back to."
+            exit 1
+          fi
+
+          echo "Using Marmot branch: $TARGET_BRANCH"
+          git checkout --detach "origin/$TARGET_BRANCH"
+
+          mkdir build
+          cd build
+          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
+          make install
+          cd ../../
+
+      - name: Build EdelweissFE
+        shell: bash -leo pipefail {0}
+        run: |
+          pip install -v .
+
+      - name: Run tests
+        shell: bash -leo pipefail {0}
+        run: |
+          run_tests_edelweissfe ./testfiles/marmot/
+          run_tests_edelweissfe ./testfiles/edelweiss-only/
