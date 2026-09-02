@@ -9,8 +9,13 @@ gstools
 make
 numpy
 numpydoc
-python=3.14
-python-freethreading
+# conda-forge's freethreaded python 3.14.7 build h1945688_5_cp314t ships broken sysconfig CFLAGS
+# ("-partition=none") that make g++ reject any pip source build of a C/C++ extension (e.g. pyamg,
+# which has no cp314t wheel). Pinning python-freethreading's build alone does not pin the python
+# package it pulls in, so both must be pinned to the last known-good build until conda-forge
+# fixes it upstream (unreported as of 2026-09-02). TODO: unpin once fixed.
+python=3.14.7=h1945688_4_cp314t
+python-freethreading=3.14.7=h92d6c8b_4
 pytest
 prettytable
 scipy
