@@ -313,7 +313,7 @@ A degree of freedom eliminated by a multi-point constraint -- a ``tie`` slave, a
 slave -- cannot also be prescribed by a Dirichlet boundary condition: the constraint already
 determines it from its masters, and a prescribed value would be a second, independent equation for
 the same unknown. Where a boundary condition's node set overlaps a constraint's slave nodes, the
-implicit solvers resolve the overlap automatically: the conflicting constraint equation is dropped,
+solvers resolve the overlap automatically: the conflicting constraint equation is dropped,
 for that component only, so that the boundary condition takes precedence. This is how Abaqus
 resolves the same overlap, and it needs no configuration.
 
