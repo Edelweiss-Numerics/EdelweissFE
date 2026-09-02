@@ -128,7 +128,6 @@
 **=================================================================================================
 *include, input=./mesh/concrete_edelweissfe.inp
 *include, input=./mesh/steel_edelweissfe.inp
-*include, input=./zsymm_free_block.txt
 
 **=================================================================================================
 ** MATERIALS
@@ -394,8 +393,8 @@ maxInc=1, minInc=1, maxNumInc=1, maxIter=25, stepLength=1
 >>dirichlet, name=fixRight,       nSet=right,          field=displacement, 1=0, 2=0, 3=0
 >>dirichlet, name=fixBack,        nSet=back,           field=displacement, 1=0, 2=0, 3=0
 >>dirichlet, name=fixBottom,      nSet=bottom,         field=displacement, 1=0, 2=0, 3=0
->>dirichlet, name=zSymmConcrete,  nSet=z_symm_concrete_free, field=displacement, 3=0
->>dirichlet, name=zSymmSteel,     nSet=z_symm_steel_free,    field=displacement, 3=0
+>>dirichlet, name=zSymmConcrete,  nSet=z_symm_concrete, field=displacement, 3=0
+>>dirichlet, name=zSymmSteel,     nSet=z_symm_steel,    field=displacement, 3=0
 >>dirichlet, name=plateXFix,      nSet=plate_left_loading, field=displacement, 1=0
 
 ** Step 2 ("loading" in the source model): ramp the plate's x-displacement to 5.0 mm using an
@@ -408,6 +407,6 @@ maxInc=5e-3, minInc=1e-8, maxNumInc=100000, maxIter=25, criticalIter=10, stepLen
 >>dirichlet, name=fixRight,       nSet=right,          field=displacement, 1=0, 2=0, 3=0
 >>dirichlet, name=fixBack,        nSet=back,           field=displacement, 1=0, 2=0, 3=0
 >>dirichlet, name=fixBottom,      nSet=bottom,         field=displacement, 1=0, 2=0, 3=0
->>dirichlet, name=zSymmConcrete,  nSet=z_symm_concrete_free, field=displacement, 3=0
->>dirichlet, name=zSymmSteel,     nSet=z_symm_steel_free,    field=displacement, 3=0
+>>dirichlet, name=zSymmConcrete,  nSet=z_symm_concrete, field=displacement, 3=0
+>>dirichlet, name=zSymmSteel,     nSet=z_symm_steel,    field=displacement, 3=0
 >>dirichlet, name=plateXFix,      nSet=plate_left_loading, field=displacement, 1=5.0

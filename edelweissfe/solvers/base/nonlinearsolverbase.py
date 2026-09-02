@@ -36,7 +36,10 @@ from scipy.sparse import csr_matrix
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
-from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
+from edelweissfe.numerics.mpctransformation import (
+    MultiPointConstraintTransformation,
+    _flattenChainedRecords,
+)
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import DivergingSolution
@@ -557,7 +560,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         return perNodeDofs[:, dirichlet.components].flatten()
 
-    def buildMPCTransformation(self, model: FEModel):
+    def buildMPCTransformation(self, model: FEModel, stepActions: dict = None):
         """Collect the linear dependency records from all multi-point constraints of the model
         and assemble the master-slave condensation operator for the current equation system.
         Must be called whenever the DofManager is (re)built.
@@ -566,6 +569,10 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         ----------
         model
             The model tree.
+        stepActions
+            The step's actions, against which conflicting records are reconciled (see
+            :meth:`_reconcileMPCDirichletConflicts`). Without them the records are used exactly as
+            collected -- there is nothing to reconcile against.
 
         Returns
         -------
@@ -587,6 +594,9 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             for record in mpc.getMultiPointConstraints(self.theDofManager)
         ]
 
+        if stepActions is not None:
+            records = self._reconcileMPCDirichletConflicts(records, stepActions)
+
         transformation = MultiPointConstraintTransformation(
             records,
             self.theDofManager.nDof,
@@ -600,6 +610,126 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         )
 
         return transformation
+
+    def _prescribedDofValues(self, stepActions: dict) -> dict:
+        """``{globalDofIndex: prescribed increment}`` over **all** Dirichlet BCs of the step.
+
+        The union matters: a tie slave's masters routinely take the relevant component from a
+        different boundary condition than the slave does (a node can sit in both a symmetry set,
+        which prescribes one component, and an encastre set, which prescribes three). Evaluated
+        per-DOF rather than per-node for the same reason -- a BC need not prescribe every component.
+        """
+
+        prescribed = {}
+        for dirichlet in stepActions["dirichlet"].values():
+            if not dirichlet.active:
+                continue
+            # the node set may have been mutated in place since this BC was built -- adaptive
+            # refinement adding boundary nodes -- which resizes the DOF index array derived from it
+            # but not the cached prescribed values, until the BC is asked to catch up
+            dirichlet.reconcileIfSetChanged()
+            indices = np.asarray(self._constrainedDofsOf(dirichlet)).flatten()
+            values = np.asarray(dirichlet.delta).flatten()
+            if indices.shape != values.shape:
+                raise ValueError(
+                    "Dirichlet '{:}': {:} constrained DOF(s) but {:} prescribed value(s) -- the DOF "
+                    "index layout and the delta layout must agree node-by-node.".format(
+                        dirichlet.name, indices.size, values.size
+                    )
+                )
+            for index, value in zip(indices, values):
+                prescribed[int(index)] = float(value)
+        return prescribed
+
+    def _reconcileMPCDirichletConflicts(self, records: list, stepActions: dict) -> list:
+        """Drop the multi-point-constraint records whose slave DOF is also Dirichlet-prescribed, so
+        the boundary condition takes precedence -- and report what was dropped.
+
+        A DOF cannot be both eliminated by a constraint and prescribed. The alternative -- rejecting
+        the model -- forces the user to subtract the constraint's slave nodes from the boundary
+        condition's node set by hand, offline: a snapshot that goes stale the moment the mesh, the
+        constraint tolerance or an adaptive refinement changes, and which additionally blocks the
+        propagation of that boundary condition to nodes created later, since refinement extends a
+        node set only where the whole parent face already lies within it. Resolving in favour of the
+        boundary condition is what Abaqus does with the same conflict.
+
+        Records are classified, not silently dropped:
+
+        * **redundant** -- the constraint equation already delivers the prescribed value (every
+          master with a non-negligible weight is itself prescribed, and the weighted sum matches).
+          Dropping it changes nothing; reported quietly.
+        * **overridden** -- it does not. Dropping it *does* change the model, so this is reported
+          loudly with the worst offender: it usually means the boundary condition's node set is
+          incomplete, or the constraint is not the one the user thought it was.
+
+        Masters are resolved transitively first (a master may itself be a slave), exactly as the
+        transformation does before it enforces anything.
+
+        Returns
+        -------
+        list
+          The records to keep.
+        """
+
+        prescribed = self._prescribedDofValues(stepActions)
+        if not prescribed:
+            return records
+
+        flattened = dict(_flattenChainedRecords(records))
+
+        dropped = set()
+        nRedundant = 0
+        overridden = []
+        for slaveDof, masters in flattened.items():
+            if slaveDof not in prescribed:
+                continue
+
+            target = prescribed[slaveDof]
+            # a scaled tolerance, never an exact comparison: clamped closest-point projections
+            # routinely leave round-off-scale weights that are not exactly 0.0
+            scale = max((abs(c) for _, c in masters), default=1.0)
+            totalWeight = 0.0
+            delivered = 0.0
+            unresolvedWeight = 0.0
+            for masterDof, coefficient in masters:
+                if abs(coefficient) <= 1e-12 * scale:
+                    continue
+                totalWeight += abs(coefficient)
+                if masterDof in prescribed:
+                    delivered += coefficient * prescribed[masterDof]
+                else:
+                    unresolvedWeight += abs(coefficient)
+
+            dropped.add(slaveDof)
+            if unresolvedWeight <= 1e-12 * scale and abs(delivered - target) <= 1e-12 * max(1.0, abs(target)):
+                nRedundant += 1
+            else:
+                weightFraction = unresolvedWeight / totalWeight if totalWeight > 0.0 else 1.0
+                overridden.append((slaveDof, weightFraction))
+
+        if not dropped:
+            return records
+
+        if nRedundant:
+            self.journal.message(
+                "reconciled {:} Dirichlet/constraint conflict(s) that were exactly redundant "
+                "(the constraint already delivered the prescribed value)".format(nRedundant),
+                self.identification,
+                1,
+            )
+        if overridden:
+            worstDof, worstWeight = max(overridden, key=lambda entry: entry[1])
+            self.journal.message(
+                "WARNING: {:} multi-point-constraint equation(s) were dropped in favour of a Dirichlet "
+                "boundary condition that they did NOT already imply -- the boundary condition wins, and "
+                "the model has changed. Worst case: DOF {:}, {:.3e} of its constraint weight rests on "
+                "unprescribed masters. This usually means the boundary condition's node set is "
+                "incomplete.".format(len(overridden), worstDof, worstWeight),
+                self.identification,
+                0,
+            )
+
+        return [record for record in records if record[0] not in dropped]
 
     def checkMPCDirichletConflicts(self, transformation, stepActions):
         """Raise if any Dirichlet boundary condition of the step prescribes a DOF that is a slave
@@ -616,5 +746,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         if transformation is None:
             return
 
+        # A post-condition, not a gate: _reconcileMPCDirichletConflicts has already removed every
+        # conflicting record by the time the transformation is assembled, so this can only fire if
+        # that reconciliation missed one. Cheap enough to keep as a guard against exactly that.
         for dirichlet in stepActions["dirichlet"].values():
             transformation.checkDirichletConflicts(self._constrainedDofsOf(dirichlet))

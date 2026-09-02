@@ -306,6 +306,48 @@ Module ``edelweissfe.constraints.tie``
     :language: edelweiss
     :caption: Example (explicit dynamics): ``testfiles/edelweiss-only/TieNED/test.inp``
 
+Multi-point constraints and Dirichlet boundary conditions
+----------------------------------------------------------
+
+A degree of freedom eliminated by a multi-point constraint -- a ``tie`` slave, a ``hangingnode``
+slave -- cannot also be prescribed by a Dirichlet boundary condition: the constraint already
+determines it from its masters, and a prescribed value would be a second, independent equation for
+the same unknown. Where a boundary condition's node set overlaps a constraint's slave nodes, the
+solvers resolve the overlap automatically: the conflicting constraint equation is dropped,
+for that component only, so that the boundary condition takes precedence. This is how Abaqus
+resolves the same overlap, and it needs no configuration.
+
+The alternative -- rejecting such a model and requiring the user to subtract the constraint's slave
+nodes from the boundary condition's node set -- is worth understanding, because input files written
+for solvers that demand it often carry such a subtraction. It is a snapshot: computed against one
+mesh, one tie tolerance and one refinement state, and silently no longer correct when any of them
+changes, with no diagnostic, because what remains is a plain list of node labels that no longer
+records why those labels were chosen. It also interferes with :math:`h`-adaptivity, which extends a
+node set to newly created nodes only where the *whole* parent face or edge already lies within the
+set: every face touching a subtracted node stops propagating the boundary condition to its children,
+so the boundary condition thins out with each refinement. Such subtractions should be removed rather
+than maintained.
+
+Dropped equations are reported in two classes, and the distinction matters:
+
+*redundant*
+    Every master carrying non-negligible weight is itself prescribed, and the weighted sum
+    reproduces the value prescribed on the slave. The constraint equation and the boundary condition
+    say the same thing, so dropping either changes nothing. Reported as a count, at journal level 1.
+    This is the expected case for a symmetry plane cutting through a tied interface: the slave and
+    its masters all lie on the plane and all carry the same prescribed value.
+
+*not implied*
+    They do not say the same thing -- some master is unprescribed, or the weighted sum disagrees.
+    The boundary condition still wins, but the model has genuinely changed, so this is reported as a
+    warning naming how much of the constraint weight rests on unprescribed masters. It is a signal
+    worth chasing rather than silencing: the usual cause is a boundary condition whose node set is
+    incomplete, so that masters which ought to carry the condition do not.
+
+Masters are resolved transitively before classification -- a master may itself be a slave of another
+constraint -- and weights are compared against a scaled tolerance, never against exact zero, since
+clamped closest-point projections routinely leave weights at round-off magnitude.
+
 ``hangingnode`` - Hanging-node coupling for adaptive mesh refinement
 --------------------------------------------------------------------
 
