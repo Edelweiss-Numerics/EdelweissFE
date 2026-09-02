@@ -625,6 +625,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         prescribed = {}
         for dirichlet in stepActions["dirichlet"].values():
+            if not dirichlet.active:
+                continue
             # the node set may have been mutated in place since this BC was built -- adaptive
             # refinement adding boundary nodes -- which resizes the DOF index array derived from it
             # but not the cached prescribed values, until the BC is asked to catch up
@@ -669,7 +671,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         Returns
         -------
         list
-            The records to keep.
+          The records to keep.
         """
 
         prescribed = self._prescribedDofValues(stepActions)
@@ -689,11 +691,13 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             # a scaled tolerance, never an exact comparison: clamped closest-point projections
             # routinely leave round-off-scale weights that are not exactly 0.0
             scale = max((abs(c) for _, c in masters), default=1.0)
+            totalWeight = 0.0
             delivered = 0.0
             unresolvedWeight = 0.0
             for masterDof, coefficient in masters:
                 if abs(coefficient) <= 1e-12 * scale:
                     continue
+                totalWeight += abs(coefficient)
                 if masterDof in prescribed:
                     delivered += coefficient * prescribed[masterDof]
                 else:
@@ -703,7 +707,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             if unresolvedWeight <= 1e-12 * scale and abs(delivered - target) <= 1e-12 * max(1.0, abs(target)):
                 nRedundant += 1
             else:
-                overridden.append((slaveDof, unresolvedWeight / scale))
+                weightFraction = unresolvedWeight / totalWeight if totalWeight > 0.0 else 1.0
+                overridden.append((slaveDof, weightFraction))
 
         if not dropped:
             return records
