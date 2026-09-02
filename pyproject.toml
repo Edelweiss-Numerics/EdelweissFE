@@ -10,8 +10,7 @@ readme = "README.md"
 authors = [
     { name = "Matthias Neuner", email = "matthias.neuner@uibk.ac.at" }
 ]
-license = "LGPL-2.1"
-license-files = ["LICENSE.md"]
+license = { text = "LGPL-2.1" }
 urls = { Homepage = "https://github.com/EdelweissFE/EdelweissFE" }
 requires-python = ">=3.14"
 
