@@ -139,7 +139,7 @@ class NEDSchema:
     contactUpdateFrequency: int | None = schemaField(
         description=(
             "The increment interval at which constraints whose connectivity is the outcome of a "
-            "search (contact) re-run that search."
+            "search (contact) re-run that search. 0 disables periodic updates mid-run."
         ),
         dtype=int,
         default=100,
@@ -174,12 +174,6 @@ class ExplicitSystem:
         The velocity vector, staggered half an increment behind ``U``.
     P
         The net nodal force -- external minus internal -- which drives the velocity update.
-    U_old
-        ``U`` as of the start of the current increment, kept for the cutback path.
-    V_old
-        ``V`` as of the start of the current increment, kept for the cutback path.
-    P_old
-        ``P`` as of the start of the current increment, kept for the cutback path.
     criticalTimeStep
         The stable time increment for the current mesh, already scaled by the courant number.
     """
@@ -190,9 +184,6 @@ class ExplicitSystem:
     dU: DofVector
     V: DofVector
     P: DofVector
-    U_old: DofVector
-    V_old: DofVector
-    P_old: DofVector
     criticalTimeStep: float
 
 
@@ -211,9 +202,8 @@ class NED(NonlinearSolverBase):
 
     supportsMPC = True
 
-    #: This solver runs the topology update exactly once, before its increment loop, which fully
-    #: serves any modifier that only ever acts at the start of the analysis. One that would act later
-    #: is refused by validateModelCapabilities rather than silently never running.
+    #: This solver supports model modifiers both before the increment loop (initialOnly modifiers)
+    #: and mid-run on a periodic cadence via the ``topology-check-frequency`` solver option.
     supportsModelModifiers = True
 
     #: Option schema for this solver, per OptionSchemaProvider.
@@ -295,6 +285,10 @@ class NED(NonlinearSolverBase):
 
         self.validateModelCapabilities(model)
 
+        self._externalWork = 0.0
+        self._cumulativeMassDrift = 0.0
+        self._warnedAboutMissingInternalEnergy = False
+
         # Constraints whose DOF footprint is the outcome of a search, i.e. contact. Collected once,
         # so a model without any pays nothing for the per-increment tick in the loop below.
         self._dynamicConnectivityConstraints = [
@@ -327,7 +321,6 @@ class NED(NonlinearSolverBase):
 
         Minv = theSystem.Minv
         U, dU, V, P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
-        U_old, V_old, P_old = theSystem.U_old, theSystem.V_old, theSystem.P_old
         criticalTimeStep = theSystem.criticalTimeStep
 
         contactUpdateFrequency = self.options["contact-update-frequency"]
@@ -364,6 +357,7 @@ class NED(NonlinearSolverBase):
                     )
                 if (
                     self._dynamicConnectivityConstraints
+                    and contactUpdateFrequency
                     and timeStep.number > 0
                     and timeStep.number % contactUpdateFrequency == 0
                 ):
@@ -386,11 +380,7 @@ class NED(NonlinearSolverBase):
 
                         Minv = theSystem.Minv
                         U, dU, V, P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
-                        U_old, V_old, P_old = theSystem.U_old, theSystem.V_old, theSystem.P_old
 
-                U_old[:] = U
-                V_old[:] = V
-                P_old[:] = P
                 dU[:] = 0.0
                 try:
                     U, V, P = self.solveIncrement(
@@ -491,7 +481,6 @@ class NED(NonlinearSolverBase):
 
                             Minv = theSystem.Minv
                             U, dU, V, P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
-                            U_old, V_old, P_old = theSystem.U_old, theSystem.V_old, theSystem.P_old
                             UAtLastConnectivitySearch = np.array(U)
 
                             # The net force is deliberately NOT re-evaluated on the new mesh. It
@@ -613,11 +602,12 @@ class NED(NonlinearSolverBase):
         for dirichlet in dirichlets:
             prescribedIncrement = dirichlet.getPrescribedIncrement(timeStep).flatten()
 
-            # The work put into the model at a prescribed degree of freedom is the reaction there
-            # times the motion it is dragged through. P still holds the internal force at this
-            # point, and the support reaction is its negative -- so this has to be accumulated
-            # HERE, immediately before the zeroing below, which is the only moment the reaction
-            # is available.
+            # The work put into the model at a prescribed degree of freedom is the reaction force
+            # there times the motion it is dragged through. At this point P holds the carried-over
+            # net nodal force from the previous increment (external minus internal plus constraint
+            # contributions), and the support reaction balancing it is its negative -- so this has to
+            # be accumulated HERE, immediately before the zeroing below, which is the only moment the
+            # reaction is available.
             self._externalWork -= float(np.dot(P[dirichlet.constrainedDofIndices], prescribedIncrement))
 
             P[dirichlet.constrainedDofIndices] = 0.0
@@ -904,14 +894,11 @@ class NED(NonlinearSolverBase):
 
         Two beyond :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.validateModelCapabilities`:
 
-        A **model modifier that would act after the analysis has started.** This solver runs the
-        topology update once, before its increment loop, so a modifier whose every change happens
-        there is fully served. One that would change the mesh later is not: the lumped mass, the
-        multi-point-constraint condensation and the critical time step are all derived from the mesh
-        at that single point, and -- unlike an implicit solver, which keeps everything it carries
-        between increments in node fields -- the central-difference velocity is solver-local, so
-        there is nothing to interpolate it onto newly created nodes with. Refusing is the honest
-        outcome; ``PLAN_LIVE_AMR_EXPLICIT.md`` records what lifting this needs.
+        A **model modifier that would act after the analysis has started without configuring
+        ``topology-check-frequency``.** Modifiers that act only at simulation start are served by the
+        initial topology update before the increment loop. Modifiers that act mid-run require
+        ``topology-check-frequency`` to be set to a non-zero multiple of ``output-frequency``;
+        otherwise they are refused to prevent silently never adapting.
 
         A **constraint that introduces its own scalar variables** (a Lagrange multiplier, an
         indirect-control unknown). Those DOFs carry no inertia, so their inverse lumped mass is zero
@@ -964,6 +951,10 @@ class NED(NonlinearSolverBase):
                     self.identification,
                     1,
                 )
+
+        contactUpdateFrequency = self.options["contact-update-frequency"]
+        if contactUpdateFrequency is not None and contactUpdateFrequency < 0:
+            raise ValueError(f"contact-update-frequency ({contactUpdateFrequency}) cannot be negative.")
 
         for constraintName, constraint in model.constraints.items():
             nScalarVariables = constraint.getNumberOfAdditionalNeededScalarVariables()
@@ -1107,10 +1098,6 @@ class NED(NonlinearSolverBase):
         V = self.theDofManager.constructDofVector()  # initilize velocity vector
         P = self.theDofManager.constructDofVector()  # initialize reaction vector
 
-        U_old = self.theDofManager.constructDofVector()  # initialize old displacement vector
-        V_old = self.theDofManager.constructDofVector()  # initilize old velocity vector
-        P_old = self.theDofManager.constructDofVector()  # initialize old reaction vector
-
         M[:] = 0.0
         for el in model.elements.values():
             Me = np.zeros(el.nDof)
@@ -1228,9 +1215,6 @@ class NED(NonlinearSolverBase):
             dU=dU,
             V=V,
             P=P,
-            U_old=U_old,
-            V_old=V_old,
-            P_old=P_old,
             criticalTimeStep=criticalTimeStep,
         )
 

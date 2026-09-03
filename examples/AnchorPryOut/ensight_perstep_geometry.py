@@ -22,14 +22,16 @@ USAGE
     python ensight_perstep_geometry.py esExport.case
     -> writes esExport_perstep.case, open THAT one.
 """
+
 import os
 import re
 import sys
 
 
 def parseCase(path):
-    """Return (timeSets, geometryPattern, variableLines, exportDir) from an Ensight Gold case file."""
-    text = open(path).read()
+    """Return (timeSets, geometrySet, geometryPattern, variableLines) from an Ensight Gold case file."""
+    with open(path) as f:
+        text = f.read()
 
     timeSets = {}
     for block in re.finditer(

@@ -219,7 +219,7 @@ def computeElementsInParallelForExplicit(
     numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
 
     # Target ~1000 to 5000 elements per chunk depending on mesh size
-    chunk_size = max(1, len(elements) // (numThreads * 4)) if numThreads > 1 else len(elements)
+    chunk_size = max(1, len(elements) // (numThreads * 4)) if numThreads > 1 else min(len(elements), 4000)
     plan = _chunkedGatherPlan(elements, Un1.entitiesInDofVector, chunk_size)
 
     if numThreads == 1:

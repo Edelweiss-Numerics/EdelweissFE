@@ -890,7 +890,9 @@ class Constraint(ConstraintBase, MeshDependent):
                     KLocal += f_n * H
 
             if self.mu > 0.0:
-                PFriction, KFriction = self._computeFriction(s, c, nBar, f_n, stiffness, w, dU, pIdcs, fIdcs)
+                PFriction, KFriction = self._computeFriction(
+                    s, c, nBar, f_n, stiffness, w, dU, pIdcs, fIdcs, computeTangent=(KLocal is not None)
+                )
                 PLocal += PFriction
                 if KLocal is not None:
                     KLocal += KFriction
@@ -950,7 +952,8 @@ class Constraint(ConstraintBase, MeshDependent):
         dU: np.ndarray,
         pIdcs: list,
         fIdcs: list,
-    ) -> tuple[np.ndarray, np.ndarray]:
+        computeTangent: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
         """Coulomb friction in the frozen small-sliding frame: elastic (stick) predictor from the
         converged tangential force and the incremental tangential relative displacement, radial
         return onto the friction cone ``|f_T| <= mu * N`` on slip.
@@ -980,19 +983,22 @@ class Constraint(ConstraintBase, MeshDependent):
         if stickForceMagnitude <= slipLimit:
             tangentialForce = stickForce
             # d(stickForce)_d(dURelative) = -kTangent * projector; K = -G.T dfT_dU G
-            KFriction = np.kron(np.outer(c, c), kTangent * projectorOntoTangentPlane)
+            KFriction = np.kron(np.outer(c, c), kTangent * projectorOntoTangentPlane) if computeTangent else None
         else:
             slipDirection = stickForce / stickForceMagnitude
             tangentialForce = slipLimit * slipDirection
-            # dfT_dU = slipDirection * mu * dN_dU + slipLimit * dSlipDirection_dU, with
-            # dN_dU = -stiffness * w and dSlipDirection_dU built from the stick predictor;
-            # the first term makes KFriction nonsymmetric (normal-tangential coupling).
-            KFriction = self.mu * stiffness * np.outer(np.kron(c, slipDirection), w)
-            KFriction += np.kron(
-                np.outer(c, c),
-                (slipLimit * kTangent / stickForceMagnitude)
-                * ((np.eye(nDim) - np.outer(slipDirection, slipDirection)) @ projectorOntoTangentPlane),
-            )
+            if computeTangent:
+                # dfT_dU = slipDirection * mu * dN_dU + slipLimit * dSlipDirection_dU, with
+                # dN_dU = -stiffness * w and dSlipDirection_dU built from the stick predictor;
+                # the first term makes KFriction nonsymmetric (normal-tangential coupling).
+                KFriction = self.mu * stiffness * np.outer(np.kron(c, slipDirection), w)
+                KFriction += np.kron(
+                    np.outer(c, c),
+                    (slipLimit * kTangent / stickForceMagnitude)
+                    * ((np.eye(nDim) - np.outer(slipDirection, slipDirection)) @ projectorOntoTangentPlane),
+                )
+            else:
+                KFriction = None
 
         self._tangentialForceCurrent[s] = tangentialForce
         PFriction = np.kron(c, tangentialForce)

@@ -256,7 +256,7 @@ class SimpleTimeStepper(TimeStepperBase):
         if self.totalIncrements <= 0:
             return None
 
-        return self.stepLength * self.increment
+        return float(self.dT)
 
     def writeRestart(self, restartFile):
         """Write this time stepper's progress within the step to a restart checkpoint.
