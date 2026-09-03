@@ -960,13 +960,8 @@ class FEModel:
             if storedField is None:
                 continue
 
-            # Iterate what the CHECKPOINT holds, not what this model has created so far. The two
-            # differ: writeRestart stores every entry a node field has at write time, while at read
-            # time the driver has created only 'U' and 'P'. The explicit solver's velocity entry 'V'
-            # is created later, the first time the solver writes it -- so keying this loop on the
-            # model silently dropped 'V' from every resume, leaving the run to integrate from zero
-            # velocity with no error anywhere. Entries the model has not created yet are created
-            # here, so they are populated before any solver asks for them.
+            # Iterate the checkpoint's entries, not the model's -- entries created only later by a
+            # solver (e.g. the explicit solver's 'V') would otherwise never be restored.
             for entryName, storedValues in storedField.items():
                 if entryName not in nf:
                     nf.createFieldValueEntry(entryName)

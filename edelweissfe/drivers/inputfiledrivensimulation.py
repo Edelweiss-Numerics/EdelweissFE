@@ -257,10 +257,6 @@ def finiteElementSimulation(
 
     except StepFailed as e:
         print("")
-        # Report WHY. A StepFailed carries the reason it was raised with -- which solver, which
-        # increment, which material -- and discarding it left the log with no explanation at all,
-        # so a run that stopped for a diagnosable reason looked indistinguishable from one that
-        # stopped for an unknown one.
         message = str(e)
         journal.errorMessage(
             "Simulation failed: {:}".format(message) if message else "Simulation failed", identification
