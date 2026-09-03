@@ -121,7 +121,10 @@ class NEDSchema:
         optionName="courant-number",
     )
     outputFrequency: int | None = schemaField(
-        description="The increment interval at which progress is logged.",
+        description=(
+            "The increment interval at which progress is logged and field outputs are finalized. "
+            "Must be at least 1: it is a divisor, so 0 does not disable reporting."
+        ),
         dtype=int,
         default=1000,
         optionName="output-frequency",
@@ -952,6 +955,36 @@ class NED(NonlinearSolverBase):
         topologyCheckFrequency = self.options["topology-check-frequency"]
         outputFrequency = self.options["output-frequency"]
 
+        # All three cadence options are validated here, together, because each is used as a modulo
+        # operand further down and none of them fails usefully on its own:
+        #
+        #  * output-frequency is a DIVISOR, not a flag: 0 does not mean "never report", it means
+        #    ZeroDivisionError from a bare traceback on the first increment. It must be >= 1.
+        #  * a NEGATIVE cadence is silently accepted otherwise. It is truthy, so it passes the
+        #    "is it set" gates; and when its magnitude is a multiple of output-frequency it also
+        #    passes the multiple check below (-20 % 20 == 0) and then fires at exactly the same
+        #    increments as its absolute value (n % -20 == 0 for the same n as n % 20 == 0). When
+        #    the magnitude is NOT a multiple, the multiple-check error blames the wrong thing.
+        if outputFrequency is None or outputFrequency < 1:
+            raise ValueError(
+                "output-frequency ({:}) must be at least 1: it is the divisor of the reporting, "
+                "field-output and topology-check cadences, so 0 does not disable them, it raises "
+                "ZeroDivisionError on the first increment.".format(outputFrequency)
+            )
+
+        if topologyCheckFrequency is not None and topologyCheckFrequency < 0:
+            raise ValueError(
+                "topology-check-frequency ({:}) cannot be negative. Use 0 to run the topology "
+                "update only once, before the increment loop.".format(topologyCheckFrequency)
+            )
+
+        contactUpdateFrequency = self.options["contact-update-frequency"]
+        if contactUpdateFrequency is not None and contactUpdateFrequency < 0:
+            raise ValueError(
+                "contact-update-frequency ({:}) cannot be negative. Use 0 to disable the periodic "
+                "connectivity update mid-run.".format(contactUpdateFrequency)
+            )
+
         if lateModifiers and not topologyCheckFrequency:
             raise ValueError(
                 "The model modifier(s) {:} act after the analysis has started, but "
@@ -976,10 +1009,6 @@ class NED(NonlinearSolverBase):
                     self.identification,
                     1,
                 )
-
-        contactUpdateFrequency = self.options["contact-update-frequency"]
-        if contactUpdateFrequency is not None and contactUpdateFrequency < 0:
-            raise ValueError(f"contact-update-frequency ({contactUpdateFrequency}) cannot be negative.")
 
         for constraintName, constraint in model.constraints.items():
             nScalarVariables = constraint.getNumberOfAdditionalNeededScalarVariables()
