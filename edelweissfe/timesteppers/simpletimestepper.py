@@ -110,6 +110,12 @@ class SimpleTimeStepper(TimeStepperBase):
                     self.increment = remainder
 
                 dT = self.stepLength * self.increment
+                # Record the increment actually used. writeRestart checkpoints ``self.dT`` and
+                # restoredTimeIncrement() hands it back to a multi-step integrator on resume, so
+                # leaving it at its ``__init__`` value of 0.0 makes both silently meaningless: an
+                # explicit solver seeded with dT_prev = 0 repeats its leapfrog startup half-step on
+                # every resumed run, which is indistinguishable from a correct cold start.
+                self.dT = dT
                 self.finishedStepProgress += self.increment
                 endTimeOfIncrementInStep = self.stepLength * self.finishedStepProgress
                 endTimeOfIncrementInTotal = self.currentTime + endTimeOfIncrementInStep
@@ -139,6 +145,12 @@ class SimpleTimeStepper(TimeStepperBase):
                     self.increment = remainder
 
                 dT = self.stepLength * self.increment
+                # Record the increment actually used. writeRestart checkpoints ``self.dT`` and
+                # restoredTimeIncrement() hands it back to a multi-step integrator on resume, so
+                # leaving it at its ``__init__`` value of 0.0 makes both silently meaningless: an
+                # explicit solver seeded with dT_prev = 0 repeats its leapfrog startup half-step on
+                # every resumed run, which is indistinguishable from a correct cold start.
+                self.dT = dT
                 self.finishedStepProgress += self.increment
                 endTimeOfIncrementInStep = self.stepLength * self.finishedStepProgress
                 endTimeOfIncrementInTotal = self.currentTime + endTimeOfIncrementInStep
