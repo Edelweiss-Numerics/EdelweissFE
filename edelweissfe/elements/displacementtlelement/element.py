@@ -643,12 +643,24 @@ class DisplacementTLElement(BaseElement):
         return np.concatenate([self._stateVarsRef.reshape(-1), self._Eold.reshape(-1)]).copy()
 
     def setStateVars(self, values: np.ndarray):
-        """Overwrite the converged quadrature-point state-variable buffer and ``_Eold`` in place."""
+        """Overwrite the converged quadrature-point state-variable buffer and ``_Eold`` in place.
+
+        The working buffers are seeded from them as well. :meth:`acceptLastState` copies
+        ``_stateVarsTemp`` over ``_stateVarsRef`` *and* ``_E`` over ``_Eold``, and it can run
+        before any element computation has populated either: both explicit solvers process a zero
+        increment first, for which :meth:`computeYourself` is never called, and then accept it. On
+        a resumed run that copied freshly allocated buffers of zeros over the state just restored,
+        discarding both the quadrature-point history and the converged Green-Lagrange strain the
+        total-Lagrangian incremental-strain computation resumes from. A cold start never noticed,
+        because there both buffers are zero anyway.
+        """
 
         values = np.asarray(values)
         nStateVars = self._stateVarsRef.size
         self._stateVarsRef[:] = values[:nStateVars].reshape(self._stateVarsRef.shape)
         self._Eold[:] = values[nStateVars:].reshape(self._Eold.shape)
+        self._stateVarsTemp = self._stateVarsRef.copy()
+        self._E = self._Eold.copy()
 
     def getResultArray(self, result: str, quadraturePoint: int, getPersistentView: bool = True) -> np.ndarray:
         """Get the array of a result, possibly as a persistent view which is continiously
