@@ -233,24 +233,21 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         setVersions[key] = theSet._version
         return changed
 
-    def applyConstraintForcesOnly(
+    def applyConstraintExplicit(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
         PExt: np.ndarray,
         timeStep: TimeStep,
     ):
-        """Evaluate this constraint's nodal forces without producing a tangent.
+        """Evaluate this constraint without producing a tangent matrix.
 
-        What an explicit solver needs: it assembles no system matrix, so any tangent a constraint
-        computes is built and discarded. The default implementation below still asks for one, through
-        the same ``getVIJContributionSize``/``shapeVIJContribution`` protocol the implicit system
-        matrix uses, so every existing constraint keeps working without change.
+        Used by explicit solvers where no system tangent matrix is assembled. The default
+        implementation forwards to :meth:`applyConstraint` with a dummy tangent contribution
+        so existing constraints remain functional without modification.
 
-        A constraint for which the tangent is a material part of the cost should override this.
-        ``nodeToDeformableSurfacePenalty`` does: its per-slave outer product and four block writes are
-        2.5 ms per increment on a 280k-dof contact model, and its container another 1.2 ms, all of it
-        thrown away.
+        Constraints where tangent computation is costly should override this method to evaluate
+        only the residual / force vector directly.
 
         Parameters
         ----------
@@ -259,7 +256,7 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         dU
             The current solution increment, likewise restricted.
         PExt
-            The local force vector to augment.
+            The local residual / force vector to augment.
         timeStep
             The current time step.
         """

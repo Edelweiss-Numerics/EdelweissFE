@@ -1237,14 +1237,10 @@ class NED(NonlinearSolverBase):
 
         No tangent is requested. An explicit increment solves no linear system, so a constraint's
         stiffness enters nothing, and
-        :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintForcesOnly`
-        is the entry point that says so. Its default still builds a throwaway container through the
-        implicit system matrix' own protocol, so every constraint works unchanged; a constraint for
-        which the tangent is a real cost overrides it, as the deformable-surface contact does -- there
-        the per-slave outer product and block writes were 2.5 ms per increment on a 280k-dof model,
-        and the container another 1.2 ms, all discarded. A constraint that could act *only* through
-        its tangent would contribute nothing here; that is precisely the class
-        :meth:`validateModelCapabilities` refuses.
+        :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit`
+        is the entry point that evaluates the constraint forces directly without assembling a tangent.
+        A constraint that could act *only* through its tangent would contribute nothing here; that is
+        precisely the class :meth:`validateModelCapabilities` refuses.
 
         Parameters
         ----------
@@ -1268,7 +1264,7 @@ class NED(NonlinearSolverBase):
         for constraint in constraints.values():
             Pc = np.zeros(constraint.nDof)
 
-            constraint.applyConstraintForcesOnly(U_np[constraint], dU[constraint], Pc, timeStep)
+            constraint.applyConstraintExplicit(U_np[constraint], dU[constraint], Pc, timeStep)
 
             # np.add.at rather than +=: a constraint may name the same DOF more than once (a slave
             # node that also appears in its own master facet's node list), and += would keep only the

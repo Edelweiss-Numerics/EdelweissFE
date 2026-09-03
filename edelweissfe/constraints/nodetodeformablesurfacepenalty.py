@@ -775,7 +775,7 @@ class Constraint(ConstraintBase, MeshDependent):
                     J_[k] = pIdcs[j]
                     k += 1
 
-    def applyConstraintForcesOnly(
+    def applyConstraintExplicit(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
@@ -783,9 +783,7 @@ class Constraint(ConstraintBase, MeshDependent):
         timeStep: TimeStep,
     ):
         """Forces without a tangent, by running the one loop with ``K=None``. Overrides the base
-        implementation, which would build a container this constraint then fills at real cost -- see
-        :meth:`applyConstraint`'s guards. One loop rather than two, so the physics cannot drift
-        between the implicit and explicit paths."""
+        implementation to avoid constructing an unused tangent matrix container."""
 
         self.applyConstraint(U_np, dU, PExt, None, timeStep)
 
@@ -881,8 +879,7 @@ class Constraint(ConstraintBase, MeshDependent):
             PLocal = -f_n * w
 
             # K is None when the caller discards the tangent -- see
-            # ConstraintBase.applyConstraintForcesOnly. The outer product below is (nDim*(1+nNodes))^2
-            # per slave, so skipping it is worth having rather than tidy.
+            # ConstraintBase.applyConstraintExplicit.
             KLocal = None
             if K is not None:
                 KLocal = stiffness * np.outer(w, w)
