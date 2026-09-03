@@ -51,7 +51,6 @@ from edelweissfe.utils.exceptions import (
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
 
-
 #: Tolerance on the relative change of the total lumped mass across a single topology
 #: change. The children of a refined element tile it and carry the same density, so the
 #: mass is a geometric identity -- but it is assembled by Gauss quadrature, which is exact

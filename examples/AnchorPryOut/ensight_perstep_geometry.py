@@ -56,7 +56,7 @@ def main(casePath):
     print(f"  variable time set {variableSet}: {len(variableTimes)} step(s)")
 
     root = os.path.dirname(os.path.abspath(casePath))
-    stem = geometryPattern.replace("_****", "")           # e.g. esExport/geometry.geo
+    stem = geometryPattern.replace("_****", "")  # e.g. esExport/geometry.geo
     linkStem = stem.replace(".geo", "_perstep.geo")
 
     # For each variable step, the geometry in force is the last one written at or before that time.
