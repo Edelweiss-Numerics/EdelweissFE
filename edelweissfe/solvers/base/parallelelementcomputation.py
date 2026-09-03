@@ -161,6 +161,13 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, chunkSize: int
         and _gatherPlanCache[0] is entitiesInDofVector
         and _gatherPlanCache[1] == chunkSize
         and _gatherPlanCache[2] == len(elements)
+        # Keyed on the collection itself, not just its length: the plan stores the chunked
+        # ELEMENTS, so a second caller in the same increment passing a different but equal-length
+        # subset against the same DofManager would otherwise be handed a plan for the wrong
+        # elements with correctly shaped buffers -- the silent wrong-DOF failure this cache is
+        # documented to guard against. Only NEDParallel calls this today, always with
+        # model.elements, so this is latent rather than live.
+        and _gatherPlanCache[4] is elements
     ):
         return _gatherPlanCache[3]
 
@@ -171,7 +178,7 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, chunkSize: int
         np.cumsum([len(indices) for indices in indicesPerElement], out=offsets[1:])
         plan.append((chunk, np.concatenate(indicesPerElement), offsets))
 
-    _gatherPlanCache = (entitiesInDofVector, chunkSize, len(elements), plan)
+    _gatherPlanCache = (entitiesInDofVector, chunkSize, len(elements), plan, elements)
     return plan
 
 

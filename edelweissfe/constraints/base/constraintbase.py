@@ -39,6 +39,11 @@ from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
 class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
+    #: Scratch buffer for the tangent that :meth:`applyConstraintExplicit` computes and discards.
+    #: Declared here so every constraint has it without touching its constructor; replaced by an
+    #: instance-level array on first use, and re-allocated only when the DOF footprint changes.
+    _discardedTangentScratch = None
+
     @classmethod
     def fromConstraintDefinition(
         cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
@@ -261,7 +266,18 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
             The current time step.
         """
 
-        K = self.shapeVIJContribution(np.zeros(self.getVIJContributionSize()))
+        # nDof**2 for any constraint that does not override getVIJContributionSize, allocated on
+        # every increment for a tangent no explicit solver reads. Kept and re-zeroed instead: the
+        # zeroing preserves the previous semantics exactly, whatever applyConstraint assumes about
+        # the buffer it is handed.
+        size = self.getVIJContributionSize()
+        scratch = self._discardedTangentScratch
+        if scratch is None or scratch.size != size:
+            scratch = self._discardedTangentScratch = np.zeros(size)
+        else:
+            scratch[:] = 0.0
+
+        K = self.shapeVIJContribution(scratch)
         self.applyConstraint(U_np, dU, PExt, K, timeStep)
 
     @abstractmethod

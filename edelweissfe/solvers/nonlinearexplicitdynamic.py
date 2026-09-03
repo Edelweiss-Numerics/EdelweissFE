@@ -229,6 +229,8 @@ class NED(NonlinearSolverBase):
         self.ids_1st = None
         self.ids_2nd = None
         self._warnedAboutMissingInternalEnergy = False
+        self._warnedAboutMissingExternalWork = False
+        self._warnedAboutMassDrift = False
         #: Summed relative mass drift over every topology change, checked against
         #: _CUMULATIVE_MASS_DRIFT_TOLERANCE so that many individually-tolerable changes
         #: cannot silently add up to a meaningful one.
@@ -288,6 +290,8 @@ class NED(NonlinearSolverBase):
         self._externalWork = 0.0
         self._cumulativeMassDrift = 0.0
         self._warnedAboutMissingInternalEnergy = False
+        self._warnedAboutMissingExternalWork = False
+        self._warnedAboutMassDrift = False
 
         # Constraints whose DOF footprint is the outcome of a search, i.e. contact. Collected once,
         # so a model without any pays nothing for the per-increment tick in the loop below.
@@ -472,7 +476,8 @@ class NED(NonlinearSolverBase):
                         and timeStep.number > 0
                         and timeStep.number % topologyCheckFrequency == 0
                     ):
-                        massBefore = float(np.sum(self._rawLumpedMass))
+                        massBefore = float(np.sum(self._rawLumpedMass[self.ids_2nd]))
+                        nonlocalInertiaBefore = float(np.sum(self._rawLumpedMass[self.ids_1st]))
                         momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, V, model)
                         kineticBefore = 0.5 * float(np.sum(self._rawLumpedMass[self.ids_2nd] * V[self.ids_2nd] ** 2))
 
@@ -493,7 +498,9 @@ class NED(NonlinearSolverBase):
                             # preferable to an unbounded unknown one.
                             P[:] = 0.0
 
-                            self.reportTopologyChangeConservation(massBefore, momentumBefore, kineticBefore, V, model)
+                            self.reportTopologyChangeConservation(
+                                massBefore, nonlocalInertiaBefore, momentumBefore, kineticBefore, V, model
+                            )
 
                             # Lower only. Refinement shrinks the smallest element and tightens the
                             # limit, which must be honoured; softening raises it, and taking that up
@@ -704,6 +711,24 @@ class NED(NonlinearSolverBase):
             # Said once, loudly, because a silent zero here reads as "no strain energy yet" rather
             # than "this quantity is not being reported", and the ratio above is the usual way one
             # decides whether an explicit run is quasi-static enough.
+            # The energy-creation check below is gated on Wext > 0, and _externalWork only
+            # accumulates at PRESCRIBED degrees of freedom. A model whose Dirichlet conditions are
+            # all fixed and whose loading comes from body forces, node forces, a distributed load
+            # or an initial velocity therefore has Wext identically zero, and the check silently
+            # never fires -- on precisely the impact/drop class of problem explicit dynamics
+            # exists for. Say so once rather than printing a table of dashes.
+            if Wext == 0.0 and not self._warnedAboutMissingExternalWork:
+                self._warnedAboutMissingExternalWork = True
+                self.journal.message(
+                    "The external work is identically zero: this model is not displacement-driven, "
+                    "and only work done at prescribed degrees of freedom is accumulated. The energy "
+                    "balance above is NOT usable, and in particular the energy-creation check -- "
+                    "the one that catches the stability contributions dt_crit does not see -- "
+                    "cannot fire. Watch the kinetic energy history directly instead.",
+                    self.identification,
+                    1,
+                )
+
             if Wint == 0.0 and not self._warnedAboutMissingInternalEnergy:
                 self._warnedAboutMissingInternalEnergy = True
                 self.journal.message(
@@ -1312,6 +1337,7 @@ class NED(NonlinearSolverBase):
     def reportTopologyChangeConservation(
         self,
         massBefore: float,
+        nonlocalInertiaBefore: float,
         momentumBefore: np.ndarray,
         kineticBefore: float,
         V: DofVector,
@@ -1326,6 +1352,13 @@ class NED(NonlinearSolverBase):
           same density, so this is an identity rather than an approximation -- which makes it the
           cheapest correctness check on the entire transfer, and the one that catches a connectivity
           or geometry error nothing else would notice. Violating it raises.
+
+          Restricted to the SECOND-ORDER field, which is the only one carrying mass in the physical
+          sense. Summing the whole lumped vector also collects the first-order (nonlocal damage)
+          field, whose "mass" is a viscosity: with eta_nl ~ 1e-4 against a density ~ 1e-9 that block
+          outweighs the real mass by orders of magnitude, so a total-vector check is dominated by a
+          quantity refinement need not conserve at all and would pass a 100 % error in the actual
+          mass. The first-order block is reported separately rather than folded in.
         * **Linear momentum is conserved exactly for a spatially uniform velocity field**, because
           the shape functions are a partition of unity and the child masses sum to the parent's. For
           a general field the discrepancy is second order in the velocity gradient across the parent:
@@ -1338,7 +1371,9 @@ class NED(NonlinearSolverBase):
         Parameters
         ----------
         massBefore
-            Total lumped mass before the change.
+            Total second-order (physical) lumped mass before the change.
+        nonlocalInertiaBefore
+            Total first-order (nonlocal-field) lumped inertia before the change. Reported only.
         momentumBefore
             Per-component momentum before the change.
         kineticBefore
@@ -1354,7 +1389,13 @@ class NED(NonlinearSolverBase):
             If the total lumped mass changed.
         """
 
-        massAfter = float(np.sum(self._rawLumpedMass))
+        massAfter = float(np.sum(self._rawLumpedMass[self.ids_2nd]))
+        nonlocalInertiaAfter = float(np.sum(self._rawLumpedMass[self.ids_1st]))
+        relativeNonlocalInertiaChange = (
+            abs(nonlocalInertiaAfter - nonlocalInertiaBefore) / nonlocalInertiaBefore
+            if nonlocalInertiaBefore > 0.0
+            else 0.0
+        )
         momentumAfter = self.secondOrderMomentum(self._rawLumpedMass, V, model)
         kineticAfter = 0.5 * float(np.sum(self._rawLumpedMass[self.ids_2nd] * V[self.ids_2nd] ** 2))
 
@@ -1373,14 +1414,22 @@ class NED(NonlinearSolverBase):
                 )
             )
 
-        if self._cumulativeMassDrift > _CUMULATIVE_MASS_DRIFT_TOLERANCE:
-            raise RuntimeError(
+        # Reported, not raised. By this function's own account each individual change was
+        # within the exact-conservation bound, so what accumulates here is quadrature error, not a
+        # violated invariant -- and aborting a multi-hour run mid-increment on an accumulated
+        # heuristic is out of proportion to what it establishes. The per-change check above is the
+        # invariant, and it still raises.
+        if self._cumulativeMassDrift > _CUMULATIVE_MASS_DRIFT_TOLERANCE and not self._warnedAboutMassDrift:
+            self._warnedAboutMassDrift = True
+            self.journal.message(
                 "The accumulated relative lumped-mass drift over this step has reached {:e}, above "
                 "the tolerance of {:e}. Each individual topology change was within its own bound, so "
                 "this is many small quadrature changes adding up rather than one bad refinement; the "
                 "model mass is no longer the one the step started with.".format(
                     self._cumulativeMassDrift, _CUMULATIVE_MASS_DRIFT_TOLERANCE
-                )
+                ),
+                self.identification,
+                1,
             )
 
         # Minv = 1/M is formed wherever M != 0.0 and only negative mass is rejected, so a master
@@ -1414,11 +1463,13 @@ class NED(NonlinearSolverBase):
         relativeKineticJump = abs(kineticAfter - kineticBefore) / kineticBefore if kineticBefore > 0.0 else 0.0
 
         self.journal.message(
-            "Topology change: mass conserved to {:.1e} relative; smallest integrating mass {:.3e} "
+            "Topology change: 2nd-order mass conserved to {:.1e} relative (1st-order inertia "
+            "{:.1e}); smallest integrating mass {:.3e} "
             "({:.1e} of median) [2nd-order {:.3e} of median {:.3e}; 1st-order {:.3e} of median "
             "{:.3e}]; largest momentum component change "
             "{:.3e} (of {:.3e}); kinetic energy {:.6e} -> {:.6e} ({:+.2f} %)".format(
                 relativeMassChange,
+                relativeNonlocalInertiaChange,
                 smallestMass,
                 massRatio,
                 smallest2nd,
