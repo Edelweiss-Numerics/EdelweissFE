@@ -956,8 +956,16 @@ class FEModel:
         self.replayTopologyHistory(records)
 
         for nf in self.nodeFields.values():
-            for entryName, entryValues in nf._values.items():
-                nf[entryName][:] = f["nodeFields"][nf.name][entryName]
+            storedField = f["nodeFields"].get(nf.name)
+            if storedField is None:
+                continue
+
+            # Iterate the checkpoint's entries, not the model's -- entries created only later by a
+            # solver (e.g. the explicit solver's 'V') would otherwise never be restored.
+            for entryName, storedValues in storedField.items():
+                if entryName not in nf:
+                    nf.createFieldValueEntry(entryName)
+                storedValues.read_direct(nf[entryName])
 
         for name, scalarVariable in self.scalarVariables.items():
             scalarVariable.value = f["scalarVariables"].attrs[name]

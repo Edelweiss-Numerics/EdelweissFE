@@ -255,9 +255,12 @@ def finiteElementSimulation(
         print("")
         journal.errorMessage("Interrupted by user", identification)
 
-    except StepFailed:
+    except StepFailed as e:
         print("")
-        journal.errorMessage("Simulation failed", identification)
+        message = str(e)
+        journal.errorMessage(
+            "Simulation failed: {:}".format(message) if message else "Simulation failed", identification
+        )
 
     except Exception as e:
         print("")
