@@ -970,7 +970,7 @@ class FEModel:
             for entryName, storedValues in storedField.items():
                 if entryName not in nf:
                     nf.createFieldValueEntry(entryName)
-                nf[entryName][:] = storedValues
+                storedValues.read_direct(nf[entryName])
 
         for name, scalarVariable in self.scalarVariables.items():
             scalarVariable.value = f["scalarVariables"].attrs[name]

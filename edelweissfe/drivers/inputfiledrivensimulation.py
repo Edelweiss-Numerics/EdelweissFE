@@ -261,7 +261,10 @@ def finiteElementSimulation(
         # increment, which material -- and discarding it left the log with no explanation at all,
         # so a run that stopped for a diagnosable reason looked indistinguishable from one that
         # stopped for an unknown one.
-        journal.errorMessage("Simulation failed: {:}".format(e) if str(e) else "Simulation failed", identification)
+        message = str(e)
+        journal.errorMessage(
+            "Simulation failed: {:}".format(message) if message else "Simulation failed", identification
+        )
 
     except Exception as e:
         print("")
