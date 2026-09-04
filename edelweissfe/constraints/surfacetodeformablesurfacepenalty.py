@@ -733,19 +733,19 @@ class Constraint(ConstraintBase, MeshDependent):
         PExt: np.ndarray,
         timeStep: TimeStep,
     ):
-        """Forces without a tangent, by running the one loop with ``K=None``. Overrides the base
-        implementation to avoid constructing an unused tangent matrix container."""
+        """Forces without a tangent, by running the one loop with ``K=None``.
+
+        Overriding this is a necessity here rather than an optimization, and the override must match
+        the base class's spelling of the hook exactly. The base implementation asks for a tangent
+        container through the ordinary VIJ protocol and then discards it; for this constraint that
+        container is ``nPoints * ((nSlaveParentNodes + nMasterParentNodes) * nDim)**2`` doubles --
+        of order 50 MB per increment on the anchor pry-out -- plus one dense outer product per
+        contact point to fill it. An override under the wrong name is therefore not a cosmetic slip:
+        it is silently dead code, every result is unchanged, and the only symptom is an
+        inexplicably slow run. One loop rather than two, so the physics cannot drift between the
+        implicit and explicit paths."""
 
         self.applyConstraint(U_np, dU, PExt, None, timeStep)
-
-    #: The constraint base class spells the forces-only hook ``applyConstraintForcesOnly`` on some
-    #: branches and ``applyConstraintExplicit`` on others. Binding both to the same implementation
-    #: is what keeps this file portable between them: if only the name the local solver does *not*
-    #: call were defined, the override would be silently dead code and the base implementation used
-    #: instead -- which builds a tangent container through the ordinary VIJ protocol and discards
-    #: it, at more cost than the entire contact evaluation. That failure is invisible in results and
-    #: shows up only as an inexplicably slow run.
-    applyConstraintForcesOnly = applyConstraintExplicit
 
     def applyConstraint(
         self,
