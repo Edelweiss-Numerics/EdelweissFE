@@ -506,6 +506,18 @@ class Constraint(ConstraintBase, MeshDependent):
         self._fieldsOnNodes = newFieldsOnNodes
         self._nDof = self.nDim * len(newNodes)
 
+        # Reported because the assembly cost is paid per *assigned* point while the transmitted load
+        # is carried only by the closed ones: without a searchDistance every point is assigned, so
+        # these two numbers are what tell an explicit run whether its contact cost is doing work.
+        # The closed count is from the last force evaluation, which is the previous increment.
+        nAssigned = sum(1 for facetIdx in newAssignment if facetIdx is not None)
+        self.journal.message(
+            f"{nAssigned} of {self.nPoints} contact points assigned, "
+            f"{int((self._gapCurrent < 0.0).sum())} closed at the last evaluation",
+            self.name,
+            level=2,
+        )
+
         return hasChanged
 
     def _currentSlavePointCoordinates(self, model: FEModel) -> np.ndarray:
@@ -629,14 +641,17 @@ class Constraint(ConstraintBase, MeshDependent):
             g = nBar.dot(slaveShapeFunctions @ slaveCoords - masterShapeFunctions @ masterCoords)
             self._gapCurrent[p] = g
 
-            # Frozen projection: the gap is linear in the DOFs, so the gradient is constant and the
-            # geometric (Hessian) term vanishes identically.
-            c = np.concatenate((slaveShapeFunctions, -masterShapeFunctions))
-            w = np.kron(c, nBar)
-
             if g >= 0.0:
                 activeIdx += 1
                 continue
+
+            # Frozen projection: the gap is linear in the DOFs, so the gradient is constant and the
+            # geometric (Hessian) term vanishes identically. Built only for a point that is actually
+            # in contact -- without a searchDistance every point is assigned a facet and most of
+            # them are open, so this kron of 2 * nParentNodes * nDim entries would otherwise be the
+            # dominant per-increment cost of an explicit run and be discarded every time.
+            c = np.concatenate((slaveShapeFunctions, -masterShapeFunctions))
+            w = np.kron(c, nBar)
 
             # The integration weight plays the role the node-based formulation's tributary area
             # plays, so the force laws below are identical to that constraint's, sign conventions
