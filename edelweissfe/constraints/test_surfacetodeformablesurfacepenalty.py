@@ -288,6 +288,43 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
         self.assertTrue(np.all(corners < 0.0), "the corner nodal forces must be tensile")
         self.assertAlmostEqual(corners.sum() + midsides.sum(), p * area, delta=1e-8 * p * area)
 
+    def test_unassigned_points_report_no_stale_gap(self):
+        """A point that loses its master facet must report gap 0, not the value it had while still
+        assigned.
+
+        ``_gapCurrent`` backs the public :meth:`getGaps`, whose callers cannot mask unassigned
+        entries because they do not know the assignment, and the connectivity diagnostic counts
+        negative entries as 'closed'. Without the reset, a point that penetrated and then dropped
+        out of the search radius would keep being reported as closed forever.
+        """
+
+        model, slaveSurface, masterSurface = self._twoBlockModel(penetration=0.05)
+        constraint = self._constraint(model, slaveSurface, masterSurface, searchDistance=1.0)
+        self._forces(constraint, np.zeros(constraint.nDof))
+
+        self.assertTrue((constraint.getGaps() < 0.0).any(), "expected penetrating points to start")
+
+        # Shrink the search radius so nothing can be assigned, and re-run the connectivity update.
+        constraint.searchDistance = 1e-12
+        constraint.updateConnectivity(model)
+
+        self.assertTrue(all(f is None for f in constraint._assignedFacetIdx), "expected no assignments")
+        np.testing.assert_array_equal(
+            constraint.getGaps(), 0.0, err_msg="unassigned points must not retain a stale gap"
+        )
+
+    def test_getGaps_returns_a_copy(self):
+        """Mutating the returned array must not corrupt the state a later Uzawa update would read."""
+
+        model, slaveSurface, masterSurface = self._twoBlockModel(penetration=0.05)
+        constraint = self._constraint(model, slaveSurface, masterSurface)
+        self._forces(constraint, np.zeros(constraint.nDof))
+
+        gaps = constraint.getGaps()
+        before = gaps.copy()
+        gaps[:] = 1234.0
+        np.testing.assert_array_equal(constraint.getGaps(), before)
+
     def test_open_gap_carries_no_force(self):
         """Separated surfaces produce no contact force at all."""
 

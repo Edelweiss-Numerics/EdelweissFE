@@ -408,6 +408,7 @@ class Constraint(ConstraintBase, MeshDependent):
         self._batched = None
         self._activePoints = np.zeros(0, dtype=int)
         self._blockSizes = None
+        self._lastReportedActivity = None
 
     @classmethod
     def fromConstraintDefinition(cls, name: str, definition: dict, model: FEModel, journal: Journal) -> "Constraint":
@@ -514,17 +515,31 @@ class Constraint(ConstraintBase, MeshDependent):
 
         self._prepareActiveArrays()
 
+        # A point that lost its facet has no gap any more, so its last value must not survive: it
+        # backs the public getGaps(), whose consumers cannot mask it because they do not know the
+        # assignment, and it would otherwise keep counting as 'closed' below forever. Zero is the
+        # neutral value this array is initialized with. Resetting here is what makes the closed
+        # count correct by construction, so it deliberately needs no mask of its own.
+        for p in range(self.nPoints):
+            if newAssignment[p] is None:
+                self._gapCurrent[p] = 0.0
+
         # Reported because the assembly cost is paid per *assigned* point while the transmitted load
         # is carried only by the closed ones: without a searchDistance every point is assigned, so
         # these two numbers are what tell an explicit run whether its contact cost is doing work.
-        # The closed count is from the last force evaluation, which is the previous increment.
+        # The closed count is from the last force evaluation, i.e. one increment behind the
+        # assignment on the same line. Emitted only when it changes -- an explicit run updates
+        # connectivity thousands of times and an unchanging pair of numbers is pure log noise.
         nAssigned = sum(1 for facetIdx in newAssignment if facetIdx is not None)
-        self.journal.message(
-            f"{nAssigned} of {self.nPoints} contact points assigned, "
-            f"{int((self._gapCurrent < 0.0).sum())} closed at the last evaluation",
-            self.name,
-            level=2,
-        )
+        activity = (nAssigned, int((self._gapCurrent < 0.0).sum()))
+        if activity != self._lastReportedActivity:
+            self._lastReportedActivity = activity
+            self.journal.message(
+                f"{activity[0]} of {self.nPoints} contact points assigned, "
+                f"{activity[1]} closed at the last evaluation",
+                self.name,
+                level=2,
+            )
 
         return hasChanged
 
@@ -853,9 +868,14 @@ class Constraint(ConstraintBase, MeshDependent):
 
     def getGaps(self) -> np.ndarray:
         """The current gap at each contact point (negative when penetrating), ordered like
-        :meth:`getNormalPressures`."""
+        :meth:`getNormalPressures`.
 
-        return self._gapCurrent
+        A point with no assigned master facet reports 0, not a stale value from when it last had
+        one -- see :meth:`updateConnectivity`. Returned as a copy, so a caller cannot corrupt the
+        state a later augmented-Lagrange update would read.
+        """
+
+        return self._gapCurrent.copy()
 
     def getSlaveNodalNormalForces(self) -> np.ndarray:
         """The normal component of the contact force delivered to each slave surface node.
