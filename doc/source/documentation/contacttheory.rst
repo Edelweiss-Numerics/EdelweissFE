@@ -374,6 +374,37 @@ force is :math:`-29.99100269952982` against the analytic :math:`-4 pA/12 = -29.9
 an interior corner shared by four faces -- the corner nodes carry exactly the tensile load the face
 demands. The patch test passes on hexa20 exactly as it does on hexa8.
 
+.. figure:: ../contact_nonmatching_comparison.png
+    :width: 100%
+    :align: center
+
+    Box on box with **non-matching** interface meshes (3x3 against 4x4 elements), otherwise
+    identical: :math:`\nu = 0` under uniform imposed compression, so the exact solution is a flat
+    interface transmitting a uniform :math:`S_{33} = -360`. Every feature shown is discretization
+    error, and the rows differ in nothing but the contact constraint. The surface is warped by its
+    own :math:`u_z` deviation from the interface mean (exact value: zero), so the *geometry* answers
+    "is the interface flat?" while the *colour* answers "is the transmitted stress uniform?".
+    Regenerate with ``python doc/figures/contact_nonmatching_comparison.py``.
+
+The figure makes two points the matched patch tests above cannot. First, the improvement is not
+confined to the corner-liftoff mechanism: the interface undulation falls by between 61x and 1042x
+across the four element pairings, and the transmitted resultant, which node-to-surface contact
+misses by 0.4% to 3.2% here, is recovered to five or six digits in every one of them.
+
+Second -- and contrary to what the matched tests suggest -- **the integrated formulation also helps
+for purely linear faces.** On a matched interface the parent-face basis coincides with the facet
+basis and the two constraints agree to 13 digits, so there is genuinely nothing to gain. On a
+non-matching one, the hexa8/hexa8 pairing improves by 238x, because integrating the pressure over
+the slave facet is simply a better approximation of the transferred load than lumping it to the
+slave nodes, quite apart from any question about negative corner weights. Serendipity faces are
+where node-based contact fails *qualitatively*; non-matching meshes are where it fails
+*quantitatively*, whatever the element order.
+
+Note also that ``hexa8 slave / hexa20 master`` is the weakest of the four integrated cases (61x
+rather than several hundred). That is the slave-side sampling asymmetry: the quadrature points live
+on the slave facets, so a coarser-order slave under-samples the master's basis. It is the reason to
+put the finer surface on the slave side.
+
 **What this does not fix.** Pointwise enforcement at quadrature points still over-constrains a
 non-matching interface, and the integrand is discontinuous inside a slave facet wherever the
 assigned master facet changes, so that quadrature error does not shrink under refinement of the

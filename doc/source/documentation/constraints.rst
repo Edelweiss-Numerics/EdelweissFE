@@ -264,8 +264,10 @@ consistent nodal load of a uniform pressure at a serendipity corner is *tensile*
 unilateral spring cannot exert, so the discrete solution opens every corner gap instead. The
 mechanism, the measurements, and why no choice of nodal weights can repair it are documented in
 :ref:`serendipity-liftoff`; the integrated formulation and its own limits are in
-:ref:`integrated-contact`. On *linear* faces the parent-face basis coincides with the facet basis,
-so the two constraints agree to 13 digits and there is nothing to gain.
+:ref:`integrated-contact`. On *matched* linear faces the parent-face basis coincides with the facet
+basis, so the two constraints agree to 13 digits and there is nothing to gain -- but on
+**non-matching** meshes the integrated formulation is a substantial improvement at any element
+order, linear included, as the figure in :ref:`integrated-contact` shows.
 
 Scope: normal penalty contact under ``sliding=small``, on both the implicit and the explicit solver
 path. Coulomb friction and augmented Lagrange are **not** implemented here (the node-based
