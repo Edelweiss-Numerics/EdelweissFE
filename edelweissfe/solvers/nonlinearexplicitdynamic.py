@@ -164,11 +164,12 @@ class ExplicitSystem:
 
     Parameters
     ----------
-    M
-        The lumped mass, with multi-point-constraint slave mass already folded onto its masters.
     Minv
         The inverse lumped mass. Zero on multi-point-constraint slave DOFs, which integrate no
-        equation of motion of their own.
+        equation of motion of their own. The lumped mass it was built from is not carried here:
+        the diagnostics need the *unfolded* mass, which is held as ``_rawLumpedMass``, and a
+        second mass on this dataclass that no caller reads would only invite reading the wrong
+        one.
     U
         The solution vector.
     dU
@@ -181,7 +182,6 @@ class ExplicitSystem:
         The stable time increment for the current mesh, already scaled by the courant number.
     """
 
-    M: DofVector
     Minv: DofVector
     U: DofVector
     dU: DofVector
@@ -242,6 +242,9 @@ class NED(NonlinearSolverBase):
         #: increment. Compared against the kinetic energy to detect energy creation; see
         #: _ENERGY_CREATION_TOLERANCE.
         self._externalWork = 0.0
+        #: Per-constraint force buffer and scatter plan, by constraint name; see
+        #: :meth:`assembleConstraintForces`. Cleared whenever the DofManager is rebuilt.
+        self._constraintForcePlans = {}
 
     def _updateOptions(self, updatedOptions: dict, journal):
         """Update options of the solver using a string dict
@@ -362,11 +365,26 @@ class NED(NonlinearSolverBase):
                         self.identification,
                         level=1,
                     )
+                # The mid-run topology check at the end of this same increment re-runs the
+                # connectivity search on EVERY constraint, these included. Searching here as well
+                # would build and query the same k-d tree twice within one increment: the later
+                # search is the one that has to happen, because a refinement in between invalidates
+                # whatever this one found. Deferring to it costs one increment of staleness -- the
+                # same staleness the configured frequency already accepts, and orders of magnitude
+                # below a facet dimension at an explicit time step.
+                topologyCheckDueThisIncrement = bool(
+                    self._liveTopologyModifiers
+                    and topologyCheckFrequency
+                    and timeStep.number > 0
+                    and timeStep.number % topologyCheckFrequency == 0
+                )
+
                 if (
                     self._dynamicConnectivityConstraints
                     and contactUpdateFrequency
                     and timeStep.number > 0
                     and timeStep.number % contactUpdateFrequency == 0
+                    and not topologyCheckDueThisIncrement
                 ):
                     connectivityChanged = self.updateConstraintConnectivity(model)
                     motionSinceLastSearch = float(np.max(np.abs(np.asarray(U) - UAtLastConnectivitySearch)))
@@ -714,20 +732,29 @@ class NED(NonlinearSolverBase):
             # Said once, loudly, because a silent zero here reads as "no strain energy yet" rather
             # than "this quantity is not being reported", and the ratio above is the usual way one
             # decides whether an explicit run is quasi-static enough.
-            # The energy-creation check below is gated on Wext > 0, and _externalWork only
+            # The energy-creation check above is gated on Wext > 0, and _externalWork only
             # accumulates at PRESCRIBED degrees of freedom. A model whose Dirichlet conditions are
             # all fixed and whose loading comes from body forces, node forces, a distributed load
             # or an initial velocity therefore has Wext identically zero, and the check silently
             # never fires -- on precisely the impact/drop class of problem explicit dynamics
             # exists for. Say so once rather than printing a table of dashes.
-            if Wext == 0.0 and not self._warnedAboutMissingExternalWork:
+            #
+            # NEGATIVE is the same case and must be caught by the same branch rather than falling
+            # between the two: a model that has returned more work at its prescribed degrees of
+            # freedom than was put in -- a rebounding or oscillating structure -- satisfies neither
+            # Wext > 0 nor Wext == 0, so gating on equality left the diagnostic disabled with
+            # nothing said at all. That is the failure this check exists to prevent.
+            if Wext <= 0.0 and not self._warnedAboutMissingExternalWork:
                 self._warnedAboutMissingExternalWork = True
                 self.journal.message(
-                    "The external work is identically zero: this model is not displacement-driven, "
-                    "and only work done at prescribed degrees of freedom is accumulated. The energy "
-                    "balance above is NOT usable, and in particular the energy-creation check -- "
-                    "the one that catches the stability contributions dt_crit does not see -- "
-                    "cannot fire. Watch the kinetic energy history directly instead.",
+                    "The external work is {:}: only work done at prescribed degrees of freedom is "
+                    "accumulated, so this model is either not displacement-driven or is currently "
+                    "returning work at its prescribed degrees of freedom. The energy balance above "
+                    "is NOT usable, and in particular the energy-creation check -- the one that "
+                    "catches the stability contributions dt_crit does not see -- cannot fire. "
+                    "Watch the kinetic energy history directly instead.".format(
+                        "identically zero" if Wext == 0.0 else "negative ({:e})".format(Wext)
+                    ),
                     self.identification,
                     1,
                 )
@@ -1143,6 +1170,11 @@ class NED(NonlinearSolverBase):
         self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
         self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
 
+        # The constraint force buffers and their index plans belong to the DofManager that was just
+        # (re)built: a refinement changes both a constraint's DOF count and where its DOFs sit, and
+        # a stale plan would scatter forces to the wrong degrees of freedom silently.
+        self._constraintForcePlans = {}
+
         # initialize mass and damping matrices
         M = self.theDofManager.constructDofVector()  # initialize lumped mass matrix
         Minv = self.theDofManager.constructDofVector()  # initialize inverse lumped mass matrix
@@ -1263,7 +1295,6 @@ class NED(NonlinearSolverBase):
             )
 
         return ExplicitSystem(
-            M=M,
             Minv=Minv,
             U=U,
             dU=dU,
@@ -1315,15 +1346,35 @@ class NED(NonlinearSolverBase):
             The augmented net force vector.
         """
 
-        for constraint in constraints.values():
-            Pc = np.zeros(constraint.nDof)
+        # Buffers and index plans, one per constraint, built once per equation system rather than
+        # per increment -- this runs on the explicit hot path, tens of thousands of times. Both are
+        # invalidated by exactly one event, a rebuild of the DofManager, which is where the cache is
+        # cleared; nothing else can change a constraint's DOF count or its indices.
+        PPlain = P.asPlainArray()
+
+        for name, constraint in constraints.items():
+            plan = self._constraintForcePlans.get(name)
+            if plan is None:
+                indices = P.entitiesInDofVector[constraint]
+                # A constraint may name the same DOF more than once -- a slave node that also
+                # appears in its own master facet's node list -- and += would then keep only the
+                # last write instead of summing the contributions. That is the only reason
+                # np.add.at is needed, and it is the rare case: decide once, here, instead of
+                # paying its dispatch on every constraint of every increment.
+                plan = (np.zeros(constraint.nDof), indices, len(np.unique(indices)) != len(indices))
+                self._constraintForcePlans[name] = plan
+
+            Pc, indices, namesDofMoreThanOnce = plan
+
+            # Reused, so it must be cleared: applyConstraintExplicit augments what it is handed.
+            Pc[:] = 0.0
 
             constraint.applyConstraintExplicit(U_np[constraint], dU[constraint], Pc, timeStep)
 
-            # np.add.at rather than +=: a constraint may name the same DOF more than once (a slave
-            # node that also appears in its own master facet's node list), and += would keep only the
-            # last write instead of summing the contributions.
-            np.add.at(P, P.entitiesInDofVector[constraint], Pc)
+            if namesDofMoreThanOnce:
+                np.add.at(PPlain, indices, Pc)
+            else:
+                PPlain[indices] += Pc
 
         return P
 

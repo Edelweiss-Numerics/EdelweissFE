@@ -85,10 +85,26 @@ class DofVector(np.ndarray):
         except (KeyError, TypeError):
             return super().__getitem__(key)
 
+        return self.asPlainArray()[indices]
+
+    def asPlainArray(self) -> np.ndarray:
+        """The same buffer seen as a plain :class:`numpy.ndarray`, built once and cached.
+
+        Indexing through this bypasses the subclass wrapping that dominates hot-path access -- see
+        :meth:`__getitem__`. It aliases this vector rather than copying it, so writes through it are
+        writes to this vector. Callers that index a DofVector repeatedly in a loop should take this
+        once outside the loop instead of calling ``view(np.ndarray)`` themselves.
+
+        Returns
+        -------
+        np.ndarray
+            A plain-ndarray view of this vector's buffer.
+        """
+
         plainView = self._plainView
         if plainView is None:
             plainView = self._plainView = self.view(np.ndarray)
-        return plainView[indices]
+        return plainView
 
     def __setitem__(self, key, value):
         if isinstance(key, (int, slice, np.ndarray, list, tuple)):

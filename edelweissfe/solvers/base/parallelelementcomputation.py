@@ -156,20 +156,28 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, chunkSize: int
 
     global _gatherPlanCache
 
+    # Read the global ONCE. Checking the guard against the global and then returning the plan out
+    # of the global again is a time-of-check-to-time-of-use gap: with the GIL disabled, another
+    # thread reaching this function between the two can replace the entry, and the caller would be
+    # handed a plan that was never checked against its own elements -- the exact silent wrong-DOF
+    # failure the guard below exists to prevent. A tuple is replaced atomically, so one read is
+    # a consistent snapshot; the worst a race can then do is have both threads rebuild the plan.
+    cached = _gatherPlanCache
+
     if (
-        _gatherPlanCache is not None
-        and _gatherPlanCache[0] is entitiesInDofVector
-        and _gatherPlanCache[1] == chunkSize
-        and _gatherPlanCache[2] == len(elements)
+        cached is not None
+        and cached[0] is entitiesInDofVector
+        and cached[1] == chunkSize
+        and cached[2] == len(elements)
         # Keyed on the collection itself, not just its length: the plan stores the chunked
         # ELEMENTS, so a second caller in the same increment passing a different but equal-length
         # subset against the same DofManager would otherwise be handed a plan for the wrong
         # elements with correctly shaped buffers -- the silent wrong-DOF failure this cache is
         # documented to guard against. Only NEDParallel calls this today, always with
         # model.elements, so this is latent rather than live.
-        and _gatherPlanCache[4] is elements
+        and cached[4] is elements
     ):
-        return _gatherPlanCache[3]
+        return cached[3]
 
     plan = []
     for chunk in chunked_iterable(elements.values(), chunkSize):
@@ -201,9 +209,10 @@ def computeElementsInParallelForExplicit(
         )
 
     # Plain ndarray aliases: the gather below indexes them directly, bypassing the DofVector
-    # entity lookup entirely for the hot path.
-    Un1_plain = Un1.view(np.ndarray)
-    dU_plain = dU.view(np.ndarray)
+    # entity lookup entirely for the hot path. Taken from the vector's own cached view rather than
+    # built here, so this shares the one alias every entity access already goes through.
+    Un1_plain = Un1.asPlainArray()
+    dU_plain = dU.asPlainArray()
 
     def compute_chunk(plannedChunk) -> float:
         chunkElements, flatIndices, offsets = plannedChunk

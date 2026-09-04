@@ -539,6 +539,15 @@ class Constraint(ConstraintBase, MeshDependent):
             # its centroid beyond searchDistance + rMax.
             radius = np.minimum(radius, searchDistance + rMax)
 
+        # The bound above is exact in real arithmetic and query_ball_point includes its boundary, so
+        # a facet that exactly ties -- the ordinary case on a structured or symmetric contact mesh --
+        # sits precisely ON the radius, where the rounding of the sum that produced it can land an
+        # ulp low and drop it from the candidate list. That would silently pick a different facet
+        # than the exhaustive sweep, against what this docstring promises. A few ulps of relative
+        # margin restores the superset property; it widens the ball by a distance many orders below
+        # any mesh dimension, so it admits no facet that the exhaustive sweep would not also see.
+        radius = radius * (1.0 + 8.0 * np.finfo(float).eps)
+
         return [sorted(c) for c in tree.query_ball_point(slaveCoords, radius)]
 
     def updateConnectivity(self, model: FEModel) -> bool:
