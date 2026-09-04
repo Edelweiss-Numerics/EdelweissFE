@@ -69,6 +69,31 @@ class TimeStepperBase(ABC):
             The factor for scaling based on the discarded increment.
         """
 
+    def enforceTimeIncrement(self, timeIncrement: float):
+        """Replace the enforced time increment for the remaining increments of the step.
+
+        Only meaningful for a stepper driven by an externally imposed increment rather than by its own
+        adaptation. The caller is an explicit solver whose stable time increment is a property of the
+        mesh, so it changes when the mesh does -- an h-adaptivity event mid-step can shrink the
+        smallest element and therefore the increment every subsequent increment must use. The
+        increment is passed to :meth:`generateTimeStep` once, before the first increment, so there
+        would otherwise be no way to revise it.
+
+        Parameters
+        ----------
+        timeIncrement
+            The new enforced time increment.
+
+        Raises
+        ------
+        NotImplementedError
+            If this stepper is not driven by an enforced time increment.
+        """
+
+        raise NotImplementedError(
+            f"{type(self).__name__} is not driven by an enforced time increment, so it cannot be given " "a new one."
+        )
+
     @abstractmethod
     def changeIncrementSize(self, scaleFactor: float):
         """Modify the size of the next increment by a given scale factor
@@ -84,6 +109,23 @@ class TimeStepperBase(ABC):
     def preventIncrementIncrease(self):
         """May be called before an increment is requested, to prevent
         an automatic increase of the increment size, e.g., in case of bad convergence."""
+
+    def restoredTimeIncrement(self) -> float | None:
+        """The size of the increment already completed when this time stepper was restored from a
+        restart checkpoint.
+
+        A multi-step integrator needs the previous increment size to continue, and on a resumed run
+        that increment belongs to the run that wrote the checkpoint. Deliberately NOT abstract: a
+        time stepper that does not persist its progress inherits the cold-start answer rather than
+        being forced to implement something it has no state for.
+
+        Returns
+        -------
+        float | None
+            The completed increment size, or None if this time stepper is starting cold.
+        """
+
+        return None
 
     @abstractmethod
     def writeRestart(self, restartFile):

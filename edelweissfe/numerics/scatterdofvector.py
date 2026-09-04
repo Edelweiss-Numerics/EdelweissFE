@@ -91,6 +91,8 @@ class ScatterDofVector(np.ndarray):
         obj._global_indices = template.globalIndices
         obj._entitiesInDofVector = template.entitiesInDofVector
         obj._nDof = template.nDof
+        #: Plain-ndarray alias of the same buffer; see __getitem__.
+        obj._plainView = None
 
         return obj
 
@@ -101,6 +103,7 @@ class ScatterDofVector(np.ndarray):
         self._entitiesInDofVector = getattr(obj, "_entitiesInDofVector", None)
         self._nDof = getattr(obj, "_nDof", None)
         self._global_indices = getattr(obj, "_global_indices", None)
+        self._plainView = None
 
     def __getitem__(self, key):
         """
@@ -116,14 +119,20 @@ class ScatterDofVector(np.ndarray):
         ndarray or float
             The slice view corresponding to the key.
         """
-        if isinstance(key, (int, slice, np.ndarray, list, tuple)):
-            return super().__getitem__(key)
-
+        # Hot path: see DofVector.__getitem__ for the measurement. The slice itself is
+        # cheap here, so wrapping the result back into a ScatterDofVector subclass (which
+        # runs __array_finalize__ and its four attribute lookups) was almost the entire
+        # cost. A plain ndarray view of the same buffer aliases the same memory, so the
+        # element kernels still write straight into the scatter buffer.
         try:
             offset, size = self._offset_map[key]
-            return super().__getitem__(slice(offset, offset + size))
         except (KeyError, TypeError):
             return super().__getitem__(key)
+
+        plainView = self._plainView
+        if plainView is None:
+            plainView = self._plainView = self.view(np.ndarray)
+        return plainView[offset : offset + size]
 
     def __setitem__(self, key, value):
         """

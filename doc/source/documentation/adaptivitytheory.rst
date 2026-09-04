@@ -3,7 +3,7 @@ Adaptive refinement: error estimation and marking
 
 This page documents the theory behind *marking* for the dynamic hanging-node
 :math:`h`-adaptivity modifier (:mod:`~edelweissfe.modelmodifiers.adaptivity.hadaptivity`):
-how EdelweissFE decides **which** elements to refine each increment, with particular attention to
+how EdelweissFE decides **which** elements to refine at a topology check, with particular attention to
 gradient-enhanced (implicit-gradient) damage models. The mechanics of *how* an element is then
 subdivided -- octree children, curved-edge honouring, state transfer, and the exact hanging-node
 multi-point constraint -- are documented under :doc:`modelmodifiers`; this page is only about the
@@ -18,8 +18,11 @@ zero indicator; symmetric mesh and field :math:`\to` equal indicators on mirror 
 The adaptive loop and where markers sit
 ---------------------------------------
 
-At the start of every increment the solver runs
-:meth:`~edelweissfe.models.femodel.FEModel.updateTopology`, which asks the modifier to
+*When* the topology update runs is the solver's decision, and the two solver families differ: the
+implicit solvers run :meth:`~edelweissfe.models.femodel.FEModel.updateTopology` at the start of
+every increment, while the explicit dynamic solver runs it at the *end* of a finalized increment
+and only every ``topology-check-frequency`` increments -- see
+:ref:`adaptivity-explicit-dynamics` below. Either way, the update asks the modifier to
 :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan` and then to
 :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply` its decision.
 That update
@@ -52,6 +55,43 @@ sub-keyword of ``*modelModifier, type=hAdaptivity``. The available types are:
     A recovery-based *a posteriori error estimator* on the gradient of a nodal field, with Dörfler
     bulk marking -- the subject of most of this page. See
     :class:`~edelweissfe.adaptivity.marking.RecoveryErrorMarker`.
+
+.. _adaptivity-explicit-dynamics:
+
+Adaptivity under explicit dynamics
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The explicit dynamic solver ``NED`` (:doc:`solvers`) also runs modifiers, but neither every
+increment nor at the same point in one, for reasons that are worth stating because they constrain
+how a marker may be configured.
+
+**Cadence.** An explicit increment is thousands of times cheaper than an implicit one and there
+are correspondingly more of them -- millions in a routine analysis. Evaluating a marker in each is
+not affordable, so the check runs every ``topology-check-frequency`` increments, and
+``topology-check-frequency`` must be a **multiple of** ``output-frequency``: a marker reads the
+last *finalized* field output, so a check on an increment whose output was never finalized would
+decide on stale results. Setting it to ``0`` runs the topology update exactly once, before the
+increment loop, which is what an ``initialOnly`` pre-refinement needs; a modifier that acts later
+than simulation start is then refused rather than silently ignored (see
+:attr:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.actsOnlyAtSimulationStart`).
+
+**Placement.** The check sits at the *end* of a finalized increment, not the start, for three
+independent reasons: the marker refines on the last finalized field output, so anywhere earlier it
+would decide on stale results; the velocity of a central-difference scheme is staggered half an
+increment behind the displacement, so the pairing of the two is unambiguous only *between*
+increments; and it keeps a topology change disjoint from the failure path, whose restore vectors
+are sized by the old equation system. Increment 0 is excluded deliberately -- the time stepper
+yields a zero-length increment first, before anything has been solved, and a marker evaluated
+there would refine on the initial condition.
+
+**What a refinement changes for an explicit run.** Refining lowers the stable time increment, so
+the critical time step is recomputed from the new mesh (unlike a mere contact-connectivity change,
+which leaves the mesh alone and therefore reuses it). The lumped mass is rebuilt; because that
+mass *is* the operator an explicit increment divides by, the solver reports the total mass, the
+per-component linear momentum and the kinetic energy across every topology change, and accumulates
+the relative mass drift over all of them so that many individually-tolerable changes cannot
+silently add up to a meaningful one. The velocity field is carried across refinement by the same
+warm-start interpolation as the displacement -- omitting it would restart the new nodes from rest.
 
 
 Motivation: gradient-enhanced damage

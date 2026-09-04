@@ -29,6 +29,8 @@
 
 import itertools
 
+import numpy as np
+
 from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.numerics.parallelizationutilities import (
     getNumberOfThreads,
@@ -116,6 +118,78 @@ def chunked_iterable(iterable, size):
         yield chunk
 
 
+#: Single-entry cache of the per-chunk gather plan; see :func:`_chunkedGatherPlan`. One entry
+#: suffices because a solver works on one element set at a time, and holding a reference to the
+#: entity mapping it was built for keeps that mapping alive, so identity comparison against it is
+#: sound (a freed dict could otherwise have its id reused by a different one).
+_gatherPlanCache = None
+
+
+def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, chunkSize: int) -> list:
+    """Build, or reuse, the flat gather index plan for one chunking of the elements.
+
+    Each chunk gets the concatenation of its elements' DOF indices, plus the offsets at which
+    each element's slice begins, so a worker can gather the whole chunk with one fancy-index and
+    then hand out views.
+
+    The plan is only valid for the element set and DOF layout it was built from. h-adaptivity
+    rebuilds the DofManager on every topology change, which produces a fresh
+    ``idcsOfHigherOrderEntitiesInDofVector`` dict, so identity of that mapping is what detects a
+    stale plan. The element count and chunk size are compared as well: those would catch a
+    rebuild that somehow preserved the mapping object, and a stale plan here would silently
+    gather the wrong degrees of freedom rather than fail.
+
+    Parameters
+    ----------
+    elements
+        The elements to compute, in the order they will be chunked.
+    entitiesInDofVector
+        The entity-to-DOF-index mapping the plan is built against.
+    chunkSize
+        Number of elements per chunk.
+
+    Returns
+    -------
+    list
+        One ``(chunkElements, flatIndices, offsets)`` tuple per chunk.
+    """
+
+    global _gatherPlanCache
+
+    # Read the global ONCE. Checking the guard against the global and then returning the plan out
+    # of the global again is a time-of-check-to-time-of-use gap: with the GIL disabled, another
+    # thread reaching this function between the two can replace the entry, and the caller would be
+    # handed a plan that was never checked against its own elements -- the exact silent wrong-DOF
+    # failure the guard below exists to prevent. A tuple is replaced atomically, so one read is
+    # a consistent snapshot; the worst a race can then do is have both threads rebuild the plan.
+    cached = _gatherPlanCache
+
+    if (
+        cached is not None
+        and cached[0] is entitiesInDofVector
+        and cached[1] == chunkSize
+        and cached[2] == len(elements)
+        # Keyed on the collection itself, not just its length: the plan stores the chunked
+        # ELEMENTS, so a second caller in the same increment passing a different but equal-length
+        # subset against the same DofManager would otherwise be handed a plan for the wrong
+        # elements with correctly shaped buffers -- the silent wrong-DOF failure this cache is
+        # documented to guard against. Only NEDParallel calls this today, always with
+        # model.elements, so this is latent rather than live.
+        and cached[4] is elements
+    ):
+        return cached[3]
+
+    plan = []
+    for chunk in chunked_iterable(elements.values(), chunkSize):
+        indicesPerElement = [entitiesInDofVector[element] for element in chunk]
+        offsets = np.zeros(len(chunk) + 1, dtype=np.intp)
+        np.cumsum([len(indices) for indices in indicesPerElement], out=offsets[1:])
+        plan.append((chunk, np.concatenate(indicesPerElement), offsets))
+
+    _gatherPlanCache = (entitiesInDofVector, chunkSize, len(elements), plan, elements)
+    return plan
+
+
 def computeElementsInParallelForExplicit(
     elements: dict, Un1: DofVector, dU: DofVector, P: DofVector, timeStep: TimeStep
 ) -> tuple[DofVector, float]:
@@ -124,32 +198,53 @@ def computeElementsInParallelForExplicit(
     time = timeStep.totalTime
     dT = timeStep.timeIncrement
 
-    # Define the worker to process a CHUNK of elements, not just one.
-    def compute_chunk(element_chunk) -> float:
-        chunk_psi = 0.0
-        for element in element_chunk:
-            Pe = scatter_P[element]
-            Ue = Un1[element]
-            dUe = dU[element]
+    # Both vectors come from DofManager.constructDofVector, which hands every DofVector the same
+    # idcsOfHigherOrderEntitiesInDofVector object -- so one index plan serves both. Assert it
+    # rather than assume it: gathering dU through indices built for a different layout would
+    # produce wrong forces silently.
+    if dU.entitiesInDofVector is not Un1.entitiesInDofVector:
+        raise ValueError(
+            "The solution and increment vectors carry different entity mappings, so a shared "
+            "gather plan cannot be used for both."
+        )
 
-            element.computeKernelsExplicit(Pe, Ue, dUe, time, dT)
+    # Plain ndarray aliases: the gather below indexes them directly, bypassing the DofVector
+    # entity lookup entirely for the hot path. Taken from the vector's own cached view rather than
+    # built here, so this shares the one alias every entity access already goes through.
+    Un1_plain = Un1.asPlainArray()
+    dU_plain = dU.asPlainArray()
+
+    def compute_chunk(plannedChunk) -> float:
+        chunkElements, flatIndices, offsets = plannedChunk
+
+        # One gather per chunk rather than two per element. The elements then take views into
+        # these buffers, which allocate nothing.
+        gatheredU = Un1_plain[flatIndices]
+        gatheredDU = dU_plain[flatIndices]
+
+        chunk_psi = 0.0
+        for position, element in enumerate(chunkElements):
+            begin = offsets[position]
+            end = offsets[position + 1]
+
+            element.computeKernelsExplicit(scatter_P[element], gatheredU[begin:end], gatheredDU[begin:end], time, dT)
             chunk_psi += element.computeInternalEnergy()
 
         return chunk_psi
 
     numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
 
+    # Target ~1000 to 5000 elements per chunk depending on mesh size
+    chunk_size = max(1, len(elements) // (numThreads * 4)) if numThreads > 1 else min(len(elements), 4000)
+    plan = _chunkedGatherPlan(elements, Un1.entitiesInDofVector, chunk_size)
+
     if numThreads == 1:
         # avoid ThreadPoolExecutor/task dispatch overhead when there is nothing to parallelize
-        psi_total = compute_chunk(elements.values())
+        psi_total = sum(compute_chunk(plannedChunk) for plannedChunk in plan)
     else:
-        # Target ~1000 to 5000 elements per chunk depending on mesh size
-        chunk_size = max(1, len(elements) // (numThreads * 4))
-        chunks = chunked_iterable(elements.values(), chunk_size)
-
         executor = getThreadPool(numThreads)
         # map returns the chunk_psi from each worker
-        psi_total = sum(executor.map(compute_chunk, chunks))
+        psi_total = sum(executor.map(compute_chunk, plan))
 
     scatter_P.assembleInto(P)
 

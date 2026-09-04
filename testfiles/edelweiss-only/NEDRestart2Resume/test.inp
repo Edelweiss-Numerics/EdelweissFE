@@ -1,0 +1,85 @@
+** Explicit-dynamic (NED) restart equivalence, part 2 of 2: the run that RESUMES.
+**
+** Resumes from the checkpoint left by NEDRestart1Write (which must run first -- the runner sorts
+** directory names, hence the '1'/'2') and runs the remaining increments to the end of the step.
+**
+** U.ref is the FULL straight-run answer -- byte-identical to NEDContact/U.ref, since this is the
+** same model run to the same end. That is the whole point: it asserts that resuming is
+** equivalent to never having stopped, not merely that it runs. If NEDContact's model is ever
+** changed, this reference and NEDRestart1Write's must both be regenerated.
+**
+** See NEDRestart1Write for the two silent defects this pair was written to catch.
+**
+** This run does not checkpoint itself; it only reads.
+
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+**E       nu     density
+1.8e4,    0.3,   1.0
+
+*job, name=nedcontactjob, domain=3d
+
+*solver, solver=NEDParallel, name=theSolver
+second-order-fields="displacement"
+courant-number=0.8
+output-frequency=50
+contact-update-frequency=10
+
+*modelGenerator, generator=boxGen, name=lower
+nX      =3
+nY      =3
+nZ      =3
+x0      =0
+y0      =0
+z0      =0
+lX      =2
+lY      =2
+lZ      =1
+elProvider =edelweiss
+elType  =C3D8
+
+*modelGenerator, generator=boxGen, name=upper
+nX      =3
+nY      =3
+nZ      =3
+x0      =0.3
+y0      =1.1
+z0      =1.05
+lX      =0.6
+lY      =0.6
+lZ      =1
+elProvider =edelweiss
+elType  =C3D8
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen1
+surface = upper_back
+name    = slaveSurf
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen2
+surface = lower_front
+name    = masterSurf
+
+*section, name=section1, material=linearelastic, type=solid
+lower_all
+upper_all
+
+*constraint, name=contact, type=nodeToDeformableSurfacePenalty
+slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=5e4, type=linear, searchDistance=2.0
+
+*fieldOutput
+>>perNode, elSet=lower_all, field=displacement, result=U, name=dispLower
+>>perNode, elSet=upper_all, field=displacement, result=U, name=dispUpper
+>>perNode, name=dispLowerMax, elSet=lower_all, field=displacement, result=U, f(x)='np.max(np.abs(x))', saveHistory=True
+>>perNode, name=RFLower, nSet=lower_back, field=displacement, result=P, f(x)='np.sum(x[:,2])', saveHistory=True
+
+*output, type=monitor, name=monitor
+fieldOutput=dispLowerMax
+fieldOutput=RFLower
+
+*restart, readFrom=../NEDRestart1Write/restart_0.h5
+
+*step, type=adaptiveForExplicitSimulations, solver=theSolver
+maxInc=1, minInc=1e-12, maxNumInc=2000, maxIter=25, stepLength=0.5
+>>dirichlet, name=fixLower, nSet=lower_back, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=pushDown, nSet=upper_front, field=displacement, 3=-0.2
+>>dirichlet, name=pinUpperXY, nSet=upper_bottomLeftBack, field=displacement, 1=0.0, 2=0.0
+>>dirichlet, name=pinUpperRotZ, nSet=upper_bottomRightBack, field=displacement, 2=0.0
