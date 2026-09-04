@@ -17,8 +17,332 @@ interface (e.g. anchorage problems: steel anchors in concrete channels, friction
 capacity, curved bearing surfaces, quadratic solid elements).
 
 
-Surface discretization
-----------------------
+Formulation
+-----------
+
+The contact mechanics itself: how the gap is measured, what force answers it, and how friction is integrated. None of this is particular to EdelweissFE.
+
+
+Gap kinematics
+~~~~~~~~~~~~~~
+
+Throughout, :math:`\boldsymbol{x}_s` denotes the current position of a slave node and
+:math:`\boldsymbol{x}_a,\; a = 1 \ldots k` the current positions of the assigned master facet's
+nodes (:math:`k = 3` for Tria3, :math:`k = 2` for Line2). The generalized coordinate vector of
+one contact pair is :math:`\boldsymbol{q} = [\boldsymbol{x}_s, \boldsymbol{x}_1, \ldots,
+\boldsymbol{x}_k]`.
+
+.. _finite-sliding-kinematics:
+
+Finite sliding: exact gap, gradient, and Hessian
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In the finite-sliding formulation (``sliding=finite``), the gap and its exact first and second
+derivatives are recomputed from the *current Newton iterate* in every iteration -- no geometry is
+frozen within an increment.
+
+For a Tria3 facet, the unit normal is constructed by cross-product-then-normalize,
+
+.. math::
+
+   \boldsymbol{c} = (\boldsymbol{x}_2 - \boldsymbol{x}_1) \times (\boldsymbol{x}_3 -
+   \boldsymbol{x}_1), \qquad m = \lVert \boldsymbol{c} \rVert, \qquad \boldsymbol{n} =
+   \boldsymbol{c} / m,
+
+and the gap is the signed plane distance
+
+.. math::
+
+   g(\boldsymbol{q}) = \boldsymbol{n} \cdot (\boldsymbol{x}_s - \boldsymbol{x}_1),
+
+positive outside the facet's half-space, negative when penetrating. (In 2D, :math:`\boldsymbol{n}`
+is the edge direction rotated by :math:`-90^\circ` and normalized, consistent with a
+counter-clockwise traversal of the solid's boundary.)
+
+The gradient :math:`\boldsymbol{w} = \partial g / \partial \boldsymbol{q}` follows from the chain
+rule with
+
+.. math::
+
+   \frac{\partial \boldsymbol{n}}{\partial \boldsymbol{x}_a} = \frac{1}{m} \left( \boldsymbol{I}
+   - \boldsymbol{n} \otimes \boldsymbol{n} \right) \frac{\partial \boldsymbol{c}}{\partial
+   \boldsymbol{x}_a},
+
+where :math:`\partial \boldsymbol{c} / \partial \boldsymbol{x}_a` are constant skew-symmetric
+(cross-product) matrices of the edge vectors. Because the facet is flat, the *only* second-order
+term in the Hessian :math:`\boldsymbol{H} = \partial^2 g / \partial \boldsymbol{q}^2` is the
+pose-dependence of the normal's own construction (the derivative of the
+normalize-the-cross-product map) -- there is **no curvature term**. The closed forms comprise
+three contributions per node-pair block: the derivative of the tangent-plane projector, the
+derivative of the skew arguments, and the derivative of the normalization denominator. They were
+derived by hand and cross-verified against exact symbolic differentiation (SymPy) and independent
+central finite differences to machine precision at many random non-degenerate configurations; see
+the warning in :mod:`~edelweissfe.utils.facetcontactgeometry` -- this normalize/rotate
+second-derivative algebra is very easy to get subtly wrong, and the module must not be hand-edited
+without re-verification.
+
+The slave is assigned to its single closest facet (by facet centroid distance) once per
+connectivity update -- every increment in an implicit analysis, less often under explicit dynamics
+(see :ref:`contact-explicit-dynamics`) -- from the last converged configuration. Within the
+increment, an exact in-facet containment test
+(barycentric for Tria3, parametric for Line2) gates the contribution: if the projection of the
+slave leaves the assigned facet mid-Newton, no contact is assembled for that slave until the next
+connectivity update. Two non-smoothness sources follow: the facet-normal snap when the closest
+point crosses a facet seam, and the mid-increment containment loss ("dead zones" at facet edges
+and corners, where a penetrating node can temporarily carry no force). Both are accepted
+limitations of this formulation -- and both *vanish identically* in the small-sliding formulation,
+which is the recommended one for the target applications.
+
+.. _small-sliding-kinematics:
+
+Small sliding: frozen closest-point projection
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In the small-sliding formulation (``sliding=small``, in the sense of the classical
+"small-sliding" contact of implicit FE codes), the closest-point projection of each slave onto
+the master surface is computed once per increment from the last converged configuration and
+**frozen for all Newton iterations of that increment**:
+
+1. For every master facet, the true closest point of the *closed* facet domain is computed --
+   interior, edge, or vertex -- via the barycentric region classification (Ericson's real-time
+   collision detection test), yielding clamped, non-negative weights
+   :math:`\bar{N}_a \geq 0,\; \sum_a \bar{N}_a = 1`. The facet with the smallest true distance is
+   assigned. Because the *closed* domain is used, there is no dead zone at facet seams: a node
+   beyond a facet's edge clamps to that edge or vertex and remains loadable.
+
+2. The assigned facet's unit normal :math:`\bar{\boldsymbol{n}}` and the clamped weights
+   :math:`\bar{N}_a` are frozen. The gap of the current iterate is then
+
+   .. math::
+
+      g(\boldsymbol{q}) = \bar{\boldsymbol{n}} \cdot \Big( \boldsymbol{x}_s - \sum_a \bar{N}_a\,
+      \boldsymbol{x}_a \Big),
+
+   which is **linear in the displacement DOFs**: the gradient is the constant vector
+
+   .. math::
+
+      \boldsymbol{w} = \boldsymbol{c} \otimes \bar{\boldsymbol{n}}, \qquad \boldsymbol{c} = [1,
+      -\bar{N}_1, \ldots, -\bar{N}_k],
+
+   (Kronecker-product block structure) and the geometric Hessian term vanishes identically.
+
+Both non-smoothness sources of finite sliding disappear; the only remaining switch is the
+gap-sign activation. The formulation is variationally the linearization of the contact kinematics
+about the last converged state -- consistent with a small-deformation setting, where the solid
+elements are linearized anyway, while still permitting arbitrarily large *accumulated* sliding
+through the per-increment re-projection. It is also the necessary basis for the frictional
+return mapping (constant tangent frame within the increment).
+
+The relative displacement mapping used throughout normal and frictional contact is the constant
+matrix
+
+.. math::
+
+   \boldsymbol{G} = \boldsymbol{c} \otimes \boldsymbol{I}, \qquad \boldsymbol{u}_{rel} =
+   \boldsymbol{G}\, \boldsymbol{q} = \boldsymbol{x}_s - \sum_a \bar{N}_a \boldsymbol{x}_a,
+
+with the identities :math:`\boldsymbol{G}^T \boldsymbol{M} \boldsymbol{G} = (\boldsymbol{c}
+\otimes \boldsymbol{c}^T) \otimes \boldsymbol{M}` and :math:`\boldsymbol{G}^T \boldsymbol{v} =
+\boldsymbol{c} \otimes \boldsymbol{v}` used verbatim in the implementation.
+
+
+Normal contact
+~~~~~~~~~~~~~~
+
+Penalty force laws
+^^^^^^^^^^^^^^^^^^
+
+Contact is active for :math:`g < 0`. With :math:`\kappa = p\, A_s` (``penalty`` :math:`p`, an
+interface stiffness modulus per unit area, times the tributary area), two force laws are
+available; :math:`f_n \leq 0` denotes the normal force carried by the slave node (compression
+negative), assembled as :math:`\boldsymbol{P}^{ext} \mathrel{-}= f_n\, \boldsymbol{w}`:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 22 22 42
+
+   * - law
+     - potential :math:`\Pi(g)`
+     - force :math:`f_n`, stiffness :math:`\partial f_n / \partial g`
+     - activation smoothness
+   * - ``linear``
+     - :math:`\tfrac{1}{2} \kappa g^2`
+     - :math:`\kappa g`, :math:`\kappa`
+     - force :math:`C^0`; stiffness jumps by :math:`\kappa` at :math:`g = 0`
+   * - ``quadratic``
+     - :math:`-\tfrac{1}{6} \kappa g^3`
+     - :math:`-\tfrac{1}{2} \kappa g^2`, :math:`-\kappa g`
+     - force :math:`C^1`; stiffness continuous (:math:`\to 0`) at :math:`g = 0`
+
+The sign convention matters: the quadratic force must carry the sign of :math:`g` (i.e.
+:math:`f_n = -\tfrac{1}{2}\kappa g^2 < 0` in contact) so that the shared assembly expression
+remains repulsive; the consistent stiffness is then :math:`-\kappa g > 0`.
+
+The choice of law is not cosmetic. For frictionless contact both work; **in combination with
+friction, the quadratic law is strongly recommended**: the frictional slip tangent contains a
+nonsymmetric term proportional to :math:`\mu \, \partial f_n / \partial g` (see
+:ref:`friction-tangent`). With the linear law this term switches on and off with the full
+magnitude :math:`\mu \kappa` at gap activation; nodes lifting off or touching down at a tilting
+contact edge (e.g. the trailing edge of a dragged block) then make Newton limit-cycle *independent
+of the increment size* -- observed as a residual two-cycle persisting down to increments of
+:math:`10^{-6}`. With the quadratic law, both the normal and the mu-scaled frictional tangent
+vanish continuously at activation, and the same problems converge without cutbacks.
+
+The consistent contribution of one active slave to the tangent is
+
+.. math::
+
+   \boldsymbol{K} = \frac{\partial f_n}{\partial g}\, \boldsymbol{w} \otimes \boldsymbol{w} +
+   f_n\, \boldsymbol{H},
+
+where :math:`\boldsymbol{H} \equiv \boldsymbol{0}` for small sliding.
+
+.. _augmented-lagrange:
+
+Augmented Lagrange (incremental Uzawa)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+With ``augmentedLagrange=True`` (requires ``sliding=small``), each slave carries a persistent
+normal traction multiplier :math:`\lambda_s \leq 0` (a force), and the contact force becomes
+
+.. math::
+
+   f_n = \lambda_s + f_n^{pen}(g),
+
+with the penalty part :math:`f_n^{pen}` of the chosen law for :math:`g<0` and zero at open gaps.
+Contact is assembled whenever :math:`g < 0` *or* :math:`\lambda_s < 0`; at an open gap with a
+lingering multiplier, the constant force :math:`\lambda_s \boldsymbol{w}` is applied without any
+stiffness, and the multiplier decays within a few increments (see below). Since
+:math:`\lambda_s` is **constant within an increment, it contributes nothing to the tangent and
+cannot destabilize Newton** -- the entire algorithmic character of the penalty method is
+retained.
+
+On increment acceptance, the multiplier is updated by the *converged penalty force part*
+(incremental Uzawa):
+
+.. math::
+
+   \lambda_s \leftarrow \min\big(0,\; \lambda_s + f_n^{pen}(g_{conv})\big),
+
+with the linear release measure :math:`\kappa\, g_{conv} > 0` at open gaps. The law-dependence of
+the update is essential and easy to get wrong: the textbook update :math:`\lambda \leftarrow
+\lambda + \kappa g` *is* the penalty force only for the linear law, where it transfers the spring
+force to the multiplier in one step. Under the quadratic law the converged gap scales as
+:math:`g \sim -\sqrt{2 N / \kappa}` for a nodal force :math:`N`, so :math:`\kappa g \sim
+-\sqrt{2 \kappa N}` overshoots the required traction by :math:`\sqrt{\kappa / (2N)}` -- orders of
+magnitude at practical penalties (observed: per-node multipliers ~100x the nodal force, total
+normal force spiking 40x, cutback cascade). Updating by the penalty *force* restores the
+one-step transfer property for both laws.
+
+Consequences: at fixed penalty the penetration is driven toward zero over the increments (the
+multiplier progressively carries the load), so the **penalty can be reduced by an order of
+magnitude or more** (conditioning, smoother switches) while the solution moves *closer* to the
+rigid-constraint limit than a pure penalty at the stiff value. The friction cone :math:`\mu N`
+(below) uses the multiplier-augmented normal force -- a sharper cone than the pure penalty
+estimate.
+
+
+Coulomb friction
+~~~~~~~~~~~~~~~~
+
+Interface plasticity and the necessity of state
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Coulomb friction is rate-independent plasticity on the interface: yield function
+:math:`\phi = \lVert \boldsymbol{t}_T \rVert - \mu N \leq 0`, slip as the plastic flow, and the
+tangential force as the stress-like internal variable. The interface force is *not* a function of
+the current configuration -- two loading histories ending at the identical displacement field
+carry different locked-in tangential forces (hysteresis is precisely this memory). The converged
+tangential force :math:`\boldsymbol{t}_T^{(n)}` per slave is the minimal state that makes the
+incremental problem well-posed. A stateless incremental law (:math:`\boldsymbol{t}_T = k_T \Delta
+\boldsymbol{u}_T`, reset each increment) would make a stuck block creep by :math:`\tau / k_T`
+*per increment* under constant sub-limit shear -- a response proportional to the number of
+increments, never converging under time-step refinement.
+
+Storing the *force* (rather than accumulated slip) is deliberate: total relative slip is not even
+well-defined across increments here -- the frozen frame rotates and the assigned facet changes as
+a node slides across the master surface -- whereas the force transfers cleanly (it is projected
+onto the new tangent plane at each connectivity update, and zeroed when contact is lost).
+
+Predictor--corrector (radial return)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+All frictional kinematics live in the frozen small-sliding frame (``mu > 0`` requires
+``sliding=small``). With the tangent-plane projector :math:`\bar{\boldsymbol{P}} = \boldsymbol{I}
+- \bar{\boldsymbol{n}} \otimes \bar{\boldsymbol{n}}` and the incremental relative displacement
+:math:`\Delta \boldsymbol{u}_{rel} = \boldsymbol{G}\, \Delta \boldsymbol{q}` (:math:`\Delta`
+relative to the last converged state, i.e. computed from the solver's :math:`d\boldsymbol{U}`
+fresh in every iteration -- nothing accumulates across Newton iterations, which also makes
+cutbacks automatically state-safe):
+
+.. math::
+
+   \boldsymbol{t}^{trial} &= \boldsymbol{t}_T^{(n)} - k_T\, \bar{\boldsymbol{P}}\, \Delta
+   \boldsymbol{u}_{rel}, \qquad k_T = t\, A_s \quad (\texttt{tangentPenalty}\ t), \\[4pt]
+   \boldsymbol{t}_T &= \begin{cases} \boldsymbol{t}^{trial}, & \lVert \boldsymbol{t}^{trial}
+   \rVert \leq \mu N \quad \text{(stick)} \\[2pt] \mu N \, \dfrac{\boldsymbol{t}^{trial}}{\lVert
+   \boldsymbol{t}^{trial} \rVert}, & \text{otherwise (slip: radial return onto the cone)}
+   \end{cases}
+
+with :math:`N = -f_n \geq 0` the current normal force (multiplier-augmented if AL is active).
+The force on the slave node is :math:`\boldsymbol{t}_T` and the facet nodes receive the reaction
+:math:`-\bar{N}_a \boldsymbol{t}_T`, i.e. the assembly is :math:`\boldsymbol{P}^{ext}
+\mathrel{+}= \boldsymbol{G}^T \boldsymbol{t}_T = \boldsymbol{c} \otimes \boldsymbol{t}_T`.
+
+Note the continuity at liftoff: as :math:`N \to 0` the slip branch caps the force at :math:`\mu N
+\to 0`, so the frictional force is continuous through gap activation. The *tangent*, however, is
+only continuous there if the normal stiffness vanishes at activation -- the quadratic-law
+argument above.
+
+On increment acceptance (the constraint's ``acceptLastState`` lifecycle hook, called by
+:meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` alongside the element state commit),
+the tangential force of the converged iterate is promoted to the history:
+:math:`\boldsymbol{t}_T^{(n+1)} \leftarrow \boldsymbol{t}_T`.
+
+.. _friction-tangent:
+
+Consistent tangent
+^^^^^^^^^^^^^^^^^^
+
+With :math:`\boldsymbol{K} = -\partial \boldsymbol{P}^{ext} / \partial \boldsymbol{U}` and the
+Kronecker identities above:
+
+**Stick** (symmetric, positive semi-definite):
+
+.. math::
+
+   \boldsymbol{K}^{stick} = \boldsymbol{G}^T \big( k_T \bar{\boldsymbol{P}} \big) \boldsymbol{G}
+   = (\boldsymbol{c} \otimes \boldsymbol{c}^T) \otimes \big( k_T \bar{\boldsymbol{P}} \big).
+
+**Slip** (nonsymmetric): differentiating :math:`\boldsymbol{t}_T = \mu N \hat{\boldsymbol{s}}`
+with :math:`\hat{\boldsymbol{s}} = \boldsymbol{t}^{trial} / \lVert \boldsymbol{t}^{trial}
+\rVert`, :math:`\partial N / \partial \boldsymbol{q} = -(\partial f_n / \partial g)\,
+\boldsymbol{w}^T` and :math:`\partial \hat{\boldsymbol{s}} / \partial \boldsymbol{q} =
+-\tfrac{k_T}{\lVert \boldsymbol{t}^{trial} \rVert} (\boldsymbol{I} - \hat{\boldsymbol{s}} \otimes
+\hat{\boldsymbol{s}}) \bar{\boldsymbol{P}} \boldsymbol{G}`:
+
+.. math::
+
+   \boldsymbol{K}^{slip} = \underbrace{\mu \, \frac{\partial f_n}{\partial g} \, (\boldsymbol{c}
+   \otimes \hat{\boldsymbol{s}}) \otimes \boldsymbol{w}}_{\text{normal--tangential coupling,
+   nonsymmetric}} \; + \; (\boldsymbol{c} \otimes \boldsymbol{c}^T) \otimes \left[ \frac{\mu N
+   k_T}{\lVert \boldsymbol{t}^{trial} \rVert} \big( \boldsymbol{I} - \hat{\boldsymbol{s}}
+   \otimes \hat{\boldsymbol{s}} \big) \bar{\boldsymbol{P}} \right].
+
+The bracketed second term is symmetric (:math:`\hat{\boldsymbol{s}} \perp \bar{\boldsymbol{n}}`
+implies the two projectors commute); the rank-one coupling term is not. The linear solvers used
+by the implicit solver operate on general unsymmetric matrices (e.g. the PARDISO interface runs
+``mtype = 11``), so no symmetrization is applied. Both regimes of the tangent are verified
+against independent finite differences of the assembled residual to relative errors of
+:math:`\sim 10^{-11}`.
+
+Surface discretization and load transfer
+----------------------------------------
+
+How the two surfaces are discretized here, what that costs in fidelity, and why the serendipity case forced a second formulation. The measurements are kept beside the claims they support rather than collected at the end -- each is the evidence for the paragraph above it.
+
+
 
 Facet-based surface representation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -452,320 +776,11 @@ are typically two to three times as many contact points as slave nodes -- of ord
 contact-assembly entries. Whether that matters depends on contact's share of the assembly, which is
 worth measuring on a given model before adopting it in an explicit run.
 
+Framework integration and verification
+--------------------------------------
 
-Gap kinematics
---------------
+What the constraints require of a solver, how the options should be chosen, and which test cases cover the above.
 
-Throughout, :math:`\boldsymbol{x}_s` denotes the current position of a slave node and
-:math:`\boldsymbol{x}_a,\; a = 1 \ldots k` the current positions of the assigned master facet's
-nodes (:math:`k = 3` for Tria3, :math:`k = 2` for Line2). The generalized coordinate vector of
-one contact pair is :math:`\boldsymbol{q} = [\boldsymbol{x}_s, \boldsymbol{x}_1, \ldots,
-\boldsymbol{x}_k]`.
-
-.. _finite-sliding-kinematics:
-
-Finite sliding: exact gap, gradient, and Hessian
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-In the finite-sliding formulation (``sliding=finite``), the gap and its exact first and second
-derivatives are recomputed from the *current Newton iterate* in every iteration -- no geometry is
-frozen within an increment.
-
-For a Tria3 facet, the unit normal is constructed by cross-product-then-normalize,
-
-.. math::
-
-   \boldsymbol{c} = (\boldsymbol{x}_2 - \boldsymbol{x}_1) \times (\boldsymbol{x}_3 -
-   \boldsymbol{x}_1), \qquad m = \lVert \boldsymbol{c} \rVert, \qquad \boldsymbol{n} =
-   \boldsymbol{c} / m,
-
-and the gap is the signed plane distance
-
-.. math::
-
-   g(\boldsymbol{q}) = \boldsymbol{n} \cdot (\boldsymbol{x}_s - \boldsymbol{x}_1),
-
-positive outside the facet's half-space, negative when penetrating. (In 2D, :math:`\boldsymbol{n}`
-is the edge direction rotated by :math:`-90^\circ` and normalized, consistent with a
-counter-clockwise traversal of the solid's boundary.)
-
-The gradient :math:`\boldsymbol{w} = \partial g / \partial \boldsymbol{q}` follows from the chain
-rule with
-
-.. math::
-
-   \frac{\partial \boldsymbol{n}}{\partial \boldsymbol{x}_a} = \frac{1}{m} \left( \boldsymbol{I}
-   - \boldsymbol{n} \otimes \boldsymbol{n} \right) \frac{\partial \boldsymbol{c}}{\partial
-   \boldsymbol{x}_a},
-
-where :math:`\partial \boldsymbol{c} / \partial \boldsymbol{x}_a` are constant skew-symmetric
-(cross-product) matrices of the edge vectors. Because the facet is flat, the *only* second-order
-term in the Hessian :math:`\boldsymbol{H} = \partial^2 g / \partial \boldsymbol{q}^2` is the
-pose-dependence of the normal's own construction (the derivative of the
-normalize-the-cross-product map) -- there is **no curvature term**. The closed forms comprise
-three contributions per node-pair block: the derivative of the tangent-plane projector, the
-derivative of the skew arguments, and the derivative of the normalization denominator. They were
-derived by hand and cross-verified against exact symbolic differentiation (SymPy) and independent
-central finite differences to machine precision at many random non-degenerate configurations; see
-the warning in :mod:`~edelweissfe.utils.facetcontactgeometry` -- this normalize/rotate
-second-derivative algebra is very easy to get subtly wrong, and the module must not be hand-edited
-without re-verification.
-
-The slave is assigned to its single closest facet (by facet centroid distance) once per
-connectivity update -- every increment in an implicit analysis, less often under explicit dynamics
-(see :ref:`contact-explicit-dynamics`) -- from the last converged configuration. Within the
-increment, an exact in-facet containment test
-(barycentric for Tria3, parametric for Line2) gates the contribution: if the projection of the
-slave leaves the assigned facet mid-Newton, no contact is assembled for that slave until the next
-connectivity update. Two non-smoothness sources follow: the facet-normal snap when the closest
-point crosses a facet seam, and the mid-increment containment loss ("dead zones" at facet edges
-and corners, where a penetrating node can temporarily carry no force). Both are accepted
-limitations of this formulation -- and both *vanish identically* in the small-sliding formulation,
-which is the recommended one for the target applications.
-
-.. _small-sliding-kinematics:
-
-Small sliding: frozen closest-point projection
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-In the small-sliding formulation (``sliding=small``, in the sense of the classical
-"small-sliding" contact of implicit FE codes), the closest-point projection of each slave onto
-the master surface is computed once per increment from the last converged configuration and
-**frozen for all Newton iterations of that increment**:
-
-1. For every master facet, the true closest point of the *closed* facet domain is computed --
-   interior, edge, or vertex -- via the barycentric region classification (Ericson's real-time
-   collision detection test), yielding clamped, non-negative weights
-   :math:`\bar{N}_a \geq 0,\; \sum_a \bar{N}_a = 1`. The facet with the smallest true distance is
-   assigned. Because the *closed* domain is used, there is no dead zone at facet seams: a node
-   beyond a facet's edge clamps to that edge or vertex and remains loadable.
-
-2. The assigned facet's unit normal :math:`\bar{\boldsymbol{n}}` and the clamped weights
-   :math:`\bar{N}_a` are frozen. The gap of the current iterate is then
-
-   .. math::
-
-      g(\boldsymbol{q}) = \bar{\boldsymbol{n}} \cdot \Big( \boldsymbol{x}_s - \sum_a \bar{N}_a\,
-      \boldsymbol{x}_a \Big),
-
-   which is **linear in the displacement DOFs**: the gradient is the constant vector
-
-   .. math::
-
-      \boldsymbol{w} = \boldsymbol{c} \otimes \bar{\boldsymbol{n}}, \qquad \boldsymbol{c} = [1,
-      -\bar{N}_1, \ldots, -\bar{N}_k],
-
-   (Kronecker-product block structure) and the geometric Hessian term vanishes identically.
-
-Both non-smoothness sources of finite sliding disappear; the only remaining switch is the
-gap-sign activation. The formulation is variationally the linearization of the contact kinematics
-about the last converged state -- consistent with a small-deformation setting, where the solid
-elements are linearized anyway, while still permitting arbitrarily large *accumulated* sliding
-through the per-increment re-projection. It is also the necessary basis for the frictional
-return mapping (constant tangent frame within the increment).
-
-The relative displacement mapping used throughout normal and frictional contact is the constant
-matrix
-
-.. math::
-
-   \boldsymbol{G} = \boldsymbol{c} \otimes \boldsymbol{I}, \qquad \boldsymbol{u}_{rel} =
-   \boldsymbol{G}\, \boldsymbol{q} = \boldsymbol{x}_s - \sum_a \bar{N}_a \boldsymbol{x}_a,
-
-with the identities :math:`\boldsymbol{G}^T \boldsymbol{M} \boldsymbol{G} = (\boldsymbol{c}
-\otimes \boldsymbol{c}^T) \otimes \boldsymbol{M}` and :math:`\boldsymbol{G}^T \boldsymbol{v} =
-\boldsymbol{c} \otimes \boldsymbol{v}` used verbatim in the implementation.
-
-
-Normal contact
---------------
-
-Penalty force laws
-~~~~~~~~~~~~~~~~~~
-
-Contact is active for :math:`g < 0`. With :math:`\kappa = p\, A_s` (``penalty`` :math:`p`, an
-interface stiffness modulus per unit area, times the tributary area), two force laws are
-available; :math:`f_n \leq 0` denotes the normal force carried by the slave node (compression
-negative), assembled as :math:`\boldsymbol{P}^{ext} \mathrel{-}= f_n\, \boldsymbol{w}`:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 14 22 22 42
-
-   * - law
-     - potential :math:`\Pi(g)`
-     - force :math:`f_n`, stiffness :math:`\partial f_n / \partial g`
-     - activation smoothness
-   * - ``linear``
-     - :math:`\tfrac{1}{2} \kappa g^2`
-     - :math:`\kappa g`, :math:`\kappa`
-     - force :math:`C^0`; stiffness jumps by :math:`\kappa` at :math:`g = 0`
-   * - ``quadratic``
-     - :math:`-\tfrac{1}{6} \kappa g^3`
-     - :math:`-\tfrac{1}{2} \kappa g^2`, :math:`-\kappa g`
-     - force :math:`C^1`; stiffness continuous (:math:`\to 0`) at :math:`g = 0`
-
-The sign convention matters: the quadratic force must carry the sign of :math:`g` (i.e.
-:math:`f_n = -\tfrac{1}{2}\kappa g^2 < 0` in contact) so that the shared assembly expression
-remains repulsive; the consistent stiffness is then :math:`-\kappa g > 0`.
-
-The choice of law is not cosmetic. For frictionless contact both work; **in combination with
-friction, the quadratic law is strongly recommended**: the frictional slip tangent contains a
-nonsymmetric term proportional to :math:`\mu \, \partial f_n / \partial g` (see
-:ref:`friction-tangent`). With the linear law this term switches on and off with the full
-magnitude :math:`\mu \kappa` at gap activation; nodes lifting off or touching down at a tilting
-contact edge (e.g. the trailing edge of a dragged block) then make Newton limit-cycle *independent
-of the increment size* -- observed as a residual two-cycle persisting down to increments of
-:math:`10^{-6}`. With the quadratic law, both the normal and the mu-scaled frictional tangent
-vanish continuously at activation, and the same problems converge without cutbacks.
-
-The consistent contribution of one active slave to the tangent is
-
-.. math::
-
-   \boldsymbol{K} = \frac{\partial f_n}{\partial g}\, \boldsymbol{w} \otimes \boldsymbol{w} +
-   f_n\, \boldsymbol{H},
-
-where :math:`\boldsymbol{H} \equiv \boldsymbol{0}` for small sliding.
-
-.. _augmented-lagrange:
-
-Augmented Lagrange (incremental Uzawa)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-With ``augmentedLagrange=True`` (requires ``sliding=small``), each slave carries a persistent
-normal traction multiplier :math:`\lambda_s \leq 0` (a force), and the contact force becomes
-
-.. math::
-
-   f_n = \lambda_s + f_n^{pen}(g),
-
-with the penalty part :math:`f_n^{pen}` of the chosen law for :math:`g<0` and zero at open gaps.
-Contact is assembled whenever :math:`g < 0` *or* :math:`\lambda_s < 0`; at an open gap with a
-lingering multiplier, the constant force :math:`\lambda_s \boldsymbol{w}` is applied without any
-stiffness, and the multiplier decays within a few increments (see below). Since
-:math:`\lambda_s` is **constant within an increment, it contributes nothing to the tangent and
-cannot destabilize Newton** -- the entire algorithmic character of the penalty method is
-retained.
-
-On increment acceptance, the multiplier is updated by the *converged penalty force part*
-(incremental Uzawa):
-
-.. math::
-
-   \lambda_s \leftarrow \min\big(0,\; \lambda_s + f_n^{pen}(g_{conv})\big),
-
-with the linear release measure :math:`\kappa\, g_{conv} > 0` at open gaps. The law-dependence of
-the update is essential and easy to get wrong: the textbook update :math:`\lambda \leftarrow
-\lambda + \kappa g` *is* the penalty force only for the linear law, where it transfers the spring
-force to the multiplier in one step. Under the quadratic law the converged gap scales as
-:math:`g \sim -\sqrt{2 N / \kappa}` for a nodal force :math:`N`, so :math:`\kappa g \sim
--\sqrt{2 \kappa N}` overshoots the required traction by :math:`\sqrt{\kappa / (2N)}` -- orders of
-magnitude at practical penalties (observed: per-node multipliers ~100x the nodal force, total
-normal force spiking 40x, cutback cascade). Updating by the penalty *force* restores the
-one-step transfer property for both laws.
-
-Consequences: at fixed penalty the penetration is driven toward zero over the increments (the
-multiplier progressively carries the load), so the **penalty can be reduced by an order of
-magnitude or more** (conditioning, smoother switches) while the solution moves *closer* to the
-rigid-constraint limit than a pure penalty at the stiff value. The friction cone :math:`\mu N`
-(below) uses the multiplier-augmented normal force -- a sharper cone than the pure penalty
-estimate.
-
-
-Coulomb friction
-----------------
-
-Interface plasticity and the necessity of state
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Coulomb friction is rate-independent plasticity on the interface: yield function
-:math:`\phi = \lVert \boldsymbol{t}_T \rVert - \mu N \leq 0`, slip as the plastic flow, and the
-tangential force as the stress-like internal variable. The interface force is *not* a function of
-the current configuration -- two loading histories ending at the identical displacement field
-carry different locked-in tangential forces (hysteresis is precisely this memory). The converged
-tangential force :math:`\boldsymbol{t}_T^{(n)}` per slave is the minimal state that makes the
-incremental problem well-posed. A stateless incremental law (:math:`\boldsymbol{t}_T = k_T \Delta
-\boldsymbol{u}_T`, reset each increment) would make a stuck block creep by :math:`\tau / k_T`
-*per increment* under constant sub-limit shear -- a response proportional to the number of
-increments, never converging under time-step refinement.
-
-Storing the *force* (rather than accumulated slip) is deliberate: total relative slip is not even
-well-defined across increments here -- the frozen frame rotates and the assigned facet changes as
-a node slides across the master surface -- whereas the force transfers cleanly (it is projected
-onto the new tangent plane at each connectivity update, and zeroed when contact is lost).
-
-Predictor--corrector (radial return)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-All frictional kinematics live in the frozen small-sliding frame (``mu > 0`` requires
-``sliding=small``). With the tangent-plane projector :math:`\bar{\boldsymbol{P}} = \boldsymbol{I}
-- \bar{\boldsymbol{n}} \otimes \bar{\boldsymbol{n}}` and the incremental relative displacement
-:math:`\Delta \boldsymbol{u}_{rel} = \boldsymbol{G}\, \Delta \boldsymbol{q}` (:math:`\Delta`
-relative to the last converged state, i.e. computed from the solver's :math:`d\boldsymbol{U}`
-fresh in every iteration -- nothing accumulates across Newton iterations, which also makes
-cutbacks automatically state-safe):
-
-.. math::
-
-   \boldsymbol{t}^{trial} &= \boldsymbol{t}_T^{(n)} - k_T\, \bar{\boldsymbol{P}}\, \Delta
-   \boldsymbol{u}_{rel}, \qquad k_T = t\, A_s \quad (\texttt{tangentPenalty}\ t), \\[4pt]
-   \boldsymbol{t}_T &= \begin{cases} \boldsymbol{t}^{trial}, & \lVert \boldsymbol{t}^{trial}
-   \rVert \leq \mu N \quad \text{(stick)} \\[2pt] \mu N \, \dfrac{\boldsymbol{t}^{trial}}{\lVert
-   \boldsymbol{t}^{trial} \rVert}, & \text{otherwise (slip: radial return onto the cone)}
-   \end{cases}
-
-with :math:`N = -f_n \geq 0` the current normal force (multiplier-augmented if AL is active).
-The force on the slave node is :math:`\boldsymbol{t}_T` and the facet nodes receive the reaction
-:math:`-\bar{N}_a \boldsymbol{t}_T`, i.e. the assembly is :math:`\boldsymbol{P}^{ext}
-\mathrel{+}= \boldsymbol{G}^T \boldsymbol{t}_T = \boldsymbol{c} \otimes \boldsymbol{t}_T`.
-
-Note the continuity at liftoff: as :math:`N \to 0` the slip branch caps the force at :math:`\mu N
-\to 0`, so the frictional force is continuous through gap activation. The *tangent*, however, is
-only continuous there if the normal stiffness vanishes at activation -- the quadratic-law
-argument above.
-
-On increment acceptance (the constraint's ``acceptLastState`` lifecycle hook, called by
-:meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` alongside the element state commit),
-the tangential force of the converged iterate is promoted to the history:
-:math:`\boldsymbol{t}_T^{(n+1)} \leftarrow \boldsymbol{t}_T`.
-
-.. _friction-tangent:
-
-Consistent tangent
-~~~~~~~~~~~~~~~~~~
-
-With :math:`\boldsymbol{K} = -\partial \boldsymbol{P}^{ext} / \partial \boldsymbol{U}` and the
-Kronecker identities above:
-
-**Stick** (symmetric, positive semi-definite):
-
-.. math::
-
-   \boldsymbol{K}^{stick} = \boldsymbol{G}^T \big( k_T \bar{\boldsymbol{P}} \big) \boldsymbol{G}
-   = (\boldsymbol{c} \otimes \boldsymbol{c}^T) \otimes \big( k_T \bar{\boldsymbol{P}} \big).
-
-**Slip** (nonsymmetric): differentiating :math:`\boldsymbol{t}_T = \mu N \hat{\boldsymbol{s}}`
-with :math:`\hat{\boldsymbol{s}} = \boldsymbol{t}^{trial} / \lVert \boldsymbol{t}^{trial}
-\rVert`, :math:`\partial N / \partial \boldsymbol{q} = -(\partial f_n / \partial g)\,
-\boldsymbol{w}^T` and :math:`\partial \hat{\boldsymbol{s}} / \partial \boldsymbol{q} =
--\tfrac{k_T}{\lVert \boldsymbol{t}^{trial} \rVert} (\boldsymbol{I} - \hat{\boldsymbol{s}} \otimes
-\hat{\boldsymbol{s}}) \bar{\boldsymbol{P}} \boldsymbol{G}`:
-
-.. math::
-
-   \boldsymbol{K}^{slip} = \underbrace{\mu \, \frac{\partial f_n}{\partial g} \, (\boldsymbol{c}
-   \otimes \hat{\boldsymbol{s}}) \otimes \boldsymbol{w}}_{\text{normal--tangential coupling,
-   nonsymmetric}} \; + \; (\boldsymbol{c} \otimes \boldsymbol{c}^T) \otimes \left[ \frac{\mu N
-   k_T}{\lVert \boldsymbol{t}^{trial} \rVert} \big( \boldsymbol{I} - \hat{\boldsymbol{s}}
-   \otimes \hat{\boldsymbol{s}} \big) \bar{\boldsymbol{P}} \right].
-
-The bracketed second term is symmetric (:math:`\hat{\boldsymbol{s}} \perp \bar{\boldsymbol{n}}`
-implies the two projectors commute); the rank-one coupling term is not. The linear solvers used
-by the implicit solver operate on general unsymmetric matrices (e.g. the PARDISO interface runs
-``mtype = 11``), so no symmetrization is applied. Both regimes of the tangent are verified
-against independent finite differences of the assembled residual to relative errors of
-:math:`\sim 10^{-11}`.
 
 Parameter guidance
 ~~~~~~~~~~~~~~~~~~
@@ -785,7 +800,7 @@ Parameter guidance
 
 
 Solver integration
-------------------
+~~~~~~~~~~~~~~~~~~
 
 The constraint participates in the implicit solution through three hooks:
 
@@ -815,7 +830,7 @@ ordered like the generator's ``<prefix>_nodes`` node set, and are typically requ
 .. _contact-explicit-dynamics:
 
 Explicit dynamics
-~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^
 
 Under ``NED`` (:doc:`solvers`) the same formulation is used, with two differences that follow from
 what an explicit increment is.
@@ -853,7 +868,7 @@ and iterated in ascending facet index, so it reproduces the exhaustive tie-break
 
 
 Verification and benchmarks
----------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The implementation is verified on several independent levels, and the regression suite pins the
 key physical invariants:
