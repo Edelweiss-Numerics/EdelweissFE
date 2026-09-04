@@ -1,0 +1,88 @@
+** Integrated (Gauss-point-to-segment) contact on the EXPLICIT dynamic path: the same model and the
+** same decisive check as NEDContact, with type=surfaceToDeformableSurfacePenalty.
+**
+** As there, the check is not that this runs but the `dispLowerMax` history: nothing else in this
+** model loads the lower block, so its displacement is identically zero unless the contact
+** constraint's forces actually reach the equations. `cornerForce` is the minimum slave nodal normal
+** force; it is POSITIVE here because these are linear (C3D8) faces, whose consistent nodal loads
+** are all non-negative -- contrast SurfaceToDeformableSurfaceContactPatchHexa20, where the same
+** quantity is negative by design.
+**
+** Deliberately C3D8 rather than C3D20, although hexa20 is the reason the constraint exists: the
+** pure-Python C3D20 element cannot currently run explicit dynamics at all. Row-sum lumping of its
+** consistent mass matrix yields NEGATIVE corner masses (verified pre-existing: unmodified
+** NEDContact with only elType changed to C3D20 fails identically, with the node-based contact),
+** which is the very same serendipity property that motivates this constraint, appearing in the
+** mass matrix instead of the contact loads -- and it wants the same kind of fix there
+** (Duczek & Gravenkamp's 1/3-2/3 lumping weights). Marmot's own quadratic elements lump their mass
+** themselves and are unaffected, so this does not block hexa20 explicit models that use them.
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+1.8e4,    0.3,   1.0
+
+*job, name=nedcontactjob, domain=3d
+
+*solver, solver=NEDParallel, name=theSolver
+second-order-fields="displacement"
+courant-number=0.8
+output-frequency=50
+contact-update-frequency=10
+
+*modelGenerator, generator=boxGen, name=lower
+nX      =3
+nY      =3
+nZ      =3
+x0      =0
+y0      =0
+z0      =0
+lX      =2
+lY      =2
+lZ      =1
+elProvider =edelweiss
+elType  =C3D8
+
+*modelGenerator, generator=boxGen, name=upper
+nX      =3
+nY      =3
+nZ      =3
+x0      =0.3
+y0      =1.1
+z0      =1.05
+lX      =0.6
+lY      =0.6
+lZ      =1
+elProvider =edelweiss
+elType  =C3D8
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen1
+surface = upper_back
+name    = slaveSurf
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen2
+surface = lower_front
+name    = masterSurf
+
+*section, name=section1, material=linearelastic, type=solid
+lower_all
+upper_all
+
+*constraint, name=contact, type=surfaceToDeformableSurfacePenalty
+slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=5e4, type=linear, searchDistance=2.0
+
+*fieldOutput
+>>perNode, elSet=lower_all, field=displacement, result=U, name=dispLower
+>>perNode, elSet=upper_all, field=displacement, result=U, name=dispUpper
+>>perNode, name=dispLowerMax, elSet=lower_all, field=displacement, result=U, f(x)='np.max(np.abs(x))', saveHistory=True
+>>perNode, name=RFLower, nSet=lower_back, field=displacement, result=P, f(x)='np.sum(x[:,2])', saveHistory=True
+>>fromExpression, name=cornerForce, nSet=slaveSurf_nodes, expression='model.constraints["contact"].getSlaveNodalNormalForces()', f(x)='np.min(x)', saveHistory=True
+
+*output, type=monitor, name=monitor
+fieldOutput=dispLowerMax
+fieldOutput=RFLower
+fieldOutput=cornerForce
+
+*step, type=adaptiveForExplicitSimulations, solver=theSolver
+maxInc=1, minInc=1e-12, maxNumInc=2000, maxIter=25, stepLength=0.5
+>>dirichlet, name=fixLower, nSet=lower_back, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=pushDown, nSet=upper_front, field=displacement, 3=-0.2
+>>dirichlet, name=pinUpperXY, nSet=upper_bottomLeftBack, field=displacement, 1=0.0, 2=0.0
+>>dirichlet, name=pinUpperRotZ, nSet=upper_bottomRightBack, field=displacement, 2=0.0

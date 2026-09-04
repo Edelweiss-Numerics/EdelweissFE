@@ -93,15 +93,18 @@ class TestContactFacetNodalWeights(unittest.TestCase):
         """A single straight-edged hexa20 cube of side ``_SIDE``, with its Ymin face registered as
         the surface ``theSurface``."""
 
+        # boxGen's own corner ring order, (0,0), (0,S), (S,S), (S,0) in the (x, z) plane: the
+        # generator's face tables were verified against it, and transposing two corners would
+        # reverse every face normal while leaving areas and shape-function integrals untouched.
         corners = [
             np.array([0.0, 0.0, 0.0]),
-            np.array([_SIDE, 0.0, 0.0]),
-            np.array([_SIDE, 0.0, _SIDE]),
             np.array([0.0, 0.0, _SIDE]),
+            np.array([_SIDE, 0.0, _SIDE]),
+            np.array([_SIDE, 0.0, 0.0]),
             np.array([0.0, _SIDE, 0.0]),
-            np.array([_SIDE, _SIDE, 0.0]),
-            np.array([_SIDE, _SIDE, _SIDE]),
             np.array([0.0, _SIDE, _SIDE]),
+            np.array([_SIDE, _SIDE, _SIDE]),
+            np.array([_SIDE, _SIDE, 0.0]),
         ]
         coordinates = corners + [0.5 * (corners[a] + corners[b]) for a, b in _HEXA20_EDGES]
 
@@ -352,6 +355,21 @@ class TestParentFaceIntegration(unittest.TestCase):
         sourceNodes = model.surfaces["theSurface"][1][0].nodes
         np.testing.assert_allclose([loads[sourceNodes[i]] for i in _YMIN_CORNERS], -4.0 / 12.0, atol=1e-13)
         np.testing.assert_allclose([loads[sourceNodes[i]] for i in _YMIN_MIDSIDES], 4.0 / 3.0, atol=1e-13)
+
+    def test_generated_facet_normals_point_outward(self):
+        """Every facet of the cube's Ymin face must have an outward (-y) normal. Nothing else in
+        this file would notice a reversed winding -- areas and shape-function integrals are
+        orientation-independent -- but a contact constraint would silently see penetration where
+        there is separation."""
+
+        model = TestContactFacetNodalWeights._modelWithOneHexa20(self)
+        with model.topologyChanges():
+            facetsSetName, _ = buildContactFacets(
+                model, "theSurface", "pfx", "midside", "facetConsistent", self.journal
+            )
+        for facet in model.elementSets[facetsSetName]:
+            normal, _ = facetNormalAndMeasure(np.array([n.coordinates for n in facet.nodes]))
+            np.testing.assert_allclose(normal, [0.0, -1.0, 0.0], atol=1e-14)
 
     def test_canonical_parent_face_derivation(self):
         """The derivation from the face tables, on one face of each supported source type."""

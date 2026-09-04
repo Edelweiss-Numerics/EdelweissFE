@@ -251,6 +251,44 @@ Module ``edelweissfe.constraints.nodetodeformablesurfacepenalty``
     :caption: Example (small sliding, Coulomb friction, hexa20 midside triangulation):
               ``testfiles/edelweiss-only/NodeToDeformableSurfaceContactFrictionHexa20/test.inp``
 
+``surfacetodeformablesurfacepenalty`` - Integrated surface-to-surface contact
+-----------------------------------------------------------------------------
+
+The integrated (Gauss-point-to-segment) counterpart of the constraint above: contact is evaluated
+at *quadrature points* over the slave surface's facets, and the resulting pressure is distributed
+with each side's **parent element face** shape functions rather than with the flat facets' own.
+
+Use this instead of ``nodetodeformablesurfacepenalty`` on quadratic (hexa20/quad8) contact
+surfaces. There, a node-based penalty scheme cannot transmit a correct pressure at all -- the
+consistent nodal load of a uniform pressure at a serendipity corner is *tensile*, which a
+unilateral spring cannot exert, so the discrete solution opens every corner gap instead. The
+mechanism, the measurements, and why no choice of nodal weights can repair it are documented in
+:ref:`serendipity-liftoff`; the integrated formulation and its own limits are in
+:ref:`integrated-contact`. On *linear* faces the parent-face basis coincides with the facet basis,
+so the two constraints agree to 13 digits and there is nothing to gain.
+
+Scope: normal penalty contact under ``sliding=small``, on both the implicit and the explicit solver
+path. Coulomb friction and augmented Lagrange are **not** implemented here (the node-based
+constraint has both), and ``sliding=finite`` is rejected rather than approximated.
+
+Module ``edelweissfe.constraints.surfacetodeformablesurfacepenalty``
+
+.. automodule:: edelweissfe.constraints.surfacetodeformablesurfacepenalty
+    :members: __doc__
+
+.. pprint:: constraint:surfacetodeformablesurfacepenalty
+    :caption: Options:
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/SurfaceToDeformableSurfaceContactPatchHexa20/test.inp
+    :language: edelweiss
+    :caption: Example (the hexa20 acceptance test, with the measured results in its header):
+              ``testfiles/edelweiss-only/SurfaceToDeformableSurfaceContactPatchHexa20/test.inp``
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/NEDSurfaceContact/test.inp
+    :language: edelweiss
+    :caption: Example (explicit dynamics):
+              ``testfiles/edelweiss-only/NEDSurfaceContact/test.inp``
+
 ``tie`` - Surface-to-surface tie (DOF elimination)
 --------------------------------------------------
 

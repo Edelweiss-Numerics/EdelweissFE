@@ -288,6 +288,109 @@ them requires integrating a pressure field against the parent face's own quadrat
 (segment-to-segment/mortar), which never imposes a unilateral condition at a corner node at all --
 and that, not the weighting, is what the numbers above argue for.
 
+.. _integrated-contact:
+
+Integrated contact: distributing with the parent face's basis
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The obstruction above is a property of *where* the unilateral condition is imposed, not of the
+physics. Impose it on the nodes and the nodal force must be non-negative; impose it on a *pressure
+field* and only the pressure must be non-negative, while the nodal forces are whatever the
+distribution makes them. :mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`
+does the latter, evaluating the penalty pressure at quadrature points over the slave facets and
+distributing it as
+
+.. math::
+    f_a = \sum_q w_q \, J_q \, p(g_q) \, N_a(\xi_q) ,
+
+with :math:`N_a` the **parent element face's** shape functions. Wherever :math:`N_a` is negative --
+which for a serendipity face is a neighbourhood of every corner -- node :math:`a` receives a
+tensile force, and for a uniform pressure the sum reproduces :math:`-pA/12` exactly. The corner
+load is now available, so nothing needs to lift off.
+
+The parent-face basis is the load-bearing half of this, not the quadrature. Distributing with the
+flat sub-facets' own linear shape functions would leave every weight non-negative and the corners
+lifting off exactly as before -- the same wall the nodal weights run into, since the facet-linear
+lumping *is* the ``facetConsistent`` weighting. What each side's parent face is, and where its
+quadrature points sit in that face's parametric space, is recorded on the facets by the surface
+element generator; see :mod:`~edelweissfe.utils.parentfacegeometry`.
+
+Two consequences of freezing the projection per increment (``sliding=small``) make the formulation
+unusually cheap here. The gap
+
+.. math::
+    g = \bar{\boldsymbol{n}} \cdot \left( N^s(\xi_q) \cdot \boldsymbol{x}^s
+        - N^m(\xi_m) \cdot \boldsymbol{x}^m \right)
+
+is linear in the displacement DOFs, so the gradient :math:`\boldsymbol{w} = \bar{\boldsymbol{n}}
+\otimes [N^s, -N^m]` is constant and the geometric Hessian vanishes identically; and the tangent
+:math:`\mathrm{d}f_n/\mathrm{d}g \, \boldsymbol{w} \otimes \boldsymbol{w}` is symmetric. This
+is structurally the same algebra as the node-based frozen form, with that formulation's slave
+coefficient :math:`1` replaced by the slave face's shape-function vector.
+
+Note that the gap is measured to the *parent surface* point :math:`N^m(\xi_m) \cdot
+\boldsymbol{x}^m`, not to the flat facet point. Distributing the force with :math:`N^m` while
+measuring the gap to the flat point would make the force distribution differ from the transpose of
+the gap gradient -- a non-symmetric, variationally inconsistent operator, the same defect that
+confines the ``serendipityOptimal`` weight transform to small sliding. The flat facets serve only
+as the search and parametrization scaffold; the contact geometry is the curved parent surface,
+which also removes the slave-side faceting error. For straight-edged faces the two points coincide
+identically.
+
+**Measured** (``testfiles/edelweiss-only/SurfaceToDeformableSurfaceContactPatchHexa20``, the same
+matched 2x2 hexa20 interface as the table above):
+
+.. list-table::
+    :header-rows: 1
+
+    * - variant
+      - interface force
+      - corners in contact
+      - max slave gap
+      - interface flatness
+    * - C3D8, for reference
+      - 359.892
+      - --
+      - -1.2e-5
+      - 1.4e-17
+    * - hexa20, node-based
+      - 353.787
+      - 0 of 9
+      - +2.396e-3
+      - 1.4274e-3
+    * - hexa20, **integrated**
+      - **359.892**
+      - all
+      - **-1.1996e-5**
+      - **3.19e-16**
+
+Each figure is what theory demands rather than merely an improvement. The resultant,
+359.89203239028313, agrees with the C3D8 reference's 359.89203239028274 to 13 digits: the same
+answer a linear interface gives, penalty compliance included. The gap is
+:math:`-1.1996401 \cdot 10^{-5} = -p/\varepsilon` at *every* quadrature point, i.e. a uniform
+penetration and hence a uniform pressure, with nothing lifted off. The interface is flat to
+machine precision, the per-point pressure spread is 5.6e-11, and the minimum slave nodal normal
+force is :math:`-29.99100269952982` against the analytic :math:`-4 pA/12 = -29.99100269919026` for
+an interior corner shared by four faces -- the corner nodes carry exactly the tensile load the face
+demands. The patch test passes on hexa20 exactly as it does on hexa8.
+
+**What this does not fix.** Pointwise enforcement at quadrature points still over-constrains a
+non-matching interface, and the integrand is discontinuous inside a slave facet wherever the
+assigned master facet changes, so that quadrature error does not shrink under refinement of the
+rule. Exactness on non-matching meshes requires integrating over *clipped* slave-master segments
+and enforcing the constraint weakly through a multiplier field -- mortar (Puso & Laursen 2004;
+for the quadratic dual basis, whose construction uses the very same modified shape functions as
+``nodalWeights=serendipityOptimal``, Popp, Wohlmuth & Wall, SISC 2012). The measured spread of
+:math:`\sim 0.5` on a 3x3-on-2x2 interface remains this project's tripwire for that step, and
+:mod:`~edelweissfe.constraints.tie` would share the same clipping layer.
+
+**Cost.** Each contact point couples both parent faces, so in 3D a block is
+:math:`(8+8) \times 3 = 48` DOF rather than the node-based :math:`(1+3) \times 3 = 12`, and there
+are typically two to three times as many contact points as slave nodes -- of order 30 times the
+contact-assembly entries. Whether that matters depends on contact's share of the assembly, which is
+worth measuring on a given model before adopting it in an explicit run.
+
+
 Gap kinematics
 --------------
 

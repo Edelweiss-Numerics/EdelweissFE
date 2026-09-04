@@ -29,7 +29,6 @@
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.spatial import cKDTree
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.elements.contactsurfaceelement import facetNormalAndMeasure
@@ -39,6 +38,7 @@ from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.facetcontactgeometry import (
+    closestFacetCandidates,
     line2ClosestPoint,
     line2GapGradientHessian,
     tria3ClosestPoint,
@@ -498,73 +498,6 @@ class Constraint(ConstraintBase, MeshDependent):
         u = np.array([dispField["U"][idcs[n]] if n in idcs else np.zeros(self.nDim) for n in nodes])
         return referenceCoords + u
 
-    @staticmethod
-    def _closestFacetCandidates(slaveCoords: np.ndarray, facetCoords: list, searchDistance: float | None) -> list:
-        """For each slave node, the facets that could possibly be its closest one.
-
-        Replaces an exhaustive slave x facet sweep with a spatial query, WITHOUT changing which facet
-        is selected. The exhaustive form called the clamped closest-point routine once per
-        slave-facet pair -- 778,000 calls on the anchor pry-out model, measured at 5.98 s per
-        connectivity update, which is why the solver had to be told to search only every few hundred
-        increments.
-
-        The bound that makes this exact: let ``F*`` be the truly closest facet, at point-to-closed-
-        domain distance ``d*``, with centroid ``C*`` and radius ``r*`` (its largest centroid-to-vertex
-        distance). A triangle's centroid lies inside its own closed domain, so the distance to the
-        facet owning the nearest centroid is at most ``d0``, the distance to that centroid -- hence
-        ``d* <= d0``. And ``|x - C*| <= d* + r* <= d0 + rMax``. So every facet that could win, or
-        even tie, has its centroid inside a ball of radius ``d0 + rMax``, and querying that ball
-        cannot miss it.
-
-        Candidates are returned in ascending facet index, so the caller's "first strict minimum"
-        selection picks exactly the facet the exhaustive sweep would have. The result is bit-identical,
-        not merely equivalent.
-
-        Parameters
-        ----------
-        slaveCoords
-            Current coordinates of the slave nodes, shape ``(nSlaves, nDim)``.
-        facetCoords
-            Current coordinates of each facet's nodes.
-        searchDistance
-            The caller's cut-off, if any. A facet beyond it is rejected anyway, so the query radius
-            is capped accordingly.
-
-        Returns
-        -------
-        list
-            One ascending list of candidate facet indices per slave node.
-        """
-
-        if not facetCoords:
-            return [[] for _ in range(len(slaveCoords))]
-
-        stacked = np.asarray(facetCoords, dtype=float)  # (nFacets, nNodesPerFacet, nDim)
-        centroids = stacked.mean(axis=1)
-        radii = np.linalg.norm(stacked - centroids[:, None, :], axis=2).max(axis=1)
-        rMax = float(radii.max())
-
-        tree = cKDTree(centroids)
-        nearestCentroidDistance, _ = tree.query(slaveCoords, k=1)
-
-        radius = nearestCentroidDistance + rMax
-        if searchDistance is not None:
-            # A facet farther than searchDistance is rejected by the caller regardless, and its
-            # closed domain is at least |x - C| - r away, so nothing within searchDistance can have
-            # its centroid beyond searchDistance + rMax.
-            radius = np.minimum(radius, searchDistance + rMax)
-
-        # The bound above is exact in real arithmetic and query_ball_point includes its boundary, so
-        # a facet that exactly ties -- the ordinary case on a structured or symmetric contact mesh --
-        # sits precisely ON the radius, where the rounding of the sum that produced it can land an
-        # ulp low and drop it from the candidate list. That would silently pick a different facet
-        # than the exhaustive sweep, against what this docstring promises. A few ulps of relative
-        # margin restores the superset property; it widens the ball by a distance many orders below
-        # any mesh dimension, so it admits no facet that the exhaustive sweep would not also see.
-        radius = radius * (1.0 + 8.0 * np.finfo(float).eps)
-
-        return [sorted(c) for c in tree.query_ball_point(slaveCoords, radius)]
-
     def updateConnectivity(self, model: FEModel) -> bool:
         """Re-assign each slave node to its single closest facet, based on the last converged
         configuration. Called once per increment by the solver, before the equation system is
@@ -589,7 +522,7 @@ class Constraint(ConstraintBase, MeshDependent):
             # frozen for the whole increment, making the gap linear in the displacement DOFs.
             closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
             nSlavesWithDiscardedHistory = 0
-            candidatesPerSlave = self._closestFacetCandidates(slaveCoords, facetCoords, self.searchDistance)
+            candidatesPerSlave = closestFacetCandidates(slaveCoords, facetCoords, self.searchDistance)
             for s in range(self.nSlaves):
                 bestDistance = np.inf
                 bestFacet = None
