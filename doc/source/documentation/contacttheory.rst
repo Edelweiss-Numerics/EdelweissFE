@@ -385,7 +385,12 @@ demands. The patch test passes on hexa20 exactly as it does on hexa8.
 
     The slave interface is warped by its own :math:`u_z` deviation from the interface mean, whose
     exact value is zero, so the *geometry* answers "is the interface flat?" while the *colour*
-    answers "is the transmitted stress uniform?". The two bodies are drawn translucent for context,
+    answers "is the transmitted stress uniform?". The stress is averaged over *all* of an element's
+    integration points: exporting a single one samples a corner point and biases the sample
+    directionally, which showed up as a spurious diagonal gradient across an entirely symmetric
+    model and inflated the apparent stress error roughly twofold. The two bodies are drawn
+    translucent for context, with element gridlines taken from a linear copy of each block so the
+    two discretizations can be compared,
     clipped to a slab around the interface -- whole blocks leave the interface occupying a sixth of
     the frame and wash its colour out -- and the master interface is overlaid as a wireframe, since
     the warped surface shows only the slave mesh and the non-matching discretization would
@@ -405,6 +410,26 @@ the slave facet is simply a better approximation of the transferred load than lu
 slave nodes, quite apart from any question about negative corner weights. Serendipity faces are
 where node-based contact fails *qualitatively*; non-matching meshes are where it fails
 *quantitatively*, whatever the element order.
+
+A second study replaces the equal footprints with a lower block 50% wider in plan, so the contact
+patch acquires a **free boundary**:
+
+.. figure:: ../contact_overhang_comparison.png
+    :width: 100%
+    :align: center
+
+    The same eight models with the lower block widened by 50% in plan. The exact interface is now
+    neither flat nor uniform -- a punch-like corner and edge concentration is *physically* correct
+    here -- so this figure compares the two formulations with each other rather than against a
+    known answer, and no flatness ratio is quoted for that reason.
+
+Its result is a useful negative one. Both rows reproduce the same physical pattern, corners of the
+patch carrying the highest compression and the centre the least, and the interface deviation agrees
+to within a factor of two between the formulations (5.47e-3 against 5.06e-3 for hexa20/hexa20).
+Where the geometry itself concentrates the transmitted stress, that concentration dominates the
+discretization error and the choice of contact formulation matters comparatively little. The
+formulation matters where the interface *ought* to transmit uniformly -- which is the regime of the
+first figure, and of a bearing surface.
 
 Note also that ``hexa8 slave / hexa20 master`` is the weakest of the four integrated cases (61x
 rather than several hundred). That is the slave-side sampling asymmetry: the quadrature points live
