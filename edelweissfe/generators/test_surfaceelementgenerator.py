@@ -43,13 +43,23 @@ from edelweissfe.constraints.nodetodeformablesurfacepenalty import (
 from edelweissfe.constraints.nodetodeformablesurfacepenalty import (
     NodeToDeformableSurfacePenaltySchema,
 )
-from edelweissfe.elements.contactsurfaceelement import Tria3ContactFacet
+from edelweissfe.elements.contactsurfaceelement import (
+    Tria3ContactFacet,
+    facetNormalAndMeasure,
+)
 from edelweissfe.elements.displacementelement.element import DisplacementElement
-from edelweissfe.generators.surfaceelementgenerator import buildContactFacets
+from edelweissfe.generators.surfaceelementgenerator import (
+    buildContactFacets,
+    canonicalParentFace,
+)
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
+from edelweissfe.utils.parentfacegeometry import (
+    facetQuadratureRule,
+    parentFaceShapeFunctions,
+)
 
 #: Edge-to-midside-node map of the hexa20 node ordering, local indices 8..19 in order.
 _HEXA20_EDGES = (
@@ -282,6 +292,98 @@ class TestContactFacetNodalWeights(unittest.TestCase):
                         "theContact", model, slaveSurface, masterSurface, self.journal, configuration=configuration
                     )
                 self.assertIn(expectation, str(ctx.exception))
+
+
+class TestParentFaceIntegration(unittest.TestCase):
+    """The premise of integrated (Gauss-point-to-segment) contact: quadrature over the facets
+    tiling a face, distributed with the *parent face's* shape functions, reproduces that face's own
+    consistent nodal loads -- including the NEGATIVE corner loads of a serendipity face that no
+    per-node scheme can deliver."""
+
+    def setUp(self):
+        self.journal = Journal()
+
+    def _consistentLoadsOfUnitPressure(self, model: FEModel, facetsSetName: str, nPoints: int) -> dict:
+        """Integrate a unit pressure over the facet tiling, distributing it with the parent face's
+        shape functions, and accumulate the resulting nodal loads."""
+
+        loads = {}
+        for facet in model.elementSets[facetsSetName]:
+            self.assertIsNotNone(facet.parentFaceType, "the generator must stamp the parent face")
+            coordinates = np.array([n.coordinates for n in facet.nodes])
+            _, measure = facetNormalAndMeasure(coordinates)
+            barycentric, weights = facetQuadratureRule(len(facet.nodes), nPoints)
+            for b, w in zip(barycentric, weights):
+                N = parentFaceShapeFunctions(facet.parentFaceType, b @ facet.vertexParametricCoords)
+                for node, shapeFunction in zip(facet.parentFaceNodes, N):
+                    loads[node] = loads.get(node, 0.0) + measure * w * shapeFunction
+        return loads
+
+    def test_hexa20_face_recovers_the_negative_corner_loads(self):
+        """The go/no-go for the whole formulation: -A/12 per corner and +A/3 per midside, for the
+        side-2 cube's face of area A = 4. The integrand is quadratic in the facet's barycentric
+        coordinates, so the 3-point rule is exact and this must hold to machine precision."""
+
+        for nPoints in (3, 6):
+            model = TestContactFacetNodalWeights._modelWithOneHexa20(self)
+            with model.topologyChanges():
+                facetsSetName, _ = buildContactFacets(
+                    model, "theSurface", "pfx", "midside", "facetConsistent", self.journal
+                )
+            loads = self._consistentLoadsOfUnitPressure(model, facetsSetName, nPoints)
+            sourceNodes = model.surfaces["theSurface"][1][0].nodes
+
+            corners = np.array([loads[sourceNodes[i]] for i in _YMIN_CORNERS])
+            midsides = np.array([loads[sourceNodes[i]] for i in _YMIN_MIDSIDES])
+            np.testing.assert_allclose(corners, -4.0 / 12.0, atol=1e-13, err_msg=f"nPoints={nPoints}")
+            np.testing.assert_allclose(midsides, 4.0 / 3.0, atol=1e-13, err_msg=f"nPoints={nPoints}")
+            self.assertAlmostEqual(corners.sum() + midsides.sum(), 4.0, places=12)
+            self.assertTrue(np.all(corners < 0.0), "the corner loads must be tensile")
+
+    def test_corner_triangulation_recovers_them_too(self):
+        """The parent face is a property of the element, not of the tiling: even the corner
+        reduction, whose facets contain no midside nodes at all, distributes onto the full quad8
+        basis and reproduces the same loads."""
+
+        model = TestContactFacetNodalWeights._modelWithOneHexa20(self)
+        with model.topologyChanges():
+            facetsSetName, _ = buildContactFacets(model, "theSurface", "pfx", "corner", "facetConsistent", self.journal)
+        loads = self._consistentLoadsOfUnitPressure(model, facetsSetName, 3)
+        sourceNodes = model.surfaces["theSurface"][1][0].nodes
+        np.testing.assert_allclose([loads[sourceNodes[i]] for i in _YMIN_CORNERS], -4.0 / 12.0, atol=1e-13)
+        np.testing.assert_allclose([loads[sourceNodes[i]] for i in _YMIN_MIDSIDES], 4.0 / 3.0, atol=1e-13)
+
+    def test_canonical_parent_face_derivation(self):
+        """The derivation from the face tables, on one face of each supported source type."""
+
+        faceType, indices = canonicalParentFace("hexa20", 1)
+        self.assertEqual(faceType, "quad8")
+        # Ymin corner triangles are (11,3,10), (10,2,9), (9,1,8), (8,0,11): cycle 3,2,1,0 with the
+        # midside between consecutive corners taken from each triangle's last entry
+        self.assertEqual(indices, (3, 2, 1, 0, 10, 9, 8, 11))
+
+        self.assertEqual(canonicalParentFace("hexa8", 1), ("quad4", (3, 2, 1, 0)))
+        self.assertEqual(canonicalParentFace("quad8", 1), ("line3", (0, 1, 4)))
+        self.assertEqual(canonicalParentFace("quad4", 1), ("line2", (0, 1)))
+
+    def test_line3_parent_edge_recovers_simpson(self):
+        """In 2D the consistent weights of a quadratic edge are Simpson's -- all positive, so the
+        2D case has no obstruction to begin with; this pins the line3 branch."""
+
+        coords = {0: np.array([0.0, 0.0]), 1: np.array([2.0, 0.0]), 4: np.array([1.0, 0.0])}
+        faceType, indices = canonicalParentFace("quad8", 1)
+        parametric = {0: np.array([-1.0]), 1: np.array([1.0]), 4: np.array([0.0])}
+        loads = {i: 0.0 for i in indices}
+        for facetNodes in ((0, 4), (4, 1)):
+            measure = np.linalg.norm(coords[facetNodes[1]] - coords[facetNodes[0]])
+            vertexParametric = np.array([parametric[i] for i in facetNodes])
+            barycentric, weights = facetQuadratureRule(2, 3)
+            for b, w in zip(barycentric, weights):
+                N = parentFaceShapeFunctions(faceType, b @ vertexParametric)
+                for k, i in enumerate(indices):
+                    loads[i] += measure * w * N[k]
+        np.testing.assert_allclose([loads[0], loads[1]], 2.0 / 6.0, atol=1e-13)
+        np.testing.assert_allclose(loads[4], 2.0 * 2.0 / 3.0, atol=1e-13)
 
 
 if __name__ == "__main__":

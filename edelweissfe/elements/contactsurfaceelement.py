@@ -90,6 +90,12 @@ class ContactFacetElementBase(BaseElement):
     #: Neutral default, so the property is well-defined before initializeElement() runs.
     _weightTransform = None
 
+    #: The parent element face this facet tiles, stamped by the surface element generator; see
+    #: setParentFace. None until stamped, which is what the integrated contact formulation checks.
+    _parentFaceType = None
+    _parentFaceNodes = None
+    _vertexParametricCoords = None
+
     def __init__(self, elementType: str, elNumber: int):
         self._elType = elementType
         self._elNumber = elNumber
@@ -166,6 +172,52 @@ class ContactFacetElementBase(BaseElement):
 
     def setNodalAreaShares(self, shares: np.ndarray):
         self._nodalAreaShares = np.asarray(shares, dtype=float)
+
+    def setParentFace(self, faceType: str, parentFaceNodes: list, vertexParametricCoords: np.ndarray):
+        """Record the element face this facet was cut from.
+
+        This is what an integrated (Gauss-point-to-segment) contact formulation needs and a
+        node-based one does not: it lets a quadrature point on this facet be located in the *parent
+        face's* parametric space and the pressure there be distributed with the parent face's own --
+        for a serendipity face, partly negative -- shape functions. See
+        :mod:`~edelweissfe.utils.parentfacegeometry`.
+
+        Parameters
+        ----------
+        faceType
+            The parent face's canonical type, a key of
+            :data:`~edelweissfe.utils.parentfacegeometry.PARENT_FACE_PARAMETRIC_COORDS`.
+        parentFaceNodes
+            The parent face's nodes, in that canonical ordering. A superset of this facet's own
+            nodes.
+        vertexParametricCoords
+            The parametric coordinates of *this facet's* nodes in the parent face, shape
+            ``(nNodes, domainSize - 1)`` and aligned with ``nodes``.
+        """
+
+        self._parentFaceType = faceType
+        self._parentFaceNodes = list(parentFaceNodes)
+        self._vertexParametricCoords = np.asarray(vertexParametricCoords, dtype=float)
+
+    @property
+    def parentFaceType(self) -> str | None:
+        """The parent face's canonical type, or None if this facet was never stamped."""
+
+        return self._parentFaceType
+
+    @property
+    def parentFaceNodes(self) -> list | None:
+        """The parent face's nodes in canonical order, or None if this facet was never stamped."""
+
+        return self._parentFaceNodes
+
+    @property
+    def vertexParametricCoords(self) -> np.ndarray | None:
+        """This facet's own nodes' parametric coordinates in the parent face, aligned with
+        ``nodes``; a quadrature point at barycentric ``b`` sits at ``b @ vertexParametricCoords``.
+        None if this facet was never stamped."""
+
+        return self._vertexParametricCoords
 
     @property
     def weightTransform(self) -> np.ndarray | None:

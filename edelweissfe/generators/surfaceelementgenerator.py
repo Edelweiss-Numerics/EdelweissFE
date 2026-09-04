@@ -66,6 +66,7 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.utils.parentfacegeometry import PARENT_FACE_PARAMETRIC_COORDS
 from edelweissfe.utils.schema import schemaField
 
 # Face-node-ordering tables, 0-indexed, reduced to each element type's linear corner nodes. Each
@@ -160,6 +161,92 @@ _MIDSIDE_FACE_TABLES = {
         6: ((16, 4, 15), (15, 7, 19), (19, 3, 11), (11, 0, 16), (15, 19, 11), (15, 11, 16)),  # Zmin
     },
 }
+
+
+def canonicalParentFace(ensightType: str, faceNumber: int) -> tuple[str, tuple]:
+    """The parent face of ``faceNumber``, as its canonical type and its element-local node indices
+    in the canonical ordering of :mod:`~edelweissfe.utils.parentfacegeometry`.
+
+    Derived from the face tables above rather than transcribed a third time, which is the point: a
+    separate table of parent-face orderings would be one more chance to get a node ordering subtly
+    wrong. The midside table lists every corner triangle as ``(m_prev, c, m_next)``, so the corner
+    cycle is its middle entries and the midside between ``ck`` and ``c(k+1)`` is its last -- and the
+    linear table's fan ``(a, b, c), (a, c, d)`` gives the corner cycle directly.
+
+    The parent face is a property of the *element*, not of how the face was tiled: a hexa20 face is
+    a quad8 parent face even under ``triangulation=corner``, where the facets happen to use only its
+    corner nodes.
+
+    Parameters
+    ----------
+    ensightType
+        The source element's ensight type, e.g. ``"hexa20"``.
+    faceNumber
+        The face number, as used by the face tables.
+
+    Returns
+    -------
+    tuple[str, tuple]
+        The canonical face type and the parent face's element-local node indices in that ordering.
+    """
+
+    midsideTable = _MIDSIDE_FACE_TABLES.get(ensightType)
+    if midsideTable is not None:
+        groups = midsideTable.get(faceNumber)
+        if groups is None:
+            raise ValueError(
+                f"surfaceElementGenerator: face {faceNumber} is not defined for element type " f"'{ensightType}'."
+            )
+        if len(groups[0]) == 3:
+            corners = tuple(group[1] for group in groups[:4])
+            midsides = tuple(group[2] for group in groups[:4])
+            return "quad8", corners + midsides
+        # a 2D higher-order element edge, split at its midside node into two Line2 facets
+        return "line3", (groups[0][0], groups[1][1], groups[0][1])
+
+    linearTable = _FACE_TABLES.get(ensightType)
+    if linearTable is None:
+        raise ValueError(
+            f"surfaceElementGenerator: no face-node-ordering table available for element type " f"'{ensightType}'."
+        )
+    groups = linearTable.get(faceNumber)
+    if groups is None:
+        raise ValueError(
+            f"surfaceElementGenerator: face {faceNumber} is not defined for element type " f"'{ensightType}'."
+        )
+    if len(groups[0]) == 3:
+        return "quad4", (groups[0][0], groups[0][1], groups[0][2], groups[1][2])
+    return "line2", tuple(groups[0])
+
+
+def _stampParentFace(facet, sourceElement, faceType: str, canonicalIndices: tuple):
+    """Record the parent face on one facet, mapping the facet's own nodes onto the parent face's
+    canonical parametric coordinates.
+
+    Parameters
+    ----------
+    facet
+        The contact facet element to stamp.
+    sourceElement
+        The solid element the face belongs to.
+    faceType
+        The canonical parent face type, from :func:`canonicalParentFace`.
+    canonicalIndices
+        The parent face's element-local node indices in canonical order, from the same.
+    """
+
+    parametricCoords = PARENT_FACE_PARAMETRIC_COORDS[faceType]
+    positionOfNode = {sourceElement.nodes[localIndex]: k for k, localIndex in enumerate(canonicalIndices)}
+    try:
+        vertexParametricCoords = np.array([parametricCoords[positionOfNode[node]] for node in facet.nodes])
+    except KeyError as exception:
+        raise ValueError(
+            f"surfaceElementGenerator: facet {facet.elNumber} has a node that is not on the parent "
+            f"face it was cut from (element {sourceElement.elNumber}, face type '{faceType}') -- the "
+            "face tables and the canonical parent-face derivation disagree."
+        ) from exception
+
+    facet.setParentFace(faceType, [sourceElement.nodes[i] for i in canonicalIndices], vertexParametricCoords)
 
 
 def _assignQuadConsistentShares(quadFacets: list):
@@ -351,6 +438,8 @@ def buildContactFacets(
                     f"'{sourceElement.ensightType}' (element {sourceElement.elNumber})."
                 )
 
+            parentFaceType, parentFaceIndices = canonicalParentFace(sourceElement.ensightType, faceNumber)
+
             faceFacets = []
             for localIndices in faceNodeGroups:
                 facetNodes = [sourceElement.nodes[i] for i in localIndices]
@@ -369,6 +458,7 @@ def buildContactFacets(
                 facetElement = facetClass(facetElementType, elNumber)
                 facetElement.setNodes(facetNodes)
                 facetElement.initializeElement()
+                _stampParentFace(facetElement, sourceElement, parentFaceType, parentFaceIndices)
 
                 faceFacets.append(facetElement)
                 newElements[elNumber] = facetElement
