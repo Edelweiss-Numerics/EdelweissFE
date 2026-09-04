@@ -122,7 +122,9 @@ matching meshes:
   classical quadratic-element limitation of all node-based contact schemes (the reason
   commercial codes discourage node-to-surface contact on 20-node bricks), and it bounds what
   pressure fidelity can be expected from hexa20 slave surfaces. Total forces and mean pressures
-  remain correct (they follow from global equilibrium).
+  remain correct (they follow from global equilibrium). How far the mismatch can be reduced, and
+  what the generator's ``nodalWeights`` option does about it, is quantified in
+  :ref:`serendipity-weighting` below.
 
 * On **non-matching meshes**, node-to-surface contact transfers each slave nodal force to the
   master facet nodes by the (non-negative, partition-of-unity) barycentric weights of the contact
@@ -135,6 +137,156 @@ matching meshes:
   on non-matching meshes is precisely what mortar/segment-to-segment methods buy -- and the
   measured spread is this project's quantified tripwire for ever adopting one.
 
+
+.. _serendipity-weighting:
+
+Serendipity faces: how much of the mismatch is removable
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Write :math:`\hat N_i` for the piecewise-linear shape functions that the midside triangulation
+induces on a quadratic face's eight nodes. The area shares assembled above *are* that
+interpolation's own consistent lumping, :math:`A_i = \int \hat N_i \, \mathrm{d}A`, so the
+assembled contact virtual work is
+
+.. math::
+    \sum_s f_s \, \delta g_s \;=\; p \int \hat{\mathcal{I}}[\delta g] \, \mathrm{d}A
+    \qquad\text{instead of}\qquad p \int \delta g \, \mathrm{d}A ,
+
+i.e. a piecewise-linear quadrature applied to an integrand that is the *quadratic* trace of the
+solid's displacement field. For a linear (hexa8) face :math:`\hat N \equiv N` and the error
+vanishes identically -- which is exactly why the C3D8 contact patch test passes to machine
+precision. For a quadratic face it does not, and the per-node mismatch is
+
+.. math::
+    \Delta_i \;=\; \int \hat N_i \, \mathrm{d}A \;-\; \int N_i \, \mathrm{d}A .
+
+:math:`\sum_i \Delta_i = 0` and :math:`\sum_i \Delta_i \, \boldsymbol{x}_i = \boldsymbol{0}`:
+the mismatch is a **self-equilibrated, zero-moment corner/midside alternating load pattern**. It
+therefore does no work on rigid or linear surface motion -- resultants and mean pressures stay
+right -- but it drives the face's quadratic surface modes directly, at the shortest wavelength the
+mesh can carry. Its amplitude is a fixed fraction of the transmitted traction, so **mesh
+refinement does not reduce it**; the resulting surface undulation scales as
+:math:`\sim \Delta \, p / (E h)`.
+
+The two ``nodalWeights`` options are the two ends of what a per-node weighting can achieve
+(:math:`A` is the face area):
+
+.. list-table::
+    :header-rows: 1
+
+    * - node
+      - ``facetConsistent`` (default)
+      - ``serendipityOptimal``
+      - consistent :math:`\int N_i \mathrm{d}A`
+    * - corner
+      - :math:`+A/24`
+      - :math:`0`
+      - :math:`-A/12`
+    * - midside
+      - :math:`+5A/24`
+      - :math:`+A/4`
+      - :math:`+A/3`
+    * - mismatch :math:`|\Delta_i|`
+      - :math:`A/8`
+      - :math:`A/12`
+      - :math:`0`
+
+``serendipityOptimal`` is the optimum, not merely an improvement: over all weightings that are
+resultant-exact (:math:`4 w_c + 4 w_m = A`) and non-negative, the mismatch per node is
+:math:`w_c + A/12`, monotone in the corner share, so a *vanishing* corner share minimises it.
+Exact consistency would require :math:`w_c = -A/12`, i.e. a penalty spring that attracts. The
+weighting is the modified serendipity shape function set
+:math:`\tilde N_{\text{mid}} = N_{\text{mid}} + \tfrac{1}{2}(N_{c_1} + N_{c_2})`,
+:math:`\tilde N_{\text{corner}} = 0` of Puso, Laursen & Solberg (CMAME 197, 2008), which the same
+authors and Popp, Wohlmuth & Wall (SISC 2012) introduce for exactly this reason in quadratic mortar
+contact. Reducing the residual :math:`A/12` any further requires integrating a pressure *field*
+against the parent face's own quadratic shape functions (segment-to-segment/mortar), which this
+formulation does not do.
+
+On the master side the transferred force is distributed by the contact point's barycentric weights
+on its facet, which are the same :math:`\hat N_i`. ``serendipityOptimal`` therefore also installs a
+per-facet **weight transform** on the corner triangles, reassigning the corner's interpolation
+weight in equal halves to its two adjacent midside nodes -- which, for this triangulation, are
+exactly the facet's own other two nodes, so the map never reaches outside the facet. This is
+variationally harmless under ``sliding=small`` and only there: the facet is flat, the transformed
+weights remain a partition of unity, and the frozen normal is normal to the facet plane at the
+increment's start, so :math:`g = \bar{\boldsymbol{n}} \cdot (\boldsymbol{x}_s - \sum_a w_a
+\boldsymbol{x}_a)` takes the same value for *any* partition of unity over the -- coplanar -- facet
+nodes. Gap, gradient :math:`\boldsymbol{w} = \bar{\boldsymbol{n}} \otimes \boldsymbol{c}` and
+the symmetry of the tangent are all preserved; the substitution perturbs the gap only as the facet
+tilts away from the frozen normal within the increment, at exactly the order the small-sliding
+formulation already discards. Under ``sliding=finite`` the same substitution would make the force
+distribution differ from the transpose of the gap gradient and leave the geometric term
+:math:`f_n \boldsymbol{H}` inconsistent with it, so the constraint refuses that combination
+outright.
+
+**What this costs.** Corner nodes of the affected faces end up with a zero tributary area: they
+are no longer contact points. That is what removes the corner over-constraint (four constraints per
+face instead of eight), but it also means those nodes carry no penetration guard. Interior corners
+are held by the quadratic interpolation of their midside neighbours; at the *boundary* of a contact
+patch, and at convex edges of the slave body, a corner can penetrate. Such a node stays in the
+slave node list, inert, so the ordering of ``getNormalPressures`` and of the generated
+``<prefix>_nodes`` set is unaffected, and it is reported at zero pressure.
+
+.. _serendipity-liftoff:
+
+Measured: the discrete solution lifts the corners off instead
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The analysis above describes an error in the applied *load*. It is not how the discrete solution
+actually resolves the inconsistency, and measuring
+``testfiles/edelweiss-only/NodeToDeformableSurfaceContactPatchHexa20`` (matched 2x2 hexa20
+interface, analytic solution homogeneous uniaxial with a flat interface and a total force of 360)
+shows what it does instead:
+
+.. list-table::
+    :header-rows: 1
+
+    * - variant
+      - interface force
+      - corners in contact
+      - max slave gap
+      - interface flatness
+    * - C3D8, for reference
+      - 359.892
+      - --
+      - ~1.2e-5
+      - 1.4e-17
+    * - hexa20, ``facetConsistent``
+      - 353.787
+      - **0 of 9**
+      - 2.396e-3
+      - 1.4274e-3
+    * - hexa20, ``serendipityOptimal``
+      - 353.810
+      - **0 of 9**
+      - 1.950e-3
+      - 1.2281e-3
+
+Under *both* weightings every corner node has lifted off, with gaps of 1.4e-3 to 2.4e-3 -- two
+orders of magnitude above the midsides' penalty compliance of ~1.2e-5. The unilateral constraint
+resolves the quad8 face's demand for a *tensile* corner load by opening the corner gap, not by
+carrying a mis-distributed load. Once a corner is open its tributary area is irrelevant, and the
+weighting consequently moves the interface force by 0.007% and nothing else of substance: the
+corner-minus-midside displacement offset, 1.081e-3 of the 1.4274e-3 total flatness, is unchanged to
+0.07% between the two.
+
+The flatness difference in the table must therefore **not** be read as a benefit of the weighting.
+Sweeping the retained corner share continuously from ``facetConsistent`` to ``serendipityOptimal``
+gives a non-monotone, two-valued response that tracks which of the facets sharing a
+vertex-coincident slave's projection point wins the tie-break in the closest-point search, rather
+than the share itself.
+
+So the practical standing of the two options is: ``serendipityOptimal`` is the provably optimal
+non-negative per-node weighting and it drops the corner over-constraint, but **no measured benefit
+has been demonstrated for it**, because wherever a quadratic face carries a near-uniform pressure
+its corner nodes are already open and the weighting is moot. It can only matter where corner nodes
+are genuinely pressed into the master -- convex slave corners, strongly non-matching interfaces --
+which is not covered by any test here. Corner liftoff and the accompanying 1.7% force deficit are
+beyond the reach of *any* per-node weighting, since the load the corners need is tensile. Removing
+them requires integrating a pressure field against the parent face's own quadratic shape functions
+(segment-to-segment/mortar), which never imposes a unilateral condition at a corner node at all --
+and that, not the weighting, is what the numbers above argue for.
 
 Gap kinematics
 --------------
