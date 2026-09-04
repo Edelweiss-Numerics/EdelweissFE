@@ -8,6 +8,19 @@
 ** are all non-negative -- contrast SurfaceToDeformableSurfaceContactPatchHexa20, where the same
 ** quantity is negative by design.
 **
+** SENSITIVITY, and the reason this reference was regenerated once: the contact force evaluation is
+** batched over all active points (see _prepareActiveArrays), which is arithmetically equivalent to
+** the per-point reference loop -- measured agreement is 2e-15 relative on gaps, forces and the
+** tangent, and exactly zero for the linear law -- but differs in floating-point summation order.
+** Over the 2000 increments of this test that 1e-15 grows to about 1e-3 relative in the monitored
+** results, because the gap activation `g < 0` is non-smooth: a point whose gap sits near zero can
+** flip state one increment earlier and change the trajectory. So the reference here is NOT
+** reproducible across a change of summation order, thread count, or reduction layout, and a
+** disagreement at the 1e-3 level in this test is not by itself evidence of a defect. The
+** implicit-path patch tests (SurfaceToDeformableSurfaceContactPatch*) have no such amplification and
+** do reproduce bit-identically -- they are the sharper guard on the formulation itself, and the
+** batched-vs-loop equivalence unit test is the sharper guard on this optimization.
+**
 ** Deliberately C3D8 rather than C3D20, although hexa20 is the reason the constraint exists: the
 ** pure-Python C3D20 element cannot currently run explicit dynamics at all. Row-sum lumping of its
 ** consistent mass matrix yields NEGATIVE corner masses (verified pre-existing: unmodified

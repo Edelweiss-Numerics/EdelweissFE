@@ -198,6 +198,45 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
             scale = max(np.abs(K).max(), 1.0)
             np.testing.assert_allclose(K, KNumeric, atol=1e-5 * scale, err_msg=f"type={contactType}")
 
+    def test_batched_and_per_point_paths_agree(self):
+        """The batched evaluation must reproduce the per-point loop, which is the reference
+        implementation. Without this the loop is unreachable in tests -- every ordinary model takes
+        the batched path -- and the two could drift apart unnoticed.
+
+        Checked for both penalty laws, on forces and on the assembled tangent, at a displacement
+        state where some points are closed and some are open.
+        """
+
+        for contactType in ("linear", "quadratic"):
+            model, slaveSurface, masterSurface = self._twoBlockModel(penetration=0.02)
+            constraint = self._constraint(model, slaveSurface, masterSurface, contactType=contactType)
+
+            rng = np.random.default_rng(7)
+            U = 2e-2 * rng.standard_normal(constraint.nDof)
+
+            self.assertIsNotNone(constraint._batched, "this model should take the batched path")
+            gaps = None
+
+            results = {}
+            for label in ("batched", "loop"):
+                if label == "loop":
+                    constraint._batched = None
+                P = self._forces(constraint, U)
+                K = self._assembledTangent(constraint, U)
+                results[label] = (P.copy(), K.copy(), constraint.getGaps().copy(), constraint.totalNormalForce)
+                if gaps is None:
+                    gaps = constraint.getGaps().copy()
+
+            # a mixed active set, or the comparison proves little
+            self.assertTrue((gaps < 0.0).any() and (gaps >= 0.0).any(), "expected a mixed active set")
+
+            pB, kB, gB, fB = results["batched"]
+            pL, kL, gL, fL = results["loop"]
+            np.testing.assert_allclose(gB, gL, rtol=1e-13, atol=1e-15, err_msg=f"gaps, {contactType}")
+            np.testing.assert_allclose(pB, pL, rtol=1e-11, atol=1e-13, err_msg=f"forces, {contactType}")
+            np.testing.assert_allclose(kB, kL, rtol=1e-11, atol=1e-13, err_msg=f"tangent, {contactType}")
+            self.assertAlmostEqual(fB, fL, delta=1e-10 * max(abs(fL), 1.0))
+
     def test_tangent_is_symmetric(self):
         """The frozen-projection formulation must produce a symmetric operator; a weight
         substitution that broke the gradient/distribution transpose relation would show up here."""

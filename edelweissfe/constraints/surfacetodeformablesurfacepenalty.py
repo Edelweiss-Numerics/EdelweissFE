@@ -403,6 +403,12 @@ class Constraint(ConstraintBase, MeshDependent):
         self._fieldsOnNodes = []
         self._nDof = 0
 
+        # Batched active-point arrays, rebuilt by every connectivity update; None means the
+        # per-point loop is used (no active points, or non-uniform parent-node counts).
+        self._batched = None
+        self._activePoints = np.zeros(0, dtype=int)
+        self._blockSizes = None
+
     @classmethod
     def fromConstraintDefinition(cls, name: str, definition: dict, model: FEModel, journal: Journal) -> "Constraint":
         """Build this constraint from a parsed ``*constraint`` definition. See
@@ -506,6 +512,8 @@ class Constraint(ConstraintBase, MeshDependent):
         self._fieldsOnNodes = newFieldsOnNodes
         self._nDof = self.nDim * len(newNodes)
 
+        self._prepareActiveArrays()
+
         # Reported because the assembly cost is paid per *assigned* point while the transmitted load
         # is carried only by the closed ones: without a searchDistance every point is assigned, so
         # these two numbers are what tell an explicit run whether its contact cost is doing work.
@@ -554,8 +562,143 @@ class Constraint(ConstraintBase, MeshDependent):
         )
         return True
 
+    def _prepareActiveArrays(self):
+        """Batch the frozen per-point data into contiguous arrays, once per connectivity update.
+
+        The force evaluation runs every explicit increment -- 1.5M times on the anchor pry-out --
+        over thousands of contact points whose individual work is a couple of 8x3 matmuls and a
+        48-entry outer product. Looping in Python costs about 29 microseconds per point, essentially
+        all of it interpreter and numpy dispatch overhead rather than arithmetic, which put contact
+        at roughly half the wall clock of an explicit run. Batching lets the whole surface be
+        evaluated in a fixed handful of array operations instead.
+
+        Only the *uniform* case is batched: every active point must share the same slave and master
+        parent-node counts, which holds whenever each surface is discretized with a single element
+        type (the ordinary case, and the pry-out's). Anything else falls back to the per-point loop,
+        which remains the reference implementation.
+        """
+
+        active = [p for p in range(self.nPoints) if self._assignedFacetIdx[p] is not None]
+        self._activePoints = np.array(active, dtype=int)
+        self._blockSizes = None
+
+        if not active:
+            self._batched = None
+            return
+
+        slaveCounts = {len(self._slaveShapeFunctions[self._pointFacet[p]][0]) for p in active}
+        masterCounts = {len(self._frozenMasterShapeFunctions[p]) for p in active}
+        if len(slaveCounts) != 1 or len(masterCounts) != 1:
+            self._batched = None
+            return
+
+        nSlaveNodes, nMasterNodes = slaveCounts.pop(), masterCounts.pop()
+        nActive, nDim = len(active), self.nDim
+
+        Ns = np.empty((nActive, nSlaveNodes))
+        Nm = np.empty((nActive, nMasterNodes))
+        nBar = np.empty((nActive, nDim))
+        weights = np.empty(nActive)
+        slaveRef = np.empty((nActive, nSlaveNodes, nDim))
+        masterRef = np.empty((nActive, nMasterNodes, nDim))
+
+        for k, p in enumerate(active):
+            f = self._pointFacet[p]
+            q = self._pointQuadraturePoint[p]
+            Ns[k] = self._slaveShapeFunctions[f][q]
+            Nm[k] = self._frozenMasterShapeFunctions[p]
+            nBar[k] = self._frozenNormals[p]
+            weights[k] = self._slaveIntegrationWeights[f][q]
+            slaveRef[k] = self._slaveParentRefCoords[f]
+            masterRef[k] = self._masterParentRefCoords[self._assignedFacetIdx[p]]
+
+        # Local DOF layout, mirroring the node declaration above exactly: each active point owns a
+        # contiguous run of (nSlaveNodes + nMasterNodes) * nDim entries, slave nodes first, and no
+        # two points share a slot -- the sharing between points happens only when the *solver*
+        # scatters this local vector into the global one. So the whole local vector is just a
+        # (nActive, blockDof) matrix, and both the displacement gather and the force scatter are
+        # plain reshapes: no index arrays, no bincount, no np.add.at.
+        blockDof = (nSlaveNodes + nMasterNodes) * nDim
+        assert self._nDof == nActive * blockDof, "the local DOF layout is not one block per point"
+
+        self._batched = {
+            "Ns": Ns,
+            "Nm": Nm,
+            "nBar": nBar,
+            "weights": weights,
+            "slaveRef": slaveRef,
+            "masterRef": masterRef,
+            "nSlaveNodes": nSlaveNodes,
+            "nMasterNodes": nMasterNodes,
+            "nSlaveDof": nSlaveNodes * nDim,
+            "blockDof": blockDof,
+        }
+
+    def _applyConstraintBatched(self, U_np: np.ndarray, PExt: np.ndarray, K) -> None:
+        """The batched force evaluation. Physics identical to the per-point loop, expressed over all
+        active points at once; see :meth:`_prepareActiveArrays`."""
+
+        b = self._batched
+        nDim = self.nDim
+        active = self._activePoints
+
+        blocks = U_np.reshape((-1, b["blockDof"]))
+        xS = b["slaveRef"] + blocks[:, : b["nSlaveDof"]].reshape((-1, b["nSlaveNodes"], nDim))
+        xM = b["masterRef"] + blocks[:, b["nSlaveDof"] :].reshape((-1, b["nMasterNodes"], nDim))
+
+        # Both points ride the curved parent surfaces; see the class docstring on why the master
+        # point must not be taken on the flat facet instead.
+        relative = np.einsum("ai,aij->aj", b["Ns"], xS) - np.einsum("ai,aij->aj", b["Nm"], xM)
+        gaps = np.einsum("aj,aj->a", b["nBar"], relative)
+
+        self._gapCurrent[active] = gaps
+
+        closed = gaps < 0.0
+        if not closed.any():
+            return
+
+        g = gaps[closed]
+        penaltyTimesArea = self.penalty * b["weights"][closed]
+
+        if self.type == "linear":
+            f_n = penaltyTimesArea * g
+            stiffness = penaltyTimesArea
+        else:
+            f_n = -0.5 * penaltyTimesArea * g**2
+            stiffness = -penaltyTimesArea * g
+
+        # w = kron([Ns, -Nm], nBar), per point
+        c = np.concatenate((b["Ns"][closed], -b["Nm"][closed]), axis=1)
+        w = (c[:, :, None] * b["nBar"][closed][:, None, :]).reshape((len(g), -1))
+
+        rows = np.flatnonzero(closed)
+        PExt.reshape((-1, b["blockDof"]))[rows] += -f_n[:, None] * w
+
+        self._normalForceCurrent[active[closed]] = f_n
+        self.totalNormalForce = float(f_n.sum())
+
+        if K is not None:
+            # The tangent is only ever requested by the implicit path, so it stays a loop: one
+            # (nSlave+nMaster)*nDim square block per point, written into the view's own per-active
+            # -point slots, which the batched form has no way to address in bulk.
+            for i, activeIdx in enumerate(rows):
+                K.blocks[activeIdx] += stiffness[i] * np.outer(w[i], w[i])
+
     def _activeBlockSizes(self) -> list[int]:
-        """The DOF count of each assigned contact point's dense block, in assembly order."""
+        """The DOF count of each assigned contact point's dense block, in assembly order.
+
+        Cached, because the implicit path asks for it twice per evaluation (once to size the VIJ
+        contribution, once to shape it) and recomputing it walks every point and dereferences its
+        facet's parent-face node list -- which profiled as the single largest cost of an evaluation,
+        larger than all of the actual contact arithmetic put together.
+        """
+
+        if self._blockSizes is None:
+            self._blockSizes = self._computeActiveBlockSizes()
+        return self._blockSizes
+
+    def _computeActiveBlockSizes(self) -> list[int]:
+        """Uncached :meth:`_activeBlockSizes`."""
 
         return [
             self.nDim
@@ -595,6 +738,15 @@ class Constraint(ConstraintBase, MeshDependent):
 
         self.applyConstraint(U_np, dU, PExt, None, timeStep)
 
+    #: The constraint base class spells the forces-only hook ``applyConstraintForcesOnly`` on some
+    #: branches and ``applyConstraintExplicit`` on others. Binding both to the same implementation
+    #: is what keeps this file portable between them: if only the name the local solver does *not*
+    #: call were defined, the override would be silently dead code and the base implementation used
+    #: instead -- which builds a tangent container through the ordinary VIJ protocol and discards
+    #: it, at more cost than the entire contact evaluation. That failure is invisible in results and
+    #: shows up only as an inexplicably slow run.
+    applyConstraintForcesOnly = applyConstraintExplicit
+
     def applyConstraint(
         self,
         U_np: np.ndarray,
@@ -610,11 +762,15 @@ class Constraint(ConstraintBase, MeshDependent):
         """
 
         self.totalNormalForce = 0.0
+        self._normalForceCurrent[:] = 0.0
+
+        if self._batched is not None:
+            self._applyConstraintBatched(U_np, PExt, K)
+            return
 
         localOffset = 0
         activeIdx = 0
         for p in range(self.nPoints):
-            self._normalForceCurrent[p] = 0.0
 
             facetIdx = self._assignedFacetIdx[p]
             if facetIdx is None:
