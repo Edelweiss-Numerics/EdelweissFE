@@ -55,6 +55,8 @@ import pyvista as pv
 SIGMA_EXACT = -360.0
 SZZ = 2  # Voigt index of S33 in the element's stress vector
 WARP = 60.0
+#: Half-height of the slab of each block kept around the interface, see renderPanel.
+SLAB = 0.30
 N_LOWER, N_UPPER = 3, 4
 
 CASES = [
@@ -186,13 +188,35 @@ def staticCase(runDir: str) -> str:
     last = max(int(f.suffix.split("_")[-1]) for f in (d / dataDir).glob("dispUpper.var_*"))
     lines = ["FORMAT", "type: ensight gold", "GEOMETRY", f"model: {dataDir}/geometry.geo_0000", "VARIABLE"]
     for name, kind in (
+        ("dispLower", "vector per node"),
         ("dispUpper", "vector per node"),
+        ("stressLower", "tensor symm per element"),
         ("stressUpper", "tensor symm per element"),
     ):
         lines.append(f"{kind}: {name} {dataDir}/{name}.var_{last:04d}")
     out = d / "final.case"
     out.write_text("\n".join(lines) + "\n")
     return str(out)
+
+
+def blocks(runDir: str):
+    """The two solid blocks and the master interface, in the reference configuration, as context.
+
+    Reference rather than deformed: the interface relief is exaggerated by WARP to be visible at
+    all, and deforming the blocks by the same factor would distort them grossly (the imposed
+    compression is 6% of a block height). They are drawn translucent, so they read as the setting
+    for the interface rather than as a result themselves -- and their edges are what show the two
+    interface meshes to be non-matching, which is the whole premise of the comparison.
+    """
+
+    m = pv.read(staticCase(runDir))
+    lower, upper = m["lower_all"], m["upper_all"]
+
+    # the lower block's top face: the master interface, whose mesh does not match the slave's
+    surf = lower.extract_surface(algorithm="dataset_surface")
+    keep = np.flatnonzero(np.abs(surf.points[:, 2] - surf.points[:, 2].max()) < 1e-9)
+    masterFace = surf.extract_points(keep, adjacent_cells=False).extract_surface(algorithm="dataset_surface")
+    return lower, upper, masterFace
 
 
 def interfaceSurface(runDir: str):
@@ -211,31 +235,52 @@ def interfaceSurface(runDir: str):
     return iface
 
 
-def renderPanel(surface, clim) -> np.ndarray:
-    """Render one interface to an RGB array.
+def renderPanel(surface, context, clim) -> np.ndarray:
+    """Render one interface, in the setting of its two blocks, to an RGB array.
 
     Framing is fixed and identical for every panel, and deliberately NOT cropped to content: a
     flat interface crops to a thin sliver while an undulating one fills the frame, which would
     silently rescale the panels against each other and destroy the comparison the figure exists to
     make.
 
+    The blocks are drawn translucent and *without* their element edges -- a hexa20's faces
+    triangulate into a mesh of diagonals that buries the figure in noise -- so their outlines come
+    from feature edges instead. The master interface is added as a wireframe, because otherwise
+    only the slave mesh would be visible and the non-matching discretization, which is the entire
+    premise, would be invisible.
+
     Composed with matplotlib rather than laid out by pyvista because a pyvista subplot grid gives
     no control over where the colour bar and the annotations land, and they collided.
     """
 
-    p = pv.Plotter(off_screen=True, window_size=(820, 430), border=False)
+    lower, upper, masterFace = context
+
+    # Only a slab of each block is drawn. Whole blocks put the interface -- the entire subject of
+    # the figure -- into about a sixth of the frame, and looking at the relief through a full unit
+    # cube of translucent material washes its colour out. A slab still shows two distinct bodies
+    # meeting, which is what was missing when only the interface was drawn.
+    zInterface = float(masterFace.points[:, 2].max())
+    lower = lower.clip("z", origin=(0.0, 0.0, zInterface - SLAB), invert=False)
+    upper = upper.clip("-z", origin=(0.0, 0.0, zInterface + SLAB), invert=False)
+
+    p = pv.Plotter(off_screen=True, window_size=(820, 560), border=False)
+    p.enable_depth_peeling(number_of_peels=10, occlusion_ratio=0.0)
+    for block, opacity in ((lower, 0.30), (upper, 0.22)):
+        p.add_mesh(block, color="#c4ced6", opacity=opacity, show_edges=False, lighting=False)
+        p.add_mesh(block.extract_feature_edges(), color="#5d6a74", line_width=1)
+    p.add_mesh(masterFace, style="wireframe", color="#8a6a2f", line_width=2)
     p.add_mesh(
         surface.warp_by_scalar("dUz", factor=WARP),
         scalars="szz",
         cmap="RdBu_r",
         clim=clim,
         show_edges=True,
-        edge_color="#3a3a3a",
+        edge_color="#2a2a2a",
         line_width=1,
         show_scalar_bar=False,
     )
-    p.camera_position = [(2.45, -2.05, 1.62), (0.5, 0.5, 1.02), (0, 0, 1)]
-    p.camera.zoom(1.45)
+    p.camera_position = [(2.55, -2.30, 1.78), (0.5, 0.5, zInterface), (0, 0, 1)]
+    p.camera.zoom(1.42)
     p.set_background("white")
     img = p.screenshot(return_img=True)
     p.close()
@@ -249,22 +294,23 @@ def main(outPath: str, runDirs: dict):
     import matplotlib.pyplot as plt
     from matplotlib import cm, colors
 
-    surfaces, amps = {}, {}
+    surfaces, contexts, amps = {}, {}, {}
     for (tag, ctag), d in runDirs.items():
         s = interfaceSurface(str(d))
         surfaces[(tag, ctag)] = s
+        contexts[(tag, ctag)] = blocks(str(d))
         amps[(tag, ctag)] = float(np.abs(s.point_data["dUz"]).max())
 
     spread = max(float(np.abs(np.asarray(s.cell_data["szz"]) - SIGMA_EXACT).max()) for s in surfaces.values())
     clim = (SIGMA_EXACT - spread, SIGMA_EXACT + spread)
 
-    fig = plt.figure(figsize=(15.0, 5.6), dpi=150)
+    fig = plt.figure(figsize=(15.0, 7.2), dpi=150)
     gs = fig.add_gridspec(2, 4, left=0.055, right=0.985, top=0.855, bottom=0.20, wspace=0.02, hspace=0.34)
 
     for j, (tag, title, _, _) in enumerate(CASES):
         for i, (ctag, rowName, _) in enumerate(CONSTRAINTS):
             ax = fig.add_subplot(gs[i, j])
-            ax.imshow(renderPanel(surfaces[(tag, ctag)], clim))
+            ax.imshow(renderPanel(surfaces[(tag, ctag)], contexts[(tag, ctag)], clim))
             ax.set_axis_off()
             if i == 0:
                 ax.set_title(title, fontsize=12, pad=10)

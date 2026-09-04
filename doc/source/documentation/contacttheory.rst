@@ -378,13 +378,19 @@ demands. The patch test passes on hexa20 exactly as it does on hexa8.
     :width: 100%
     :align: center
 
-    Box on box with **non-matching** interface meshes (3x3 against 4x4 elements), otherwise
-    identical: :math:`\nu = 0` under uniform imposed compression, so the exact solution is a flat
-    interface transmitting a uniform :math:`S_{33} = -360`. Every feature shown is discretization
-    error, and the rows differ in nothing but the contact constraint. The surface is warped by its
-    own :math:`u_z` deviation from the interface mean (exact value: zero), so the *geometry* answers
-    "is the interface flat?" while the *colour* answers "is the transmitted stress uniform?".
-    Regenerate with ``python doc/figures/contact_nonmatching_comparison.py``.
+    Box on box with **non-matching** interface meshes (3x3 against 4x4 elements, two elements
+    thick), otherwise identical: :math:`\nu = 0` under uniform imposed compression, so the exact
+    solution is a flat interface transmitting a uniform :math:`S_{33} = -360`. Every feature shown
+    is discretization error, and the rows differ in nothing but the contact constraint.
+
+    The slave interface is warped by its own :math:`u_z` deviation from the interface mean, whose
+    exact value is zero, so the *geometry* answers "is the interface flat?" while the *colour*
+    answers "is the transmitted stress uniform?". The two bodies are drawn translucent for context,
+    clipped to a slab around the interface -- whole blocks leave the interface occupying a sixth of
+    the frame and wash its colour out -- and the master interface is overlaid as a wireframe, since
+    the warped surface shows only the slave mesh and the non-matching discretization would
+    otherwise be invisible. Regenerate with
+    ``python doc/figures/contact_nonmatching_comparison.py``.
 
 The figure makes two points the matched patch tests above cannot. First, the improvement is not
 confined to the corner-liftoff mechanism: the interface undulation falls by between 61x and 1042x
