@@ -194,8 +194,10 @@ the warning in :mod:`~edelweissfe.utils.facetcontactgeometry` -- this normalize/
 second-derivative algebra is very easy to get subtly wrong, and the module must not be hand-edited
 without re-verification.
 
-The slave is assigned to its single closest facet (by facet centroid distance) once per increment,
-from the last converged configuration. Within the increment, an exact in-facet containment test
+The slave is assigned to its single closest facet (by facet centroid distance) once per
+connectivity update -- every increment in an implicit analysis, less often under explicit dynamics
+(see :ref:`contact-explicit-dynamics`) -- from the last converged configuration. Within the
+increment, an exact in-facet containment test
 (barycentric for Tria3, parametric for Line2) gates the contribution: if the projection of the
 slave leaves the assigned facet mid-Newton, no contact is assembled for that slave until the next
 connectivity update. Two non-smoothness sources follow: the facet-normal snap when the closest
@@ -470,7 +472,7 @@ Solver integration
 
 The constraint participates in the implicit solution through three hooks:
 
-``updateConnectivity(model)`` (once per increment, before the equation system is (re)built)
+``updateConnectivity(model)`` (once per increment in an implicit analysis, before the equation system is (re)built)
     Re-assigns every slave to its closest facet from the last converged configuration (clamped
     closest point for small sliding, centroid distance for finite sliding), refreshes the frozen
     projection data, rotates the frictional history into the new tangent plane, zeroes the
@@ -492,6 +494,45 @@ Per-slave results -- normal pressures :math:`p_s = -f_n/A_s`, tangential tractio
 gaps -- are exposed via ``getNormalPressures()`` / ``getTangentialTractions()`` / ``getGaps()``,
 ordered like the generator's ``<prefix>_nodes`` node set, and are typically requested as
 ``fromExpression`` field outputs.
+
+.. _contact-explicit-dynamics:
+
+Explicit dynamics
+~~~~~~~~~~~~~~~~~
+
+Under ``NED`` (:doc:`solvers`) the same formulation is used, with two differences that follow from
+what an explicit increment is.
+
+**No tangent is assembled.** An explicit increment solves no linear system, so a constraint
+stiffness enters nothing. The solver calls
+:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit`
+instead of ``applyConstraint``, and this constraint overrides it to evaluate the contact forces
+without building a tangent at all. The base-class default forwards to ``applyConstraint`` with a
+discarded tangent contribution, so a constraint that has not been ported still works -- correctly,
+but paying for a stiffness nobody reads. Constraints for which the tangent is a material part of
+the cost should override the method; for this one it is, at a per-slave outer product and four
+block writes.
+
+**The connectivity search is throttled.** The closest-facet search is
+:math:`\mathcal{O}(n_\text{slave} \times n_\text{facet})` work in Python, affordable once per
+increment of an implicit analysis -- where it is amortised over a Newton loop and a linear
+solve -- and not affordable at every one of millions of explicit increments. It therefore runs
+every ``contact-update-frequency`` increments, and is skipped entirely on an increment where a
+mid-run topology check is due, because that check re-searches every constraint anyway *after* a
+possible refinement (:doc:`adaptivitytheory`).
+
+What makes throttling defensible rather than merely cheap is that an explicit time step is tiny:
+between two searches a slave node moves :math:`\|\boldsymbol{v}\| \, \Delta t \, f`, orders of
+magnitude below a facet dimension. This is reported rather than assumed -- on every search that
+changes the connectivity the solver prints the largest nodal motion accumulated since the previous
+one, so the configured frequency can be checked against a given model's facet size instead of
+trusted. A connectivity change rebuilds the equation system, but reuses the critical time step:
+the mesh is unchanged, so the stability limit is unchanged, and recomputing it would cost a full
+element pass.
+
+A candidate-facet pre-filter (a centroid k-d tree with a triangle-inequality radius bound) reduces
+the search cost without changing which facet is selected; it is a superset of the exhaustive sweep
+and iterated in ascending facet index, so it reproduces the exhaustive tie-break exactly.
 
 
 Verification and benchmarks

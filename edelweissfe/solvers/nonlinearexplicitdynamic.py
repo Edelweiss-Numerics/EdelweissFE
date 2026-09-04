@@ -26,7 +26,68 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
+"""The nonlinear explicit dynamic solver.
 
+An increment solves no equation system. Second-order fields are advanced by central differences
+(a leapfrog, with the velocity staggered half an increment behind the displacement), first-order
+fields -- a nonlocal damage field, for instance -- by forward Euler, and both divide by a **lumped**
+mass, so the cost of an increment is one element pass plus vector arithmetic. There is no linear
+solver, no Newton loop, and no cutback: the time increment is set by stability, not by convergence,
+so a material that fails to integrate at the stable step is reported as an error rather than
+answered with a smaller step.
+
+The stable increment is computed once per mesh from the element wave speeds and scaled by
+``courant-number``. It is recomputed whenever the mesh changes and deliberately *not* recomputed
+when it has not: as a material softens the true limit only grows, so reusing it is the conservative
+direction, and re-deriving it costs a full element pass.
+
+**Three cadences, all in increments.** ``output-frequency`` is how often progress is logged and
+field outputs are finalized (a divisor, so it must be at least 1). ``topology-check-frequency`` is
+how often model modifiers may change the mesh mid-run, and must be a multiple of
+``output-frequency`` because a marker reads the last finalized output; ``0`` runs the topology
+update only once, before the increment loop. ``contact-update-frequency`` is how often constraints
+whose connectivity is the outcome of a search re-run it; ``0`` disables that. The reasoning behind
+the latter two, and what they cost in accuracy, is documented under
+:doc:`/documentation/adaptivitytheory` and :doc:`/documentation/contacttheory` respectively.
+
+**Constraints.** Multi-point constraints are enforced by folding a slave's mass and force onto its
+masters (row-sum, mass-conserving) and slaving it kinematically, which leaves the critical time step
+untouched. Other constraints -- contact above all -- are evaluated through
+:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit`, which
+asks for forces and no tangent, since a tangent assembled here would enter nothing. A constraint
+that can act *only* through its tangent contributes nothing to an explicit increment and is
+refused at validation rather than silently ignored.
+
+**Energy balance.** Every reporting increment prints the external work accumulated at prescribed
+degrees of freedom, the kinetic energy, the internal (strain) energy, and what remains unaccounted.
+Its purpose is one check that nothing else performs: kinetic energy cannot exceed external work,
+because the terms omitted from the balance are all non-negative, so a violation means energy is
+appearing from nowhere and the time step is above the true stability limit -- which the critical
+time step does not see in full, as it ignores the nonlocal field entirely and never sees contact
+penalty stiffness.
+
+Two honest limits, both of which the solver states in the log rather than leaving to be
+discovered. The external work accumulates only at *prescribed* degrees of freedom, so a model
+driven by body forces, node forces, a distributed load or an initial velocity has none, and the
+check cannot fire; and the internal energy is whatever the materials publish as a strain energy,
+which not every material does. When either is identically zero -- or the external work is
+negative, a structure returning work at its boundary -- the balance is not usable as a
+quasi-static criterion, and the honest substitute is to integrate a reaction force against its
+prescribed displacement, both of which are available as ``saveHistory`` field outputs.
+
+**Diagnostics across a topology change.** Because the lumped mass is the operator an increment
+divides by, a refinement's effect on it is reported: total mass, per-component linear momentum and
+kinetic energy before and after, plus the relative mass drift accumulated over every such change,
+so that many individually-tolerable changes cannot silently add up to a meaningful one. The
+smallest integrating mass in the model is reported alongside, since that is what bounds the step.
+
+**Restart.** A resumed run must not repeat the half-step that starts a leapfrog: the velocity in
+the checkpoint already carries the half-increment offset, so applying the startup again would apply
+one half-impulse too few. The solver therefore takes the previous time increment from the restart
+state rather than synthesising it, and the velocity field is checkpointed in its own right -- an
+implicit solver reconstructs everything it needs from the displacement, a central-difference scheme
+does not.
+"""
 
 from copy import deepcopy
 from dataclasses import dataclass
