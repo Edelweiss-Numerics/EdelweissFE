@@ -101,7 +101,7 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
     def setUp(self):
         self.journal = Journal()
 
-    def _twoBlockModel(self, penetration: float) -> tuple:
+    def _twoBlockModel(self, penetration: float, nodalWeights: str = "facetConsistent") -> tuple:
         """Two hexa20 cubes meeting at y = 0, the lower one overlapping the upper by
         ``penetration``, with the lower block's Ymax face as slave and the upper block's Ymin face
         as master.
@@ -132,10 +132,8 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
             model.surfaces["masterFace"] = {_YMIN: ElementSet("m", [elements["upper"]])}
             model.surfaces["slaveFace"] = {_YMAX: ElementSet("s", [elements["lower"]])}
 
-            masterSetName, _ = buildContactFacets(
-                model, "masterFace", "mst", "midside", "facetConsistent", self.journal
-            )
-            slaveSetName, _ = buildContactFacets(model, "slaveFace", "slv", "midside", "facetConsistent", self.journal)
+            masterSetName, _ = buildContactFacets(model, "masterFace", "mst", "midside", nodalWeights, self.journal)
+            slaveSetName, _ = buildContactFacets(model, "slaveFace", "slv", "midside", nodalWeights, self.journal)
 
         return model, model.elementSets[slaveSetName], model.elementSets[masterSetName]
 
@@ -557,6 +555,23 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             self._constraint(model, slaveSurface, slaveSurface)
         self.assertIn("self-contact is not supported", str(ctx.exception))
+
+    def test_serendipity_weighted_surfaces_are_rejected(self):
+        """A surface generated with nodalWeights='serendipityOptimal' must be refused, not silently
+        ignored.
+
+        There is no code path here that could honour a per-node weighting: the pressure is
+        distributed with the parent face's shape functions at the quadrature points. Accepting the
+        surface would give a different answer from the node-based constraint on identical input,
+        with nothing in the log to say why -- and the corner mismatch the weighting exists to
+        minimise is one this formulation removes outright.
+        """
+
+        model, slaveSurface, masterSurface = self._twoBlockModel(penetration=0.05, nodalWeights="serendipityOptimal")
+        with self.assertRaises(ValueError) as ctx:
+            self._constraint(model, slaveSurface, masterSurface)
+        self.assertIn("cannot honour", str(ctx.exception))
+        self.assertIn("nodalWeights='facetConsistent'", str(ctx.exception))
 
     def test_invalid_penalty_and_type_are_rejected(self):
         model, slaveSurface, masterSurface = self._twoBlockModel(penetration=0.05)

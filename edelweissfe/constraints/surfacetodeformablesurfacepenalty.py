@@ -343,6 +343,29 @@ class Constraint(ConstraintBase, MeshDependent):
                     "surface element generator, which stamps them."
                 )
 
+        # A per-node weighting has no meaning in this formulation and, unlike the node-based
+        # constraint, there is no code path that could apply one: the pressure is distributed with
+        # the parent face's own shape functions, evaluated at the quadrature points. Accepting a
+        # surface stamped with a weight transform would silently give a different answer from the
+        # sibling constraint on the same input, which is the one outcome worth refusing outright --
+        # the whole point of the parent-face basis is that it fixes the corner mismatch the
+        # weighting only minimises.
+        for side, facets, setName in (
+            ("slave", self._slaveFacets, self._slaveSurfaceSetName),
+            ("master", self.facetElements, self._masterSurfaceSetName),
+        ):
+            weighted = [facet.elNumber for facet in facets if facet.weightTransform is not None]
+            if weighted:
+                raise ValueError(
+                    f"Constraint '{self.name}': {side} surface '{setName}' was generated with "
+                    f"nodalWeights='serendipityOptimal' (facet {weighted[0]} and "
+                    f"{len(weighted) - 1} more carry a weight transform), which this constraint "
+                    "cannot honour -- it distributes the contact pressure with the parent face's "
+                    "shape functions, not with per-node weights, and needs no corner reweighting "
+                    "to begin with. Generate these facets with the default "
+                    "nodalWeights='facetConsistent'."
+                )
+
         masterNodes = {node for facet in self.facetElements for node in facet.parentFaceNodes}
         slaveNodes = {node for facet in self._slaveFacets for node in facet.parentFaceNodes}
         if not masterNodes.isdisjoint(slaveNodes):
@@ -465,6 +488,12 @@ class Constraint(ConstraintBase, MeshDependent):
         closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
         candidatesPerPoint = closestFacetCandidates(slavePointCoords, facetCoords, self.searchDistance)
 
+        # The normal is a property of the facet, not of the point projecting onto it, and there are
+        # nQuadraturePoints times more points than facets. Memoised per facet for this update only;
+        # the arrays are shared between points, which is safe because nothing ever writes through
+        # _frozenNormals -- both evaluation paths only read it into a row of nBar.
+        facetNormals = {}
+
         newAssignment = [None] * self.nPoints
         for p in range(self.nPoints):
             bestDistance = np.inf
@@ -483,7 +512,10 @@ class Constraint(ConstraintBase, MeshDependent):
                 # face's shape functions there.
                 parametric = bestWeights @ facet.vertexParametricCoords
                 self._frozenMasterShapeFunctions[p] = parentFaceShapeFunctions(facet.parentFaceType, parametric)
-                normal, _ = facetNormalAndMeasure(facetCoords[bestFacet])
+                normal = facetNormals.get(bestFacet)
+                if normal is None:
+                    normal, _ = facetNormalAndMeasure(facetCoords[bestFacet])
+                    facetNormals[bestFacet] = normal
                 self._frozenNormals[p] = normal
             else:
                 self._frozenMasterShapeFunctions[p] = None

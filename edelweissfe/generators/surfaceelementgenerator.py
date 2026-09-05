@@ -401,6 +401,33 @@ def buildContactFacets(
                 f"elements ({', '.join(offending)}) and triangulation='{triangulation}'."
             )
 
+    if nodalWeights == "serendipityOptimal":
+        # The redistribution is applied to the four corner *triangles* of a midside-triangulated
+        # quadratic face, so it only ever fires for a face that tiles into six Tria3 facets. A 2D
+        # quadratic element edge tiles into two Line2 facets instead and reaches neither branch, so
+        # without this the option would pass validation and then do nothing at all. Refuse: a
+        # silent no-op is the worst of the three possible behaviours. It is also not merely
+        # unimplemented -- a quadratic edge's consistent weights are Simpson's (L/6, 2L/3, L/6),
+        # all non-negative, so there the mismatch is removable exactly and a corner-share
+        # reassignment is the wrong instrument for it in the first place.
+        unsupported = set()
+        for elementSet in model.surfaces[surfaceName].values():
+            for sourceElement in elementSet:
+                midsideTable = _MIDSIDE_FACE_TABLES.get(sourceElement.ensightType)
+                if midsideTable is None:
+                    continue
+                anyFaceGroups = next(iter(midsideTable.values()))
+                if len(anyFaceGroups[0]) == 2:
+                    unsupported.add(sourceElement.ensightType)
+        unsupported = sorted(unsupported)
+        if unsupported:
+            raise ValueError(
+                f"surfaceElementGenerator: nodalWeights='serendipityOptimal' is not available for "
+                f"2D higher-order element edges, but surface '{surfaceName}' has source elements "
+                f"({', '.join(unsupported)}) whose faces are Line2 facets. Use the default "
+                "nodalWeights='facetConsistent'."
+            )
+
     facetsSetName = f"{prefix}_facets"
     nodesSetName = f"{prefix}_nodes"
 

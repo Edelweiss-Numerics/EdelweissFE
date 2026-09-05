@@ -552,6 +552,23 @@ patch, and at convex edges of the slave body, a corner can penetrate. Such a nod
 slave node list, inert, so the ordering of ``getNormalPressures`` and of the generated
 ``<prefix>_nodes`` set is unaffected, and it is reported at zero pressure.
 
+**Where the option does not apply, and is refused rather than ignored.** Two combinations pass
+every other check and would then do nothing, so the generator and the constraint reject them at
+construction:
+
+* ``surfaceToDeformableSurfacePenalty`` refuses a surface generated with
+  ``nodalWeights='serendipityOptimal'``. There is no path by which it could honour a per-node
+  weighting -- it distributes the pressure with the parent face's own shape functions at the
+  quadrature points -- so accepting the surface would silently give a different answer from the
+  node-based constraint on identical input. It also needs no corner reweighting: the mismatch the
+  weighting minimises is one :ref:`integrated-contact` removes outright.
+* The generator refuses ``nodalWeights='serendipityOptimal'`` for 2D higher-order element edges.
+  The redistribution is defined on the four corner *triangles* of a midside-triangulated quadratic
+  face; a quadratic edge tiles into two ``Line2`` facets and never reaches it. This is not merely
+  an unimplemented case -- a quadratic edge's consistent weights are Simpson's
+  :math:`(L/6,\; 2L/3,\; L/6)`, all non-negative, so in 2D there is no tensile corner load to work
+  around and a corner-share reassignment is the wrong instrument.
+
 .. _serendipity-liftoff:
 
 Measured: the discrete solution lifts the corners off instead

@@ -223,6 +223,47 @@ class TestContactFacetNodalWeights(unittest.TestCase):
             buildContactFacets(model, "theSurface", "pfx", "corner", "serendipityOptimal", self.journal)
         self.assertIn("requires triangulation='midside'", str(ctx.exception))
 
+    def _modelWithOneQuad8(self) -> FEModel:
+        """A single straight-edged quad8 of side ``_SIDE`` in 2D, with one of its edges registered
+        as the surface ``theSurface``."""
+
+        corners = [
+            np.array([0.0, 0.0]),
+            np.array([_SIDE, 0.0]),
+            np.array([_SIDE, _SIDE]),
+            np.array([0.0, _SIDE]),
+        ]
+        coordinates = corners + [0.5 * (corners[a] + corners[(a + 1) % 4]) for a in range(4)]
+
+        model = FEModel(2)
+        nodes = [Node(i + 1, x) for i, x in enumerate(coordinates)]
+        for node in nodes:
+            model.nodes[node.label] = node
+
+        with model.topologyChanges():
+            (elNumber,) = model.reserveElementNumbers(1)
+            element = DisplacementElement("CPE8", elNumber)
+            element.setNodes(nodes)
+            model.createElement(element)
+        model.surfaces["theSurface"] = {1: ElementSet("theEdge", [element])}
+
+        return model
+
+    def test_serendipityOptimal_rejects_2d_quadratic_edges(self):
+        """A quadratic *edge* tiles into two Line2 facets, which reach neither branch that applies
+        the corner reassignment -- so without a refusal the option would validate and then do
+        nothing at all.
+
+        The refusal is not a placeholder for an unimplemented case: a quadratic edge's consistent
+        weights are Simpson's (L/6, 2L/3, L/6), all non-negative, so there is no tensile corner
+        load to work around in 2D and the corner-share reassignment is simply the wrong instrument.
+        """
+
+        model = self._modelWithOneQuad8()
+        with self.assertRaises(ValueError) as ctx, model.topologyChanges():
+            buildContactFacets(model, "theSurface", "pfx", "midside", "serendipityOptimal", self.journal)
+        self.assertIn("not available for 2D higher-order element edges", str(ctx.exception))
+
     def test_unknown_nodalWeights_is_rejected(self):
         model = self._modelWithOneHexa20()
         with self.assertRaises(ValueError) as ctx, model.topologyChanges():
