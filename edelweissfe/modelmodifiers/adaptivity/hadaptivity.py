@@ -395,9 +395,21 @@ class ModelModifier(ModelModifierBase):
             if pairs:
                 self._mesh.define_surface(surfaceName, pairs)
 
-        # companion hanging-node MPC (records set in memory), registered as a multi-point constraint
+        # Companion hanging-node MPC (records set in memory), registered as a multi-point
+        # constraint -- at the FRONT, which is load-bearing and not cosmetic.
+        #
+        # A hanging node lying on a tie's slave surface is claimed by both constraints, and only one
+        # may condense it out. The hanging-node constraint has to win: nothing else in the model
+        # keeps that node on its coarse parent edge, so if the tie takes it the refined and
+        # unrefined meshes come apart there. The tie loses nothing in return -- the node's coarse
+        # parents are themselves tie slaves, so its tied motion is still delivered through them.
+        #
+        # NonlinearSolverBase._collectMultiPointConstraintRecords resolves contested DOFs by model
+        # order, so registering first is what expresses that precedence. Measured on
+        # examples/AnchorPryOutCoarse: the two precedences differ by 5.3e-02 relative displacement
+        # and eventually by the mesh itself. tests/test_mpc_slave_claim_arbitration.py pins it.
         self._hanging = HangingNodeConstraint(name + "_hanging", model)
-        model.multiPointConstraints[name + "_hanging"] = self._hanging
+        model.multiPointConstraints = {name + "_hanging": self._hanging, **model.multiPointConstraints}
         self._converged = False  # set True once an increment has converged
         self._lastRefinedTime = None  # model.time of the last refinement (guards re-refine on cutback)
         self._isFirstCall = True

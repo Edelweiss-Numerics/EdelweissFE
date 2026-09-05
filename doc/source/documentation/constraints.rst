@@ -306,6 +306,42 @@ Module ``edelweissfe.constraints.tie``
     :language: edelweiss
     :caption: Example (explicit dynamics): ``testfiles/edelweiss-only/TieNED/test.inp``
 
+Contested slave degrees of freedom
+----------------------------------
+
+A degree of freedom can be condensed out only once, so when several multi-point constraints ask for
+the same slave DOF, exactly one may keep it. This arises routinely under :math:`h`-adaptivity: a
+hanging node created on a refined tie interface is a ``hangingnode`` slave, and the tie would like to
+constrain it too.
+
+The decision is made **centrally**, where every constraint's records are collected, and not inside
+any constraint: the first constraint in model order keeps the DOF, and later claims on it are
+dropped and reported. Resolving it centrally is what makes the result independent of the order in
+which constraints are *refreshed* -- a constraint that inspected its peers mid-refresh would read
+some of them in their pre-refinement state.
+
+**Model order therefore carries meaning.** For the hanging-node case the precedence is not
+arbitrary, and it is expressed by ``hAdaptivity`` registering its hanging-node constraint at the
+front of the model's multi-point constraints:
+
+* If the **hanging-node constraint** keeps the node, the refined and unrefined meshes stay exactly
+  conforming, and the node is still tied -- indirectly but almost exactly, because its coarse parent
+  nodes are themselves tie slaves and it is their interpolation.
+* If the **tie** keeps it instead, the node is bonded exactly, but nothing holds it on its coarse
+  parent edge any more, and the refined and unrefined meshes come apart there.
+
+One constraint has a stand-in for its condition and the other does not, which is what settles it.
+Measured on the coarse anchor pry-out, the two precedences differ by 5.3e-02 relative displacement
+and eventually by the refined mesh itself.
+
+.. note::
+
+   This used to be resolved inside the tie, which built its records against its peers'
+   ``claimedSlaveNodes()`` while the refresh sweep was still running -- so peers that had not yet
+   refreshed answered with their *pre-refinement* claims. A node that had been a hanging node before
+   the latest refinement, and was not one after it, was reported as still claimed, and the tie
+   dropped it, leaving it constrained by nothing at all.
+
 Multi-point constraints and Dirichlet boundary conditions
 ----------------------------------------------------------
 
