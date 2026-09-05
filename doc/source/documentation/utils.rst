@@ -98,3 +98,15 @@ Module ``edelweissfe.timesteppers.adaptivetimestepper``
 
 .. autoclass:: edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper
    :members:
+
+Parent element faces and facet quadrature
+-----------------------------------------
+
+The canonical face types behind the integrated contact formulation
+(:ref:`integrated-contact-algorithm`): the shape functions of a facet's *parent element face*, and
+the quadrature rules used to integrate against them over a flat contact facet.
+
+Module ``edelweissfe.utils.parentfacegeometry``
+
+.. automodule:: edelweissfe.utils.parentfacegeometry
+   :members:

@@ -673,10 +673,16 @@ Note that the gap is measured to the *parent surface* point :math:`N^m(\xi_m) \c
 \boldsymbol{x}^m`, not to the flat facet point. Distributing the force with :math:`N^m` while
 measuring the gap to the flat point would make the force distribution differ from the transpose of
 the gap gradient -- a non-symmetric, variationally inconsistent operator, the same defect that
-confines the ``serendipityOptimal`` weight transform to small sliding. The flat facets serve only
-as the search and parametrization scaffold; the contact geometry is the curved parent surface,
-which also removes the slave-side faceting error. For straight-edged faces the two points coincide
-identically.
+confines the ``serendipityOptimal`` weight transform to small sliding. For straight-edged faces the
+two points coincide identically.
+
+The flat facets are otherwise the search and parametrization scaffold only -- with one exception
+that matters: the frozen normal :math:`\bar{\boldsymbol{n}}` is the *facet's* normal, not the
+parent face's. The contact geometry is the curved parent surface, which also removes the slave-side
+faceting error, but the direction the gap is measured along is piecewise constant over the
+triangulation. That is what makes :math:`\bar{\boldsymbol{n}}` discontinuous across an element
+boundary once the master deforms, and the consequences are quantified in
+:ref:`contact-explicit-dynamics`.
 
 **Measured** (``testfiles/edelweiss-only/SurfaceToDeformableSurfaceContactPatchHexa20``, the same
 matched 2x2 hexa20 interface as the table above):
@@ -793,6 +799,72 @@ are typically two to three times as many contact points as slave nodes -- of ord
 contact-assembly entries. Whether that matters depends on contact's share of the assembly, which is
 worth measuring on a given model before adopting it in an explicit run.
 
+
+.. _integrated-contact-algorithm:
+
+The integrated formulation, step by step
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The argument above says what is computed and why; this is the order in which it happens, which is
+what a reader modifying :mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty` needs.
+
+**Once, at construction** (and again after an AMR retiling, through ``refresh``):
+
+#. Each slave facet is given a quadrature rule in its own barycentric coordinates,
+   ``nQuadraturePoints`` points with weights summing to one
+   (:func:`~edelweissfe.utils.parentfacegeometry.facetQuadratureRule`). The **contact points** are
+   the flattened ``(slave facet, quadrature point)`` pairs, so there are
+   :math:`n_\text{slave facets} \times` ``nQuadraturePoints`` of them -- not one per node.
+#. Each point's barycentric location is mapped into its facet's *parent face* parametric space
+   through the facet's stamped ``vertexParametricCoords``, and the parent-face shape functions
+   :math:`N^s` are evaluated there. This is frozen for the whole analysis: a contact point does not
+   move on its own slave parent face, whatever the body does.
+#. The point's integration weight is :math:`w_q J_q` with :math:`J_q` the slave facet's measure in
+   the **reference** configuration, computed once and never updated. That is the same
+   small-deformation choice the node-based constraint's tributary areas make, and it is why the
+   weights need no per-increment refresh.
+
+**Once per increment**, in ``updateConnectivity`` -- throttled to every
+``contact-update-frequency`` increments on the explicit path (:ref:`contact-explicit-dynamics`):
+
+#. Every contact point's current position is evaluated from its slave parent face's *current*
+   nodal coordinates through the frozen :math:`N^s`, so the points ride the curved slave surface.
+#. Candidate master facets come from the shared broadphase (a centroid k-d tree with a
+   triangle-inequality radius bound, a superset of the exhaustive sweep iterated in ascending facet
+   index, so it reproduces the exhaustive tie-break). The clamped closest point is computed on each
+   candidate **flat** facet and the nearest wins, subject to ``searchDistance`` where one is given.
+#. What is frozen from the winner is *not* the flat-facet interpolation: the clamped barycentric
+   weights are mapped through that facet's ``vertexParametricCoords`` into its parent face's
+   parametric space, and the parent-face shape functions :math:`N^m` are evaluated there. The
+   facet's unit normal :math:`\bar{\boldsymbol{n}}` is frozen alongside them, per facet rather than
+   per point.
+#. Only *assigned* points contribute DOFs, and each contributes one dense block over its slave
+   parent face's nodes plus its assigned master parent face's nodes. Gap activation is deliberately
+   **not** part of this: an assigned point that happens to be open still owns its block, which is
+   then left at zero, so the sparsity pattern is stable across the Newton loop and only a genuine
+   reassignment forces a rebuild.
+#. A point that loses its master facet has its stored gap reset to zero rather than left stale --
+   it backs the public ``getGaps()``, whose callers cannot mask unassigned entries because they do
+   not know the assignment.
+
+**Every evaluation**, in ``applyConstraint`` (implicit) or ``applyConstraintExplicit``:
+
+#. The gap of each assigned point follows from the frozen data by the expression above; the point
+   is closed where :math:`g < 0`.
+#. The closed points' normal force is the penalty law applied to :math:`g`, scaled by that point's
+   integration weight -- so ``penalty`` is a stiffness per unit *area*, and the force of a point is
+   the pressure it carries times the area it represents.
+#. That force is distributed with :math:`\boldsymbol{w} = \bar{\boldsymbol{n}} \otimes [N^s,
+   -N^m]`, which is where a serendipity corner receives its tensile share. The tangent is assembled
+   only when one is asked for; the explicit path overrides the hook so that no tangent container is
+   ever allocated.
+
+Open points are skipped entirely rather than contributing a zero, and the whole evaluation is
+batched over the active set, falling back to a per-point loop where parent-node counts are not
+uniform across points. The two paths are held to each other by a dedicated equivalence test, since
+every ordinary model takes the batched one.
+
+
 Framework integration and verification
 --------------------------------------
 
@@ -814,6 +886,18 @@ Parameter guidance
   magnitude lower for the same (or better) penetration control.
 * Use ``type=quadratic`` whenever friction is active (see above); ``type=linear`` is appropriate
   for frictionless cases and yields the cleanest analytic correspondence (e.g. in patch tests).
+* ``nQuadraturePoints`` (integrated contact only) defaults to 3, which integrates a quad8 parent
+  face's shape functions exactly over a Tria3 facet -- that exactness is what makes the consistent
+  nodal loads, negative corners included, come out right. Beware of a misleading self-check here:
+  the facet weights sum to one, so the transmitted **resultant** is exact at any point count, and a
+  test that only compares resultants passes at one point per facet. Under-integration degrades the
+  *distribution* of that resultant over the parent-face nodes, which is the whole quantity of
+  interest. Lower it only with a distribution-level check in hand.
+* ``searchDistance`` gates the broadphase: a contact point whose nearest master facet is further
+  away than this is left unassigned and contributes nothing. Left unset, every point is always
+  assigned its single closest facet with no distance gate, which is the right default for a closed
+  interface; set it where slave facets genuinely have no counterpart, and size it well above the
+  largest expected approach so that a point does not enter and leave the assigned set repeatedly.
 
 
 Solver integration
@@ -843,6 +927,17 @@ Per-slave results -- normal pressures :math:`p_s = -f_n/A_s`, tangential tractio
 gaps -- are exposed via ``getNormalPressures()`` / ``getTangentialTractions()`` / ``getGaps()``,
 ordered like the generator's ``<prefix>_nodes`` node set, and are typically requested as
 ``fromExpression`` field outputs.
+
+The integrated constraint (:ref:`integrated-contact-algorithm`) presents the same
+``updateConnectivity`` / ``applyConstraint`` pair, with three differences worth knowing at the
+solver boundary. It carries no history, so it has no ``acceptLastState`` to promote -- every
+quantity derives from the converged state and :math:`d\boldsymbol{U}`. Its DOF footprint is the set
+of *assigned* contact points and does not respond to gap activation, so the sparsity pattern
+changes only on a genuine reassignment, not when a point opens or closes mid-Newton. And its
+results are ordered **by contact point**, not by node: ``getGaps()`` and ``getNormalPressures()``
+run over slave facets and, within a facet, over quadrature points, so a ``fromExpression`` output
+reading them cannot be tied to a node set -- use a reduction, or ``getSlaveNodalNormalForces()``,
+which is node-ordered like the accessors above.
 
 .. _contact-explicit-dynamics:
 
