@@ -8,18 +8,41 @@
 ** are all non-negative -- contrast SurfaceToDeformableSurfaceContactPatchHexa20, where the same
 ** quantity is negative by design.
 **
-** SENSITIVITY, and the reason this reference was regenerated once: the contact force evaluation is
-** batched over all active points (see _prepareActiveArrays), which is arithmetically equivalent to
-** the per-point reference loop -- measured agreement is 2e-15 relative on gaps, forces and the
-** tangent, and exactly zero for the linear law -- but differs in floating-point summation order.
-** Over the 2000 increments of this test that 1e-15 grows to about 1e-3 relative in the monitored
-** results, because the gap activation `g < 0` is non-smooth: a point whose gap sits near zero can
-** flip state one increment earlier and change the trajectory. So the reference here is NOT
-** reproducible across a change of summation order, thread count, or reduction layout, and a
-** disagreement at the 1e-3 level in this test is not by itself evidence of a defect. The
-** implicit-path patch tests (SurfaceToDeformableSurfaceContactPatch*) have no such amplification and
-** do reproduce bit-identically -- they are the sharper guard on the formulation itself, and the
-** batched-vs-loop equivalence unit test is the sharper guard on this optimization.
+** DETERMINISM, and why contact-update-frequency=0: the closest-point projection is established
+** once before the increment loop and never re-searched. That is a requirement, not a convenience.
+** With a periodic re-search this model cannot serve as a bitwise reference at all -- perturbing the
+** penalty by 2e-16 relative (5e4 -> 50000.00000000001) and running to completion moves the final
+** displacements by 5.3e-4 at contact-update-frequency=10, against the runner's fixed 1e-6 absolute
+** tolerance. Pinned, the same perturbation ends at 3.8e-16 and the case reproduces across thread
+** count and machine. Pinning costs about 1% in the monitored results (dispLowerMax 0.03877 against
+** 0.03842), which is the small-sliding approximation error this option exists to trade away, not a
+** loss of coverage: the constraint's force path, its explicit hook and its active set are exercised
+** exactly as before.
+**
+** The switch is master-facet REASSIGNMENT, and it is worth stating precisely because the obvious
+** suspects are both innocent. It is not the `g < 0` activation, and it is not the batched
+** evaluation's summation order (that path agrees with the per-point reference loop to 2e-15
+** relative, and exactly for the linear law). Over this run 166 contact points cross from one master
+** element's parent face onto the next one's; at a crossing the frozen facet normal changes by up to
+** 5.2e-2 -- the kink between two adjacent, now non-coplanar, deformed element faces -- which jumps
+** that point's gap by up to 4.8e-4, some 1.3% of the gap itself. Which side of the seam a
+** borderline point lands on is decided at the 1e-16 level, so the trajectory is a step function of
+** rounding.
+**
+** Re-projection by itself is NOT the problem, and pinning is not a way of hiding one. The
+** node-based constraint under sliding=small injects a gap jump at every update once contact
+** engages (up to 4.8e-6 on the equivalent model) and still reproduces to 6.9e-16, because its 16
+** slave nodes never cross a master element boundary, while 54 quadrature points spread over the
+** slave surface do. The discrete facet switch is the chaotic ingredient; the continuous re-freeze
+** is not. Note also that NodeToDeformableSurfaceContact-style decks do not set `sliding` at all and
+** so run the node-based default, `finite`, which has no frozen projection to re-freeze -- they are
+** not a control for any of this unless sliding=small is set explicitly.
+**
+** What this deck therefore does not cover is updateConnectivity's reassignment path, which is
+** covered exactly, and deterministically, in test_surfacetodeformablesurfacepenalty.py:
+** re-projection within one parent face, and across two parent faces of a flat master, are both
+** asserted to leave the gap bit-identical. Do not reintroduce a periodic update here to win that
+** coverage back -- it buys a flaky reference for a mechanism a unit test already pins exactly.
 **
 ** Deliberately C3D8 rather than C3D20, although hexa20 is the reason the constraint exists: the
 ** pure-Python C3D20 element cannot currently run explicit dynamics at all. Row-sum lumping of its
@@ -38,7 +61,7 @@
 second-order-fields="displacement"
 courant-number=0.8
 output-frequency=50
-contact-update-frequency=10
+contact-update-frequency=0
 
 *modelGenerator, generator=boxGen, name=lower
 nX      =3

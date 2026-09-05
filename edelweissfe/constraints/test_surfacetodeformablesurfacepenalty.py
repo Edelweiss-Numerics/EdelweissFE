@@ -45,11 +45,13 @@ from edelweissfe.constraints.surfacetodeformablesurfacepenalty import (
 )
 from edelweissfe.elements.contactsurfaceelement import Tria3ContactFacet
 from edelweissfe.elements.displacementelement.element import DisplacementElement
+from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.generators.surfaceelementgenerator import buildContactFacets
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
+from edelweissfe.sets.nodeset import NodeSet
 
 _HEXA20_EDGES = (
     (0, 1),
@@ -311,6 +313,184 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
         self.assertTrue(all(f is None for f in constraint._assignedFacetIdx), "expected no assignments")
         np.testing.assert_array_equal(
             constraint.getGaps(), 0.0, err_msg="unassigned points must not retain a stale gap"
+        )
+
+    def _twoElementMasterModel(self, penetration: float) -> tuple:
+        """Two hexa20 cubes side by side in x forming the master surface, and one hexa20 cube
+        straddling their seam as the slave, overlapping by ``penetration``.
+
+        The point of the second master element is that its Ymin face is a *different* parent face:
+        a contact point sliding in +x crosses from one parent face to the other, which is the
+        reassignment that :meth:`test_reprojection_across_parent_faces_leaves_the_gap_unchanged`
+        pins. The two cubes do not share nodes -- their coincident faces are topologically
+        separate -- which is exactly the situation the closest-point search sees on a real mesh
+        once each element has contributed its own facets.
+
+        Returns
+        -------
+        tuple
+            ``(model, slaveSurface, masterSurface)``.
+        """
+
+        model = FEModel(3)
+        label = 1
+        elements = {}
+        with model.topologyChanges():
+            for key, shift in (
+                ("masterLeft", np.array([0.0, 0.0, 0.0])),
+                ("masterRight", np.array([_SIDE, 0.0, 0.0])),
+                ("slave", np.array([0.5 * _SIDE, -_SIDE + penetration, 0.0])),
+            ):
+                nodes = []
+                for x in _hexa20Coordinates(0.0):
+                    node = Node(label, x + shift)
+                    model.nodes[label] = node
+                    nodes.append(node)
+                    label += 1
+                (elNumber,) = model.reserveElementNumbers(1)
+                element = DisplacementElement("C3D20", elNumber)
+                element.setNodes(nodes)
+                model.createElement(element)
+                elements[key] = element
+
+            model.surfaces["masterFace"] = {_YMIN: ElementSet("m", [elements["masterLeft"], elements["masterRight"]])}
+            model.surfaces["slaveFace"] = {_YMAX: ElementSet("s", [elements["slave"]])}
+
+            masterSetName, _ = buildContactFacets(
+                model, "masterFace", "mst", "midside", "facetConsistent", self.journal
+            )
+            slaveSetName, _ = buildContactFacets(model, "slaveFace", "slv", "midside", "facetConsistent", self.journal)
+
+        return model, model.elementSets[slaveSetName], model.elementSets[masterSetName]
+
+    def _addDisplacementField(self, model) -> NodeField:
+        """Give ``model`` a zeroed displacement field, so the constraint's connectivity search can
+        be re-run at a configuration other than the reference one."""
+
+        for node in model.nodes.values():
+            node.fields["displacement"] = model.domainSize
+        field = NodeField("displacement", model.domainSize, NodeSet("all", list(model.nodes.values())))
+        field.createFieldValueEntry("U")
+        model.nodeFields["displacement"] = field
+        return field
+
+    def _gapsFromFrozenProjection(self, constraint, model) -> np.ndarray:
+        """The gap of every assigned point at the model's *current* configuration, evaluated from
+        whatever projection is frozen right now.
+
+        Deliberately independent of :meth:`applyConstraint`: it takes the frozen data directly, so
+        calling it either side of an ``updateConnectivity`` isolates the effect of the re-projection
+        from everything else.
+        """
+
+        slavePoints = constraint._currentSlavePointCoordinates(model)
+        gaps = np.full(constraint.nPoints, np.nan)
+        for p in range(constraint.nPoints):
+            facetIdx = constraint._assignedFacetIdx[p]
+            if facetIdx is None:
+                continue
+            masterCoords = constraint._currentCoordinates(
+                constraint.facetElements[facetIdx].parentFaceNodes,
+                model,
+                constraint._masterParentRefCoords[facetIdx],
+            )
+            masterPoint = constraint._frozenMasterShapeFunctions[p] @ masterCoords
+            gaps[p] = constraint._frozenNormals[p] @ (slavePoints[p] - masterPoint)
+        return gaps
+
+    def _slideAndReproject(self, constraint, model, field, slaveNodes, offset: np.ndarray) -> tuple:
+        """Translate ``slaveNodes`` tangentially by ``offset``, re-run the connectivity search, and
+        return ``(assignmentBefore, assignmentAfter, gapsBefore, gapsAfter)``, both gap fields taken
+        at the *same* (slid) configuration.
+
+        The master surface here is flat and undeformed and the slide is in its plane, so the normal
+        gap is a geometric invariant of the slide: ``n`` is constant and ``n . x`` is unchanged for
+        a tangential motion of either surface. Whatever the search then picks -- a different facet,
+        a different parent face, a different parametric location within one -- must reproduce the
+        same gap exactly. This is the sharp form of the statement that re-projection is a change of
+        *representation*, not of physics.
+        """
+
+        for node in slaveNodes:
+            field["U"][field._indicesOfNodesInArray[node]] = offset
+
+        assignmentBefore = list(constraint._assignedFacetIdx)
+        gapsBefore = self._gapsFromFrozenProjection(constraint, model)
+        constraint.updateConnectivity(model)
+        return (
+            assignmentBefore,
+            list(constraint._assignedFacetIdx),
+            gapsBefore,
+            self._gapsFromFrozenProjection(constraint, model),
+        )
+
+    def test_reprojection_within_one_parent_face_leaves_the_gap_unchanged(self):
+        """Sliding the slave tangentially reassigns points among the facets tiling one parent face,
+        and the gap field is unchanged to the last bit.
+
+        This is the benign half of the reassignment behaviour, and it is worth pinning because the
+        mapping it exercises -- clamped facet barycentrics through ``vertexParametricCoords`` into
+        the parent face's own parametric space -- is the one place a facet swap could silently move
+        the evaluation point. A single hexa20 face is tiled by six Tria3 facets, so this happens
+        without any second element being involved.
+        """
+
+        model, slaveSurface, masterSurface = self._twoBlockModel(penetration=0.01)
+        field = self._addDisplacementField(model)
+        constraint = self._constraint(model, slaveSurface, masterSurface, searchDistance=1.0)
+        slaveNodes = [node for node in slaveSurface.extractNodeSet()]
+
+        before, after, gapsBefore, gapsAfter = self._slideAndReproject(
+            constraint, model, field, slaveNodes, np.array([0.31, 0.0, 0.17])
+        )
+
+        reassigned = [p for p in range(constraint.nPoints) if before[p] != after[p]]
+        self.assertTrue(reassigned, "the slide must actually reassign facets or the test is vacuous")
+        for p in reassigned:
+            self.assertEqual(
+                constraint.facetElements[before[p]].parentFaceNodes,
+                constraint.facetElements[after[p]].parentFaceNodes,
+                "a single-element master offers only one parent face to reassign within",
+            )
+
+        np.testing.assert_array_equal(
+            gapsAfter, gapsBefore, err_msg="re-projecting within one parent face must not move the gap"
+        )
+
+    def test_reprojection_across_parent_faces_leaves_the_gap_unchanged(self):
+        """A point sliding from one master element's parent face onto the next one's reproduces the
+        same gap exactly.
+
+        This is the reassignment that actually occurs in service -- 166 times over the
+        NEDSurfaceContact run -- and the one that makes an explicit trajectory a step function of
+        rounding, because *which* side of the seam a borderline point lands on is decided at the
+        1e-16 level. That sensitivity is legitimate only if the two branches agree where they meet,
+        which is what this asserts. On a flat master they agree exactly; what remains in a deformed
+        model is the genuine kink between two non-coplanar element faces, i.e. the frozen facet
+        normal changing -- a property of facet-based contact, not of this mapping. See the header of
+        testfiles/edelweiss-only/NEDSurfaceContact/test.inp.
+        """
+
+        model, slaveSurface, masterSurface = self._twoElementMasterModel(penetration=0.01)
+        field = self._addDisplacementField(model)
+        constraint = self._constraint(model, slaveSurface, masterSurface, searchDistance=1.0)
+        slaveNodes = [node for node in slaveSurface.extractNodeSet()]
+
+        before, after, gapsBefore, gapsAfter = self._slideAndReproject(
+            constraint, model, field, slaveNodes, np.array([0.37, 0.0, 0.0])
+        )
+
+        crossings = [
+            p
+            for p in range(constraint.nPoints)
+            if before[p] != after[p]
+            and constraint.facetElements[before[p]].parentFaceNodes
+            != constraint.facetElements[after[p]].parentFaceNodes
+        ]
+        self.assertTrue(crossings, "the slide must carry points across the seam or the test is vacuous")
+
+        np.testing.assert_array_equal(
+            gapsAfter, gapsBefore, err_msg="crossing a parent-face boundary must not move the gap"
         )
 
     def test_getGaps_returns_a_copy(self):

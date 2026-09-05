@@ -866,6 +866,35 @@ A candidate-facet pre-filter (a centroid k-d tree with a triangle-inequality rad
 the search cost without changing which facet is selected; it is a superset of the exhaustive sweep
 and iterated in ascending facet index, so it reproduces the exhaustive tie-break exactly.
 
+**What throttling costs in reproducibility, as opposed to accuracy.** The argument above is about
+accuracy, and it holds. Reproducibility is a separate question, and the answer is different: a
+periodic re-search makes an explicit trajectory a *step function of rounding*. Re-projection itself
+does not -- on a flat master it is provably a change of representation and nothing else, since
+:math:`\bar{\boldsymbol{n}}` is constant and :math:`\bar{\boldsymbol{n}} \cdot \boldsymbol{x}`
+is unchanged by a tangential slide, so the gap is bit-identical whichever facet, parent face or
+parametric location the search now returns (asserted in
+``test_surfacetodeformablesurfacepenalty.py``, both within one parent face and across two). What
+is discontinuous is the *frozen facet normal* where the master is deformed: two adjacent element
+faces are then no longer coplanar, and a point crossing their seam picks up the kink. Measured on
+``NEDSurfaceContact`` at ``contact-update-frequency=10``: 166 crossings over the run, with
+:math:`\|\Delta \bar{\boldsymbol{n}}\|` up to :math:`5.2 \times 10^{-2}` and a gap jump up to
+:math:`4.8 \times 10^{-4}`, some 1.3 % of the gap. Which side of a seam a borderline point lands on
+is decided at the :math:`10^{-16}` level, so a perturbation of that size grows to
+:math:`5.3 \times 10^{-4}` in the final displacements; with the connectivity pinned
+(``contact-update-frequency=0``) the same perturbation ends at :math:`3.8 \times 10^{-16}`.
+
+The practical consequences are worth separating. For a *simulation*, nothing here is a defect: the
+jump is the genuine facet-normal discontinuity of any facet-based scheme, it is self-limiting, and
+throttling remains the right trade. For a *regression reference*, it is fatal, so the explicit
+regression case pins its connectivity and the reassignment path is covered by unit tests instead.
+Note also that the node-based constraint's decks are not a control for any of this unless they set
+``sliding=small`` explicitly: the node-based default is ``sliding=finite``, which has no frozen
+projection to re-freeze. Under ``sliding=small`` it injects re-projection jumps too (up to
+:math:`4.8 \times 10^{-6}` on the equivalent model) and still reproduces to
+:math:`6.9 \times 10^{-16}`, because its slave *nodes* happen never to cross a master element
+boundary where 54 quadrature points do -- a property of that model's sampling, not of the
+formulation.
+
 
 Verification and benchmarks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
