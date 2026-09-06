@@ -1,0 +1,96 @@
+** Explicit-dynamic (NED) gradient-enhanced damage test WITH initial h-adaptivity: the
+** GCDPNEDExplicit bar, with the elements at one end refined once before the increment loop starts.
+**
+** This is the case for the topology update in NED. What it establishes, beyond GCDPNEDExplicit:
+**
+**  * the topology update runs at all under this solver (supportsModelModifiers), exactly once,
+**    before the DofManager, the lumped mass, the multi-point-constraint condensation and the
+**    critical time step are derived from the mesh -- so all four see the refined mesh,
+**  * the hanging-node constraints refinement creates are ordinary multi-point constraints, so
+**    NED's existing mass folding / slave kinematics / force folding carries them with no new code,
+**  * the critical time step drops, because the refined elements are smaller: the reported value
+**    should be the unrefined one divided by the split factor.
+**
+** A marker that would act LATER is refused by name rather than silently never running; that is the
+** point of ModelModifierBase.actsOnlyAtSimulationStart. Only initialOnly markers work here.
+**
+** This is the first case anywhere in either repository to exercise the gradient-enhanced explicit
+** path at all. What it covers, none of which had a test before:
+**
+**  * the first-order / second-order field split -- the displacement field is integrated with central
+**    differences, the nonlocal damage field with forward Euler. `first-order-fields` appeared in no
+**    test or example previously.
+**  * GeneralGradientEnhancedDisplacementFiniteElement::computeLumpedInertia, whose displacement block
+**    comes from the material density and whose nonlocal block comes from getNonlocalViscosity() --
+**    the nonlocal field's own inertia is what makes an elliptic regularisation field explicitly
+**    integrable in the first place. A hexa20 lumped mass is also where a negative entry would show
+**    up if the element's linear/quadratic shape-function blend did not prevent it.
+**  * GCDPModel::getDensity and getNonlocalViscosity at material property indices 19 and 20, and
+**    getMaximumWaveSpeed through GCDP's own tangent (see the GCDP module's own ctest).
+**  * computeCriticalTimeStepForExplicitDynamics on the gradient-enhanced element.
+**
+** The Duvaut-Lions viscosity (idx 18) is deliberately ZERO here. It is a relaxation time, and the
+** explicit time increment is ~2e-6 s: a value tuned for implicit increments of ~1e-2 would give
+** dT/eta << 1, meaning almost no viscoplastic relaxation per increment, and the material would
+** respond essentially elastically -- a run that completes and shows no softening at all.
+**
+** The nonlocal viscosity (idx 20) is the mass of the forward-Euler update of the nonlocal field, so
+** it sets that field's own stability limit, roughly dT <~ 2*eta_nl/(1 + l^2/h^2). Here l = 4 mm and
+** h = 10 mm, so the floor is around 1.4e-6; 1e-4 sits comfortably above it. NOTE that the element's
+** computeCriticalTimeStepForExplicitDynamics does NOT account for the nonlocal field ("TODO:
+** current implementation ignores nonlocal variables"), so this value is not checked by anything --
+** it has to be chosen against the finest element in the model by hand.
+
+*material, name=gcdp, id=gcdp
+**E         nu      fcy         fcu         fbu         ftu         Df          Ah
+30000.0,    0.15,   13,         47.4,       55,         4.74,       0.85,       0.12,
+**Bh        Ch          Dh      As          softmod     l           m           omegaMax
+0.003,      2.0,        1e-6,   15.0,       0.0040,     4,          1.0,        0.99,
+**diffmeth  dTThreshCel viscosity    density   nonlocalViscosity
+0,          0,          0,           3e-9,     1e-4
+
+*section, name=section1, material=gcdp, type=solid
+gen_all
+
+*job, name=nedGcdpJob, domain=3d
+
+** COURANT NUMBER: 0.1, not the 0.8 default. The l/c critical-time-step estimate is a LINEAR-
+** element formula. For a 20-node element the highest free eigenfrequency is far above what it
+** predicts, and a convergence study on this very case shows the answer only settles around 0.1-0.2:
+** the final reaction is 4.49 at courant 0.8, 84.6 at 0.4, 118.5 at 0.2, 120.7 at 0.1, 118.0 at 0.05.
+** The 0.8 run does not fail, it just quietly returns a number 26x too small. Do not raise this.
+*solver, solver=NEDParallel, name=theSolver
+second-order-fields="displacement"
+first-order-fields="nonlocal damage"
+courant-number=0.1
+output-frequency=50
+
+*modelModifier, type=hAdaptivity, name=amr
+>>marker, type=nodeSet, nSet=gen_right, initialOnly=True
+refineElSet=gen_all
+maxLevel=1
+
+*modelGenerator, generator=boxGen, name=gen
+nX      =2
+nY      =1
+nZ      =1
+lX      =20
+lY      =10
+lZ      =10
+elType  =GC3D20R
+
+*fieldOutput
+>>perNode, elSet=gen_all, field=displacement, result=U, name=displacement
+>>perNode, elSet=gen_all, field=nonlocal damage, result=U, name=nonlocalDamage
+>>perElement, elSet=gen_all, name=omega, result=omega, quadraturePoint=0:8, f(x)='np.max(x,axis=1)'
+>>perNode, name=RF, nSet=gen_left, field=displacement, result=P, f(x)='np.sum(x[:,0])', saveHistory=True
+>>perNode, name=Uend, nSet=gen_right, field=displacement, result=U, f(x)='np.mean(x[:,0])', saveHistory=True
+
+*output, type=monitor, name=monitor
+fieldOutput=RF
+fieldOutput=Uend
+
+*step, type=adaptiveForExplicitSimulations, solver=theSolver
+maxInc=1, minInc=1e-12, maxNumInc=40000, maxIter=25, stepLength=1e-3
+>>dirichlet, name=fixLeft,  nSet=gen_left,  field=displacement, 1=0, 2=0, 3=0
+>>dirichlet, name=pullRight, nSet=gen_right, field=displacement, 1=0.05

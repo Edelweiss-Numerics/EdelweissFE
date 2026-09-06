@@ -40,27 +40,8 @@ They are defined globally:
         create=perElement, elSet=all, fieldOutput=Strain
 
 """
-import importlib
 
-
-def getOutputManagerClass(name: str) -> type:
-    """Get the class type of the requested output manager.
-
-    Parameters
-    ----------
-    name
-        The name of the output manager to load.
-
-    Returns
-    -------
-    type
-        The output manager class type.
-    """
-
-    module = importlib.import_module("edelweissfe.outputmanagers." + name.lower())
-    return module.OutputManager
-
-
-def getOutputManagerFactoryByName(name):
-    module = importlib.import_module("edelweissfe.outputmanagers." + name.lower())
-    return module.outputManagerFactory
+# This module holds no code: output managers are resolved through the registry's ``outputmanager``
+# category, see :mod:`edelweissfe.config.registry`. The module survives for the docstring above,
+# which is user-facing prose rendered by ``doc/source/documentation/output.rst`` via
+# ``.. automodule:: edelweissfe.config.outputmanagers``; deleting the file would break that build.

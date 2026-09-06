@@ -183,56 +183,74 @@ class MarmotMaterialWrappingElement(BaseElement):
 
         self.acceptLastState()
 
-    def computeYourself(
+    def shapeVIJContribution(self, flat_view: np.ndarray) -> np.ndarray:
+        """Keep the view flat for Cython 1-D memoryview compatibility."""
+        return flat_view
+
+    def computeKernels(
         self,
-        Ke,
-        Pe,
-        U,
-        dU,
-        time,
-        dTime,
+        Ke: np.ndarray,
+        Pe: np.ndarray,
+        U: np.ndarray,
+        dU: np.ndarray,
+        time: float,
+        dTime: float,
     ):
         self._initializeStateVarsTemp()
 
-        self._marmotMaterialWrapper.computeYourself(Ke, Pe, U, dU, time, dTime)
+        self._marmotMaterialWrapper.computeKernels(Ke, Pe, U, dU, time, dTime)
 
-        Pe *= -1
-
-    def computeYourselfExplicit(
+    def computeKernelsExplicit(
         self,
-        Pe,
-        U,
-        dU,
-        time,
-        dTime,
+        Pe: np.ndarray,
+        U: np.ndarray,
+        dU: np.ndarray,
+        time: float,
+        dTime: float,
     ):
         self._initializeStateVarsTemp()
 
-        self._marmotMaterialWrapper.computeYourselfExplicit(Pe, U, dU, time, dTime)
+        self._marmotMaterialWrapper.computeKernelsExplicit(Pe, U, dU, time, dTime)
 
-        Pe *= -1
-
-    def computeLumpedInertia(self, Me):
+    def computeLumpedInertia(self, Me: np.ndarray):
         """Not implemented for this wrapper."""
 
         raise ValueError("This should not be called for this wrapper.")
 
-    def computeCriticalTimeStepForExplicitDynamics(self, Q):
+    def computeCriticalTimeStepForExplicitDynamics(self, Q: np.ndarray):
         """Not implemented for this wrapper."""
 
         raise ValueError("This should not be called for this wrapper.")
 
-    def computeDistributedLoad(self, loadType, P, K, faceID, load, U, time, dTime):
+    def computeDistributedLoad(
+        self,
+        loadType: str,
+        P: np.ndarray,
+        K: np.ndarray,
+        faceID: int,
+        load: np.ndarray,
+        U: np.ndarray,
+        time: float,
+        dTime: float,
+    ):
         """Not implemented for this wrapper."""
 
         raise ValueError("This should not be called for this wrapper.")
 
-    def computeInternalEnergy(self):
+    def computeInternalEnergy(self) -> float:
         """Not implemented for this wrapper."""
 
         raise ValueError("This should not be called for this wrapper.")
 
-    def computeBodyForce(self, P, K, load, U, time, dTime):
+    def computeBodyForce(
+        self,
+        P: np.ndarray,
+        K: np.ndarray,
+        load: np.ndarray,
+        U: np.ndarray,
+        time: float,
+        dTime: float,
+    ):
         """Not implemented for this wrapper."""
 
         raise ValueError("This should not be called for this wrapper.")
@@ -248,6 +266,18 @@ class MarmotMaterialWrappingElement(BaseElement):
         self,
     ):
         pass
+
+    def getStateVars(self) -> np.ndarray:
+        """Return a copy of the converged state-variable buffer."""
+
+        return self._stateVars.copy()
+
+    def setStateVars(self, values: np.ndarray):
+        """Overwrite the converged and trial state-variable buffers in place (so the
+        Marmot material wrapper's assigned pointer to the trial buffer stays valid)."""
+
+        self._stateVars[:] = values
+        self._stateVarsTemp[:] = values
 
     def getResultArray(self, result: str, quadraturePoint: int, getPersistentView: bool = True) -> np.ndarray:
         return self._marmotMaterialWrapper.getResultArray(result, getPersistentView)

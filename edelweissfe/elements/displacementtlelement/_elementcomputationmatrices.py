@@ -29,6 +29,13 @@
 import numpy as np
 import numpy.linalg as lin
 
+from edelweissfe.elements._hexa3dnodeordering import (
+    hexa8DNdXi,
+    hexa8N,
+    hexa20DNdXi,
+    hexa20N,
+)
+
 
 def computeJacobian(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, x: np.ndarray, nInt: int, nNodes: int, dim: int):
     """Get the Jacobi matrix for the element calculation.
@@ -193,54 +200,17 @@ def computeNOperator(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, nInt: int, 
                     )
                 )
     elif dim == 3:
+        # Hexa8/Hexa20 node ordering (see edelweissfe.elements._hexa3dnodeordering) follows the
+        # standard Abaqus C3D8/C3D20 convention (corner ring 0-3 at zeta=-1, ring 4-7 at zeta=+1),
+        # matching Marmot's element formulation and the small-strain displacementelement -- this
+        # is also the local node ordering assumed by any face-numbering convention (e.g. a
+        # contact-facet generator) built on top of this element.
         if nNodes == 8:  # Hexa8
             for i in range(nInt):
-                N[i] = (
-                    1
-                    / 8
-                    * np.array(
-                        [
-                            (1 - xi[i]) * (1 - eta[i]) * (1 - z[i]),
-                            (1 - xi[i]) * (1 - eta[i]) * (1 + z[i]),
-                            (1 + xi[i]) * (1 - eta[i]) * (1 + z[i]),
-                            (1 + xi[i]) * (1 - eta[i]) * (1 - z[i]),
-                            (1 - xi[i]) * (1 + eta[i]) * (1 - z[i]),
-                            (1 - xi[i]) * (1 + eta[i]) * (1 + z[i]),
-                            (1 + xi[i]) * (1 + eta[i]) * (1 + z[i]),
-                            (1 + xi[i]) * (1 + eta[i]) * (1 - z[i]),
-                        ]
-                    )
-                )
+                N[i] = hexa8N(xi[i], eta[i], z[i])
         elif nNodes == 20:  # Hexa20
             for i in range(nInt):
-                N[i] = (
-                    1
-                    / 8
-                    * np.array(
-                        [
-                            (1 - xi[i]) * (1 - eta[i]) * (1 - z[i]) * (-xi[i] - eta[i] - z[i] - 2),
-                            (1 - xi[i]) * (1 - eta[i]) * (1 + z[i]) * (-xi[i] - eta[i] + z[i] - 2),
-                            (1 + xi[i]) * (1 - eta[i]) * (1 + z[i]) * (xi[i] - eta[i] + z[i] - 2),
-                            (1 + xi[i]) * (1 - eta[i]) * (1 - z[i]) * (xi[i] - eta[i] - z[i] - 2),
-                            (1 - xi[i]) * (1 + eta[i]) * (1 - z[i]) * (-xi[i] + eta[i] - z[i] - 2),
-                            (1 - xi[i]) * (1 + eta[i]) * (1 + z[i]) * (-xi[i] + eta[i] + z[i] - 2),
-                            (1 + xi[i]) * (1 + eta[i]) * (1 + z[i]) * (xi[i] + eta[i] + z[i] - 2),
-                            (1 + xi[i]) * (1 + eta[i]) * (1 - z[i]) * (xi[i] + eta[i] - z[i] - 2),
-                            2 * (1 - xi[i]) * (1 - eta[i]) * (1 - z[i] ** 2),
-                            2 * (1 - xi[i] ** 2) * (1 - eta[i]) * (1 + z[i]),
-                            2 * (1 + xi[i]) * (1 - eta[i]) * (1 - z[i] ** 2),
-                            2 * (1 - xi[i] ** 2) * (1 - eta[i]) * (1 - z[i]),
-                            2 * (1 - xi[i]) * (1 + eta[i]) * (1 - z[i] ** 2),
-                            2 * (1 - xi[i] ** 2) * (1 + eta[i]) * (1 + z[i]),
-                            2 * (1 + xi[i]) * (1 + eta[i]) * (1 - z[i] ** 2),
-                            2 * (1 - xi[i] ** 2) * (1 + eta[i]) * (1 - z[i]),
-                            2 * (1 - xi[i]) * (1 - eta[i] ** 2) * (1 - z[i]),
-                            2 * (1 - xi[i]) * (1 - eta[i] ** 2) * (1 + z[i]),
-                            2 * (1 + xi[i]) * (1 - eta[i] ** 2) * (1 + z[i]),
-                            2 * (1 + xi[i]) * (1 - eta[i] ** 2) * (1 - z[i]),
-                        ]
-                    )
-                )
+                N[i] = hexa20N(xi[i], eta[i], z[i])
     return N
 
 
@@ -386,116 +356,11 @@ def _Ndiff3D(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, nNodes: int):
     np.ndarray
         The derivative of the 3D shape functions w.r.t. the local coordinates."""
 
+    # Node ordering matches computeNOperator (Marmot's/standard Abaqus C3D8/C3D20 convention).
     if nNodes == 8:  # Hexa8
-        return (
-            1
-            / 8
-            * np.array(
-                [
-                    [
-                        -(1 - xi) * (1 - z),
-                        -(1 - xi) * (1 + z),
-                        (1 - xi) * (1 + z),
-                        (1 - xi) * (1 - z),
-                        -(1 + xi) * (1 - z),
-                        -(1 + xi) * (1 + z),
-                        (1 + xi) * (1 + z),
-                        (1 + xi) * (1 - z),
-                    ],
-                    [
-                        -(1 - eta) * (1 - z),
-                        -(1 - eta) * (1 + z),
-                        -(1 + eta) * (1 + z),
-                        -(1 + eta) * (1 - z),
-                        (1 - eta) * (1 - z),
-                        (1 - eta) * (1 + z),
-                        (1 + eta) * (1 + z),
-                        (1 + eta) * (1 - z),
-                    ],
-                    [
-                        -(1 - eta) * (1 - xi),
-                        (1 - eta) * (1 - xi),
-                        (1 + eta) * (1 - xi),
-                        -(1 + eta) * (1 - xi),
-                        -(1 - eta) * (1 + xi),
-                        (1 - eta) * (1 + xi),
-                        (1 + eta) * (1 + xi),
-                        -(1 + eta) * (1 + xi),
-                    ],
-                ]
-            )
-        )
+        return hexa8DNdXi(xi, eta, z)
     else:  # Hexa20
-        return np.array(
-            [
-                [
-                    ((xi - 1) * (z - 1) * (2 * eta + xi + z + 1)) / 8,
-                    -((xi - 1) * (z + 1) * (2 * eta + xi - z + 1)) / 8,
-                    -((xi - 1) * (z + 1) * (2 * eta - xi + z - 1)) / 8,
-                    -((xi - 1) * (z - 1) * (xi - 2 * eta + z + 1)) / 8,
-                    -((xi + 1) * (z - 1) * (2 * eta - xi + z + 1)) / 8,
-                    ((xi + 1) * (z + 1) * (2 * eta - xi - z + 1)) / 8,
-                    ((xi + 1) * (z + 1) * (2 * eta + xi + z - 1)) / 8,
-                    -((xi + 1) * (z - 1) * (2 * eta + xi - z - 1)) / 8,
-                    -((z**2 - 1) * (xi - 1)) / 4,
-                    (eta * (xi - 1) * (z + 1)) / 2,
-                    ((z**2 - 1) * (xi - 1)) / 4,
-                    -(eta * (xi - 1) * (z - 1)) / 2,
-                    ((z**2 - 1) * (xi + 1)) / 4,
-                    -(eta * (xi + 1) * (z + 1)) / 2,
-                    -((z**2 - 1) * (xi + 1)) / 4,
-                    (eta * (xi + 1) * (z - 1)) / 2,
-                    -((xi**2 - 1) * (z - 1)) / 4,
-                    ((xi**2 - 1) * (z + 1)) / 4,
-                    -((xi**2 - 1) * (z + 1)) / 4,
-                    ((xi**2 - 1) * (z - 1)) / 4,
-                ],
-                [
-                    ((eta - 1) * (z - 1) * (eta + 2 * xi + z + 1)) / 8,
-                    -((eta - 1) * (z + 1) * (eta + 2 * xi - z + 1)) / 8,
-                    -((eta + 1) * (z + 1) * (eta - 2 * xi + z - 1)) / 8,
-                    -((eta + 1) * (z - 1) * (2 * xi - eta + z + 1)) / 8,
-                    -((eta - 1) * (z - 1) * (eta - 2 * xi + z + 1)) / 8,
-                    ((eta - 1) * (z + 1) * (eta - 2 * xi - z + 1)) / 8,
-                    ((eta + 1) * (z + 1) * (eta + 2 * xi + z - 1)) / 8,
-                    -((eta + 1) * (z - 1) * (eta + 2 * xi - z - 1)) / 8,
-                    -(eta / 4 - 1 / 4) * (z**2 - 1),
-                    (eta**2 / 4 - 1 / 4) * (z + 1),
-                    (eta / 4 + 1 / 4) * (z**2 - 1),
-                    -(eta**2 / 4 - 1 / 4) * (z - 1),
-                    (eta / 4 - 1 / 4) * (z**2 - 1),
-                    -(eta**2 / 4 - 1 / 4) * (z + 1),
-                    -(eta / 4 + 1 / 4) * (z**2 - 1),
-                    (eta**2 / 4 - 1 / 4) * (z - 1),
-                    -2 * xi * (eta / 4 - 1 / 4) * (z - 1),
-                    2 * xi * (eta / 4 - 1 / 4) * (z + 1),
-                    -2 * xi * (eta / 4 + 1 / 4) * (z + 1),
-                    2 * xi * (eta / 4 + 1 / 4) * (z - 1),
-                ],
-                [
-                    ((eta - 1) * (xi - 1) * (eta + xi + 2 * z + 1)) / 8,
-                    -((eta - 1) * (xi - 1) * (eta + xi - 2 * z + 1)) / 8,
-                    -((eta + 1) * (xi - 1) * (eta - xi + 2 * z - 1)) / 8,
-                    -((eta + 1) * (xi - 1) * (xi - eta + 2 * z + 1)) / 8,
-                    -((eta - 1) * (xi + 1) * (eta - xi + 2 * z + 1)) / 8,
-                    ((eta - 1) * (xi + 1) * (eta - xi - 2 * z + 1)) / 8,
-                    ((eta + 1) * (xi + 1) * (eta + xi + 2 * z - 1)) / 8,
-                    -((eta + 1) * (xi + 1) * (eta + xi - 2 * z - 1)) / 8,
-                    -2 * z * (eta / 4 - 1 / 4) * (xi - 1),
-                    (eta**2 / 4 - 1 / 4) * (xi - 1),
-                    2 * z * (eta / 4 + 1 / 4) * (xi - 1),
-                    -(eta**2 / 4 - 1 / 4) * (xi - 1),
-                    2 * z * (eta / 4 - 1 / 4) * (xi + 1),
-                    -(eta**2 / 4 - 1 / 4) * (xi + 1),
-                    -2 * z * (eta / 4 + 1 / 4) * (xi + 1),
-                    (eta**2 / 4 - 1 / 4) * (xi + 1),
-                    -(eta / 4 - 1 / 4) * (xi**2 - 1),
-                    (eta / 4 - 1 / 4) * (xi**2 - 1),
-                    -(eta / 4 + 1 / 4) * (xi**2 - 1),
-                    (eta / 4 + 1 / 4) * (xi**2 - 1),
-                ],
-            ]
-        )
+        return hexa20DNdXi(xi, eta, z)
 
 
 def _J2D4(xi: np.ndarray, eta: np.ndarray, x: np.ndarray, nInt: int):
@@ -611,44 +476,9 @@ def _J3D8(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, x: np.ndarray, nInt: i
         The requested Jacobian matrix."""
 
     J = np.zeros([nInt, 3, 3])
-    # calc all parameters for the X and Y functions (H8)
-    A = np.array(
-        [
-            [1, -1, -1, -1, 1, 1, 1, -1],
-            [1, -1, -1, 1, 1, -1, -1, 1],
-            [1, 1, -1, 1, -1, -1, 1, -1],
-            [1, 1, -1, -1, -1, 1, -1, 1],
-            [1, -1, 1, -1, -1, -1, 1, 1],
-            [1, -1, 1, 1, -1, 1, -1, -1],
-            [1, 1, 1, 1, 1, 1, 1, 1],
-            [1, 1, 1, -1, 1, -1, -1, -1],
-        ]
-    )
-    invA = lin.solve(A, np.eye(8))
-    ax = invA @ np.transpose(x[0])
-    ay = invA @ np.transpose(x[1])
-    az = invA @ np.transpose(x[2])
-    for i in range(0, nInt):  # for all Gauss points (N in total)
-        # [J] Jacobi matrix (only H8)
-        J[i] = np.array(
-            [
-                [
-                    ax[1] + ax[4] * xi[i] + ax[6] * z[i] + ax[7] * xi[i] * z[i],
-                    ay[1] + ay[4] * xi[i] + ay[6] * z[i] + ay[7] * xi[i] * z[i],
-                    az[1] + az[4] * xi[i] + az[6] * z[i] + az[7] * xi[i] * z[i],
-                ],
-                [
-                    ax[2] + ax[4] * eta[i] + ax[5] * z[i] + ax[7] * eta[i] * z[i],
-                    ay[2] + ay[4] * eta[i] + ay[5] * z[i] + ay[7] * eta[i] * z[i],
-                    az[2] + az[4] * eta[i] + az[5] * z[i] + az[7] * eta[i] * z[i],
-                ],
-                [
-                    ax[3] + ax[5] * xi[i] + ax[6] * eta[i] + ax[7] * eta[i] * xi[i],
-                    ay[3] + ay[5] * xi[i] + ay[6] * eta[i] + ay[7] * eta[i] * xi[i],
-                    az[3] + az[5] * xi[i] + az[6] * eta[i] + az[7] * eta[i] * xi[i],
-                ],
-            ]
-        )
+    for i in range(nInt):
+        dN = _Ndiff3D(xi[i], eta[i], z[i], 8)
+        J[i] = dN @ x.T
     return J
 
 
@@ -674,155 +504,9 @@ def _J3D20(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, x: np.ndarray, nInt: 
         The requested Jacobian matrix."""
 
     J = np.zeros([nInt, 3, 3])
-    # calc all parameters for the X and Y functions (H20)
-    A = np.array(
-        [
-            [1, -1, -1, -1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 1],
-            [1, -1, -1, 1, 1, -1, -1, 1, 1, 1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1],
-            [1, 1, -1, 1, -1, -1, 1, 1, 1, 1, -1, 1, 1, -1, 1, 1, -1, -1, 1, -1],
-            [1, 1, -1, -1, -1, 1, -1, 1, 1, 1, -1, 1, -1, -1, 1, -1, 1, 1, -1, -1],
-            [1, -1, 1, -1, -1, -1, 1, 1, 1, 1, 1, -1, -1, 1, -1, -1, 1, -1, 1, -1],
-            [1, -1, 1, 1, -1, 1, -1, 1, 1, 1, 1, -1, 1, 1, -1, 1, -1, 1, -1, -1],
-            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [1, 1, 1, -1, 1, -1, -1, 1, 1, 1, 1, 1, -1, 1, 1, -1, -1, -1, -1, 1],
-            [1, -1, -1, 0, 1, 0, 0, 1, 1, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0],
-            [1, 0, -1, 1, 0, -1, 0, 0, 1, 1, 0, 0, 1, -1, 0, 0, 0, 0, 0, 0],
-            [1, 1, -1, 0, -1, 0, 0, 1, 1, 0, -1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-            [1, 0, -1, -1, 0, 1, 0, 0, 1, 1, 0, 0, -1, -1, 0, 0, 0, 0, 0, 0],
-            [1, -1, 1, 0, -1, 0, 0, 1, 1, 0, 1, -1, 0, 0, 0, 0, 0, 0, 0, 0],
-            [1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0],
-            [1, 1, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-            [1, 0, 1, -1, 0, -1, 0, 0, 1, 1, 0, 0, -1, 1, 0, 0, 0, 0, 0, 0],
-            [1, -1, 0, -1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1, -1, 0, 0, 0, 0],
-            [1, -1, 0, 1, 0, 0, -1, 1, 0, 1, 0, 0, 0, 0, -1, 1, 0, 0, 0, 0],
-            [1, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0],
-            [1, 1, 0, -1, 0, 0, -1, 1, 0, 1, 0, 0, 0, 0, 1, -1, 0, 0, 0, 0],
-        ]
-    )
-    invA = lin.solve(A, np.eye(20))
-    ax = invA @ np.transpose(x[0])
-    ay = invA @ np.transpose(x[1])
-    az = invA @ np.transpose(x[2])
-    for i in range(0, nInt):  # for all Gauss points (N in total)
-        # [J] Jacobi matrix (only H8)
-        J[i] = np.array(
-            [
-                [
-                    ax[1]
-                    + ax[4] * xi[i]
-                    + ax[6] * z[i]
-                    + 2 * ax[7] * eta[i]
-                    + 2 * ax[10] * eta[i] * xi[i]
-                    + ax[11] * xi[i] ** 2
-                    + ax[14] * z[i] ** 2
-                    + 2 * ax[15] * z[i] * eta[i]
-                    + ax[16] * xi[i] * z[i]
-                    + 2 * ax[17] * eta[i] * xi[i] * z[i]
-                    + ax[18] * xi[i] ** 2 * z[i]
-                    + ax[19] * xi[i] * z[i] ** 2,
-                    ay[1]
-                    + ay[4] * xi[i]
-                    + ay[6] * z[i]
-                    + 2 * ay[7] * eta[i]
-                    + 2 * ay[10] * eta[i] * xi[i]
-                    + ay[11] * xi[i] ** 2
-                    + ay[14] * z[i] ** 2
-                    + 2 * ay[15] * z[i] * eta[i]
-                    + ay[16] * xi[i] * z[i]
-                    + 2 * ay[17] * eta[i] * xi[i] * z[i]
-                    + ay[18] * xi[i] ** 2 * z[i]
-                    + ay[19] * xi[i] * z[i] ** 2,
-                    az[1]
-                    + az[4] * xi[i]
-                    + az[6] * z[i]
-                    + 2 * az[7] * eta[i]
-                    + 2 * az[10] * eta[i] * xi[i]
-                    + az[11] * xi[i] ** 2
-                    + az[14] * z[i] ** 2
-                    + 2 * az[15] * z[i] * eta[i]
-                    + az[16] * xi[i] * z[i]
-                    + 2 * az[17] * eta[i] * xi[i] * z[i]
-                    + az[18] * xi[i] ** 2 * z[i]
-                    + az[19] * xi[i] * z[i] ** 2,
-                ],
-                [
-                    ax[2]
-                    + ax[4] * eta[i]
-                    + ax[5] * z[i]
-                    + 2 * ax[8] * xi[i]
-                    + ax[10] * eta[i] ** 2
-                    + 2 * ax[11] * eta[i] * xi[i]
-                    + 2 * ax[12] * xi[i] * z[i]
-                    + ax[13] * z[i] ** 2
-                    + ax[16] * eta[i] * z[i]
-                    + ax[17] * eta[i] ** 2 * z[i]
-                    + 2 * ax[18] * eta[i] * xi[i] * z[i]
-                    + ax[19] * eta[i] * z[i] ** 2,
-                    ay[2]
-                    + ay[4] * eta[i]
-                    + ay[5] * z[i]
-                    + 2 * ay[8] * xi[i]
-                    + ay[10] * eta[i] ** 2
-                    + 2 * ay[11] * eta[i] * xi[i]
-                    + 2 * ay[12] * xi[i] * z[i]
-                    + ay[13] * z[i] ** 2
-                    + ay[16] * eta[i] * z[i]
-                    + ay[17] * eta[i] ** 2 * z[i]
-                    + 2 * ay[18] * eta[i] * xi[i] * z[i]
-                    + ay[19] * eta[i] * z[i] ** 2,
-                    az[2]
-                    + az[4] * eta[i]
-                    + az[5] * z[i]
-                    + 2 * az[8] * xi[i]
-                    + az[10] * eta[i] ** 2
-                    + 2 * az[11] * eta[i] * xi[i]
-                    + 2 * az[12] * xi[i] * z[i]
-                    + az[13] * z[i] ** 2
-                    + az[16] * eta[i] * z[i]
-                    + az[17] * eta[i] ** 2 * z[i]
-                    + 2 * az[18] * eta[i] * xi[i] * z[i]
-                    + az[19] * eta[i] * z[i] ** 2,
-                ],
-                [
-                    ax[3]
-                    + ax[5] * z[i]
-                    + ax[6] * eta[i]
-                    + 2 * ax[9] * z[i]
-                    + ax[12] * xi[i] ** 2
-                    + 2 * ax[13] * xi[i] * z[i]
-                    + 2 * ax[14] * z[i] * eta[i]
-                    + ax[15] * eta[i] ** 2
-                    + ax[16] * eta[i] * xi[i]
-                    + ax[17] * eta[i] ** 2 * xi[i]
-                    + ax[18] * eta[i] * xi[i] ** 2
-                    + 2 * ax[19] * eta[i] * xi[i] * z[i],
-                    ay[3]
-                    + ay[5] * z[i]
-                    + ay[6] * eta[i]
-                    + 2 * ay[9] * z[i]
-                    + ay[12] * xi[i] ** 2
-                    + 2 * ay[13] * xi[i] * z[i]
-                    + 2 * ay[14] * z[i] * eta[i]
-                    + ay[15] * eta[i] ** 2
-                    + ay[16] * eta[i] * xi[i]
-                    + ay[17] * eta[i] ** 2 * xi[i]
-                    + ay[18] * eta[i] * xi[i] ** 2
-                    + 2 * ay[19] * eta[i] * xi[i] * z[i],
-                    az[3]
-                    + az[5] * z[i]
-                    + az[6] * eta[i]
-                    + 2 * az[9] * z[i]
-                    + az[12] * xi[i] ** 2
-                    + 2 * az[13] * xi[i] * z[i]
-                    + 2 * az[14] * z[i] * eta[i]
-                    + az[15] * eta[i] ** 2
-                    + az[16] * eta[i] * xi[i]
-                    + az[17] * eta[i] ** 2 * xi[i]
-                    + az[18] * eta[i] * xi[i] ** 2
-                    + 2 * az[19] * eta[i] * xi[i] * z[i],
-                ],
-            ]
-        )
+    for i in range(nInt):
+        dN = _Ndiff3D(xi[i], eta[i], z[i], 20)
+        J[i] = dN @ x.T
     return J
 
 

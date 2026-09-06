@@ -29,28 +29,124 @@
 
 # @author: Matthias Neuner
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
+from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
-module = Module("rigidbody", "A rigid body constraint tying nodes to a reference point.")
 
-inputLanguage = InputLanguage()
+class RigidBodyStiffnessView:
+    """Provides structured 2-D sub-views for the sparse rigid body stiffness matrix slice.
 
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
+    Theoretical Background
+    ----------------------
+    In a geometrically exact rigid body constraint, a set of slave nodes is tied to a reference point (RP).
+    For each slave node :math:`s`, we define:
+      - Nodal displacement DOFs: :math:`\\mathbf{u}_s` (size ``nDim``)
+      - RP displacement DOFs: :math:`\\mathbf{u}_{RP}` (size ``nDim``)
+      - RP rotation DOFs: :math:`\\boldsymbol{\\phi}_{RP}` (size ``nRot``)
+      - Lagrange multipliers: :math:`\\boldsymbol{\\lambda}_s` (size ``nDim``)
 
-module.addRequiredArg("nSet", "Node set to tie.", str)
-module.addRequiredArg("referencePoint", "Node set containing only the reference point.", str)
+    The constraint equation enforcing the rigid body distance :math:`\\mathbf{d}_0^s` is nonlinear:
+    .. math::
+       \\mathbf{g}_s(\\mathbf{u}_s, \\mathbf{u}_{RP}, \\boldsymbol{\\phi}_{RP}) =
+       -\\mathbf{d}_0^s - (\\mathbf{u}_s - \\mathbf{u}_{RP}) + \\mathbf{T}(\\boldsymbol{\\phi}_{RP}) \\mathbf{d}_0^s = \\mathbf{0}
 
-documentation = [module]
+    where :math:`\\mathbf{T}` is the rotation matrix of the RP.
+
+    The gradient of the constraint with respect to the coupled DOFs (ordered as slave displacement,
+    RP displacement, and RP rotation) is:
+    .. math::
+       \\mathbf{G}_s = \\frac{\\partial \\mathbf{g}_s}{\\partial \\mathbf{U}} =
+       \\begin{bmatrix}
+         -\\mathbf{I}_{\\text{nDim}} &
+         +\\mathbf{I}_{\\text{nDim}} &
+         \\frac{\\partial \\mathbf{T}}{\\partial \\boldsymbol{\\phi}_{RP}} \\mathbf{d}_0^s
+       \\end{bmatrix}
+
+    which is of size ``nDim × nUc``, where ``nUc = nDim + nDim + nRot``.
+
+    The contribution of the constraint to the tangent stiffness matrix arises from:
+      1. The first derivative of the constraint equations, which gives the off-diagonal coupling blocks:
+         :math:`\\mathbf{K}_{UL}^s = \\mathbf{G}_s^T` (size ``nUc × nDim``) and
+         :math:`\\mathbf{K}_{LU}^s = \\mathbf{G}_s` (size ``nDim × nUc``).
+      2. The second derivative of the nonlinear constraint with respect to the rotation DOFs, scaled by the
+         Lagrange multipliers, which gives the RP rotation-rotation stiffness block:
+         :math:`\\mathbf{K}_{UU}^s = \\sum_s \\boldsymbol{\\lambda}_s^T \\frac{\\partial^2 \\mathbf{T}}{\\partial \\boldsymbol{\\phi}_{RP}^2} \\mathbf{d}_0^s` (size ``nRot × nRot``).
+
+    Implementation & Sparse Layout
+    ------------------------------
+    To avoid constructing high-dimensional empty matrices or performing expensive index lookups,
+    the global sparse VIJ system matrix allocates a contiguous 1-D slice for each constraint's contributions.
+    For this rigid body constraint, the 1-D slice (of size ``nRot² + nSlaves × 2 × nUc × nDim``) has the layout:
+      - ``[0 : nRot²]``: Contiguous entries for the :math:`\\mathbf{K}_{UU}` block.
+      - For each slave node :math:`s`:
+        - ``K_UL`` block of size ``nUc × nDim``.
+        - ``K_LU`` block of size ``nDim × nUc``.
+
+    This class wraps the flat 1-D numpy array and exposes reshaped 2-D views (or lists of views)
+    that share the same memory. Any additions or writes to ``K_UU``, ``K_UL[s]``, or ``K_LU[s]``
+    directly modify the global VIJ system matrix in-place.
+
+    Attributes
+    ----------
+    K_UU : np.ndarray
+        2-D view of shape ``(nRot, nRot)`` representing the accumulated reference point rotation-rotation
+        tangent stiffness contribution.
+    K_UL : list[np.ndarray]
+        List of ``nSlaves`` 2-D views, each of shape ``(nUc, nDim)``, representing the gradient coupling between
+        the coupled DOFs (slave displacement, RP displacement, RP rotation) and the Lagrange multipliers.
+    K_LU : list[np.ndarray]
+        List of ``nSlaves`` 2-D views, each of shape ``(nDim, nUc)``, representing the transpose of the gradient coupling.
+    """
+
+    def __init__(self, flat_array: np.ndarray, nRot: int, nUc: int, nDim: int, nSlaves: int):
+        self._flat_array = flat_array
+        self._nRot = nRot
+        self._nUc = nUc
+        self._nDim = nDim
+        self._nSlaves = nSlaves
+
+        kuu_size = nRot**2
+        entries_per_slave = 2 * nUc * nDim
+
+        # 2-D view of RP rotation block
+        self.K_UU = flat_array[0:kuu_size].reshape((nRot, nRot))
+
+        # Lists of 2-D views for coupling blocks of each slave node
+        self.K_UL = [
+            flat_array[kuu_size + s * entries_per_slave : kuu_size + s * entries_per_slave + nUc * nDim].reshape(
+                (nUc, nDim)
+            )
+            for s in range(nSlaves)
+        ]
+        self.K_LU = [
+            flat_array[kuu_size + s * entries_per_slave + nUc * nDim : kuu_size + (s + 1) * entries_per_slave].reshape(
+                (nDim, nUc)
+            )
+            for s in range(nSlaves)
+        ]
+
+
+@dataclass(frozen=True)
+class RigidBodySchema:
+    """The options this constraint accepts, owned by this module and never mutated from
+    outside it.
+
+    Its only options are the structural ``nSet``/``referencePoint`` it ties -- node set *names*,
+    resolved to the actual node sets in :meth:`Constraint.fromConstraintDefinition`. Each is
+    declared ``required=True``, but still given a ``default=None`` so the schema remains
+    constructible on its own."""
+
+    nSet: str | None = schemaField(description="Node set to tie.", dtype=str, default=None, required=True)
+    referencePoint: str | None = schemaField(
+        description="Node set containing only the reference point.", dtype=str, default=None, required=True
+    )
 
 
 class Constraint(ConstraintBase):
@@ -59,14 +155,19 @@ class Constraint(ConstraintBase):
     Currently only available for spatialdomain = 3D.
     """
 
-    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-    @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name, model, *args, **kwargs):
-        super().__init__(name, model, *args, **kwargs)
+    #: Option schema for this constraint, per OptionSchemaProvider.
+    schema = RigidBodySchema
 
-        # self.name = name
-
-        kwargs = CaseInsensitiveDict(kwargs)
+    def __init__(
+        self,
+        name,
+        model: FEModel,
+        nSet: NodeSet,
+        referencePoint: NodeSet,
+        *,
+        configuration: RigidBodySchema = RigidBodySchema(),
+    ):
+        super().__init__(name, model)
 
         self.nDim = model.domainSize
         nDim = self.nDim
@@ -74,20 +175,16 @@ class Constraint(ConstraintBase):
         if nDim == 2:
             raise Exception("rigid body constraint not yet implemented for 2D")
 
-        rbNset = kwargs["nSet"]
-        nodeSets = model.nodeSets
-
-        if len(nodeSets[kwargs["referencePoint"]]) > 1:
+        if len(referencePoint) > 1:
             raise Exception(
-                "node set for reference point '{:}' contains more than one node".format(kwargs["referencePoint"])
+                "node set for reference point '{:}' contains more than one node".format(referencePoint.name)
             )
 
-        self.referencePoint = nodeSets[kwargs["referencePoint"]][0]
+        self.referencePoint = referencePoint[0]
 
-        slaveNodeSet = nodeSets[rbNset]  # slave node set may contain the reference point
-
-        # reference point is removed (if present) and node set is converted to list
-        self.slaveNodes = [node for node in slaveNodeSet if not node == self.referencePoint]
+        # slave node set may contain the reference point; reference point is removed (if present)
+        # and node set is converted to list
+        self.slaveNodes = [node for node in nSet if not node == self.referencePoint]
 
         nRot = 3
         nSlaves = len(self.slaveNodes)
@@ -95,13 +192,6 @@ class Constraint(ConstraintBase):
         self.indicesOfSlaveNodesInP = [[i * nDim + j for j in range(nDim)] for i in range(nSlaves)]
         self.indicesOfRPUinP = [nSlaves * nDim + j for j in range(nDim)]
         self.indicesOfRPPhiInP = [nSlaves * nDim + nDim + j for j in range(nRot)]
-
-        # all nodes
-
-        slaveNodeSet = nodeSets[rbNset]  # slave node set may contain the reference point
-
-        # reference point is removed (if present) and node set is converted to list
-        self.slaveNodes = [node for node in slaveNodeSet if not node == self.referencePoint]
 
         # list of all nodes including RP at end
         self._nodes = self.slaveNodes + [self.referencePoint]
@@ -129,6 +219,22 @@ class Constraint(ConstraintBase):
         self._nUCoupledPerSlave = nDim + nDim + nRot
 
         self._reactions = np.zeros(self.nRot + self.nDim)
+
+    @classmethod
+    def fromConstraintDefinition(
+        cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
+    ) -> "Constraint":
+        """Build this constraint from a parsed ``*constraint`` definition. See
+        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
+        separate from ``__init__``."""
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+        return cls(
+            name,
+            model,
+            model.nodeSets[configuration.nSet],
+            model.nodeSets[configuration.referencePoint],
+            configuration=configuration,
+        )
 
     @property
     def nodes(self) -> list:
@@ -159,6 +265,16 @@ class Constraint(ConstraintBase):
               = 9    + nSlaves × 54  (in 3-D)
         """
         return self.nRot**2 + len(self.slaveNodes) * 2 * self._nUCoupledPerSlave * self.nDim
+
+    def shapeVIJContribution(self, flat_view: np.ndarray) -> RigidBodyStiffnessView:
+        """Shape the flat VIJ values slice for this constraint using RigidBodyStiffnessView."""
+        return RigidBodyStiffnessView(
+            flat_view,
+            nRot=self.nRot,
+            nUc=self._nUCoupledPerSlave,
+            nDim=self.nDim,
+            nSlaves=len(self.slaveNodes),
+        )
 
     def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
         """Fill the VIJ index arrays with the sparse pattern of this constraint.
@@ -266,21 +382,7 @@ class Constraint(ConstraintBase):
     def applyConstraint(self, U_np, dU, PExt, K, timeStep):
         """Apply the rigid body constraint.
 
-        ``K`` is received as a **1-D** array whose entries correspond to the sparse
-        VIJ pattern laid out by :meth:`initializeVIJContribution`:
-
-        * ``K[0 : nRot²]``
-          – K_UU rotation block (accumulated across all slaves, row-major).
-        * for slave *s* (s = 0, …, nSlaves-1):
-
-          * ``K[nRot² + s * 2*nUc*nDim  :  nRot² + s * 2*nUc*nDim + nUc*nDim]``
-            – K_UL block for slave *s*, stored as ``G.T.flatten()``
-            (row-major with *nUc* rows and *nDim* cols).
-          * ``K[nRot² + s * 2*nUc*nDim + nUc*nDim  :  nRot² + (s+1) * 2*nUc*nDim]``
-            – K_LU block for slave *s*, stored as ``G.flatten()``
-            (row-major with *nDim* rows and *nUc* cols).
-
-        where ``nUc = nDim + nDim + nRot`` (= 9 in 3-D).
+        ``K`` is received as a RigidBodyStiffnessView object.
         """
         nConstraints = self.nConstraints
         nDim = self.nDim
@@ -339,10 +441,6 @@ class Constraint(ConstraintBase):
 
         self._reactions.fill(0.0)
 
-        # Per-slave offset constants for the sparse K layout.
-        kuu_size = nRot**2
-        entries_per_slave = 2 * nUc * nDim
-
         for s in range(nSlaves):
             d0 = self.distancesSlaveNodeRP[s]
             indcsUNode = self.indicesOfSlaveNodesInP[s]
@@ -364,23 +462,10 @@ class Constraint(ConstraintBase):
             PExt[indcsU] -= Lambda.T @ G
             PExt[L0 : L0 + nDim] -= g
 
-            # ---- Write to the sparse 1-D K view ----
-
-            # K_UU: only the Phi_RP × Phi_RP block is nonzero (accumulated over slaves).
-            # Layout: K[ri*nRot + rj] ↔ (RP_phi[ri], RP_phi[rj]).
-            # np.einsum gives shape (nRot, nRot); .flatten() is row-major = ri*nRot+rj order.
-            K[0:kuu_size] += np.einsum("i,ijk->jk", Lambda, H[:, -nRot:, -nRot:]).flatten()
-
-            kul_offset = kuu_size + s * entries_per_slave
-            klu_offset = kul_offset + nUc * nDim
-
-            # K_UL: G.T has shape (nUc, nDim); .flatten() is row-major = iu*nDim+il order.
-            # Layout: K[kul_offset + iu*nDim + il] ↔ (indcsU[iu], Lambda_s[il]).
-            K[kul_offset : kul_offset + nUc * nDim] += G.T.flatten()
-
-            # K_LU: G has shape (nDim, nUc); .flatten() is row-major = il*nUc+iu order.
-            # Layout: K[klu_offset + il*nUc + iu] ↔ (Lambda_s[il], indcsU[iu]).
-            K[klu_offset : klu_offset + nDim * nUc] += G.flatten()
+            # ---- Write to the sparse structured K view ----
+            K.K_UU += np.einsum("i,ijk->jk", Lambda, H[:, -nRot:, -nRot:])
+            K.K_UL[s] += G.T
+            K.K_LU[s] += G
 
             self._reactions[0 : self.nDim] += Lambda
             self._reactions[self.nDim :] += np.cross(T @ d0, Lambda)

@@ -1,0 +1,82 @@
+** Dynamic h-adaptivity regression test for the recoveryError marker: a Zienkiewicz-Zhu recovered-
+** gradient error indicator on the nonlocal damage field, with Doerfler bulk marking. Two coarse
+** GC3D20R elements form a cantilever; the outer element is stretched 5% (x in [1, 2.05] instead of
+** [1, 2]) to break an exact tie in the two elements' standard-averaging ZZ error under this
+** material/loading -- with an unstretched (exactly symmetric) mesh both elements recover an
+** identical indicator, so which one wins the marking decision is an environment-dependent
+** argsort tie-break rather than physics. With the stretch, bending concentrates the gradient of
+** the nonlocal damage field near the fixed end as intended, so the recovery marker (worst element
+** by ZZ error, capped by the DOF budget) unambiguously refines exactly one element -- creating a
+** 2:1 hanging interface the MPC couples across both fields (displacement + nonlocal damage). Pins
+** the dynamic solution against U.ref, and thus exercises the full modelModifier path: recovery
+** marking -> octree refinement -> model mutation -> warm start -> quadrature-point state transfer
+** -> hanging-node MPC -> rebuild -> solve.
+*material, name=AT2PHASEFIELD, id=mat
+20000, 0.2, 0.1, 5
+
+*section, name=sec, material=mat, type=solid
+all
+
+*modelModifier, type=hAdaptivity, name=amr
+>>marker, type=recoveryError, nodeField='nonlocal damage', markFraction=0.5, maxRefinedFraction=0.5
+maxLevel=1
+
+*job, name=amr, domain=3d
+*solver, solver=NIST, name=S
+*fieldOutput
+>>perNode, elSet=all, field=displacement, result=U, name=U
+>>perNode, elSet=all, field=nonlocal damage, result=U, name=D
+
+*step, solver=S
+maxInc=0.5, minInc=1e-4, maxNumInc=50, maxIter=25,
+>>dirichlet, name=x0, nSet=x0, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=x1, nSet=x1, field=displacement, 3=0.0005
+
+*Node
+1, 0.0, 1.0, 1.0
+2, 0.0, 0.0, 1.0
+3, 0.0, 0.0, 0.0
+4, 0.0, 1.0, 0.0
+5, 1.0, 1.0, 1.0
+6, 1.0, 0.0, 1.0
+7, 1.0, 0.0, 0.0
+8, 1.0, 1.0, 0.0
+9, 0.0, 0.5, 1.0
+10, 0.0, 0.0, 0.5
+11, 0.0, 0.5, 0.0
+12, 0.0, 1.0, 0.5
+13, 1.0, 0.5, 1.0
+14, 1.0, 0.0, 0.5
+15, 1.0, 0.5, 0.0
+16, 1.0, 1.0, 0.5
+17, 0.5, 1.0, 1.0
+18, 0.5, 0.0, 1.0
+19, 0.5, 0.0, 0.0
+20, 0.5, 1.0, 0.0
+21, 2.0500, 1.0, 1.0
+22, 2.0500, 0.0, 1.0
+23, 2.0500, 0.0, 0.0
+24, 2.0500, 1.0, 0.0
+25, 2.0500, 0.5, 1.0
+26, 2.0500, 0.0, 0.5
+27, 2.0500, 0.5, 0.0
+28, 2.0500, 1.0, 0.5
+29, 1.5250, 1.0, 1.0
+30, 1.5250, 0.0, 1.0
+31, 1.5250, 0.0, 0.0
+32, 1.5250, 1.0, 0.0
+*Element, type=GC3D20R
+1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
+2, 5, 6, 7, 8, 21, 22, 23, 24, 13, 14, 15, 16, 25, 26, 27, 28, 29, 30, 31, 32
+*elSet, elSet=all, generate
+1, 2, 1
+*nSet, nSet=x0
+1, 2, 3, 4, 9, 10, 11, 12
+*nSet, nSet=x1
+21, 22, 23, 24, 25, 26, 27, 28
+*nSet, nSet=yf
+2, 3, 6, 7, 10, 14, 18, 19
+22, 23, 26, 30, 31
+*nSet, nSet=zf
+3, 4, 7, 8, 11, 15, 19, 20
+23, 24, 27, 31, 32

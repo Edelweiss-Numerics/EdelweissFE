@@ -105,6 +105,39 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
             A numpy array containing the element properties.
         """
 
+    def assignProperty(self, propertyName: str, properties: np.ndarray):
+        """Assign a property of the element by name.
+
+        Parameters
+        ----------
+        propertyName
+            The name of the property.
+        properties
+            A numpy array containing the property values.
+        """
+        raise NotImplementedError("This element type does not support named property assignment.")
+
+    def getPropertyNames(self) -> list[str]:
+        """Get the names of all the valid properties of the element.
+
+        Returns
+        -------
+        list[str]
+            A list of valid property names.
+        """
+        return []
+
+    @property
+    def propertyNames(self) -> list[str]:
+        """Get the names of all the valid properties of the element.
+
+        Returns
+        -------
+        list[str]
+            A list of valid property names.
+        """
+        return self.getPropertyNames()
+
     @abstractmethod
     def initializeElement(
         self,
@@ -144,7 +177,7 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         faceID: int,
         load: np.ndarray,
         U: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dT: float,
     ):
         """Evaluate residual and stiffness for given time, field, and field increment due to a surface load.
@@ -164,19 +197,19 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         U
             The current solution vector.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
 
     @abstractmethod
-    def computeYourself(
+    def computeKernels(
         self,
         P: np.ndarray,
         K: np.ndarray,
         U: np.ndarray,
         dU: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dT: float,
     ):
         """Evaluate the internal forces and stiffness for given time, field, and field increment.
@@ -192,18 +225,18 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         dU
             The current solution vector increment.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
 
     @abstractmethod
-    def computeYourselfExplicit(
+    def computeKernelsExplicit(
         self,
         P: np.ndarray,
         U: np.ndarray,
         dU: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dT: float,
     ):
         """Evaluate the internal forces for given time, field, and field increment.
@@ -217,7 +250,7 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         dU
             The current solution vector increment.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
@@ -234,6 +267,24 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         M
             The diagonal of the lumped mass matrix to be defined.
         """
+
+    @property
+    def initialVelocity(self) -> np.ndarray:
+        """The element's initial velocity, in DOF order, applied once as an
+        initial condition at the start of an explicit simulation.
+
+        Elements do not take part in the per-step momentum remap (that is a
+        particle/cell concern); a mass-bearing element such as
+        :class:`~edelweissfe.elements.pointmass.PointMass` instead declares its
+        initial velocity here, which the explicit solver seeds into the grid
+        velocity vector once. The default is rest.
+
+        Returns
+        -------
+        np.ndarray
+            The initial velocity of the element's DOFs (size ``nDof``).
+        """
+        return np.zeros(self.nDof)
 
     @abstractmethod
     def computeCriticalTimeStepForExplicitDynamics(
@@ -269,7 +320,7 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         K: np.ndarray,
         load: np.ndarray,
         U: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dTime: float,
     ):
         """Evaluate residual and stiffness for given time, field, and field increment due to a body force load.
@@ -285,7 +336,7 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         U
             The current solution vector.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
@@ -301,6 +352,48 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         self,
     ):
         """Rest to the last valid state."""
+
+    def getStateVars(self) -> np.ndarray:
+        """Return a copy of the element's flat (converged) quadrature-point state-variable buffer.
+
+        The buffer is laid out as ``nQuadraturePoints`` contiguous per-point blocks. Used by adaptive
+        mesh refinement to hand history down to child elements. Override in concrete elements that
+        carry a state buffer.
+
+        Returns
+        -------
+        np.ndarray
+            A copy of the converged state-variable buffer.
+        """
+        raise NotImplementedError("This element does not expose a state-variable buffer.")
+
+    def setStateVars(self, values: np.ndarray):
+        """Overwrite the element's (converged and trial) state-variable buffer.
+
+        Parameters
+        ----------
+        values
+            The new state-variable buffer, same size as :meth:`getStateVars`.
+        """
+        raise NotImplementedError("This element does not expose a state-variable buffer.")
+
+    def getStateVarSlice(self, name: str) -> tuple:
+        """Locate a named state variable within a single per-quadrature-point state block.
+
+        Enables per-state-variable routing of adaptive-refinement state transfer (see
+        :class:`~edelweissfe.adaptivity.statetransfer.perstatevar.PerStateVarStateTransfer`).
+
+        Parameters
+        ----------
+        name
+            The state-variable name (as understood by the underlying material / element).
+
+        Returns
+        -------
+        tuple
+            ``(offset, size)`` of the named variable within one per-quadrature-point block.
+        """
+        raise NotImplementedError("This element does not expose named state-variable slices.")
 
     @abstractmethod
     def getResultArray(self, result: str, quadraturePoint: int, getPersistentView: bool = True) -> np.ndarray:

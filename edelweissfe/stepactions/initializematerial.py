@@ -32,37 +32,83 @@
 Let materials initialize themselves (e.g., state vars depending on material parameters...) !
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.steps.adaptivestep import InputLanguage
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
-inputLanguage = InputLanguage()
 
-modules = [
-    inputLanguage["step"].getModule("adaptive"),
-    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
-]
+@dataclass(frozen=True)
+class InitializeMaterialSchema:
+    """The scalar options of the ``initializematerial`` keyword, owned by this module and never
+    mutated from outside it.
 
-documentation = []
+    Declares only ``structuralOnly`` fields: ``name`` and ``elSet`` are the keyword's only options,
+    and neither is an ordinary schema field -- ``elSet`` names an existing model object, resolved
+    by :meth:`fromStepActionDefinition` before the schema is even built, exactly like every other
+    category's structural names, and ``name`` is popped even earlier, by
+    ``helpers/inputfilehelpers.py``. Both are declared here purely so the rendered grammar surface
+    documents them; :func:`~edelweissfe.utils.schema.buildSchemaFromOptions` still validates the
+    (now-empty, since both keys are ``structuralOnly``) remainder, so a misspelled option is
+    rejected the same way as for every other module.
+    """
 
-for module in modules:
-    kw = module.addOptionalKeyword("initializematerial", "Standard distributed load, applied on a surface set.")
-    kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addOptionalArg("elSet", "The element set for application of the boundary condition.", str, "all")
-
-    documentation.append(kw)
+    name: str | None = schemaField(
+        description="Name of the step action.", dtype=str, default=None, required=True, structuralOnly=True
+    )
+    elSet: str | None = schemaField(
+        description="The element set for application of the boundary condition.",
+        dtype=str,
+        default="all",
+        structuralOnly=True,
+    )
 
 
 class StepAction(StepActionBase):
-    """Initializes materials"""
+    """Initializes materials.
 
-    def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
+    The constructor is typed: it takes the element set itself, not its name. Nothing here parses
+    an input file -- resolving ``elSet=all`` against the model is the job of
+    :meth:`fromStepActionDefinition` below, which is the only part of this module the ``.inp``
+    front-end needs.
+
+    Parameters
+    ----------
+    name
+        The name of this step action.
+    elementSet
+        The element set whose materials are initialized.
+    """
+
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
+    schema = InitializeMaterialSchema
+
+    def __init__(self, name: str, elementSet):
         self.name = name
 
-        self.theElements = model.elementSets[action["elSet"]]
+        self.theElements = elementSet
         self.active = True
         self.emptyDef = np.array([0.0])
+
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build this step action from a parsed ``>>initializematerial`` definition. See
+        :class:`StepActionBase` for why this is separate from ``__init__``.
+
+        ``name`` and the parser's bookkeeping keys are stripped, and ``elSet`` is structural (it
+        names a model object), so both are popped before the (empty) remainder is validated
+        against :class:`InitializeMaterialSchema`."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        elSetName = definition.pop("elSet")
+        buildSchemaFromOptions(cls.schema, definition)
+
+        return cls(name, model.elementSets[elSetName])
 
     def applyAtStepEnd(self, model, stepMagnitude=None):
         self.active = False

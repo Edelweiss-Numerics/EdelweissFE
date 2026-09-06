@@ -38,19 +38,26 @@ Module meshplot divided into classes:
     * Outputmanager:
         creates the plotting specific for the defined keyword lines
 """
+
+from dataclasses import dataclass
+from typing import Any, ClassVar, Mapping
+
 import matplotlib.tri as mtri
 import numpy as np
 from matplotlib import colors
 
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.sets.elementset import ElementSet
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.math import createMathExpression
 from edelweissfe.utils.meshtools import (
     extractNodeCoordinatesFromElset,
     transferElsetResultsToElset,
 )
-from edelweissfe.utils.misc import strtobool
+from edelweissfe.utils.schema import (
+    DatalineAggregatingSchema,
+    buildSchemaFromOptions,
+    schemaField,
+)
 
 documentation = {
     "figure": "figure number, (default=1)",
@@ -61,15 +68,187 @@ documentation = {
     "create=xyData": "2D Plot of results",
 }
 
-module = Module("meshplot", "Create plots using Matplotlib.")
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class MeshPlotXYDataJob:
+    """A 2D line/scatter plot of one field output against another (or against time)."""
 
-keyword = "output"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
+    x: str = schemaField(description="Name of the x-axis field output, or 'time'.", dtype=str)
+    y: str = schemaField(description="Name of the y-axis field output.", dtype=str)
+    f_x: str = schemaField(
+        description="Expression applied to the x values, e.g. 'sum(x[:,1])'.",
+        dtype=str,
+        default=None,
+        optionName="f(x)",
+    )
+    f_y: str = schemaField(
+        description="Expression applied to the y values, e.g. 'mean(y)'.",
+        dtype=str,
+        default=None,
+        optionName="f(y)",
+    )
+    figure: str = schemaField(description="Figure number.", dtype=str, default="1")
+    axSpec: str = schemaField(description="Axis specification in matplotlib syntax.", dtype=str, default="111")
+    label: str = schemaField(description="Curve label; defaults to the y field output's name.", dtype=str, default=None)
+    integral: bool = schemaField(
+        description="Shade the area under the curve and label it with its integral.",
+        dtype=bool,
+        default=False,
+    )
+    c: str = schemaField(description="Matplotlib color.", dtype=str, default=None)
+    ls: str = schemaField(description="Matplotlib line style.", dtype=str, default=None)
+    plotType: str = schemaField(description="'linePlot' or 'scatter'.", dtype=str, default="linePlot")
+    marker: str = schemaField(description="Matplotlib marker (scatter only).", dtype=str, default=None)
+    ms: str = schemaField(description="Marker size (scatter only).", dtype=str, default=None)
+    markerfacecolor: str = schemaField(description="Marker face color (scatter only).", dtype=str, default=None)
 
-module.addOptionalArg("dummyArg", "Mesh plot uses old input file parsing.", str, None)
+
+@dataclass(frozen=True)
+class MeshPlotPerNodeJob:
+    """A filled contour plot of a nodal result over the mesh."""
+
+    fieldOutput: str = schemaField(
+        description="Name of an element-based field output whose node set is contoured.", dtype=str
+    )
+    f_x: str = schemaField(
+        description="Expression applied to the result values.", dtype=str, default=None, optionName="f(x)"
+    )
+    figure: str = schemaField(description="Figure number.", dtype=str, default="1")
+    axSpec: str = schemaField(description="Axis specification in matplotlib syntax.", dtype=str, default="111")
+    label: str = schemaField(
+        description="Color bar label; defaults to the field output's name.", dtype=str, default=None
+    )
+    plotMeshGrid: str = schemaField(
+        description="Draw the element grid beneath the contours ('undeformed' to draw it).",
+        dtype=str,
+        default="undeformed",
+    )
+
+
+@dataclass(frozen=True)
+class MeshPlotPerElementJob:
+    """A piecewise-constant contour plot of an element result over the mesh."""
+
+    fieldOutput: str = schemaField(description="Name of an element-based field output.", dtype=str)
+    f_x: str = schemaField(
+        description="Expression applied to the result values.", dtype=str, default=None, optionName="f(x)"
+    )
+    figure: str = schemaField(description="Figure number.", dtype=str, default="1")
+    axSpec: str = schemaField(description="Axis specification in matplotlib syntax.", dtype=str, default="111")
+    label: str = schemaField(
+        description="Color bar label; defaults to the field output's name.", dtype=str, default=None
+    )
+
+
+@dataclass(frozen=True)
+class MeshPlotMeshOnlyJob:
+    """A plot of the mesh itself, undeformed or warped by a field output."""
+
+    configuration: str = schemaField(
+        description="'undeformed', or 'deformed' to warp the mesh by 'warpBy'.", dtype=str, default="undeformed"
+    )
+    warpBy: str = schemaField(
+        description="Name of the field output warping the mesh; required if configuration=deformed.",
+        dtype=str,
+        default=None,
+    )
+    scaleFactor: float = schemaField(description="Warp scaling factor.", dtype=float, default=1.0)
+    figure: str = schemaField(description="Figure number.", dtype=str, default="1")
+    axSpec: str = schemaField(description="Axis specification in matplotlib syntax.", dtype=str, default="111")
+    plotNodeLabels: bool = schemaField(description="Annotate every node with its label.", dtype=bool, default=False)
+    plotElementLabels: bool = schemaField(
+        description="Annotate every element with its number.", dtype=bool, default=False
+    )
+
+
+@dataclass(frozen=True)
+class MeshPlotSaveFigureJob:
+    """Export a figure to a file at the end of the job."""
+
+    figure: str = schemaField(description="Figure number to export.", dtype=str, default="1")
+    fileName: str = schemaField(
+        description="Output file name, without extension.", dtype=str, default="exportFigure", optionName="name"
+    )
+    width: float = schemaField(description="Figure width in points.", dtype=float, default=469.47)
+    scale: float = schemaField(description="Scaling applied to the width.", dtype=float, default=1.0)
+    heightRatio: float = schemaField(
+        # 0.0 is the plotter's "use the golden ratio" sentinel (`float(heightRatio) or golden_mean`
+        # in `Plotter._fancyFigSize`), and is what the legacy default of `False` evaluated to.
+        description="Height/width ratio; 0 selects the golden ratio.",
+        dtype=float,
+        default=0.0,
+    )
+    png: bool = schemaField(description="Export as .png in addition to .pdf.", dtype=bool, default=True)
+
+
+@dataclass(frozen=True)
+class MeshPlotSchema(DatalineAggregatingSchema):
+    """All plotting jobs of one ``*output, type=meshplot`` block, in file order.
+
+    One meshplot instance aggregates a heterogeneous list of jobs rather than describing a single
+    one, which is why this schema is a :class:`~edelweissfe.utils.schema.DatalineAggregatingSchema`
+    -- see that class for why the job dispatch lives here instead of in the generic option-building
+    logic.
+    """
+
+    #: Maps the value of the ``create`` tag option to the job schema it selects.
+    _jobSchemasByTag: ClassVar[dict[str, type]] = {
+        "pernode": MeshPlotPerNodeJob,
+        "perelement": MeshPlotPerElementJob,
+        "xydata": MeshPlotXYDataJob,
+        "meshonly": MeshPlotMeshOnlyJob,
+    }
+
+    #: Maps a bare presence-flag option to the job schema it selects, independently of ``create``.
+    _jobSchemasByFlag: ClassVar[dict[str, type]] = {"savefigure": MeshPlotSaveFigureJob}
+
+    jobs: tuple = schemaField(
+        description="The plotting jobs, one or more per dataline.",
+        dtype=tuple,
+        default=(),
+    )
+
+    @classmethod
+    def fromDatalines(cls, datalines: list[Mapping[str, Any]]) -> "MeshPlotSchema":
+        jobs = []
+
+        for options in datalines:
+            keysByFoldedName = {name.casefold(): name for name in options}
+            selectors = cls._jobSchemasByFlag.keys() & keysByFoldedName.keys()
+
+            tagKey = keysByFoldedName.get("create")
+            if tagKey is not None:
+                tag = str(options[tagKey]).casefold()
+                if tag not in cls._jobSchemasByTag:
+                    raise ValueError(
+                        f"'{options[tagKey]}' is not a valid 'create' value; expected one of "
+                        f"{', '.join(sorted(cls._jobSchemasByTag))}."
+                    )
+                selectors |= {tagKey.casefold()}
+
+            if not selectors:
+                raise ValueError(
+                    "Every meshplot dataline must select a job, either with 'create=' or with "
+                    f"{', '.join(sorted(cls._jobSchemasByFlag))}."
+                )
+
+            # A dataline selects exactly one job.
+            if len(selectors) > 1:
+                raise ValueError(
+                    f"A meshplot dataline must select a single job, not {', '.join(sorted(selectors))}; "
+                    "write one dataline per job."
+                )
+
+            (selector,) = selectors
+            jobSchema = (
+                cls._jobSchemasByTag[str(options[tagKey]).casefold()]
+                if selector == "create"
+                else cls._jobSchemasByFlag[selector]
+            )
+            jobOptions = {name: value for name, value in options.items() if name.casefold() != selector}
+            jobs.append(buildSchemaFromOptions(jobSchema, jobOptions))
+
+        return cls(jobs=tuple(jobs))
 
 
 class Triangulation:
@@ -191,8 +370,19 @@ class MeshPlot:
 
 class OutputManager(OutputManagerBase):
     identification = "meshPlot"
+    schema = MeshPlotSchema
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter):
+    def __init__(
+        self,
+        name,
+        model,
+        fieldOutputController,
+        journal,
+        plotter,
+        *,
+        configuration: MeshPlotSchema = MeshPlotSchema(),
+    ):
+        self.name = name
         self.domainSize = model.domainSize
         self.plotter = plotter
         self.journal = journal
@@ -221,96 +411,112 @@ class OutputManager(OutputManagerBase):
 
         self.fieldOutputController = fieldOutputController
 
-        # # needed for meshOnly plot
+        for job in configuration.jobs:
+            self._addJob(job, fieldOutputController)
 
-    def updateDefinition(self, **kwargs: dict):
-        fieldOutputController = self.fieldOutputController
-        if "saveFigure" in kwargs:
-            saveJob = {}
-            saveJob["figure"] = kwargs.get("figure", "1")
-            saveJob["fileName"] = kwargs.get("name", "exportFigure")
-            saveJob["width"] = kwargs.get("width", 469.47)
-            saveJob["scale"] = kwargs.get("scale", 1.0)
-            saveJob["heightRatio"] = kwargs.get("heightRatio", False)
-            saveJob["png"] = kwargs.get("png", True)
-            self.saveJobs.append(saveJob)
+    def _addJob(self, job, fieldOutputController):
+        """Turn one validated job schema into the internal job description consumed by
+        :meth:`finalizeJob`, resolving field output *names* into live field output objects.
 
-        if "create" in kwargs:
-            varType = kwargs["create"]
+        Resolution happens here rather than in the input-file adapter, so a programmatic caller
+        constructing a :class:`MeshPlotSchema` by hand gets the same treatment as an ``.inp`` file.
 
-            if varType == "perNode":
-                perNodeJob = {}
-                perNodeJob["fieldOutput"] = kwargs["fieldOutput"]
+        Parameters
+        ----------
+        job
+            One of the ``MeshPlot*Job`` schema instances.
+        fieldOutputController
+            The FieldOutputController holding the field outputs referenced by name.
+        """
+        fieldOutputs = fieldOutputController.fieldOutputs
 
-                if type(perNodeJob["fieldOutput"].associatedSet) is ElementSet:
-                    nSet = perNodeJob["fieldOutput"].associatedSet.extractNodeSet()
-                else:
-                    raise Exception("perNode job must be defined on a perElement fieldOutput")
+        if isinstance(job, MeshPlotSaveFigureJob):
+            self.saveJobs.append(
+                {
+                    "figure": job.figure,
+                    "fileName": job.fileName,
+                    "width": job.width,
+                    "scale": job.scale,
+                    "heightRatio": job.heightRatio,
+                    "png": job.png,
+                }
+            )
 
-                perNodeJob["nSet"] = nSet
-                perNodeJob["label"] = kwargs.get("label", kwargs["fieldOutput"])
-                perNodeJob["axSpec"] = kwargs.get("axSpec", "111")
-                perNodeJob["figure"] = kwargs.get("figure", "1")
-                perNodeJob["plotMeshGrid"] = kwargs.get("plotMeshGrid", "undeformed")
-                if "f(x)" in kwargs:
-                    perNodeJob["f(x)"] = createMathExpression(kwargs["f(x)"])
+        elif isinstance(job, MeshPlotPerNodeJob):
+            fieldOutput = fieldOutputs[job.fieldOutput]
 
-                # perNodeJob["dimensions"] = edelweissfe.config.phenomena.getFieldSize(
-                #     perNodeJob["fieldOutput"].field, self.domainSize
-                # # )
-                self.perNodeJobs.append(perNodeJob)
+            if type(fieldOutput.associatedSet) is not ElementSet:
+                raise Exception("perNode job must be defined on a perElement fieldOutput")
 
-            elif varType == "perElement":
-                perElementJob = {}
-                perElementJob["label"] = kwargs.get("label", kwargs["fieldOutput"])
-                perElementJob["axSpec"] = kwargs.get("axSpec", "111")
-                perElementJob["figure"] = kwargs.get("figure", "1")
-                perElementJob["fieldOutput"] = kwargs["fieldOutput"]
-                if "f(x)" in kwargs:
-                    perElementJob["f(x)"] = createMathExpression(kwargs["f(x)"])
+            perNodeJob = {
+                "fieldOutput": fieldOutput,
+                "nSet": fieldOutput.associatedSet.extractNodeSet(),
+                "label": job.label if job.label is not None else job.fieldOutput,
+                "axSpec": job.axSpec,
+                "figure": job.figure,
+                "plotMeshGrid": job.plotMeshGrid,
+            }
+            if job.f_x is not None:
+                perNodeJob["f(x)"] = createMathExpression(job.f_x)
+            self.perNodeJobs.append(perNodeJob)
 
-                perElementJob["plotMeshGrid"] = kwargs.get("plotMeshGrid", "unDeformed")
-                self.perElementJobs.append(perElementJob)
+        elif isinstance(job, MeshPlotPerElementJob):
+            perElementJob = {
+                "fieldOutput": fieldOutputs[job.fieldOutput],
+                "label": job.label if job.label is not None else job.fieldOutput,
+                "axSpec": job.axSpec,
+                "figure": job.figure,
+            }
+            if job.f_x is not None:
+                perElementJob["f(x)"] = createMathExpression(job.f_x)
+            self.perElementJobs.append(perElementJob)
 
-            elif varType == "xyData":
-                xyJob = {}
+        elif isinstance(job, MeshPlotXYDataJob):
+            y = fieldOutputs[job.y]
+            xyJob = {
+                "x": "time" if job.x == "time" else fieldOutputs[job.x],
+                "y": y,
+                "figure": job.figure,
+                "axSpec": job.axSpec,
+                "label": job.label if job.label is not None else y.name,
+                "integral": job.integral,
+                # Forwarded to `plotter.plotXYData`, which reads these keys directly out of the job dict.
+                "plotType": job.plotType,
+                **{
+                    name: value
+                    for name, value in (
+                        ("c", job.c),
+                        ("ls", job.ls),
+                        ("marker", job.marker),
+                        ("ms", job.ms),
+                        ("markerfacecolor", job.markerfacecolor),
+                    )
+                    if value is not None
+                },
+            }
+            if job.f_x is not None:
+                xyJob["f(x)"] = createMathExpression(job.f_x)
+            if job.f_y is not None:
+                xyJob["f(y)"] = createMathExpression(job.f_y, symbol="y")
+            self.xyJobs.append(xyJob)
 
-                if kwargs["x"] != "time":
-                    xyJob["x"] = fieldOutputController.fieldOutputs[kwargs["x"]]
-                else:
-                    xyJob["x"] = "time"
+        elif isinstance(job, MeshPlotMeshOnlyJob):
+            meshOnlyJob = {
+                "configuration": job.configuration,
+                "scaleFactor": job.scaleFactor,
+                "axSpec": job.axSpec,
+                "figure": job.figure,
+                "plotNodeLabels": job.plotNodeLabels,
+                "plotElementLabels": job.plotElementLabels,
+            }
+            if job.configuration == "deformed":
+                if job.warpBy is None:
+                    raise ValueError("A meshOnly job with configuration=deformed requires 'warpBy'.")
+                meshOnlyJob["warpBy"] = fieldOutputs[job.warpBy]
+            self.meshOnlyJobs.append(meshOnlyJob)
 
-                xyJob["y"] = fieldOutputController.fieldOutputs[kwargs["y"]]
-
-                if "f(x)" in kwargs:
-                    xyJob["f(x)"] = createMathExpression(kwargs["f(x)"])
-                if "f(y)" in kwargs:
-                    xyJob["f(y)"] = createMathExpression(kwargs["f(y)"], symbol="y")
-
-                xyJob["figure"] = kwargs.get("figure", "1")
-                xyJob["label"] = kwargs.get("label", xyJob["y"].name)
-                xyJob["axSpec"] = kwargs.get("axSpec", "111")
-                xyJob["integral"] = strtobool(kwargs.get("integral", "False"))
-                self.xyJobs.append(xyJob)
-
-            elif varType == "meshOnly":
-                meshOnlyJob = {}
-
-                meshOnlyJob["configuration"] = kwargs.get("configuration", "undeformed")
-
-                if meshOnlyJob["configuration"] == "deformed":
-                    meshOnlyJob["warpBy"] = fieldOutputController.fieldOutputs[kwargs["warpBy"]]
-                meshOnlyJob["scaleFactor"] = float(kwargs.get("scaleFactor", 1.0))
-                meshOnlyJob["axSpec"] = kwargs.get("axSpec", "111")
-                meshOnlyJob["figure"] = kwargs.get("figure", "1")
-                meshOnlyJob["plotNodeLabels"] = kwargs.get("plotNodeLabels", False)
-                meshOnlyJob["plotElementLabels"] = kwargs.get("plotElementLabels", False)
-                self.meshOnlyJobs.append(meshOnlyJob)
-
-        # Initialize instance of plotterclass
-
-    # def initializeSimulation(self, model):
-    #     pass
+        else:
+            raise ValueError(f"{type(job).__name__} is not a valid meshplot job.")
 
     def initializeJob(self):
         pass
@@ -354,7 +560,7 @@ class OutputManager(OutputManagerBase):
             self.plotter.plotXYData(x, y, xyJob["figure"], xyJob["axSpec"], xyJob)
             ax = self.plotter.getAx(xyJob["figure"], xyJob["axSpec"])
             if xyJob["integral"]:
-                integral = np.trapz(y.flatten(), x=x.flatten())
+                integral = np.trapezoid(y.flatten(), x=x.flatten())
                 ax.fill_between(x.flatten(), 0, y.flatten(), color="gray", label=str(integral))
 
         for perNodeJob in self.perNodeJobs:

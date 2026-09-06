@@ -1,0 +1,10 @@
+{
+  "outerSolver": "amgcl_lgmres",
+  "sweeps": 1,
+  "symmetric": true,
+  "lgmresAlwaysReset": true,
+  "verbosity": "info",
+  "dumpOnDegradationDir": "degradation_dumps_rbm6",
+  "dumpOnDegradationThreshold": 150,
+  "dumpOnDegradationMaxDumps": 10
+}

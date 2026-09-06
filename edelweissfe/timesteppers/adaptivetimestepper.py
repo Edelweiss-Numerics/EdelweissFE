@@ -27,11 +27,12 @@
 # Created on Sat Jan  21 12:18:10 2017
 
 from edelweissfe.journal.journal import Journal
+from edelweissfe.timesteppers.base.timestepperbase import TimeStepperBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import ReachedMaxIncrements, ReachedMinIncrementSize
 
 
-class AdaptiveTimeStepper:
+class AdaptiveTimeStepper(TimeStepperBase):
     identification = "AdaptiveTimeStepper"
 
     def __init__(
@@ -92,17 +93,38 @@ class AdaptiveTimeStepper:
         self.makeZeroIncrementFirst = makeZeroIncrementFirst
 
     def doesZeroIncrement(self):
-        return True
+        """Whether the *next* generated time step will be a zero increment.
 
-    def generateTimeStep(self) -> TimeStep:
+        This reports what will actually happen, not merely that zero increments are configured: the
+        zero increment is only emitted as the very first step of a step, so after a restart -- which
+        restores a non-zero increment counter -- there is none. Callers that require a zero increment
+        in order to initialise themselves have to know the difference.
+
+        Returns
+        -------
+        bool
+            True if the next generated time step will have a zero increment.
+        """
+
+        return self.makeZeroIncrementFirst and self.incrementCounter == 0
+
+    def generateTimeStep(self, enforcedTimeIncrement: float = None) -> TimeStep:
         """
         Generate the next increment.
+
+        Parameters
+        ----------
+        enforcedTimeIncrement
+            Not supported by this time stepper; a ValueError is raised if it is given.
 
         Returns
         -------
         TimeStep
             The current time step.
         """
+
+        if enforcedTimeIncrement is not None:
+            raise ValueError("AdaptiveTimeStepper does not support enforced time increments")
 
         while self.finishedStepProgress < (1.0 - 1e-15):
 
@@ -117,6 +139,13 @@ class AdaptiveTimeStepper:
                 theIncrement = self.increment
 
             dT = self.stepLength * theIncrement
+            # Record the increment actually used, for the same reason as
+            # :class:`~edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper`: writeRestart
+            # checkpoints ``self.dT``. The zero increment optionally generated first is deliberately
+            # NOT recorded -- it is not a completed increment, and a multi-step integrator resuming
+            # from it needs the last real one.
+            if theIncrement > 0.0:
+                self.dT = dT
             self.finishedStepProgress += theIncrement
             endTimeOfIncrementInStep = self.stepLength * self.finishedStepProgress
             endTimeOfIncrementInTotal = self.currentTime + endTimeOfIncrementInStep
@@ -130,8 +159,8 @@ class AdaptiveTimeStepper:
                 endTimeOfIncrementInTotal,
             )
 
-            if self.incrementCounter > self.maxNumberIncrements:
-                self.journal.errorMessage("Reached maximum number of increments", self.identification)
+            if self.incrementCounter >= self.maxNumberIncrements:
+                self.journal.message("Reached maximum number of increments", self.identification)
                 raise ReachedMaxIncrements()
 
             if (self.nPassedGoodIncrements >= 3) and self.allowedToIncreasedNext:
@@ -150,6 +179,25 @@ class AdaptiveTimeStepper:
         automatically increasing, e.g. in case of bad convergency."""
 
         self.allowedToIncreasedNext = False
+
+    def changeIncrementSize(self, scaleFactor: float):
+        """Modify the size of the next increment by a given scale factor
+        within the bounds of the minimum and maximum increment size.
+
+        Parameters
+        ----------
+        scaleFactor
+            The factor for scaling based on the current increment.
+        """
+
+        newIncrement = self.increment * scaleFactor
+        self.increment = min(max(newIncrement, self.minIncrement), self.maxIncrement)
+
+        self.journal.message(
+            "New increment size {:}".format(self.increment),
+            self.identification,
+            2,
+        )
 
     def reduceNextIncrement(self, scaleFactor: float):
         """Reduce the increment size for the next increment."""
@@ -193,7 +241,29 @@ class AdaptiveTimeStepper:
         self.reduceNextIncrement(scaleFactor)
 
     def writeRestart(self, restartFile):
-        """Write restart information to a file.
+        """Write this time stepper's progress within the step to a restart checkpoint.
+
+        Deliberately restricted to the *dynamic* progress state (``currentTime`` -- the step's own
+        absolute start time, fixed once the step began -- ``finishedStepProgress``,
+        ``incrementCounter``, ``nPassedGoodIncrements``, ``increment``, ``allowedToIncreasedNext``,
+        ``dT``), not the step's *configuration* (``stepLength``, ``startIncrement``,
+        ``maxIncrement``, ``minIncrement``, ``maxNumberIncrements``): resuming reconstructs the step
+        from the (possibly since-edited, e.g. a raised ``maxNumberIncrements`` after a run that hit
+        it) ``.inp`` file being used to resume, exactly like :meth:`~edelweissfe.models.femodel.
+        FEModel.readRestart` only overwrites converged state and never the model's own structural
+        definition. Restoring the configuration fields here would silently re-clobber any such
+        edit with whatever was in effect when the checkpoint was written.
+
+        This runs (via the restart output manager's ``finalizeIncrement``) while
+        :meth:`generateTimeStep` is paused *at* the ``yield`` for the increment that just
+        converged -- i.e. before that generator's own post-yield bookkeeping (the growth-factor
+        update and the ``incrementCounter``/``nPassedGoodIncrements`` advance) has run. An
+        uninterrupted run never notices, since the same generator object applies that bookkeeping
+        itself on its next resume. But a *fresh* generator built for a resumed run has never
+        reached that yield point at all, so it would skip the bookkeeping entirely -- repeating
+        the just-converged increment's size (mislabeled with its own ``incrementCounter``)
+        instead of continuing the growth sequence. So this snapshots the state as it will be once
+        that bookkeeping runs, replicating its exact logic, rather than the raw current attributes.
 
         Parameters
         ----------
@@ -203,21 +273,22 @@ class AdaptiveTimeStepper:
         f = restartFile
         f.create_group("timestepper")
 
+        increment = self.increment
+        if self.nPassedGoodIncrements >= 3 and self.allowedToIncreasedNext:
+            increment = min(increment * self.increaseFactor, self.maxIncrement)
+
         f["timestepper"].attrs["currentTime"] = self.currentTime
-        f["timestepper"].attrs["stepLength"] = self.stepLength
-        f["timestepper"].attrs["startIncrement"] = self.startIncrement
-        f["timestepper"].attrs["maxIncrement"] = self.maxIncrement
-        f["timestepper"].attrs["minIncrement"] = self.minIncrement
-        f["timestepper"].attrs["maxNumberIncrements"] = self.maxNumberIncrements
-        f["timestepper"].attrs["nPassedGoodIncrements"] = self.nPassedGoodIncrements
-        f["timestepper"].attrs["incrementCounter"] = self.incrementCounter
+        f["timestepper"].attrs["nPassedGoodIncrements"] = self.nPassedGoodIncrements + 1
+        f["timestepper"].attrs["incrementCounter"] = self.incrementCounter + 1
         f["timestepper"].attrs["finishedStepProgress"] = self.finishedStepProgress
-        f["timestepper"].attrs["increment"] = self.increment
-        f["timestepper"].attrs["allowedToIncreasedNext"] = self.allowedToIncreasedNext
+        f["timestepper"].attrs["increment"] = increment
+        f["timestepper"].attrs["allowedToIncreasedNext"] = True
         f["timestepper"].attrs["dT"] = self.dT
 
     def readRestart(self, restartFile):
-        """Read restart information from a file.
+        """Restore this time stepper's progress within the step from a restart checkpoint written
+        by :meth:`writeRestart`. See that method's docstring for why the step's configuration
+        fields are deliberately left untouched (kept from this instance's own construction).
 
         Parameters
         ----------
@@ -226,11 +297,6 @@ class AdaptiveTimeStepper:
         """
         f = restartFile
         self.currentTime = f["timestepper"].attrs["currentTime"]
-        self.stepLength = f["timestepper"].attrs["stepLength"]
-        self.startIncrement = f["timestepper"].attrs["startIncrement"]
-        self.maxIncrement = f["timestepper"].attrs["maxIncrement"]
-        self.minIncrement = f["timestepper"].attrs["minIncrement"]
-        self.maxNumberIncrements = f["timestepper"].attrs["maxNumberIncrements"]
         self.nPassedGoodIncrements = f["timestepper"].attrs["nPassedGoodIncrements"]
         self.incrementCounter = f["timestepper"].attrs["incrementCounter"]
         self.finishedStepProgress = f["timestepper"].attrs["finishedStepProgress"]

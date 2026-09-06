@@ -16,8 +16,8 @@ elType = GC3D8
 100.0,      0.00,   10,         30,         35,         3.00,       0.85,       0.12,
 **Bh        Ch      Dh          As          softmod     l           m           omegaMax
 0.003,      2.0,    1e-6,       15.0,       .1,         2,          1.05,       1,
-**derivativeMethod, dTThresholdElasticStiffness
-1,                  1e-8
+**derivativeMethod, dTThresholdElasticStiffness, viscoplasticity
+1,                  1e-8,       0
 
 *section, name=concrete, material=concrete, type=solid
 all
@@ -36,8 +36,8 @@ maxInc=1, minInc=1, maxNumInc=100000, maxIter=25, stepLength=1
 
 *step, solver=NISTPArcLen
 maxInc=1e-2, startInc=1e-2, minInc=1e-6, maxNumInc=100000, maxIter=25, stepLength=1
->>options, category=Ensight, intermediateSaveInterval=1, minDTForOutput=0
->>options, category=NISTArcLength, arcLengthController=indirectcontrol, stopCondition='fieldOutputs["I1pMax"] > 0.01'
+>>options, name=test, intermediateSaveInterval=1, minDTForOutput=0
+>>options, name=NISTPArcLen, arcLengthController=indirectcontrol, stopCondition='fieldOutputs["I1pMax"] > 0.01'
 
 >>indirectcontrol, dof1='model.nodeSets["IDC1"][0].fields["displacement"]', cVector1='[-1,0,0]', dof2='model.nodeSets["IDC2"][0].fields["displacement"]', cVector2='[1,0,0]', L=1.,
 

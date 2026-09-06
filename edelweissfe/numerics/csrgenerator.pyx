@@ -48,7 +48,11 @@ cdef class CSRGenerator:
         """This cdef class generates Compressed Sparse Row Matrices from the COO format,
         and offers the possibility to update the matrix without reanalyzing the
         pattern (in contrast to SciPy).
-        Very fast and convenient!
+
+        Legacy, teaching-oriented generator: single-threaded, no memory-layout optimizations. Not
+        used by any solver -- see ``edelweissfe.numerics.csrgeneratorv2.CSRGenerator`` for the
+        parallelized generator every solver actually uses, and ``doc/source/documentation/utils.rst``
+        for how the two relate.
 
         Parameters
         ----------

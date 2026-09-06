@@ -1,0 +1,89 @@
+** Heavy manual variant: drags the block 1.4 -- one third slides OFF the master edge (contact
+** release + multiplier decay under way). Runs ~70 s, deliberately NOT named test.inp (pipeline
+** budget). Run directly: edelweissfe test_slideOffEdge.inp  (reference: U_slideOffEdge.ref)
+**
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+1.8e4, 0.3
+
+*job, name=contactjob, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=boxGen, name=lower
+nX      =4
+nY      =4
+nZ      =2
+x0      =0
+y0      =0
+z0      =0
+lX      =2
+lY      =2
+lZ      =1
+elProvider =edelweiss
+elType  =C3D20
+
+*modelGenerator, generator=boxGen, name=upper
+nX      =3
+nY      =3
+nZ      =3
+x0      =0.3
+y0      =1.1
+z0      =1.05
+lX      =0.6
+lY      =0.6
+lZ      =1
+elProvider =edelweiss
+elType  =C3D20
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen1
+surface = upper_back
+name    = slaveSurf
+triangulation = midside
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen2
+surface = lower_front
+name    = masterSurf
+triangulation = midside
+
+*section, name=section1, material=linearelastic, type=solid
+lower_all
+upper_all
+
+** augmented-Lagrange variant of the friction test: the incremental Uzawa multiplier lets the
+** penalty be an order of magnitude lower (3e6 vs 3e7) while the penetration converges toward
+** zero over the increments; the multiplier is constant within each increment and cannot
+** destabilize Newton
+*constraint, name=contact, type=nodeToDeformableSurfacePenalty
+slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=3e6, type=quadratic,
+searchDistance=2.0, sliding=small, mu=0.2, tangentPenalty=1e4, augmentedLagrange=True
+
+*fieldOutput
+>>perNode, elSet=lower_all, field=displacement, result=U, name=dispLower
+>>perNode, elSet=upper_all, field=displacement, result=U, name=dispUpper
+>>perNode, name=RFDrag,   nSet=lower_back, field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=True
+>>perNode, name=RFNormal, nSet=lower_back, field=displacement, result=P, f(x)='sum(x[:,2])', saveHistory=True
+
+*output, type=ensight, name=esExport
+>>perNode, fieldOutput=dispLower
+>>perNode, fieldOutput=dispUpper
+>>configuration, overwrite=yes
+
+*output, type=monitor, name=monitor
+fieldOutput=RFDrag
+fieldOutput=RFNormal
+
+** step 1: press the small upper block onto the large lower block (closes the initial 0.05 gap,
+** then compresses by 0.05)
+*step, solver=theSolver
+maxInc=0.05, minInc=1e-6, maxNumInc=200, maxIter=25, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=fixLower, nSet=lower_back, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=holdUpper, nSet=upper_front, field=displacement, 1=0.0, 2=0.0, 3=-0.15
+
+** step 2: drag the compressed upper block 1.4 across the lower block's surface -- one third
+** slides off the master edge (contact release + multiplier decay), exercising per-increment
+** reassignment of the frozen small-sliding projection and the frictional stick-slip history
+*step, solver=theSolver
+maxInc=0.01, minInc=1e-6, maxNumInc=200, maxIter=25, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=fixLower, nSet=lower_back, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=holdUpper, nSet=upper_front, field=displacement, 1=1.4, 2=0.0, 3=0.0

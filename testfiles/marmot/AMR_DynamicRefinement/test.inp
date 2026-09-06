@@ -1,0 +1,78 @@
+** Dynamic h-adaptivity regression test -- exercises the full *modelModifier path end to end:
+** marking -> octree refinement -> model mutation -> nodal warm-start -> quadrature-point state
+** transfer -> hanging-node MPC -> equation-system rebuild -> solve on the refined mesh.
+** Two coarse C3D20R elements form a cantilever; bending concentrates stress at the fixed end,
+** so the stress marker refines exactly one element (2 -> 9 active, 13 hanging nodes), creating a
+** 2:1 hanging interface that the MPC couples across the displacement field. (Multi-field
+** coupling across a hanging interface is covered separately by AMR_TwoFieldGC3D20R.)
+** Pins the dynamic solution against U.ref. (A true adaptive-vs-uniform-fine PHYSICS benchmark --
+** PLAN_AMR.md M3 -- needs a two-run comparison harness and remains future work.)
+*material, name=linearelastic, id=mat
+20000, 0.2
+
+*section, name=sec, material=mat, type=solid
+all
+
+*modelModifier, type=hAdaptivity, name=amr
+>>marker, type=fieldOutput, fieldOutput=stressForAMR, operator='>', threshold=0.6
+maxLevel=1
+
+*job, name=amr, domain=3d
+*solver, solver=NIST, name=S
+*fieldOutput
+>>perNode, elSet=all, field=displacement, result=U, name=U
+>>perElement, elSet=all, result=stress, quadraturePoint=0:8, name=stressForAMR, f(x)='np.abs(x)'
+
+*step, solver=S
+maxInc=0.5, minInc=1e-4, maxNumInc=50, maxIter=25,
+>>dirichlet, name=x0, nSet=x0, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=x1, nSet=x1, field=displacement, 3=0.0005
+
+*Node
+1, 0.0, 1.0, 1.0
+2, 0.0, 0.0, 1.0
+3, 0.0, 0.0, 0.0
+4, 0.0, 1.0, 0.0
+5, 1.0, 1.0, 1.0
+6, 1.0, 0.0, 1.0
+7, 1.0, 0.0, 0.0
+8, 1.0, 1.0, 0.0
+9, 0.0, 0.5, 1.0
+10, 0.0, 0.0, 0.5
+11, 0.0, 0.5, 0.0
+12, 0.0, 1.0, 0.5
+13, 1.0, 0.5, 1.0
+14, 1.0, 0.0, 0.5
+15, 1.0, 0.5, 0.0
+16, 1.0, 1.0, 0.5
+17, 0.5, 1.0, 1.0
+18, 0.5, 0.0, 1.0
+19, 0.5, 0.0, 0.0
+20, 0.5, 1.0, 0.0
+21, 2.0, 1.0, 1.0
+22, 2.0, 0.0, 1.0
+23, 2.0, 0.0, 0.0
+24, 2.0, 1.0, 0.0
+25, 2.0, 0.5, 1.0
+26, 2.0, 0.0, 0.5
+27, 2.0, 0.5, 0.0
+28, 2.0, 1.0, 0.5
+29, 1.5, 1.0, 1.0
+30, 1.5, 0.0, 1.0
+31, 1.5, 0.0, 0.0
+32, 1.5, 1.0, 0.0
+*Element, type=C3D20R
+1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
+2, 5, 6, 7, 8, 21, 22, 23, 24, 13, 14, 15, 16, 25, 26, 27, 28, 29, 30, 31, 32
+*elSet, elSet=all, generate
+1, 2, 1
+*nSet, nSet=x0
+1, 2, 3, 4, 9, 10, 11, 12
+*nSet, nSet=x1
+21, 22, 23, 24, 25, 26, 27, 28
+*nSet, nSet=yf
+2, 3, 6, 7, 10, 14, 18, 19
+22, 23, 26, 30, 31
+*nSet, nSet=zf
+3, 4, 7, 8, 11, 15, 19, 20
+23, 24, 27, 31, 32

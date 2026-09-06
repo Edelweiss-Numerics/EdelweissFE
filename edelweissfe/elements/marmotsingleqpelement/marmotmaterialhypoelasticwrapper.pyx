@@ -73,13 +73,13 @@ cdef class MarmotMaterialHypoElasticWrapper:
     def setCharacteristicElementLength(self, double[::1] values):
         self.marmotMaterialHypoElastic.setCharacteristicElementLength(values[0])
 
-    def computeYourself(self,
-                        double[::1] Ke,
-                        double[::1] Pe,
-                        const double[::1] U,
-                        const double[::1] dU,
-                        const double[::1] time,
-                        double dTime):
+    def computeKernels(self,
+                       double[::1] Ke,
+                       double[::1] Pe,
+                       const double[::1] U,
+                       const double[::1] dU,
+                       double time,
+                       double dTime):
 
         cdef Matrix6d dStress_dStrain = Matrix6d(&Ke[0])
         cdef Vector6d dStrain = Vector6d(&dU[0])
@@ -89,7 +89,7 @@ cdef class MarmotMaterialHypoElasticWrapper:
         state3D.stress = Vector6d(&self.stressInStateVars[0])
 
         cdef MarmotMaterialHypoElastic.timeInfo timeInfo
-        timeInfo.time = time[1]
+        timeInfo.time = time
         timeInfo.dT = dTime
 
         try:
@@ -98,8 +98,8 @@ cdef class MarmotMaterialHypoElasticWrapper:
                 dStress_dStrain,
                 dStrain,
                 timeInfo)
-        except ValueError:
-            raise CutbackRequest("Material requests for a cutback!", 0.25)
+        except (ValueError, RuntimeError) as e:
+            raise CutbackRequest(str(e), 0.25)
 
         cdef int i = 0
         for i in range(6):

@@ -32,24 +32,25 @@
 import datetime
 import os
 from collections import defaultdict
+from dataclasses import dataclass
 from io import TextIOBase
 
+import h5py
 import numpy as np
 
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.points.node import Node
+from edelweissfe.rigidbodies.rigidbody import RigidBody
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.fieldoutput import (
     ElementFieldOutput,
     NodeFieldOutput,
     _FieldOutputBase,
 )
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.meshtools import disassembleElsetToEnsightShapes
-from edelweissfe.utils.misc import caseInsensitiveKwargsChecker, strtobool
+from edelweissfe.utils.schema import schemaField, subKeywordField
 
 """
 Output manager for Ensight exports.
@@ -58,47 +59,91 @@ For each part, perNode and perElement results can be exported, which are importe
 
 """
 
-module = Module("ensight", "Ensight export.")
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class EnsightPerNodeSchema:
+    """The options of a single ``>>perNode`` block."""
 
-keyword = "output"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-kw = module.addOptionalKeyword("perNode", "Node-based Ensight export.")
-kw.addRequiredArg(
-    "fieldOutput",
-    "Name of the result, defined on an elSet (also for perNode results!)",
-    str,
-)
-
-kw = module.addOptionalKeyword("perElement", "Element-based Ensight export.")
-kw.addRequiredArg(
-    "fieldOutput",
-    "Name of the result, defined on an elSet (also for perNode results!)",
-    str,
-)
-
-kw = module.addOptionalKeyword("configuration", "")
-kw.addOptionalArg("overwrite", "Overwrite results.", bool, False)
-kw.addOptionalArg("intermediateSaveInterval", "Set intermediate save interval.", int, 10)
-kw.addOptionalArg("elSet", "Element set.", str, None)
-kw.addOptionalArg("nSet", "Node set.", str, None)
-kw.addOptionalArg("transient", "Set transient ensight output.", bool, True)
-
-documentation = [module]
+    fieldOutput: str | None = schemaField(
+        description="Name of the result, defined on an elSet (also for perNode results!)",
+        dtype=str,
+        default=None,
+        required=True,
+    )
 
 
-keyword = "step"
-if keyword in inputLanguage:
-    modules = [
-        inputLanguage["step"].getModule("adaptive").getKeyword("options"),
-        inputLanguage["step"].getModule("adaptiveForExplicitSimulations").getKeyword("options"),
-    ]
-    for optionsModule in modules:
-        optionsModule.addOptionalArg("intermediateSaveInterval", "", float, None)
-        optionsModule.addOptionalArg("minDTForOutput", "", float, None)
+@dataclass(frozen=True)
+class EnsightPerElementSchema:
+    """The options of a single ``>>perElement`` block."""
+
+    fieldOutput: str | None = schemaField(
+        description="Name of the result, defined on an elSet (also for perNode results!)",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+
+
+@dataclass(frozen=True)
+class EnsightConfigurationSchema:
+    """The options of a single ``>>configuration`` block.
+
+    These defaults are also what an ensight export uses when no ``>>configuration`` block is given
+    at all. Note that ``overwrite`` defaults to ``False``, i.e. an export directory is by default
+    suffixed with a timestamp rather than overwritten.
+    """
+
+    overwrite: bool = schemaField(description="Overwrite results.", dtype=bool, default=False)
+    intermediateSaveInterval: int | None = schemaField(
+        description="Set intermediate save interval.", dtype=int, default=10
+    )
+    elSet: str | None = schemaField(description="Element set.", dtype=str, default=None)
+    nSet: str | None = schemaField(description="Node set.", dtype=str, default=None)
+    transient: bool = schemaField(description="Set transient ensight output.", dtype=bool, default=True)
+
+
+@dataclass(frozen=True)
+class EnsightSchema:
+    """The options this output manager accepts, owned by this module and never mutated from
+    outside it.
+
+    Ensight's grammar is not a flat option list: it is a set of repeatable ``>>`` sub-keyword
+    blocks, mirrored one-for-one here via :func:`edelweissfe.utils.schema.subKeywordField`. Each
+    field therefore holds a *tuple* of per-block schema instances, in file order. ``configurations``
+    answers to the sub-keyword ``>>configuration`` (singular) but is a tuple like the others, since
+    repeating the block is not forbidden.
+
+    ``intermediateSaveInterval``/``minDTForOutput`` are not read at construction time: they exist so
+    a later ``>>options, name=<this export's name>, ...`` block (``stepactions/options.py``) has
+    something to validate against and :meth:`OutputManager.applyOptionsOverride` to apply --
+    adjusting the running export mid-job without repeating its full ``>>configuration``. Not writing
+    either leaves whatever the manager was already configured with in place, so both are marked
+    :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.optionsOverrideOnly`: reachable through
+    ``>>options`` but not part of this keyword's own line/``>>``-block grammar.
+    """
+
+    perNode: tuple[EnsightPerNodeSchema, ...] = subKeywordField(
+        description="Node-based Ensight export.", schema=EnsightPerNodeSchema
+    )
+    perElement: tuple[EnsightPerElementSchema, ...] = subKeywordField(
+        description="Element-based Ensight export.", schema=EnsightPerElementSchema
+    )
+    configurations: tuple[EnsightConfigurationSchema, ...] = subKeywordField(
+        description="", schema=EnsightConfigurationSchema, optionName="configuration"
+    )
+    intermediateSaveInterval: int | None = schemaField(
+        description="Set the intermediate save interval for the Ensight export. Not writing it "
+        "leaves whatever the '>>configuration' block set (or its own default) in place.",
+        dtype=int,
+        default=None,
+        optionsOverrideOnly=True,
+    )
+    minDTForOutput: float | None = schemaField(
+        description="Set the minimum time between two Ensight exports. Not writing it leaves no " "minimum in place.",
+        dtype=float,
+        default=None,
+        optionsOverrideOnly=True,
+    )
 
 
 def writeCFloat(f, ndarray):
@@ -488,7 +533,7 @@ class EnsightChunkWiseCase:
         self.fileNames = {}
 
         if not os.path.exists(self.caseFileNamePrefix):
-            os.mkdir(self.caseFileNamePrefix)
+            os.makedirs(self.caseFileNamePrefix)
 
     def setCurrentTime(self, timeAndFileSetNumber: int, timeValue: float):
         """Set the current time of the case.
@@ -517,28 +562,40 @@ class EnsightChunkWiseCase:
             The associated time and fileset number.
         """
 
-        if ensightGeometry.name not in self.fileNames:
-            fileName = os.path.join(
-                self.caseFileNamePrefix,
-                ensightGeometry.name + ".geo",
-            )
+        if self.writeTransientSingleFiles:
+            if ensightGeometry.name not in self.fileNames:
+                fileName = os.path.join(
+                    self.caseFileNamePrefix,
+                    ensightGeometry.name + ".geo",
+                )
+                self.fileNames[ensightGeometry.name] = fileName
+                # create empty file
+                with open(fileName, mode="wb") as f:
+                    pass
 
-            self.fileNames[ensightGeometry.name] = fileName
-            # create empty file
-            with open(fileName, mode="wb") as f:
-                pass
+            filename = self.fileNames[ensightGeometry.name]
 
-        filename = self.fileNames[ensightGeometry.name]
+            with open(filename, mode="ab") as f:
+                if ensightGeometry.name not in self.geometryTrends:
+                    self.geometryTrends[ensightGeometry.name] = timeAndFileSetNumber
+                    writeC80(f, "C Binary")
 
-        with open(filename, mode="ab") as f:
-            if ensightGeometry.name not in self.geometryTrends:
-                self.geometryTrends[ensightGeometry.name] = timeAndFileSetNumber
-                writeC80(f, "C Binary")
-
-            if self.writeTransientSingleFiles:
                 writeC80(f, "BEGIN TIME STEP")
                 ensightGeometry.writeToFile(f)
                 writeC80(f, "END TIME STEP")
+        else:
+            if timeAndFileSetNumber not in self.timeAndFileSets:
+                stepIndex = 0
+            else:
+                stepIndex = len(self.timeAndFileSets[timeAndFileSetNumber].timeValues)
+
+            if ensightGeometry.name not in self.geometryTrends:
+                self.geometryTrends[ensightGeometry.name] = timeAndFileSetNumber
+
+            multiFileName = os.path.join(self.caseFileNamePrefix, f"{ensightGeometry.name}.geo_{stepIndex:04d}")
+            with open(multiFileName, mode="wb") as f:
+                writeC80(f, "C Binary")
+                ensightGeometry.writeToFile(f)
 
     def writeVariableTrendChunk(self, ensightVariable: EnsightVariableTrend, timeAndFileSetNumber: int = 2):
         """
@@ -552,32 +609,44 @@ class EnsightChunkWiseCase:
             The associated time and fileset number.
         """
 
-        if ensightVariable.name not in self.fileNames:
-            # create file name
-            fileName = os.path.join(self.caseFileNamePrefix, ensightVariable.name + ".var")
+        if self.writeTransientSingleFiles:
+            if ensightVariable.name not in self.fileNames:
+                # create file name
+                fileName = os.path.join(self.caseFileNamePrefix, ensightVariable.name + ".var")
+                # append to file names
+                self.fileNames[ensightVariable.name] = fileName
+                # create empty file
+                with open(fileName, mode="wb") as f:
+                    pass
 
-            # append to file names
-            self.fileNames[ensightVariable.name] = fileName
+            filename = self.fileNames[ensightVariable.name]
 
-            # create empty file
-            with open(fileName, mode="wb") as f:
-                pass
+            with open(filename, mode="ab") as f:
+                if ensightVariable.name not in self.variableTrends:
+                    self.variableTrends[ensightVariable.name] = (
+                        timeAndFileSetNumber,
+                        ensightVariable.varType,
+                    )
+                    writeC80(f, "C Binary")
 
-        filename = self.fileNames[ensightVariable.name]
-
-        with open(filename, mode="ab") as f:
+                writeC80(f, "BEGIN TIME STEP")
+                ensightVariable.writeToFile(f)
+                writeC80(f, "END TIME STEP")
+        else:
+            if timeAndFileSetNumber not in self.timeAndFileSets:
+                stepIndex = 0
+            else:
+                stepIndex = len(self.timeAndFileSets[timeAndFileSetNumber].timeValues)
 
             if ensightVariable.name not in self.variableTrends:
                 self.variableTrends[ensightVariable.name] = (
                     timeAndFileSetNumber,
                     ensightVariable.varType,
                 )
-                writeC80(f, "C Binary")
 
-            if self.writeTransientSingleFiles:
-                writeC80(f, "BEGIN TIME STEP")
+            multiFileName = os.path.join(self.caseFileNamePrefix, f"{ensightVariable.name}.var_{stepIndex:04d}")
+            with open(multiFileName, mode="wb") as f:
                 ensightVariable.writeToFile(f)
-                writeC80(f, "END TIME STEP")
 
     def finalize(self, replaceTimeValuesByEnumeration: bool = True, closeFileHandes: bool = True):
         """Write the file .case file containing all the required information."
@@ -617,28 +686,50 @@ class EnsightChunkWiseCase:
 
             cf.write("GEOMETRY\n")
             for geometryName, tAndFSetNum in self.geometryTrends.items():
-                cf.write(
-                    "model: {:} {:} {:}\n".format(
-                        tAndFSetNum,
-                        tAndFSetNum,
-                        os.path.join(self.caseFileNamePrefix, geometryName + ".geo"),
+                if self.writeTransientSingleFiles:
+                    geoFile = os.path.join(self.caseFileNamePrefix, geometryName + ".geo")
+                    cf.write(
+                        "model: {:} {:} {:}\n".format(
+                            tAndFSetNum,
+                            tAndFSetNum,
+                            geoFile,
+                        )
                     )
-                )
+                else:
+                    geoFile = os.path.join(self.caseFileNamePrefix, geometryName + ".geo_****")
+                    cf.write(
+                        "model: {:} {:}\n".format(
+                            tAndFSetNum,
+                            geoFile,
+                        )
+                    )
 
             cf.write("VARIABLE\n")
             for variableName, (
                 tAndFSetNum,
                 variableType,
             ) in self.variableTrends.items():
-                cf.write(
-                    "{:}: {:} {:} {:} {:}.var\n".format(
-                        variableType,
-                        tAndFSetNum,
-                        tAndFSetNum,
-                        variableName,
-                        os.path.join(self.caseFileNamePrefix, variableName),
+                if self.writeTransientSingleFiles:
+                    varFile = os.path.join(self.caseFileNamePrefix, variableName + ".var")
+                    cf.write(
+                        "{:}: {:} {:} {:} {:}\n".format(
+                            variableType,
+                            tAndFSetNum,
+                            tAndFSetNum,
+                            variableName,
+                            varFile,
+                        )
                     )
-                )
+                else:
+                    varFile = os.path.join(self.caseFileNamePrefix, variableName + ".var_****")
+                    cf.write(
+                        "{:}: {:} {:} {:}\n".format(
+                            variableType,
+                            tAndFSetNum,
+                            variableName,
+                            varFile,
+                        )
+                    )
 
 
 def createUnstructuredPartFromElementSet(setName, elementSet: list, partID: int):
@@ -693,66 +784,99 @@ def createUnstructuredPartFromNodeSet(setName, nodeSet: list, partID: int):
     return EnsightUnstructuredPart("NSET_" + setName, partID, list(nodeSet), elementDict)
 
 
-required = [kw.name for kw in module.requiredArgs]
-required += [kw.name for kw in module.requiredKeywords]
+def createUnstructuredPartFromRigidBody(bodyName, rigidBody, partID: int):
+    """Determines the element and node list for an Ensightpart from a
+    RigidBody. The reduced, unique node set is generated, as well as
+    the element to node index mapping for the ensight part.
 
-optional = [kw.name for kw in module.optionalArgs]
-optional += [kw.name for kw in module.optionalKeywords]
+    Parameters
+    ----------
+    bodyName
+        The name of the rigid body.
+    rigidBody
+        The rigid body object.
+    partID
+        The id of this part.
+    """
 
+    # the node list must follow getVisualizationNodes()'s order, since that is the
+    # order in which RigidBodyFieldOutput.getVisualizationField() reports per-node
+    # results - deriving it from the facets instead (e.g. by first-seen order, or
+    # excluding nodes unreferenced by any facet) would misalign or drop entries.
+    visualizationNodes = rigidBody.getVisualizationNodes()
+    nodeIndices = {node: idx for idx, node in enumerate(visualizationNodes)}
 
-@caseInsensitiveKwargsChecker(required, optional)
-def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
-    kwargs = CaseInsensitiveDict(kwargs)
+    elementDict = dict()
+    facets = rigidBody.getVisualizationElements()
 
-    perNodeDefs = moduleOptions.get("perNode", [])
-    perElementDefs = moduleOptions.get("perElement", [])
-    configurations = moduleOptions.get("configuration", [])
+    facetID = 1
+    for facet in facets:
+        elShape = facet["type"]
+        if elShape not in elementDict:
+            elementDict[elShape] = dict()
+        elementDict[elShape][facetID] = [nodeIndices[node] for node in facet["nodes"]]
+        facetID += 1
 
-    # datalineOptions = splitLinesAtCommas(datalines)
-
-    return OutputManager(
-        name,
-        FEModel,
-        fieldOutputController,
-        journal,
-        plotter,
-        perNodeDefs,
-        perElementDefs,
-        configurations,
-    )
+    return EnsightUnstructuredPart("RIGIDBODY_" + bodyName, partID, visualizationNodes, elementDict)
 
 
 class OutputManager(OutputManagerBase):
     identification = "Ensight Export"
 
+    #: Option schema for this output manager, per OptionSchemaProvider.
+    schema = EnsightSchema
+
     def __init__(
         self,
-        name,
-        model,
+        name: str,
+        model: FEModel,
         fieldOutputController,
         journal,
         plotter,
-        perNodeDefs: list[dict] = None,
-        perElementDefs: list[dict] = None,
-        configurations: list[dict] = None,
-        **kwargs,
+        *,
+        configuration: EnsightSchema = EnsightSchema(),
     ):
+        """Constructible standalone, with no parser involvement. Options arrive as an
+        already-validated, already-typed schema instance.
+
+        Parameters
+        ----------
+        name
+            The name of this output manager.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controller instance.
+        journal
+            The journal instance for logging.
+        plotter
+            The plotter instance.
+        configuration
+            The options this output manager accepts, including its ``>>perNode``, ``>>perElement``
+            and ``>>configuration`` blocks.
+        """
+        perNodeDefs = configuration.perNode
+        perElementDefs = configuration.perElement
+        configurations = configuration.configurations
+
         self.name = name
 
         self.model = model
         self.timeAtLastOutput = -1e16
         self.minDTForOutput = -1e16
         self.finishedSteps = 0
-        # self.intermediateSaveInterval = int(kwargs.get("intermediateSaveInterval", 10))
         self.intermediateSaveIntervalCounter = 0
         self.fieldOutputController = fieldOutputController
         self.journal = journal
+        self.overwrite = True
 
         self.transientTAndFSetNumber = 1
+        self.transientVariableTAndFSetNumber = 2
         self.staticTAndFSetNumber = 2
 
         self.elSetToEnsightPartMappings = {}
         self.nSetToEnsightPartMappings = {}
+        self.rigidBodyToEnsightPartMappings = {}
 
         self._transientPerNodeVariableJobs = defaultdict(list)
         self._transientPerElementVariableJobs = defaultdict(list)
@@ -761,90 +885,81 @@ class OutputManager(OutputManagerBase):
 
         self.geometryParts = self._createGeometryParts(1)
 
-        self.intermediateSaveInterval = module.getKeyword("configuration")["overwrite"].default
-        self.overwrite = module.getKeyword("configuration")["overwrite"].default
-        transient = module.getKeyword("configuration")["transient"].default
-        part = None
+        # Defaults come directly from the schema.
+        defaults = EnsightConfigurationSchema()
+        val = defaults.intermediateSaveInterval
+        self.intermediateSaveInterval = int(val) if val is not None else None
+        self.overwrite = defaults.overwrite
+        transient = defaults.transient
+        configSetName = None
+        configIsNodeSet = None
 
-        if perNodeDefs is None:
-            perNodeDefs = []
+        # A repeated `>>configuration` is not rejected: every scalar option is last-wins, but
+        # `configSetName` carries over from an earlier block if the last one names neither nSet nor
+        # elSet.
+        for configurationBlock in configurations:
+            self.intermediateSaveInterval = configurationBlock.intermediateSaveInterval
+            transient = configurationBlock.transient
+            self.overwrite = configurationBlock.overwrite
 
-        if perElementDefs is None:
-            perElementDefs = []
-
-        if configurations is None:
-            configurations = []
-
-        # configuration keyword should only be allowed once
-        for configuration in configurations:
-            self.intermediateSaveInterval = configuration["intermediateSaveInterval"]
-            transient = configuration["transient"]
-            self.overwrite = configuration["overwrite"]
-
-            # if bool(definition["nSet"]) and bool(definition["elSet"]):
-            #     raise Exception(
-            #         f"During parsing of keyword {keywordIdentifier}output ({moduleLevelKeywordIdentifier}ensight): Specify either nSet OR elSet."
-            #     )
-
-            if configuration["nSet"]:
-                part = self.nSetToEnsightPartMappings[configuration["nSet"]]
-            elif configuration["elSet"]:
-                part = self.elSetToEnsightPartMappings[configuration["elSet"]]
+            if configurationBlock.nSet:
+                configSetName = configurationBlock.nSet
+                configIsNodeSet = True
+            elif configurationBlock.elSet:
+                configSetName = configurationBlock.elSet
+                configIsNodeSet = False
 
         if not self.overwrite:
             self.exportName = "{:}_{:}".format(self.name, datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
 
-        for definition in perNodeDefs:
-            fieldOutput = fieldOutputController.fieldOutputs[definition["fieldOutput"]]
+        # store the definitions so parts + variable jobs can be rebuilt when the mesh changes (AMR)
+        self._perNodeDefs = perNodeDefs
+        self._perElementDefs = perElementDefs
+        self._fieldOutputController = fieldOutputController
+        self._configSetName = configSetName
+        self._configIsNodeSet = configIsNodeSet
+        self._configPart = None
+        self._resolveConfigPart()
+        self._transientCfg = transient
+        self._initialMeshSignature = (len(self.model.elements), len(self.model.nodes))
+        self._meshSignature = None
+        self._buildVariableJobs()
 
-            nEntries, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
-            if self.model.domainSize == 2 and varSize == 2:
-                varSize = 3
+    def _resolveConfigPart(self):
+        """(Re)resolve `self._configPart` from the configured set name/kind against the current
+        nSetToEnsightPartMappings/elSetToEnsightPartMappings, so it stays consistent with the geometry
+        parts after a mesh change (AMR). Leaves `self._configPart` as None if no set was configured."""
+        if self._configSetName is None:
+            self._configPart = None
+        elif self._configIsNodeSet:
+            self._configPart = self.nSetToEnsightPartMappings[self._configSetName]
+        else:
+            self._configPart = self.elSetToEnsightPartMappings[self._configSetName]
 
-            fieldOutputName = kwargs.get("name", fieldOutput.name).replace(" ", "_")
-            self.createPerNodeOutput(fieldOutput, part, fieldOutputName, transient=transient, varSize=varSize)
+    def _buildVariableJobs(self):
+        """(Re)create the per-node/per-element variable jobs from the stored definitions against the
+        current geometry parts. Called at setup and again whenever the mesh changes (AMR)."""
+        for definition in self._perNodeDefs:
+            fieldOutput = self._fieldOutputController.fieldOutputs[definition.fieldOutput]
+            name = fieldOutput.name.replace(" ", "_")
+            self.createPerNodeOutput(fieldOutput, self._configPart, name, transient=self._transientCfg)
 
-        for definition in perElementDefs:
-            fieldOutput = fieldOutputController.fieldOutputs[definition["fieldOutput"]]
+        for definition in self._perElementDefs:
+            fieldOutput = self._fieldOutputController.fieldOutputs[definition.fieldOutput]
+            name = fieldOutput.name.replace(" ", "_")
+            self.createPerElementOutput(fieldOutput, self._configPart, name, transient=self._transientCfg)
 
-            nEntries, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
-            if self.model.domainSize == 2 and varSize == 2:
-                varSize = 3
-
-            fieldOutputName = kwargs.get("name", fieldOutput.name).replace(" ", "_")
-            self.createPerElementOutput(fieldOutput, part, fieldOutputName, transient=transient, varSize=varSize)
-
-    def updateDefinition(self, **kwargs: dict):
-        # Determine the type
-        if "create" in kwargs:
-            create = kwargs.pop("create")
-            fieldOutput = kwargs.pop("fieldOutput")
-            part = None
-            if "nSet" in kwargs:
-                part = self.nSetToEnsightPartMappings[kwargs.pop("nSet")]
-            elif "elSet" in kwargs:
-                part = self.elSetToEnsightPartMappings[kwargs.pop("elSet")]
-
-            name = kwargs.get("name", fieldOutput.name).replace(" ", "_")
-
-            nEntries, varSize = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
-
-            if self.model.domainSize == 2 and varSize == 2:
-                varSize = 3
-
-            transient = kwargs.get("transient", "True")
-            transient = strtobool(transient)
-
-            if create == "perElement":
-                self.createPerElementOutput(fieldOutput, part, name, transient=transient, varSize=varSize)
-            elif create == "perNode":
-                self.createPerNodeOutput(fieldOutput, part, name, transient=transient, varSize=varSize)
-
-        if "configuration" in kwargs:
-            # ensight output is overwritten by default
-            self.overwrite = strtobool(kwargs.get("overwrite", "True"))
-            if not self.overwrite:
-                self.exportName = "{:}_{:}".format(self.name, datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
+    def _rebuildForMeshChange(self):
+        """Rebuild geometry parts + variable jobs after an AMR mesh change, so both stay consistent
+        with the current (refined) mesh."""
+        self.elSetToEnsightPartMappings = {}
+        self.nSetToEnsightPartMappings = {}
+        self.rigidBodyToEnsightPartMappings = {}
+        self._transientPerNodeVariableJobs = defaultdict(list)
+        self._transientPerElementVariableJobs = defaultdict(list)
+        self.geometryParts = self._createGeometryParts(1)
+        self._resolveConfigPart()
+        self._buildVariableJobs()
 
     def createPerElementOutput(
         self,
@@ -867,7 +982,9 @@ class OutputManager(OutputManagerBase):
         transient
             Whether the output is transient.
         varSize
-            The size of the variable. If not specified, the size of the field output is taken.
+            The size of the variable. If not specified, the size of the field output is taken --
+            promoted from 2 to 3 components for a 2D-domain vector field, since Ensight expects a
+            3-component vector even in 2D (the implicit z-component is 0).
         """
 
         variableJob = dict()
@@ -879,6 +996,8 @@ class OutputManager(OutputManagerBase):
         variableJob["transient"] = transient
 
         nEntries, varSizeFp = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
+        if self.model.domainSize == 2 and varSizeFp == 2:
+            varSizeFp = 3
 
         if not part:
             part = self._getTargetPartForFieldOutput(fieldOutput)
@@ -923,7 +1042,9 @@ class OutputManager(OutputManagerBase):
         transient
             Whether the output is transient.
         varSize
-            The size of the variable. If not specified, the size of the field output is taken.
+            The size of the variable. If not specified, the size of the field output is taken --
+            promoted from 2 to 3 components for a 2D-domain vector field, since Ensight expects a
+            3-component vector even in 2D (the implicit z-component is 0).
         """
 
         variableJob = dict()
@@ -935,6 +1056,8 @@ class OutputManager(OutputManagerBase):
         variableJob["transient"] = transient
 
         nEntries, varSizeFp = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
+        if self.model.domainSize == 2 and varSizeFp == 2:
+            varSizeFp = 3
         if not varSize:
             varSize = varSizeFp
 
@@ -957,19 +1080,36 @@ class OutputManager(OutputManagerBase):
             raise Exception("Only transient per node outputs are supported!")
 
     def initializeJob(self):
-        self.ensightCase = EnsightChunkWiseCase(self.exportName)
-        self.ensightCase.setCurrentTime(self.staticTAndFSetNumber, self.model.time)
-
-        geometry = EnsightGeometry("geometry", "EdelweissFE", "*export*", ensightPartList=self.geometryParts)
-        geometryTimesetNumber = self.staticTAndFSetNumber
-
-        self.ensightCase.writeGeometryTrendChunk(geometry, geometryTimesetNumber)
+        self.ensightCase = EnsightChunkWiseCase(self.exportName, writeTransientSingleFiles=False)
+        # Geometry is written per output step (on the transient time set) rather than once, so it can
+        # change with adaptive mesh refinement and stay 1:1 aligned with the variable time steps.
 
     def initializeStep(self, step):
-        if self.name in step.actions["options"] or "Ensight" in step.actions["options"]:
-            options = step.actions["options"].get(self.name, False) or step.actions["options"]["Ensight"].options
-            self.intermediateSaveInterval = int(options.get("intermediateSaveInterval", self.intermediateSaveInterval))
-            self.minDTForOutput = float(options.get("minDTForOutput", self.minDTForOutput))
+        # intermediateSaveInterval/minDTForOutput overrides are pushed directly by
+        # applyOptionsOverride as soon as a step's >>options block is constructed, so there is
+        # nothing to do here.
+        pass
+
+    def applyOptionsOverride(self, fieldValues: dict) -> None:
+        """Adjust the running export's intermediate-save interval and/or minimum output spacing.
+
+        See :meth:`~edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.applyOptionsOverride`
+        for the calling convention. Named fields, not a generic loop over ``fieldValues``: this class
+        has exactly two overridable options, and mapping schema-field-name to instance-attribute
+        generically would mean ``setattr``, which this codebase's conventions forbid.
+
+        Parameters
+        ----------
+        fieldValues
+            Maps schema field name (``intermediateSaveInterval``, ``minDTForOutput``) to its new,
+            already-coerced value; either may be absent (only whatever the user actually wrote is
+            present at all).
+        """
+
+        if "intermediateSaveInterval" in fieldValues:
+            self.intermediateSaveInterval = fieldValues["intermediateSaveInterval"]
+        if "minDTForOutput" in fieldValues:
+            self.minDTForOutput = fieldValues["minDTForOutput"]
 
     def finalizeIncrement(self, **kwargs):
         time = self.model.time
@@ -988,7 +1128,26 @@ class OutputManager(OutputManagerBase):
 
     def writeOutput(self, model: FEModel):
         self.timeAtLastOutput = model.time
-        self.ensightCase.setCurrentTime(self.transientTAndFSetNumber, model.time)
+
+        # rebuild parts + variable jobs if the mesh changed (AMR), so geometry and variables match
+        signature = (len(model.elements), len(model.nodes))
+        mesh_changed = False
+
+        if self._meshSignature is None:
+            mesh_changed = True
+            if signature != self._initialMeshSignature:
+                self._rebuildForMeshChange()
+        elif signature != self._meshSignature:
+            self._rebuildForMeshChange()
+            mesh_changed = True
+
+        self._meshSignature = signature
+
+        # write the current geometry only if it changed
+        if mesh_changed:
+            geometry = EnsightGeometry("geometry", "EdelweissFE", "*export*", ensightPartList=self.geometryParts)
+            self.ensightCase.writeGeometryTrendChunk(geometry, self.transientTAndFSetNumber)
+            self.ensightCase.setCurrentTime(self.transientTAndFSetNumber, model.time)
 
         for (
             resultName,
@@ -1006,7 +1165,7 @@ class OutputManager(OutputManagerBase):
                     result,
                 )
             enSightVariable = EnsightPerNodeVariable(resultName, resultsByParts, perNodeVariableJob["varSize"])
-            self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientTAndFSetNumber)
+            self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientVariableTAndFSetNumber)
             del enSightVariable
 
         for (
@@ -1028,15 +1187,18 @@ class OutputManager(OutputManagerBase):
                 resultsByParts[part.partNumber] = partResultsByElementShape
 
             enSightVariable = EnsightPerElementVariable(resultName, resultsByParts, perElementVariableJob["varSize"])
-            self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientTAndFSetNumber)
+            self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientVariableTAndFSetNumber)
             del enSightVariable
 
-        # intermediate save of the case
-        if self.intermediateSaveInterval:
-            if self.intermediateSaveIntervalCounter >= self.intermediateSaveInterval:
-                self.ensightCase.finalize(replaceTimeValuesByEnumeration=False, closeFileHandes=False)
-                self.intermediateSaveIntervalCounter = 0
-            self.intermediateSaveIntervalCounter += 1
+        # register the current time for variables
+        self.ensightCase.setCurrentTime(self.transientVariableTAndFSetNumber, model.time)
+
+        # Rewrite the small .case every step so the on-disk step count always matches the committed
+        # data even if the job aborts before finalizeJob() (the L-panel dies on GCDP return-mapping).
+        # A trailing partial geometry step written just before an abort is simply not counted here, so
+        # the reader never overruns it. The .case is tiny text and the data files are already appended
+        # every step, so there is no benefit to gating this behind intermediateSaveInterval.
+        self.ensightCase.finalize(replaceTimeValuesByEnumeration=False, closeFileHandes=False)
 
     def finalizeStep(
         self,
@@ -1050,6 +1212,71 @@ class OutputManager(OutputManagerBase):
         self,
     ):
         self.ensightCase.finalize(replaceTimeValuesByEnumeration=False)
+
+    def getRestartData(self) -> dict[str, np.ndarray] | None:
+        """This export's transient-sequence bookkeeping: each Ensight time/file set's history of
+        already-written time values (flattened CSR-style, since sets can have different lengths),
+        which geometry trends have ever been written (name -> time/file set number -- unlike
+        variable trends, which get (re-)registered on every write regardless of mesh change and so
+        self-heal on resume, a geometry trend is only (re-)registered when the mesh actually
+        changes; a resumed run whose mesh happens to be already stable would otherwise never
+        re-register it, leaving the ``.case`` file's ``GEOMETRY`` section without its ``model:``
+        line even though the geometry file itself exists on disk from before the resume), plus the
+        mesh signature and ``timeAtLastOutput`` used to decide whether to write a fresh geometry
+        chunk / throttle output. File numbering (``writeGeometryTrendChunk``/
+        ``writeVariableTrendChunk`` derive the next chunk's index from ``len(timeValues)``) and the
+        ``.case`` file's own declared step list come directly from ``timeAndFileSets`` -- restoring
+        it is both necessary and sufficient for continuing the same *sequence*, but the geometry
+        trend registration above is a separate, independently-necessary piece for the ``.case``
+        file to still reference the geometry at all.
+
+        ``None`` if nothing has been written yet (nothing to restore).
+        """
+
+        timeAndFileSets = self.ensightCase.timeAndFileSets
+        if not timeAndFileSets:
+            return None
+
+        setNumbers = sorted(timeAndFileSets)
+        sizes = [len(timeAndFileSets[n].timeValues) for n in setNumbers]
+        flatTimeValues = [v for n in setNumbers for v in timeAndFileSets[n].timeValues]
+        meshSignature = self._meshSignature if self._meshSignature is not None else (-1, -1)
+
+        geometryTrends = self.ensightCase.geometryTrends
+        geometryTrendNames = list(geometryTrends.keys())
+        geometryTrendSetNumbers = list(geometryTrends.values())
+
+        return {
+            "setNumbers": np.array(setNumbers, dtype=int),
+            "timeValueSizes": np.array(sizes, dtype=int),
+            "timeValues": np.array(flatTimeValues, dtype=float),
+            "meshSignature": np.array(meshSignature, dtype=int),
+            "timeAtLastOutput": np.array([self.timeAtLastOutput]),
+            "geometryTrendNames": np.array(geometryTrendNames, dtype=h5py.string_dtype(encoding="utf-8")),
+            "geometryTrendSetNumbers": np.array(geometryTrendSetNumbers, dtype=int),
+        }
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore this export's transient-sequence bookkeeping from a restart checkpoint written
+        by :meth:`getRestartData`, so the next chunk written continues the existing sequence
+        (correct file numbering, correct ``.case`` step list) instead of starting a fresh one."""
+
+        offset = 0
+        for setNumber, size in zip(data["setNumbers"], data["timeValueSizes"]):
+            size = int(size)
+            timeValues = list(data["timeValues"][offset : offset + size])
+            offset += size
+            self.ensightCase.timeAndFileSets[int(setNumber)] = EnsightTimeSet(
+                int(setNumber), "no description", 0, 1, timeValues
+            )
+
+        for name, setNumber in zip(data["geometryTrendNames"], data["geometryTrendSetNumbers"]):
+            name = name.decode("utf-8") if isinstance(name, bytes) else str(name)
+            self.ensightCase.geometryTrends[name] = int(setNumber)
+
+        meshSignature = tuple(int(x) for x in data["meshSignature"])
+        self._meshSignature = None if meshSignature == (-1, -1) else meshSignature
+        self.timeAtLastOutput = float(data["timeAtLastOutput"][0])
 
     def _createGeometryParts(self, firstPartID: int):
         model = self.model
@@ -1072,7 +1299,14 @@ class OutputManager(OutputManagerBase):
             nodeSetParts.append(nodeSetPart)
             partCounter += 1
 
-        return elSetParts + nodeSetParts
+        rigidBodyParts = []
+        for bodyName, body in model.rigidBodies.items():
+            bodyPart = createUnstructuredPartFromRigidBody(bodyName, body, partCounter)
+            self.rigidBodyToEnsightPartMappings[bodyName] = bodyPart
+            rigidBodyParts.append(bodyPart)
+            partCounter += 1
+
+        return elSetParts + nodeSetParts + rigidBodyParts
 
     def _getTargetPartForFieldOutput(self, fieldOutput: _FieldOutputBase) -> EnsightUnstructuredPart:
         """
@@ -1090,7 +1324,6 @@ class OutputManager(OutputManagerBase):
         EnsightStructuredPart
             The identified part.
         """
-
         theSetName = fieldOutput.associatedSet.name
 
         if isinstance(fieldOutput.associatedSet, NodeSet):
@@ -1099,9 +1332,12 @@ class OutputManager(OutputManagerBase):
         elif isinstance(fieldOutput.associatedSet, ElementSet):
             return self.elSetToEnsightPartMappings[theSetName]
 
+        elif isinstance(fieldOutput.associatedSet, RigidBody):
+            return self.rigidBodyToEnsightPartMappings[theSetName]
+
         else:
             raise Exception(
-                "Ensight Variables need to be excplicity associated with a part, our implicitly through a FieldOutput defined on ElementSets or NodeSets!"
+                "Ensight Variables need to be explicitly associated with a part, or implicitly through a FieldOutput defined on ElementSets, NodeSets, or RigidBodies!"
             )
 
     def _ensureArrayIs2D(self, result: np.ndarray) -> np.ndarray:

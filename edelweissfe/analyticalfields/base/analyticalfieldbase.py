@@ -31,9 +31,10 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.utils.schema import OptionSchemaProvider
 
 
-class AnalyticalField(ABC):
+class AnalyticalField(OptionSchemaProvider, ABC):
     @abstractmethod
     def __init__(self, name: str, data: list[str], model: FEModel):
         """The field base class.
