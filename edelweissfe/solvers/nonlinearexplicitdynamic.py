@@ -113,7 +113,7 @@ from edelweissfe.utils.exceptions import (
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
 
-#: Tolerance on the relative change of the total lumped mass across a single topology
+#: Default tolerance on the relative change of the total lumped mass across a single topology
 #: change. The children of a refined element tile it and carry the same density, so the
 #: mass is a geometric identity -- but it is assembled by Gauss quadrature, which is exact
 #: only up to a polynomial order. A distorted hexa20 has a non-polynomial Jacobian, so
@@ -121,6 +121,15 @@ from edelweissfe.utils.schema import schemaField
 #: on the anchor pry-out model, one live refinement moves the total mass by 4.63e-08
 #: relative; this bound leaves more than an order of magnitude of headroom above that
 #: while still catching a refinement or lumping error, which would be O(1), not O(1e-8).
+#:
+#: IT IS MESH-DEPENDENT, which is why it is a default and not a constant. That 4.63e-08 was
+#: measured on the production pry-out mesh; the same model on a 2x coarser mesh
+#: (examples/AnchorPryOutCoarse, near-anchor h 16.5 mm against 8.0 mm, min scaled Jacobian
+#: 0.61) moves the total mass by 1.11e-06 on its first live refinement -- 24x more, which is
+#: how a truncation-error term should behave under coarsening, and still six orders below the
+#: O(1) a genuine refinement or lumping error would produce. Raise it via
+#: ``mass-conservation-tolerance`` for a coarse or badly distorted mesh; do not raise it to
+#: silence a violation you have not first shown to scale with h.
 _MASS_CONSERVATION_TOLERANCE = 1e-6
 
 #: Fractional margin by which the kinetic energy may exceed the external work before it is
@@ -200,6 +209,16 @@ class NEDSchema:
         dtype=int,
         default=0,
         optionName="topology-check-frequency",
+    )
+    massConservationTolerance: float = schemaField(
+        description=(
+            "Tolerance on the relative change of the total lumped mass across one topology change. "
+            "The default is calibrated on the production anchor pry-out mesh; a coarser or more "
+            "distorted mesh has a larger quadrature truncation error and legitimately needs more."
+        ),
+        dtype=float,
+        default=_MASS_CONSERVATION_TOLERANCE,
+        optionName="mass-conservation-tolerance",
     )
     contactUpdateFrequency: int | None = schemaField(
         description=(
@@ -296,6 +315,7 @@ class NED(NonlinearSolverBase):
         "output-frequency": 1000,
         "contact-update-frequency": 100,
         "topology-check-frequency": 0,
+        "mass-conservation-tolerance": _MASS_CONSERVATION_TOLERANCE,
         "report-performance": False,
     }
 
@@ -1590,7 +1610,8 @@ class NED(NonlinearSolverBase):
         relativeMassChange = abs(massAfter - massBefore) / massBefore if massBefore > 0.0 else 0.0
         self._cumulativeMassDrift += relativeMassChange
 
-        if relativeMassChange > _MASS_CONSERVATION_TOLERANCE:
+        massConservationTolerance = self.options["mass-conservation-tolerance"]
+        if relativeMassChange > massConservationTolerance:
             raise RuntimeError(
                 "A topology change did not conserve the total lumped mass: {:e} became {:e}, a "
                 "relative change of {:e} against a tolerance of {:e}. The children of a refined "
@@ -1598,7 +1619,7 @@ class NED(NonlinearSolverBase):
                 "the quadrature that assembles it is exact only up to a polynomial order, which "
                 "admits a small change. A violation of this size is not quadrature -- it means the "
                 "refinement or the mass lumping is wrong.".format(
-                    massBefore, massAfter, relativeMassChange, _MASS_CONSERVATION_TOLERANCE
+                    massBefore, massAfter, relativeMassChange, massConservationTolerance
                 )
             )
 
