@@ -270,10 +270,20 @@ def makePrettyTable(maxLevels: int = 4) -> PrettyTable:
     return prettytable
 
 
-def extractIncrementTimes(maxLevels: int = 4) -> PrettyTable:
+def extractIncrementTimes(maxLevels: int = 4, skipUnused: bool = False) -> PrettyTable:
     """
     Returns a PrettyTable of the time elapsed since the last time
     this function was called, while keeping the accumulated totals intact.
+
+    Parameters
+    ----------
+    maxLevels
+        The maximum number of stack levels considered in the table.
+    skipUnused
+        Omit categories that were not entered at all during the interval. Off by default so the
+        table keeps a stable set of rows between reports. Turn it on where the table is printed
+        repeatedly during a run: a category that did not run shows as ``0.00000s`` against real
+        numbers, which reads as "this was free" rather than "this did not happen".
     """
 
     if not hasattr(extractIncrementTimes, "_last_snapshot") or extractIncrementTimes._last_snapshot is None:
@@ -301,6 +311,9 @@ def extractIncrementTimes(maxLevels: int = 4) -> PrettyTable:
     def flatten_delta(node, level):
         rows = []
         for name, data in node["children"]:
+            if skipUnused and data["calls"] == 0:
+                # Its children cannot have been entered either, so the whole subtree goes.
+                continue
             rows.append((level, name, data["time"], data["calls"]))
             if level < maxLevels and data["children"]:
                 rows += flatten_delta(data, level + 1)

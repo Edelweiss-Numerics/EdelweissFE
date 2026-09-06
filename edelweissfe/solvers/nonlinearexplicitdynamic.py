@@ -209,6 +209,19 @@ class NEDSchema:
         default=100,
         optionName="contact-update-frequency",
     )
+    reportPerformance: bool = schemaField(
+        description=(
+            "Print a performance table on every progress report, covering the interval since the "
+            "previous one. Off by default. An explicit run is millions of increments long, so the "
+            "table printed at the end of the step is otherwise the only one anyone sees, and it "
+            "averages the whole run into one row per phase -- this shows the cost structure as it "
+            "is now, which is what reveals a refinement or a contact search that has become "
+            "expensive while the analysis is still running."
+        ),
+        dtype=bool,
+        default=False,
+        optionName="report-performance",
+    )
 
 
 @dataclass
@@ -282,6 +295,7 @@ class NED(NonlinearSolverBase):
         "output-frequency": 1000,
         "contact-update-frequency": 100,
         "topology-check-frequency": 0,
+        "report-performance": False,
     }
 
     def __init__(self, jobInfo, journal, **kwargs):
@@ -426,6 +440,20 @@ class NED(NonlinearSolverBase):
                         self.identification,
                         level=1,
                     )
+
+                    if self.options["report-performance"]:
+                        # The *interval* table, not the cumulative one: what the solver has been
+                        # doing since the previous report is what tells a running analysis whether
+                        # its cost structure has moved -- a refinement that enlarged the mesh, a
+                        # contact search that started admitting far more candidates, a material
+                        # that entered a more expensive branch. The cumulative table, printed once
+                        # at the end of the step, averages all of that away, and on a run of
+                        # millions of increments it is also the only table anyone would ever see.
+                        self.journal.printPrettyTable(
+                            performancetiming.extractIncrementTimes(skipUnused=True),
+                            self.identification,
+                        )
+
                 # The mid-run topology check at the end of this same increment re-runs the
                 # connectivity search on EVERY constraint, these included. Searching here as well
                 # would build and query the same k-d tree twice within one increment: the later
