@@ -8,7 +8,7 @@
 **
 **  2. MASS SCALING x100. Every density is 100x its physical value (concrete 3e-7 instead of 3e-9).
 **     The stable increment goes with 1/sqrt(rho), so this buys a factor of 10 and is what makes the
-**     run reach the same 2 mm of plate displacement as the implicit variant in a comparable time.
+**     run reach the same 1.5 mm of plate displacement as the implicit variant in a comparable time.
 **     The cost is that inertial forces at a given loading rate are 100x larger, which works AGAINST
 **     quasi-staticity. That is not a matter of opinion: plot_damage_comparison.py integrates the
 **     reaction against the displacement and reports the kinetic energy as a fraction of that work.

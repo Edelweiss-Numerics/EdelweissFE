@@ -115,10 +115,21 @@ def quasiStaticity(runDir):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        "--runs", nargs="*", default=[v for v, _ in VARIANTS], help="directories holding the four completed runs"
+        "--runs",
+        nargs="*",
+        default=[v for v, _ in VARIANTS],
+        help="the %d run directories, in the order %s" % (len(VARIANTS), ", ".join(v for v, _ in VARIANTS)),
     )
     parser.add_argument("--out", default="damage_comparison.png")
     args = parser.parse_args()
+
+    # zip() would silently truncate to the shorter of the two and leave the rest of the panels
+    # looking up keys that are not there, so say it here rather than raising a KeyError further in.
+    if len(args.runs) != len(VARIANTS):
+        parser.error(
+            "--runs takes exactly %d directories, one per variant, in the order %s (got %d)"
+            % (len(VARIANTS), ", ".join(v for v, _ in VARIANTS), len(args.runs))
+        )
 
     dirs = dict(zip([v for v, _ in VARIANTS], args.runs))
     labels = dict(VARIANTS)
