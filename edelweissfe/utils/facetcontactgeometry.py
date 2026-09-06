@@ -328,4 +328,33 @@ def closestFacetCandidates(queryPoints: np.ndarray, facetCoords: list, searchDis
     # any mesh dimension, so it admits no facet that the exhaustive sweep would not also see.
     radius = radius * (1.0 + 8.0 * np.finfo(float).eps)
 
-    return [sorted(c) for c in tree.query_ball_point(queryPoints, radius)]
+    ballCandidates = tree.query_ball_point(queryPoints, radius)
+
+    # The ball is sized by rMax, the largest facet radius anywhere on the surface, so on a surface
+    # of uniform facets it is about as tight as a centroid bound can be -- and on a refined one it
+    # is not tight at all. Measured on the h-adaptive anchor pry-out model, whose concrete top
+    # surface carries 1.2 mm facets next to 34 mm ones: rMax = 24.54 mm against a mean nearest-
+    # centroid distance of 0.78 mm, so the radius is 97 % rMax and admits 457 of 4212 facets for
+    # every point. The same call on that model's other contact surface, 192 facets with
+    # rMax = 2.33 mm, admits 8.6. One global rMax makes the whole surface pay for its largest
+    # element.
+    #
+    # So reject, per facet, what its own radius already rules out. Facet i's closed domain is at
+    # least |x - C_i| - r_i away, and d* <= d0 from the bound above, so a facet with
+    # |x - C_i| - r_i > d0 is strictly farther than the winner and can neither win nor tie. It is
+    # the same argument the ball radius rests on, applied with each facet's own r_i instead of the
+    # largest one, and it removes only facets the exhaustive sweep would have evaluated and
+    # discarded -- the selected facet, and the caller's ascending-index tie-breaking among equally
+    # close ones, are untouched. The comparison keeps the ulp margin for exactly the reason the
+    # radius above does: a tie sits precisely on the boundary.
+    tolerance = 1.0 + 8.0 * np.finfo(float).eps
+
+    candidates = []
+    for p, ballCandidate in enumerate(ballCandidates):
+        indices = np.fromiter(ballCandidate, dtype=np.intp, count=len(ballCandidate))
+        centroidDistance = np.linalg.norm(centroids[indices] - queryPoints[p], axis=1)
+        surviving = indices[centroidDistance - radii[indices] <= nearestCentroidDistance[p] * tolerance]
+        surviving.sort()
+        candidates.append(surviving.tolist())
+
+    return candidates

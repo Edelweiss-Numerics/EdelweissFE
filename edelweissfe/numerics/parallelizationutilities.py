@@ -25,6 +25,7 @@
 #  ---------------------------------------------------------------------
 
 import concurrent.futures
+import itertools
 import os
 import sys
 import threading
@@ -100,3 +101,13 @@ def getThreadPool(numThreads: int) -> concurrent.futures.ThreadPoolExecutor:
                 pool = _threadPools[numThreads] = concurrent.futures.ThreadPoolExecutor(max_workers=numThreads)
 
     return pool
+
+
+def chunked_iterable(iterable, size):
+    """Yield successive n-sized chunks from an iterable."""
+    it = iter(iterable)
+    while True:
+        chunk = tuple(itertools.islice(it, size))
+        if not chunk:
+            break
+        yield chunk

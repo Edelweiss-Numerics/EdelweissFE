@@ -41,6 +41,12 @@ from edelweissfe.config.phenomena import getFieldSize, phenomena
 from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.modelchange import ModelChange, TopologyRecord, coalesce
+from edelweissfe.numerics.parallelizationutilities import (
+    chunked_iterable,
+    getNumberOfThreads,
+    getThreadPool,
+    isFreeThreadingSupported,
+)
 from edelweissfe.utils.exceptions import RestartError, TopologyError
 from edelweissfe.utils.performancetiming import timeit
 from edelweissfe.variables.fieldvariable import FieldVariable
@@ -851,14 +857,53 @@ class FEModel:
 
         self.time = time
 
-        for el in self.elements.values():
-            el.acceptLastState()
+        self._acceptElementStates()
 
+        # Left serial deliberately. Measured on the 337 471-dof explicit anchor pry-out model, where
+        # the element loop below costs 19.09 ms per call: these two together cost 0.015 ms, i.e. less
+        # than a tenth of a percent of it. There is nothing here to parallelize.
         for constraint in self.constraints.values():
             constraint.acceptLastState()
 
         for mpc in self.multiPointConstraints.values():
             mpc.acceptLastState()
+
+    def _acceptElementStates(self):
+        """Let every element accept its computed state, across the available threads.
+
+        An element's ``acceptLastState`` touches only that element's own state buffers -- for a
+        Marmot element it is the single ``self._stateVars[:] = self._stateVarsTemp`` copy -- so the
+        elements are independent of one another and this loop parallelizes without any coordination.
+
+        It is worth parallelizing because of how the explicit solver uses it, not because of how the
+        implicit ones do. An implicit analysis calls this once per *converged* increment, amortised
+        over a Newton loop and a linear solve, where 19 ms disappears into the noise. Explicit
+        dynamics calls it on every one of millions of increments: on the anchor pry-out model it was
+        15.6 % of the whole step, the single largest cost outside the element kernels themselves, and
+        every millisecond of it was serial Python holding 31 of 32 threads idle.
+        """
+
+        elements = self.elements
+        numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
+
+        if numThreads == 1 or len(elements) < numThreads:
+            for element in elements.values():
+                element.acceptLastState()
+            return
+
+        def acceptChunk(chunk):
+            for element in chunk:
+                element.acceptLastState()
+
+        # The same chunk granularity the parallel element computation uses: four chunks per thread,
+        # enough to even out the spread between cheap facet elements and expensive solid ones
+        # without paying dispatch overhead per element.
+        chunkSize = max(1, len(elements) // (numThreads * 4))
+        chunks = chunked_iterable(elements.values(), chunkSize)
+
+        # list(), not a bare call: Executor.map is lazy, and leaving the iterator unconsumed would
+        # return here with workers still writing element state.
+        list(getThreadPool(numThreads).map(acceptChunk, chunks))
 
     def writeRestart(self, restartFile: h5py.File):
         """Write the current (converged) state of the model to a restart checkpoint.
