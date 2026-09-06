@@ -1,0 +1,116 @@
+** MANUAL variant of the hexa20 contact patch test: the default nodalWeights=facetConsistent,
+** i.e. the baseline that test.inp (nodalWeights=serendipityOptimal) is compared against.
+**
+** analytic solution: two blocks of identical 1x1 footprint and matching 2x2 hexa20 interface
+** meshes under uniform compression, nu = 0, so the exact state is homogeneous uniaxial stress
+** with contact pressure sigma = E * (0.06 - 0.02) / 2 = 360, total interface force 360, and a
+** perfectly FLAT interface (every plane stays plane) -- monitored as Uzspread, the max-min spread
+** of the interface nodes' normal displacement, whose exact value is 0.
+**
+** Unlike its C3D8 sibling NodeToDeformableSurfaceContactPatch (which passes to machine precision:
+** Uzspread 1.4e-17, RFNormal 359.892, pNspread 0), a hexa20 interface CANNOT pass this test with
+** any per-node contact weighting: the consistent nodal loads of a uniform pressure on a quad8 face
+** are NEGATIVE at the corners (-pA/12, with +pA/3 at the midsides), and a unilateral penalty spring
+** cannot exert a tensile nodal force.
+**
+** WHAT THIS TEST ESTABLISHES -- and it is not what the weighting analysis predicts. The discrete
+** solution does not absorb the impossible corner load as a distributed load error: it absorbs it by
+** OPENING THE CORNER GAPS. Measured at full load, under BOTH nodalWeights options:
+**
+**   corner nodes in contact       0 of 9        (midside nodes in contact: 12 of 12)
+**   corner gaps                   +1.4e-3 to +2.4e-3, i.e. genuinely lifted off, two orders of
+**                                 magnitude above the midsides' penalty compliance of ~1.2e-5
+**   interface force               353.7868 (facetConsistent) / 353.8111 (serendipityOptimal)
+**   Uzspread                      1.4274e-3 / 1.2281e-3
+**
+** Once a corner node is open its tributary area is irrelevant, so on this test the weighting moves
+** the interface force by +0.007% and nothing else of substance. In particular the Uzspread
+** difference is NOT a weighting effect: sweeping the retained corner share phi continuously from 1
+** (facetConsistent) to 0 (serendipityOptimal) gives a non-monotone, two-valued response that tracks
+** which of the facets sharing a vertex-coincident slave's projection point wins the tie-break in the
+** closest-point search -- not phi. Do not read a benefit into it.
+**
+** The measured Uzspread is therefore the corner liftoff itself (corner-minus-midside offset
+** 1.081e-3 out of 1.4274e-3 total, unchanged to 0.07% between the two weightings), and the
+** interface force sits 1.7% below the analytic 360 for both: that deficit is the spurious interface
+** compliance those open corners represent. No per-node weighting can address either, because the
+** load the corners need is tensile. That is the quantified case for a segment-to-segment
+** formulation, which integrates a pressure field against the parent face's own quadratic shape
+** functions and never imposes a unilateral condition at a corner node at all.
+**
+** pNspread is measured over the *active* (non-zero tributary area) slave nodes only, so it is NOT
+** comparable between the two variants: serendipityOptimal deliberately zeroes the corner nodes, so
+** its spread is taken over the 12 midside nodes rather than all 21 interface nodes.
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+1.8e4, 0.0
+
+*job, name=patchjob, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=boxGen, name=lower
+nX      =2
+nY      =2
+nZ      =1
+x0      =0
+y0      =0
+z0      =0
+lX      =1
+lY      =1
+lZ      =1
+elProvider =edelweiss
+elType  =C3D20
+
+*modelGenerator, generator=boxGen, name=upper
+nX      =2
+nY      =2
+nZ      =1
+x0      =0
+y0      =0
+z0      =1.02
+lX      =1
+lY      =1
+lZ      =1
+elProvider =edelweiss
+elType  =C3D20
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen1
+surface = upper_back
+name    = slaveSurf
+triangulation = midside
+nodalWeights = facetConsistent
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen2
+surface = lower_front
+name    = masterSurf
+triangulation = midside
+nodalWeights = facetConsistent
+
+*section, name=section1, material=linearelastic, type=solid
+lower_all
+upper_all
+
+*constraint, name=contact, type=nodeToDeformableSurfacePenalty
+slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=3e7, type=linear,
+searchDistance=1.0, sliding=small
+
+*fieldOutput
+>>perNode, elSet=lower_all, field=displacement, result=U, name=dispLower
+>>perNode, elSet=upper_all, field=displacement, result=U, name=dispUpper
+>>perNode, name=RFNormal, nSet=lower_back, field=displacement, result=P, f(x)='sum(x[:,2])', saveHistory=True
+>>perNode, name=Uzspread, nSet=slaveSurf_nodes, field=displacement, result=U, f(x)='np.max(x[:,2])-np.min(x[:,2])', saveHistory=True
+>>fromExpression, name=gapMax, nSet=slaveSurf_nodes, expression='model.constraints["contact"].getGaps()', f(x)='np.max(x)', saveHistory=True
+>>fromExpression, name=pNmean, nSet=slaveSurf_nodes, expression='model.constraints["contact"].getNormalPressures()', f(x)='np.mean(x[x>0]) if np.any(x>0) else np.float64(0.0)', saveHistory=True
+>>fromExpression, name=pNspread, nSet=slaveSurf_nodes, expression='model.constraints["contact"].getNormalPressures()', f(x)='(np.max(x[x>0])-np.min(x[x>0]))/np.mean(x[x>0]) if np.any(x>0) else np.float64(0.0)', saveHistory=True
+
+*output, type=monitor, name=monitor
+fieldOutput=RFNormal
+fieldOutput=Uzspread
+fieldOutput=gapMax
+fieldOutput=pNmean
+fieldOutput=pNspread
+
+*step, solver=theSolver
+maxInc=0.25, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=fixLower, nSet=lower_back, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=pushUpper, nSet=upper_front, field=displacement, 1=0.0, 2=0.0, 3=-0.06

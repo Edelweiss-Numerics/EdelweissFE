@@ -77,7 +77,7 @@ class FEModel:
         self.meshDependents = []  #: Consumers that cache mesh-derived state; see :meth:`refreshMeshDependents`.
         self.topologyVersion = 0  #: Bumped on every structural mutation; drives pull-based reconcile.
         self._changeLog = []  #: Recorded :class:`ModelChange` per mutation, newest last.
-        self.contactFacetRecipes = {}  #: facet elSet name -> (surfaceName, prefix, triangulation).
+        self.contactFacetRecipes = {}  #: facet elSet name -> (surfaceName, prefix, triangulation, nodalWeights).
         self.materials = {}  #: Materials in the model.
         self.analyticalFields = {}  #: AnalyticalFields in the model.
         self.scalarVariables = {}  #: ScalarVariables in the model.
