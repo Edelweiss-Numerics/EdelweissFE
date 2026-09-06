@@ -236,7 +236,7 @@ def _makeTable(branch: dict, level: int, maxLevels: int) -> list[tuple]:
     return table
 
 
-def makePrettyTable(maxLevels: int = 4) -> PrettyTable:
+def makePrettyTable(maxLevels: int = 4, wallTime: float = None) -> PrettyTable:
     """Create a pretty formatted table of the measured times, merged across every thread that has
     recorded a measurement.
 
@@ -244,6 +244,18 @@ def makePrettyTable(maxLevels: int = 4) -> PrettyTable:
     ----------
     maxLevels
         The maximum number of stack levels considered in the table.
+    wallTime
+        The wall-clock time the timed work actually took, measured by the caller. If given, two
+        summary rows are appended: the sum of the top-level categories, and the difference between
+        that sum and this figure.
+
+        The difference row is the point of the parameter. Without it a reader adds up the categories
+        and takes the total for the whole run, which it is not: only what somebody thought to
+        decorate is in this table, and code that runs between the timed calls appears nowhere. On the
+        explicit anchor pry-out run this was 21.3 % of the step -- 19 766 s of 92 978 s, spent almost
+        entirely in one undecorated call -- and the table gave no hint that anything was missing.
+        Whatever is left over is not necessarily a defect, but it is a number that has to be *seen*
+        before it can be judged.
 
     Returns
     -------
@@ -265,6 +277,20 @@ def makePrettyTable(maxLevels: int = 4) -> PrettyTable:
                 calls,
                 "{:.5f}s".format(t_per_call),
             )
+        )
+
+    if wallTime is not None:
+        # Top level only: the nested rows are already counted inside their parents, so summing every
+        # row would double-count everything below level 0.
+        timed = sum(t for level, _, t, _ in theTable if level == 0)
+        unaccounted = wallTime - timed
+        share = unaccounted / wallTime * 100.0 if wallTime > 0.0 else 0.0
+
+        prettytable.add_row(("=" * 24, "", "", ""))
+        prettytable.add_row(("sum of the above", "{:.5f}s".format(timed), "", ""))
+        prettytable.add_row(("wall clock", "{:.5f}s".format(wallTime), "", ""))
+        prettytable.add_row(
+            ("unaccounted", "{:.5f}s".format(unaccounted), "", "{:.1f}%".format(share)),
         )
 
     return prettytable
