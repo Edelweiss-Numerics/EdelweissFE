@@ -70,11 +70,26 @@ topology-check-frequency=10000
 ** into a smoke test, lower maxNumInc to a few hundred.
 **
 ** The STEEL governs dt, not the concrete: the value above was unchanged across all eight topology
-** changes of the reference run, from 11176 to 14144 active elements. That is what makes the initial
-** borehole refinement cost no extra increments -- and it is also the trap, because dt is computed
-** ONCE, at step start, and is NOT recomputed when AMR refines. Refine into elements below the
-** steel's stable increment and the run keeps integrating at an increment that is no longer stable,
-** with no warning of any kind. That is why splitFactor stays at 2 and maxLevel at 1.
+** changes of the reference run, from 11176 to 14144 active elements, so the borehole refinement
+** costs no extra increments. dt IS re-estimated after every topology change and lowered if
+** refinement tightened the limit -- the solver says so ("Refinement lowered the stable time
+** increment from ... to ...") -- so a refinement that merely shrinks an element is handled.
+**
+** WHAT IS NOT HANDLED, and it is worth knowing before running this for a day: that estimate is a
+** minimum over ELEMENTS, and no element-based estimate can see a NODE whose lumped mass is a small
+** fraction of its neighbours'. Refining at a sliver produces exactly such a node. In the reference
+** run the lightest node sat at 1.1e-03 of the median lumped mass from the FIRST refinement onwards
+** and the run integrated happily for 130 000 increments; the eighth refinement made that node 7 %
+** lighter again, and the solution passed 1e+97 within the next 500 increments -- with dt duly
+** re-estimated at every one of those topology changes and never once found wanting.
+**
+** The solver already prints the quantity that predicts this, on every topology change:
+**
+**   smallest integrating mass 1.472e-07 (1.1e-03 of median)
+**
+** Nothing acts on it. WATCH THAT RATIO; a run whose lightest node is orders below the median is
+** living on margin, however healthy the mass, momentum and energy lines next to it look. It is also
+** why splitFactor stays at 2 and maxLevel at 1.
 *step, type=adaptiveForExplicitSimulations, solver=theSolver
 maxInc=1, minInc=1e-14, maxNumInc=2500000, maxIter=25, stepLength=1e-1
 >>dirichlet, name=fixLeft,        nSet=left,           field=displacement, 1=0, 2=0, 3=0
