@@ -29,7 +29,6 @@
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.spatial import cKDTree
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.elements.contactsurfaceelement import facetNormalAndMeasure
@@ -39,6 +38,7 @@ from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.facetcontactgeometry import (
+    closestFacetCandidates,
     line2ClosestPoint,
     line2GapGradientHessian,
     tria3ClosestPoint,
@@ -282,6 +282,19 @@ class Constraint(ConstraintBase, MeshDependent):
     per unit area, the assembled forces approximate a contact *pressure* distribution, and the
     contact response is insensitive to slave surface refinement.
 
+    Both the slave-side area shares and the master-side distribution of the transferred force are
+    set by the surface element generator, whose ``nodalWeights`` option selects between them. Under
+    ``nodalWeights=serendipityOptimal`` the corner nodes of quadratic faces carry a *zero*
+    tributary area -- deliberately: it is the resultant-exact, non-negative weighting closest to
+    the parent face's own consistent nodal loads, whose corner entries are negative and hence
+    unreachable for a unilateral spring. Such a node stays in the slave node list (so the ordering
+    of :meth:`getNormalPressures` and of the generated ``<prefix>_nodes`` set is unaffected) but
+    contributes no force and is reported at zero pressure. It therefore also carries no
+    penetration guard. Note that no measured benefit has been demonstrated for that option: a
+    quadratic face under near-uniform pressure opens its corner gaps regardless, which makes the
+    corner weight moot. See the :doc:`contact theory documentation
+    </documentation/contacttheory>`.
+
     With ``sliding=small`` (Abaqus-style small sliding), the closest-point projection of each
     slave onto the master surface -- assigned facet, *clamped* local coordinates (closed-domain
     closest point: interior, edge, or vertex; no dead zone at facet seams), and unit normal -- is
@@ -356,7 +369,8 @@ class Constraint(ConstraintBase, MeshDependent):
         # tributary area: the sum of its area shares over its incident slave facets (assigned by
         # the surface element generator; consistent with a uniform pressure on the source faces),
         # evaluated in the reference configuration (consistent with the small-deformation
-        # setting).
+        # setting). A share may be zero (nodalWeights=serendipityOptimal zeroes the corner nodes of
+        # quadratic faces); such nodes are kept, inert, to preserve the slave node ordering.
         tributaryAreaOfSlaveNode = {}
         for slaveFacet in self.slaveFacetElements:
             for node, share in zip(slaveFacet.nodes, slaveFacet.nodalAreaShares):
@@ -385,6 +399,7 @@ class Constraint(ConstraintBase, MeshDependent):
         self.sliding = configuration.sliding.lower()
         if self.sliding not in ["finite", "small"]:
             raise ValueError(f"Constraint sliding '{self.sliding}' is not supported. Use 'finite' or 'small'.")
+        self._validateMasterWeightTransforms()
 
         self.mu = configuration.mu
         if self.mu < 0.0:
@@ -483,73 +498,6 @@ class Constraint(ConstraintBase, MeshDependent):
         u = np.array([dispField["U"][idcs[n]] if n in idcs else np.zeros(self.nDim) for n in nodes])
         return referenceCoords + u
 
-    @staticmethod
-    def _closestFacetCandidates(slaveCoords: np.ndarray, facetCoords: list, searchDistance: float | None) -> list:
-        """For each slave node, the facets that could possibly be its closest one.
-
-        Replaces an exhaustive slave x facet sweep with a spatial query, WITHOUT changing which facet
-        is selected. The exhaustive form called the clamped closest-point routine once per
-        slave-facet pair -- 778,000 calls on the anchor pry-out model, measured at 5.98 s per
-        connectivity update, which is why the solver had to be told to search only every few hundred
-        increments.
-
-        The bound that makes this exact: let ``F*`` be the truly closest facet, at point-to-closed-
-        domain distance ``d*``, with centroid ``C*`` and radius ``r*`` (its largest centroid-to-vertex
-        distance). A triangle's centroid lies inside its own closed domain, so the distance to the
-        facet owning the nearest centroid is at most ``d0``, the distance to that centroid -- hence
-        ``d* <= d0``. And ``|x - C*| <= d* + r* <= d0 + rMax``. So every facet that could win, or
-        even tie, has its centroid inside a ball of radius ``d0 + rMax``, and querying that ball
-        cannot miss it.
-
-        Candidates are returned in ascending facet index, so the caller's "first strict minimum"
-        selection picks exactly the facet the exhaustive sweep would have. The result is bit-identical,
-        not merely equivalent.
-
-        Parameters
-        ----------
-        slaveCoords
-            Current coordinates of the slave nodes, shape ``(nSlaves, nDim)``.
-        facetCoords
-            Current coordinates of each facet's nodes.
-        searchDistance
-            The caller's cut-off, if any. A facet beyond it is rejected anyway, so the query radius
-            is capped accordingly.
-
-        Returns
-        -------
-        list
-            One ascending list of candidate facet indices per slave node.
-        """
-
-        if not facetCoords:
-            return [[] for _ in range(len(slaveCoords))]
-
-        stacked = np.asarray(facetCoords, dtype=float)  # (nFacets, nNodesPerFacet, nDim)
-        centroids = stacked.mean(axis=1)
-        radii = np.linalg.norm(stacked - centroids[:, None, :], axis=2).max(axis=1)
-        rMax = float(radii.max())
-
-        tree = cKDTree(centroids)
-        nearestCentroidDistance, _ = tree.query(slaveCoords, k=1)
-
-        radius = nearestCentroidDistance + rMax
-        if searchDistance is not None:
-            # A facet farther than searchDistance is rejected by the caller regardless, and its
-            # closed domain is at least |x - C| - r away, so nothing within searchDistance can have
-            # its centroid beyond searchDistance + rMax.
-            radius = np.minimum(radius, searchDistance + rMax)
-
-        # The bound above is exact in real arithmetic and query_ball_point includes its boundary, so
-        # a facet that exactly ties -- the ordinary case on a structured or symmetric contact mesh --
-        # sits precisely ON the radius, where the rounding of the sum that produced it can land an
-        # ulp low and drop it from the candidate list. That would silently pick a different facet
-        # than the exhaustive sweep, against what this docstring promises. A few ulps of relative
-        # margin restores the superset property; it widens the ball by a distance many orders below
-        # any mesh dimension, so it admits no facet that the exhaustive sweep would not also see.
-        radius = radius * (1.0 + 8.0 * np.finfo(float).eps)
-
-        return [sorted(c) for c in tree.query_ball_point(slaveCoords, radius)]
-
     def updateConnectivity(self, model: FEModel) -> bool:
         """Re-assign each slave node to its single closest facet, based on the last converged
         configuration. Called once per increment by the solver, before the equation system is
@@ -574,7 +522,7 @@ class Constraint(ConstraintBase, MeshDependent):
             # frozen for the whole increment, making the gap linear in the displacement DOFs.
             closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
             nSlavesWithDiscardedHistory = 0
-            candidatesPerSlave = self._closestFacetCandidates(slaveCoords, facetCoords, self.searchDistance)
+            candidatesPerSlave = closestFacetCandidates(slaveCoords, facetCoords, self.searchDistance)
             for s in range(self.nSlaves):
                 bestDistance = np.inf
                 bestFacet = None
@@ -586,7 +534,12 @@ class Constraint(ConstraintBase, MeshDependent):
 
                 if bestFacet is not None and (self.searchDistance is None or bestDistance <= self.searchDistance):
                     newAssignment[s] = bestFacet
-                    self._frozenWeights[s] = bestWeights
+                    # The search and its clamping run on the true barycentric weights; only what is
+                    # *stored* -- hence what distributes the force and enters the gap gradient -- is
+                    # transformed. See _validateMasterWeightTransforms for why this is admissible
+                    # here and refused for finite sliding.
+                    weightTransform = self.facetElements[bestFacet].weightTransform
+                    self._frozenWeights[s] = bestWeights if weightTransform is None else weightTransform @ bestWeights
                     normal, _ = facetNormalAndMeasure(facetCoords[bestFacet])
                     previousNormal = self._frozenNormals[s]
                     self._frozenNormals[s] = normal
@@ -689,6 +642,41 @@ class Constraint(ConstraintBase, MeshDependent):
             self._rebindMaster(model)
         return True
 
+    def _validateMasterWeightTransforms(self) -> None:
+        """Refuse a master surface whose facets carry a weight transform unless sliding is small.
+
+        A facet's weight transform redistributes the contact point's interpolation weights among
+        the facet's nodes (see the surface element generator's ``nodalWeights`` option). Under
+        ``sliding=small`` that is variationally harmless: the facet is flat, the weights are a
+        partition of unity, and the frozen normal is normal to the facet plane at the increment's
+        start, so ``g = nBar . (xs - sum_a w_a x_a)`` takes the same value for *any* partition of
+        unity over the -- coplanar -- facet nodes. The gap, its gradient ``w = kron(c, nBar)`` and
+        the symmetry of ``stiffness * outer(w, w)`` are all preserved; only the distribution of the
+        transferred force among the facet's nodes changes, which is the entire point. The
+        substitution perturbs the gap only as the facet tilts away from the frozen normal within
+        the increment, i.e. at exactly the order the small-sliding formulation already discards by
+        freezing the normal and dropping the Hessian.
+
+        Under ``sliding=finite`` none of that holds: the gap is measured to the exact closest point
+        with a live normal, so substituting the weights would make the force distribution differ
+        from the transpose of the gap gradient (a non-symmetric, Petrov--Galerkin operator) and
+        would leave the geometric term ``f_n * H`` inconsistent with it. Rather than half-support
+        that, refuse it.
+        """
+
+        if self.sliding == "small":
+            return
+
+        offending = [el.elNumber for el in self.facetElements if el.weightTransform is not None]
+        if offending:
+            raise ValueError(
+                f"Constraint '{self.name}': master surface '{self._masterSurfaceSetName}' was "
+                f"generated with nodalWeights='serendipityOptimal' (facet {offending[0]} and "
+                f"{len(offending) - 1} more carry a weight transform), which requires "
+                "sliding=small. Either set sliding=small on this constraint, or generate the "
+                "master facets with the default nodalWeights='facetConsistent'."
+            )
+
     def _rebindSlave(self, model: FEModel) -> None:
         """Rebuild the slave-side node list/tributary areas from the regenerated facet set,
         preserving frictional history and the AL multiplier of retained slave nodes by identity."""
@@ -723,6 +711,7 @@ class Constraint(ConstraintBase, MeshDependent):
 
         self.facetElements = list(model.elementSets[self._masterSurfaceSetName])
         self._referenceCoordsFacets = [np.array([n.coordinates for n in el.nodes]) for el in self.facetElements]
+        self._validateMasterWeightTransforms()
 
         self._assignedFacetIdx = [None] * self.nSlaves
         self._frozenWeights = [None] * self.nSlaves

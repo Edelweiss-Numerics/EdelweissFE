@@ -591,11 +591,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 f"Multi-point constraints (e.g. surface ties) are not supported by the {self.identification} solver."
             )
 
-        records = [
-            record
-            for mpc in model.multiPointConstraints.values()
-            for record in mpc.getMultiPointConstraints(self.theDofManager)
-        ]
+        records = self._collectMultiPointConstraintRecords(model)
 
         if stepActions is not None:
             records = self._reconcileMPCDirichletConflicts(records, stepActions)
@@ -643,6 +639,44 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             for index, value in zip(indices, values):
                 prescribed[int(index)] = float(value)
         return prescribed
+
+    def _collectMultiPointConstraintRecords(self, model: FEModel) -> list:
+        """Collect every multi-point constraint's records, keeping one claim per slave DOF.
+
+        A DOF may be condensed out only once, so when several constraints ask for the same one, the
+        first in model order keeps it. That is an invariant of the condensation operator, not of any
+        constraint type -- resolving it here, where all records are in one place and every
+        constraint has finished refreshing, is what makes the outcome independent of the order in
+        which constraints happened to be *refreshed*.
+
+        **Model order therefore carries meaning**, and one case depends on it: a hanging node lying
+        on a tie's slave surface is claimed by both. The hanging-node constraint must win -- it has
+        no stand-in, whereas the tie's equation for that node is still delivered by the node's coarse
+        parents, which are themselves tie slaves. ``hAdaptivity`` registers its hanging-node
+        constraint at the FRONT of ``model.multiPointConstraints`` for exactly this reason, and
+        ``tests/test_mpc_slave_claim_arbitration.py`` pins it.
+        """
+
+        records = []
+        claimed = set()
+        dropped = {}
+
+        for name, mpc in model.multiPointConstraints.items():
+            for record in mpc.getMultiPointConstraints(self.theDofManager):
+                if record[0] in claimed:
+                    dropped[name] = dropped.get(name, 0) + 1
+                    continue
+                claimed.add(record[0])
+                records.append(record)
+
+        for name, count in dropped.items():
+            self.journal.message(
+                "{:} slave DOF(s) of '{:}' are already claimed by an earlier multi-point constraint "
+                "(e.g. hanging nodes); their redundant records were dropped".format(count, name),
+                self.identification,
+            )
+
+        return records
 
     def _reconcileMPCDirichletConflicts(self, records: list, stepActions: dict) -> list:
         """Drop the multi-point-constraint records whose slave DOF is also Dirichlet-prescribed, so

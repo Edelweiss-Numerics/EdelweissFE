@@ -236,7 +236,7 @@ def _makeTable(branch: dict, level: int, maxLevels: int) -> list[tuple]:
     return table
 
 
-def makePrettyTable(maxLevels: int = 4) -> PrettyTable:
+def makePrettyTable(maxLevels: int = 4, wallTime: float = None) -> PrettyTable:
     """Create a pretty formatted table of the measured times, merged across every thread that has
     recorded a measurement.
 
@@ -244,6 +244,18 @@ def makePrettyTable(maxLevels: int = 4) -> PrettyTable:
     ----------
     maxLevels
         The maximum number of stack levels considered in the table.
+    wallTime
+        The wall-clock time the timed work actually took, measured by the caller. If given, two
+        summary rows are appended: the sum of the top-level categories, and the difference between
+        that sum and this figure.
+
+        The difference row is the point of the parameter. Without it a reader adds up the categories
+        and takes the total for the whole run, which it is not: only what somebody thought to
+        decorate is in this table, and code that runs between the timed calls appears nowhere. On the
+        explicit anchor pry-out run this was 21.3 % of the step -- 19 766 s of 92 978 s, spent almost
+        entirely in one undecorated call -- and the table gave no hint that anything was missing.
+        Whatever is left over is not necessarily a defect, but it is a number that has to be *seen*
+        before it can be judged.
 
     Returns
     -------
@@ -267,13 +279,37 @@ def makePrettyTable(maxLevels: int = 4) -> PrettyTable:
             )
         )
 
+    if wallTime is not None:
+        # Top level only: the nested rows are already counted inside their parents, so summing every
+        # row would double-count everything below level 0.
+        timed = sum(t for level, _, t, _ in theTable if level == 0)
+        unaccounted = wallTime - timed
+        share = unaccounted / wallTime * 100.0 if wallTime > 0.0 else 0.0
+
+        prettytable.add_row(("=" * 24, "", "", ""))
+        prettytable.add_row(("sum of the above", "{:.5f}s".format(timed), "", ""))
+        prettytable.add_row(("wall clock", "{:.5f}s".format(wallTime), "", ""))
+        prettytable.add_row(
+            ("unaccounted", "{:.5f}s".format(unaccounted), "", "{:.1f}%".format(share)),
+        )
+
     return prettytable
 
 
-def extractIncrementTimes(maxLevels: int = 4) -> PrettyTable:
+def extractIncrementTimes(maxLevels: int = 4, skipUnused: bool = False) -> PrettyTable:
     """
     Returns a PrettyTable of the time elapsed since the last time
     this function was called, while keeping the accumulated totals intact.
+
+    Parameters
+    ----------
+    maxLevels
+        The maximum number of stack levels considered in the table.
+    skipUnused
+        Omit categories that were not entered at all during the interval. Off by default so the
+        table keeps a stable set of rows between reports. Turn it on where the table is printed
+        repeatedly during a run: a category that did not run shows as ``0.00000s`` against real
+        numbers, which reads as "this was free" rather than "this did not happen".
     """
 
     if not hasattr(extractIncrementTimes, "_last_snapshot") or extractIncrementTimes._last_snapshot is None:
@@ -301,6 +337,9 @@ def extractIncrementTimes(maxLevels: int = 4) -> PrettyTable:
     def flatten_delta(node, level):
         rows = []
         for name, data in node["children"]:
+            if skipUnused and data["calls"] == 0:
+                # Its children cannot have been entered either, so the whole subtree goes.
+                continue
             rows.append((level, name, data["time"], data["calls"]))
             if level < maxLevels and data["children"]:
                 rows += flatten_delta(data, level + 1)

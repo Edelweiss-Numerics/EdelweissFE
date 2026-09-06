@@ -27,12 +27,12 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-import itertools
 
 import numpy as np
 
 from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.numerics.parallelizationutilities import (
+    chunked_iterable,
     getNumberOfThreads,
     getThreadPool,
     isFreeThreadingSupported,
@@ -106,16 +106,6 @@ def computeElementsInParallel(
     scatter_P.assembleInto(F, absolute=True)
 
     return P, K, F
-
-
-def chunked_iterable(iterable, size):
-    """Yield successive n-sized chunks from an iterable."""
-    it = iter(iterable)
-    while True:
-        chunk = tuple(itertools.islice(it, size))
-        if not chunk:
-            break
-        yield chunk
 
 
 #: Single-entry cache of the per-chunk gather plan; see :func:`_chunkedGatherPlan`. One entry
