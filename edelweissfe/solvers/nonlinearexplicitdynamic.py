@@ -91,6 +91,7 @@ does not.
 
 from copy import deepcopy
 from dataclasses import dataclass
+from time import perf_counter
 
 import numpy as np
 
@@ -354,6 +355,12 @@ class NED(NonlinearSolverBase):
 
         self.validateModelCapabilities(model)
 
+        # Against this the timing table reports what it did *not* measure, so it has to span
+        # everything this method does -- the initial topology refinement and the first equation
+        # system included, since both are timed categories that would otherwise be subtracted from a
+        # window they never ran in and drive the residue negative.
+        stepWallClockTic = perf_counter()
+
         self._externalWork = 0.0
         self._cumulativeMassDrift = 0.0
         self._warnedAboutMissingInternalEnergy = False
@@ -514,30 +521,38 @@ class NED(NonlinearSolverBase):
                     if timeStep.timeIncrement > 0.0:
                         prevTimeStep = timeStep
 
-                    for fieldName, field in model.nodeFields.items():
-                        self.theDofManager.writeDofVectorToNodeField(U, field, "U")
-                        self.theDofManager.writeDofVectorToNodeField(P, field, "P")
+                    with performancetiming.timeit("publish node fields"):
+                        for fieldName, field in model.nodeFields.items():
+                            self.theDofManager.writeDofVectorToNodeField(U, field, "U")
+                            self.theDofManager.writeDofVectorToNodeField(P, field, "P")
 
-                        # Published every increment, not only on output increments, for two reasons:
-                        # an h-adaptivity event can fall on any increment and its interpolation reads
-                        # this entry, and a restart checkpoint written from a node field is the only
-                        # way an explicit run can resume with its kinetic state intact. It is an
-                        # O(nDof) copy.
-                        self.theDofManager.writeDofVectorToNodeField(V, field, "V")
+                            # Published every increment, not only on output increments, for two
+                            # reasons: an h-adaptivity event can fall on any increment and its
+                            # interpolation reads this entry, and a restart checkpoint written from a
+                            # node field is the only way an explicit run can resume with its kinetic
+                            # state intact. It is an O(nDof) copy.
+                            self.theDofManager.writeDofVectorToNodeField(V, field, "V")
 
-                    for variable in model.scalarVariables.values():
-                        variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+                        for variable in model.scalarVariables.values():
+                            variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
 
                     self.updateRigidBodies(model, timeStep)
 
-                    model.advanceToTime(timeStep.totalTime)
+                    # Timed because it is not what it looks like. FEModel.advanceToTime is a generic
+                    # method shared with the implicit solvers, where it runs once per *converged*
+                    # increment and is amortised over a Newton loop; here it runs on every one of
+                    # millions of increments, and it is a serial Python loop over every element,
+                    # constraint and multi-point constraint in the model.
+                    with performancetiming.timeit("accept state"):
+                        model.advanceToTime(timeStep.totalTime)
 
                     if timeStep.number % self.options["output-frequency"] == 0:
-                        fieldOutputController.finalizeIncrement()
-                        for man in outputmanagers:
-                            man.finalizeIncrement(
-                                statusInfoDict=None,
-                            )
+                        with performancetiming.timeit("finalize output"):
+                            fieldOutputController.finalizeIncrement()
+                            for man in outputmanagers:
+                                man.finalizeIncrement(
+                                    statusInfoDict=None,
+                                )
 
                     # --- h-adaptivity, mid-run ------------------------------------------------
                     # Placed exactly here for three independent reasons. The marker refines on the
@@ -612,7 +627,7 @@ class NED(NonlinearSolverBase):
             self.applyStepActionsAtStepEnd(model, step.actions)
 
         finally:
-            prettyTable = performancetiming.makePrettyTable()
+            prettyTable = performancetiming.makePrettyTable(wallTime=perf_counter() - stepWallClockTic)
             self.journal.printPrettyTable(prettyTable, self.identification)
             performancetiming.reset()
 
@@ -685,44 +700,46 @@ class NED(NonlinearSolverBase):
                 timeStep.totalTime - timeStep.timeIncrement,
             )
 
-        # Enforce the Dirichlet boundary conditions on the constrained DOFs:
-        # there is no free equilibrium there, so their force P is set to zero,
-        # and their velocity is prescribed as (prescribed increment) / (time step).
-        for dirichlet in dirichlets:
-            prescribedIncrement = dirichlet.getPrescribedIncrement(timeStep).flatten()
+        with performancetiming.timeit("kinematic update"):
+            # Enforce the Dirichlet boundary conditions on the constrained DOFs:
+            # there is no free equilibrium there, so their force P is set to zero,
+            # and their velocity is prescribed as (prescribed increment) / (time step).
+            for dirichlet in dirichlets:
+                prescribedIncrement = dirichlet.getPrescribedIncrement(timeStep).flatten()
 
-            # The work put into the model at a prescribed degree of freedom is the reaction force
-            # there times the motion it is dragged through. At this point P holds the carried-over
-            # net nodal force from the previous increment (external minus internal plus constraint
-            # contributions), and the support reaction balancing it is its negative -- so this has to
-            # be accumulated HERE, immediately before the zeroing below, which is the only moment the
-            # reaction is available.
-            self._externalWork -= float(np.dot(P[dirichlet.constrainedDofIndices], prescribedIncrement))
+                # The work put into the model at a prescribed degree of freedom is the reaction force
+                # there times the motion it is dragged through. At this point P holds the carried-over
+                # net nodal force from the previous increment (external minus internal plus constraint
+                # contributions), and the support reaction balancing it is its negative -- so this has
+                # to be accumulated HERE, immediately before the zeroing below, which is the only
+                # moment the reaction is available.
+                self._externalWork -= float(np.dot(P[dirichlet.constrainedDofIndices], prescribedIncrement))
 
-            P[dirichlet.constrainedDofIndices] = 0.0
-            V[dirichlet.constrainedDofIndices] = prescribedIncrement / timeStep.timeIncrement
+                P[dirichlet.constrainedDofIndices] = 0.0
+                V[dirichlet.constrainedDofIndices] = prescribedIncrement / timeStep.timeIncrement
 
-        if self.ids_1st is not None:
-            V[self.ids_1st] = Minv[self.ids_1st] * P[self.ids_1st]
-        if self.ids_2nd is not None:
-            V[self.ids_2nd] += (
-                Minv[self.ids_2nd] * P[self.ids_2nd] * 0.5 * (timeStep.timeIncrement + prevTimeStep.timeIncrement)
-            )
+            if self.ids_1st is not None:
+                V[self.ids_1st] = Minv[self.ids_1st] * P[self.ids_1st]
+            if self.ids_2nd is not None:
+                V[self.ids_2nd] += (
+                    Minv[self.ids_2nd] * P[self.ids_2nd] * 0.5 * (timeStep.timeIncrement + prevTimeStep.timeIncrement)
+                )
 
-        # slave DOFs of multi-point constraints do not integrate their own equations of motion --
-        # they ride along on their masters (Minv is zero there, so the updates above left them
-        # untouched); displacements follow automatically via dU = V * dt
-        if self.mpcTransformation is not None:
-            self.mpcTransformation.applySlaveKinematics(V)
+            # slave DOFs of multi-point constraints do not integrate their own equations of motion --
+            # they ride along on their masters (Minv is zero there, so the updates above left them
+            # untouched); displacements follow automatically via dU = V * dt
+            if self.mpcTransformation is not None:
+                self.mpcTransformation.applySlaveKinematics(V)
 
-        # update displacement increment vector
-        np.multiply(V, timeStep.timeIncrement, out=dU)
-        np.add(U_n, dU, out=U_n)
+            # update displacement increment vector
+            np.multiply(V, timeStep.timeIncrement, out=dU)
+            np.add(U_n, dU, out=U_n)
 
-        self.applyStepActionsAtIncrementStart(model, timeStep, stepActions)
+        with performancetiming.timeit("step actions"):
+            self.applyStepActionsAtIncrementStart(model, timeStep, stepActions)
 
-        for geostatic in stepActions["geostatic"].values():
-            geostatic.applyAtIterationStart()
+            for geostatic in stepActions["geostatic"].values():
+                geostatic.applyAtIterationStart()
 
         P[:] = 0.0
         P, psi = self.computeElements(elements, U_n, dU, P, timeStep)
@@ -734,7 +751,8 @@ class NED(NonlinearSolverBase):
         # rigid interpolation link); done here so the Dirichlet handling at the start of the next
         # increment operates on the already-folded vector
         if self.mpcTransformation is not None:
-            P[:] = self.mpcTransformation.foldExplicitForce(P)
+            with performancetiming.timeit("mpc force fold"):
+                P[:] = self.mpcTransformation.foldExplicitForce(P)
 
         if timeStep.number % self.options["output-frequency"] == 0:
             Wint = psi
@@ -964,6 +982,7 @@ class NED(NonlinearSolverBase):
 
         return P, psi
 
+    @performancetiming.timeit("assemble loads")
     def assembleLoads(
         self,
         nodeForces: list[StepActionBase],
