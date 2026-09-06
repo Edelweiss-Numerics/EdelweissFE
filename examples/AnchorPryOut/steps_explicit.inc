@@ -28,46 +28,53 @@ first-order-fields="nonlocal damage"
 ** time step. Do not raise it without repeating the study above on THIS mesh.
 courant-number=0.1
 output-frequency=10000
-** MEASURED on this model (500-increment smoke test, 16 threads, 280155 dof): one connectivity
-** search costs 5.98 s, because nodeToDeformableSurfacePenalty.updateConnectivity is an
-** O(slaves x facets) closest-point loop in Python. At a frequency of 100 that is 0.06 s amortised
-** per increment -- as much as the entire element pass (0.058 s) -- and about 1.5 h over a full run.
-** 500 brings that to 0.29 h.
+** The connectivity of a contact pair is the outcome of a search; this is how often that search is
+** re-run. What makes 500 safe: 500 increments at the dt reported below is 8.6e-05 s of physical
+** time, and the plate's peak speed under the quintic smoothstep is 1.875 * 5.0 mm / stepLength =
+** 93.75 mm/s, so the surfaces move at most ~0.008 mm between searches -- under 1 % of the smallest
+** facet edge (1.0 mm). The solver prints the largest nodal motion since the previous search on
+** every update: CHECK IT on any run that changes stepLength, the mass scaling or the mesh. The
+** margin above is not transferable, it is arithmetic on this file's numbers.
 **
-** What makes 500 safe rather than merely cheaper: the solver reports the largest nodal motion since
-** the previous search on every change. In the smoke test that was 7e-8 to 3e-6 mm against a smallest
-** facet edge of 1.0 mm. At the steepest part of the smoothstep the plate moves at 1.875 * 5 mm /
-** stepLength, so at stepLength=1e-2 a 500-increment window is ~0.05 mm, still 5 % of a facet. CHECK
-** THE REPORTED MOTION on any run that changes stepLength or the mesh -- do not carry this number
-** over blindly.
-**
-** The real fix is to give that search a spatial index; the tie constraint's reconcile() had the
-** identical O(n*m) shape and a cKDTree took it 65-232x faster.
+** Why this is an option at all: the search used to be an O(slaves x facets) closest-point loop in
+** Python, 5.98 s per call on this model, which at a frequency of 100 cost as much per increment as
+** the entire element pass. It now goes through a cKDTree broadphase with a per-facet prune, which
+** took constraint connectivity on the reference run from 168 s to 11.5 s. 500 is therefore no
+** longer a number tuned for cost -- it is tuned for accuracy, and can be lowered if the check
+** above says the surfaces are outrunning it.
 contact-update-frequency=500
 report-performance=True
-** 0 = run the topology update exactly once, before the increment loop, and never again. Every
-** marker in this file is initialOnly, so hAdaptivity.actsOnlyAtSimulationStart is True and the
-** solver would not schedule a later update anyway -- 0 states the intent explicitly instead of
-** leaving it to be inferred. (A non-zero value must be a multiple of output-frequency, because a
-** marker refines on the last FINALIZED field output.)
+** How often the AMR markers are re-evaluated mid-run. NOT 0 here: adaptivity.inc carries a live
+** fieldOutput marker (alphaP >= 1) alongside the initialOnly surface marker, so the mesh has to go
+** on following the damage after the first increment. It must be a MULTIPLE of output-frequency,
+** because a marker refines on the last FINALIZED field output -- 10000 is one reporting interval.
+**
+** Each check that actually refines costs a re-lump of the mass, a rebuild of the hanging-node
+** constraints and a re-pack of the DOF vector. minMarkedElements in adaptivity.inc is what stops
+** that being paid for a handful of elements.
 topology-check-frequency=10000
 
 **=================================================================================================
 ** STEPS
 **=================================================================================================
 ** A single step: ramp the plate's x-displacement to 5.0 mm over stepLength seconds with a quintic
-** smoothstep amplitude. The time increment is not set here -- the solver enforces
-** courant-number * dt_crit, which it reports at step start; cross-check it against the 2.45e-7 s
-** the mesh implies (see header note 5) before trusting a long run.
+** smoothstep amplitude. The increment is not set here -- the solver computes courant-number *
+** dt_crit and reports it at step start as "Critical time step for explicit dynamics". THE REPORTED
+** NUMBER ALREADY HAS THE COURANT FACTOR IN IT; do not multiply by 0.1 again.
 **
-** maxNumInc is what bounds this file: at 500 it is a smoke test, and it has to be raised to
-** stepLength / dt_crit for a real run. Reaching it is not a failure -- the step ends normally.
+** MEASURED on this deck: 1.725589e-07 s. That is sqrt(10) above what v13/v15 of this model ran at,
+** purely because every density in materials_explicit.inc is scaled by 100 rather than 10. The ramp
+** therefore needs stepLength / dt = 1e-1 / 1.725589e-07 = about 580 000 increments, and
+** maxNumInc=2500000 is roughly 4x that -- deliberately generous, because reaching maxNumInc ends
+** the step NORMALLY and silently short of 5.0 mm rather than reporting a failure. To turn this file
+** into a smoke test, lower maxNumInc to a few hundred.
 **
-** MEASURED at courant 0.5: dt_crit = 1.146058e-07 s, so stepLength=1e-2 needs maxNumInc=87300.
-** That is 6.5 % tighter than the 1.226e-07 the mesh survey predicted, because the governing element
-** is distorted and Marmot takes the minimum of cbrt(8*detJ) over its quadrature points rather than
-** the cube root of its volume. The steel elements govern, as predicted -- the refined concrete sits
-** at 3.41e-07 -- so the initial refinement below genuinely costs no extra increments.
+** The STEEL governs dt, not the concrete: the value above was unchanged across all eight topology
+** changes of the reference run, from 11176 to 14144 active elements. That is what makes the initial
+** borehole refinement cost no extra increments -- and it is also the trap, because dt is computed
+** ONCE, at step start, and is NOT recomputed when AMR refines. Refine into elements below the
+** steel's stable increment and the run keeps integrating at an increment that is no longer stable,
+** with no warning of any kind. That is why splitFactor stays at 2 and maxLevel at 1.
 *step, type=adaptiveForExplicitSimulations, solver=theSolver
 maxInc=1, minInc=1e-14, maxNumInc=2500000, maxIter=25, stepLength=1e-1
 >>dirichlet, name=fixLeft,        nSet=left,           field=displacement, 1=0, 2=0, 3=0
