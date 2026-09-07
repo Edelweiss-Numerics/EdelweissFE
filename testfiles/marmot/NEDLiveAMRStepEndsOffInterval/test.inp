@@ -1,0 +1,100 @@
+** A step that ENDS BETWEEN a topology change and the next output increment.
+**
+** Same model as NEDLiveAMR, with one number changed: maxNumInc is 30 rather than 100, which is not
+** a multiple of output-frequency=20. That is the whole point.
+**
+** The output managers write one final frame when a step ends, from the result each field output has
+** stored. Field outputs store one every output-frequency increments. Live h-adaptivity refines on a
+** finalized output, so a refinement lands just AFTER an output -- and if the step then ends before
+** the next one, that final frame is written against a mesh the stored result does not belong to.
+** Before this case existed the Ensight export raised on it, after doing all the work:
+**
+**   Variable displacement result size (32) does not match the number of nodes (141)
+**
+** NEDLiveAMR itself cannot catch that: its maxNumInc=100 is an exact multiple of its
+** output-frequency=20, so its step always ends ON an output increment, where the stored result and
+** the mesh agree. Every other h-adaptivity case in testfiles/ is either implicit -- writing an
+** output every increment, so nothing is ever stale -- or uses initialOnly markers, so the mesh never
+** changes mid-run. The combination this case pins was reachable only from a real pry-out deck.
+**
+** So: this run must COMPLETE. A failure here is the step-end refresh in
+** FieldOutput.finalizeStep having regressed, not a physics change.
+**
+** Live (mid-run) h-adaptivity under the explicit dynamic solver -- the EXACTNESS test.
+**
+** The whole bar is given the same prescribed x-velocity, so it translates rigidly: the velocity field
+** is spatially UNIFORM and the strain is identically zero. That is the one configuration in which all
+** three conservation statements are exact rather than approximate, which is what makes it a bug
+** detector rather than a plausibility check:
+**
+**   * total lumped mass  -- always an identity (children tile the parent, same density),
+**   * linear momentum    -- exact for a uniform velocity field, because the shape functions are a
+**                           partition of unity and the child masses sum to the parent's,
+**   * kinetic energy     -- exact for the same reason, and it is the most sensitive of the three,
+**                           being quadratic in the interpolation error.
+**
+** So the "Topology change:" line this run prints must show all three conserved to round-off. Any
+** visible deviation is a defect in the velocity interpolation (hadaptivity's
+** WARM_STARTED_NODE_FIELD_ENTRIES) or in the re-lumping, NOT discretisation error -- there is none to
+** hide behind here.
+**
+** The marker is an elementSet one with initialOnly=False, i.e. a genuinely LIVE marker: on the first
+** topology update only initialOnly markers are evaluated, so this one cannot fire before the
+** increment loop. It fires once at the first periodic check and then never again, because maxLevel=1
+** retires its own children.
+**
+** topology-check-frequency must be a multiple of output-frequency -- a marker refines on the last
+** finalized field output -- and the solver refuses the combination otherwise.
+
+*material, name=LinearElastic, id=linearelastic
+**E      nu   density
+20000.0, 0.2, 2.0e-9
+
+*section, name=section1, material=linearelastic, type=solid
+gen_all
+
+*job, name=nedAmrLiveJob, domain=3d
+
+** COURANT NUMBER: 0.1, not the 0.8 default. The l/c critical-time-step estimate is a LINEAR-
+** element formula. For a 20-node element the highest free eigenfrequency is far above what it
+** predicts, and a convergence study on this very case shows the answer only settles around 0.1-0.2:
+** the final reaction is 4.49 at courant 0.8, 84.6 at 0.4, 118.5 at 0.2, 120.7 at 0.1, 118.0 at 0.05.
+** The 0.8 run does not fail, it just quietly returns a number 26x too small. Do not raise this.
+*solver, solver=NEDParallel, name=theSolver
+second-order-fields="displacement"
+courant-number=0.1
+output-frequency=20
+topology-check-frequency=20
+
+*modelGenerator, generator=boxGen, name=gen
+nX      =2
+nY      =1
+nZ      =1
+lX      =20
+lY      =10
+lZ      =10
+elType  =C3D20R
+
+*modelModifier, type=hAdaptivity, name=amrLive
+>>marker, type=elementSet, elSet=gen_all, initialOnly=False
+refineElSet=gen_all
+maxLevel=1
+
+*fieldOutput
+>>perNode, elSet=gen_all, field=displacement, result=U, name=displacement
+>>perNode, name=Ux, nSet=gen_right, field=displacement, result=U, f(x)='np.mean(x[:,0])', saveHistory=True
+
+*output, type=monitor, name=monitor
+fieldOutput=Ux
+
+** The Ensight export is what the defect lives in: it is the manager that rebuilds its per-node
+** variable bookkeeping against the new mesh and validates each stored result against it. Without
+** this block the case cannot detect the regression at all -- which is exactly why NEDLiveAMR, which
+** has no Ensight output, never did.
+*output, type=ensight, name=esExport
+>>perNode, fieldOutput=displacement
+>>configuration, overwrite=yes
+
+*step, type=adaptiveForExplicitSimulations, solver=theSolver
+maxInc=1, minInc=1e-14, maxNumInc=30, maxIter=25, stepLength=1e-3
+>>dirichlet, name=rigidTranslation, nSet=all, field=displacement, 1=0.05, 2=0, 3=0
