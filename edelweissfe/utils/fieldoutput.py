@@ -353,7 +353,24 @@ class _FieldOutputBase:
     def finalizeStep(
         self,
     ):
-        pass
+        """Bring the stored result up to date with the model's final state, if the step advanced
+        past the increment that stored the current one.
+
+        The output managers write one final frame at the end of a step, from the result stored
+        here -- see the Ensight export's ``finalizeStep``, which writes whenever time has advanced
+        since its last frame. If the topology changed after that result was stored, which is
+        exactly what live h-adaptivity does between two output increments, the result belongs to a
+        different mesh than the one being written and the export rejects it::
+
+            Variable displacement result size (32) does not match the number of nodes (141)
+
+        Guarded on time having advanced, by the same rule the managers use, so the two decisions
+        cannot disagree: whenever a manager writes a final frame the result behind it has just been
+        refreshed, and a step ending on an increment that already stored a result does not store a
+        second one at the same time and duplicate the last point of a history export.
+        """
+        if not self.timeHistory or self.model.time - self.timeHistory[-1] > 1e-12:
+            self.updateResults(self.model)
 
     def finalizeJob(
         self,
