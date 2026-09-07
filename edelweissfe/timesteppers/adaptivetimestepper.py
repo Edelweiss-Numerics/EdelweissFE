@@ -299,6 +299,7 @@ class AdaptiveTimeStepper(TimeStepperBase):
         self.currentTime = f["timestepper"].attrs["currentTime"]
         self.nPassedGoodIncrements = f["timestepper"].attrs["nPassedGoodIncrements"]
         self.incrementCounter = f["timestepper"].attrs["incrementCounter"]
+        self.warnIfResumedAtIncrementCap(self.incrementCounter, self.maxNumberIncrements, self.journal)
         self.finishedStepProgress = f["timestepper"].attrs["finishedStepProgress"]
         self.increment = f["timestepper"].attrs["increment"]
         self.allowedToIncreasedNext = f["timestepper"].attrs["allowedToIncreasedNext"]

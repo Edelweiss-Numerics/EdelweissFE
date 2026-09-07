@@ -41,6 +41,47 @@ class TimeStepperBase(ABC):
     the incrementation of a simulation step.
     """
 
+    #: Overridden by every stepper; a default so base-class diagnostics can name their source.
+    identification = "TimeStepper"
+
+    def warnIfResumedAtIncrementCap(self, incrementsAlreadyDone: int, maxNumberIncrements: int, journal):
+        """Warn when a checkpoint is resumed at or past the step's increment cap.
+
+        ``maxNumInc`` counts increments from the start of the analysis, not from the resume, and it
+        is deliberately taken from the step's own configuration rather than the checkpoint -- see
+        the subclasses' ``writeRestart`` -- precisely so it can be raised between runs. The
+        consequence is a trap: resume without raising it far enough and the stepper's very first
+        check ends the step, the solver catches that as a step which finished normally, and the job
+        exits reporting success having advanced nothing. That is indistinguishable from a completed
+        run, and it has been mistaken for one: a diagnostic arm resumed at increment 130 000 with
+        maxNumInc still at 60 000 ran a single zero increment, reported success, and was very
+        nearly read as evidence that a crash did not reproduce.
+
+        This does not change the behaviour -- the cap is absolute by design -- only the silence.
+
+        Parameters
+        ----------
+        incrementsAlreadyDone
+            The increment count restored from the checkpoint.
+        maxNumberIncrements
+            The cap this step was configured with.
+        journal
+            The journal to report on.
+        """
+        if incrementsAlreadyDone < maxNumberIncrements:
+            return
+
+        journal.message(
+            "WARNING: this checkpoint is already at increment {:}, at or past this step's "
+            "maxNumInc of {:}, so the resumed step will end immediately WITHOUT advancing the "
+            "solution -- and the job will then report success. maxNumInc counts increments from "
+            "the start of the analysis, not from the resume: raise it above {:} to continue.".format(
+                incrementsAlreadyDone, maxNumberIncrements, incrementsAlreadyDone
+            ),
+            self.identification,
+            0,
+        )
+
     @abstractmethod
     def generateTimeStep(self, enforcedTimeIncrement: float = None) -> TimeStep:
         """Generate the (sequence of) time steps.

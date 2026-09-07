@@ -224,7 +224,20 @@ def finiteElementSimulation(
                     continue
                 if step.number == resumeStepNumber:
                     step.timeStepper.readRestart(resumeCheckpoint)
+                    # Accumulators the solver cannot recompute from the converged solution -- the
+                    # explicit solver's external work is one; see its own readRestart.
+                    step.solver.readRestart(resumeCheckpoint)
                     resumeStepNumber = None
+
+                    # Nothing reads the checkpoint after this point, and it must not stay open:
+                    # the restart output manager's ring buffer rotates onto the oldest slot by
+                    # mtime, which -- once the ring has filled -- can be this very file, and HDF5
+                    # cannot truncate a file it still holds open. The resumed run then dies
+                    # mid-step with "unable to truncate a file which is already open", which reads
+                    # like a solver failure and is not one. Closing it here rather than after the
+                    # step loop is what keeps the writer's slot free.
+                    resumeCheckpoint.close()
+                    resumeCheckpoint = None
 
             tic = getCurrentTime()
             try:

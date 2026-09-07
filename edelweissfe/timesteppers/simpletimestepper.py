@@ -322,6 +322,7 @@ class SimpleTimeStepper(TimeStepperBase):
         f = restartFile
         self.currentTime = f["timestepper"].attrs["currentTime"]
         self.totalIncrements = f["timestepper"].attrs["totalIncrements"]
+        self.warnIfResumedAtIncrementCap(self.totalIncrements, self.maxNumberIncrements, self.journal)
         self.finishedStepProgress = f["timestepper"].attrs["finishedStepProgress"]
         self.increment = f["timestepper"].attrs["increment"]
         self.dT = f["timestepper"].attrs["dT"]
