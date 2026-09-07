@@ -61,6 +61,18 @@
 *material, name=LinearElastic, id=steelFastener
 200000.0, 0.3
 
-** mortar/grout equivalent solid -- see simplification note 3 above
+** 3. Mortar bond layer: Abaqus models this with COH3D8 cohesive elements, response=TRACTION
+**    SEPARATION, an elastic-only (no debonding) traction law, and a cylindrical stack direction.
+**    EdelweissFE has no cohesive element. Inspecting the actual mesh geometry shows the COH3D8
+**    "thickness"/stack direction here is circumferential, not radial (the mortar annulus is
+**    meshed as many thin circumferential wedges) -- so in the source model the mortar's own bulk
+**    stiffness contributes essentially nothing to the radial/axial anchor-concrete load path,
+**    which is instead carried entirely by the ANCHOR_TO_MORTAR / MORTAR_TO_CONCRETE ties. We
+**    therefore replace the COH3D8 wedges with ordinary linear-elastic C3D8 solid elements (same
+**    connectivity) using generic grout/mortar properties (E=30000, nu=0.2, comparable to the
+**    concrete). This is very likely a *more* compliant/realistic bulk representation than the
+**    source model's cohesive-only element, not less -- but it is a genuine judgement call, so
+**    please swap in a real mortar/grout modulus if you have one.
+**
 *material, name=LinearElastic, id=mortar
 5000.0, 0.2

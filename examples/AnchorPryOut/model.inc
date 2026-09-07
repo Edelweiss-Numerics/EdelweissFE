@@ -7,6 +7,43 @@
 ** the steps ever differed, and those are the four includes a variant actually chooses.
 **
 **=================================================================================================
+** TRANSLATED FROM Abaqus/Standard AnchorPryOut.inp -- the decisions that are not free parameters
+**=================================================================================================
+** 1. Concrete: Abaqus UEL U004 (C3D20R host, GCDP material) -> Marmot element GC3D20R (gradient-
+**    enhanced hex20, reduced integration) with Marmot's native "gcdp" material. Property order
+**    verified against Marmot/modules/materials/GCDP/src/GCDP.cpp (19 properties; the Abaqus UEL's
+**    20th/21st properties, viscosity and density, collide at material property index 18 in the
+**    current Marmot GCDP source -- see the comment above the material block below).
+**
+** 2. Steel (anchor/plate/washer/nut): Abaqus C3D8I (incompatible-modes hex8) -> Marmot C3D8
+**    (standard, fully-integrated hex8). Marmot does not currently register an incompatible-modes/
+**    enhanced-assumed-strain hex8 under any element name. This is slightly stiffer in bending than
+**    the source model; not expected to matter here since these parts stay close to linear-elastic
+**    and are not the focus of the analysis, but worth knowing if plate bending becomes significant.
+**
+** 4. Node numbering: EdelweissFE has no Abaqus Part/Instance/Assembly concept -- one flat node and
+**    element label space. Concrete (mesh/concrete.inp, nodes 1-58569) and steel (mesh/steel.inp,
+**    nodes 4489-19732) node numbers collide, so mesh/steel_edelweissfe.inp is a copy of
+**    mesh/steel.inp with every node label (and every reference to one, in *ELEMENT connectivity
+**    and *NSET lists) offset by +100000. Element labels do NOT collide (concrete: 4004-15575,
+**    steel: 1-4003) and were left untouched. *ELSET/*SURFACE blocks reference element labels only,
+**    also untouched. The *NSET "z_symm" is defined in both parts and was renamed to
+**    "z_symm_concrete"/"z_symm_steel" to avoid one silently overwriting the other. See
+**    mesh/concrete_edelweissfe.inp / mesh/steel_edelweissfe.inp for the exact (small, mechanical)
+**    diffs against the original Abaqus mesh files -- geometry/connectivity/sets are otherwise
+**    byte-for-byte identical.
+**
+** 6. The *SURFACE blocks below are the original Abaqus S1..S6 face-numbered elsets, imported
+**    unmodified and fed straight into "*modelGenerator, generator=surfaceElementGenerator".
+**    EdelweissFE's own face-numbering convention for this generator is documented as NOT being
+**    the general Abaqus S1..S6 convention (see edelweissfe/generators/surfaceelementgenerator.py)
+**    -- checked empirically (facet span/shape sanity check + closest-point-distance profiling
+**    for every tie pair, see point 7): all 5 generated facet surfaces are geometrically sane
+**    (small, local, correctly-shaped facets; matching bounding boxes / radii between tie pairs),
+**    so this coincidence holds for this mesh's Marmot-compatible node ordering.
+**
+**
+**=================================================================================================
 ** MESH
 **=================================================================================================
 *include, input=./mesh/concrete_edelweissfe.inp

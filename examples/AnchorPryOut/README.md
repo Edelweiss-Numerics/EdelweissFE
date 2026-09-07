@@ -30,12 +30,14 @@ directory exists for the case where the answer has to be mesh-credible rather th
 
 ## Where this model comes from
 
-It is a translation of a real Abaqus/Standard model, `AnchorPryOut.inp`, and the translation made
-seven modelling decisions that are not free parameters — the concrete element, the steel element,
-what happened to the cohesive mortar layer, the node numbering, and why the Abaqus `*Dynamic` step
-became a static one here. Those are recorded in
-[`TRANSLATION_NOTES.md`](TRANSLATION_NOTES.md), together with the reasoning behind the `blockamg`
-configuration. **Read it before changing the physics.**
+It is a translation of a real Abaqus/Standard model, `AnchorPryOut.inp`. The translation made a
+handful of modelling decisions that are not free parameters — which element the concrete and the
+steel use, what happened to the cohesive mortar layer, and why the Abaqus `*Dynamic` step is a
+static one here. Each is documented in the include file it applies to, next to the input it
+justifies, rather than in a separate document: the element choices, the flat node-label space and
+the surface conventions in `model.inc`, the mortar layer in `materials_implicit.inc` /
+`materials_explicit.inc`, and why the Abaqus `*Dynamic` step is static here — together with the
+measured reasoning behind the `blockamg` settings — in `steps_implicit.inc`.
 
 ## What it exercises
 
