@@ -93,8 +93,25 @@ class SimpleTimeStepper(TimeStepperBase):
             The current time step.
         """
 
-        # zero increment; return value for first function call
-        yield TimeStep(0, 0.0, 0.0, 0.0, 0.0, self.currentTime)
+        # A zero increment, yielded once before the first real one, so an explicit integrator can
+        # build its initial state (mass, internal force, contact) before taking a step.
+        #
+        # It reports the stepper's CURRENT position within the step, not the step's start. Those are
+        # the same thing on a cold start, where finishedStepProgress is 0 -- but not on a resumed
+        # run, and reporting the start there did two wrong things. The solver calls
+        # ``model.advanceToTime(timeStep.totalTime)`` on every increment, so model.time was rewound
+        # to the beginning of the step; and this increment's number is 0, hence a multiple of any
+        # ``output-frequency``, so an output frame stamped with that rewound time was written into
+        # the middle of an otherwise increasing Ensight time set -- leaving it non-monotonic, which
+        # is invalid in the format and makes a reader pair variables with the wrong geometry.
+        yield TimeStep(
+            0,
+            0.0,
+            self.finishedStepProgress,
+            0.0,
+            self.stepLength * self.finishedStepProgress,
+            self.currentTime + self.stepLength * self.finishedStepProgress,
+        )
         self.enforcedTimeIncrement = enforcedTimeIncrement
 
         if self.enforcedTimeIncrement is None:
