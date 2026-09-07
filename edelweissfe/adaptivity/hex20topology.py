@@ -48,6 +48,7 @@ from edelweissfe.adaptivity.hex20shapefunctions import (
     FACEID_TO_FACE,
     FACES,
     face_child_octants,
+    hex20_box_coords,
     hex20_shape,
     hex20_shape_grad,
     quad8_shape,
@@ -70,6 +71,9 @@ class Hex20Topology(TopologyBase):
     @property
     def faceid_to_face(self) -> dict:
         return FACEID_TO_FACE
+
+    def reference_node_param(self) -> np.ndarray:
+        return hex20_box_coords(-1.0, 1.0, -1.0, 1.0, -1.0, 1.0)
 
     def subdivision_children_param(self, n: int) -> list:
         return subdivision_children_param(n)

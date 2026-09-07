@@ -46,6 +46,26 @@ from edelweissfe.adaptivity.geometry import (
 from edelweissfe.utils.performancetiming import timeit
 
 
+def _latticeOf(params, n: int) -> np.ndarray:
+    """Exact integer lattice indices of parametric coordinates on the subdivision grid.
+
+    Every node a subdivision of a serendipity element can produce lies at ``-1 + k / n`` along each
+    axis for an integer ``k`` in ``[0, 2n]`` -- the corners of the sub-cells and the midside nodes
+    halfway between them. Converting the parametric coordinate to that integer turns a node's
+    position within its parent into exact data, which is what lets node identity be decided by
+    integer arithmetic instead of by rounding a floating-point coordinate.
+    """
+    scaled = (np.asarray(params, dtype=float) + 1.0) * n
+    lattice = np.rint(scaled).astype(np.int64)
+    if np.abs(scaled - lattice).max() > 1e-9:
+        raise ValueError(
+            "a subdivision produced a node off the 1/n parametric lattice, so its position within "
+            "the parent cannot be represented exactly; node identity would have to fall back on "
+            "comparing coordinates"
+        )
+    return lattice
+
+
 class NodeRegistry:
     """Coordinate-keyed node registry that mints unique labels and deduplicates shared nodes.
 
@@ -56,7 +76,8 @@ class NodeRegistry:
 
     def __init__(self, decimals: int = 8, reserve_labels=None):
         self.decimals = decimals
-        self._byKey = {}  # (componentId, rounded-coord) key -> label
+        self._byKey = {}  # (componentId, rounded-coord) key -> label; seeding and root elements only
+        self._byIdentity = {}  # (componentId, topological identity) -> label; everything refinement mints
         self.coordinates = {}  # label -> np.ndarray(coord)
         self.componentOf = {}  # label -> componentId of the body the node belongs to
         self._maxLabel = 0
@@ -114,6 +135,33 @@ class NodeRegistry:
             self.coordinates[lab] = np.array(coord, dtype=float)
             self.componentOf[lab] = componentId
         return lab
+
+    def label_for_identity(self, identity, coord, componentId: int = 0) -> int:
+        """Return the label of a node named by its *topological* identity, minting one if new.
+
+        ``identity`` names the node by which corners of its parent span it and in what exact integer
+        proportion, so two elements sharing a face or an edge derive the identical identity for a
+        point on it -- without comparing coordinates, and regardless of how their local axes happen
+        to be oriented relative to one another.
+
+        This is what :meth:`label` cannot do. Rounding a coordinate to a fixed number of decimals
+        splits one node into two whenever the exact value lands on a rounding tie and the two
+        parents' last bits disagree, and a mesh written with a fixed number of decimals produces
+        such ties systematically rather than by accident: on the anchor pry-out mesh every
+        quarter-point of a graded edge landed on one, giving 156 duplicated nodes with nothing
+        constraining them together.
+        """
+        key = (componentId, identity)
+        label = self._byIdentity.get(key)
+        if label is None:
+            label = self._mint()
+            self._byIdentity[key] = label
+            self.coordinates[label] = np.array(coord, dtype=float)
+            self.componentOf[label] = componentId
+            # Keep the coordinate index populated so seeding still sees these nodes; it is never
+            # consulted to identify a node that has a topological identity.
+            self._byKey.setdefault(self._key(coord, componentId), label)
+        return label
 
     def _mint(self) -> int:
         """One fresh label, from the model's allocator if this registry was given one."""
@@ -211,6 +259,19 @@ class AdaptiveMesh:
         self.nodeSets = {}  # name -> set(node label)
         self.surfaces = {}  # name -> set((eid, faceID))  (element-based, Marmot faceID convention)
         self._next = 1
+        # The subdivision lattice, resolved once: it depends only on the topology and splitFactor.
+        self._childLattice = [
+            _latticeOf(param, splitFactor) for param in self.topology.subdivision_children_param(splitFactor)
+        ]
+        ownLattice = _latticeOf(self.topology.reference_node_param(), splitFactor)
+        #: lattice position -> local slot of the parent's own nodes, so a child node landing on one
+        #: reuses the parent's node instead of minting a second node at the same point
+        self._ownNodeAt = {tuple(row): slot for slot, row in enumerate(ownLattice)}
+        # The corners are the nodes sitting at an extreme of every axis; the rest are midside nodes,
+        # which span no sub-entity of their own and so never appear in an identity.
+        isCorner = np.all((ownLattice == 0) | (ownLattice == 2 * splitFactor), axis=1)
+        self._cornerSlots = np.flatnonzero(isCorner)
+        self._cornerLattice = ownLattice[isCorner]
 
     # ---- topological containers ----
     def define_element_set(self, name, eids):
@@ -223,12 +284,43 @@ class AdaptiveMesh:
         """pairs: iterable of (eid, faceID) with Marmot faceID (1-6)."""
         self.surfaces[name] = set(pairs)
 
-    def _add(self, coords, level, parent, componentId: int = 0):
+    def _childConnectivity(self, parentConn, childIndex, coords, componentId):
+        """The 20 node labels of one child, decided topologically rather than geometrically.
+
+        Each child node is either one of the parent's own nodes -- recognised by an exact lattice
+        match, and reused -- or a new node spanned by some of the parent's corners. In the latter
+        case its identity is the set of spanning corner *labels* paired with exact integer weights.
+        A neighbouring element that shares that face or edge names the same corners with the same
+        weights, so both arrive at one label for one point.
+        """
+        extent = 2 * self.splitFactor
+        conn = []
+        for slot, lattice in enumerate(self._childLattice[childIndex]):
+            own = self._ownNodeAt.get(tuple(lattice))
+            if own is not None:
+                conn.append(parentConn[own])
+                continue
+            spanning = []
+            for cornerSlot, cornerLattice in zip(self._cornerSlots, self._cornerLattice):
+                weight = 1
+                for axis in range(len(lattice)):
+                    weight *= int(lattice[axis]) if cornerLattice[axis] == extent else extent - int(lattice[axis])
+                if weight:
+                    spanning.append((parentConn[cornerSlot], weight))
+            spanning.sort()
+            conn.append(self.registry.label_for_identity(tuple(spanning), coords[slot], componentId))
+        return conn
+
+    def _add(self, coords, level, parent, componentId: int = 0, parentConn=None, childIndex=None):
         coords = np.asarray(coords, dtype=float)
         eid = self._next
         self._next += 1
         self.elements[eid] = dict(
-            conn=self.registry.connectivity(coords, componentId),
+            conn=(
+                self.registry.connectivity(coords, componentId)
+                if parentConn is None
+                else self._childConnectivity(parentConn, childIndex, coords, componentId)
+            ),
             coords=coords,
             level=level,
             active=True,
@@ -273,8 +365,9 @@ class AdaptiveMesh:
             return e["children"]
         parent_conn = e["conn"]
         kids = [
-            self._add(ch, e["level"] + 1, eid, e["componentId"])
-            for ch in self.topology.subdivide(e["coords"], self.splitFactor)  # children stay in the parent's body
+            # children stay in the parent's body, and take their node identities from it
+            self._add(ch, e["level"] + 1, eid, e["componentId"], parent_conn, childIndex)
+            for childIndex, ch in enumerate(self.topology.subdivide(e["coords"], self.splitFactor))
         ]
         e["active"] = False
         e["children"] = kids
