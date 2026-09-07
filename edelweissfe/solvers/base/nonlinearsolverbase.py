@@ -143,6 +143,33 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             else:
                 self.options[canonicalKey] = type(defaultValue)(v)
 
+    def writeRestart(self, restartFile):
+        """Write solver state that a resumed run cannot reconstruct from the converged solution.
+
+        Called once per checkpoint by the restart output manager, alongside the model's and the
+        time stepper's own ``writeRestart``. Most solvers need nothing here: an implicit solver
+        rebuilds everything it uses from the solution it just converged. A no-op by default, so a
+        solver declares such state only when it actually carries some.
+
+        Parameters
+        ----------
+        restartFile
+            The open checkpoint to write to.
+        """
+
+    def readRestart(self, restartFile):
+        """Restore what :meth:`writeRestart` wrote.
+
+        Must tolerate a checkpoint that carries no state for this solver -- one written by a
+        different solver, or written before this solver carried any. A resumed run then behaves as
+        it did before the state was checkpointed, rather than failing.
+
+        Parameters
+        ----------
+        restartFile
+            The open checkpoint to read from.
+        """
+
     def applyOptionsOverride(self, fieldValues: dict) -> None:
         """Apply a partial override of this solver's own ``schema`` fields onto ``self.options``.
 

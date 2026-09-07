@@ -183,6 +183,7 @@ class OutputManager(OutputManagerBase):
             f.attrs["stepNumber"] = self._currentStep.number
             self.model.writeRestart(f)
             self._currentStep.timeStepper.writeRestart(f)
+            self._currentStep.solver.writeRestart(f)
 
             # Sibling output managers' own sequence bookkeeping (e.g. Ensight's transient time/file
             # sets, whose file numbering a resumed run would otherwise restart from zero, orphaning

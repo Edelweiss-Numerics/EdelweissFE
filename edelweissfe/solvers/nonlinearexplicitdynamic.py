@@ -318,6 +318,10 @@ class NED(NonlinearSolverBase):
         #: increment. Compared against the kinetic energy to detect energy creation; see
         #: _ENERGY_CREATION_TOLERANCE.
         self._externalWork = 0.0
+        #: The external work a resumed checkpoint carried, handed to the next solveStep. Staged
+        #: rather than assigned directly because readRestart necessarily runs before solveStep,
+        #: which resets the live accumulator; see :meth:`readRestart`.
+        self._resumedExternalWork = 0.0
         #: Per-constraint force buffer and scatter plan, by constraint name; see
         #: :meth:`assembleConstraintForces`. Cleared whenever the DofManager is rebuilt.
         self._constraintForcePlans = {}
@@ -343,6 +347,55 @@ class NED(NonlinearSolverBase):
                     self.options[k] = type(self.NEDOptions[k])(updatedOptions[k])
             else:
                 raise AttributeError("Invalid option {:} for {:}".format(k, self.identification))
+
+    def writeRestart(self, restartFile):
+        """Persist the accumulated external work.
+
+        It is an ACCUMULATOR, not a state that can be recomputed: it is summed increment by
+        increment from the reaction forces at the prescribed degrees of freedom, so nothing in a
+        converged solution reproduces it.
+
+        A resumed run that started it at zero compared its kinetic energy against only the work
+        done since the resume -- and that comparison is the check on whether the run is still
+        quasi-static and whether energy is being created, so the one diagnostic that would flag a
+        run going wrong instead read as though the model were mostly kinetic. The anchor pry-out
+        run resumed at 22 % of its ramp reported kinetic energy at 41.7 % of external work for
+        that reason alone.
+
+        Parameters
+        ----------
+        restartFile
+            The open checkpoint to write to.
+        """
+        restartFile.require_group("solver").attrs["externalWork"] = self._externalWork
+
+    def _consumeResumedExternalWork(self) -> float:
+        """The external work a resumed checkpoint carried, handed over exactly once.
+
+        The energy balance is per step, so the step being resumed picks up where the checkpoint
+        left off while any later step in the same job correctly starts from zero -- hence consumed
+        rather than merely read. It is staged in the first place because
+        :meth:`readRestart` necessarily runs BEFORE :meth:`solveStep`, which resets the live
+        accumulator and would otherwise wipe the restored value before the first increment.
+        """
+        resumed = self._resumedExternalWork
+        self._resumedExternalWork = 0.0
+        return resumed
+
+    def readRestart(self, restartFile):
+        """Restore the accumulated external work; see :meth:`writeRestart`.
+
+        Tolerates a checkpoint written before this state was carried, in which case the resumed
+        step's energy balance is wrong in the old way rather than the run failing.
+
+        Parameters
+        ----------
+        restartFile
+            The open checkpoint to read from.
+        """
+        if "solver" not in restartFile or "externalWork" not in restartFile["solver"].attrs:
+            return
+        self._resumedExternalWork = float(restartFile["solver"].attrs["externalWork"])
 
     def solveStep(
         self,
@@ -375,7 +428,7 @@ class NED(NonlinearSolverBase):
         # window they never ran in and drive the residue negative.
         stepWallClockTic = perf_counter()
 
-        self._externalWork = 0.0
+        self._externalWork = self._consumeResumedExternalWork()
         self._cumulativeMassDrift = 0.0
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
