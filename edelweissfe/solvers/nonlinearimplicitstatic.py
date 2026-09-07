@@ -275,8 +275,25 @@ class NIST(NonlinearSolverBase):
                 ticked = any([constraint.updateConnectivity(model) for constraint in model.constraints.values()])
                 connectivityHasChanged = refreshed or ticked
 
+                # One separator, marking the start of this increment's block. Everything about this
+                # increment -- an equation-system rebuild if one is needed, the MPC/Dirichlet
+                # diagnostics that come with it, the Newton table, all of it -- is printed after this
+                # single header, nested one level deeper (see the messages below), instead of being
+                # sandwiched between a second separator of its own.
+                self.journal.printSeperationLine()
+                self.journal.message(
+                    "increment {:}: {:8f}, {:8f}; time {:10f} to {:10f}".format(
+                        timeStep.number,
+                        timeStep.stepProgressIncrement,
+                        timeStep.stepProgress,
+                        timeStep.totalTime - timeStep.timeIncrement,
+                        timeStep.totalTime,
+                    ),
+                    self.identification,
+                    level=1,
+                )
+
                 if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
-                    self.journal.message("Creating monolithic equation system", self.identification, 0)
                     self.theDofManager = DofManager(
                         model.nodeFields.values(),
                         model.scalarVariables.values(),
@@ -289,9 +306,9 @@ class NIST(NonlinearSolverBase):
                     # it references) alive for the rest of the run.
                     self._dirichletIndicesCache = None
                     self.journal.message(
-                        "total size of eq. system: {:}".format(self.theDofManager.nDof),
+                        "eq. system rebuilt: {:} dof".format(self.theDofManager.nDof),
                         self.identification,
-                        0,
+                        2,
                     )
 
                     # The per-field block extents, not just the total. Fields are laid out
@@ -300,17 +317,15 @@ class NIST(NonlinearSolverBase):
                     # tells you at a glance how a coupled model's DOFs are actually distributed.
                     for fieldName, fieldIndices in self.theDofManager.idcsOfFieldsInDofVector.items():
                         self.journal.message(
-                            "  field '{:}': {:} dofs, [{:}, {:})".format(
+                            "field '{:}': {:} dof, [{:}, {:})".format(
                                 fieldName,
                                 fieldIndices.stop - fieldIndices.start,
                                 fieldIndices.start,
                                 fieldIndices.stop,
                             ),
                             self.identification,
-                            0,
+                            2,
                         )
-
-                    self.journal.printSeperationLine()
 
                     # The one interface point a solver needs beyond the plain (A, b) call: it
                     # derives whatever it wants (field layout, node coordinates, topology) from
@@ -360,18 +375,6 @@ class NIST(NonlinearSolverBase):
                     "notes": "",
                 }
 
-                self.journal.printSeperationLine()
-                self.journal.message(
-                    "increment {:}: {:8f}, {:8f}; time {:10f} to {:10f}".format(
-                        timeStep.number,
-                        timeStep.stepProgressIncrement,
-                        timeStep.stepProgress,
-                        timeStep.totalTime - timeStep.timeIncrement,
-                        timeStep.totalTime,
-                    ),
-                    self.identification,
-                    level=1,
-                )
                 self.journal.message(self.iterationHeader, self.identification, level=2)
                 self.journal.message(self.iterationHeader2, self.identification, level=2)
 

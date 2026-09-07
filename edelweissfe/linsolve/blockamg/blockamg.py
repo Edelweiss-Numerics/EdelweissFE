@@ -97,7 +97,11 @@ from edelweissfe.linsolve.nullspace import rigidBodyNullspace, translationNullsp
 # not affect, the Journal instance's own message-level suppression (see _log()) -- this gate decides
 # whether blockamg attempts to log at all; Journal's own level decides whether the attempt is shown.
 _VERBOSITY_LEVELS = ("silent", "warning", "info", "debug")
-_JOURNAL_LEVEL = {"warning": 0, "info": 1, "debug": 2}
+# Journal indentation level, not verbosity: "info"/"debug" both nest at level 2, alongside the Newton
+# residual line each solve corresponds to -- they are the same nesting depth (a per-Newton-iteration
+# detail), just gated by different verbosity settings. "warning" stays at level 0 (the least indented,
+# most visible spot in the log) regardless of nesting, since a warning is rare and meant to stand out.
+_JOURNAL_LEVEL = {"warning": 0, "info": 2, "debug": 2}
 _IDENTIFICATION = "BlockAMGSolver"
 
 # "backendPrecision" and "backendBlockSize" are not AMGCL parameters -- they select the AMGCL
@@ -860,7 +864,16 @@ class BlockAMGSolver(LinearSolver):
 
         fieldNames = [block.name for block in blocks]
         if fieldNames != self._fieldsAnnounced:
-            self._log("info", "blockamg: fields = {:}".format(fieldNames))
+            self._log("info", "blockamg linear solver: fields = {:}".format(", ".join(fieldNames)))
+            # The column header for every per-solve line below, printed once here (same trigger as the
+            # fields announcement, since the columns themselves never change without it) instead of on
+            # every single solve -- once you know what the columns mean, the compact rows are enough.
+            self._log(
+                "info",
+                "{:<6} {:<8} {:>5} {:>7} {:>7} {:>7} {:>7}".format(
+                    "solve", "precond", "iters", "η", "‖r‖", "retries", "time"
+                ),
+            )
             self._fieldsAnnounced = fieldNames
 
         residualNorm = float(np.linalg.norm(b))
@@ -1251,9 +1264,9 @@ class BlockAMGSolver(LinearSolver):
         solveElapsedTime = time.time() - solveStartTime
         self._log(
             "info",
-            "blockamg: solve #{:<4d} {:7s} {:3d}it eta={:.1e} res={:.1e} cont={:} time={:7.3f}s".format(
-                self._solveCount,
-                "REFRESH" if mustRefresh else "reuse",
+            "{:<6} {:<8} {:>3d}it {:>7.1e} {:>7.1e} {:>7d} {:>6.1f}s".format(
+                "#{:}".format(self._solveCount),
+                "rebuilt" if mustRefresh else "reused",
                 outerIters,
                 eta,
                 trueResidual,
@@ -1262,10 +1275,14 @@ class BlockAMGSolver(LinearSolver):
             ),
         )
         if outerIters > self._warnOuterIterationsThreshold:
+            # Rare and actionable, so this stays at "warning" (Journal level 0, the least indented and
+            # most visible spot in the log) and spells out the likely cause, unlike the routine
+            # per-solve line above it.
             self._log(
                 "warning",
-                "blockamg: WARNING solve #{:} needed {:} outer GMRES iterations (> threshold {:}) -- "
-                "possible preconditioner degradation".format(
+                "⚠ solve #{:} needed {:} outer GMRES iterations, above the warning threshold of {:}. "
+                "Likely a preconditioner-quality problem, not a physics one -- worth checking whether "
+                "the Jacobian changed sharply since the last hierarchy rebuild.".format(
                     self._solveCount, outerIters, self._warnOuterIterationsThreshold
                 ),
             )
@@ -1316,16 +1333,20 @@ class BlockAMGSolver(LinearSolver):
         if trueResidual > eta:
             self._log(
                 "warning",
-                "blockamg: WARNING solve #{:} true residual {:.2e} still exceeds requested eta={:.2e} "
-                "after {:} continuation(s) -- did not fully converge".format(
+                "⚠ solve #{:} did not fully converge: ‖r‖={:.1e} still exceeds η={:.1e} after {:} "
+                "retries. This usually means the block preconditioner no longer matches the current "
+                "system (e.g. after heavy contact/damage changes since it was last rebuilt), not that "
+                "the system itself is unsolvable. If it recurs, try a smaller hierarchyStalenessFactor "
+                "(rebuilds the preconditioner sooner) or a lower etaMax.".format(
                     self._solveCount, trueResidual, eta, continuations
                 ),
             )
         if info != 0:
             self._log(
                 "warning",
-                "blockamg: WARNING solve #{:} GMRES reported info={:} (did not converge within "
-                "maxiter on its own preconditioned-residual criterion)".format(self._solveCount, info),
+                "⚠ solve #{:} GMRES itself did not converge within outerMaxiter x outerRestart "
+                "iterations. Raise outerMaxiter/outerRestart, or check whether the system is simply "
+                "too hard for this preconditioner at its current settings.".format(self._solveCount),
             )
 
         return x

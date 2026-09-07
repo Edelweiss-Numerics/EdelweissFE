@@ -261,6 +261,11 @@ class Constraint(ConstraintBase, MeshDependent):
     #: Option schema for this constraint, per OptionSchemaProvider.
     schema = SurfaceToDeformableSurfacePenaltySchema
 
+    #: Journal sender tag: a short, class-level identification, not this instance's own (potentially
+    #: long, user-chosen) name -- so the log's fixed-width sender column never has to truncate it. The
+    #: instance name is still reported in full, in the message text itself (see __init__/updateConnectivity).
+    identification = "SurfaceContact"
+
     def __init__(
         self,
         name: str,
@@ -308,10 +313,10 @@ class Constraint(ConstraintBase, MeshDependent):
         self.totalNormalForce = 0.0
 
         self.journal.message(
-            f"{self.nPoints} contact points ({len(self._slaveFacets)} slave facets x "
+            f"contact '{self.name}': {self.nPoints} points ({len(self._slaveFacets)} slave facets x "
             f"{self.nQuadraturePoints} quadrature points), {len(self.facetElements)} master facets, "
             f"sliding={self.sliding}, type={self.type}",
-            name,
+            self.identification,
         )
 
     def _buildFromSurfaces(self, slaveSurface: ElementSet, masterSurface: ElementSet):
@@ -567,9 +572,8 @@ class Constraint(ConstraintBase, MeshDependent):
         if activity != self._lastReportedActivity:
             self._lastReportedActivity = activity
             self.journal.message(
-                f"{activity[0]} of {self.nPoints} contact points assigned, "
-                f"{activity[1]} closed at the last evaluation",
-                self.name,
+                f"contact '{self.name}': {activity[0]}/{self.nPoints} active, {activity[1]} closed",
+                self.identification,
                 level=2,
             )
 
