@@ -26,8 +26,6 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-import textwrap
-
 from edelweissfe.config import registry
 from edelweissfe.config.stepactions import stepActionFactory
 from edelweissfe.config.steps import getStepClassByType
@@ -189,15 +187,14 @@ class StepManager:
         """
 
         def printActionDefinition(intro, options):
-            for line in textwrap.wrap(
+            # A single call: Journal.message() owns all wrapping/indentation for this line, so it
+            # stays consistent with every other multi-line message in the log instead of pre-wrapping
+            # here against a width Journal itself has no knowledge of.
+            journal.message(
                 intro + " [" + ", ".join(("{:}={:}".format(k, v) for k, v in options.items())) + "]",
-                subsequent_indent=" " * (len(intro) + 1),
-            ):
-                journal.message(
-                    line,
-                    self.identification,
-                    2,
-                )
+                self.identification,
+                2,
+            )
 
         for stepNumber, stepDefinition in enumerate(self.stepDefinitions):
             actionNamesInThisStep = set()

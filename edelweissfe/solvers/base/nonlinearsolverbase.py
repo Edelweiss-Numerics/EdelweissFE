@@ -605,7 +605,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         self.journal.message(
             "eliminating {:} slave DOF(s) via multi-point constraints".format(transformation.nEliminatedDof),
             self.identification,
-            0,
+            2,
         )
 
         return transformation
@@ -674,6 +674,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 "{:} slave DOF(s) of '{:}' are already claimed by an earlier multi-point constraint "
                 "(e.g. hanging nodes); their redundant records were dropped".format(count, name),
                 self.identification,
+                2,
             )
 
         return records
@@ -752,16 +753,25 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 "reconciled {:} Dirichlet/constraint conflict(s) that were exactly redundant "
                 "(the constraint already delivered the prescribed value)".format(nRedundant),
                 self.identification,
-                1,
+                2,
             )
         if overridden:
             worstDof, worstWeight = max(overridden, key=lambda entry: entry[1])
+            # Rare and actionable, so this stays at level 0 (least indented -- the most visible spot
+            # in the log) and spells out the cause and the fix, unlike the routine messages above it.
             self.journal.message(
-                "WARNING: {:} multi-point-constraint equation(s) were dropped in favour of a Dirichlet "
-                "boundary condition that they did NOT already imply -- the boundary condition wins, and "
-                "the model has changed. Worst case: DOF {:}, {:.3e} of its constraint weight rests on "
-                "unprescribed masters. This usually means the boundary condition's node set is "
-                "incomplete.".format(len(overridden), worstDof, worstWeight),
+                "WARNING: {:} multi-point-constraint equation(s) conflicted with a Dirichlet boundary "
+                "condition and were dropped -- a DOF cannot be both eliminated by a constraint and "
+                "directly prescribed, so the boundary condition wins. This changes the model: those "
+                "DOFs now get exactly their prescribed value instead of whatever the constraint (e.g. "
+                "a tie or hanging-node link) would have computed for them. Worst case: DOF {:}, where "
+                "{:.3e} of its constraint weight depends on masters that are themselves NOT prescribed "
+                "-- meaning the constraint's own value would likely have differed. This usually means "
+                "the boundary condition's node set was built independently of the mesh's tie/hanging-"
+                "node topology and is missing some nodes -- check whether it should be extended, or "
+                "whether these DOFs should be excluded from the constraint.".format(
+                    len(overridden), worstDof, worstWeight
+                ),
                 self.identification,
                 0,
             )
