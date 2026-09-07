@@ -125,8 +125,8 @@ from edelweissfe.utils.schema import schemaField
 #: IT IS MESH-DEPENDENT, which is why it is a default and not a constant. That 4.63e-08 was
 #: measured on the production pry-out mesh; the same model on a 2x coarser mesh
 #: (examples/AnchorPryOutCoarse, near-anchor h 16.5 mm against 8.0 mm, min scaled Jacobian
-#: 0.61) moves the total mass by 1.11e-06 on its first live refinement -- 24x more, which is
-#: how a truncation-error term should behave under coarsening, and still six orders below the
+#: 0.61) moves the total mass by 2.217e-06 on its first live refinement -- 48x more, which is
+#: how a truncation-error term should behave under coarsening, and still five orders below the
 #: O(1) a genuine refinement or lumping error would produce. Raise it via
 #: ``mass-conservation-tolerance`` for a coarse or badly distorted mesh; do not raise it to
 #: silence a violation you have not first shown to scale with h.

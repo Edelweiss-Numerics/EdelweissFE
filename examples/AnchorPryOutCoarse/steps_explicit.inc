@@ -42,10 +42,14 @@ topology-check-frequency=5000
 ** truncation error, by an amount that depends on the mesh.
 **
 ** The 1e-6 default is calibrated on the production pry-out mesh, where one refinement moves the
-** total mass by 4.6e-08. This mesh is 2x coarser and its refinements move it by 2.2e-06 -- 48x more,
-** which is how a truncation-error term behaves under coarsening, and still five orders below the
-** O(1) that a genuine refinement or lumping error would produce. Without this line the run aborts at
-** its first refinement.
+** total mass by 4.63e-08. This mesh is 2x coarser and its first refinement moves it by 2.217e-06 --
+** 48x more, which is how a truncation-error term behaves under coarsening, and still five orders
+** below the O(1) that a genuine refinement or lumping error would produce.
+**
+** Both halves of that were measured by deleting this line and running: the abort arrives at the
+** first topology change (1634 -> 1648 active elements, increment 10000) and names the figure --
+** "2.718504e+01 became 2.718510e+01, a relative change of 2.217260e-06 against a tolerance of
+** 1.000000e-06".
 **
 ** Do not copy this number onto a different mesh without re-measuring, and never raise it to silence
 ** a violation you have not first shown to scale with h.
