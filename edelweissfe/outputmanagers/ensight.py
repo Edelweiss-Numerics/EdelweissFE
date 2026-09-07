@@ -1121,6 +1121,16 @@ class OutputManager(OutputManagerBase):
             self.journal.message("Skipping output".format(), self.identification, 1)
             return
 
+        # No time has passed since the last frame, so there is nothing new to record. This is a
+        # step's priming zero increment: on a resumed run it reports the time the checkpoint was
+        # taken at, which already has a frame on disk. Writing a second frame there duplicates the
+        # data and leaves the .case file's time values non-strictly-increasing, which the format
+        # does not allow and which makes a reader pair variables with the wrong geometry. The
+        # sentinel timeAtLastOutput of -1e16 is what keeps a cold start's own first frame, where no
+        # time has passed either but nothing has been written yet.
+        if timeSinceLastOutput <= 0.0:
+            return
+
         self.writeOutput(self.model)
 
     def finalizeFailedIncrement(self, **kwargs):
