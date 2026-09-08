@@ -84,7 +84,7 @@ cdef extern from "Marmot/MarmotElement.h":
 
         void assignProperty(const MarmotMaterialSection& property) except +ValueError
 
-        void assignProperty(const string& propertyName, const double* properties) except +ValueError
+        void assignProperty(const string& propertyName, const double* properties, int nProperties) except +ValueError
 
         vector[string] getPropertyNames() const
 

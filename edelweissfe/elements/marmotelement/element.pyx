@@ -166,10 +166,17 @@ cdef class MarmotElementWrapper:
     def assignProperty(self, str propertyName, properties):
         """Assign a single property of the element by name."""
 
-        cdef double[::1] _properties = np.atleast_1d(np.asarray(properties, dtype=np.float64))
+        cdef double[::1] _properties = np.ascontiguousarray(
+                np.atleast_1d(np.asarray(properties, dtype=np.float64)))
+
+        # The count travels with the pointer: the values come from a user-written input file, and
+        # the element reads a fixed number of them per property name. Without it a short list is
+        # not an error but an out-of-bounds read that lands whatever happens to follow in memory
+        # in a material coefficient.
         self.marmotElement.assignProperty(
                 propertyName.encode("UTF-8"),
-                &_properties[0])
+                &_properties[0],
+                _properties.shape[0])
 
     def getPropertyNames(self):
         """Get the names of all the valid properties of the element."""
