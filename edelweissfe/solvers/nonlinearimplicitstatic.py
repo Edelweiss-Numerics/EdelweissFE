@@ -339,9 +339,17 @@ class NIST(NonlinearSolverBase):
                             "scalar variables",
                         ]
 
-                    nVariables = len(presentVariableNames)
-                    self.iterationHeader = ("{:^25}" * nVariables).format(*presentVariableNames)
-                    self.iterationHeader2 = (" {:<10}  {:<10}  ").format("||R||∞", "||ddU||∞") * nVariables
+                    self.iterationHeader2 = (" {:<10}  {:<10}  ").format("||R||∞", "||ddU||∞") * len(
+                        presentVariableNames
+                    )
+                    if self.linSolver.reportsSolveSummary:
+                        # One more column, exactly like any other field's, for the linear solver's own
+                        # per-iteration diagnostics -- see NonlinearSolverBase.checkConvergence, which
+                        # builds and appends the matching row cell.
+                        presentVariableNames = presentVariableNames + ["linear solve"]
+                        self.iterationHeader2 += (" {:<10}  {:<10}  ").format("iters", "‖r‖")
+
+                    self.iterationHeader = ("{:^25}" * len(presentVariableNames)).format(*presentVariableNames)
                     self.iterationMessageTemplate = "{:11.2e}{:1}{:11.2e}{:1} "
 
                     K = self.theDofManager.constructVIJSystemMatrix()

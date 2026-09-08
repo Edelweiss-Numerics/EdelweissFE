@@ -87,7 +87,7 @@ import scipy.sparse as sp
 from scipy.sparse.linalg import LinearOperator, gmres
 
 import edelweissfe.utils.performancetiming as performancetiming
-from edelweissfe.linsolve.base import FieldBlock, LinearSolver
+from edelweissfe.linsolve.base import FieldBlock, LinearSolver, LinearSolveSummary
 from edelweissfe.linsolve.nullspace import rigidBodyNullspace, translationNullspace
 
 # Ordered low-to-high; index comparison decides whether a message at a given level should print.
@@ -402,6 +402,9 @@ class BlockAMGSolver(LinearSolver):
         can often be answered directly from the manifest without needing a replay at all.
     """
 
+    #: See :attr:`~edelweissfe.linsolve.base.LinearSolver.identification`.
+    identification = _IDENTIFICATION
+
     #: Degradation dumps written across every instance in this process, so
     #: ``dumpOnDegradationMaxDumps`` is a genuine process-wide ceiling -- the same reasoning as
     #: :class:`~edelweissfe.linsolve.matrixdump.matrixdump.MatrixDumpSolver`'s ``_totalDumpsWritten``.
@@ -510,7 +513,6 @@ class BlockAMGSolver(LinearSolver):
         BlockAMGSolver._instancesCreated += 1
 
         self._solveCount = 0
-        self._fieldsAnnounced = None
 
         # Eisenstat-Walker forcing state.
         self._lastResidualNorm = None
@@ -539,6 +541,26 @@ class BlockAMGSolver(LinearSolver):
         # condition under which AMGCL's own preallocated scratch vectors are no longer valid.
         self._lgmresSolver = None
         self._lgmresN = None
+
+        self._lastSolveSummary = None
+
+    @property
+    def reportsSolveSummary(self) -> bool:
+        """Whether the nonlinear solver should render a "linear solve" column for this instance.
+
+        Tied to this instance's own verbosity rather than a bare ``True`` -- at ``"silent"`` or
+        ``"warning"`` (the default) there is nothing routine to show, matching those settings' own
+        contract (see the ``verbosity`` parameter docstring above); only at ``"info"`` or ``"debug"``
+        does :attr:`lastSolveSummary` carry anything worth a column.
+        """
+        return self._verbosityIndex >= _VERBOSITY_LEVELS.index("info")
+
+    @property
+    def lastSolveSummary(self) -> "LinearSolveSummary | None":
+        """The most recent call's diagnostics -- see
+        :attr:`~edelweissfe.linsolve.base.LinearSolver.lastSolveSummary`. ``None`` before the first
+        call."""
+        return self._lastSolveSummary
 
     def _log(self, level: str, message: str) -> None:
         """Emit ``message`` through the injected Journal (see ``setJournal``, inherited from
@@ -862,20 +884,6 @@ class BlockAMGSolver(LinearSolver):
             )
             self._lgmresN = n
 
-        fieldNames = [block.name for block in blocks]
-        if fieldNames != self._fieldsAnnounced:
-            self._log("info", "blockamg linear solver: fields = {:}".format(", ".join(fieldNames)))
-            # The column header for every per-solve line below, printed once here (same trigger as the
-            # fields announcement, since the columns themselves never change without it) instead of on
-            # every single solve -- once you know what the columns mean, the compact rows are enough.
-            self._log(
-                "info",
-                "{:<6} {:<8} {:>5} {:>7} {:>7} {:>7} {:>7}".format(
-                    "solve", "precond", "iters", "η", "‖r‖", "retries", "time"
-                ),
-            )
-            self._fieldsAnnounced = fieldNames
-
         residualNorm = float(np.linalg.norm(b))
         newIncrement = (
             self._lastResidualNorm is not None and residualNorm > self._residualGrowthFactor * self._lastResidualNorm
@@ -894,15 +902,32 @@ class BlockAMGSolver(LinearSolver):
         # nothing to reuse yet, the field-block layout changed (e.g. an AMR event resized the DOF
         # vector), the sparsity pattern changed, a residual jump marks a new increment / cutback, or the
         # previous solve's own outer count asked for it (drifted too far from the one before it).
+        wasStale = self._refreshNext
         mustRefresh = (
             self._preconditioners is None
             or blocks != self._blocks
             or n != self._n
             or patternChanged
             or newIncrement
-            or self._refreshNext
+            or wasStale
         )
         self._refreshNext = False
+
+        # Captured now, in priority order matching mustRefresh above -- by the time the debug detail
+        # is built at the end of this call, self._refreshNext has already been overwritten for the
+        # *next* call, so "why" has to be recorded at the point mustRefresh itself is decided.
+        if not mustRefresh:
+            rebuildReason = None
+        elif self._preconditioners is None:
+            rebuildReason = "first"
+        elif blocks != self._blocks or n != self._n:
+            rebuildReason = "amr"
+        elif patternChanged:
+            rebuildReason = "pattern"
+        elif newIncrement:
+            rebuildReason = "increment"
+        else:
+            rebuildReason = "stale"
 
         with performancetiming.timeit("equilibration"):
             if mustRefresh:
@@ -1262,17 +1287,23 @@ class BlockAMGSolver(LinearSolver):
         self._lastEta = eta
 
         solveElapsedTime = time.time() - solveStartTime
-        self._log(
-            "info",
-            "{:<6} {:<8} {:>3d}it {:>7.1e} {:>7.1e} {:>7d} {:>6.1f}s".format(
-                "#{:}".format(self._solveCount),
-                "rebuilt" if mustRefresh else "reused",
-                outerIters,
-                eta,
-                trueResidual,
-                continuations,
-                solveElapsedTime,
-            ),
+
+        # Populated unconditionally (cheap: one dataclass construction) -- reportsSolveSummary, not
+        # this, is what decides whether the nonlinear solver ever looks at it, so there is nothing to
+        # gate here beyond detailLines, which is genuinely wasted work at anything below "debug".
+        detailLines = ()
+        if self._verbosityIndex >= _VERBOSITY_LEVELS.index("debug"):
+            precondWord = "rebuilt({:})".format(rebuildReason) if mustRefresh else "reused"
+            detailLines = (
+                precondWord,
+                "η={:.1e} · {:.1f}s".format(eta, solveElapsedTime),
+            )
+        self._lastSolveSummary = LinearSolveSummary(
+            iters=outerIters,
+            residual=trueResidual,
+            residualMet=trueResidual <= eta,
+            retries=continuations,
+            detailLines=detailLines,
         )
         if outerIters > self._warnOuterIterationsThreshold:
             # Rare and actionable, so this stays at "warning" (Journal level 0, the least indented and
