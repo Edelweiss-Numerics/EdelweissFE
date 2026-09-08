@@ -143,6 +143,7 @@ def createSolver(opts) -> Callable:
         ("dumpOnDegradationThreshold", int),
         ("dumpOnDegradationMaxDumps", int),
         ("dumpOnDegradationContextSolves", int),
+        ("hotReloadConfigFile", str),
     ):
         if key in optionMap:
             kwargs[key] = cast(optionMap[key])

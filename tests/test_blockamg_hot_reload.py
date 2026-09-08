@@ -189,3 +189,35 @@ def test_every_constructor_setting_is_reloadable_or_explicitly_ignored(configure
     ]
 
     assert unclassified == []
+
+
+def test_the_factory_forwards_the_hot_reload_path(tmp_path):
+    """The factory builds its kwargs from an explicit whitelist, so a setting that is only added
+    to ``BlockAMGSolver.__init__`` is silently DROPPED on the path a deck actually uses.
+
+    That is not hypothetical: it is how this feature first shipped, and the symptom was a run that
+    read its config once and never again, with nothing in the log to say so -- because an
+    unrecognized key in the JSON is dropped by the whitelist rather than rejected.
+    """
+    from edelweissfe.linsolve.blockamg import createSolver
+
+    configPath = tmp_path / "blockamg.json"
+    _write(configPath, {"sweeps": 1, "hotReloadConfigFile": str(configPath)})
+
+    solver = createSolver({"sweeps": 1, "hotReloadConfigFile": str(configPath)})
+
+    assert solver._hotReloadConfigFile == str(configPath)
+
+    # and it is live, not merely stored
+    _write(configPath, {"sweeps": 5, "hotReloadConfigFile": str(configPath)})
+    assert _reload(solver) is True
+    assert solver._sweeps == 5
+
+
+def test_the_factory_defaults_the_hot_reload_path_to_off():
+    from edelweissfe.linsolve.blockamg import createSolver
+
+    solver = createSolver({"sweeps": 1})
+
+    assert solver._hotReloadConfigFile is None
+    assert solver._maybeHotReloadConfig() is False
