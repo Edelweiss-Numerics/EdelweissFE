@@ -78,6 +78,7 @@ symmetric-aggregation-based hierarchy already reaches a working feasibility poin
 """
 
 import collections
+import inspect
 import json
 import os
 import time
@@ -400,6 +401,26 @@ class BlockAMGSolver(LinearSolver):
         Every dumped solve (trigger or context) also records ``mustRefresh``/``patternChanged``/
         ``newIncrement``/``previousOuterIters`` in the manifest, so the hierarchy-staleness question
         can often be answered directly from the manifest without needing a replay at all.
+    hotReloadConfigFile
+        Path to this solver's own JSON config file. When set, every solve checks whether the file
+        changed on disk and, if it did, re-reads it and applies the recognized settings, forcing a
+        hierarchy rebuild. Unset (the default) means the settings are fixed at construction.
+
+        This exists to make solver settings testable against a *live* run. A degraded AMG hierarchy
+        typically only appears tens of hours into a nonlinear analysis, and rebuilding that state to
+        try one parameter is the expensive part of every tuning round -- so the parameter can now be
+        changed in place instead, with the log recording which settings were in force from which
+        solve onwards.
+
+        Editing a file a running process reads is inherently racy, so the reload is built to fail
+        safely: the file is parsed *before* its modification stamp is accepted, so the half-written
+        state an editor briefly leaves behind is retried on the next solve rather than recorded as
+        seen, and a missing, unreadable or malformed config is reported while the settings in force
+        are kept. Nothing about a bad edit can end the run -- which matters precisely because the
+        runs worth using this on are the ones that were expensive to reach.
+
+        Unrecognized keys are reported rather than ignored, and so are recognized ones that cannot
+        be applied after construction.
     """
 
     #: See :attr:`~edelweissfe.linsolve.base.LinearSolver.identification`.
@@ -450,6 +471,7 @@ class BlockAMGSolver(LinearSolver):
         dumpOnDegradationThreshold: int = None,
         dumpOnDegradationMaxDumps: int = 10,
         dumpOnDegradationContextSolves: int = 0,
+        hotReloadConfigFile: str = None,
     ):
         self._outerTol = outerTol
         self._outerRestart = outerRestart
@@ -497,6 +519,12 @@ class BlockAMGSolver(LinearSolver):
         )
         self._dumpOnDegradationMaxDumps = dumpOnDegradationMaxDumps
         self._dumpOnDegradationContextSolves = dumpOnDegradationContextSolves
+
+        # Hot reload: the path to watch, and the (mtime_ns, size) it was last read at. Seeded as
+        # None rather than from the file, so the first solve reads and reports the settings actually
+        # in force -- which is the whole point when the file is being edited during a long run.
+        self._hotReloadConfigFile = hotReloadConfigFile
+        self._hotReloadStamp = None
         if self._dumpOnDegradationDir is not None:
             os.makedirs(self._dumpOnDegradationDir, exist_ok=True)
         # Rolling window of the last dumpOnDegradationContextSolves solves (each entry: solveCount, A,
@@ -858,11 +886,134 @@ class BlockAMGSolver(LinearSolver):
                 },
             )
 
+    # Settings whose stored attribute does not follow the self._<name> convention. Listed
+    # explicitly rather than inferred, because a wrong guess here would apply a setting to nothing
+    # and report success while doing so.
+    _HOT_RELOAD_ALIASES = {
+        "verbosity": "_verbosityIndex",
+        "p1FieldNames": "_p1FieldNamesRequested",
+    }
+    # Changing which file is watched, from inside that file, is not a thing worth supporting.
+    _HOT_RELOAD_IGNORED = ("hotReloadConfigFile",)
+
+    def _maybeHotReloadConfig(self) -> bool:
+        """Re-read the JSON config if it changed on disk; return whether anything was applied.
+
+        Point ``hotReloadConfigFile`` at the config's own path to enable this. It exists so that
+        solver settings can be tried against a *live* run: a degraded AMG hierarchy typically only
+        appears tens of hours into a nonlinear analysis, and rebuilding that state to test one
+        parameter is the expensive part of every tuning round.
+
+        Anything applied forces a hierarchy refresh through ``_refreshNext``, and every derived
+        cache (node coordinates, P1 topology, lazily built P1 maps) is dropped first, because those
+        were built under the *old* settings.
+
+        The file is parsed before its stamp is accepted, so a half-written file -- the normal
+        transient state of an editor saving in place -- is retried on the next solve instead of
+        being recorded as "seen". No failure here can end the run: a missing, unreadable or
+        malformed config is reported and the settings in force are kept. That asymmetry is
+        deliberate. The feature's whole purpose is to be used on a run that is expensive to have
+        reached, so a typo in a config edit must never be able to destroy it.
+        """
+        if self._hotReloadConfigFile is None:
+            return False
+
+        try:
+            fileStat = os.stat(self._hotReloadConfigFile)
+            stamp = (fileStat.st_mtime_ns, fileStat.st_size)
+        except OSError as error:
+            self._log("warning", "hot reload: cannot stat {:}: {:}".format(self._hotReloadConfigFile, error))
+            return False
+
+        if stamp == self._hotReloadStamp:
+            return False
+
+        try:
+            with open(self._hotReloadConfigFile, "r") as configFile:
+                newOptions = json.load(configFile)
+            if not isinstance(newOptions, dict):
+                raise ValueError("expected a JSON object, got {:}".format(type(newOptions).__name__))
+        except (OSError, ValueError) as error:
+            self._log(
+                "warning",
+                "hot reload: {:} is not readable as a JSON object ({:}); keeping the settings in "
+                "force and retrying on the next solve".format(self._hotReloadConfigFile, error),
+            )
+            return False
+
+        self._hotReloadStamp = stamp
+
+        validNames = set(inspect.signature(type(self).__init__).parameters) - {"self"}
+
+        # Diff first, mutate second: the cache invalidation below has to happen before anything is
+        # applied (a p1Maps entry supplied by the new file must not then be dropped as a stale lazy
+        # one), and that needs to know whether there is a change at all.
+        pending, rejected, unknown = [], [], []
+        for name, value in newOptions.items():
+            if name in self._HOT_RELOAD_IGNORED:
+                continue
+            if name not in validNames:
+                unknown.append(name)
+                continue
+
+            if name == "verbosity":
+                if value not in _VERBOSITY_LEVELS:
+                    rejected.append("{:} (must be one of {:})".format(name, _VERBOSITY_LEVELS))
+                    continue
+                newValue = _VERBOSITY_LEVELS.index(value)
+            elif name == "p1FieldNames":
+                newValue = set(value or [])
+            elif name in ("fieldPreconds", "p1Maps"):
+                newValue = value or {}
+            else:
+                newValue = value
+
+            attribute = self._HOT_RELOAD_ALIASES.get(name, "_" + name)
+            if not hasattr(self, attribute):
+                rejected.append("{:} (recognized at construction but not hot-reloadable)".format(name))
+                continue
+
+            oldValue = getattr(self, attribute)
+            if newValue != oldValue:
+                pending.append((name, attribute, oldValue, newValue))
+
+        if pending:
+            for fieldName in self._lazyP1MapNames:
+                self._p1Maps.pop(fieldName, None)
+            self._lazyP1MapNames.clear()
+            self._nodeCoordinateCache.clear()
+            self._pNodeCache.clear()
+
+            for _, attribute, _, newValue in pending:
+                setattr(self, attribute, newValue)
+
+            self._refreshNext = True
+
+        # Reported at "warning" so it lands in the log of a run whose verbosity is not raised: what
+        # settings were in force from which solve onwards is the one thing a later reader of a
+        # hot-reloaded run cannot reconstruct otherwise.
+        if pending or rejected or unknown:
+            summary = ["hot reload of {:} at solve #{:}".format(self._hotReloadConfigFile, self._solveCount)]
+            for name, _, oldValue, newValue in pending:
+                summary.append("  applied  {:}: {!r} -> {!r}".format(name, oldValue, newValue))
+            for entry in rejected:
+                summary.append("  REJECTED {:}".format(entry))
+            for name in unknown:
+                summary.append("  UNKNOWN  {:} (not a BlockAMGSolver setting)".format(name))
+            if not pending:
+                summary.append("  no effective change; hierarchies kept")
+            else:
+                summary.append("  hierarchies will be rebuilt on this solve")
+            self._log("warning", "\n".join(summary))
+
+        return bool(pending)
+
     def __call__(self, A, b):
         solveStartTime = time.time()
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLMatrix, PyAMGCLSolver
 
         self._solveCount += 1
+        self._maybeHotReloadConfig()
         A = A.tocsr()
         n = A.shape[0]
         blocks = self._resolveBlocks(n)
