@@ -81,6 +81,40 @@ class FieldBlock:
     dimension: int
 
 
+@dataclass(frozen=True)
+class LinearSolveSummary:
+    """One solver call's diagnostics -- exactly what the nonlinear solver renders as the extra
+    "linear solve" column in its own convergence table (see
+    :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkConvergence`).
+
+    Attributes
+    ----------
+    iters
+        This call's outer iteration count (e.g. GMRES outer iterations).
+    residual
+        The achieved residual, in whatever norm the solver checks against its own tolerance.
+    residualMet
+        Whether ``residual`` met the solver's own requested tolerance for this call -- rendered with
+        the same "met tolerance" checkmark the Newton residual columns already use.
+    retries
+        How many extra internal attempts this call needed to meet its tolerance (``0`` for a clean
+        first-pass solve). Rendered as a superscript on the iteration count rather than a plain digit,
+        so it can never be misread as part of that number (e.g. iters=65, retries=2 must not look like
+        the single number 652).
+    detailLines
+        Extra lines confined to the "linear solve" column's own width, for detail a routine glance
+        does not need but solver tuning does (e.g. why a preconditioner was rebuilt). Empty unless the
+        solver's own verbosity setting asks for it -- solvers that never populate this simply cost the
+        caller nothing beyond checking for an empty tuple.
+    """
+
+    iters: int
+    residual: float
+    residualMet: bool
+    retries: int
+    detailLines: tuple = ()
+
+
 class LinearSolver:
     """Common base for every ``linsolver`` registry entry. Callable as ``(A, b) -> x``.
 
@@ -93,6 +127,25 @@ class LinearSolver:
     _fieldStructure: "list[FieldBlock] | None" = None
     _model = None
     _dofManager = None
+
+    #: Display name for this solver's own log lines (e.g. a "linear solve" column's debug detail).
+    #: Overridden by a solver that wants its messages attributed to something other than the generic
+    #: base name -- e.g. ``BlockAMGSolver`` sets this to its own identification string.
+    identification = "LinearSolver"
+
+    #: Whether this solver reports per-solve diagnostics (an iteration count, a residual, etc.) that
+    #: the nonlinear solver can render as an extra "linear solve" column in its own convergence table.
+    #: ``False`` for solvers with nothing iterative to report -- a direct factorization has no
+    #: per-solve iteration count or residual, so there is nothing there worth a column. A solver
+    #: overriding this to ``True`` must also populate :attr:`lastSolveSummary` after every
+    #: :meth:`__call__`.
+    reportsSolveSummary = False
+
+    #: The most recent call's diagnostics as a :class:`LinearSolveSummary`, or ``None`` before any
+    #: call, or for a solver that never overrides :attr:`reportsSolveSummary`. Read by the nonlinear
+    #: solver immediately after calling this solver, to build its per-iteration row -- never pushed
+    #: proactively, since the caller alone knows when "this iteration's row" is being assembled.
+    lastSolveSummary: "LinearSolveSummary | None" = None
 
     def setJournal(self, journal) -> None:
         """Receive the shared :class:`~edelweissfe.journal.journal.Journal` instance.
