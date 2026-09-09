@@ -952,7 +952,27 @@ class NED(NonlinearSolverBase):
             # for an explicit scheme means the time step is above the true stability limit. This
             # catches the contributions dt_crit does not see: the nonlocal field (whose limit
             # nothing checks), contact penalty stiffness, and any element shape it misjudges.
-            if Wext > 0.0 and Wkin > Wext * (1.0 + _ENERGY_CREATION_TOLERANCE):
+            # Checked before the comparison below, because that comparison cannot catch it: every
+            # ordering against a NaN is False, including the `Wext > 0.0` this guard is gated on. A
+            # run that has already diverged to NaN therefore passes the energy check silently and
+            # keeps going -- writing NaN into every output for however many hours remain, and
+            # reporting success at the end. Divergence to NaN is the terminal form of exactly the
+            # failure this guard exists to report, so it is reported the same way.
+            if not (np.isfinite(Wext) and np.isfinite(Wkin)):
+                self.journal.message(
+                    "THE SOLUTION HAS DIVERGED: the energy balance is no longer a finite number "
+                    "(external work {:e}, kinetic {:e}), which means the state itself is not. The "
+                    "time step is above the true stability limit -- and dt_crit does not see all of "
+                    "it: it never sees contact penalty stiffness, and it sees the nonlocal field "
+                    "only where that field carries a micro-inertia, a first-order one having a "
+                    "forward-Euler limit that nothing checks. Nothing after this increment is "
+                    "meaningful; stop the run and resume from a checkpoint with a smaller "
+                    "courant-number.".format(Wext, Wkin),
+                    self.identification,
+                    0,
+                )
+
+            elif Wext > 0.0 and Wkin > Wext * (1.0 + _ENERGY_CREATION_TOLERANCE):
                 self.journal.message(
                     "ENERGY IS BEING CREATED: the kinetic energy {:e} exceeds the external work "
                     "{:e} by {:.1f} %. That is impossible -- the unreported terms (strain energy, "

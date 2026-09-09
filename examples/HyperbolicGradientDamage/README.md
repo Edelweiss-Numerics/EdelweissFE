@@ -59,11 +59,20 @@ vtable, so a stale `libMarmot` is not merely out of date, it is wrong.
 
 **Difference** — the point:
 
-- the parabolic scheme's own limit crosses the mechanical one somewhere between `nX = 80` and
-  `nX = 320` (`h = 1.25` to `0.31 mm` against `l = 5 mm`), and since nothing checks it, that run is
-  expected to trip the solver's energy guard — `ENERGY IS BEING CREATED` — rather than fail cleanly;
+- the parabolic scheme's own limit crosses the mechanical one between `nX = 80` and `nX = 160`
+  (`h = 1.25` to `0.625 mm` against `l = 5 mm`), and since nothing checks it, that run **diverges to
+  NaN** — measured: `nX = 160` parabolic reports a finite critical time step of `1.52e-8 s`, runs to
+  completion, and produces `NaN` for every output. It did not even trip the energy guard, because
+  every ordering against a NaN is False, including the `W_ext > 0` the guard is gated on; that is
+  now caught separately (`THE SOLUTION HAS DIVERGED`), but a run on an older solver will look like a
+  success;
 - the hyperbolic run at the same mesh stays governed by the mechanical limit, so its increment count
   tracks `1/h` instead of `1/h^2`.
+
+This also brackets the discretisation constant `C`: the parabolic limit `2 eta/(1 + C l^2/h^2)` at
+`h = 0.625 mm` is `2.6e-8 s` for `C = 12` and `1.3e-8 s` for `C = 24`, and the run diverges at
+`1.52e-8 s` — so `C` is nearer 24 than 12 for this element, which is why the non-local branch of the
+stable increment bounds the assembled operator's eigenvalue directly instead of assuming a constant.
 
 The `dt`-scaling claim itself does not need these runs: it is measured directly, per element, by
 `TestGeneralGradientEnhancedDisplacementFiniteElement` in Marmot, which finds `dt(h/2)/dt(h) =

@@ -136,6 +136,7 @@ def summarise(runDir, nX):
     # The energy guard is what a parabolic run above its own (unchecked) stability limit trips:
     # the kinetic energy overtakes the external work, which is impossible, and the solver says so.
     row["energyCreated"] = "ENERGY IS BEING CREATED" in log
+    row["diverged"] = "THE SOLUTION HAS DIVERGED" in log
     row["incrementationFailed"] = "Incrementation failed" in log
 
     rfPath = os.path.join(runDir, "RF.csv")
@@ -199,7 +200,12 @@ def main():
     for nX in meshes:
         for scheme in ("parabolic", "hyperbolic"):
             row = rows[(scheme, nX)]
-            if row["energyCreated"]:
+            # A run can diverge without the energy guard firing on an older solver: every
+            # ordering against a NaN is False, so the check was passed silently. The force is the
+            # backstop -- a NaN peak force is a diverged run whatever the log says.
+            if row["diverged"] or not np.isfinite(row["peakForce"]):
+                status = "DIVERGED"
+            elif row["energyCreated"]:
                 status = "energy!"
             elif row["incrementationFailed"]:
                 status = "cutbacks"
