@@ -2,7 +2,9 @@
 ** parabolic (viscous, first order in time) or damped hyperbolic (micro-inertia, second order).
 **
 ** Generated from template.inp by run_study.py -- edit the template, not the generated decks.
-** Placeholders: __NX__, __SOLVER_FIELDS__, __ELEMENT_PROPERTY__, __STEP_LENGTH__, __MAX_NUM_INC__
+** The placeholders it substitutes are the double-underscore tokens below; do not name them in a
+** comment, or the substitution rewrites the comment too and a multi-line replacement turns the
+** rest of that line into a stray dataline.
 **
 ** The geometry, material and weak central element are those of examples/AlphaP_AMR_Study, which is
 ** the calibrated fracture-energy benchmark for this material, so the load-displacement curve and
@@ -85,4 +87,4 @@ maxInc=1, minInc=1e-14, maxNumInc=__MAX_NUM_INC__, maxIter=25, stepLength=__STEP
 >>dirichlet, name=leftX, nSet=gen_left, field=displacement, 1=0.0
 >>dirichlet, name=leftY, nSet=gen_left, field=displacement, 2=0.0
 >>dirichlet, name=leftZ, nSet=gen_left, field=displacement, 3=0.0
->>dirichlet, name=right, nSet=gen_right, field=displacement, 1=0.04
+>>dirichlet, name=right, nSet=gen_right, field=displacement, 1=0.1

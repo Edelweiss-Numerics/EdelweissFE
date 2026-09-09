@@ -55,7 +55,7 @@ CROSS_SECTION = 25.0
 PARABOLIC_FIELDS = """second-order-fields="displacement"
 first-order-fields="nonlocal damage\""""
 
-HYPERBOLIC_FIELDS = """second-order-fields="displacement", "nonlocal damage"
+HYPERBOLIC_FIELDS = """second-order-fields="displacement, nonlocal damage"
 micro-inertia-fields="nonlocal damage\""""
 
 HYPERBOLIC_PROPERTY = """*elementProperty, elSet=gen_all, propertyName=nonlocal micro inertia
@@ -150,7 +150,15 @@ def summarise(runDir, nX):
     reaction = np.atleast_2d(np.loadtxt(rfPath))
     displacement = np.atleast_2d(np.loadtxt(uPath))
 
-    row["increments"] = reaction.shape[0]
+    # NOT the number of rows in the exported history: a saveHistory field output is finalised once
+    # per output-frequency increments, so the row count is the increment count divided by that. The
+    # performance table's own tally is the increment count.
+    match = re.search(r"\|\s*increment\s*\|[^|]*\|\s*(\d+)\s*\|", log)
+    if match:
+        row["increments"] = int(match.group(1))
+    else:
+        reported = re.findall(r"increment (\d+):", log)
+        row["increments"] = int(reported[-1]) if reported else 0
 
     force = np.abs(reaction[:, 1])
     elongation = displacement[:, 1]

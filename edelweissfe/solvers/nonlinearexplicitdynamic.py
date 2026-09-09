@@ -1480,8 +1480,10 @@ class NED(NonlinearSolverBase):
         self._rawMicroInertia = microInertia.copy()
         self._checkMicroInertiaAgainstDeclaration(microInertia)
 
-        # Kept before M is turned into the effective inertia: the diagnostics need the viscosity
-        # that is now the damping, not the micro-inertia that replaced it.
+        # Kept before folding, so the kinetic energy diagnostic accounts for the true velocities of
+        # all nodes (including tied slaves) rather than master-placed folded mass -- and before M is
+        # turned into the effective inertia, because the diagnostics need the viscosity that is now
+        # the damping and not the micro-inertia that replaced it.
         self._rawLumpedMass = M.copy()
 
         dampingOfMicroInertiaDofs = M.copy()
