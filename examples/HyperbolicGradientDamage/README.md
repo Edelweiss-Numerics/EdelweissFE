@@ -51,11 +51,35 @@ vtable, so a stale `libMarmot` is not merely out of date, it is wrong.
 
 ## What the result has to show
 
-**Agreement** — the validation:
+**Agreement** — the validation. Measured:
 
-- peak force and fracture energy `G_f` match the parabolic run on the same mesh, and both approach
-  the implicit reference of `AlphaP_AMR_Study` (`G_f ~ 0.098 N/mm`) as the mesh is refined;
-- the localisation band stays `l`-controlled, i.e. its width does not change with the scheme.
+    scheme        nX   h [mm]      dt [s]  increments  F_max [N]  G_f [N/mm]  status
+    parabolic     20    5.000  1.2127e-07        8248      27.84     0.03704      ok
+    hyperbolic    20    5.000  8.8530e-08       11297      42.80     0.04715      ok
+    parabolic     40    2.500  6.0634e-08       16494      60.86     0.05141      ok
+    hyperbolic    40    2.500  6.0634e-08       16494      61.06     0.05149      ok
+    parabolic     80    1.250  3.0317e-08       32986      61.70     0.05025      ok
+    hyperbolic    80    1.250  3.0317e-08       32986      61.94     0.05043      ok
+    parabolic    160    0.625  1.5158e-08       65971        nan         nan  DIVERGED
+    hyperbolic   160    0.625  1.5158e-08       65971      67.10     0.05369      ok
+    parabolic    320    0.312  7.5792e-09      131941        nan         nan  DIVERGED
+    hyperbolic   320    0.312  7.5792e-09      131941      67.21     0.08160      ok
+
+- **Scheme against scheme, at nX = 40 and 80** — the only meshes where both are stable — the two
+  agree to **0.4 %** in peak force and 0.4 % in dissipated energy, on an **identical** time
+  increment. That is the validation: the micro-inertia bought the time-step scaling without moving
+  the answer.
+- **Peak force converges onto an independent reference.** 61.06, 61.94, 67.10, 67.21 N against the
+  implicit `AlphaP_AMR_Study` value of 66.95 N, i.e. **0.4 %** at convergence — a number established
+  before any of this work existed.
+- **`G_f` is NOT mesh-converged, in either scheme.** 0.0515, 0.0504, 0.0537, 0.0816 N/mm against the
+  implicit 0.098. Every run softens essentially to zero (2-4 % of peak by U = 0.097 mm), so this is
+  not a truncated integral: the coarse meshes under-dissipate, and refinement moves `G_f` upward
+  toward the reference. With `l = 5 mm` the band is `2*pi*l ~ 31 mm` wide, so even `h = 1.25 mm` is
+  only a handful of elements across it. Do not read `G_f` from this study as a converged property;
+  read it as a scheme-to-scheme comparison at fixed mesh.
+- The post-peak curve is a single smooth branch at every mesh -- no second peak, no shoulder -- so
+  the rise in `G_f` is a fatter softening tail on a better-resolved process zone, not a second crack.
 
 **Difference** — the point:
 
