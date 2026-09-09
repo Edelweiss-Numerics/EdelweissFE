@@ -268,6 +268,26 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
             The diagonal of the lumped mass matrix to be defined.
         """
 
+    def computeLumpedNonlocalMicroInertia(
+        self,
+        M: np.ndarray,
+    ):
+        """Evaluate the diagonal of the lumped micro-inertia of the element's non-local
+        degrees of freedom.
+
+        A micro-inertia turns a gradient-enhanced field's balance from a viscous, parabolic
+        equation into a damped hyperbolic one, whose stable time increment falls off with the
+        element size rather than with its square. Carrying none is the ordinary case -- it is what
+        every mechanical element and every gradient-enhanced element left in its parabolic form
+        reports -- so this is not abstract and the default leaves the buffer alone.
+
+        Parameters
+        ----------
+        M
+            The diagonal of the lumped micro-inertia, supplied zero-initialised and written in
+            place. Entries left untouched are read as "no micro-inertia here".
+        """
+
     @property
     def initialVelocity(self) -> np.ndarray:
         """The element's initial velocity, in DOF order, applied once as an

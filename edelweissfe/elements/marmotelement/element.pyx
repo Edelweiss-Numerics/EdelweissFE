@@ -324,6 +324,11 @@ cdef class MarmotElementWrapper:
 
         self.marmotElement.computeLumpedInertia(&M[0])
 
+    def computeLumpedNonlocalMicroInertia(self, double[::1] M):
+        """Compute the lumped non-local micro-inertia of the underlying MarmotElement"""
+
+        self.marmotElement.computeLumpedNonlocalMicroInertia(&M[0])
+
     def computeCriticalTimeStepForExplicitDynamics(self, double[::1] Q):
         """Compute the critical time step for explicit dynamics of the underlying MarmotElement"""
         cdef double criticalTimeStep = 1e36

@@ -1,0 +1,74 @@
+** Explicit-dynamic (NED) gradient-enhanced damage test with the non-local field made HYPERBOLIC:
+** the same bar as GCDPNEDExplicit, with a micro-inertia turning the non-local balance from a
+** viscous, parabolic equation into a damped wave equation.
+**
+** What this covers that GCDPNEDExplicit does not:
+**
+**  * the "nonlocal micro inertia" named element property, and
+**    GeneralGradientEnhancedDisplacementFiniteElement::computeLumpedNonlocalMicroInertia.
+**  * the non-local branch of computeCriticalTimeStepForExplicitDynamics, which in the parabolic
+**    case is not checked at all (that element's own ctest covers its scaling; this covers that it
+**    is reached from a deck).
+**  * NED integrating a second-order field with mass-proportional damping, and the momentum,
+**    kinetic-energy and mass-conservation diagnostics excluding a micro-inertia from all three.
+**  * the micro-inertia-fields declaration, and the two-way check between it and what the elements
+**    assembled.
+**
+** The micro-inertia is m_k = eta^2 / 4 = 2.5e-9 s^2 for this deck's eta = 1e-4 s. That is not a
+** fitted value: it is the largest micro-inertia at which the zeroth-order reaction mode does not
+** ring, and the largest one is the best one because the stable increment grows with sqrt(m_k).
+** With l = 4 mm and h = 10 mm it puts the non-local limit around 6e-5 s, two orders above the
+** mechanical limit of ~3e-7 s -- so the mechanical field still governs, which is the whole point,
+** and the reaction here should stay close to the parabolic case's.
+
+*material, name=gcdp, id=gcdp
+**E         nu      fcy         fcu         fbu         ftu         Df          Ah
+30000.0,    0.15,   13,         47.4,       55,         4.74,       0.85,       0.12,
+**Bh        Ch          Dh      As          softmod     l           m           omegaMax
+0.003,      2.0,        1e-6,   15.0,       0.0040,     4,          1.0,        0.99,
+**diffmeth  dTThreshCel viscosity    density   nonlocalViscosity
+0,          0,          0,           3e-9,     1e-4
+
+*section, name=section1, material=gcdp, type=solid
+gen_all
+
+*elementProperty, elSet=gen_all, propertyName=nonlocal micro inertia
+2.5e-9
+
+*job, name=nedGcdpJob, domain=3d
+
+** COURANT NUMBER: 0.1, not the 0.8 default. The l/c critical-time-step estimate is a LINEAR-
+** element formula. For a 20-node element the highest free eigenfrequency is far above what it
+** predicts, and a convergence study on this very case shows the answer only settles around 0.1-0.2:
+** the final reaction is 4.49 at courant 0.8, 84.6 at 0.4, 118.5 at 0.2, 120.7 at 0.1, 118.0 at 0.05.
+** The 0.8 run does not fail, it just quietly returns a number 26x too small. Do not raise this.
+*solver, solver=NEDParallel, name=theSolver
+second-order-fields="displacement", "nonlocal damage"
+micro-inertia-fields="nonlocal damage"
+courant-number=0.1
+output-frequency=50
+
+*modelGenerator, generator=boxGen, name=gen
+nX      =2
+nY      =1
+nZ      =1
+lX      =20
+lY      =10
+lZ      =10
+elType  =GC3D20R
+
+*fieldOutput
+>>perNode, elSet=gen_all, field=displacement, result=U, name=displacement
+>>perNode, elSet=gen_all, field=nonlocal damage, result=U, name=nonlocalDamage
+>>perElement, elSet=gen_all, name=omega, result=omega, quadraturePoint=0:8, f(x)='np.max(x,axis=1)'
+>>perNode, name=RF, nSet=gen_left, field=displacement, result=P, f(x)='np.sum(x[:,0])', saveHistory=True
+>>perNode, name=Uend, nSet=gen_right, field=displacement, result=U, f(x)='np.mean(x[:,0])', saveHistory=True
+
+*output, type=monitor, name=monitor
+fieldOutput=RF
+fieldOutput=Uend
+
+*step, type=adaptiveForExplicitSimulations, solver=theSolver
+maxInc=1, minInc=1e-12, maxNumInc=40000, maxIter=25, stepLength=1e-3
+>>dirichlet, name=fixLeft,  nSet=gen_left,  field=displacement, 1=0, 2=0, 3=0
+>>dirichlet, name=pullRight, nSet=gen_right, field=displacement, 1=0.05
