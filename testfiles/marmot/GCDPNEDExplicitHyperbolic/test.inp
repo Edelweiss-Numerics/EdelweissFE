@@ -11,7 +11,7 @@
 **    is reached from a deck).
 **  * NED integrating a second-order field with mass-proportional damping, and the momentum,
 **    kinetic-energy and mass-conservation diagnostics excluding a micro-inertia from all three.
-**  * the micro-inertia-fields declaration, and the two-way check between it and what the elements
+**  * the non-mechanical-inertia-fields declaration, and the two-way check between it and what the elements
 **    assembled.
 **
 ** The micro-inertia is m_k = eta^2 / 4 = 2.5e-9 s^2 for this deck's eta = 1e-4 s. That is not a
@@ -44,7 +44,7 @@ gen_all
 ** The 0.8 run does not fail, it just quietly returns a number 26x too small. Do not raise this.
 *solver, solver=NEDParallel, name=theSolver
 second-order-fields="displacement, nonlocal damage"
-micro-inertia-fields="nonlocal damage"
+non-mechanical-inertia-fields="nonlocal damage"
 courant-number=0.1
 output-frequency=50
 

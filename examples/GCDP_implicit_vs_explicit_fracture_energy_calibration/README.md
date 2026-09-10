@@ -63,19 +63,10 @@ limit falls off with `h²` and nothing checks it, so the run reports a finite `d
 keeps going. On a solver without the NaN check in the energy guard it looks like a success — hence
 the force being used as the backstop for the status column.
 
-## What is already known going in
+## Results
 
-From the earlier, narrower study this folder supersedes (kept as `NOTES_hyperbolic.md`), on the same
-bar but pulled only to 0.1 mm and without the bulk-viscosity variants:
-
-- parabolic and hyperbolic agree to **0.4 %** in peak force and dissipated energy wherever both are
-  stable, on an **identical** time increment;
-- `explicit-parabolic` diverges to NaN from `h = 0.625 mm` down, at increments the hyperbolic
-  variant runs without complaint;
-- peak force converges onto the implicit reference (67.21 N against 66.95 N, 0.4 %);
-- `G_f` did **not** converge there (0.0515 → 0.0504 → 0.0537 → 0.0816 against 0.098). Whether that
-  is the truncated tail, incomplete mesh convergence, or both is exactly what pulling to the
-  reference's own 0.2 mm endpoint here is meant to settle.
+See `RESULTS.md` for the full run: the derivation of `eta`/`m_k`/the mass scaling, the results
+table, and what it establishes about agreement, stability, and the cost of bulk viscosity.
 
 ## Watch for, in the explicit variants
 
@@ -84,7 +75,7 @@ damped and the shortest-wavelength modes are barely touched. GCDP's damage rides
 internal variable, so an overshoot of `ε̄` above `ε̃` is written in irreversibly. Two things in the
 log are worth reading before trusting a curve:
 
-- the `micro-inertial (not an energy)` row of the energy table — the energy in the ringing; it
+- the `non-mechanical-inertia (not an energy)` row of the energy table — the energy in the ringing; it
   should decay after the initial transient, not persist;
 - `alphaP` in the Ensight output away from the crack — a rising value where nothing is loading is
   ringing being integrated into damage.
