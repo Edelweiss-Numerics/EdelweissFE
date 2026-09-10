@@ -125,9 +125,20 @@ jobs:
       - name: Run tests
         shell: bash -l {0}
         run: |
-          coverage run -m pytest tests $(find edelweissfe -name "test_*.py")
-          coverage run -a -m edelweissfe._cli._run_tests_edelweissfe ./testfiles/marmot/
-          coverage run -a -m edelweissfe._cli._run_tests_edelweissfe ./testfiles/edelweiss-only/
+          # Invoke the installed console-script files directly (not `python -m ...`), which would
+          # unconditionally prepend the repo root to sys.path and let the local, uncompiled
+          # edelweissfe/ source tree shadow the properly built package (with compiled Cython
+          # extensions) installed into site-packages.
+          #
+          # Only tests/ is collected here, not the module-local test_*.py files living inside the
+          # edelweissfe/ package (e.g. edelweissfe/numerics/test_numerics.py, see AGENTS.md). Since
+          # edelweissfe/ has an __init__.py, pytest's own import machinery walks up to the repo
+          # root and prepends *that* to sys.path to import them -- reintroducing the same
+          # shadowing regardless of -m or --import-mode. Those need an editable/in-place build to
+          # run in CI; tracked as a follow-up rather than bundled into this coverage pipeline.
+          coverage run "$(command -v pytest)" tests
+          coverage run -a "$(command -v run_tests_edelweissfe)" ./testfiles/marmot/
+          coverage run -a "$(command -v run_tests_edelweissfe)" ./testfiles/edelweiss-only/
           coverage xml
 
       - name: Upload coverage to Codecov
