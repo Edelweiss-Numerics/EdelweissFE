@@ -48,6 +48,7 @@ import concurrent.futures
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -100,7 +101,13 @@ def _runInFreshInterpreter(code: str) -> tuple[int, str]:
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
-        cwd=str(REPO_ROOT),
+        # NOT cwd=REPO_ROOT: `-c` sets sys.path[0] to the (resolved) cwd, and the repo root
+        # contains an uncompiled edelweissfe/ source tree (no built Cython extensions -- those
+        # only exist in the real, installed site-packages copy under a non-editable `pip install
+        # .`). That local package would shadow the installed one and break on the very import
+        # this test is trying to exercise. A neutral cwd keeps the import resolving to whatever is
+        # actually on sys.path via the installed package, which is the property under test.
+        cwd=tempfile.gettempdir(),
     )
     lastLine = (result.stderr.strip().splitlines() or [""])[-1]
     return result.returncode, lastLine
