@@ -43,9 +43,10 @@ second order, a damped wave equation whose limit falls off linearly, with that c
 its meaning and changing role: it is now the damping. Such a field is declared in
 ``second-order-fields`` **and** in ``non-mechanical-inertia-fields``, the second because nothing in
 an assembled diagonal distinguishes this inertia from a mass: it carries no momentum and no kinetic
-energy, takes no part in the mass-conservation check across a topology change, and is integrated
-with the damping its first-order coefficient now provides. Both directions of that declaration are
-checked against what the elements assembled. Marmot's non-local fields report an inertia this way
+energy, is conserved across a topology change on its own rather than summed into the mechanical
+total, and is integrated with the damping its first-order coefficient now provides. Both directions
+of that declaration are checked against what the elements assembled. Marmot's non-local fields
+report an inertia this way
 via the ``nonlocal micro inertia`` element property; see its ``nonlocalmicroinertia`` feature page
 for the formulation and the choice of the parameter.
 
@@ -699,8 +700,7 @@ class NED(NonlinearSolverBase):
                         and timeStep.number > 0
                         and timeStep.number % topologyCheckFrequency == 0
                     ):
-                        massBefore = float(np.sum(self._rawLumpedMass[self.ids_2ndMechanical]))
-                        nonlocalInertiaBefore = self.nonMechanicalInertiaTotals()
+                        lumpedTotalsBefore = self._perFieldLumpedTotals()
                         momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, V, model)
                         kineticBefore = 0.5 * float(
                             np.sum(self._rawLumpedMass[self.ids_2ndMechanical] * V[self.ids_2ndMechanical] ** 2)
@@ -724,7 +724,7 @@ class NED(NonlinearSolverBase):
                             P[:] = 0.0
 
                             self.reportTopologyChangeConservation(
-                                massBefore, nonlocalInertiaBefore, momentumBefore, kineticBefore, V, model
+                                lumpedTotalsBefore, momentumBefore, kineticBefore, V, model
                             )
 
                             # Lower only. Refinement shrinks the smallest element and tightens the
@@ -1791,30 +1791,31 @@ class NED(NonlinearSolverBase):
 
         return total if total is not None else np.zeros(0)
 
-    def nonMechanicalInertiaTotals(self) -> tuple[float, float]:
-        """The assembled inertia of the degrees of freedom whose inertia is not a mass, by kind.
+    def _perFieldLumpedTotals(self) -> dict[str, float]:
+        """The assembled lumped total of every first- and second-order field, each on its own.
 
-        Both are diagonal totals over disjoint sets of degrees of freedom, and neither is a mass:
-        the first is the gradient-enhanced field's viscosity where that field is integrated with a
-        first-order scheme, the second its non-mechanical inertia where it is integrated with a second-order
-        one. They are returned separately because they do not share units and must not be summed.
+        Never summed across fields. A conservation bug that halves one field's total can be
+        diluted below detection by another field's total if the two differ enough in magnitude
+        -- which happens routinely here, since a mechanical density and a non-local viscosity or
+        non-mechanical inertia are not just different units, they are typically many orders of
+        magnitude apart in value. That is true even between two fields of the SAME kind (two
+        mechanical fields of very different density would have the same problem), so the fix is
+        per field, not per "mechanical vs. not". :meth:`_checkLumpedQuantityConserved` is called
+        once per field with its own total, so a violation anywhere is visible regardless of what
+        else is assembled alongside it.
 
         Returns
         -------
-        tuple[float, float]
-            The first-order (viscous) total and the non-mechanical-inertia total.
+        dict[str, float]
+            Field name to its total lumped mass, viscosity or non-mechanical inertia -- whichever
+            that field's own coefficient is.
         """
 
-        firstOrderTotal = (
-            float(np.sum(self._rawLumpedMass[self.ids_1st])) if self.ids_1st is not None and self.ids_1st.size else 0.0
-        )
-        nonMechanicalInertiaTotal = (
-            float(np.sum(self._rawNonMechanicalInertia[self.ids_nonMechanicalInertia]))
-            if self.ids_nonMechanicalInertia is not None and self.ids_nonMechanicalInertia.size
-            else 0.0
-        )
-
-        return firstOrderTotal, nonMechanicalInertiaTotal
+        totals = {}
+        for fieldName in self.options["first-order-fields"] + self.options["second-order-fields"]:
+            indices = self.theDofManager.idcsOfFieldsInDofVector[fieldName]
+            totals[fieldName] = float(np.sum(self._rawLumpedMass[indices]))
+        return totals
 
     def _checkNonMechanicalInertiaAgainstDeclaration(self, nonMechanicalInertia: DofVector):
         """Check the assembled non-mechanical inertia against what the deck declared, in both directions.
@@ -1937,8 +1938,7 @@ class NED(NonlinearSolverBase):
 
     def reportTopologyChangeConservation(
         self,
-        massBefore: float,
-        nonlocalInertiaBefore: tuple[float, float],
+        lumpedTotalsBefore: dict[str, float],
         momentumBefore: np.ndarray,
         kineticBefore: float,
         V: DofVector,
@@ -1947,33 +1947,32 @@ class NED(NonlinearSolverBase):
         """Report what a topology change did to the quantities that ought to survive it.
 
         Refinement interpolates the velocity onto new nodes and re-lumps every per-element
-        scalar property, and the four invariants behave differently under that:
+        scalar property, and the three invariants behave differently under that:
 
-        * **Every lumped quantity -- mass, a first-order field's viscosity, a second-order
-          field's non-mechanical inertia -- is conserved exactly**, by the same geometric
-          identity: the children of a refined element tile it and carry the same value. Which
-          of the three a given quantity physically is plays no part in this; see
-          :meth:`_checkLumpedQuantityConserved`, which is why one check serves all three rather
-          than mass alone. Violating any of them raises.
+        * **Every field's own lumped total is conserved exactly**, by the same geometric
+          identity regardless of what that field's coefficient physically is: the children of a
+          refined element tile it and carry the same value. Checked per FIELD, not per family,
+          via :meth:`_checkLumpedQuantityConserved` -- summing across fields first, even ones
+          that agree on units, would let a violation in a numerically small field hide inside a
+          numerically large one. Violating any single field's total raises.
         * **Linear momentum is conserved exactly for a spatially uniform velocity field**, because
           the shape functions are a partition of unity and the child masses sum to the parent's. For
           a general field the discrepancy is second order in the velocity gradient across the parent:
           discretisation error, not a defect. Reported, not enforced. Restricted to the fields with a
           physical mass: a viscosity or a non-mechanical inertia has no associated momentum, mass or
-          not.
+          not, and here fields legitimately DO sum into one total, because a real total system
+          momentum is exactly the sum of its parts' momenta.
         * **Kinetic energy is not conserved** by interpolation plus re-lumping, and it is the most
-          sensitive of the four, being quadratic in the interpolation error. Reported as a relative
+          sensitive of the three, being quadratic in the interpolation error. Reported as a relative
           jump; more than roughly a percent is a reason to look at the transfer rather than to
           believe the physics. Restricted to the same mass-carrying fields as momentum, for the same
-          reason.
+          reason, and summed across them for the same reason momentum is.
 
         Parameters
         ----------
-        massBefore
-            Total second-order (physical) lumped mass before the change.
-        nonlocalInertiaBefore
-            Totals of the lumped inertia that is not a mass before the change, as
-            (first-order viscosity, non-mechanical inertia); see :meth:`nonMechanicalInertiaTotals`.
+        lumpedTotalsBefore
+            Every first- and second-order field's own lumped total before the change, by field
+            name; see :meth:`_perFieldLumpedTotals`.
         momentumBefore
             Per-component momentum before the change.
         kineticBefore
@@ -1986,21 +1985,19 @@ class NED(NonlinearSolverBase):
         Raises
         ------
         RuntimeError
-            If any of the three lumped quantities (mass, first-order viscosity, non-mechanical
-            inertia) changed by more than its conservation tolerance.
+            If any field's own lumped total changed by more than its conservation tolerance.
         """
 
-        massAfter = float(np.sum(self._rawLumpedMass[self.ids_2ndMechanical]))
-        nonlocalInertiaAfter = self.nonMechanicalInertiaTotals()
+        lumpedTotalsAfter = self._perFieldLumpedTotals()
         momentumAfter = self.secondOrderMomentum(self._rawLumpedMass, V, model)
         kineticAfter = 0.5 * float(np.sum(self._rawLumpedMass[self.ids_2ndMechanical] * V[self.ids_2ndMechanical] ** 2))
 
-        relativeMassChange = self._checkLumpedQuantityConserved("mass", massBefore, massAfter)
-        relativeFirstOrderViscosityChange = self._checkLumpedQuantityConserved(
-            "first-order viscosity", nonlocalInertiaBefore[0], nonlocalInertiaAfter[0]
-        )
-        relativeNonMechanicalInertiaChange = self._checkLumpedQuantityConserved(
-            "non-mechanical inertia", nonlocalInertiaBefore[1], nonlocalInertiaAfter[1]
+        relativeChangeByField = {
+            fieldName: self._checkLumpedQuantityConserved(fieldName, before, lumpedTotalsAfter.get(fieldName, 0.0))
+            for fieldName, before in lumpedTotalsBefore.items()
+        }
+        worstField, worstRelativeChange = (
+            max(relativeChangeByField.items(), key=lambda item: item[1]) if relativeChangeByField else ("", 0.0)
         )
 
         # Minv = 1/M is formed wherever M != 0.0 and only negative mass is rejected, so a master
@@ -2034,14 +2031,12 @@ class NED(NonlinearSolverBase):
         relativeKineticJump = abs(kineticAfter - kineticBefore) / kineticBefore if kineticBefore > 0.0 else 0.0
 
         self.journal.message(
-            "Topology change: mass conserved to {:.1e} relative (1st-order viscosity {:.1e}, "
-            "non-mechanical inertia {:.1e}); smallest integrating mass {:.3e} "
-            "({:.1e} of median) [2nd-order {:.3e} of median {:.3e}; 1st-order {:.3e} of median "
-            "{:.3e}]; largest momentum component change "
+            "Topology change: worst-conserved field '{:}' to {:.1e} relative; smallest integrating "
+            "mass {:.3e} ({:.1e} of median) [2nd-order {:.3e} of median {:.3e}; 1st-order {:.3e} of "
+            "median {:.3e}]; largest momentum component change "
             "{:.3e} (of {:.3e}); kinetic energy {:.6e} -> {:.6e} ({:+.2f} %)".format(
-                relativeMassChange,
-                relativeFirstOrderViscosityChange,
-                relativeNonMechanicalInertiaChange,
+                worstField,
+                worstRelativeChange,
                 smallestMass,
                 massRatio,
                 smallest2nd,
