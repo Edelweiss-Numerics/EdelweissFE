@@ -128,15 +128,18 @@ from edelweissfe.utils.exceptions import (
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
 
-#: Tolerance on the relative change of the total lumped mass across a single topology
-#: change. The children of a refined element tile it and carry the same density, so the
-#: mass is a geometric identity -- but it is assembled by Gauss quadrature, which is exact
-#: only up to a polynomial order. A distorted hexa20 has a non-polynomial Jacobian, so
-#: repartitioning a parent into children changes the quadrature truncation error. Measured
-#: on the anchor pry-out model, one live refinement moves the total mass by 4.63e-08
-#: relative; this bound leaves more than an order of magnitude of headroom above that
-#: while still catching a refinement or lumping error, which would be O(1), not O(1e-8).
-_MASS_CONSERVATION_TOLERANCE = 1e-6
+#: Tolerance on the relative change, across a single topology change, of any row-sum-lumped
+#: per-element quantity (mass, a first-order field's viscosity, a second-order field's
+#: non-mechanical inertia -- whichever is assigned as a per-element scalar and lumped with
+#: the same weights). The children of a refined element tile it and carry the same value, so
+#: conservation is a geometric identity regardless of what the quantity physically is -- but
+#: it is assembled by Gauss quadrature, which is exact only up to a polynomial order. A
+#: distorted hexa20 has a non-polynomial Jacobian, so repartitioning a parent into children
+#: changes the quadrature truncation error. Measured on the anchor pry-out model, one live
+#: refinement moves the total mass by 4.63e-08 relative; this bound leaves more than an order
+#: of magnitude of headroom above that while still catching a refinement or lumping error,
+#: which would be O(1), not O(1e-8).
+_LUMPED_QUANTITY_CONSERVATION_TOLERANCE = 1e-6
 
 #: Fractional margin by which the kinetic energy may exceed the external work before it is
 #: reported as energy creation. KE <= W_ext is exact in the continuum, but the discrete run has
@@ -146,11 +149,12 @@ _MASS_CONSERVATION_TOLERANCE = 1e-6
 #: unstable time step produces -- v5 of the anchor pry-out reached 1e+38 mm.
 _ENERGY_CREATION_TOLERANCE = 1e-2
 
-#: Tolerance on the accumulated relative mass drift over a whole step. A single change
-#: being within tolerance does not bound a run with hundreds of refinements, so the drift
-#: is summed and checked separately. At the measured 4.63e-08 per change, this permits
-#: over two thousand refinements before tripping.
-_CUMULATIVE_MASS_DRIFT_TOLERANCE = 1e-4
+#: Tolerance on the accumulated relative drift of any one lumped quantity (see
+#: _LUMPED_QUANTITY_CONSERVATION_TOLERANCE) over a whole step. A single change being within
+#: tolerance does not bound a run with hundreds of refinements, so the drift is summed per
+#: quantity and checked separately. At the measured 4.63e-08 per change, this permits over
+#: two thousand refinements before tripping.
+_CUMULATIVE_LUMPED_QUANTITY_DRIFT_TOLERANCE = 1e-4
 
 
 @dataclass(frozen=True)
@@ -347,11 +351,14 @@ class NED(NonlinearSolverBase):
         self._rawNonMechanicalInertia = None
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
-        self._warnedAboutMassDrift = False
-        #: Summed relative mass drift over every topology change, checked against
-        #: _CUMULATIVE_MASS_DRIFT_TOLERANCE so that many individually-tolerable changes
-        #: cannot silently add up to a meaningful one.
-        self._cumulativeMassDrift = 0.0
+        #: Summed relative drift of each lumped quantity (mass, first-order viscosity,
+        #: non-mechanical inertia) over every topology change, keyed by name and checked
+        #: against _CUMULATIVE_LUMPED_QUANTITY_DRIFT_TOLERANCE so that many
+        #: individually-tolerable changes cannot silently add up to a meaningful one.
+        self._cumulativeLumpedQuantityDrift = {}
+        #: Whether the cumulative-drift warning has already fired for a given quantity name,
+        #: so it is reported once per step rather than once per topology change.
+        self._warnedAboutCumulativeDrift = {}
         #: Work done on the model by its prescribed degrees of freedom, accumulated every
         #: increment. Compared against the kinetic energy to detect energy creation; see
         #: _ENERGY_CREATION_TOLERANCE.
@@ -467,10 +474,10 @@ class NED(NonlinearSolverBase):
         stepWallClockTic = perf_counter()
 
         self._externalWork = self._consumeResumedExternalWork()
-        self._cumulativeMassDrift = 0.0
+        self._cumulativeLumpedQuantityDrift = {}
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
-        self._warnedAboutMassDrift = False
+        self._warnedAboutCumulativeDrift = {}
 
         # Constraints whose DOF footprint is the outcome of a search, i.e. contact. Collected once,
         # so a model without any pays nothing for the per-increment tick in the loop below.
@@ -1856,6 +1863,78 @@ class NED(NonlinearSolverBase):
                 "micro inertia'; without it the field has no second-order term to integrate.".format(missing)
             )
 
+    def _checkLumpedQuantityConserved(self, label: str, before: float, after: float) -> float:
+        """Check one row-sum-lumped per-element quantity for exact conservation across a
+        topology change, and warn once per step if many individually-tolerable changes have
+        accumulated into a meaningful one.
+
+        Any quantity assigned as a per-element scalar and lumped with the same row-sum weights
+        -- mass, a first-order field's viscosity, a second-order field's non-mechanical inertia
+        -- is conserved by the SAME geometric identity: the children of a refined element tile
+        it and carry the same value. What the quantity physically is plays no part in that;
+        only how it is assembled does, which is why this one check serves all of them.
+
+        Parameters
+        ----------
+        label
+            Name of the quantity, used in the raised message and as the key for its own
+            cumulative drift and warned-once state.
+        before, after
+            The total before and after the change.
+
+        Returns
+        -------
+        float
+            The relative change, for the caller to report.
+
+        Raises
+        ------
+        RuntimeError
+            If the relative change exceeds _LUMPED_QUANTITY_CONSERVATION_TOLERANCE.
+        """
+
+        relativeChange = abs(after - before) / before if before > 0.0 else 0.0
+        self._cumulativeLumpedQuantityDrift[label] = (
+            self._cumulativeLumpedQuantityDrift.get(label, 0.0) + relativeChange
+        )
+
+        if relativeChange > _LUMPED_QUANTITY_CONSERVATION_TOLERANCE:
+            raise RuntimeError(
+                "A topology change did not conserve the total lumped {:}: {:e} became {:e}, a "
+                "relative change of {:e} against a tolerance of {:e}. The children of a refined "
+                "element tile it and carry the same value, so it is conserved geometrically; the "
+                "quadrature that assembles it is exact only up to a polynomial order, which "
+                "admits a small change. A violation of this size is not quadrature -- it means "
+                "the refinement or the lumping is wrong.".format(
+                    label, before, after, relativeChange, _LUMPED_QUANTITY_CONSERVATION_TOLERANCE
+                )
+            )
+
+        # Reported, not raised. By this function's own account each individual change was
+        # within the exact-conservation bound, so what accumulates here is quadrature error, not
+        # a violated invariant -- and aborting a multi-hour run mid-increment on an accumulated
+        # heuristic is out of proportion to what it establishes. The per-change check above is
+        # the invariant, and it still raises.
+        if self._cumulativeLumpedQuantityDrift[
+            label
+        ] > _CUMULATIVE_LUMPED_QUANTITY_DRIFT_TOLERANCE and not self._warnedAboutCumulativeDrift.get(label, False):
+            self._warnedAboutCumulativeDrift[label] = True
+            self.journal.message(
+                "The accumulated relative {:} drift over this step has reached {:e}, above the "
+                "tolerance of {:e}. Each individual topology change was within its own bound, so "
+                "this is many small quadrature changes adding up rather than one bad refinement; "
+                "the model's {:} is no longer the one the step started with.".format(
+                    label,
+                    self._cumulativeLumpedQuantityDrift[label],
+                    _CUMULATIVE_LUMPED_QUANTITY_DRIFT_TOLERANCE,
+                    label,
+                ),
+                self.identification,
+                1,
+            )
+
+        return relativeChange
+
     def reportTopologyChangeConservation(
         self,
         massBefore: float,
@@ -1867,28 +1946,26 @@ class NED(NonlinearSolverBase):
     ):
         """Report what a topology change did to the quantities that ought to survive it.
 
-        Refinement interpolates the velocity onto new nodes and re-lumps the mass, and the three
-        invariants behave differently under that:
+        Refinement interpolates the velocity onto new nodes and re-lumps every per-element
+        scalar property, and the four invariants behave differently under that:
 
-        * **Total mass is conserved exactly.** The children of a refined element tile it and carry the
-          same density, so this is an identity rather than an approximation -- which makes it the
-          cheapest correctness check on the entire transfer, and the one that catches a connectivity
-          or geometry error nothing else would notice. Violating it raises.
-
-          Restricted to the SECOND-ORDER field, which is the only one carrying mass in the physical
-          sense. Summing the whole lumped vector also collects the first-order (nonlocal damage)
-          field, whose "mass" is a viscosity: with eta_nl ~ 1e-4 against a density ~ 1e-9 that block
-          outweighs the real mass by orders of magnitude, so a total-vector check is dominated by a
-          quantity refinement need not conserve at all and would pass a 100 % error in the actual
-          mass. The first-order block is reported separately rather than folded in.
+        * **Every lumped quantity -- mass, a first-order field's viscosity, a second-order
+          field's non-mechanical inertia -- is conserved exactly**, by the same geometric
+          identity: the children of a refined element tile it and carry the same value. Which
+          of the three a given quantity physically is plays no part in this; see
+          :meth:`_checkLumpedQuantityConserved`, which is why one check serves all three rather
+          than mass alone. Violating any of them raises.
         * **Linear momentum is conserved exactly for a spatially uniform velocity field**, because
           the shape functions are a partition of unity and the child masses sum to the parent's. For
           a general field the discrepancy is second order in the velocity gradient across the parent:
-          discretisation error, not a defect. Reported, not enforced.
+          discretisation error, not a defect. Reported, not enforced. Restricted to the fields with a
+          physical mass: a viscosity or a non-mechanical inertia has no associated momentum, mass or
+          not.
         * **Kinetic energy is not conserved** by interpolation plus re-lumping, and it is the most
-          sensitive of the three, being quadratic in the interpolation error. Reported as a relative
+          sensitive of the four, being quadratic in the interpolation error. Reported as a relative
           jump; more than roughly a percent is a reason to look at the transfer rather than to
-          believe the physics.
+          believe the physics. Restricted to the same mass-carrying fields as momentum, for the same
+          reason.
 
         Parameters
         ----------
@@ -1897,7 +1974,6 @@ class NED(NonlinearSolverBase):
         nonlocalInertiaBefore
             Totals of the lumped inertia that is not a mass before the change, as
             (first-order viscosity, non-mechanical inertia); see :meth:`nonMechanicalInertiaTotals`.
-            Reported only.
         momentumBefore
             Per-component momentum before the change.
         kineticBefore
@@ -1910,54 +1986,22 @@ class NED(NonlinearSolverBase):
         Raises
         ------
         RuntimeError
-            If the total lumped mass changed.
+            If any of the three lumped quantities (mass, first-order viscosity, non-mechanical
+            inertia) changed by more than its conservation tolerance.
         """
 
         massAfter = float(np.sum(self._rawLumpedMass[self.ids_2ndMechanical]))
         nonlocalInertiaAfter = self.nonMechanicalInertiaTotals()
-        # Taken per block rather than on a sum: a viscosity and a non-mechanical inertia have different
-        # units, and adding them to report one number would be the very mistake the split above
-        # exists to avoid. They cannot both be non-zero at the same degree of freedom, so the worse
-        # of the two relative changes is the one to report.
-        relativeNonlocalInertiaChange = max(
-            abs(after - before) / before if before > 0.0 else 0.0
-            for before, after in zip(nonlocalInertiaBefore, nonlocalInertiaAfter)
-        )
         momentumAfter = self.secondOrderMomentum(self._rawLumpedMass, V, model)
         kineticAfter = 0.5 * float(np.sum(self._rawLumpedMass[self.ids_2ndMechanical] * V[self.ids_2ndMechanical] ** 2))
 
-        relativeMassChange = abs(massAfter - massBefore) / massBefore if massBefore > 0.0 else 0.0
-        self._cumulativeMassDrift += relativeMassChange
-
-        if relativeMassChange > _MASS_CONSERVATION_TOLERANCE:
-            raise RuntimeError(
-                "A topology change did not conserve the total lumped mass: {:e} became {:e}, a "
-                "relative change of {:e} against a tolerance of {:e}. The children of a refined "
-                "element tile it and carry the same density, so the mass is conserved geometrically; "
-                "the quadrature that assembles it is exact only up to a polynomial order, which "
-                "admits a small change. A violation of this size is not quadrature -- it means the "
-                "refinement or the mass lumping is wrong.".format(
-                    massBefore, massAfter, relativeMassChange, _MASS_CONSERVATION_TOLERANCE
-                )
-            )
-
-        # Reported, not raised. By this function's own account each individual change was
-        # within the exact-conservation bound, so what accumulates here is quadrature error, not a
-        # violated invariant -- and aborting a multi-hour run mid-increment on an accumulated
-        # heuristic is out of proportion to what it establishes. The per-change check above is the
-        # invariant, and it still raises.
-        if self._cumulativeMassDrift > _CUMULATIVE_MASS_DRIFT_TOLERANCE and not self._warnedAboutMassDrift:
-            self._warnedAboutMassDrift = True
-            self.journal.message(
-                "The accumulated relative lumped-mass drift over this step has reached {:e}, above "
-                "the tolerance of {:e}. Each individual topology change was within its own bound, so "
-                "this is many small quadrature changes adding up rather than one bad refinement; the "
-                "model mass is no longer the one the step started with.".format(
-                    self._cumulativeMassDrift, _CUMULATIVE_MASS_DRIFT_TOLERANCE
-                ),
-                self.identification,
-                1,
-            )
+        relativeMassChange = self._checkLumpedQuantityConserved("mass", massBefore, massAfter)
+        relativeFirstOrderViscosityChange = self._checkLumpedQuantityConserved(
+            "first-order viscosity", nonlocalInertiaBefore[0], nonlocalInertiaAfter[0]
+        )
+        relativeNonMechanicalInertiaChange = self._checkLumpedQuantityConserved(
+            "non-mechanical inertia", nonlocalInertiaBefore[1], nonlocalInertiaAfter[1]
+        )
 
         # Minv = 1/M is formed wherever M != 0.0 and only negative mass is rejected, so a master
         # DOF left with a tiny positive mass yields an enormous Minv and integrates itself to
@@ -1990,13 +2034,14 @@ class NED(NonlinearSolverBase):
         relativeKineticJump = abs(kineticAfter - kineticBefore) / kineticBefore if kineticBefore > 0.0 else 0.0
 
         self.journal.message(
-            "Topology change: 2nd-order mass conserved to {:.1e} relative (1st-order inertia "
-            "{:.1e}); smallest integrating mass {:.3e} "
+            "Topology change: mass conserved to {:.1e} relative (1st-order viscosity {:.1e}, "
+            "non-mechanical inertia {:.1e}); smallest integrating mass {:.3e} "
             "({:.1e} of median) [2nd-order {:.3e} of median {:.3e}; 1st-order {:.3e} of median "
             "{:.3e}]; largest momentum component change "
             "{:.3e} (of {:.3e}); kinetic energy {:.6e} -> {:.6e} ({:+.2f} %)".format(
                 relativeMassChange,
-                relativeNonlocalInertiaChange,
+                relativeFirstOrderViscosityChange,
+                relativeNonMechanicalInertiaChange,
                 smallestMass,
                 massRatio,
                 smallest2nd,
