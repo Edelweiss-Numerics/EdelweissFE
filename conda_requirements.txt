@@ -17,6 +17,7 @@ numpydoc
 python=3.14.7=h1945688_4_cp314t
 python-freethreading=3.14.7=h92d6c8b_4
 pytest
+pytest-cov
 prettytable
 scipy
 suitesparse

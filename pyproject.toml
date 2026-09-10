@@ -39,3 +39,18 @@ markers = [
     # cannot be done in-process. Deselect with `-m "not slow"` while iterating.
     "slow: spawns many subprocesses; seconds rather than milliseconds",
 ]
+
+[tool.coverage.run]
+source = ["edelweissfe"]
+branch = true
+# The pytest suite (tests/ + module-local test_*.py files) and the .inp-driven
+# run_tests_edelweissfe integration runner are both invoked under `coverage run -a` in CI to
+# accumulate one combined report; omit the test files themselves from the measured source.
+omit = ["*/test_*.py"]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "def __repr__",
+]
