@@ -37,6 +37,17 @@ cimport numpy as np
 
 from edelweissfe.utils.exceptions import CutbackRequest
 
+# Point Marmot's warning channel at stdout, once, when this extension is imported.
+#
+# MarmotJournal holds an std::ostream constructed from a null streambuf, so warningToMSG() writes
+# into nothing unless a consumer calls setMSGOutputDirection. Nothing here ever did, which means
+# every warning Marmot has ever raised on this path -- a deprecated state name, an element telling
+# you that its stable increment is bounded by the non-local field rather than by the mesh -- was
+# discarded before it could be printed. Sending it to std::cout puts it in the same place the
+# solver's own output goes, so a redirected run log captures it.
+MarmotJournal.setMSGOutputDirection(cout)
+
+
 cimport edelweissfe.elements.marmotelement.element
 
 mapLoadTypes={

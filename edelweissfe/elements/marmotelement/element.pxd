@@ -37,6 +37,24 @@ from libcpp.vector cimport vector
 import numpy as np
 
 
+# Marmot's warning channel. MarmotJournal is constructed with a NULL streambuf, so every
+# warningToMSG()/notificationToMSG() the library emits is silently discarded until a consumer
+# points it somewhere -- which nothing in EdelweissFE did, so no Marmot warning has ever been
+# visible from here. See the setMSGOutputDirection call in element.pyx.
+cdef extern from "<ostream>" namespace "std":
+    cdef cppclass ostream
+
+
+cdef extern from "<iostream>" namespace "std":
+    ostream cout
+
+
+cdef extern from "Marmot/MarmotJournal.h":
+    cdef cppclass MarmotJournal:
+        @staticmethod
+        void setMSGOutputDirection(ostream&)
+
+
 cdef extern from "Marmot/MarmotElement.h" namespace "MarmotElement":
     cdef enum StateTypes:
         Sigma11,
