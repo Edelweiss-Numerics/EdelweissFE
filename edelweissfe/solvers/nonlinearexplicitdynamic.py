@@ -1485,29 +1485,41 @@ class NED(NonlinearSolverBase):
             el.computeLumpedInertia(Me)
             M[el] += Me
 
-        # What the elements assemble into M is the coefficient of the HIGHEST time derivative each
-        # field had before micro-inertia existed: a density on the displacement block, a viscosity
-        # on the gradient-enhanced one. Where a micro-inertia has been assigned it takes that role
-        # over and the viscosity becomes what it now is, the damping -- so the two vectors are read
-        # exactly that way below, and a model without any micro-inertia never leaves this path.
-        microInertia = self.theDofManager.constructDofVector()
-        microInertia[:] = 0.0
+        # The coefficient of each field's FIRST time derivative: zero on the mechanical block,
+        # where no device reports through this path, and the non-local viscosity on a non-local
+        # one -- always, whether or not that field has also been given a micro-inertia (see
+        # computeLumpedInertia() above, which reports the SECOND: mass, and, where one has been
+        # assigned, that micro-inertia). Neither vector needs the swap-in-place bookkeeping a
+        # single merged vector used to.
+        damping = self.theDofManager.constructDofVector()
+        damping[:] = 0.0
         for el in model.elements.values():
-            Me = np.zeros(el.nDof)
-            el.computeLumpedNonlocalMicroInertia(Me)
-            microInertia[el] += Me
+            Ce = np.zeros(el.nDof)
+            el.computeLumpedDamping(Ce)
+            damping[el] += Ce
+
+        # Isolate the non-local part of M by zeroing the known mechanical indices: what remains is
+        # exactly zero except where an element actually assigned a micro-inertia, which is what the
+        # declaration check and the micro-inertia diagnostics need.
+        microInertia = M.copy()
+        microInertia[self.ids_2ndMechanical] = 0.0
 
         self._rawMicroInertia = microInertia.copy()
         self._checkMicroInertiaAgainstDeclaration(microInertia)
 
-        # Kept before folding, so the kinetic energy diagnostic accounts for the true velocities of
-        # all nodes (including tied slaves) rather than master-placed folded mass -- and before M is
-        # turned into the effective inertia, because the diagnostics need the viscosity that is now
-        # the damping and not the micro-inertia that replaced it.
-        self._rawLumpedMass = M.copy()
+        # A first-order field is integrated by forward Euler, C * rate = P, and divides by THIS
+        # vector to do it -- so what it needs here is the damping/viscosity computeLumpedDamping()
+        # reports, not the (correctly zero) inertia computeLumpedInertia() reports for a field with
+        # no micro-inertia. Resolved here, ahead of the general ids_1st/ids_2nd bookkeeping further
+        # down, because the vector everything below reads as "the divisor" needs it first.
+        firstOrderIds = np.empty(0, dtype=int)
+        for fieldName in self.options["first-order-fields"]:
+            firstOrderIds = np.r_[firstOrderIds, self.theDofManager.idcsOfFieldsInDofVector[fieldName]]
+        M[firstOrderIds] = damping[firstOrderIds]
 
-        dampingOfMicroInertiaDofs = M.copy()
-        M[self.ids_microInertia] = microInertia[self.ids_microInertia]
+        # Kept before folding, so the kinetic energy diagnostic accounts for the true velocities of
+        # all nodes (including tied slaves) rather than master-placed folded mass.
+        self._rawLumpedMass = M.copy()
 
         # compute inverses
         if np.any(M == 0.0):
@@ -1539,7 +1551,7 @@ class NED(NonlinearSolverBase):
             # master collects slaves of a single material the two folds cancel exactly and the rate
             # is unchanged; where it collects slaves of different ones the rate becomes their
             # inertia-weighted blend, which is what the folded equation of motion actually has.
-            self.mpcTransformation.foldLumpedMass(dampingOfMicroInertiaDofs)
+            self.mpcTransformation.foldLumpedMass(damping)
 
         Minv[M != 0.0] = 1.0 / M[M != 0.0]
 
@@ -1550,7 +1562,7 @@ class NED(NonlinearSolverBase):
         self._microDampingRate[:] = 0.0
         if self.ids_microInertia.size:
             integrating = self.ids_microInertia[M[self.ids_microInertia] > 0.0]
-            self._microDampingRate[integrating] = dampingOfMicroInertiaDofs[integrating] / M[integrating]
+            self._microDampingRate[integrating] = damping[integrating] / M[integrating]
 
         # kept (instead of 1/Minv) for the kinetic energy: slave DOFs have Minv = 0
         self._lumpedMass = M

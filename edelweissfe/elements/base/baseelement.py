@@ -260,32 +260,38 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         self,
         M: np.ndarray,
     ):
-        """Evaluate the internal forces for given time, field, and field increment.
+        """Evaluate the diagonal of the lumped inertia of the element, over every field it carries.
+
+        The coefficient of each field's SECOND time derivative: mass on the displacement block,
+        and, on a non-local block whose field has been given a micro-inertia, that micro-inertia.
+        A gradient-enhanced field left in its parabolic form -- the ordinary case -- reports none,
+        which is what tells the solver it is still first order in time; see
+        computeLumpedDamping() for what integrates it in that case.
 
         Parameters
         ----------
         M
-            The diagonal of the lumped mass matrix to be defined.
+            The diagonal of the lumped inertia to be defined.
         """
 
-    def computeLumpedNonlocalMicroInertia(
+    def computeLumpedDamping(
         self,
-        M: np.ndarray,
+        C: np.ndarray,
     ):
-        """Evaluate the diagonal of the lumped micro-inertia of the element's non-local
-        degrees of freedom.
+        """Evaluate the diagonal of the lumped damping of the element, over every field it carries.
 
-        A micro-inertia turns a gradient-enhanced field's balance from a viscous, parabolic
-        equation into a damped hyperbolic one, whose stable time increment falls off with the
-        element size rather than with its square. Carrying none is the ordinary case -- it is what
-        every mechanical element and every gradient-enhanced element left in its parabolic form
-        reports -- so this is not abstract and the default leaves the buffer alone.
+        The coefficient of each field's FIRST time derivative: zero on the displacement block,
+        where no device reports through this path, and the non-local viscosity on a non-local
+        block -- always, whether or not that field has also been given a micro-inertia (see
+        computeLumpedInertia()). A first-order non-local field is integrated by this term alone; a
+        second-order one is damped by it. Carrying none is the ordinary case for a plain mechanical
+        element, so this is not abstract and the default leaves the buffer alone.
 
         Parameters
         ----------
-        M
-            The diagonal of the lumped micro-inertia, supplied zero-initialised and written in
-            place. Entries left untouched are read as "no micro-inertia here".
+        C
+            The diagonal of the lumped damping, supplied zero-initialised and written in place.
+            Entries left untouched are read as "no damping here".
         """
 
     @property

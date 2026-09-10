@@ -145,7 +145,7 @@ cdef extern from "Marmot/MarmotElement.h":
                         double dT)
 
         void computeLumpedInertia(double* M)
-        void computeLumpedNonlocalMicroInertia(double* M)
+        void computeLumpedDamping(double* C)
 
         void computeCriticalTimeStepForExplicitDynamics(double& criticalTimeStep, const double* QTotal)
 
