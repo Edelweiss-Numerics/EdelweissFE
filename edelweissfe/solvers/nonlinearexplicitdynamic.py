@@ -67,6 +67,12 @@ carrying a non-mechanical inertia, which keeps it out of both balances and onto 
 The deck says nothing about any of this: assigning the element property is the whole of what makes
 the field second order, and the solver reads that back off the assembled operators.
 
+Because it is derived, the deck may no longer declare it. ``first-order-fields``,
+``second-order-fields``, ``first-order-scheme`` and ``second-order-scheme`` were removed rather
+than deprecated -- a declaration that agreed with the assembled operators was redundant and one
+that disagreed was already refused -- so a deck carrying any of them now fails with
+``Invalid option``. Deleting those lines is the whole of the migration; nothing replaces them.
+
 The stable increment is computed once per mesh from the element wave speeds and scaled by
 ``courant-number``. It is recomputed whenever the mesh changes and deliberately *not* recomputed
 when it has not: as a material softens the true limit only grows, so reusing it is the conservative
@@ -112,7 +118,9 @@ prescribed displacement, both of which are available as ``saveHistory`` field ou
 divides by, a refinement's effect on it is reported: total mass, per-component linear momentum and
 kinetic energy before and after, plus the relative mass drift accumulated over every such change,
 so that many individually-tolerable changes cannot silently add up to a meaningful one. The
-smallest integrating mass in the model is reported alongside, since that is what bounds the step.
+smallest coefficient the increment divides by is reported alongside -- an inertia at a
+second-order degree of freedom, a damping at a first-order one -- since that is what bounds the
+step.
 
 **Restart.** A resumed run must not repeat the half-step that starts a leapfrog: the velocity in
 the checkpoint already carries the half-increment offset, so applying the startup again would apply
@@ -823,6 +831,7 @@ class NED(NonlinearSolverBase):
             # Enforce the Dirichlet boundary conditions on the constrained DOFs:
             # there is no free equilibrium there, so their force P is set to zero,
             # and their velocity is prescribed as (prescribed increment) / (time step).
+            prescribedVelocities = []
             for dirichlet in dirichlets:
                 prescribedIncrement = dirichlet.getPrescribedIncrement(timeStep).flatten()
 
@@ -841,8 +850,11 @@ class NED(NonlinearSolverBase):
                 if carriesKineticEnergy(dirichlet.field):
                     self._externalWork -= float(np.dot(P[dirichlet.constrainedDofIndices], prescribedIncrement))
 
+                prescribedVelocity = prescribedIncrement / timeStep.timeIncrement
+
                 P[dirichlet.constrainedDofIndices] = 0.0
-                V[dirichlet.constrainedDofIndices] = prescribedIncrement / timeStep.timeIncrement
+                V[dirichlet.constrainedDofIndices] = prescribedVelocity
+                prescribedVelocities.append((dirichlet.constrainedDofIndices, prescribedVelocity))
 
             if self.ids_1st is not None:
                 V[self.ids_1st] = Minv[self.ids_1st] * P[self.ids_1st]
@@ -871,6 +883,16 @@ class NED(NonlinearSolverBase):
                 V[self.ids_2nd] = (
                     (1.0 - halfRateStep) * V[self.ids_2nd] + Minv[self.ids_2nd] * P[self.ids_2nd] * dtAverage
                 ) / (1.0 + halfRateStep)
+
+            # A prescribed velocity is a boundary condition, not the solution of an equation of
+            # motion, so the two updates above must not have touched it -- and both of them did.
+            # The undamped central difference did so harmlessly (it added Minv * 0 * dt, leaving the
+            # value exactly), which is why this only needs saying now: at a damped degree of freedom
+            # the relaxation factor (1 - alpha dt/2)/(1 + alpha dt/2) scales the prescribed velocity
+            # itself, and the DOF drifts off its prescribed increment by that factor every
+            # increment. The first-order assignment loses it outright, to Minv * 0 = 0.
+            for constrainedDofIndices, prescribedVelocity in prescribedVelocities:
+                V[constrainedDofIndices] = prescribedVelocity
 
             # slave DOFs of multi-point constraints do not integrate their own equations of motion --
             # they ride along on their masters (Minv is zero there, so the updates above left them
@@ -967,22 +989,25 @@ class NED(NonlinearSolverBase):
             # run that has already diverged to NaN therefore passes the energy check silently and
             # keeps going -- writing NaN into every output for however many hours remain, and
             # reporting success at the end. Divergence to NaN is the terminal form of exactly the
-            # failure this guard exists to report, so it is reported the same way.
+            # failure this guard exists to report.
+            #
+            # Reported by failing the step rather than by a message, because there is nothing left
+            # for the run to do: no state after this increment is meaningful, every output written
+            # from here on is NaN, and an explicit scheme has no cutback to answer it with. The
+            # step ends where the divergence was detected, which is also the last increment a
+            # restart can usefully be taken from.
             if not (np.isfinite(Wext) and np.isfinite(Wkin)):
-                self.journal.message(
-                    "THE SOLUTION HAS DIVERGED: the energy balance is no longer a finite number "
-                    "(external work {:e}, kinetic {:e}), which means the state itself is not. The "
-                    "time step is above the true stability limit -- and dt_crit does not see all of "
-                    "it: it never sees contact penalty stiffness, and it sees the nonlocal field "
-                    "only where that field carries a non-mechanical inertia, a first-order one having a "
-                    "forward-Euler limit that nothing checks. Nothing after this increment is "
-                    "meaningful; stop the run and resume from a checkpoint with a smaller "
-                    "courant-number.".format(Wext, Wkin),
-                    self.identification,
-                    0,
+                raise StepFailed(
+                    "THE SOLUTION HAS DIVERGED in increment {:}: the energy balance is no longer a "
+                    "finite number (external work {:e}, kinetic {:e}), which means the state itself "
+                    "is not. The time step is above the true stability limit -- and dt_crit does not "
+                    "see all of it: it never sees contact penalty stiffness, and it sees the nonlocal "
+                    "field only where that field carries a non-mechanical inertia, a first-order one "
+                    "having a forward-Euler limit that nothing checks. Resume from a checkpoint with "
+                    "a smaller courant-number.".format(timeStep.number, Wext, Wkin)
                 )
 
-            elif Wext > 0.0 and Wkin > Wext * (1.0 + _ENERGY_CREATION_TOLERANCE):
+            if Wext > 0.0 and Wkin > Wext * (1.0 + _ENERGY_CREATION_TOLERANCE):
                 self.journal.message(
                     "ENERGY IS BEING CREATED: the kinetic energy {:e} exceeds the external work "
                     "{:e} by {:.1f} %. That is impossible -- the unreported terms (strain energy, "
@@ -1461,6 +1486,25 @@ class NED(NonlinearSolverBase):
             el.computeLumpedDamping(Ce)
             damping[el] += Ce
 
+        # Checked here rather than through the inertia check below, which never sees it at a
+        # second-order degree of freedom: there the divisor stays the (positive) inertia and the
+        # damping only enters as the rate C/M. A negative rate does not merely fail to damp, it
+        # amplifies the very transient the damping exists to remove, and at alpha * dt / 2 = -1 the
+        # update's denominator is exactly zero. Both are silent, so the coefficient is refused where
+        # it is assembled -- a damping is a dissipation and cannot be negative in either scheme.
+        if not np.all(np.isfinite(damping)) or np.any(damping < 0.0):
+            raise ValueError(
+                "The assembled lumped damping is not a valid dissipation: {:} of {:} entries are "
+                "negative and {:} are not finite (smallest: {:e}). A damping coefficient enters the "
+                "second-order update as the rate C/M, where a negative value amplifies instead of "
+                "damping, and a first-order field divides by it directly.".format(
+                    int(np.count_nonzero(np.asarray(damping) < 0.0)),
+                    damping.shape[0],
+                    int(np.count_nonzero(~np.isfinite(np.asarray(damping)))),
+                    np.nanmin(damping),
+                )
+            )
+
         # Which time derivative each field carries, and therefore which scheme integrates it, read
         # off the two vectors just assembled. The elements are the authority on this and the deck
         # is not asked: an inertia is what a central-difference update divides by, so a field that
@@ -1521,9 +1565,12 @@ class NED(NonlinearSolverBase):
         # is worth stating rather than trusting.
         if np.any(M < 0.0):
             raise ValueError(
-                "Negative mass found in {:} of {:} entries of the lumped mass vector (smallest: "
-                "{:e}). A negative lumped mass makes the explicit update integrate backwards in time "
-                "at those degrees of freedom.".format(int(np.count_nonzero(M < 0.0)), M.shape[0], M.min())
+                "Negative coefficient found in {:} of {:} entries of the vector the increment "
+                "divides by (smallest: {:e}). It is a lumped inertia at a second-order degree of "
+                "freedom and a damping at a first-order one; either way a negative value makes the "
+                "explicit update integrate backwards in time there.".format(
+                    int(np.count_nonzero(M < 0.0)), M.shape[0], M.min()
+                )
             )
 
         # Slave DOFs of multi-point constraints carry no own inertia: their mass is folded onto
@@ -2038,8 +2085,8 @@ class NED(NonlinearSolverBase):
 
         self.journal.message(
             "Topology change: worst-conserved field '{:}' to {:.1e} relative; smallest integrating "
-            "mass {:.3e} ({:.1e} of median) [2nd-order {:.3e} of median {:.3e}; 1st-order {:.3e} of "
-            "median {:.3e}]; largest momentum component change "
+            "coefficient {:.3e} ({:.1e} of median) [2nd-order inertia {:.3e} of median {:.3e}; "
+            "1st-order damping {:.3e} of median {:.3e}]; largest momentum component change "
             "{:.3e} (of {:.3e}); kinetic energy {:.6e} -> {:.6e} ({:+.2f} %)".format(
                 worstField,
                 worstRelativeChange,
