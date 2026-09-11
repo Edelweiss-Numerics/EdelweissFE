@@ -76,8 +76,8 @@ damped and the shortest-wavelength modes are barely touched. GCDP's damage rides
 internal variable, so an overshoot of `ε̄` above `ε̃` is written in irreversibly. Two things in the
 log are worth reading before trusting a curve:
 
-- the `non-mechanical-inertia (not an energy)` row of the energy table — the energy in the ringing; it
-  should decay after the initial transient, not persist;
+- the `nonlocal damage` / `not an energy` row of the energy table (its `0.5 m_k ε̄̇²`) — the energy
+  in the ringing; it should decay after the initial transient, not persist;
 - `alphaP` in the Ensight output away from the crack — a rising value where nothing is loading is
   ringing being integrated into damage.
 

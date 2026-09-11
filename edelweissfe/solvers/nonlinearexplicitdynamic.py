@@ -36,19 +36,32 @@ solver, no Newton loop, and no cutback: the time increment is set by stability, 
 so a material that fails to integrate at the stable step is reported as an error rather than
 answered with a smaller step.
 
-**Non-mechanical inertia.** A first-order field's forward-Euler limit falls off with the SQUARE of
-the element size, so on a refined mesh it, not the mechanical field, bounds the increment -- and its
-only knob is its first-order coefficient itself. Giving such a field an inertia instead makes it
-second order, a damped wave equation whose limit falls off linearly, with that coefficient keeping
-its meaning and changing role: it is now the damping. Such a field is declared in
-``second-order-fields`` **and** in ``non-mechanical-inertia-fields``, the second because nothing in
-an assembled diagonal distinguishes this inertia from a mass: it carries no momentum and no kinetic
-energy, is conserved across a topology change on its own rather than summed into the mechanical
-total, and is integrated with the damping its first-order coefficient now provides. Both directions
-of that declaration are checked against what the elements assembled. Marmot's non-local fields
-report an inertia this way
-via the ``nonlocal micro inertia`` element property; see its ``nonlocalmicroinertia`` feature page
-for the formulation and the choice of the parameter.
+**Inertia and damping, and what may be summed.** An element reports two diagonals: the coefficient
+of each field's second time derivative (its inertia) and the coefficient of its first (its
+damping). The integrator divides by the one and relaxes with the other, and needs to know nothing
+further -- a single update rule covers every second-order degree of freedom and reduces exactly to
+the undamped central difference wherever the damping is zero, which is what keeps a model with no
+damping bit-identical to one built before damping existed.
+
+What the *diagnostics* need is a different question, and it is about units rather than about
+physics: which entries of that one inertia diagonal may be added to which. A field's inertia is a
+mass, a rotational inertia, or neither, and which it is belongs to the field rather than to a deck
+-- it is recorded once in :mod:`edelweissfe.config.phenomena`, next to the field's tensorial order.
+Linear momentum is summed over the fields whose inertia is a mass; the energy balance, at both
+ends, over those and the ones whose inertia is a rotational inertia; and every field's own lumped
+total is conserved across a topology change on its own, whichever it is.
+
+The case that forces the distinction: a first-order field's forward-Euler limit falls off with the
+SQUARE of the element size, so on a refined mesh it, not the mechanical field, bounds the increment
+-- and its only knob is its first-order coefficient itself. Giving such a field an inertia instead
+makes it second order, a damped wave equation whose limit falls off linearly, with that coefficient
+keeping its meaning and changing role: it is now the damping. Marmot's non-local fields report such
+an inertia via the ``nonlocal micro inertia`` element property; see its ``nonlocalmicroinertia``
+feature page for the formulation and the choice of the parameter. That inertia is a time squared,
+so ``0.5 m_k rate^2`` there has the units of a volume, not of an energy: the field is registered as
+carrying a non-mechanical inertia, which keeps it out of both balances and onto a line of its own.
+Listing it in ``second-order-fields`` is the whole of what the deck has to say; whether that agrees
+with what the elements assembled is checked, not asked for a second time.
 
 The stable increment is computed once per mesh from the element wave speeds and scaled by
 ``courant-number``. It is recomputed whenever the mesh changes and deliberately *not* recomputed
@@ -112,6 +125,7 @@ from time import perf_counter
 import numpy as np
 
 import edelweissfe.utils.performancetiming as performancetiming
+from edelweissfe.config.phenomena import carriesKineticEnergy, carriesLinearMomentum
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
@@ -183,16 +197,6 @@ class NEDSchema:
         dtype=list,
         default_factory=list,
         optionName="second-order-fields",
-    )
-    nonMechanicalInertiaFields: list | None = schemaField(
-        description=(
-            "Second-order fields whose inertia is not a physical mass (e.g. Marmot's non-local "
-            "non-mechanical inertia). Excluded from the momentum, kinetic energy and mass conservation "
-            "diagnostics, and integrated with the damping their first-order coefficient provides."
-        ),
-        dtype=list,
-        default_factory=list,
-        optionName="non-mechanical-inertia-fields",
     )
     firstOrderScheme: str | None = schemaField(
         description="The time integration scheme for first-order fields.",
@@ -320,7 +324,6 @@ class NED(NonlinearSolverBase):
     NEDOptions = {
         "first-order-fields": [],
         "second-order-fields": [],
-        "non-mechanical-inertia-fields": [],
         "first-order-scheme": "forward-euler",
         "second-order-scheme": "central-difference",
         "courant-number": 0.8,
@@ -338,18 +341,21 @@ class NED(NonlinearSolverBase):
         self._updateOptions(kwargs, journal)
         self.ids_1st = None
         self.ids_2nd = None
-        #: Second-order DOFs whose inertia is not a physical mass (e.g. the gradient-enhanced field
-        #: made hyperbolic), and the complementary mechanical ones. The split is what keeps a
-        #: non-mechanical inertia out of the momentum and energy balances, where it has no meaning.
-        self.ids_nonMechanicalInertia = None
-        self.ids_2ndMechanical = None
-        #: Second-order fields carrying real mass, in declaration order; the momentum diagnostic
-        #: sums over these alone.
-        self.mechanicalSecondOrderFields = []
-        #: Damping rate C/M per degree of freedom, non-zero only on ids_nonMechanicalInertia.
-        self._nonMechanicalDampingRate = None
-        #: The assembled lumped non-mechanical inertia, before folding; reported, never used as a mass.
-        self._rawNonMechanicalInertia = None
+        #: Second-order DOFs whose 0.5*m*v**2 is a mechanical energy -- the mass-carrying ones and
+        #: the rotational ones -- and equally the DOFs at which prescribed work is an energy. The
+        #: energy balance uses these at both ends; see phenomena.carriesKineticEnergy.
+        self.ids_mechanicalEnergy = None
+        #: Second-order fields whose inertia is a mass, in declaration order; the per-component
+        #: momentum diagnostic walks these.
+        self.linearMomentumFields = []
+        #: Second-order fields whose inertia is neither a mass nor a rotational inertia, in
+        #: declaration order. Each is reported on its own line of the energy table and enters
+        #: neither balance; see phenomena.inertiaKind.
+        self.nonMechanicalSecondOrderFields = []
+        #: Mass-proportional damping rate C/M per degree of freedom. Zero wherever the elements
+        #: reported no damping, which is what makes the one damped update rule below reduce
+        #: exactly to the undamped central difference there.
+        self._dampingRate = None
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
         #: Summed relative drift of each lumped quantity (mass, first-order viscosity,
@@ -703,7 +709,7 @@ class NED(NonlinearSolverBase):
                         lumpedTotalsBefore = self._perFieldLumpedTotals()
                         momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, V, model)
                         kineticBefore = 0.5 * float(
-                            np.sum(self._rawLumpedMass[self.ids_2ndMechanical] * V[self.ids_2ndMechanical] ** 2)
+                            np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
                         )
 
                         if self.updateTopologyAndConnectivity(model, step):
@@ -841,7 +847,14 @@ class NED(NonlinearSolverBase):
                 # contributions), and the support reaction balancing it is its negative -- so this has
                 # to be accumulated HERE, immediately before the zeroing below, which is the only
                 # moment the reaction is available.
-                self._externalWork -= float(np.dot(P[dirichlet.constrainedDofIndices], prescribedIncrement))
+                #
+                # Only where that product is an energy. A prescribed non-local damage, say, has a
+                # conjugate "force" in the units its own balance equation carries, and adding it
+                # here would put cubic millimetres into a total that is then compared against a
+                # kinetic energy in newton-millimetres -- the same units error the kinetic sum
+                # below excludes it from, at the other end of the same balance.
+                if carriesKineticEnergy(dirichlet.field):
+                    self._externalWork -= float(np.dot(P[dirichlet.constrainedDofIndices], prescribedIncrement))
 
                 P[dirichlet.constrainedDofIndices] = 0.0
                 V[dirichlet.constrainedDofIndices] = prescribedIncrement / timeStep.timeIncrement
@@ -851,25 +864,28 @@ class NED(NonlinearSolverBase):
             if self.ids_2nd is not None:
                 dtAverage = 0.5 * (timeStep.timeIncrement + prevTimeStep.timeIncrement)
 
-                V[self.ids_2ndMechanical] += Minv[self.ids_2ndMechanical] * P[self.ids_2ndMechanical] * dtAverage
-
                 # Central difference with mass-proportional damping, the standard form: the rate
                 # alpha = C/M enters through a single factor on each side rather than through an
-                # extra force evaluation, so a damped field costs the same as an undamped one. It
-                # reduces to the update above at alpha = 0, which is why a model with no
-                # non-mechanical inertia never reaches this branch and stays bit-identical.
+                # extra force evaluation, so a damped degree of freedom costs the same as an
+                # undamped one.
                 #
-                # Damping is not optional here. Without it the hyperbolic non-local field is a
-                # lossless wave equation driven by a slowly varying source: the transient minted at
-                # the start of the step, and again at every refinement, never decays, and the
-                # damage variable it drives accumulates on every overshoot rather than following
-                # the mean.
-                if self.ids_nonMechanicalInertia.size:
-                    halfRateStep = 0.5 * self._nonMechanicalDampingRate[self.ids_nonMechanicalInertia] * dtAverage
-                    V[self.ids_nonMechanicalInertia] = (
-                        (1.0 - halfRateStep) * V[self.ids_nonMechanicalInertia]
-                        + dtAverage * Minv[self.ids_nonMechanicalInertia] * P[self.ids_nonMechanicalInertia]
-                    ) / (1.0 + halfRateStep)
+                # One rule for every second-order degree of freedom, with no field taxonomy behind
+                # it: alpha is whatever C/M the elements assembled there, and at alpha = 0 the
+                # expression is not merely equivalent to the undamped update but bit-identical to
+                # it -- (1 - 0) * V is V exactly, the force term is associated exactly as the
+                # undamped one was, and the final division is by exactly 1. That is what lets the
+                # branch go away rather than being kept "for safety", and it is why mechanical
+                # Rayleigh damping, the day an element reports some, needs no code here at all.
+                #
+                # Damping is not optional for a non-local field made hyperbolic. Without it that
+                # field is a lossless wave equation driven by a slowly varying source: the
+                # transient minted at the start of the step, and again at every refinement, never
+                # decays, and the damage variable it drives accumulates on every overshoot rather
+                # than following the mean.
+                halfRateStep = 0.5 * self._dampingRate[self.ids_2nd] * dtAverage
+                V[self.ids_2nd] = (
+                    (1.0 - halfRateStep) * V[self.ids_2nd] + Minv[self.ids_2nd] * P[self.ids_2nd] * dtAverage
+                ) / (1.0 + halfRateStep)
 
             # slave DOFs of multi-point constraints do not integrate their own equations of motion --
             # they ride along on their masters (Minv is zero there, so the updates above left them
@@ -903,33 +919,15 @@ class NED(NonlinearSolverBase):
         if timeStep.number % self.options["output-frequency"] == 0:
             Wint = psi
 
-            # Restricted to the second-order fields, which are the only ones carrying inertia in the
-            # mechanical sense. Summing over the whole vector also collected the first-order fields,
-            # whose "mass" is a viscosity (the gradient-enhanced nonlocal field's eta) and whose
-            # "velocity" is that field's rate -- a product with no energy meaning, and one that can
-            # be orders of magnitude larger than the real term (eta ~ 1e-4 against a density
-            # ~ 1e-9). On any gradient-enhanced model that made the split read as 100 % kinetic
-            # regardless of what the structure was actually doing. The same exclusion applies to a
-            # second-order field whose inertia is a non-mechanical inertia; see below.
-            Wkin = 0.5 * float(np.sum(self._rawLumpedMass[self.ids_2ndMechanical] * V[self.ids_2ndMechanical] ** 2))
-
-            # The same argument one step further. A field made second order in time by a
-            # non-mechanical inertia has a 0.5 * m_k * rate^2 term that looks like a kinetic energy and is
-            # not one: m_k is a numerical regularisation with units of seconds squared, so the
-            # product has units of volume, and adding it to a mechanical energy balance is adding
-            # cubic millimetres to newton-millimetres. It is reported on its own line because it is
-            # a useful diagnostic -- it is the energy in the ringing the damping is there to remove
-            # -- and it is kept out of the balance because it does not belong to it.
-            nonMechanicalKineticEnergy = (
-                0.5
-                * float(
-                    np.sum(
-                        self._rawNonMechanicalInertia[self.ids_nonMechanicalInertia]
-                        * V[self.ids_nonMechanicalInertia] ** 2
-                    )
-                )
-                if self.ids_nonMechanicalInertia.size
-                else 0.0
+            # Summed over exactly the degrees of freedom where 0.5 * m * v**2 is an energy. Summing
+            # the whole vector instead also collected the first-order fields, whose "mass" is a
+            # viscosity (the gradient-enhanced nonlocal field's eta) and whose "velocity" is that
+            # field's rate -- a product with no energy meaning, and one that can be orders of
+            # magnitude larger than the real term (eta ~ 1e-4 against a density ~ 1e-9). On any
+            # gradient-enhanced model that made the balance read as 100 % kinetic regardless of
+            # what the structure was actually doing.
+            Wkin = 0.5 * float(
+                np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
             )
 
             Wext = self._externalWork
@@ -951,12 +949,20 @@ class NED(NonlinearSolverBase):
                 ["unaccounted", "{:+.6e}".format(unaccounted), _share(unaccounted)],
             ]
 
-            if self.ids_nonMechanicalInertia.size:
+            # One row per second-order field that is not in the balance, named by that field and
+            # never summed with another or into the total above. Each is a 0.5 * m * rate**2
+            # formed from that field's own inertia, and for the non-local field made hyperbolic that inertia is a
+            # time squared, so the product has the units of a volume rather than of an energy.
+            # Reported because it is a useful diagnostic in its own right -- it is the energy in
+            # the ringing the damping exists to remove -- and kept apart, per field, for the same
+            # reason the conservation check is per field: two of them need not share units either.
+            for fieldName in self.nonMechanicalSecondOrderFields:
+                indices = self.theDofManager.idcsOfFieldsInDofVector[fieldName]
                 energyRows.append(
                     [
-                        "non-mechanical-inertia (not an energy)",
-                        "{:+.6e}".format(nonMechanicalKineticEnergy),
-                        "      -- ",
+                        fieldName,
+                        "{:+.6e}".format(0.5 * float(np.sum(self._rawLumpedMass[indices] * V[indices] ** 2))),
+                        "not an energy",
                     ]
                 )
 
@@ -1452,48 +1458,33 @@ class NED(NonlinearSolverBase):
         # a stale plan would scatter forces to the wrong degrees of freedom silently.
         self._constraintForcePlans = {}
 
-        # A second-order field is either mechanical -- its inertia is a mass, it carries momentum
-        # and kinetic energy -- or its inertia is a non-mechanical one, which is none of those
-        # things. Nothing in the assembled vectors distinguishes the two on its own
-        # (a viscosity, a density and a non-mechanical inertia are all just positive numbers on a diagonal),
-        # so the declaration is what settles it, and both directions are checked against what the
-        # elements actually assembled once the assembly below has run.
-        #
-        # Resolved HERE, ahead of ids_1st/ids_2nd further down, because the inertia assembly needs
-        # it: which vector a degree of freedom takes its inertia from is decided by this split.
-        nonMechanicalInertiaFields = self.options["non-mechanical-inertia-fields"]
-
-        for fieldName in nonMechanicalInertiaFields:
-            if fieldName not in self.options["second-order-fields"]:
-                raise ValueError(
-                    "Field {:} is listed in non-mechanical-inertia-fields but not in second-order-fields. A "
-                    "non-mechanical inertia is the coefficient of a second time derivative; a field that is "
-                    "not integrated with a second-order scheme has nowhere to put it.".format(fieldName)
-                )
-            if fieldName not in self.theDofManager.idcsOfFieldsInDofVector:
-                raise ValueError(
-                    "Field {:} is listed in non-mechanical-inertia-fields but is not present in the model.".format(
-                        fieldName
-                    )
-                )
-
-        self.mechanicalSecondOrderFields = [
+        # Which of the second-order fields may be summed into a linear momentum, and which into
+        # the energy balance. Nothing in the assembled inertia vector answers that -- a density, a
+        # rotational inertia and a non-local micro-inertia are all just positive numbers on a
+        # diagonal -- but it is not a property of this analysis either, so it is not asked of the
+        # deck: it is a fact about the physical field, read from the one registry that owns such
+        # facts. See phenomena.inertiaKind for the three answers and what each admits.
+        secondOrderFields = [
             fieldName
             for fieldName in self.options["second-order-fields"]
-            if fieldName not in nonMechanicalInertiaFields
+            if fieldName in self.theDofManager.idcsOfFieldsInDofVector
         ]
 
-        self.ids_nonMechanicalInertia = np.empty(0, dtype=int)
-        self.ids_2ndMechanical = np.empty(0, dtype=int)
-        for fieldName in nonMechanicalInertiaFields:
-            self.ids_nonMechanicalInertia = np.r_[
-                self.ids_nonMechanicalInertia, self.theDofManager.idcsOfFieldsInDofVector[fieldName]
-            ]
-        for fieldName in self.mechanicalSecondOrderFields:
-            if fieldName in self.theDofManager.idcsOfFieldsInDofVector:
-                self.ids_2ndMechanical = np.r_[
-                    self.ids_2ndMechanical, self.theDofManager.idcsOfFieldsInDofVector[fieldName]
-                ]
+        self.linearMomentumFields = [fieldName for fieldName in secondOrderFields if carriesLinearMomentum(fieldName)]
+        self.nonMechanicalSecondOrderFields = [
+            fieldName for fieldName in secondOrderFields if not carriesKineticEnergy(fieldName)
+        ]
+
+        def _indicesOf(fieldNames):
+            indices = np.empty(0, dtype=int)
+            for fieldName in fieldNames:
+                indices = np.r_[indices, self.theDofManager.idcsOfFieldsInDofVector[fieldName]]
+            return indices
+
+        self.ids_mechanicalEnergy = _indicesOf(
+            [fieldName for fieldName in secondOrderFields if carriesKineticEnergy(fieldName)]
+        )
+        secondOrderIds = _indicesOf(secondOrderFields)
 
         # initialize mass and damping matrices
         M = self.theDofManager.constructDofVector()  # initialize lumped mass matrix
@@ -1520,20 +1511,15 @@ class NED(NonlinearSolverBase):
             el.computeLumpedDamping(Ce)
             damping[el] += Ce
 
-        # Zero the known mechanical indices of M: what remains is the non-mechanical inertia alone,
-        # for the declaration check and the diagnostics.
-        nonMechanicalInertia = M.copy()
-        nonMechanicalInertia[self.ids_2ndMechanical] = 0.0
-
-        self._rawNonMechanicalInertia = nonMechanicalInertia.copy()
-        self._checkNonMechanicalInertiaAgainstDeclaration(nonMechanicalInertia)
-
         # A first-order field integrates by forward Euler, C * rate = P, and needs the damping
         # computeLumpedDamping() reports here, not the (correctly zero) inertia. Resolved before
         # ids_1st/ids_2nd further down because this vector is used as "the divisor" from here on.
         firstOrderIds = np.empty(0, dtype=int)
         for fieldName in self.options["first-order-fields"]:
             firstOrderIds = np.r_[firstOrderIds, self.theDofManager.idcsOfFieldsInDofVector[fieldName]]
+
+        self._checkFirstOrderFieldsCarryNoInertia(M, firstOrderIds)
+
         M[firstOrderIds] = damping[firstOrderIds]
 
         # Kept before folding, so the kinetic energy diagnostic accounts for the true velocities of
@@ -1544,8 +1530,9 @@ class NED(NonlinearSolverBase):
         if np.any(M == 0.0):
             raise ValueError(
                 "Zero mass found in mass vector. This can be caused by elements with zero density, by elements with "
-                "zero volume, or by a field declared in non-mechanical-inertia-fields whose elements were not given the "
-                "'nonlocal micro inertia' property."
+                "zero volume, or by a field listed in second-order-fields whose elements assembled no inertia there "
+                "-- a non-local field, for instance, that was not given the 'nonlocal micro inertia' element "
+                "property, and so has no second-order term to integrate."
             )
 
         # A negative lumped mass is the classical failure mode of row-summing a quadratic element's
@@ -1574,14 +1561,20 @@ class NED(NonlinearSolverBase):
 
         Minv[M != 0.0] = 1.0 / M[M != 0.0]
 
-        # Mass-proportional damping rate alpha = C / M, formed only where a non-mechanical inertia carries a
-        # damping. Slave DOFs fold to zero inertia and integrate no equation of their own, so they
-        # are left at zero rather than dividing by it.
-        self._nonMechanicalDampingRate = self.theDofManager.constructDofVector()
-        self._nonMechanicalDampingRate[:] = 0.0
-        if self.ids_nonMechanicalInertia.size:
-            integrating = self.ids_nonMechanicalInertia[M[self.ids_nonMechanicalInertia] > 0.0]
-            self._nonMechanicalDampingRate[integrating] = damping[integrating] / M[integrating]
+        # Mass-proportional damping rate alpha = C / M, formed wherever an inertia is divided by
+        # and a damping was assembled alongside it -- which field that is plays no part. Slave DOFs
+        # fold to zero inertia and integrate no equation of their own, so they are left at zero
+        # rather than dividing by it, and every DOF whose elements reported no damping keeps the
+        # zero that makes the increment's single update rule the undamped one exactly.
+        #
+        # Restricted to the second-order degrees of freedom, the only ones this rate is ever read
+        # for: a first-order DOF has had its inertia overwritten with its own damping above, so
+        # C/M there would be exactly 1.0 -- a meaningless number that nothing reads, and one worth
+        # not putting in the vector at all.
+        self._dampingRate = self.theDofManager.constructDofVector()
+        self._dampingRate[:] = 0.0
+        integrating = secondOrderIds[M[secondOrderIds] > 0.0]
+        self._dampingRate[integrating] = damping[integrating] / M[integrating]
 
         # kept (instead of 1/Minv) for the kinetic energy: slave DOFs have Minv = 0
         self._lumpedMass = M
@@ -1767,7 +1760,7 @@ class NED(NonlinearSolverBase):
         """
 
         total = None
-        for fieldName in self.mechanicalSecondOrderFields:
+        for fieldName in self.linearMomentumFields:
             indices = self.theDofManager.idcsOfFieldsInDofVector[fieldName]
             dimension = model.nodeFields[fieldName].dimension
             perNodeMass = np.asarray(mass[indices]).reshape((-1, dimension))
@@ -1817,51 +1810,48 @@ class NED(NonlinearSolverBase):
             totals[fieldName] = float(np.sum(self._rawLumpedMass[indices]))
         return totals
 
-    def _checkNonMechanicalInertiaAgainstDeclaration(self, nonMechanicalInertia: DofVector):
-        """Check the assembled non-mechanical inertia against what the deck declared, in both directions.
+    def _checkFirstOrderFieldsCarryNoInertia(self, inertia: DofVector, firstOrderIds: np.ndarray):
+        """Refuse a field integrated first order in time whose elements assembled an inertia.
 
-        A non-mechanical inertia that the elements carry but the solver was not told about would be
-        integrated as though it were a mass -- it would enter the momentum, the kinetic energy and
-        the mass conservation check, all of which it is meaningless in. A non-mechanical inertia the solver
-        was told about but the elements do not carry would leave those degrees of freedom
-        integrating a viscosity as their mass, which is the parabolic scheme wearing the
-        hyperbolic one's stability limit. Neither shows up as anything but a wrong answer, so both
-        are refused here.
+        The remaining half of a check that used to be spelled out twice. A field's scheme is
+        declared -- ``first-order-fields`` against ``second-order-fields`` -- while its inertia and
+        its damping are assembled, and the two have to agree. The second-order direction is already
+        covered where it is felt: a second-order field with no assembled inertia leaves a zero in
+        the vector the increment divides by, and the zero-mass check refuses it there. This is the
+        other direction, which nothing else would catch. An inertia on a first-order field is
+        silently discarded by the divisor assignment that follows -- the field keeps integrating by
+        forward Euler, and the micro-inertia that was assigned to it, along with the linear
+        stability limit that was the whole point of assigning it, simply does not happen.
+
+        No declaration of what the inertia *is* enters this: the elements are the authority on that,
+        and their answer needs checking only against the scheme it is going to be integrated with.
 
         Parameters
         ----------
-        nonMechanicalInertia
-            The assembled lumped non-mechanical inertia.
+        inertia
+            The assembled lumped inertia, before the first-order entries are overwritten with
+            their damping.
+        firstOrderIds
+            Indices of the degrees of freedom of every field listed in first-order-fields.
 
         Raises
         ------
         ValueError
-            If the assembled non-mechanical inertia and the declared fields disagree.
+            If any first-order degree of freedom carries an inertia.
         """
 
-        carriesNonMechanicalInertia = np.asarray(nonMechanicalInertia) > 0.0
+        if not firstOrderIds.size:
+            return
 
-        declared = np.zeros_like(carriesNonMechanicalInertia)
-        # Guarded rather than indexed straight: numpy reads an index of None as np.newaxis, so an
-        # unset index array here would mark the WHOLE vector as declared instead of none of it.
-        if self.ids_nonMechanicalInertia is not None and self.ids_nonMechanicalInertia.size:
-            declared[self.ids_nonMechanicalInertia] = True
-
-        undeclared = int(np.count_nonzero(carriesNonMechanicalInertia & ~declared))
-        if undeclared:
+        offending = int(np.count_nonzero(np.asarray(inertia[firstOrderIds]) != 0.0))
+        if offending:
             raise ValueError(
-                "{:} degrees of freedom were assigned a non-mechanical inertia by their elements, but the "
-                "field they belong to is not listed in non-mechanical-inertia-fields. Add it there: a "
-                "non-mechanical inertia is not a mass, and the solver has to know which of its second-order "
-                "fields carry one.".format(undeclared)
-            )
-
-        missing = int(np.count_nonzero(declared & ~carriesNonMechanicalInertia))
-        if missing:
-            raise ValueError(
-                "{:} degrees of freedom belong to a field listed in non-mechanical-inertia-fields, but their "
-                "elements assembled no non-mechanical inertia there. Assign the element property 'nonlocal "
-                "micro inertia'; without it the field has no second-order term to integrate.".format(missing)
+                "{:} degrees of freedom belong to a field listed in first-order-fields, but their "
+                "elements assembled an inertia there. A first-order field is integrated by its "
+                "damping alone, so that inertia would be silently discarded -- along with the "
+                "stability limit it was meant to buy. Either move the field to second-order-fields, "
+                "or stop assigning it an inertia (for a non-local field, the 'nonlocal micro "
+                "inertia' element property).".format(offending)
             )
 
     def _checkLumpedQuantityConserved(self, label: str, before: float, after: float) -> float:
@@ -1958,14 +1948,16 @@ class NED(NonlinearSolverBase):
         * **Linear momentum is conserved exactly for a spatially uniform velocity field**, because
           the shape functions are a partition of unity and the child masses sum to the parent's. For
           a general field the discrepancy is second order in the velocity gradient across the parent:
-          discretisation error, not a defect. Reported, not enforced. Restricted to the fields with a
-          physical mass: a viscosity or a non-mechanical inertia has no associated momentum, mass or
-          not, and here fields legitimately DO sum into one total, because a real total system
-          momentum is exactly the sum of its parts' momenta.
+          discretisation error, not a defect. Reported, not enforced. Restricted to the fields whose
+          inertia is a mass, per :func:`~edelweissfe.config.phenomena.carriesLinearMomentum`: a
+          viscosity or a non-mechanical inertia has no associated momentum, and a rotational inertia
+          has an angular one that must not be added to a linear one. Across those fields the sum IS
+          legitimate, because a real total system momentum is exactly the sum of its parts' momenta.
         * **Kinetic energy is not conserved** by interpolation plus re-lumping, and it is the most
           sensitive of the three, being quadratic in the interpolation error. Reported as a relative
           jump; more than roughly a percent is a reason to look at the transfer rather than to
-          believe the physics. Restricted to the same mass-carrying fields as momentum, for the same
+          believe the physics. Restricted to the fields whose 0.5*m*v**2 is an energy -- the
+          mass-carrying ones and the rotational ones, a wider set than momentum admits -- and
           reason, and summed across them for the same reason momentum is.
 
         Parameters
@@ -1990,7 +1982,9 @@ class NED(NonlinearSolverBase):
 
         lumpedTotalsAfter = self._perFieldLumpedTotals()
         momentumAfter = self.secondOrderMomentum(self._rawLumpedMass, V, model)
-        kineticAfter = 0.5 * float(np.sum(self._rawLumpedMass[self.ids_2ndMechanical] * V[self.ids_2ndMechanical] ** 2))
+        kineticAfter = 0.5 * float(
+            np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
+        )
 
         relativeChangeByField = {
             fieldName: self._checkLumpedQuantityConserved(fieldName, before, lumpedTotalsAfter.get(fieldName, 0.0))
@@ -2009,11 +2003,12 @@ class NED(NonlinearSolverBase):
         medianMass = float(np.median(integrating)) if integrating.size else 0.0
         massRatio = smallestMass / medianMass if medianMass > 0.0 else 0.0
 
-        # Split by integration scheme. The second-order (displacement) field carries rho-based
-        # inertia and integrates with central difference; the first-order (nonlocal damage) field
-        # carries eta_nl-based inertia and integrates with forward Euler, whose stability limit is
-        # a completely different expression. A collapsing mass means something different in each,
-        # so the aggregate minimum above cannot be acted on without knowing which field it is in.
+        # Split by integration scheme, which is what makes the two numbers mean different things:
+        # a second-order DOF divides its inertia into a central-difference update, a first-order
+        # one divides its damping into a forward-Euler update, and the stability limit of the two
+        # is a completely different expression. A collapsing divisor therefore means something
+        # different in each, so the aggregate minimum above cannot be acted on without knowing
+        # which of them it is in.
         def smallestOf(indices):
             if not indices.size:
                 return 0.0, 0.0
@@ -2023,8 +2018,8 @@ class NED(NonlinearSolverBase):
                 return 0.0, 0.0
             return float(np.min(entries)), float(np.median(entries))
 
-        smallest2nd, median2nd = smallestOf(self.ids_2ndMechanical)
-        smallest1st, median1st = smallestOf(np.r_[self.ids_1st, self.ids_nonMechanicalInertia])
+        smallest2nd, median2nd = smallestOf(self.ids_2nd)
+        smallest1st, median1st = smallestOf(self.ids_1st)
 
         momentumChange = float(np.max(np.abs(momentumAfter - momentumBefore))) if momentumBefore.size else 0.0
         momentumScale = float(np.max(np.abs(momentumBefore))) if momentumBefore.size else 0.0

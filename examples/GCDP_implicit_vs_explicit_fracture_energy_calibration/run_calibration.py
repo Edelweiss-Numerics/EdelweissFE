@@ -218,8 +218,7 @@ output-frequency={outputFrequency:}"""
 PARABOLIC_FIELDS = """second-order-fields="displacement"
 first-order-fields="nonlocal damage\""""
 
-HYPERBOLIC_FIELDS = """second-order-fields="displacement, nonlocal damage"
-non-mechanical-inertia-fields="nonlocal damage\""""
+HYPERBOLIC_FIELDS = """second-order-fields="displacement, nonlocal damage\""""
 
 
 def microInertiaProperty(nonlocalViscosity):

@@ -58,6 +58,45 @@ phenomena = {
 }
 
 
+# field                  kind of inertia
+#
+# The coefficient of a field's SECOND time derivative is not always a mass. A dynamic solver
+# assembles one inertia vector over every field it carries -- that is the element interface, and
+# rightly so, since the integrator divides by all of it alike -- but the moment it wants to report
+# a momentum or an energy it has to know which entries may be added to which. Three answers, and
+# the value recorded here is the ONLY place that question is answered:
+#
+#  * ``"mass"``                  -- m*v is a linear momentum and 0.5*m*v^2 is an energy. Summable
+#                                   with every other mass field, in both balances.
+#  * ``"rotational inertia"``    -- 0.5*I*w^2 is an energy, so it belongs in the energy balance,
+#                                   but I*w is an ANGULAR momentum and must not be added to a
+#                                   linear one. Adding the two is not caught by a dimension check:
+#                                   in 3d both occupy three components and numpy would sum them
+#                                   happily.
+#  * ``"non-mechanical"``        -- neither. Typically a numerical regularisation: the non-local
+#                                   micro-inertia that makes gradient-enhanced damage hyperbolic
+#                                   is a time squared, so 0.5*m*v^2 there has the units of a
+#                                   volume, not of an energy.
+#
+# A field with no inertia at all -- one integrated first order in time, or not integrated at all --
+# is recorded as ``"non-mechanical"`` too: the question this answers is what its inertia WOULD
+# mean, and for such a field the honest answer is that it has none to sum anywhere.
+inertiaKind = {
+    "displacement": "mass",
+    "rotation": "rotational inertia",
+    "micro rotation": "rotational inertia",
+    "thermal": "non-mechanical",
+    "nonlocal damage": "non-mechanical",
+    "nonlocal damage 2": "non-mechanical",
+    "concentration": "non-mechanical",
+    "chemical potential": "non-mechanical",
+    "strain symmetric": "non-mechanical",
+    "plastic multiplier": "non-mechanical",
+    "pressure": "non-mechanical",
+    "jacobi": "non-mechanical",
+}
+
+
 # field                  tolerance
 fieldCorrectionTolerance = {
     "displacement": 1e-7,
@@ -111,6 +150,74 @@ domainMapping = {
     "3d": 3,
     "axisymmetric": 2,
 }
+
+
+def getInertiaKind(field: str) -> str:
+    """The kind of inertia a field carries; see :data:`inertiaKind`.
+
+    Parameters
+    ----------
+    field
+        The name of the physical field.
+
+    Returns
+    -------
+    str
+        One of ``"mass"``, ``"rotational inertia"``, ``"non-mechanical"``.
+
+    Raises
+    ------
+    NotImplementedError
+        If the field is not registered here.
+    """
+
+    try:
+        return inertiaKind[field]
+    except KeyError:
+        raise NotImplementedError(
+            "Physical field {:} has no registered inertia kind. Add it to inertiaKind in "
+            "edelweissfe/config/phenomena.py, alongside its entry in phenomena.".format(field)
+        )
+
+
+def carriesLinearMomentum(field: str) -> bool:
+    """Whether a field's inertia times its rate is a linear momentum, i.e. whether the field may
+    enter a linear-momentum balance and be summed with the other fields in it.
+
+    Parameters
+    ----------
+    field
+        The name of the physical field.
+
+    Returns
+    -------
+    bool
+        True only for a field whose inertia is a mass.
+    """
+
+    return getInertiaKind(field) == "mass"
+
+
+def carriesKineticEnergy(field: str) -> bool:
+    """Whether a field's ``0.5 * inertia * rate**2`` is a mechanical energy, i.e. whether the field
+    may enter the energy balance and be summed with the other fields in it.
+
+    Work done at a prescribed degree of freedom of such a field -- a force through a displacement,
+    a moment through a rotation -- is an energy by the same token, which is why the external work
+    is accumulated over exactly these fields as well.
+
+    Parameters
+    ----------
+    field
+        The name of the physical field.
+
+    Returns
+    -------
+    bool
+        True for a field whose inertia is a mass or a rotational inertia.
+    """
+
+    return getInertiaKind(field) in ("mass", "rotational inertia")
 
 
 def getFieldSize(field, domainSize):
