@@ -41,7 +41,14 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["edelweissfe"]
+# source_pkgs (an importable package name), not source (a literal directory): CI does a
+# non-editable `pip install .`, so the code that actually executes at test time lives in
+# site-packages, not in this repo-root `edelweissfe/` checkout. Because that checkout directory
+# happens to exist on disk with the same name, `source = ["edelweissfe"]` resolves to it as a
+# literal path and coverage traces nothing that's actually running -- silently producing "No data
+# was collected" / 0% coverage, since none of the site-packages files match. source_pkgs forces
+# package-name resolution: coverage imports "edelweissfe" and measures wherever it actually lives.
+source_pkgs = ["edelweissfe"]
 branch = true
 # The pytest suite (tests/ + module-local test_*.py files) and the .inp-driven
 # run_tests_edelweissfe integration runner are both invoked under `coverage run -a` in CI to
