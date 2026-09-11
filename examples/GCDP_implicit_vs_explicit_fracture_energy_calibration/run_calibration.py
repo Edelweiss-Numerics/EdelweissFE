@@ -61,16 +61,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 #: 1e-4 rather than the 1e-5 of the first study. What makes that affordable is the slower loading:
 #: eta's viscous contribution grows with the rate, and over 1 s the rate is 1000x below the 1e-3 s
 #: ramp on which eta was measured doing real work, so ten times more eta still leaves it about two
-#: orders of magnitude below that. Verified rather than assumed -- see the eta control pair in
-#: NOTES_stepLength1.md.
+#: orders of magnitude below that. Verified rather than assumed, with an eta control pair (see the
+#: write-up of this study).
 #:
 #: KNOWN CONSEQUENCE: it also lifts the PARABOLIC scheme's own limit, dt <= 2 eta/(1 + C l^2/h^2),
 #: to 1.30e-07 at nX = 160 -- above the mechanical CFL of 1.52e-08. At eta = 1e-5 that limit was
 #: 1.30e-08, i.e. violated by the increment the solver actually took, which is why the parabolic
 #: scheme went NaN at h = 0.625 mm. So this deck can no longer show that divergence: raising eta to
-#: afford the increment is precisely the workaround the micro-inertia exists to remove. The
-#: divergence is demonstrated at eta = 1e-5 in RESULTS.md; this deck answers the fracture-energy
-#: question instead.
+#: afford the increment is precisely the workaround the micro-inertia exists to remove. This deck
+#: answers the fracture-energy question instead; the divergence at eta = 1e-5 is demonstrated in
+#: the write-up of this study.
 NONLOCAL_VISCOSITY = 1e-4
 
 #: Critical damping of the reaction mode -- the largest micro-inertia that does not ring, and

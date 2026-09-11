@@ -65,8 +65,9 @@ the force being used as the backstop for the status column.
 
 ## Results
 
-See `RESULTS.md` for the full run: the derivation of `eta`/`m_k`/the mass scaling, the results
-table, and what it establishes about agreement, stability, and the cost of bulk viscosity.
+The full run -- the derivation of `eta`/`m_k`/the mass scaling, the results table, and what it
+establishes about agreement, stability, and the cost of bulk viscosity -- is written up separately
+rather than kept here.
 
 ## Watch for, in the explicit variants
 

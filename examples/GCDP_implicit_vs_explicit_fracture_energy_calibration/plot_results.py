@@ -1,8 +1,8 @@
 """Figures for the GCDP fracture-energy calibration.
 
 Reads what the runs of ``run_calibration.py`` left behind -- the exported load-displacement
-histories and the Ensight export of the damage fields -- and writes the figures that
-``RESULTS.md`` embeds.
+histories and the Ensight export of the damage fields -- and writes the figures for the write-up
+of this calibration study.
 
 The Ensight export is read directly rather than through VTK. It is Ensight Gold *binary*, written
 by ``edelweissfe/outputmanagers/ensight.py``, and its layout is fixed and small: 80-byte character
