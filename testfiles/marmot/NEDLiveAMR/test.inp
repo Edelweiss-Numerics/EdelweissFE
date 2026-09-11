@@ -39,7 +39,6 @@ gen_all
 ** the final reaction is 4.49 at courant 0.8, 84.6 at 0.4, 118.5 at 0.2, 120.7 at 0.1, 118.0 at 0.05.
 ** The 0.8 run does not fail, it just quietly returns a number 26x too small. Do not raise this.
 *solver, solver=NEDParallel, name=theSolver
-second-order-fields="displacement"
 courant-number=0.1
 output-frequency=20
 topology-check-frequency=20

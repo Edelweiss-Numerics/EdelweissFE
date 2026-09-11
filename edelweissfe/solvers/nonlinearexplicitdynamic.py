@@ -41,7 +41,11 @@ of each field's second time derivative (its inertia) and the coefficient of its 
 damping). The integrator divides by the one and relaxes with the other, and needs to know nothing
 further -- a single update rule covers every second-order degree of freedom and reduces exactly to
 the undamped central difference wherever the damping is zero, which is what keeps a model with no
-damping bit-identical to one built before damping existed.
+damping bit-identical to one built before damping existed. *Which* scheme a field gets is read off
+those same two diagonals: a field carrying an inertia is integrated with central differences, one
+carrying only a damping with forward Euler. The deck declares no field ordering, because an
+inertia is exactly what a central-difference update divides by and so there was never an answer
+the deck could give that differed from this one.
 
 What the *diagnostics* need is a different question, and it is about units rather than about
 physics: which entries of that one inertia diagonal may be added to which. A field's inertia is a
@@ -60,8 +64,8 @@ an inertia via the ``nonlocal micro inertia`` element property; see its ``nonloc
 feature page for the formulation and the choice of the parameter. That inertia is a time squared,
 so ``0.5 m_k rate^2`` there has the units of a volume, not of an energy: the field is registered as
 carrying a non-mechanical inertia, which keeps it out of both balances and onto a line of its own.
-Listing it in ``second-order-fields`` is the whole of what the deck has to say; whether that agrees
-with what the elements assembled is checked, not asked for a second time.
+The deck says nothing about any of this: assigning the element property is the whole of what makes
+the field second order, and the solver reads that back off the assembled operators.
 
 The stable increment is computed once per mesh from the element wave speeds and scaled by
 ``courant-number``. It is recomputed whenever the mesh changes and deliberately *not* recomputed
@@ -179,37 +183,17 @@ class NEDSchema:
 
     Mirrors :attr:`NED.NEDOptions` one-for-one; the plain ``self.options`` dict remains the actual
     source of truth consulted at runtime (see :class:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema`
-    for why). The ``*-fields``/``*-scheme``/``courant-number``/``output-frequency`` option names are
-    not valid Python identifiers, hence the ``optionName`` indirection. ``firstOrderFields``/
-    ``secondOrderFields`` are declared ``dtype=list`` to describe their real shape (a comma-separated
-    list, appended to rather than replaced -- see :meth:`NED._updateOptions`), even though nothing
-    coerces a raw string against this schema today.
+    for why). The hyphenated option names are not valid Python identifiers, hence the
+    ``optionName`` indirection.
+
+    Every option here is a property of the ANALYSIS -- how far below the stability limit to run,
+    how often to report, how often to let the mesh or a contact search change. Nothing here
+    describes the model: which fields exist, which time derivative each carries, and what its
+    coefficient means are all read from the model and from
+    :mod:`edelweissfe.config.phenomena`, never asked of the deck. See
+    :meth:`NED._classifyFieldsByScheme`.
     """
 
-    firstOrderFields: list | None = schemaField(
-        description="Fields integrated with a first-order (forward-Euler) time scheme.",
-        dtype=list,
-        default_factory=list,
-        optionName="first-order-fields",
-    )
-    secondOrderFields: list | None = schemaField(
-        description="Fields integrated with a second-order (central-difference) time scheme.",
-        dtype=list,
-        default_factory=list,
-        optionName="second-order-fields",
-    )
-    firstOrderScheme: str | None = schemaField(
-        description="The time integration scheme for first-order fields.",
-        dtype=str,
-        default="forward-euler",
-        optionName="first-order-scheme",
-    )
-    secondOrderScheme: str | None = schemaField(
-        description="The time integration scheme for second-order fields.",
-        dtype=str,
-        default="central-difference",
-        optionName="second-order-scheme",
-    )
     courantNumber: float | None = schemaField(
         description="The fraction of the critical time step actually used.",
         dtype=float,
@@ -322,10 +306,6 @@ class NED(NonlinearSolverBase):
     schema = NEDSchema
 
     NEDOptions = {
-        "first-order-fields": [],
-        "second-order-fields": [],
-        "first-order-scheme": "forward-euler",
-        "second-order-scheme": "central-difference",
         "courant-number": 0.8,
         "output-frequency": 1000,
         "contact-update-frequency": 100,
@@ -339,6 +319,11 @@ class NED(NonlinearSolverBase):
         # Ensure mutable defaults (field lists) are isolated per solver instance.
         self.options = deepcopy(self.NEDOptions)
         self._updateOptions(kwargs, journal)
+        #: Fields integrated first order (forward Euler) and second order (central difference) in
+        #: time, and their degrees of freedom. All four are DERIVED from the assembled inertia and
+        #: damping in :meth:`_classifyFieldsByScheme`, never declared.
+        self.firstOrderFields = []
+        self.secondOrderFields = []
         self.ids_1st = None
         self.ids_2nd = None
         #: Second-order DOFs whose 0.5*m*v**2 is a mechanical energy -- the mass-carrying ones and
@@ -1439,13 +1424,6 @@ class NED(NonlinearSolverBase):
         if not isRebuild:
             self.journal.printSeperationLine()
 
-        presentVariableNames = list(self.theDofManager.idcsOfFieldsInDofVector.keys())
-
-        if self.theDofManager.idcsOfScalarVariablesInDofVector:
-            presentVariableNames += [
-                "scalar variables",
-            ]
-
         # self.options already reflects every >>options, name=<this solver's name>, ... block applied
         # so far, applied as each block is constructed or re-declared; there is nothing to reset or
         # re-fetch here.
@@ -1457,34 +1435,6 @@ class NED(NonlinearSolverBase):
         # (re)built: a refinement changes both a constraint's DOF count and where its DOFs sit, and
         # a stale plan would scatter forces to the wrong degrees of freedom silently.
         self._constraintForcePlans = {}
-
-        # Which of the second-order fields may be summed into a linear momentum, and which into
-        # the energy balance. Nothing in the assembled inertia vector answers that -- a density, a
-        # rotational inertia and a non-local micro-inertia are all just positive numbers on a
-        # diagonal -- but it is not a property of this analysis either, so it is not asked of the
-        # deck: it is a fact about the physical field, read from the one registry that owns such
-        # facts. See phenomena.inertiaKind for the three answers and what each admits.
-        secondOrderFields = [
-            fieldName
-            for fieldName in self.options["second-order-fields"]
-            if fieldName in self.theDofManager.idcsOfFieldsInDofVector
-        ]
-
-        self.linearMomentumFields = [fieldName for fieldName in secondOrderFields if carriesLinearMomentum(fieldName)]
-        self.nonMechanicalSecondOrderFields = [
-            fieldName for fieldName in secondOrderFields if not carriesKineticEnergy(fieldName)
-        ]
-
-        def _indicesOf(fieldNames):
-            indices = np.empty(0, dtype=int)
-            for fieldName in fieldNames:
-                indices = np.r_[indices, self.theDofManager.idcsOfFieldsInDofVector[fieldName]]
-            return indices
-
-        self.ids_mechanicalEnergy = _indicesOf(
-            [fieldName for fieldName in secondOrderFields if carriesKineticEnergy(fieldName)]
-        )
-        secondOrderIds = _indicesOf(secondOrderFields)
 
         # initialize mass and damping matrices
         M = self.theDofManager.constructDofVector()  # initialize lumped mass matrix
@@ -1511,16 +1461,43 @@ class NED(NonlinearSolverBase):
             el.computeLumpedDamping(Ce)
             damping[el] += Ce
 
+        # Which time derivative each field carries, and therefore which scheme integrates it, read
+        # off the two vectors just assembled. The elements are the authority on this and the deck
+        # is not asked: an inertia is what a central-difference update divides by, so a field that
+        # has one is second order and a field that has none is not, and no deck answer that
+        # disagreed with that could be honoured anyway.
+        self.firstOrderFields, self.secondOrderFields = self._classifyFieldsByScheme(M, damping)
+
+        self.ids_1st = self._dofIndicesOfFields(self.firstOrderFields)
+        self.ids_2nd = self._dofIndicesOfFields(self.secondOrderFields)
+
+        self.journal.message(
+            "Time integration, derived from the assembled operators: central difference for {:}; "
+            "forward Euler for {:}".format(
+                ", ".join(self.secondOrderFields) or "(no field)",
+                ", ".join(self.firstOrderFields) or "(no field)",
+            ),
+            self.identification,
+            verbosity,
+        )
+
+        # Which of the second-order fields may be summed into a linear momentum, and which into the
+        # energy balance. Nothing in the assembled inertia vector answers that -- a density, a
+        # rotational inertia and a non-local micro-inertia are all just positive numbers on a
+        # diagonal -- but it is not a property of this analysis either, so it is not asked of the
+        # deck: it is a fact about the physical field, read from the one registry that owns such
+        # facts. See phenomena.inertiaKind for the three answers and what each admits.
+        self.linearMomentumFields = [f for f in self.secondOrderFields if carriesLinearMomentum(f)]
+        self.nonMechanicalSecondOrderFields = [f for f in self.secondOrderFields if not carriesKineticEnergy(f)]
+        self.ids_mechanicalEnergy = self._dofIndicesOfFields(
+            [f for f in self.secondOrderFields if carriesKineticEnergy(f)]
+        )
+
         # A first-order field integrates by forward Euler, C * rate = P, and needs the damping
-        # computeLumpedDamping() reports here, not the (correctly zero) inertia. Resolved before
-        # ids_1st/ids_2nd further down because this vector is used as "the divisor" from here on.
-        firstOrderIds = np.empty(0, dtype=int)
-        for fieldName in self.options["first-order-fields"]:
-            firstOrderIds = np.r_[firstOrderIds, self.theDofManager.idcsOfFieldsInDofVector[fieldName]]
-
-        self._checkFirstOrderFieldsCarryNoInertia(M, firstOrderIds)
-
-        M[firstOrderIds] = damping[firstOrderIds]
+        # computeLumpedDamping() reports here, not the (correctly zero) inertia. From here on this
+        # vector is "the divisor", whichever of the two coefficients a degree of freedom's scheme
+        # actually divides by.
+        M[self.ids_1st] = damping[self.ids_1st]
 
         # Kept before folding, so the kinetic energy diagnostic accounts for the true velocities of
         # all nodes (including tied slaves) rather than master-placed folded mass.
@@ -1529,10 +1506,12 @@ class NED(NonlinearSolverBase):
         # compute inverses
         if np.any(M == 0.0):
             raise ValueError(
-                "Zero mass found in mass vector. This can be caused by elements with zero density, by elements with "
-                "zero volume, or by a field listed in second-order-fields whose elements assembled no inertia there "
-                "-- a non-local field, for instance, that was not given the 'nonlocal micro inertia' element "
-                "property, and so has no second-order term to integrate."
+                "Zero found in the vector the increment divides by, at {:} of {:} degrees of freedom. "
+                "Every FIELD is covered by the classification above, which refuses a field carrying "
+                "neither coefficient, so what is left here are degrees of freedom belonging to no field "
+                "-- scalar variables, which this solver has no equation of motion for.".format(
+                    int(np.count_nonzero(np.asarray(M) == 0.0)), M.shape[0]
+                )
             )
 
         # A negative lumped mass is the classical failure mode of row-summing a quadratic element's
@@ -1573,7 +1552,7 @@ class NED(NonlinearSolverBase):
         # not putting in the vector at all.
         self._dampingRate = self.theDofManager.constructDofVector()
         self._dampingRate[:] = 0.0
-        integrating = secondOrderIds[M[secondOrderIds] > 0.0]
+        integrating = self.ids_2nd[M[self.ids_2nd] > 0.0]
         self._dampingRate[integrating] = damping[integrating] / M[integrating]
 
         # kept (instead of 1/Minv) for the kinetic energy: slave DOFs have Minv = 0
@@ -1609,30 +1588,6 @@ class NED(NonlinearSolverBase):
             U[:] = previous.U
             V[:] = previous.V
             P[:] = previous.P
-
-        self.ids_1st = np.empty(0, dtype=int)
-        self.ids_2nd = np.empty(0, dtype=int)
-
-        # check if all fields are specified either in first-order-fields or second-order-fields
-        isSpecified = {presentVariable: False for presentVariable in presentVariableNames}
-        for fieldName in self.options["first-order-fields"] + self.options["second-order-fields"]:
-            if fieldName not in presentVariableNames:
-                raise ValueError(
-                    "Field {:} specified in first-order-fields, but not present in model".format(fieldName)
-                )
-            if isSpecified[fieldName]:
-                raise ValueError(
-                    "Field {:} specified multiple times in first-order-fields and second-order-fields: {:}, {:}".format(
-                        fieldName, self.options["first-order-fields"], self.options["second-order-fields"]
-                    )
-                )
-            isSpecified[fieldName] = True
-
-        # assign indices of fields to first-order and second-order update schemes
-        for fieldName in self.options["first-order-fields"]:
-            self.ids_1st = np.r_[self.ids_1st, self.theDofManager.idcsOfFieldsInDofVector[fieldName]]
-        for fieldName in self.options["second-order-fields"]:
-            self.ids_2nd = np.r_[self.ids_2nd, self.theDofManager.idcsOfFieldsInDofVector[fieldName]]
 
         if isRebuild:
             # The mesh is unchanged (the layout check above establishes that), so the stable time
@@ -1805,54 +1760,110 @@ class NED(NonlinearSolverBase):
         """
 
         totals = {}
-        for fieldName in self.options["first-order-fields"] + self.options["second-order-fields"]:
+        for fieldName in self.firstOrderFields + self.secondOrderFields:
             indices = self.theDofManager.idcsOfFieldsInDofVector[fieldName]
             totals[fieldName] = float(np.sum(self._rawLumpedMass[indices]))
         return totals
 
-    def _checkFirstOrderFieldsCarryNoInertia(self, inertia: DofVector, firstOrderIds: np.ndarray):
-        """Refuse a field integrated first order in time whose elements assembled an inertia.
+    def _dofIndicesOfFields(self, fieldNames: list[str]) -> np.ndarray:
+        """The degrees of freedom of the named fields, concatenated in the order given.
 
-        The remaining half of a check that used to be spelled out twice. A field's scheme is
-        declared -- ``first-order-fields`` against ``second-order-fields`` -- while its inertia and
-        its damping are assembled, and the two have to agree. The second-order direction is already
-        covered where it is felt: a second-order field with no assembled inertia leaves a zero in
-        the vector the increment divides by, and the zero-mass check refuses it there. This is the
-        other direction, which nothing else would catch. An inertia on a first-order field is
-        silently discarded by the divisor assignment that follows -- the field keeps integrating by
-        forward Euler, and the micro-inertia that was assigned to it, along with the linear
-        stability limit that was the whole point of assigning it, simply does not happen.
+        Parameters
+        ----------
+        fieldNames
+            Names of fields present in the current DofManager.
 
-        No declaration of what the inertia *is* enters this: the elements are the authority on that,
-        and their answer needs checking only against the scheme it is going to be integrated with.
+        Returns
+        -------
+        np.ndarray
+            Their indices in the dof vector; empty (and of integer dtype, which matters -- numpy
+            reads an index of None as np.newaxis) when no field is named.
+        """
+
+        indices = np.empty(0, dtype=int)
+        for fieldName in fieldNames:
+            indices = np.r_[indices, self.theDofManager.idcsOfFieldsInDofVector[fieldName]]
+        return indices
+
+    def _classifyFieldsByScheme(self, inertia: DofVector, damping: DofVector) -> tuple[list[str], list[str]]:
+        """Which fields are integrated second order in time and which first, read off the
+        assembled operators rather than declared.
+
+        The deck used to say this, in ``first-order-fields`` and ``second-order-fields``, and it
+        had no freedom in what to say: an inertia is precisely what a central-difference update
+        divides by, so a field carrying one is second order and a field carrying none is not.
+        Every way of disagreeing with that was already refused -- a second-order field with no
+        inertia left a zero in the divisor, a first-order field with one had it silently discarded
+        along with the linear stability limit it was assigned to buy -- which is what makes the
+        declaration a derived quantity with a typo surface rather than a choice. Deriving it also
+        closes a hole the declaration had: a field present in the model and named in neither list
+        was never integrated at all, silently, its velocity left at zero for the whole run.
+
+        Per FIELD, not per degree of freedom, and a field whose own degrees of freedom disagree is
+        refused rather than split. ``*elementProperty`` takes an element set, so assigning a
+        micro-inertia to only some of the elements carrying a non-local field is an easy thing to
+        do by accident; integrating part of that field as a wave equation and the rest as a
+        diffusion one is not a scheme anybody chose.
 
         Parameters
         ----------
         inertia
             The assembled lumped inertia, before the first-order entries are overwritten with
-            their damping.
-        firstOrderIds
-            Indices of the degrees of freedom of every field listed in first-order-fields.
+            their damping and before any multi-point-constraint fold -- a tied slave's own
+            inertia has to still be there, or its field would look unintegrable.
+        damping
+            The assembled lumped damping, likewise.
+
+        Returns
+        -------
+        tuple[list[str], list[str]]
+            The first-order and the second-order field names, in the model's field order.
 
         Raises
         ------
         ValueError
-            If any first-order degree of freedom carries an inertia.
+            If any field carries a coefficient on some of its degrees of freedom and not on
+            others, or carries neither coefficient anywhere.
         """
 
-        if not firstOrderIds.size:
-            return
+        firstOrderFields = []
+        secondOrderFields = []
 
-        offending = int(np.count_nonzero(np.asarray(inertia[firstOrderIds]) != 0.0))
-        if offending:
-            raise ValueError(
-                "{:} degrees of freedom belong to a field listed in first-order-fields, but their "
-                "elements assembled an inertia there. A first-order field is integrated by its "
-                "damping alone, so that inertia would be silently discarded -- along with the "
-                "stability limit it was meant to buy. Either move the field to second-order-fields, "
-                "or stop assigning it an inertia (for a non-local field, the 'nonlocal micro "
-                "inertia' element property).".format(offending)
-            )
+        for fieldName, indices in self.theDofManager.idcsOfFieldsInDofVector.items():
+            carriesInertia = np.asarray(inertia[indices]) != 0.0
+            carriesDamping = np.asarray(damping[indices]) != 0.0
+
+            if carriesInertia.all():
+                secondOrderFields.append(fieldName)
+            elif carriesInertia.any():
+                raise ValueError(
+                    "Field {:} was assembled an inertia on {:} of its {:} degrees of freedom and "
+                    "none on the rest, so it is neither second order in time nor first order. The "
+                    "usual cause is an *elementProperty assigning the inertia (for a non-local "
+                    "field, 'nonlocal micro inertia') over an element set that does not cover "
+                    "every element carrying the field.".format(
+                        fieldName, int(np.count_nonzero(carriesInertia)), carriesInertia.size
+                    )
+                )
+            elif carriesDamping.all():
+                firstOrderFields.append(fieldName)
+            elif carriesDamping.any():
+                raise ValueError(
+                    "Field {:} carries no inertia, so it is integrated by its damping alone -- but "
+                    "a damping was assembled on only {:} of its {:} degrees of freedom, and the "
+                    "rest have nothing to divide by.".format(
+                        fieldName, int(np.count_nonzero(carriesDamping)), carriesDamping.size
+                    )
+                )
+            else:
+                raise ValueError(
+                    "Field {:} carries neither an inertia nor a damping, so there is no time "
+                    "derivative for this solver to integrate it with. Its elements report both "
+                    "through computeLumpedInertia and computeLumpedDamping; an element with zero "
+                    "density or zero volume reports the first as zero.".format(fieldName)
+                )
+
+        return firstOrderFields, secondOrderFields
 
     def _checkLumpedQuantityConserved(self, label: str, before: float, after: float) -> float:
         """Check one row-sum-lumped per-element quantity for exact conservation across a

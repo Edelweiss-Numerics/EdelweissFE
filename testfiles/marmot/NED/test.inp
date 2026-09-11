@@ -6,7 +6,6 @@ all
 
 *job, name=c3d8job, domain=2d
 *solver, solver=NED, name=theSolver
-second-order-fields="displacement"
 output-frequency=1
 *modelGenerator, generator=planeRectQuad, name=gen
 l=10
