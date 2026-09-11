@@ -1,7 +1,6 @@
 anaconda::mkl
 anaconda::mkl-include
 anaconda::intel-openmp
-boost-cpp
 cmake
 compilers
 cython
@@ -13,11 +12,11 @@ meshio
 numpy
 numpydoc
 # petsc4py
-pyamg
+# pyamg: its cp314t wheel isn't free-thread-safe (silently re-enables the GIL on import)
 # pymumps
 python=3.14
 pytest
-pyvista
+pyvista<0.49.0
 prettytable
 scipy
 suitesparse

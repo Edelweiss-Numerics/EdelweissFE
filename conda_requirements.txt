@@ -1,19 +1,24 @@
 anaconda::mkl
 anaconda::mkl-include
 anaconda::intel-openmp
-boost-cpp
 cmake
 compilers
 cython
+docutils
 gstools
 make
+matplotlib
 numpy
 numpydoc
+# boost-cpp is deliberately NOT installed here: its only conda-forge build (1.85.0) pins
+# icu<76, which conflicts with the icu>=78.3 that the only free-threaded-Python-compatible
+# matplotlib build needs. Boost is instead built from source for AMGCL - see README.md.
+#
 # conda-forge's freethreaded python 3.14.7 build h1945688_5_cp314t ships broken sysconfig CFLAGS
-# ("-partition=none") that make g++ reject any pip source build of a C/C++ extension (e.g. pyamg,
-# which has no cp314t wheel). Pinning python-freethreading's build alone does not pin the python
-# package it pulls in, so both must be pinned to the last known-good build until conda-forge
-# fixes it upstream (unreported as of 2026-09-02). TODO: unpin once fixed.
+# ("-partition=none") that make g++ reject any pip source build of a C/C++ extension. Pinning
+# python-freethreading's build alone does not pin the python package it pulls in, so both must be
+# pinned to the last known-good build until conda-forge fixes it upstream (unreported as of
+# 2026-09-02). TODO: unpin once fixed.
 python=3.14.7=h1945688_4_cp314t
 python-freethreading=3.14.7=h92d6c8b_4
 pytest

@@ -66,14 +66,33 @@ jobs:
           make install
           cd ../..
 
+      - name: Build Boost
+        shell: bash -l {0}
+        run: |
+          # boost-cpp's only conda-forge build (1.85.0) pins icu<76, which
+          # conflicts with the icu>=78.3 that the only free-threaded-Python
+          # matplotlib build needs, so it can't live in the same env as the
+          # rest of conda_requirements.txt. Build the specific libraries
+          # AMGCL needs from source instead, into the same conda prefix as
+          # everything else.
+          curl -L -o boost_1_85_0.tar.gz https://archives.boost.io/release/1.85.0/source/boost_1_85_0.tar.gz
+          tar xzf boost_1_85_0.tar.gz
+          cd boost_1_85_0
+          ./bootstrap.sh --prefix=$CONDA_PREFIX --with-libraries=program_options,serialization,test
+          ./b2 install
+          cd ..
+
       - name: Install AMGCL
         shell: bash -l {0}
         run: |
+          # A plain, unhinted cmake here can silently pick up an unrelated
+          # Boost from elsewhere on the system instead of the one just built
+          # (verified, not hypothetical) — point it at $CONDA_PREFIX explicitly.
           git clone --branch 1.4.7 --depth 1 https://github.com/ddemidov/amgcl.git
           cd amgcl
           mkdir build
           cd build
-          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
+          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DBOOST_ROOT=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX ..
           make install
           cd ../..
 
