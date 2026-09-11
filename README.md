@@ -104,14 +104,35 @@ make install
 cd ../..
 ```
 
-Step 6: Install AMGCL.
+Step 6: Build Boost from source, then install AMGCL.
+
+`boost-cpp`'s only available conda-forge build (1.85.0) pins `icu<76`, which
+conflicts with the `icu>=78.3` that the only free-threaded-Python-compatible
+`matplotlib` build needs — so it can't be installed into the same environment
+as the rest of `conda_requirements.txt`. Build the specific Boost libraries
+AMGCL needs (`program_options`, `serialization`, `test`) from source instead,
+into the same conda prefix as everything else:
+
+```console
+curl -L -o boost_1_85_0.tar.gz https://archives.boost.io/release/1.85.0/source/boost_1_85_0.tar.gz
+tar xzf boost_1_85_0.tar.gz
+cd boost_1_85_0
+./bootstrap.sh --prefix=$CONDA_PREFIX --with-libraries=program_options,serialization,test
+./b2 install
+cd ..
+```
+
+Even installed into the same prefix, AMGCL's `cmake` won't reliably find it
+without an explicit hint (a plain, unhinted `cmake ..` here can silently pick
+up an unrelated Boost from elsewhere on the system instead — verified, not
+hypothetical), so point it there explicitly:
 
 ```console
 git clone --branch 1.4.7 --depth 1 https://github.com/ddemidov/amgcl.git
 cd amgcl
 mkdir build
 cd build
-cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
+cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DBOOST_ROOT=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX ..
 make install
 cd ../..
 ```

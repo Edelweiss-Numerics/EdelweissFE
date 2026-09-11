@@ -1,6 +1,8 @@
-docutils
-matplotlib
-pyamg
+# pyamg is deliberately NOT installed here: its cp314t wheel does not declare itself
+# free-thread-safe, so importing it silently re-enables the GIL process-wide (confirmed via
+# `import pyamg` -> RuntimeWarning on pyamg.amg_core.evolution_strength), defeating the whole
+# point of python-freethreading. Revisit once pyamg opts into free-threading support.
+#
 # pyvista>=0.49.0 pulls in pyvista-validation==0.2.2, whose sdist build hard-codes
 # py_limited_api='cp310', which setuptools rejects under free-threaded Python
 # (Py_GIL_DISABLED). Pin below that until pyvista-validation supports cp314t.
