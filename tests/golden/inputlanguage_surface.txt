@@ -510,9 +510,10 @@ Quad faces of 3D solids are split into two Tria3 facets via a fixed diagonal. Hi
 element faces are either reduced to their linear corner-node subset (``triangulation=corner``,
 exact for straight-edged meshes) or triangulated including their midside nodes
 (``triangulation=midside``, strictly more accurate for curved faces). The facets carry
-face-consistent per-node tributary area shares for the pressure-weighted contact formulation.
-See the :doc:`contact theory documentation </documentation/contacttheory>` for the full
-background.
+face-consistent per-node tributary area shares for the pressure-weighted contact formulation;
+``nodalWeights`` selects between the facet tiling's own consistent shares and the non-negative
+weighting that best approximates a *serendipity* face's consistent nodal loads. See the
+:doc:`contact theory documentation </documentation/contacttheory>` for the full background.
 
 The underlying :func:`buildContactFacets` is idempotent and re-runnable, so a
 :class:`~edelweissfe.models.meshdependent.MeshDependent` consumer of these facets (e.g.
@@ -532,14 +533,16 @@ refinement) as well as at setup time; the recipe is recorded in ``model.contactF
     [name] The prefix for the generated element/node sets. (<class 'str'>)
   optional arguments
     [triangulation] The facet triangulation of higher-order element faces: 'corner' (linear corner-node subset only; exact for straight-edged meshes) or 'midside' (triangulation of the full face boundary including midside nodes; strictly more accurate for curved faces). Linear element faces are unaffected by this option. (<class 'str'>, default = corner)
+    [nodalWeights] The per-node contact weighting of the generated facets: 'facetConsistent' (the consistent nodal loads of the flat facet tiling itself) or 'serendipityOptimal' (the resultant-exact, non-negative weighting that minimises the mismatch against a quadratic face's own consistent nodal loads, by reassigning each corner node's share to its two adjacent midside nodes -- the modified shape functions of Puso, Laursen & Solberg, CMAME 2008). Reduces the spurious corner/midside load pattern on hexa20 contact surfaces by a third, at the price of corner nodes ceasing to be contact points -- but NO measured benefit has been demonstrated, because a quadratic face under near-uniform pressure lifts its corner nodes off anyway, which makes their weight moot; see the contact theory documentation. Requires triangulation='midside'; linear element faces are unaffected by this option. (<class 'str'>, default = facetConsistent)
 ===== module documentation: edelweissfe.modelmodifiers.adaptivity.hadaptivity =====
 Dynamic h-adaptivity model modifier for HEX20 hanging-node AMR.
 [hadaptivity] Dynamic hanging-node h-adaptivity model modifier for HEX20 elements.
   optional arguments
     [moduleOptions] Internal (<class 'dict'>, default = {})
-    [elSet] Fallback for 'refineElSet' if that is not given. Each '>>marker' scopes its own eligible elements (a fieldOutput's associated set, an elementSet/nodeSet/surface's members); this no longer restricts marking itself. (<class 'str'>, default = None)
+    [elSet] Fallback for 'refineElSet' if that is not given. Does not restrict marking itself -- each '>>marker' scopes its own eligible elements (a fieldOutput's associated set, an elementSet/nodeSet/surface's members). (<class 'str'>, default = None)
     [refineElSet] Restrict the AMR octree mirror itself to this element set, e.g. the solid elements in a mesh that also contains contact-facet elements. Elements outside this set never become octree roots and are left untouched by refinement. Defaults to 'elSet' if given, otherwise to every 20-node (HEX20-family) element in the model. (<class 'str'>, default = None)
     [maxLevel] Maximum refinement level. (<class 'int'>, default = 1)
+    [minMarkedElements] Minimum number of eligible elements that must be marked before a refinement pass is triggered. Marked elements persist (accumulate) across increments -- across calls where fewer than this many are marked, no refinement happens and no equation system rebuild is triggered -- until the accumulated count reaches this threshold, at which point all of them are refined together in a single pass. Note that individual markers may cap their own marks per pass (e.g. 'maxRefinedFraction') or expand them (e.g. 'halo') before accumulating here. Default 1 refines as soon as any element is marked (previous behavior). (<class 'int'>, default = 1)
     [splitFactor] Number of equal parts per axis a marked element is split into (2 = octree bisection into 8 children; 3 = 3x3x3 = 27 children, etc.). The hanging-node coupling stays exact for any factor. (<class 'int'>, default = 2)
     [elementType] Element type to instantiate for children (default: like parents). (<class 'str'>, default = None)
     [elementProvider] Element provider. (<class 'str'>, default = marmot)
@@ -548,14 +551,9 @@ Dynamic h-adaptivity model modifier for HEX20 hanging-node AMR.
   optional keywords
     < marker > AMR marker definition. At least one is required.
       required arguments
-        [type] Type of marker: fieldOutput, elementSet, nodeSet, surface (<class 'str'>)
+        [type] Marker type, resolved through the 'marker' registry: fieldOutput, elementSet, nodeSet, surface, recoveryError. The type-specific options are defined by the selected marker's own schema. (<class 'str'>)
       optional arguments
         [initialOnly] Evaluate only once at simulation start (<class 'bool'>, default = False)
-        [fieldOutput] Name of an already-declared 'perElement' *fieldOutput (covering every quadrature point of interest, no 'f(x)') to mark on. (<class 'str'>, default = None)
-        [expression] Boolean expression in x (the fieldOutput's raw per-element result). (<class 'str'>, default = None)
-        [elSet] Element set to mark (<class 'str'>, default = None)
-        [nSet] Node set to mark (<class 'str'>, default = None)
-        [surface] Surface to mark (<class 'str'>, default = None)
 ===== module documentation: edelweissfe.outputmanagers.computetimemonitor =====
 [computetimemonitor] A simple monitor to observe results (fieldOutputs) in the console during analysis.
   optional arguments
@@ -955,23 +953,16 @@ actually present against *that instance's own* ``type(target).schema`` (:func:`c
 -- only present keys, no missing-required check, since an override is by definition partial), and
 applies them immediately via ``target.applyOptionsOverride(...)``.
 
-This replaces a name-blind, category-string mechanism (``getOptionsOfCategory``, matched against a
-solver's ``self.identification`` or an output manager's own name-or-a-hardcoded-fallback) that let a
-hand-maintained category tag drift from the object it was supposed to identify -- which is exactly
-how ``NISTPArcLength``'s two bespoke options ended up registered, and resolved, under the unrelated
-string ``"NISTArcLength"`` rather than its own ``identification``. A name is already unique and
-already declared; there is no second tag to keep in sync with it.
+Resolving directly by name against the target's own schema means there is no separate category tag
+that could drift out of sync with the object it is supposed to identify.
 
 The ``>>options`` keyword's own grammar is validated **dynamically**, not against a statically
 pre-declared list of every solver's and output manager's option names: at parse time, before
 ``name`` has even been resolved, the parser's dedicated ``isDynamicOptionsKeyword`` branch (see
 ``utils/inputfileparser.py::parseModuleKeywordLine``) only enforces that ``name`` itself is present
 -- every other ``key=value`` pair is accepted unvalidated and handed on raw. Real validation happens
-once ``name`` resolves to a concrete object, against *that object's
-own* ``type(target).schema`` (:func:`coercePresentOptions`, in :meth:`StepAction.fromStepActionDefinition`
-below). There is therefore no shared, hand-synchronized aggregate of every solver's and output
-manager's option names to keep from drifting: each schema is consulted directly, once, exactly when
-it is needed.
+once ``name`` resolves to a concrete object, against *that object's own* ``type(target).schema``
+(:func:`coercePresentOptions`, in :meth:`StepAction.fromStepActionDefinition` below).
 < options > Adjust a solver's or output manager's own options mid-job. 'name' must be the name an already-declared *solver or *output block gave it; every other option is validated against that specific instance's own type.
   required arguments
     [name] The name of the already-declared solver or output manager this block configures. (<class 'str'>)

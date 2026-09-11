@@ -35,5 +35,17 @@ jobs:
       - name: Run tests without Marmot
         shell: bash -l {0}
         run: |
-          run_tests_edelweissfe ./testfiles/edelweiss-only/
+          # See run_tests_with_marmot.yml: invoke the installed console script directly, not via
+          # `python -m ...`, to avoid the repo root's uncompiled edelweissfe/ source tree
+          # shadowing the properly built package installed into site-packages.
+          coverage run "$(command -v run_tests_edelweissfe)" ./testfiles/edelweiss-only/
+          coverage xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          flags: no-marmot
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
