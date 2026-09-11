@@ -1,0 +1,75 @@
+** Explicit-dynamic (NED) gradient-enhanced damage test combining the HYPERBOLIC non-local field
+** with h-adaptivity: the GCDPNEDExplicitHyperbolic bar, with the elements at one end refined once
+** before the increment loop starts.
+**
+** This is the only case anywhere that has a named element property AND a topology change, which
+** is what it exists for:
+**
+**  * a refined child element inherits its parent's named properties. It inherits the section
+**    through its own path and inherited nothing else, so before hAdaptivity propagated them a
+**    child lost the `nonlocal micro inertia` assigned here -- in exactly the region the refinement
+**    was requested for. The failure is not subtle once it is reachable: the non-local field then
+**    carries an inertia on the unrefined elements and none on the refined ones, and NED refuses a
+**    field whose own degrees of freedom disagree about which time derivative they carry, so this
+**    deck stops with that error rather than quietly integrating half the field as a wave equation
+**    and half as a diffusion one.
+**  * the non-local field's critical time step and the mass/momentum conservation diagnostics
+**    across a topology change with a non-mechanical inertia present -- the inertia is a time
+**    squared, so it is conserved on its own line and enters neither the momentum nor the energy
+**    balance.
+**
+** Everything else is GCDPNEDExplicitHyperbolic, including the micro-inertia
+** m_k = eta^2 / 4 = 2.5e-9 s^2 and the reasoning behind it, and GCDPNEDExplicitAMR, including the
+** initialOnly marker (a marker that would act later is refused by name under this solver).
+
+*material, name=gcdp, id=gcdp
+**E         nu      fcy         fcu         fbu         ftu         Df          Ah
+30000.0,    0.15,   13,         47.4,       55,         4.74,       0.85,       0.12,
+**Bh        Ch          Dh      As          softmod     l           m           omegaMax
+0.003,      2.0,        1e-6,   15.0,       0.0040,     4,          1.0,        0.99,
+**diffmeth  dTThreshCel viscosity    density   nonlocalViscosity
+0,          0,          0,           3e-9,     1e-4
+
+*section, name=section1, material=gcdp, type=solid
+gen_all
+
+*elementProperty, elSet=gen_all, propertyName=nonlocal micro inertia
+2.5e-9
+
+*job, name=nedGcdpJob, domain=3d
+
+** COURANT NUMBER: 0.1, not the 0.8 default -- see GCDPNEDExplicit for the convergence study behind
+** that choice. Do not raise this.
+*solver, solver=NEDParallel, name=theSolver
+courant-number=0.1
+output-frequency=50
+
+*modelModifier, type=hAdaptivity, name=amr
+>>marker, type=nodeSet, nSet=gen_right, initialOnly=True
+refineElSet=gen_all
+maxLevel=1
+
+*modelGenerator, generator=boxGen, name=gen
+nX      =2
+nY      =1
+nZ      =1
+lX      =20
+lY      =10
+lZ      =10
+elType  =GC3D20R
+
+*fieldOutput
+>>perNode, elSet=gen_all, field=displacement, result=U, name=displacement
+>>perNode, elSet=gen_all, field=nonlocal damage, result=U, name=nonlocalDamage
+>>perElement, elSet=gen_all, name=omega, result=omega, quadraturePoint=0:8, f(x)='np.max(x,axis=1)'
+>>perNode, name=RF, nSet=gen_left, field=displacement, result=P, f(x)='np.sum(x[:,0])', saveHistory=True
+>>perNode, name=Uend, nSet=gen_right, field=displacement, result=U, f(x)='np.mean(x[:,0])', saveHistory=True
+
+*output, type=monitor, name=monitor
+fieldOutput=RF
+fieldOutput=Uend
+
+*step, type=adaptiveForExplicitSimulations, solver=theSolver
+maxInc=1, minInc=1e-12, maxNumInc=40000, maxIter=25, stepLength=1e-3
+>>dirichlet, name=fixLeft,  nSet=gen_left,  field=displacement, 1=0, 2=0, 3=0
+>>dirichlet, name=pullRight, nSet=gen_right, field=displacement, 1=0.05
