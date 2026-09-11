@@ -41,7 +41,7 @@ name='applied load',                    fieldOutput=LoadTop, f(x)='sum(x[:,1]) /
 
 *output, type=meshPlot
 figure=1, axSpec=121, create=xyData,  y=DisplacementTop, x=time, f(y)='mean(y[:,:,1], axis=1) / 200', label=Neuner et al. (24h),
-figure=1, axSpec=122, >>perNode, fieldOutput=DisplacementN, f(x)='x[:,1]', label=U
+figure=1, axSpec=122, create=perNode, fieldOutput=Displacement, f(x)='x[:,1]', label=U
 figure=2, axSpec=111, create=xyData,  y=E, x=time,  label=E,
 
 *configurePlots

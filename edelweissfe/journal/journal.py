@@ -34,6 +34,7 @@ which can be used troughout EdelweissFE.
 """
 
 import math
+import textwrap
 
 from prettytable import PrettyTable
 
@@ -54,6 +55,19 @@ class Journal:
         Suppress certain levels.
     """
 
+    # Class-level width settings to ensure all instances synchronize formatting
+    linewidth = 120
+    leftColumn = 100
+    leftColumnMaxSize = 120
+    outputWidths = {0: 99, 1: 96, 2: 95}
+    _rightColumn = 20
+    errorMessageTemplate = " > > > {:<88}{:>18} < < < "
+    leveledOutput = {
+        0: " {:<100}{:>18} ",
+        1: "   {:<98}{:>18} ",
+        2: "     {:<96}{:>18} ",
+    }
+
     def __init__(
         self,
         verbose: bool = True,
@@ -63,7 +77,6 @@ class Journal:
         self._suppressLvl = suppressFromLevel
         self._verbose = verbose
         self._fileHandle = None
-        self.setNewLineWidth(newWidth=100, leftColumn=80)
 
     def setFileOutput(self, fileHandle=None):
         if fileHandle:
@@ -71,7 +84,8 @@ class Journal:
         else:
             self._fileHandle = None
 
-    def setNewLineWidth(self, newWidth: int = 100, leftColumn: int = 80):
+    @classmethod
+    def setNewLineWidth(cls, newWidth: int = 100, leftColumn: int = 80):
         """Set the line width of the log file.
 
         Parameters
@@ -82,20 +96,20 @@ class Journal:
             Width of the main column.
         """
 
-        self.linewidth = newWidth
-        self.leftColumn = leftColumn
-        self.leftColumnMaxSize = 120
-        self.outputWidths = {}
-        self.outputWidths[0] = leftColumn - 1
-        self.outputWidths[1] = leftColumn - 4
-        self.outputWidths[2] = leftColumn - 5
-        self._rightColumn = self.linewidth - leftColumn
+        cls.linewidth = newWidth
+        cls.leftColumn = leftColumn
+        cls.leftColumnMaxSize = 120
+        cls.outputWidths = {}
+        cls.outputWidths[0] = leftColumn - 1
+        cls.outputWidths[1] = leftColumn - 4
+        cls.outputWidths[2] = leftColumn - 5
+        cls._rightColumn = cls.linewidth - leftColumn
 
-        self.errorMessageTemplate = " > > > {{:<{:}}}{{:>{:}}} < < < ".format(leftColumn - 12, self._rightColumn - 2)
-        self.leveledOutput = {
-            0: " {{:<{:}}}{{:>{:}}} ".format(leftColumn, self._rightColumn - 2),
-            1: "   {{:<{:}}}{{:>{:}}} ".format(leftColumn - 2, self._rightColumn - 2),
-            2: "     {{:<{:}}}{{:>{:}}} ".format(leftColumn - 4, self._rightColumn - 2),
+        cls.errorMessageTemplate = " > > > {{:<{:}}}{{:>{:}}} < < < ".format(leftColumn - 12, cls._rightColumn - 2)
+        cls.leveledOutput = {
+            0: " {{:<{:}}}{{:>{:}}} ".format(leftColumn, cls._rightColumn - 2),
+            1: "   {{:<{:}}}{{:>{:}}} ".format(leftColumn - 2, cls._rightColumn - 2),
+            2: "     {{:<{:}}}{{:>{:}}} ".format(leftColumn - 4, cls._rightColumn - 2),
         }
 
     def message(self, message: str, senderIdentification: str, level: int = 1):
@@ -112,11 +126,25 @@ class Journal:
         """
 
         lines = message.splitlines()
-        for line in lines:
-            while len(line) > self.leftColumn and self.leftColumn < self.leftColumnMaxSize:
-                self.setNewLineWidth(self.linewidth + 5, self.leftColumn + 5)
+        wrapped_lines = []
 
-            theLine = self.leveledOutput[level].format(line, senderIdentification)
+        # Abbreviate senderIdentification if it is too long
+        max_sender_len = Journal._rightColumn - 2
+        if len(senderIdentification) > max_sender_len:
+            senderIdentification = senderIdentification[: max_sender_len - 3] + "..."
+
+        # Maximum allowed characters for the line based on leveledOutput indentations
+        wrap_width = Journal.leftColumn - {0: 0, 1: 2, 2: 4}.get(level, 0)
+
+        for line in lines:
+            if len(line) > wrap_width:
+                wrapped_lines.extend(textwrap.wrap(line, width=wrap_width))
+            else:
+                wrapped_lines.append(line)
+
+        for i, line in enumerate(wrapped_lines):
+            sender = senderIdentification if i == 0 else ""
+            theLine = Journal.leveledOutput[level].format(line, sender)
             if level < self._suppressLvl:
                 if self._verbose:
                     print(theLine)
@@ -209,3 +237,7 @@ class Journal:
         """
 
         self._suppressLvl = level
+
+
+# Initialize the class-level formats exactly once
+Journal.setNewLineWidth(newWidth=100, leftColumn=80)

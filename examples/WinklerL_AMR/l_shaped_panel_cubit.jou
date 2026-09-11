@@ -1,0 +1,72 @@
+reset
+brick x 500 y 500 z 10
+
+surface {Id("surface") - 3} name "surface_bottom"
+surface {Id("surface") - 4} name "surface_back"
+
+webcut volume all with plane xplane offset 0
+webcut volume all with plane yplane offset 0
+
+volume {Id("volume") - 0} name "left_upper"
+volume {Id("volume") - 1} name "right_upper"
+volume {Id("volume") - 2} name "left_lower"
+volume {Id("volume") - 3} name "right_lower"
+
+
+delete volume with name "right_lower"
+
+webcut volume with name "right_upper" with plane xplane offset 200
+curve {Id("curve") - 7} name "curve_load_application"
+
+webcut volume with name "left_lower" with plane yplane offset -150
+
+volume with name "left_lower" rename "reinforced_concrete"
+
+imprint volume all
+merge volume all
+
+# we have to mesh the surfac first in order to do the nice refinement;
+# we cannot refine the volume directly, because the we have no possibility to
+# refine hexes in an anisotropic way
+# https://forum.coreform.com/t/structured-hex-mesh-refinement/1873#
+
+surface with name "surface_back*" size 12
+
+# control skew surface all
+mesh surface with name "surface_back*"
+
+create group "quads_to_refine"
+group "quads_to_refine" add face with ( x_coord + 190 ) * ( x_coord + 190 ) + ( y_coord + 530 ) * ( y_coord + 530 ) < 590 * 590 \
+                             and with ( x_coord + 190 ) * ( x_coord + 190 ) + ( y_coord + 530 ) * ( y_coord + 530 ) > 520 * 520
+
+#refine face in group with name "quads_to_refine"
+
+volume all  redistribute nodes on
+volume all  scheme Sweep Vector 0 0 -1 sweep transform least squares
+# volume all  autosmooth target on  fixed imprints off  smart smooth off
+
+mesh volume all
+
+create block {NumBlocks()+1}
+block {NumBlocks()} name "concrete"
+block {NumBlocks()} add volume all except with name "reinforced_concrete*"
+block {NumBlocks()} element type hex20
+
+create block {NumBlocks()+1}
+block {NumBlocks()} name "reinforced_concrete"
+block {NumBlocks()} add volume with name "reinforced_concrete"
+block {NumBlocks()} element type hex20
+
+create nodeset {NumNodesets()+1}
+nodeset {NumNodesets()} name "nset_back"
+nodeset {NumNodesets()} add node in surface with name "surface_back*"
+
+create nodeset {NumNodesets()+1}
+nodeset {NumNodesets()} name "nset_load_application"
+nodeset {NumNodesets()} add node in curve with name "curve_load_application*"
+
+create nodeset {NumNodesets()+1}
+nodeset {NumNodesets()} name "nset_bottom"
+nodeset {NumNodesets()} add node in surface with name "surface_bottom*"
+
+export abaqus "mesh.inp" overwrite partial

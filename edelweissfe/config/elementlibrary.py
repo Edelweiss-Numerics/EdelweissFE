@@ -40,30 +40,37 @@ In future, elements by other providers or elements directly implemented in Edelw
         1000,        1,     2,     3,     4,     ...
 """
 
-from edelweissfe.elements.displacementelement.element import (  # noqa: F401
-    DisplacementElement,
-)
-from edelweissfe.elements.displacementtlelement.element import (  # noqa: F401
-    DisplacementTLElement,
-)
-from edelweissfe.elements.library import elLibrary
+from edelweissfe.config import registry
 from edelweissfe.utils.misc import strCaseCmp
 
 
 def getElementClass(elType: str, provider: str = None) -> type:
-    """Get the class type of the requested element provider.
+    """Return the class implementing element type ``elType`` for the given ``provider``.
+
+    ``provider`` selects a namespace, not a variant of one lookup, and is dispatched via an
+    explicit table rather than the registry: ``marmot`` and ``marmotsingleqpelement`` ignore
+    ``elType`` entirely and return a single wrapper class that resolves the type at the Marmot
+    boundary.
+
+    The ``edelweiss`` provider is resolved through the registry (``element`` category), keyed by
+    element type, which lets a third party contribute an element type through an entry point.
 
     Parameters
     ----------
     elType
         A string identifying the requested element formulation.
     provider
-        The name of the element provider ot load.
+        The name of the element provider to load.
 
     Returns
     -------
     type
         The element provider class type.
+
+    Raises
+    ------
+    edelweissfe.config.registry.RegistryLookupError
+        If ``provider`` is ``edelweiss`` and no element is registered under ``elType``.
     """
 
     if provider is None:
@@ -71,10 +78,9 @@ def getElementClass(elType: str, provider: str = None) -> type:
 
     if strCaseCmp(provider, "edelweiss"):
 
-        try:
-            return eval(elLibrary[elType]["elClass"])
-        except KeyError:
-            raise Exception("Edelweiss element not found in library.")
+        elementClass, _ = registry.lookup("element", elType)
+
+        return elementClass
 
     elif provider.lower() == "marmot":
         from edelweissfe.elements.marmotelement.element import MarmotElementWrapper

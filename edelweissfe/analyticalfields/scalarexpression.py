@@ -27,53 +27,62 @@
 #  ---------------------------------------------------------------------
 """Define a field using a scalar expression."""
 
-from typing import Callable
+from dataclasses import dataclass
 
 import numpy as np
 
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
 from edelweissfe.utils.math import createModelAccessibleFunction
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
-
-module = Module("scalarExpression", "Define an analytical field using a scalar expression.")
-
-inputLanguage = InputLanguage()
-
-keyword = "analyticalField"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg(
-    "f(x,y,z)",
-    "Python expression using variables x, y, z (coordinates); dictionaries contained in model can be accessed",
-    str,
-)
-
-documentation = [module]
+from edelweissfe.utils.schema import schemaField
 
 
-@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-@castKwargsValuesAndAddDefaults(module)
-def analyticalFieldFactory(name, FEModel, **kwargs):
-    expression = createModelAccessibleFunction(kwargs["f(x,y,z)"], FEModel, *"xyz")
+@dataclass(frozen=True)
+class ScalarExpressionSchema:
+    """The options this analytical field accepts, owned by this module and never mutated from
+    outside it.
 
-    return AnalyticalField(name, FEModel, expression)
+    ``f_x_y_z`` is declared ``required=True`` explicitly, but is still given a ``default=None`` so
+    that ``ScalarExpressionSchema()`` remains constructible as the constructor's default argument;
+    ``buildSchemaFromOptions`` still enforces that an ``.inp`` file supplies it.
+    """
+
+    f_x_y_z: str | None = schemaField(
+        description="Python expression using variables x, y, z (coordinates); dictionaries "
+        "contained in model can be accessed",
+        dtype=str,
+        default=None,
+        required=True,
+        optionName="f(x,y,z)",
+    )
 
 
 class AnalyticalField(AnalyticalFieldBase):
-    def __init__(self, name: str, FEModel, expression: Callable):
+    """Define an analytical field using a scalar expression."""
+
+    #: Option schema for this analytical field, per OptionSchemaProvider.
+    schema = ScalarExpressionSchema
+
+    def __init__(self, name: str, FEModel, *, configuration: ScalarExpressionSchema = ScalarExpressionSchema()):
+        """Constructible standalone, with no parser involvement.
+
+        Parameters
+        ----------
+        name
+            The name of this analytical field.
+        FEModel
+            The model tree.
+        configuration
+            The options this analytical field accepts; ``f_x_y_z`` is still required, see
+            :class:`ScalarExpressionSchema`.
+        """
         self.name = name
         self.type = "scalarExpression"
 
         self.domainSize = FEModel.domainSize
 
-        self.expression = expression
+        self.expression = createModelAccessibleFunction(configuration.f_x_y_z, FEModel, *"xyz")
 
         return
 

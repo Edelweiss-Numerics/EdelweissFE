@@ -35,18 +35,22 @@ by specifying their ``name`` and a list of ``option=value``, for example
 
 .. code-block:: edelweiss
 
-    *step, jobName=myJob,
-        dirichlet, name=bottom,   nSet=bottom,   field=displacement, 2=0, 1=0
-        dirichlet, name=rightTop, nSet=rightTop, field=displacement, 2=0,
-        distributedload, name=dload1, surface=top,  type=pressure, magnitude=10, f(t)=t*2
-        distributedload, name=dload2, surface=left, type=pressure, magnitude=50, f(t)=t
+    *step, solver=mySolver
+    >>dirichlet, name=bottom,   nSet=bottom,   field=displacement, 2=0, 1=0
+    >>dirichlet, name=rightTop, nSet=rightTop, field=displacement, 2=0,
+    >>distributedload, name=dload1, surface=top,  type=pressure, magnitude=10, f(t)=t*2
+    >>distributedload, name=dload2, surface=left, type=pressure, magnitude=50, f(t)=t
 """
 
-import importlib
+from edelweissfe.config import registry
 
 
 def stepActionFactory(name: str) -> type:
-    """Get the class type of the requested step action.
+    """Return the class implementing step action ``name``.
+
+    Resolved through the registry (``stepaction`` category), which lets built-in step actions,
+    entry points, and in-process :func:`~edelweissfe.config.registry.register` calls all be
+    reached the same way.
 
     Parameters
     ----------
@@ -57,8 +61,13 @@ def stepActionFactory(name: str) -> type:
     -------
     type
         The step action class type.
+
+    Raises
+    ------
+    edelweissfe.config.registry.RegistryLookupError
+        If no step action is registered under ``name``.
     """
 
-    module = importlib.import_module("edelweissfe.stepactions." + name.lower())
+    stepActionClass, _ = registry.lookup("stepaction", name)
 
-    return module.StepAction
+    return stepActionClass

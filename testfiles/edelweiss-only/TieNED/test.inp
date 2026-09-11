@@ -1,0 +1,63 @@
+** explicit-dynamics (NED, central difference) tie test: two CPE4 patches with MISMATCHED
+** interface meshes (2 vs 3 elements across), bonded by the DOF-elimination tie, top edge pushed
+** down by a prescribed-velocity Dirichlet ramp. The tie in explicit dynamics adds no stiffness
+** (critical time step untouched): slave masses and forces are folded onto the masters
+** (row-sum lumping of T^T M T, mass-conserving), and the slave kinematics are assigned directly
+** from the masters each increment -- a compression wave crosses the tied interface. Regression
+** via U.ref; the journal's internal/kinetic energy split provides the sanity monitor. See
+** test_merged.inp for the manually-run monolithic reference of the same geometry.
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+100, 0.0, 1.0
+
+*job, name=tiejobned, domain=2d
+*solver, solver=NED, name=theSolver
+second-order-fields="displacement"
+output-frequency=10
+
+*modelGenerator, generator=planeRectQuad, name=lower
+nX      =2
+nY      =2
+x0      =0
+y0      =0
+l       =1
+h       =1
+elType  =CPE4
+elProvider =edelweiss
+
+*modelGenerator, generator=planeRectQuad, name=upper
+nX      =3
+nY      =2
+x0      =0
+y0      =1.02
+l       =1
+h       =1
+elType  =CPE4
+elProvider =edelweiss
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen1
+surface = upper_bottom
+name    = slaveSurf
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen2
+surface = lower_top
+name    = masterSurf
+
+*section, name=section1, thickness=1.0, material=linearelastic, type=plane
+lower_all
+upper_all
+
+*constraint, name=tie1, type=tie
+slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets
+
+*fieldOutput
+>>perNode, elSet=lower_all, field=displacement, result=U, name=dispLower
+>>perNode, elSet=upper_all, field=displacement, result=U, name=dispUpper
+>>perNode, name=RFBottom, nSet=lower_bottom, field=displacement, result=P, f(x)='sum(x[:,1])', saveHistory=True
+
+*output, type=monitor, name=monitor
+fieldOutput=RFBottom
+
+*step, type=adaptiveForExplicitSimulations, solver=theSolver
+maxInc=1e0, minInc=1e-2, maxNumInc=10000, maxIter=25, stepLength=1
+>>dirichlet, name=fixBottom, nSet=lower_bottom, field=displacement, 1=0, 2=0
+>>dirichlet, name=pushTop, nSet=upper_top, field=displacement, 2=-0.05

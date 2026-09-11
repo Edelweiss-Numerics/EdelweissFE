@@ -1,0 +1,41 @@
+*material, name=linearelastic, id=mat
+18000, 0.0
+
+*section, name=sec, material=mat, type=solid
+fixed_all
+
+*modelGenerator, generator=boxGen, name=fixed
+nX      =2
+nY      =2
+nZ      =2
+x0      =0
+y0      =0
+z0      =0
+lX      =1
+lY      =1
+lZ      =1
+elType  =C3D20
+
+*modelModifier, type=hAdaptivity, name=amr
+** Test modular initial refinement using different marker types
+>>marker, type=nodeSet, nSet=fixed_top, initialOnly=True
+>>marker, type=surface, surface=fixed_left, initialOnly=True
+maxLevel=1
+
+*job, name=amrinitialrefine, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, elSet=fixed_all, field=displacement, result=U, name=dispFixed
+>>perNode, nSet=fixed_back, field=displacement, result=P, name=rfFixed
+
+*output, type=ensight, name=esExport
+>>perNode, fieldOutput=dispFixed
+>>perNode, fieldOutput=rfFixed
+>>configuration, overwrite=yes
+
+*step, solver=theSolver
+maxInc=1.0, minInc=1.0, maxNumInc=1, maxIter=25, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=fixBack, nSet=fixed_back, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=moveFront, nSet=fixed_front, field=displacement, 1=0.1, 2=0.0, 3=0.0

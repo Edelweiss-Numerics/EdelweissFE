@@ -26,62 +26,85 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """
-Created on Thu Apr 13 14:08:32 2017
+Records the model time at the end of every increment and writes the collected times to a
+``.csv`` file when the job finishes.
+
+.. code-block:: console
+    :caption: Example:
+
+    *output, type=timemonitor, name=mytimes
+        export=myTimes
 
 @author: Matthias Neuner
 """
 
+from dataclasses import dataclass
 
 import numpy as np
 
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
-
-module = Module(
-    "computetimemonitor", "A simple monitor to observe results (fieldOutputs) in the console during analysis."
-)
-
-inputLanguage = InputLanguage()
-
-keyword = "output"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg("export", "Provide a filename to export the results.", str)
-
-documentation = [module]
-
-required = [kw.name for kw in module.requiredArgs]
-required += [kw.name for kw in module.requiredKeywords]
-
-optional = [kw.name for kw in module.optionalArgs]
-optional += [kw.name for kw in module.optionalKeywords]
+from edelweissfe.utils.fieldoutput import FieldOutputController
+from edelweissfe.utils.plotter import Plotter
+from edelweissfe.utils.schema import schemaField
 
 
-@caseInsensitiveKwargsChecker(required, optional)
-@castKwargsValuesAndAddDefaults(module)
-def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
-    kwargs = CaseInsensitiveDict(kwargs)
+@dataclass(frozen=True)
+class TimeMonitorSchema:
+    """The options this output manager accepts, owned by this module and never mutated from
+    outside it.
 
-    filename = kwargs["export"]
+    ``export`` is required, but is still given a default of ``None`` -- with ``required`` forced
+    to ``True`` -- so that ``TimeMonitorSchema()`` remains constructible without arguments;
+    ``buildSchemaFromOptions`` still enforces that an ``.inp`` file supplies it.
+    """
 
-    return OutputManager(name, FEModel, fieldOutputController, journal, plotter, filename)
+    export: str | None = schemaField(
+        description="Provide a filename to export the results.", dtype=str, default=None, required=True
+    )
 
 
 class OutputManager(OutputManagerBase):
     identification = "TimeMonitor"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter, filename):
+    #: Option schema for this output manager, per OptionSchemaProvider.
+    schema = TimeMonitorSchema
+
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        fieldOutputController: FieldOutputController,
+        journal: Journal,
+        plotter: Plotter,
+        *,
+        configuration: TimeMonitorSchema = TimeMonitorSchema(),
+    ):
+        """Constructible standalone, with no parser involvement. Options arrive as an
+        already-validated, already-typed schema instance.
+
+        Parameters
+        ----------
+        name
+            The name of this output manager.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controller instance.
+        journal
+            The journal instance for logging.
+        plotter
+            The plotter instance.
+        configuration
+            The options this output manager accepts; defaults to all-defaults.
+        """
+        self.name = name
         self.journal = journal
         self.monitorJobs = []
         self.model = model
 
-        self.exportFile = filename
+        self.exportFile = configuration.export
         self.timeVals = []
 
     def initializeJob(self):
@@ -90,18 +113,14 @@ class OutputManager(OutputManagerBase):
     def initializeStep(self, step):
         pass
 
-    def finalizeIncrement(self, U, P, **kwargs):
+    def finalizeIncrement(self, **kwargs):
         self.timeVals.append(self.model.time)
 
     def finalizeFailedIncrement(self, **kwargs):
         pass
 
-    def finalizeStep(self, U, P):
+    def finalizeStep(self):
         pass
 
-    def finalizeJob(
-        self,
-        U,
-        P,
-    ):
+    def finalizeJob(self):
         np.savetxt("{:}.csv".format(self.exportFile), np.asarray(self.timeVals).T)

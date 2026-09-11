@@ -42,11 +42,11 @@ if checkSuccessfulExtension("edelweissfe.elements.marmotsingleqpelement.marmotma
 else:
     MarmotMaterialWrappingElement = None
 
-from edelweissfe.sets.orderedset import ImmutableOrderedSet
+from edelweissfe.sets.orderedset import OrderedSet
 from edelweissfe.utils.meshtools import extractNodesFromElementSet
 
 
-class ElementSet(ImmutableOrderedSet):
+class ElementSet(OrderedSet):
     """A basic element set.
     It has a label, and a list containing unique elements.
 
@@ -82,3 +82,10 @@ class ElementSet(ImmutableOrderedSet):
         if not self._nodes:
             self._nodes = extractNodesFromElementSet(self)
         return self._nodes
+
+    def replaceMembers(self, item_s):
+        """Replace all members in-place (see :meth:`OrderedSet.replaceMembers`), additionally
+        invalidating the cached :meth:`extractNodeSet` result, which is stale once the element
+        membership changes."""
+        super().replaceMembers(item_s)
+        self._nodes = None

@@ -4,15 +4,14 @@ Solvers
 .. automodule:: edelweissfe.config.solvers
    :members:
 
-.. pprint:: edelweissfe.config.solvers.solverLibrary
-   :caption: Currently available:
-
 
 ``NIST`` - Nonlinear Implicit Static
 ------------------------------------
 
 .. automodule:: edelweissfe.solvers.nonlinearimplicitstatic
    :members:
+
+.. pprint:: solver:NIST
 
 
 ``NISTParallel`` - Nonlinear Implicit Static (parallel)
@@ -21,11 +20,15 @@ Solvers
 .. automodule:: edelweissfe.solvers.nonlinearimplicitstaticparallel
    :members:
 
+.. pprint:: solver:NISTParallel
+
 ``NISTPArcLength`` - Nonlinear Implicit Static - Arc length
 -----------------------------------------------------------
 
 .. automodule:: edelweissfe.solvers.nonlinearimplicitstaticparallelarclength
    :members:
+
+.. pprint:: solver:NISTPArcLength
 
 ``NEST`` - Nonlinear Explicit Static
 -------------------------------------
@@ -33,11 +36,15 @@ Solvers
 .. automodule:: edelweissfe.solvers.nonlinearexplicitstatic
    :members:
 
+.. pprint:: solver:NEST
+
 ``NESTParallel`` - Nonlinear Explicit Static (parallel)
 --------------------------------------------------------
 
 .. automodule:: edelweissfe.solvers.nonlinearexplicitstaticparallel
    :members:
+
+.. pprint:: solver:NESTParallel
 
 ``NED`` - Nonlinear Explicit Dynamic
 -------------------------------------
@@ -45,8 +52,12 @@ Solvers
 .. automodule:: edelweissfe.solvers.nonlinearexplicitdynamic
    :members:
 
+.. pprint:: solver:NED
+
 ``NEDParallel`` - Nonlinear Explicit Dynamic (parallel)
 --------------------------------------------------------
 
 .. automodule:: edelweissfe.solvers.nonlinearexplicitdynamicparallel
    :members:
+
+.. pprint:: solver:NEDParallel

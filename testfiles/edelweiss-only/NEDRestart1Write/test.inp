@@ -1,0 +1,123 @@
+** Explicit-dynamic (NED) restart equivalence, part 1 of 2: the run that WRITES the checkpoint.
+**
+** Runs the NEDContact model but stops deliberately early (maxNumInc below), checkpointing as it
+** goes. Stopping early is what makes the handover point deterministic: with
+** numberOfFilesToKeep=1 there is exactly one checkpoint file and it always holds the state at the
+** last output tick before the cut, whatever output-frequency happens to be. Part 2 resumes from
+** it and runs the REMAINING increments, so the resume is followed by enough of the analysis to
+** expose an error introduced at the handover.
+**
+** This half's U.ref is therefore the truncated run's own answer, not the full one. Part 2's
+** U.ref is the full straight-run answer, byte-identical to NEDContact/U.ref.
+**
+** Part 2 (NEDRestart2Resume) depends on this directory having run first. The runner sorts
+** directory names, hence the '1'/'2'.
+**
+** WHY THIS PAIR EXISTS. Restart was silently wrong twice, and both times every layer reported
+** success and produced a plausible curve:
+**
+**   1. SimpleTimeStepper.restoredTimeIncrement() returned self.dT, which was never assigned
+**      during a run -- so a resumed explicit run was seeded with dT_prev = 0 and repeated the
+**      leapfrog startup half-step, exactly reproducing the cold-start path.
+**   2. acceptLastState() copies the working quadrature-point buffer over the converged one, and
+**      the zero increment both explicit solvers process first accepts without ever computing an
+**      element -- so a freshly allocated buffer of zeros was copied over the state readRestart
+**      had just restored. Marmot-backed elements survive it (their setStateVars writes the
+**      working buffer), which is why a Marmot-based verification came out bit-identical while
+**      every pure-Python model resumed from a zero stress state.
+**
+** Neither is visible unless a resumed run is compared against a straight one. Defect 2 alone
+** moved the final displacement by 2.3e-02 relative; defect 1 by 1.5e-04, which is why the resume
+** must be followed by a substantial number of increments and not just a handful.
+**
+** RESTART IS ALREADY TESTED -- in tests/ (test_restart_integration.py and four siblings), and
+** those tests pass. They missed both defects because of what they cover, not because they are
+** absent, and the gap is worth stating precisely:
+**
+**   * they drive IMPLICIT solvers (pardiso / blockamg), while defect 1 is specific to the
+**     explicit leapfrog startup, and
+**   * they use VonMises, a MARMOT-backed material. Marmot's setStateVars writes _stateVarsTemp,
+**     the buffer acceptLastState copies FROM, so Marmot elements survive defect 2 by accident;
+**     only the pure-Python elements, whose setStateVars writes the converged buffer directly,
+**     lose their history.
+**
+** So the uncovered corner was exactly "explicit solver + pure-Python element", which is what this
+** pair occupies. Note that defect 2's mechanism is not itself explicit-only: any solver that
+** accepts an increment without having computed an element would wipe a pure-Python element's
+** restored history the same way.
+**
+** ALL restart options go on ONE dataline -- this manager does not aggregate datalines, so
+** separate lines would silently build one manager per line, two of them at writeInterval=1.
+
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+**E       nu     density
+1.8e4,    0.3,   1.0
+
+*job, name=nedcontactjob, domain=3d
+
+*solver, solver=NEDParallel, name=theSolver
+second-order-fields="displacement"
+courant-number=0.8
+output-frequency=50
+contact-update-frequency=10
+
+*modelGenerator, generator=boxGen, name=lower
+nX      =3
+nY      =3
+nZ      =3
+x0      =0
+y0      =0
+z0      =0
+lX      =2
+lY      =2
+lZ      =1
+elProvider =edelweiss
+elType  =C3D8
+
+*modelGenerator, generator=boxGen, name=upper
+nX      =3
+nY      =3
+nZ      =3
+x0      =0.3
+y0      =1.1
+z0      =1.05
+lX      =0.6
+lY      =0.6
+lZ      =1
+elProvider =edelweiss
+elType  =C3D8
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen1
+surface = upper_back
+name    = slaveSurf
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen2
+surface = lower_front
+name    = masterSurf
+
+*section, name=section1, material=linearelastic, type=solid
+lower_all
+upper_all
+
+*constraint, name=contact, type=nodeToDeformableSurfacePenalty
+slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=5e4, type=linear, searchDistance=2.0
+
+*fieldOutput
+>>perNode, elSet=lower_all, field=displacement, result=U, name=dispLower
+>>perNode, elSet=upper_all, field=displacement, result=U, name=dispUpper
+>>perNode, name=dispLowerMax, elSet=lower_all, field=displacement, result=U, f(x)='np.max(np.abs(x))', saveHistory=True
+>>perNode, name=RFLower, nSet=lower_back, field=displacement, result=P, f(x)='np.sum(x[:,2])', saveHistory=True
+
+*output, type=monitor, name=monitor
+fieldOutput=dispLowerMax
+fieldOutput=RFLower
+
+*output, type=restart, name=restart
+writeInterval=1, baseName=restart, numberOfFilesToKeep=1
+
+*step, type=adaptiveForExplicitSimulations, solver=theSolver
+maxInc=1, minInc=1e-12, maxNumInc=200, maxIter=25, stepLength=0.5
+>>dirichlet, name=fixLower, nSet=lower_back, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=pushDown, nSet=upper_front, field=displacement, 3=-0.2
+>>dirichlet, name=pinUpperXY, nSet=upper_bottomLeftBack, field=displacement, 1=0.0, 2=0.0
+>>dirichlet, name=pinUpperRotZ, nSet=upper_bottomRightBack, field=displacement, 2=0.0

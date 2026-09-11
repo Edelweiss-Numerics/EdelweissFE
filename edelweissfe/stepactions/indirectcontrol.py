@@ -29,60 +29,244 @@
 
 # @author: Matthias Neuner
 
+from dataclasses import dataclass
+
 import numpy as np
 
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager
-from edelweissfe.solvers.nonlinearimplicitstaticparallelarclength import NISTPArcLength
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.math import evalModelAccessibleExpression
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
+from edelweissfe.variables.fieldvariable import FieldVariable
 
 """
 Indirect (displacement) controller for the NISTArcLength solver
 """
 
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class IndirectControlSchema:
+    """The scalar options of the ``indirectcontrol`` keyword, owned by this module and never
+    mutated from outside it.
 
-modules = [
-    inputLanguage["step"].getModule("adaptive"),
-    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
-]
+    None of ``dof1``/``dof2``/``cVector1``/``cVector2`` is structural in the usual sense (a model
+    dict lookup by a fixed key): each is a model-access *expression*, evaluated by
+    :func:`~edelweissfe.utils.math.evalModelAccessibleExpression`/``eval`` in
+    :meth:`~StepAction._dofFromDefinition`/:meth:`~StepAction._cVectorFromDefinition`, so all four
+    stay plain string schema fields, exactly like ``modelupdate``'s ``update``.
+    """
 
-documentation = []
-
-for module in modules:
-    kw = module.addOptionalKeyword(
-        "indirectcontrol",
-        "Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.",
+    dof1: str | None = schemaField(
+        description="Degree of freedom for the constraint (model access expression).",
+        dtype=str,
+        default=None,
+        required=True,
     )
-    # kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("dof1", "Degree of freedom for the constraint (model access expression).", str)
-    kw.addRequiredArg("dof2", "Degree of freedom for the constraint (model access expression).", str)
-    kw.addRequiredArg("cVector1", "c vector.", str)
-    kw.addRequiredArg("cVector2", "c vector.", str)
-    kw.addRequiredArg("L", "Final distance (e.g. crack opening)", float)
-    kw.addOptionalArg("exportCVector", "File to export the computed c vector", str, "")
-    kw.addOptionalArg("absolute", "Use absolute formulation", bool, True)
-
-    documentation.append(kw)
+    dof2: str | None = schemaField(
+        description="Degree of freedom for the constraint (model access expression).",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    cVector1: str | None = schemaField(description="c vector.", dtype=str, default=None, required=True)
+    cVector2: str | None = schemaField(description="c vector.", dtype=str, default=None, required=True)
+    L: float | None = schemaField(
+        description="Final distance (e.g. crack opening)", dtype=float, default=None, required=True
+    )
+    exportCVector: str | None = schemaField(description="File to export the computed c vector", dtype=str, default="")
+    absolute: bool | None = schemaField(description="Use absolute formulation", dtype=bool, default=True)
 
 
 class StepAction(StepActionBase):
+    """Indirect (displacement) controller for the NISTPArcLength solver, based on two field
+    variables and the pair of c vectors weighting their components.
+
+    The controlled quantity is ``c1·dof1 + c2·dof2``, e.g. the opening between two nodes if the
+    c vectors are opposite unit vectors, and the solver's load parameter increment is chosen such
+    that this quantity follows ``L`` over the step.
+
+    The constructor is typed: it takes the two field variables themselves and the two c vectors as
+    arrays. Nothing here parses an input file -- turning a model access expression such as
+    ``dof1='model.nodes[18].fields["displacement"]'`` and a c vector expression such as
+    ``cVector1='0, -1'`` into those arguments is the job of :meth:`fromStepActionDefinition` /
+    :meth:`updateStepActionFromDefinition` below, which is the only part of this module the ``.inp``
+    front-end needs.
+
+    Parameters
+    ----------
+    name
+        The name of this step action.
+    dof1
+        The first controlled field variable.
+    dof2
+        The second controlled field variable.
+    cVector1
+        The weights of ``dof1``'s components in the controlled quantity.
+    cVector2
+        The weights of ``dof2``'s components in the controlled quantity.
+    L
+        The final value of the controlled quantity (e.g. a crack opening) to be reached at the end
+        of the step. Interpreted as an increment on top of the value already reached in previous
+        steps unless ``absolute`` is set.
+    model
+        The model tree.
+    journal
+        The journal object for logging.
+    absolute
+        If True, ``L`` is the absolute target value, i.e. the value reached in previous steps is
+        subtracted from it. Fixed at construction time: a later step re-declaring this action
+        cannot change the formulation.
+    """
+
     identification = "IndirectControl"
 
-    def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
+    schema = IndirectControlSchema
+
+    def __init__(
+        self,
+        name: str,
+        dof1: FieldVariable,
+        dof2: FieldVariable,
+        cVector1: np.ndarray,
+        cVector2: np.ndarray,
+        L: float,
+        model: FEModel,
+        journal: Journal,
+        absolute: bool = True,
+    ):
         self.name = name
         self.journal = journal
         self.model = model
         self.currentL0 = 0.0
 
-        self.absolute = action["absolute"]
+        self.absolute = absolute
 
-        self.updateStepAction(action, jobInfo, model, fieldOutputController, journal)
+        self.updateStepAction(dof1, dof2, cVector1, cVector2, L)
+
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build this controller from a parsed ``>>indirectcontrol`` definition. See
+        :class:`StepActionBase` for why this is separate from ``__init__``.
+
+        ``name`` and the parser's bookkeeping keys are stripped before the remaining options are
+        validated against :class:`IndirectControlSchema`; there is nothing structural to pop, since
+        every option here is an expression string rather than a model dict lookup key."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+
+        return cls(
+            name,
+            cls._dofFromExpression(configuration.dof1, model),
+            cls._dofFromExpression(configuration.dof2, model),
+            cls._cVectorFromExpression(configuration.cVector1),
+            cls._cVectorFromExpression(configuration.cVector2),
+            configuration.L,
+            model,
+            journal,
+            absolute=configuration.absolute,
+        )
+
+    def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
+        """Update from a parsed ``>>indirectcontrol`` definition re-declared in a later step.
+
+        **Unreachable from an input file today**, which is worth knowing before relying on it. This
+        module declares no ``name`` field in its schema, so ``helpers/inputfilehelpers.py`` gives
+        every declaration an auto-generated unique name (``indirectcontrol-0``,
+        ``indirectcontrol-1``, ...). ``StepManager`` therefore matches no existing action and takes
+        the *create* branch every time, and the arc-length solver then picks ``[...][0]`` out of the
+        accumulated collection, i.e. the first controller ever declared. So a per-step re-declared
+        ``L`` never takes effect, and ``currentL0`` together with the whole ``absolute`` formulation
+        is inert via the ``.inp`` front-end. The hook is implemented regardless, because it *is*
+        reachable programmatically. Whether to fix the reachability (e.g. declare a ``name``, or
+        have the solver honour the ``arcLengthController`` option's value) is an open product
+        decision. Its sibling ``indirectcontractioncontrol`` does declare ``name`` and is not
+        affected.
+
+        ``absolute`` is deliberately not re-read: the formulation is fixed by the first declaration
+        (see the ``absolute`` entry in the class docstring), and re-reading it would alter the
+        ``L - currentL0`` bookkeeping. There is no ``update<keyword>`` grammar for this module, so a
+        re-declaration is always validated against the full ``indirectcontrol`` keyword and
+        ``buildSchemaFromOptions`` is safe here too."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        configuration = buildSchemaFromOptions(self.schema, definition)
+
+        self.updateStepAction(
+            self._dofFromExpression(configuration.dof1, model),
+            self._dofFromExpression(configuration.dof2, model),
+            self._cVectorFromExpression(configuration.cVector1),
+            self._cVectorFromExpression(configuration.cVector2),
+            configuration.L,
+        )
+
+    def updateStepAction(
+        self,
+        dof1: FieldVariable,
+        dof2: FieldVariable,
+        cVector1: np.ndarray,
+        cVector2: np.ndarray,
+        L: float,
+    ):
+        """Control a new pair of field variables, c vectors and target value.
+
+        Parameters
+        ----------
+        dof1
+            The first controlled field variable.
+        dof2
+            The second controlled field variable.
+        cVector1
+            The weights of ``dof1``'s components in the controlled quantity.
+        cVector2
+            The weights of ``dof2``'s components in the controlled quantity.
+        L
+            The target value of the controlled quantity for this step.
+        """
+
+        if self.absolute:
+            self.L = L - self.currentL0
+        else:
+            self.L = L
+
+        self.dof1 = dof1
+        self.dof2 = dof2
+
+        self.c1 = np.asarray(cVector1, dtype=float)
+        self.c2 = np.asarray(cVector2, dtype=float)
+
+        self.c = np.hstack([self.c1, self.c2])
 
     def computeDDLambda(self, dU, ddU_0, ddU_f, timeStep: TimeStep, dofManager: DofManager):
+        """Compute the increment of the arc length load parameter for the current iteration.
+
+        Parameters
+        ----------
+        dU
+            The current increment of the solution vector.
+        ddU_0
+            The correction of the solution vector due to the dead and the current reference load.
+        ddU_f
+            The correction of the solution vector due to the unit reference load.
+        timeStep
+            The current time step.
+        dofManager
+            The dof manager of the current equation system.
+
+        Returns
+        -------
+        float
+            The increment of the load parameter.
+        """
+
         idcs = np.hstack(
             [
                 dofManager.idcsOfFieldVariablesInDofVector[self.dof1],
@@ -96,28 +280,75 @@ class StepAction(StepActionBase):
         return ddLambda
 
     def finishIncrement(self, U, dU, dLambda, timeStep: TimeStep, dofManager):
+        """Report the currently controlled quantity at the end of a converged increment.
+
+        Parameters
+        ----------
+        U
+            The current solution vector.
+        dU
+            The current increment of the solution vector.
+        dLambda
+            The increment of the load parameter.
+        timeStep
+            The current time step.
+        dofManager
+            The dof manager of the current equation system.
+        """
+
         self.journal.message(
             f"C1·DOF1: {self.c1.dot(self.dof1.values)}, C2·DOF2: {self.c2.dot(self.dof2.values)}",
             self.identification,
         )
 
     def applyAtStepEnd(self, model):
+        """Remember the control target reached in this step, so that the absolute formulation of a
+        subsequent step accounts for it.
+
+        Parameters
+        ----------
+        model
+            The current state of the model.
+        """
+
         # self.currentL0 = self.c1.dot(self.dof1.values) + self.c2.dot(self.dof2.values)
         self.currentL0 = self.L
 
-    def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
-        if self.absolute:
-            self.L = action["L"] - self.currentL0
-        else:
-            self.L = action["L"]
+    @staticmethod
+    def _dofFromExpression(expression: str, model: FEModel) -> FieldVariable:
+        """Resolve a validated schema's model access expression (``dof1`` or ``dof2``) into a field
+        variable.
 
-        self.dof1 = evalModelAccessibleExpression(action["dof1"], model)
-        self.dof2 = evalModelAccessibleExpression(action["dof2"], model)
+        Parameters
+        ----------
+        expression
+            The model access expression, e.g. ``'model.nodes[18].fields["displacement"]'``.
+        model
+            The model tree.
 
-        self.c1 = np.asarray(eval(action["cVector1"].replace("x", "0")), dtype=float)
-        self.c2 = np.asarray(eval(action["cVector2"].replace("x", "0")), dtype=float)
+        Returns
+        -------
+        FieldVariable
+            The field variable the expression evaluates to.
+        """
 
-        self.c = np.hstack([self.c1, self.c2])
+        return evalModelAccessibleExpression(expression, model)
 
-        arcLengthController = NISTPArcLength(jobInfo, journal)
-        self.arcLengthController = arcLengthController
+    @staticmethod
+    def _cVectorFromExpression(expression: str) -> np.ndarray:
+        """Evaluate a validated schema's c vector expression (``cVector1`` or ``cVector2``).
+
+        Parameters
+        ----------
+        expression
+            The c vector expression, e.g. ``'0, -1'``.
+
+        Returns
+        -------
+        np.ndarray
+            The c vector.
+        """
+
+        # An entry of 'x' marks a component as not participating in the controlled quantity, which
+        # is expressed as a zero weight.
+        return np.asarray(eval(expression.replace("x", "0")), dtype=float)

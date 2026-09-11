@@ -32,7 +32,7 @@ all
 
 *step, solver=theSolver
 maxInc=2e-2, minInc=1e-5, maxNumInc=10000, maxIter=25, stepLength=100
->>options, category=NISTSolver, extrapolation=linear
+>>options, name=theSolver, extrapolation=linear
 >>initializematerial, name=init, elSet=all
 >>dirichlet, name=front, nSet=front_face,    field=displacement, 3=0
 >>dirichlet, name=frontr, nSet=front_face,    field=micro rotation, 1=0, 2=0

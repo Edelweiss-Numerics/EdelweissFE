@@ -30,9 +30,6 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-# from edelweissfe.utils.exceptions import CutbackRequest
-# from edelweissfe.utils.voigtnotation import doVoigtStrain
-
 
 class BaseHyperElasticMaterial(ABC):
     """Base material class for a hyper elastic material.
@@ -46,6 +43,8 @@ class BaseHyperElasticMaterial(ABC):
     def materialProperties(self) -> np.ndarray:
         """The properties the material has."""
 
+        return self._materialProperties
+
     @abstractmethod
     def getNumberOfRequiredStateVars(self) -> int:
         """Returns number of needed material state Variables per integration point in the material.
@@ -55,7 +54,6 @@ class BaseHyperElasticMaterial(ABC):
         int
             Number of needed material state Vars."""
 
-    @abstractmethod
     def getDensity(self) -> float:
         """Determines the density of the material.
 
@@ -63,6 +61,10 @@ class BaseHyperElasticMaterial(ABC):
         -------
         float
             The density of the material."""
+
+        if not hasattr(self, "_density"):
+            raise Exception("Density is not defined for this material.")
+        return self._density
 
     @abstractmethod
     def __init__(self, materialProperties: np.ndarray):
@@ -77,7 +79,6 @@ class BaseHyperElasticMaterial(ABC):
         currentStateVars
             Array containing the material state vars."""
 
-    @abstractmethod
     def computePlaneKirchhoff(
         self,
         stress: np.ndarray,
@@ -127,7 +128,6 @@ class BaseHyperElasticMaterial(ABC):
         dTime
             Current time step size."""
 
-    @abstractmethod
     def computeUniaxialKirchhoff(
         self,
         stress: np.ndarray,
@@ -150,6 +150,8 @@ class BaseHyperElasticMaterial(ABC):
             Array of step time and total time.
         dTime
             Current time step size."""
+
+        raise Exception("Computing uniaxial stress is not possible with this material.")
 
     @abstractmethod
     def getResult(self, result: str) -> float:

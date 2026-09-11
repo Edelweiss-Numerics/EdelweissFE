@@ -10,8 +10,7 @@ readme = "README.md"
 authors = [
     { name = "Matthias Neuner", email = "matthias.neuner@uibk.ac.at" }
 ]
-license = "LGPL-2.1"
-license-files = ["LICENSE.md"]
+license = { text = "LGPL-2.1" }
 urls = { Homepage = "https://github.com/EdelweissFE/EdelweissFE" }
 requires-python = ">=3.14"
 
@@ -24,3 +23,41 @@ where = ["."]
 [project.scripts]
 edelweissfe = "edelweissfe._cli._edelweissfe:main"
 run_tests_edelweissfe = "edelweissfe._cli._run_tests_edelweissfe:main"
+
+[tool.black]
+line-length = 120
+target-version = ["py312"]
+
+[tool.pytest.ini_options]
+# This is a new, separate pytest suite (see tests/), distinct from the bespoke
+# `run_tests_edelweissfe` .inp-driven CLI runner (testfiles/) and the unrelated legacy `test/`
+# data directory. Pin testpaths explicitly so a plain `python -m pytest` from the repo root does
+# not also try to collect the many stray ad-hoc `test_*.py` scripts scattered at the repo root.
+testpaths = ["tests"]
+markers = [
+    # Tests that spawn one fresh interpreter per module to check an import-order property, which
+    # cannot be done in-process. Deselect with `-m "not slow"` while iterating.
+    "slow: spawns many subprocesses; seconds rather than milliseconds",
+]
+
+[tool.coverage.run]
+# source_pkgs (an importable package name), not source (a literal directory): CI does a
+# non-editable `pip install .`, so the code that actually executes at test time lives in
+# site-packages, not in this repo-root `edelweissfe/` checkout. Because that checkout directory
+# happens to exist on disk with the same name, `source = ["edelweissfe"]` resolves to it as a
+# literal path and coverage traces nothing that's actually running -- silently producing "No data
+# was collected" / 0% coverage, since none of the site-packages files match. source_pkgs forces
+# package-name resolution: coverage imports "edelweissfe" and measures wherever it actually lives.
+source_pkgs = ["edelweissfe"]
+branch = true
+# The pytest suite (tests/ + module-local test_*.py files) and the .inp-driven
+# run_tests_edelweissfe integration runner are both invoked under `coverage run -a` in CI to
+# accumulate one combined report; omit the test files themselves from the measured source.
+omit = ["*/test_*.py"]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "def __repr__",
+]

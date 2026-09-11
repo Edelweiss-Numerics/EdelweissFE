@@ -26,29 +26,32 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
+from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.exceptions import WrongDomain
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
-module = Module("linearizedrigidbody", "A rigid body constraint tying nodes to a reference point.")
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class LinearizedRigidBodySchema:
+    """The options this constraint accepts, owned by this module and never mutated from outside
+    it.
 
-keyword = "constraint"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
+    Its only options are the structural ``nSet``/``referencePoint`` it ties -- node set *names*,
+    resolved to the actual node sets in :meth:`Constraint.fromConstraintDefinition`. Each is
+    declared ``required=True``, but still given a ``default=None`` so the schema remains
+    constructible on its own."""
 
-module.addRequiredArg("nSet", "Node set to tie.", str)
-module.addRequiredArg("referencePoint", "Node set containing only the reference point.", str)
-
-documentation = [module]
+    nSet: str | None = schemaField(description="Node set to tie.", dtype=str, default=None, required=True)
+    referencePoint: str | None = schemaField(
+        description="Node set containing only the reference point.", dtype=str, default=None, required=True
+    )
 
 
 class Constraint(ConstraintBase):
@@ -92,7 +95,6 @@ class Constraint(ConstraintBase):
             | ...                          |   | 0 |
 
 
-
     Create dg/du matrix
     ===================
 
@@ -118,7 +120,6 @@ class Constraint(ConstraintBase):
     ...     |.........................................................................................|
 
 
-
     Create K matrix
     ===============
 
@@ -126,37 +127,33 @@ class Constraint(ConstraintBase):
             | dg_du   0       |
 
 
-
     """
 
-    @caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-    @castKwargsValuesAndAddDefaults(module)
-    def __init__(self, name, model, *args, **kwargs):
-        super().__init__(name, model, *args, **kwargs)
+    #: Option schema for this constraint, per OptionSchemaProvider.
+    schema = LinearizedRigidBodySchema
+
+    def __init__(
+        self,
+        name,
+        model: FEModel,
+        nSet: NodeSet,
+        referencePoint: NodeSet,
+        *,
+        configuration: LinearizedRigidBodySchema = LinearizedRigidBodySchema(),
+    ):
+        super().__init__(name, model)
 
         if model.domainSize not in [2, 3]:
             raise WrongDomain("Wrong domain size!")
 
-        # self.name = name
+        if len(referencePoint) > 1:
+            raise Exception(f"node set for reference point '{referencePoint.name}' contains more than one node")
 
-        kwargs = CaseInsensitiveDict(kwargs)
-
-        rbNset = kwargs["nSet"]
-
-        nodeSets = model.nodeSets
-        rpSetName = kwargs["referencePoint"]
-        rpNodeSet = nodeSets[rpSetName]
-
-        if len(rpNodeSet) > 1:
-            raise Exception(f"node set for reference point '{rpSetName}' contains more than one node")
-
-        self.rp = rpNodeSet[0]
+        self.rp = referencePoint[0]
 
         # slave node set may contain the reference point
-        slaveNodeSet = nodeSets[rbNset]
-
         # RP is removed (if present) and node set is converted to list
-        self.slaveNodes = [node for node in slaveNodeSet if not node == self.rp]
+        self.slaveNodes = [node for node in nSet if not node == self.rp]
 
         # list of all nodes including RP at end
         self._nodes = self.slaveNodes + [self.rp]
@@ -243,6 +240,22 @@ class Constraint(ConstraintBase):
         K[-dG_dU.shape[0] :, 0 : dG_dU.shape[1] :] = dG_dU
 
         self.K = K
+
+    @classmethod
+    def fromConstraintDefinition(
+        cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
+    ) -> "Constraint":
+        """Build this constraint from a parsed ``*constraint`` definition. See
+        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
+        separate from ``__init__``."""
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+        return cls(
+            name,
+            model,
+            model.nodeSets[configuration.nSet],
+            model.nodeSets[configuration.referencePoint],
+            configuration=configuration,
+        )
 
     @property
     def nodes(self) -> list:

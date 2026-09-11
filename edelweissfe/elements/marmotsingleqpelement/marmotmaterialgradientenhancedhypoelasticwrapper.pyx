@@ -75,13 +75,13 @@ cdef class MarmotMaterialGradientEnhancedHypoElasticWrapper:
     def setCharacteristicElementLength(self, double length):
         pass
 
-    def computeYourself(self,
-                        double[::1] Ke,
-                        double[::1] Pe,
-                        const double[::1] QTotal,
-                        const double[::1] dQ,
-                        const double[::1] time,
-                        double dTime):
+    def computeKernels(self,
+                       double[::1] Ke,
+                       double[::1] Pe,
+                       const double[::1] QTotal,
+                       const double[::1] dQ,
+                       double time,
+                       double dTime):
 
         cdef double pNewDT
         pNewDT = 1e36
@@ -100,19 +100,24 @@ cdef class MarmotMaterialGradientEnhancedHypoElasticWrapper:
         S[:] = self.stressLikeInStateVars[0:6]
         cdef double KLocal = self.stressLikeInStateVars[self.nU-1]
 
-        self.marmotMaterialGradientEnhancedHypoElastic.computeStress(
-                &S[0],
-                KLocal,
-                nonLocalRadius,
-                &C[0],
-                &dKLocal_dDE[0],
-                &dS_dK[0],
-                &dStrain[0],
-                KOld,
-                dK,
-                &time[0],
-                dTime,
-                pNewDT)
+        cdef double[2] time_arr = [0.0, time]
+
+        try:
+            self.marmotMaterialGradientEnhancedHypoElastic.computeStress(
+                    &S[0],
+                    KLocal,
+                    nonLocalRadius,
+                    &C[0],
+                    &dKLocal_dDE[0],
+                    &dS_dK[0],
+                    &dStrain[0],
+                    KOld,
+                    dK,
+                    &time_arr[0],
+                    dTime,
+                    pNewDT)
+        except (ValueError, RuntimeError) as e:
+            raise CutbackRequest(str(e), 0.25)
 
         Pe[0:6] = S
         Pe[6] = - KLocal + QTotal[6]

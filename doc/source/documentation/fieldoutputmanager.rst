@@ -6,7 +6,7 @@ Relevant module: ``edelweissfe.utils.fieldoutput``
 .. automodule:: edelweissfe.utils.fieldoutput
    :members: __doc__
 
-.. pprint:: edelweissfe.utils.fieldoutput.documentation
+.. pprint:: keyword:fieldOutput
    :caption: Options:
 
 .. literalinclude:: ../../../testfiles/marmot/FieldOutput/fieldOutput.inp
@@ -26,6 +26,9 @@ Module documentation:
    :members:
 
 .. autoclass:: edelweissfe.utils.fieldoutput.NodeFieldOutput
+   :members:
+
+.. autoclass:: edelweissfe.utils.fieldoutput.RigidBodyFieldOutput
    :members:
 
 .. autoclass:: edelweissfe.utils.fieldoutput.ExpressionFieldOutput

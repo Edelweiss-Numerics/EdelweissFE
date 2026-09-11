@@ -26,16 +26,12 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-from edelweissfe.config.generators import getGeneratorFunction
-from edelweissfe.config.outputmanagers import (
-    getOutputManagerClass,
-    getOutputManagerFactoryByName,
-)
+from edelweissfe.config import registry
+from edelweissfe.config.generators import getGeneratorClass
 from edelweissfe.config.solvers import getSolverByName
 from edelweissfe.generators.abqmodelconstructor import AbqModelConstructor
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.steps.adaptivestep import inputLanguage
 from edelweissfe.steps.stepmanager import (
     StepActionDefinition,
     StepDefinition,
@@ -43,8 +39,7 @@ from edelweissfe.steps.stepmanager import (
 )
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.fieldoutput import FieldOutputController
-from edelweissfe.utils.inputfileparser import inputLanguage  # noqa: F811
-from edelweissfe.utils.inputlanguage import (
+from edelweissfe.utils.inputfileparser import (
     keywordIdentifier,
     moduleLevelKeywordIdentifier,
 )
@@ -53,10 +48,13 @@ from edelweissfe.utils.misc import (
     convertLinesToStringDictionary,
     convertLineToStringDictionary,
     isInteger,
+    parseDatalinesToArgsAndKwargs,
     strCaseCmp,
     strToRange,
+    withoutParserBookkeeping,
 )
 from edelweissfe.utils.plotter import Plotter
+from edelweissfe.utils.schema import DatalineAggregatingSchema, buildSchemaFromOptions
 
 
 def flattenDefinitions(ll):
@@ -96,12 +94,56 @@ def createFieldOutputFromInputFile(inputfile: dict, model: FEModel, journal: Jou
 
         for definition in perNodeDefs:
             field = definition["field"]
-            nodeField = model.nodeFields[field]
 
-            if bool(definition["nSet"]) and bool(definition["elSet"]):
+            if sum(bool(definition[key]) for key in ("nSet", "elSet", "rigidBody")) > 1:
                 raise Exception(
-                    f"During parsing of keyword {keywordIdentifier}fieldOutput ({moduleLevelKeywordIdentifier}perNode): Specify either nSet OR elSet."
+                    f"During parsing of keyword {keywordIdentifier}fieldOutput ({moduleLevelKeywordIdentifier}perNode): Specify at most one of nSet, elSet, or rigidBody."
                 )
+
+            f_of_x = definition["f(x)"]
+            if f_of_x:
+                f_of_x = createMathExpression(f_of_x)
+
+            f_export_of_x = definition["f_export(x)"]
+            if f_export_of_x:
+                f_export_of_x = createMathExpression(f_export_of_x)
+
+            if definition["rigidBody"]:
+                # A rigid body's visualization nodes are not independent degrees of
+                # freedom -- they are fully determined by its reference point -- so
+                # this bypasses NodeFields entirely rather than treating them as a
+                # subset of one. There is consequently no "P"/"dU"-like distinction
+                # to select via `result` -- RigidBodyFieldOutput always returns the
+                # field's current value -- so reject anything but the "U" (current
+                # value) convention rather than silently ignoring the user's intent.
+                if definition["result"] not in ("U", "u"):
+                    raise Exception(
+                        f"During parsing of keyword {keywordIdentifier}fieldOutput "
+                        f"({moduleLevelKeywordIdentifier}perNode) '{definition['name']}': rigidBody field outputs "
+                        f"only support result=U (the rigid body's current field value), got "
+                        f"result={definition['result']!r}."
+                    )
+
+                if definition["rigidBody"] not in model.rigidBodies:
+                    raise Exception(
+                        f"During parsing of keyword {keywordIdentifier}fieldOutput "
+                        f"({moduleLevelKeywordIdentifier}perNode) '{definition['name']}': rigidBody "
+                        f"'{definition['rigidBody']}' is not defined. Available rigid bodies: "
+                        f"{list(model.rigidBodies.keys())}."
+                    )
+
+                fieldOutputController.addRigidBodyFieldOutput(
+                    name=definition["name"],
+                    rigidBody=model.rigidBodies[definition["rigidBody"]],
+                    field=field,
+                    saveHistory=definition["saveHistory"],
+                    f_x=f_of_x,
+                    export=definition["export"],
+                    fExport_x=f_export_of_x,
+                )
+                continue
+
+            nodeField = model.nodeFields[field]
 
             subset = None
             if definition["nSet"]:
@@ -111,14 +153,6 @@ def createFieldOutputFromInputFile(inputfile: dict, model: FEModel, journal: Jou
 
             if subset:
                 nodeField = nodeField.subset(subset)
-
-            f_of_x = definition["f(x)"]
-            if f_of_x:
-                f_of_x = createMathExpression(f_of_x)
-
-            f_export_of_x = definition["f_export(x)"]
-            if f_export_of_x:
-                f_export_of_x = createMathExpression(f_export_of_x)
 
             fieldOutputController.addPerNodeFieldOutput(
                 name=definition["name"],
@@ -207,6 +241,15 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
         The updated, filled model tree.
     """
 
+    # Model setup is a topology change: it is the one phase besides a model modifier's own update in
+    # which elements may be created (see FEModel.topologyChanges). Everything below runs inside it.
+    with model.topologyChanges():
+        return _fillFEModelFromInputFile(model, inputfile, journal)
+
+
+def _fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) -> FEModel:
+    """The body of :func:`fillFEModelFromInputFile`, run inside an open topology window."""
+
     # call individual optional model generators with executeAfterManualGeneration == True
     for definition in inputfile["modelGenerator"]:
         if definition.get("executeAfterManualGeneration", False):
@@ -215,19 +258,32 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
 
         generatorType = generatorDefinition.pop("generator")
         data = generatorDefinition.pop("datalines")
-        module = inputLanguage["modelGenerator"].getModule(generatorType)
+        args, kwargs = parseDatalinesToArgsAndKwargs(data)
 
-        args, kwargs = module.parseDatalines(data)
+        # raw code lines must not be comma-split -- same special case as in the
+        # executeAfterManualGeneration loop below
+        if strCaseCmp(generatorType, "executePythoncode"):
+            args = data
 
-        model = getGeneratorFunction(generatorType)(generatorDefinition, model, journal, *args, **kwargs)
+        generatorClass = getGeneratorClass(generatorType)
+        model = generatorClass.fromGeneratorDefinition(generatorDefinition["name"], model, journal, args, kwargs)
 
     # the standard 'Abaqus like' model generator is invoked unconditionally, and it has direct access to the inputfile
     abqModelConstructor = AbqModelConstructor(journal)
     model = abqModelConstructor.createGeometryFromInputFile(model, inputfile)
+
+    # The base mesh is complete here, and it numbers its nodes and elements from the input file
+    # rather than from the allocators (see FEModel.adoptSetupElementNumbers). Raise both allocators
+    # above it now, so that everything created from this point on -- contact facets, rigid-body
+    # point masses, and later every model modifier -- draws numbers that cannot collide with it.
+    model.adoptSetupElementNumbers()
+    model.adoptSetupNodeNumbers()
+
     model = abqModelConstructor.createMaterialsFromInputFile(model, inputfile)
     model = abqModelConstructor.createAdvancedMaterialsFromInputFile(model, inputfile)
     model = abqModelConstructor.createAnalyticalFieldsFromInputFile(model, inputfile)
     model = abqModelConstructor.createSectionsFromInputFile(model, inputfile)
+    model = abqModelConstructor.createElementPropertiesFromInputFile(model, inputfile)
 
     # call individual optional model generators with executeAfterManualGeneration == False
     for definition in inputfile["modelGenerator"]:
@@ -237,16 +293,16 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
 
         generatorType = generatorDefinition.pop("generator")
         data = generatorDefinition.pop("datalines")
-        module = inputLanguage["modelGenerator"].getModule(generatorType)
+        args, kwargs = parseDatalinesToArgsAndKwargs(data)
 
-        args, kwargs = module.parseDatalines(data)
-
-        if strCaseCmp(module.name, "executePythoncode"):
+        if strCaseCmp(generatorType, "executePythoncode"):
             args = data
 
-        model = getGeneratorFunction(generatorType)(generatorDefinition, model, journal, *args, **kwargs)
+        generatorClass = getGeneratorClass(generatorType)
+        model = generatorClass.fromGeneratorDefinition(generatorDefinition["name"], model, journal, args, kwargs)
 
     model = abqModelConstructor.createConstraintsFromInputFile(model, inputfile)
+    model = abqModelConstructor.createModelModifiersFromInputFile(model, inputfile)
     return model
 
 
@@ -266,33 +322,41 @@ def createStepManagerFromInputFile(inputfile: dict):
     """
     stepManager = StepManager()
 
-    for stepDefinition in inputfile["step"]:
-        stepType = stepDefinition.pop("type")
-        stepActionLines = stepDefinition.pop("moduleOptions")
+    autoNameCounter = 0
 
-        inputFile = stepDefinition.pop("inputfile")  # noqa F841
-        data = stepDefinition.pop("datalines")  # noqa F841
+    for stepOptions in inputfile["step"]:
+        stepType = stepOptions.pop("type")
+        stepActionLines = stepOptions.pop("moduleOptions")
+
+        stepOptions.pop("inputfile")
+        data = stepOptions.pop("datalines")
 
         stepActionDefinitions = []
 
-        module = inputLanguage["step"].getModule(stepType)
-        args, kwargs = module.parseDatalines(data)
+        args, kwargs = parseDatalinesToArgsAndKwargs(data)
 
-        stepDefinition.update(kwargs)
+        if args:
+            raise ValueError(
+                f"Unexpected positional options {args} in the datalines of *step; only key=value options are allowed."
+            )
 
-        for module, definitions in stepActionLines.items():
+        stepOptions.update(kwargs)
+
+        for actionModule, definitions in stepActionLines.items():
             for definition in definitions:
-                try:
-                    name = definition.pop("name")
-                except KeyError:
-                    num = 0
-                    for stepDef in stepManager.stepDefinitions:
-                        num += len(stepDef.stepActionDefinitions)
-                    num += len(stepActionDefinitions)
-                    name = f"StepAction-{num}"
-                stepActionDefinitions.append(StepActionDefinition(name, module, definition))
+                # metadata added by the parser, of no relevance for the step actions:
+                definition.pop("inputfile", None)
 
-        stepDefinition = StepDefinition(stepType, stepDefinition, stepActionDefinitions)
+                # unnamed actions are identified by their category (e.g., 'options'
+                # step actions), or get an auto-generated unique name:
+                name = definition.pop("name", None) or definition.get("category")
+                if name is None:
+                    name = f"{actionModule}-{autoNameCounter}"
+                    autoNameCounter += 1
+
+                stepActionDefinitions.append(StepActionDefinition(name, actionModule, definition))
+
+        stepDefinition = StepDefinition(stepType, stepOptions, stepActionDefinitions)
 
         stepManager.enqueueStepDefinition(stepDefinition)
 
@@ -388,78 +452,73 @@ def createOutputManagersFromInputFile(
 
         moduleOptions = outputManagerKwargs.pop("moduleOptions")
 
-        # new input file parsing not yet implemented for meshplot
-        if outputManagerType.casefold() in ["meshplot"]:
-            OutputManager = getOutputManagerClass(definition["type"].lower())
-            definitionLines = definition["datalines"]
+        outputManagerClass, outputManagerSchema = registry.lookup("outputmanager", outputManagerType)
 
-            outputManager = OutputManager(outputManagerName, model, fieldOutputController, journal, plotter)
-
-            for defLine in definitionLines:
-                kwargs = convertLineToStringDictionary(defLine)
-                if "elSet" in kwargs:
-                    kwargs["elSet"] = model.elementSets[kwargs["elSet"]]
-                if "nSet" in kwargs:
-                    kwargs["nSet"] = model.nodeSets[kwargs["nSet"]]
-                if "fieldOutput" in kwargs:
-                    kwargs["fieldOutput"] = fieldOutputController.fieldOutputs[kwargs["fieldOutput"]]
-
-                outputManager.updateDefinition(**kwargs)
-
-            outputManagers.append(outputManager)
-            continue
-
-        if len(datalines) == 0:
-            module = inputLanguage["output"].getModule(outputManagerType)
-            args, kwargs = module.parseDatalines(datalines)
-
-            outputManagerFactory = getOutputManagerFactoryByName(outputManagerType)
+        if outputManagerSchema is not None and issubclass(outputManagerSchema, DatalineAggregatingSchema):
+            # One instance aggregating a heterogeneous list of jobs, one or more per dataline,
+            # instead of one instance per dataline -- see `DatalineAggregatingSchema` for why the
+            # dataline interpretation belongs to the schema rather than to this adapter.
             try:
-                outputManager = outputManagerFactory(
+                configuration = outputManagerSchema.fromDatalines(
+                    [convertLineToStringDictionary(line) for line in datalines]
+                )
+            except ValueError as e:
+                raise ValueError(
+                    f"Error during parsing of keyword {keywordIdentifier}output "
+                    f"(type={outputManagerType}): " + e.args[0]
+                ) from e
+
+            outputManagers.append(
+                outputManagerClass(
                     outputManagerName,
                     model,
                     fieldOutputController,
-                    # args,
-                    moduleOptions,
                     journal,
                     plotter,
-                    **kwargs,
+                    configuration=configuration,
+                )
+            )
+            continue
+
+        if outputManagerSchema is None:
+            raise ValueError(
+                f"Output manager '{outputManagerType}' declares no option schema. Declare one as a "
+                "`schema` class attribute (see `edelweissfe.utils.schema.OptionSchemaProvider`). The "
+                "pre-schema `outputManagerFactory` protocol was removed once the last built-in output "
+                "manager was ported, so there is no fallback path any more."
+            )
+
+        # Look up the output manager's class and schema in the registry, then parse -> validate/coerce
+        # into the module's own option schema -> call its constructor. `moduleOptions` carries the
+        # nested `>>` sub-keyword blocks (ensight's `>>perNode`, `>>perElement`, `>>configuration`)
+        # and is forwarded as the schema's sub-keyword source; for a schema that declares no
+        # sub-keyword fields it is `{}`, and a stray block under such a keyword is rejected by
+        # `buildSchemaFromOptions` rather than silently dropped.
+        for optionsForOneManager in [datalines] if len(datalines) == 0 else datalines:
+            args, kwargs = parseDatalinesToArgsAndKwargs(optionsForOneManager)
+
+            try:
+                configuration = buildSchemaFromOptions(
+                    outputManagerSchema,
+                    kwargs,
+                    {name: withoutParserBookkeeping(blocks) for name, blocks in moduleOptions.items()},
                 )
             except ValueError as e:
-                e.args = (
-                    f"Error during parsing of keyword {keywordIdentifier}output (type={outputManagerType}): "
-                    + e.args[0],
+                raise ValueError(
+                    f"Error during parsing of keyword {keywordIdentifier}output "
+                    f"(type={outputManagerType}): " + e.args[0]
+                ) from e
+
+            outputManagers.append(
+                outputManagerClass(
+                    outputManagerName,
+                    model,
+                    fieldOutputController,
+                    journal,
+                    plotter,
+                    configuration=configuration,
                 )
-                raise e
-
-            outputManagers.append(outputManager)
-
-        else:
-            for dataline in datalines:
-                module = inputLanguage["output"].getModule(outputManagerType)
-                args, kwargs = module.parseDatalines(dataline)
-
-                outputManagerFactory = getOutputManagerFactoryByName(outputManagerType)
-
-                try:
-                    outputManager = outputManagerFactory(
-                        outputManagerName,
-                        model,
-                        fieldOutputController,
-                        # args,
-                        moduleOptions,
-                        journal,
-                        plotter,
-                        **kwargs,
-                    )
-                except ValueError as e:
-                    e.args = (
-                        f"Error during parsing of keyword {keywordIdentifier}output (type={outputManagerType}): "
-                        + e.args[0],
-                    )
-                    raise e
-
-                outputManagers.append(outputManager)
+            )
 
     return outputManagers
 

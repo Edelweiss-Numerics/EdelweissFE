@@ -14,7 +14,7 @@ Relevant module ``edelweissfe.generators.boxgen``
 .. automodule:: edelweissfe.generators.boxgen
     :members: __doc__
 
-.. pprint:: edelweissfe.generators.boxgen.documentation
+.. pprint:: generator:boxgen
    :caption: Options:
 
 .. literalinclude:: ../../../testfiles/marmot/BoxGen/test.inp
@@ -29,7 +29,7 @@ Relevant module ``edelweissfe.generators.planerectquad``
 .. automodule:: edelweissfe.generators.planerectquad
    :members: __doc__,
 
-.. pprint:: edelweissfe.generators.planerectquad.documentation
+.. pprint:: generator:planerectquad
    :caption: Options:
 
 .. literalinclude:: ../../../testfiles/marmot/NodeForces/test.inp
@@ -44,7 +44,7 @@ Relevant module ``edelweissfe.generators.pipegen``
 .. automodule:: edelweissfe.generators.pipegen
     :members: __doc__
 
-.. pprint:: edelweissfe.generators.pipegen.documentation
+.. pprint:: generator:pipegen
    :caption: Options:
 
 .. literalinclude:: ../../../testfiles/marmot/PipeGen/test.inp
@@ -59,7 +59,7 @@ Relevant module ``edelweissfe.generators.cubit``
 .. automodule:: edelweissfe.generators.cubit
    :members: __doc__
 
-.. pprint:: edelweissfe.generators.cubit.documentation
+.. pprint:: generator:cubit
    :caption: Options:
 
 .. literalinclude:: ../../../testfiles/marmot/CubitGen/test.inp
@@ -74,7 +74,7 @@ Relevant module ``edelweissfe.generators.findclosestnode``
 .. automodule:: edelweissfe.generators.findclosestnode
    :members: __doc__
 
-.. pprint:: edelweissfe.generators.findclosestnode.documentation
+.. pprint:: generator:findclosestnode
    :caption: Options:
 
 
@@ -86,7 +86,7 @@ Relevant module ``edelweissfe.generators.cuboidlatticegenerator``
 .. automodule:: edelweissfe.generators.cuboidlatticegenerator
     :members: __doc__
 
-.. pprint:: edelweissfe.generators.cuboidlatticegenerator.documentation
+.. pprint:: generator:cuboidlatticegenerator
    :caption: Options:
 
 .. literalinclude:: ../../../testfiles/edelweiss-only/CuboidLatticeGenerator/test.inp
@@ -101,12 +101,27 @@ Relevant module ``edelweissfe.generators.microstructuregenerator``
 .. automodule:: edelweissfe.generators.microstructuregenerator
     :members: __doc__
 
-.. pprint:: edelweissfe.generators.microstructuregenerator.documentation
+.. pprint:: generator:microstructuregenerator
    :caption: Options:
 
 .. literalinclude:: ../../../testfiles/edelweiss-only/MicrostructureGenerator/test.inp
     :language: edelweiss
     :caption: Example: ``testfiles/edelweiss-only/MicrostructureGenerator/test.inp``
+
+``discreterigidbodygenerator`` - A discrete rigid body from a surface mesh file
+--------------------------------------------------------------------------------
+
+Relevant module ``edelweissfe.generators.discreterigidbodygenerator``
+
+.. automodule:: edelweissfe.generators.discreterigidbodygenerator
+    :members: __doc__
+
+.. pprint:: generator:discreterigidbodygenerator
+   :caption: Options:
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/NodeToDiscreteRigidBodyContact/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/edelweiss-only/NodeToDiscreteRigidBodyContact/test.inp``
 
 ``executepythoncode`` - Script model generation using Python
 ------------------------------------------------------------
@@ -116,9 +131,24 @@ Relevant module ``edelweissfe.generators.executepythoncode``
 .. automodule:: edelweissfe.generators.executepythoncode
     :members: __doc__
 
-.. pprint:: edelweissfe.generators.executepythoncode.documentation
+.. pprint:: generator:executepythoncode
    :caption: Options:
 
 .. literalinclude:: ../../../testfiles/marmot/PythonCodeModelGeneration/test.inp
     :language: edelweiss
     :caption: Example: ``testfiles/marmot/PythonCodeModelGeneration/test.inp``
+
+``surfaceElementGenerator`` - Contact facet elements from a *surface
+----------------------------------------------------------------------
+
+Relevant module ``edelweissfe.generators.surfaceelementgenerator``
+
+.. automodule:: edelweissfe.generators.surfaceelementgenerator
+    :members: __doc__
+
+.. pprint:: generator:surfaceelementgenerator
+   :caption: Options:
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/NodeToDeformableSurfaceContact/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/edelweiss-only/NodeToDeformableSurfaceContact/test.inp``

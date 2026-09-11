@@ -40,27 +40,8 @@ with properties, such as materials.
     *section, name=mySection, thickness=1.0, material=myMaterial, type=plane
         all
 """
-import importlib
 
-
-def getSectionClass(name: str) -> type:
-    """Get the class type of the requested section.
-
-    Parameters
-    ----------
-    name
-        The name of the section class type to load.
-
-    Returns
-    -------
-    type
-        The section class type.
-    """
-
-    module = importlib.import_module("edelweissfe.sections." + name.lower())
-    return module.Section
-
-
-def getSectionFactoryByName(name):
-    module = importlib.import_module("edelweissfe.sections." + name.lower())
-    return module.sectionFactory
+# This module holds no code. Sections are resolved through the ``section`` category of
+# :mod:`edelweissfe.config.registry`. The docstring above is rendered by Sphinx via
+# ``.. automodule:: edelweissfe.config.sections`` in ``doc/source/documentation/sections.rst``;
+# do not delete this file.

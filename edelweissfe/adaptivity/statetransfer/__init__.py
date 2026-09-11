@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#  ---------------------------------------------------------------------
+#
+#  _____    _      _              _         _____ _____
+# | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|
+# |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|
+# | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___
+# |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
+#
+#
+#  Unit of Strength of Materials and Structural Analysis
+#  University of Innsbruck,
+#  2017 - today
+#
+#  Matthias Neuner matthias.neuner@uibk.ac.at
+#
+#  This file is part of EdelweissFE.
+#
+#  This library is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU Lesser General Public
+#  License as published by the Free Software Foundation; either
+#  version 2.1 of the License, or (at your option) any later version.
+#
+#  The full text of the license can be found in the file LICENSE.md at
+#  the top level directory of EdelweissFE.
+#  ---------------------------------------------------------------------
+
+"""Pluggable quadrature-point state-transfer strategies for adaptive mesh refinement."""
+
+from edelweissfe.adaptivity.statetransfer.base import StateTransferStrategy
+from edelweissfe.adaptivity.statetransfer.nearestquadraturepoint import (
+    NearestQuadraturePointCopy,
+)
+from edelweissfe.adaptivity.statetransfer.perstatevar import PerStateVarStateTransfer
+from edelweissfe.adaptivity.statetransfer.projection import PolynomialProjection
+from edelweissfe.adaptivity.statetransfer.virgin import VirginState
+
+
+def transferStateNearestQp(parent, children, topology=None):
+    """Backward-compatible shortcut for the default nearest-quadrature-point block copy."""
+    if topology is None:
+        from edelweissfe.adaptivity.hex20topology import Hex20Topology
+
+        topology = Hex20Topology()
+    NearestQuadraturePointCopy().transferState(parent, children, topology)
+
+
+__all__ = [
+    "StateTransferStrategy",
+    "NearestQuadraturePointCopy",
+    "VirginState",
+    "PolynomialProjection",
+    "PerStateVarStateTransfer",
+    "transferStateNearestQp",
+]

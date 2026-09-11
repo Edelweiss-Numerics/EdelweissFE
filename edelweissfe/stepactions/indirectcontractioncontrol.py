@@ -29,11 +29,18 @@
 
 # @author: Matthias Neuner
 
+from dataclasses import dataclass
+
 import numpy as np
 
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
+from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.steps.adaptivestep import InputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.misc import withoutParserBookkeepingKeys
+from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 Indirect (displacement) controller for the NISTArcLength solver
@@ -45,69 +52,256 @@ The center is autotically computed from the bounding node coordinates.
 """
 
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class IndirectContractionControlSchema:
+    """The scalar options of the ``indirectcontractioncontrol`` keyword, owned by this module and
+    never mutated from outside it.
 
-modules = [
-    inputLanguage["step"].getModule("adaptive"),
-    inputLanguage["step"].getModule("adaptiveForExplicitSimulations"),
-]
+    ``name`` and ``contractionNSet`` are ``structuralOnly`` fields: ``contractionNSet`` names an
+    existing model object, resolved by :meth:`fromStepActionDefinition` before the schema is even
+    built, exactly like every other category's structural names, and ``name`` is popped even
+    earlier, by ``helpers/inputfilehelpers.py``. Both are declared here purely so the rendered
+    grammar surface documents them -- :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`
+    never actually sees either key; see :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.structuralOnly`.
+    """
 
-documentation = []
-
-for module in modules:
-    kw = module.addOptionalKeyword(
-        "indirectcontractioncontrol",
-        "Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.",
+    name: str | None = schemaField(
+        description="Name of the step action.", dtype=str, default=None, required=True, structuralOnly=True
     )
-    kw.addRequiredArg("name", "Name of the step action.", str)
-    kw.addRequiredArg("contractionNSet", "The node set defining the contraction ring", str)
-    kw.addRequiredArg("L", "Final distance (e.g. crack opening)", float)
-    kw.addOptionalArg("exportCVector", "File to export the computed c vector", str, None)
-    kw.addOptionalArg("absolute", "Use absolute formulation", bool, True)
-
-    documentation.append(kw)
+    contractionNSet: str | None = schemaField(
+        description="The node set defining the contraction ring",
+        dtype=str,
+        default=None,
+        required=True,
+        structuralOnly=True,
+    )
+    L: float | None = schemaField(
+        description="Final distance (e.g. crack opening)", dtype=float, default=None, required=True
+    )
+    exportCVector: str | None = schemaField(description="File to export the computed c vector", dtype=str, default=None)
+    absolute: bool | None = schemaField(description="Use absolute formulation", dtype=bool, default=True)
 
 
 class StepAction(StepActionBase):
+    """Indirect (displacement) controller for the NISTPArcLength solver, controlling the average
+    radial contraction of a ring of nodes, e.g. for tunneling simulations.
+
+    The controlled quantity is the mean of the inward radial displacements of the nodes in
+    ``contractionNSet``; the ring's center is computed from the bounding coordinates of that set.
+    Currently 2D only.
+
+    The constructor is typed: it takes the node set itself rather than its name, so the c vector is
+    derived from real coordinates. Nothing here parses an input file -- resolving
+    ``contractionNSet=innerRing`` against the model and honouring ``exportCVector`` is the job of
+    :meth:`fromStepActionDefinition` / :meth:`updateStepActionFromDefinition` below, which is the
+    only part of this module the ``.inp`` front-end needs.
+
+    Parameters
+    ----------
+    name
+        The name of this step action.
+    contractionNSet
+        The node set defining the contraction ring.
+    L
+        The final value of the mean contraction to be reached at the end of the step. Interpreted as
+        an increment on top of the contraction already reached in previous steps unless ``absolute``
+        is set.
+    model
+        The model tree.
+    journal
+        The journal object for logging.
+    absolute
+        If True, ``L`` is the absolute target contraction, i.e. the contraction reached in previous
+        steps is subtracted from it. Fixed at construction time: a later step re-declaring this
+        action cannot change the formulation.
+    """
+
     identification = "IndirectControl"
 
-    def __init__(self, name, action, jobInfo, model, fieldOutputController, journal):
+    #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
+    schema = IndirectContractionControlSchema
+
+    def __init__(
+        self,
+        name: str,
+        contractionNSet: NodeSet,
+        L: float,
+        model: FEModel,
+        journal: Journal,
+        absolute: bool = True,
+    ):
         self.name = name
         self.journal = journal
+        self.model = model
 
         self.currentL0 = 0.0
+        self._currentL = 0.0
 
-        self.L = action["L"]
+        self.L = L
 
-        self.generateCVectorAndIndices(action, jobInfo, model, fieldOutputController, journal)
+        self.generateCVector(contractionNSet)
 
-        if action["exportCVector"] is not None:
-            np.savetxt(action["exportCVector"] + ".csv", self.cVector)
+        self.absolute = absolute
 
-        self.absolute = action["absolute"]
+    @classmethod
+    def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
+        """Build this controller from a parsed ``>>indirectcontractioncontrol`` definition. See
+        :class:`StepActionBase` for why this is separate from ``__init__``.
 
-    def computeDDLambda(self, dU, ddU_0, ddU_f, timeStep: TimeStep):
+        The ``exportCVector`` dump is written here rather than in ``__init__`` because appending
+        ``.csv`` to a user-supplied file name is input-file shaping, and a typed constructor should
+        not write files as a side effect -- a programmatic caller that wants the dump can
+        ``np.savetxt`` the public ``cVector`` itself.
+
+        ``name`` and the parser's bookkeeping keys are stripped, and ``contractionNSet`` is
+        structural (it names a model object), so both are popped before the remaining options are
+        validated against :class:`IndirectContractionControlSchema`."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        contractionNSetName = definition.pop("contractionNSet")
+        configuration = buildSchemaFromOptions(cls.schema, definition)
+
+        stepAction = cls(
+            name,
+            model.nodeSets[contractionNSetName],
+            configuration.L,
+            model,
+            journal,
+            absolute=configuration.absolute,
+        )
+
+        if configuration.exportCVector is not None:
+            np.savetxt(configuration.exportCVector + ".csv", stepAction.cVector)
+
+        return stepAction
+
+    def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
+        """Update from a parsed ``>>indirectcontractioncontrol`` definition re-declared in a later
+        step.
+
+        Re-declaring the control target ``L`` per step is the normal way this action is used, so
+        this path is not a corner case. Note that neither ``absolute`` nor ``exportCVector`` is
+        re-read here: the formulation has always been fixed by the first declaration, and the c
+        vector dump has always been written once, at creation. There is no ``update<keyword>``
+        grammar for this module, so a re-declaration is always validated against the full
+        ``indirectcontractioncontrol`` keyword and ``buildSchemaFromOptions`` is safe here too."""
+
+        definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
+        definition.pop("name", None)
+        contractionNSetName = definition.pop("contractionNSet")
+        configuration = buildSchemaFromOptions(self.schema, definition)
+
+        self.updateStepAction(model.nodeSets[contractionNSetName], configuration.L)
+
+    def _getIdcsInDofVector(self, dofManager) -> np.ndarray:
+        """Determine the indices of the contraction ring displacements in the dof vector.
+
+        Parameters
+        ----------
+        dofManager
+            The dof manager of the current equation system.
+
+        Returns
+        -------
+        np.ndarray
+            The indices in the dof vector.
+        """
+
+        return np.hstack(
+            [dofManager.idcsOfFieldVariablesInDofVector[n.fields["displacement"]][:2] for n in self.contractionNSet]
+        )
+
+    def computeDDLambda(self, dU, ddU_0, ddU_f, timeStep: TimeStep, dofManager):
+        """Compute the increment of the arc length load parameter for the current iteration.
+
+        Parameters
+        ----------
+        dU
+            The current increment of the solution vector.
+        ddU_0
+            The correction of the solution vector due to the dead and the current reference load.
+        ddU_f
+            The correction of the solution vector due to the unit reference load.
+        timeStep
+            The current time step.
+        dofManager
+            The dof manager of the current equation system.
+
+        Returns
+        -------
+        float
+            The increment of the load parameter.
+        """
+
+        idcs = self._getIdcsInDofVector(dofManager)
+
         dL = timeStep.stepProgressIncrement * self.L
 
-        ddLambda = (dL - self.cVector.dot(dU[self.idcs] + ddU_0[self.idcs])) / self.cVector.dot(ddU_f[self.idcs])
+        ddLambda = (dL - self.cVector.dot(dU[idcs] + ddU_0[idcs])) / self.cVector.dot(ddU_f[idcs])
         return ddLambda
 
-    def finishIncrement(self, U, dU, dLambda):
-        pass
+    def finishIncrement(self, U, dU, dLambda, timeStep: TimeStep, dofManager):
+        """Store the contraction reached at the end of a converged increment.
 
-    def applyAtStepEnd(self, U, P):
-        self.currentL0 = self.cVector.dot(U[self.idcs])
+        Parameters
+        ----------
+        U
+            The current solution vector.
+        dU
+            The current increment of the solution vector.
+        dLambda
+            The increment of the load parameter.
+        timeStep
+            The current time step.
+        dofManager
+            The dof manager of the current equation system.
+        """
 
-    def updateStepAction(self, action, jobInfo, model, fieldOutputController, journal):
+        idcs = self._getIdcsInDofVector(dofManager)
+        self._currentL = self.cVector.dot(U[idcs] + dU[idcs])
+
+    def applyAtStepEnd(self, model):
+        """Remember the contraction reached in this step, so that the absolute formulation of a
+        subsequent step accounts for it.
+
+        Parameters
+        ----------
+        model
+            The current state of the model.
+        """
+
+        self.currentL0 = self._currentL
+
+    def updateStepAction(self, contractionNSet: NodeSet, L: float):
+        """Control a new contraction ring and target contraction.
+
+        Parameters
+        ----------
+        contractionNSet
+            The node set defining the contraction ring.
+        L
+            The target contraction for this step.
+        """
+
         if self.absolute:
-            self.L = action["L"] - self.currentL0
+            self.L = L - self.currentL0
         else:
-            self.L = action["L"]
+            self.L = L
 
-        self.generateCVectorAndIndices(action, jobInfo, model, fieldOutputController, journal)
+        self.generateCVector(contractionNSet)
 
-    def generateCVectorAndIndices(self, action, jobInfo, model, fieldOutputController, journal):
-        contractionNSet = model.nodeSets[action["contractionNSet"]]
+    def generateCVector(self, contractionNSet: NodeSet):
+        """Derive the c vector of the inward radial unit vectors of the ring's nodes, scaled such
+        that the controlled quantity is the ring's mean contraction.
+
+        The ring's center is computed from the bounding coordinates of the node set.
+
+        Parameters
+        ----------
+        contractionNSet
+            The node set defining the contraction ring.
+        """
 
         nNodes = len(contractionNSet)
 
@@ -122,7 +316,6 @@ class StepAction(StepActionBase):
         y_center = 0.5 * (y_max + y_min)
 
         cVector = []
-        idcsInDofVector = []
 
         for n in contractionNSet:
             vec_n_to_center = np.array([x_center - n.coordinates[0], y_center - n.coordinates[1]])
@@ -132,11 +325,9 @@ class StepAction(StepActionBase):
 
             cVector.append(vec_n_to_center_normalized)
 
-            idcsInDofVector.append([n.fields["displacement"][dim] for dim in range(2)])
-
         self.cVector = np.hstack(cVector)
 
         # dividing c vector to make 'average' contraction of ring:
         self.cVector *= 1.0 / nNodes
 
-        self.idcs = np.hstack(idcsInDofVector)
+        self.contractionNSet = contractionNSet

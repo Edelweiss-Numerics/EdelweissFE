@@ -1,5 +1,8 @@
 docutils
 matplotlib
 pyamg
-pyvista
+# pyvista>=0.49.0 pulls in pyvista-validation==0.2.2, whose sdist build hard-codes
+# py_limited_api='cp310', which setuptools rejects under free-threaded Python
+# (Py_GIL_DISABLED). Pin below that until pyvista-validation supports cp314t.
+pyvista<0.49.0
 vtk
