@@ -379,7 +379,6 @@ for _linsolverName in [
     "klu",
     "petsclu",
     "mumps",
-    "gmres",
     "amgcl",
     "blockamg",
     "matrixdump",
