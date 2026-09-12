@@ -37,10 +37,8 @@ from libcpp.vector cimport vector
 import numpy as np
 
 
-# Marmot's warning channel. MarmotJournal is constructed with a NULL streambuf, so every
-# warningToMSG()/notificationToMSG() the library emits is silently discarded until a consumer
-# points it somewhere -- which nothing in EdelweissFE did, so no Marmot warning has ever been
-# visible from here. See the setMSGOutputDirection call in element.pyx.
+# Marmot's warning channel. MarmotJournal is built on a NULL streambuf, so everything it emits is
+# discarded until a consumer points it somewhere. See the setMSGOutputDirection call in element.pyx.
 cdef extern from "<ostream>" namespace "std":
     cdef cppclass ostream
 

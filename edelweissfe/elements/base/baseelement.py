@@ -263,10 +263,9 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         """Evaluate the diagonal of the lumped inertia of the element, over every field it carries.
 
         The coefficient of each field's SECOND time derivative: mass on the displacement block,
-        and, on a non-local block whose field has been given a micro-inertia, that micro-inertia.
-        A gradient-enhanced field left in its parabolic form -- the ordinary case -- reports none,
-        which is what tells the solver it is still first order in time; see
-        computeLumpedDamping() for what integrates it in that case.
+        and a micro-inertia on a non-local block that has been given one. A parabolic
+        gradient-enhanced field reports none, which is what tells the solver it is first order in
+        time; see computeLumpedDamping() for what integrates it then.
 
         Parameters
         ----------
@@ -281,11 +280,10 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         """Evaluate the diagonal of the lumped damping of the element, over every field it carries.
 
         The coefficient of each field's FIRST time derivative: zero on the displacement block,
-        where no device reports through this path, and the non-local viscosity on a non-local
-        block -- always, whether or not that field has also been given a micro-inertia (see
-        computeLumpedInertia()). A first-order non-local field is integrated by this term alone; a
-        second-order one is damped by it. Carrying none is the ordinary case for a plain mechanical
-        element, so this is not abstract and the default leaves the buffer alone.
+        and the non-local viscosity on a non-local block -- always, whether or not that field also
+        carries a micro-inertia. A first-order field is integrated by this term alone; a
+        second-order one is damped by it. Carrying none is the ordinary case, so the default
+        leaves the buffer alone.
 
         Parameters
         ----------

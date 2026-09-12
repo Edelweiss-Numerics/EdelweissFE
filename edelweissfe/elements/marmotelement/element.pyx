@@ -37,14 +37,10 @@ cimport numpy as np
 
 from edelweissfe.utils.exceptions import CutbackRequest
 
-# Point Marmot's warning channel at stdout, once, when this extension is imported.
-#
-# MarmotJournal holds an std::ostream constructed from a null streambuf, so warningToMSG() writes
-# into nothing unless a consumer calls setMSGOutputDirection. Nothing here ever did, which means
-# every warning Marmot has ever raised on this path -- a deprecated state name, an element telling
-# you that its stable increment is bounded by the non-local field rather than by the mesh -- was
-# discarded before it could be printed. Sending it to std::cout puts it in the same place the
-# solver's own output goes, so a redirected run log captures it.
+# Point Marmot's warning channel at stdout, once, when this extension is imported. MarmotJournal
+# writes into a null streambuf unless a consumer calls setMSGOutputDirection, and nothing here ever
+# did -- so every warning Marmot raised on this path was discarded before it could be printed.
+# std::cout is where the solver's own output goes, so a redirected run log captures it.
 MarmotJournal.setMSGOutputDirection(cout)
 
 
@@ -180,10 +176,9 @@ cdef class MarmotElementWrapper:
         cdef double[::1] _properties = np.ascontiguousarray(
                 np.atleast_1d(np.asarray(properties, dtype=np.float64)))
 
-        # The count travels with the pointer: the values come from a user-written input file, and
-        # the element reads a fixed number of them per property name. Without it a short list is
-        # not an error but an out-of-bounds read that lands whatever happens to follow in memory
-        # in a material coefficient.
+        # The count travels with the pointer: the values come from a user-written input file and
+        # the element reads a fixed number per property name, so without it a short list is not an
+        # error but an out-of-bounds read landing in a material coefficient.
         self.marmotElement.assignProperty(
                 propertyName.encode("UTF-8"),
                 &_properties[0],

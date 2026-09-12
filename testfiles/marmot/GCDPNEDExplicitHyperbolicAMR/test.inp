@@ -5,18 +5,14 @@
 ** This is the only case anywhere that has a named element property AND a topology change, which
 ** is what it exists for:
 **
-**  * a refined child element inherits its parent's named properties. It inherits the section
-**    through its own path and inherited nothing else, so before hAdaptivity propagated them a
-**    child lost the `nonlocal micro inertia` assigned here -- in exactly the region the refinement
-**    was requested for. The failure is not subtle once it is reachable: the non-local field then
-**    carries an inertia on the unrefined elements and none on the refined ones, and NED refuses a
-**    field whose own degrees of freedom disagree about which time derivative they carry, so this
-**    deck stops with that error rather than quietly integrating half the field as a wave equation
-**    and half as a diffusion one.
-**  * the non-local field's critical time step and the mass/momentum conservation diagnostics
-**    across a topology change with a non-mechanical inertia present -- the inertia is a time
-**    squared, so it is conserved on its own line and enters neither the momentum nor the energy
-**    balance.
+**  * a refined child element inherits its parent's named properties. It inherited the section
+**    and nothing else, so a child used to lose the `nonlocal micro inertia` assigned here -- in
+**    exactly the region the refinement was requested for. It fails loudly if that regresses: the
+**    field then carries an inertia on the unrefined elements and none on the refined ones, and NED
+**    refuses a field whose degrees of freedom disagree about which time derivative they carry.
+**  * the non-local field's critical time step and the conservation diagnostics across a topology
+**    change with a non-mechanical inertia present -- a time squared, so it is conserved on its own
+**    line and enters neither balance.
 **
 ** Everything else is GCDPNEDExplicitHyperbolic, including the micro-inertia
 ** m_k = eta^2 / 4 = 2.5e-9 s^2 and the reasoning behind it, and GCDPNEDExplicitAMR, including the

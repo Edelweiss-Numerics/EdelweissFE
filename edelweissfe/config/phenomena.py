@@ -61,26 +61,20 @@ phenomena = {
 # field                  kind of inertia
 #
 # The coefficient of a field's SECOND time derivative is not always a mass. A dynamic solver
-# assembles one inertia vector over every field it carries -- that is the element interface, and
-# rightly so, since the integrator divides by all of it alike -- but the moment it wants to report
-# a momentum or an energy it has to know which entries may be added to which. Three answers, and
-# the value recorded here is the ONLY place that question is answered:
+# assembles one inertia vector over every field alike -- the integrator divides by all of it --
+# but reporting a momentum or an energy needs to know which entries may be added to which. This
+# is the only place that question is answered:
 #
-#  * ``"mass"``                  -- m*v is a linear momentum and 0.5*m*v^2 is an energy. Summable
-#                                   with every other mass field, in both balances.
-#  * ``"rotational inertia"``    -- 0.5*I*w^2 is an energy, so it belongs in the energy balance,
-#                                   but I*w is an ANGULAR momentum and must not be added to a
-#                                   linear one. Adding the two is not caught by a dimension check:
-#                                   in 3d both occupy three components and numpy would sum them
-#                                   happily.
-#  * ``"non-mechanical"``        -- neither. Typically a numerical regularisation: the non-local
-#                                   micro-inertia that makes gradient-enhanced damage hyperbolic
-#                                   is a time squared, so 0.5*m*v^2 there has the units of a
-#                                   volume, not of an energy.
+#  * ``"mass"``               -- m*v is a linear momentum, 0.5*m*v^2 an energy; summable with
+#                                every other mass field in both balances.
+#  * ``"rotational inertia"`` -- 0.5*I*w^2 is an energy, but I*w is an ANGULAR momentum and must
+#                                not be added to a linear one. No dimension check catches that:
+#                                in 3d both occupy three components.
+#  * ``"non-mechanical"``     -- neither. Typically a numerical regularisation: the non-local
+#                                micro-inertia is a time squared, so 0.5*m*v^2 there is a volume.
 #
-# A field with no inertia at all -- one integrated first order in time, or not integrated at all --
-# is recorded as ``"non-mechanical"`` too: the question this answers is what its inertia WOULD
-# mean, and for such a field the honest answer is that it has none to sum anywhere.
+# A field with no inertia at all is recorded as ``"non-mechanical"`` too -- the question is what
+# its inertia WOULD mean, and it has none to sum anywhere.
 inertiaKind = {
     "displacement": "mass",
     "rotation": "rotational inertia",

@@ -310,12 +310,11 @@ class ModelModifier(ModelModifierBase):
                 for element in elementSet:
                     self._sectionOf[element] = section
 
-        # element -> its named properties, for the same reason. A named property is assigned once,
-        # when the model is prepared, and a child element created here never went through that --
-        # so without this it starts life without the artificial bulk viscosity or the non-local
-        # micro-inertia its parent was given. Both are numerical devices that are simply absent
-        # when unset, so losing one does not fail, it changes the answer in the refined region
-        # only: exactly where the refinement was asked for because the answer mattered.
+        # element -> its named properties, for the same reason. A named property is assigned when
+        # the model is prepared, which a child created here never went through, so without this it
+        # starts life without its parent's bulk viscosity or micro-inertia. Both are simply absent
+        # when unset, so losing one does not fail -- it changes the answer in the refined region,
+        # which is exactly where the refinement was asked for.
         self._elementPropertiesOf = {}
         for elementProperty in model.elementProperties:
             for element in model.elementSets[elementProperty.elSetName]:
