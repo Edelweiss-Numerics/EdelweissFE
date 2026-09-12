@@ -37,6 +37,22 @@ from libcpp.vector cimport vector
 import numpy as np
 
 
+# Marmot's warning channel. MarmotJournal is built on a NULL streambuf, so everything it emits is
+# discarded until a consumer points it somewhere. See the setMSGOutputDirection call in element.pyx.
+cdef extern from "<ostream>" namespace "std":
+    cdef cppclass ostream
+
+
+cdef extern from "<iostream>" namespace "std":
+    ostream cout
+
+
+cdef extern from "Marmot/MarmotJournal.h":
+    cdef cppclass MarmotJournal:
+        @staticmethod
+        void setMSGOutputDirection(ostream&)
+
+
 cdef extern from "Marmot/MarmotElement.h" namespace "MarmotElement":
     cdef enum StateTypes:
         Sigma11,
@@ -84,7 +100,7 @@ cdef extern from "Marmot/MarmotElement.h":
 
         void assignProperty(const MarmotMaterialSection& property) except +ValueError
 
-        void assignProperty(const string& propertyName, const double* properties) except +ValueError
+        void assignProperty(const string& propertyName, const double* properties, int nProperties) except +ValueError
 
         vector[string] getPropertyNames() const
 
@@ -127,6 +143,7 @@ cdef extern from "Marmot/MarmotElement.h":
                         double dT)
 
         void computeLumpedInertia(double* M)
+        void computeLumpedDamping(double* C)
 
         void computeCriticalTimeStepForExplicitDynamics(double& criticalTimeStep, const double* QTotal)
 

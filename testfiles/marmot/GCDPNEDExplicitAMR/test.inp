@@ -18,11 +18,13 @@
 ** path at all. What it covers, none of which had a test before:
 **
 **  * the first-order / second-order field split -- the displacement field is integrated with central
-**    differences, the nonlocal damage field with forward Euler. `first-order-fields` appeared in no
-**    test or example previously.
-**  * GeneralGradientEnhancedDisplacementFiniteElement::computeLumpedInertia, whose displacement block
-**    comes from the material density and whose nonlocal block comes from getNonlocalViscosity() --
-**    the nonlocal field's own inertia is what makes an elliptic regularisation field explicitly
+**    differences, the nonlocal damage field with forward Euler. The solver derives that split from
+**    the assembled inertia and damping; no other test has a field on the first-order side.
+**  * GeneralGradientEnhancedDisplacementFiniteElement::computeLumpedInertia, whose displacement
+**    block comes from the material density, and computeLumpedDamping, whose nonlocal block comes
+**    from getNonlocalViscosity(). No `nonlocal micro inertia` is assigned here, so the nonlocal
+**    block of the inertia is zero and that viscosity is the whole of what the nonlocal field's
+**    update divides by -- which is what makes an elliptic regularisation field explicitly
 **    integrable in the first place. A hexa20 lumped mass is also where a negative entry would show
 **    up if the element's linear/quadratic shape-function blend did not prevent it.
 **  * GCDPModel::getDensity and getNonlocalViscosity at material property indices 19 and 20, and
@@ -60,8 +62,6 @@ gen_all
 ** the final reaction is 4.49 at courant 0.8, 84.6 at 0.4, 118.5 at 0.2, 120.7 at 0.1, 118.0 at 0.05.
 ** The 0.8 run does not fail, it just quietly returns a number 26x too small. Do not raise this.
 *solver, solver=NEDParallel, name=theSolver
-second-order-fields="displacement"
-first-order-fields="nonlocal damage"
 courant-number=0.1
 output-frequency=50
 

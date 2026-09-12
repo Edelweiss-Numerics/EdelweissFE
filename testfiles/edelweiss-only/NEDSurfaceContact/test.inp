@@ -58,7 +58,6 @@
 *job, name=nedcontactjob, domain=3d
 
 *solver, solver=NEDParallel, name=theSolver
-second-order-fields="displacement"
 courant-number=0.8
 output-frequency=50
 contact-update-frequency=0

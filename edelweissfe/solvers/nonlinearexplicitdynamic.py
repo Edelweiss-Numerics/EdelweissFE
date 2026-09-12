@@ -36,6 +36,31 @@ solver, no Newton loop, and no cutback: the time increment is set by stability, 
 so a material that fails to integrate at the stable step is reported as an error rather than
 answered with a smaller step.
 
+**Inertia and damping.** An element reports two diagonals: the coefficient of each field's second
+time derivative (its inertia) and of its first (its damping). The integrator divides by the one and
+relaxes with the other, and *which* scheme a field gets is read off them -- an inertia means central
+differences, a damping alone means forward Euler. The deck declares no field ordering, because an
+inertia is exactly what a central-difference update divides by. At zero damping the update is
+bit-identical to the undamped one.
+
+The diagnostics need one thing more, and it is about units: which entries of the inertia diagonal
+may be summed. That belongs to the FIELD rather than to a deck, and is recorded in
+:mod:`edelweissfe.config.phenomena` as a mass, a rotational inertia, or neither. Linear momentum
+sums the first kind, the energy balance the first two; conservation across a topology change is
+checked per field regardless.
+
+The case that forces it: a first-order field's forward-Euler limit falls off with the SQUARE of the
+element size, so on a refined mesh it, not the mechanical field, bounds the increment. Giving it an
+inertia makes it second order -- a damped wave equation, limit linear in h -- with its old
+coefficient keeping its value and becoming the damping. Marmot supplies one through the ``nonlocal
+micro inertia`` element property; that inertia is a time squared, so ``0.5 m_k rate^2`` is a volume
+rather than an energy and the field is registered as carrying a non-mechanical inertia, which keeps
+it out of both balances.
+
+``first-order-fields``, ``second-order-fields``, ``first-order-scheme`` and ``second-order-scheme``
+are removed rather than deprecated: a deck carrying any of them now fails with ``Invalid option``,
+and deleting those lines is the whole of the migration.
+
 The stable increment is computed once per mesh from the element wave speeds and scaled by
 ``courant-number``. It is recomputed whenever the mesh changes and deliberately *not* recomputed
 when it has not: as a material softens the true limit only grows, so reusing it is the conservative
@@ -63,8 +88,10 @@ degrees of freedom, the kinetic energy, the internal (strain) energy, and what r
 Its purpose is one check that nothing else performs: kinetic energy cannot exceed external work,
 because the terms omitted from the balance are all non-negative, so a violation means energy is
 appearing from nowhere and the time step is above the true stability limit -- which the critical
-time step does not see in full, as it ignores the nonlocal field entirely and never sees contact
-penalty stiffness.
+time step does not see in full, as it never sees contact penalty stiffness, and sees the nonlocal
+field only where that field carries a non-mechanical inertia. Such a field's own
+``0.5 m_k rate^2`` is reported on a separate line and kept out of the balance: with a coefficient in
+seconds squared it has the units of a volume, not of an energy.
 
 Two honest limits, both of which the solver states in the log rather than leaving to be
 discovered. The external work accumulates only at *prescribed* degrees of freedom, so a model
@@ -79,7 +106,9 @@ prescribed displacement, both of which are available as ``saveHistory`` field ou
 divides by, a refinement's effect on it is reported: total mass, per-component linear momentum and
 kinetic energy before and after, plus the relative mass drift accumulated over every such change,
 so that many individually-tolerable changes cannot silently add up to a meaningful one. The
-smallest integrating mass in the model is reported alongside, since that is what bounds the step.
+smallest coefficient the increment divides by is reported alongside -- an inertia at a
+second-order degree of freedom, a damping at a first-order one -- since that is what bounds the
+step.
 
 **Restart.** A resumed run must not repeat the half-step that starts a leapfrog: the velocity in
 the checkpoint already carries the half-increment offset, so applying the startup again would apply
@@ -96,6 +125,7 @@ from time import perf_counter
 import numpy as np
 
 import edelweissfe.utils.performancetiming as performancetiming
+from edelweissfe.config.phenomena import carriesKineticEnergy, carriesLinearMomentum
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
@@ -113,15 +143,13 @@ from edelweissfe.utils.exceptions import (
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
 
-#: Tolerance on the relative change of the total lumped mass across a single topology
-#: change. The children of a refined element tile it and carry the same density, so the
-#: mass is a geometric identity -- but it is assembled by Gauss quadrature, which is exact
-#: only up to a polynomial order. A distorted hexa20 has a non-polynomial Jacobian, so
-#: repartitioning a parent into children changes the quadrature truncation error. Measured
-#: on the anchor pry-out model, one live refinement moves the total mass by 4.63e-08
-#: relative; this bound leaves more than an order of magnitude of headroom above that
-#: while still catching a refinement or lumping error, which would be O(1), not O(1e-8).
-_MASS_CONSERVATION_TOLERANCE = 1e-6
+#: Tolerance on the relative change, across one topology change, of any row-sum-lumped
+#: per-element quantity (a mass, a viscosity, a non-mechanical inertia). Children tile their
+#: parent and carry its value, so conservation is a geometric identity -- but the assembly is
+#: Gauss quadrature, exact only to a polynomial order, and a distorted hexa20's Jacobian is not
+#: polynomial. Measured on the anchor pry-out, one live refinement moves the total mass by
+#: 4.63e-08 relative; a real refinement or lumping error would be O(1).
+_LUMPED_QUANTITY_CONSERVATION_TOLERANCE = 1e-6
 
 #: Fractional margin by which the kinetic energy may exceed the external work before it is
 #: reported as energy creation. KE <= W_ext is exact in the continuum, but the discrete run has
@@ -131,11 +159,10 @@ _MASS_CONSERVATION_TOLERANCE = 1e-6
 #: unstable time step produces -- v5 of the anchor pry-out reached 1e+38 mm.
 _ENERGY_CREATION_TOLERANCE = 1e-2
 
-#: Tolerance on the accumulated relative mass drift over a whole step. A single change
-#: being within tolerance does not bound a run with hundreds of refinements, so the drift
-#: is summed and checked separately. At the measured 4.63e-08 per change, this permits
-#: over two thousand refinements before tripping.
-_CUMULATIVE_MASS_DRIFT_TOLERANCE = 1e-4
+#: Tolerance on the accumulated drift of any one lumped quantity over a whole step: a single
+#: change being within tolerance does not bound a run with hundreds of refinements. At the
+#: measured 4.63e-08 per change this permits over two thousand of them.
+_CUMULATIVE_LUMPED_QUANTITY_DRIFT_TOLERANCE = 1e-4
 
 
 @dataclass(frozen=True)
@@ -145,37 +172,17 @@ class NEDSchema:
 
     Mirrors :attr:`NED.NEDOptions` one-for-one; the plain ``self.options`` dict remains the actual
     source of truth consulted at runtime (see :class:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema`
-    for why). The ``*-fields``/``*-scheme``/``courant-number``/``output-frequency`` option names are
-    not valid Python identifiers, hence the ``optionName`` indirection. ``firstOrderFields``/
-    ``secondOrderFields`` are declared ``dtype=list`` to describe their real shape (a comma-separated
-    list, appended to rather than replaced -- see :meth:`NED._updateOptions`), even though nothing
-    coerces a raw string against this schema today.
+    for why). The hyphenated option names are not valid Python identifiers, hence the
+    ``optionName`` indirection.
+
+    Every option here is a property of the ANALYSIS -- how far below the stability limit to run,
+    how often to report, how often to let the mesh or a contact search change. Nothing here
+    describes the model: which fields exist, which time derivative each carries, and what its
+    coefficient means are all read from the model and from
+    :mod:`edelweissfe.config.phenomena`, never asked of the deck. See
+    :meth:`NED._classifyFieldsByScheme`.
     """
 
-    firstOrderFields: list | None = schemaField(
-        description="Fields integrated with a first-order (forward-Euler) time scheme.",
-        dtype=list,
-        default_factory=list,
-        optionName="first-order-fields",
-    )
-    secondOrderFields: list | None = schemaField(
-        description="Fields integrated with a second-order (central-difference) time scheme.",
-        dtype=list,
-        default_factory=list,
-        optionName="second-order-fields",
-    )
-    firstOrderScheme: str | None = schemaField(
-        description="The time integration scheme for first-order fields.",
-        dtype=str,
-        default="forward-euler",
-        optionName="first-order-scheme",
-    )
-    secondOrderScheme: str | None = schemaField(
-        description="The time integration scheme for second-order fields.",
-        dtype=str,
-        default="central-difference",
-        optionName="second-order-scheme",
-    )
     courantNumber: float | None = schemaField(
         description="The fraction of the critical time step actually used.",
         dtype=float,
@@ -288,10 +295,6 @@ class NED(NonlinearSolverBase):
     schema = NEDSchema
 
     NEDOptions = {
-        "first-order-fields": [],
-        "second-order-fields": [],
-        "first-order-scheme": "forward-euler",
-        "second-order-scheme": "central-difference",
         "courant-number": 0.8,
         "output-frequency": 1000,
         "contact-update-frequency": 100,
@@ -305,15 +308,38 @@ class NED(NonlinearSolverBase):
         # Ensure mutable defaults (field lists) are isolated per solver instance.
         self.options = deepcopy(self.NEDOptions)
         self._updateOptions(kwargs, journal)
+        #: Fields integrated first order (forward Euler) and second order (central difference) in
+        #: time, and their degrees of freedom. All four are DERIVED from the assembled inertia and
+        #: damping in :meth:`_classifyFieldsByScheme`, never declared.
+        self.firstOrderFields = []
+        self.secondOrderFields = []
         self.ids_1st = None
         self.ids_2nd = None
+        #: Second-order DOFs whose 0.5*m*v**2 is a mechanical energy -- the mass-carrying ones and
+        #: the rotational ones -- and equally the DOFs at which prescribed work is an energy. The
+        #: energy balance uses these at both ends; see phenomena.carriesKineticEnergy.
+        self.ids_mechanicalEnergy = None
+        #: Second-order fields whose inertia is a mass, in declaration order; the per-component
+        #: momentum diagnostic walks these.
+        self.linearMomentumFields = []
+        #: Second-order fields whose inertia is neither a mass nor a rotational inertia, in
+        #: declaration order. Each is reported on its own line of the energy table and enters
+        #: neither balance; see phenomena.inertiaKind.
+        self.nonMechanicalSecondOrderFields = []
+        #: Mass-proportional damping rate C/M per degree of freedom. Zero wherever the elements
+        #: reported no damping, which is what makes the one damped update rule below reduce
+        #: exactly to the undamped central difference there.
+        self._dampingRate = None
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
-        self._warnedAboutMassDrift = False
-        #: Summed relative mass drift over every topology change, checked against
-        #: _CUMULATIVE_MASS_DRIFT_TOLERANCE so that many individually-tolerable changes
-        #: cannot silently add up to a meaningful one.
-        self._cumulativeMassDrift = 0.0
+        #: Summed relative drift of each lumped quantity (mass, first-order viscosity,
+        #: non-mechanical inertia) over every topology change, keyed by name and checked
+        #: against _CUMULATIVE_LUMPED_QUANTITY_DRIFT_TOLERANCE so that many
+        #: individually-tolerable changes cannot silently add up to a meaningful one.
+        self._cumulativeLumpedQuantityDrift = {}
+        #: Whether the cumulative-drift warning has already fired for a given quantity name,
+        #: so it is reported once per step rather than once per topology change.
+        self._warnedAboutCumulativeDrift = {}
         #: Work done on the model by its prescribed degrees of freedom, accumulated every
         #: increment. Compared against the kinetic energy to detect energy creation; see
         #: _ENERGY_CREATION_TOLERANCE.
@@ -429,10 +455,10 @@ class NED(NonlinearSolverBase):
         stepWallClockTic = perf_counter()
 
         self._externalWork = self._consumeResumedExternalWork()
-        self._cumulativeMassDrift = 0.0
+        self._cumulativeLumpedQuantityDrift = {}
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
-        self._warnedAboutMassDrift = False
+        self._warnedAboutCumulativeDrift = {}
 
         # Constraints whose DOF footprint is the outcome of a search, i.e. contact. Collected once,
         # so a model without any pays nothing for the per-increment tick in the loop below.
@@ -654,10 +680,11 @@ class NED(NonlinearSolverBase):
                         and timeStep.number > 0
                         and timeStep.number % topologyCheckFrequency == 0
                     ):
-                        massBefore = float(np.sum(self._rawLumpedMass[self.ids_2nd]))
-                        nonlocalInertiaBefore = float(np.sum(self._rawLumpedMass[self.ids_1st]))
+                        lumpedTotalsBefore = self._perFieldLumpedTotals()
                         momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, V, model)
-                        kineticBefore = 0.5 * float(np.sum(self._rawLumpedMass[self.ids_2nd] * V[self.ids_2nd] ** 2))
+                        kineticBefore = 0.5 * float(
+                            np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
+                        )
 
                         if self.updateTopologyAndConnectivity(model, step):
                             theSystem = self.buildEquationSystem(model, step)
@@ -677,7 +704,7 @@ class NED(NonlinearSolverBase):
                             P[:] = 0.0
 
                             self.reportTopologyChangeConservation(
-                                massBefore, nonlocalInertiaBefore, momentumBefore, kineticBefore, V, model
+                                lumpedTotalsBefore, momentumBefore, kineticBefore, V, model
                             )
 
                             # Lower only. Refinement shrinks the smallest element and tightens the
@@ -785,6 +812,7 @@ class NED(NonlinearSolverBase):
             # Enforce the Dirichlet boundary conditions on the constrained DOFs:
             # there is no free equilibrium there, so their force P is set to zero,
             # and their velocity is prescribed as (prescribed increment) / (time step).
+            prescribedVelocities = []
             for dirichlet in dirichlets:
                 prescribedIncrement = dirichlet.getPrescribedIncrement(timeStep).flatten()
 
@@ -794,17 +822,45 @@ class NED(NonlinearSolverBase):
                 # contributions), and the support reaction balancing it is its negative -- so this has
                 # to be accumulated HERE, immediately before the zeroing below, which is the only
                 # moment the reaction is available.
-                self._externalWork -= float(np.dot(P[dirichlet.constrainedDofIndices], prescribedIncrement))
+                #
+                # Only where that product is an energy. A prescribed non-local damage, say, has a
+                # conjugate "force" in the units its own balance equation carries, and adding it
+                # here would put cubic millimetres into a total that is then compared against a
+                # kinetic energy in newton-millimetres -- the same units error the kinetic sum
+                # below excludes it from, at the other end of the same balance.
+                if carriesKineticEnergy(dirichlet.field):
+                    self._externalWork -= float(np.dot(P[dirichlet.constrainedDofIndices], prescribedIncrement))
+
+                prescribedVelocity = prescribedIncrement / timeStep.timeIncrement
 
                 P[dirichlet.constrainedDofIndices] = 0.0
-                V[dirichlet.constrainedDofIndices] = prescribedIncrement / timeStep.timeIncrement
+                V[dirichlet.constrainedDofIndices] = prescribedVelocity
+                prescribedVelocities.append((dirichlet.constrainedDofIndices, prescribedVelocity))
 
             if self.ids_1st is not None:
                 V[self.ids_1st] = Minv[self.ids_1st] * P[self.ids_1st]
             if self.ids_2nd is not None:
-                V[self.ids_2nd] += (
-                    Minv[self.ids_2nd] * P[self.ids_2nd] * 0.5 * (timeStep.timeIncrement + prevTimeStep.timeIncrement)
-                )
+                dtAverage = 0.5 * (timeStep.timeIncrement + prevTimeStep.timeIncrement)
+
+                # Central difference with mass-proportional damping: the rate alpha = C/M enters
+                # as one factor on each side rather than as an extra force evaluation, so a damped
+                # degree of freedom costs what an undamped one does. At alpha = 0 it is
+                # bit-identical to the undamped update, which is why there is no branch -- and why
+                # mechanical Rayleigh damping would need no code here. The damping is not optional
+                # for a hyperbolic non-local field: undamped, the transients minted at the start of
+                # the step and at every refinement never decay, and the damage variable follows
+                # every overshoot instead of the mean.
+                halfRateStep = 0.5 * self._dampingRate[self.ids_2nd] * dtAverage
+                V[self.ids_2nd] = (
+                    (1.0 - halfRateStep) * V[self.ids_2nd] + Minv[self.ids_2nd] * P[self.ids_2nd] * dtAverage
+                ) / (1.0 + halfRateStep)
+
+            # A prescribed velocity is a boundary condition, not a solution, and both updates above
+            # overwrote it: the damped one scales it by (1 - alpha dt/2)/(1 + alpha dt/2), the
+            # first-order one loses it outright to Minv * 0. The undamped central difference added
+            # Minv * 0 * dt and left it exactly, which is why this only needs saying now.
+            for constrainedDofIndices, prescribedVelocity in prescribedVelocities:
+                V[constrainedDofIndices] = prescribedVelocity
 
             # slave DOFs of multi-point constraints do not integrate their own equations of motion --
             # they ride along on their masters (Minv is zero there, so the updates above left them
@@ -838,14 +894,14 @@ class NED(NonlinearSolverBase):
         if timeStep.number % self.options["output-frequency"] == 0:
             Wint = psi
 
-            # Restricted to the second-order fields, which are the only ones carrying inertia in the
-            # mechanical sense. Summing over the whole vector also collected the first-order fields,
-            # whose "mass" is a viscosity (the gradient-enhanced nonlocal field's eta) and whose
-            # "velocity" is that field's rate -- a product with no energy meaning, and one that can
-            # be orders of magnitude larger than the real term (eta ~ 1e-4 against a density
-            # ~ 1e-9). On any gradient-enhanced model that made the split read as 100 % kinetic
-            # regardless of what the structure was actually doing.
-            Wkin = 0.5 * float(np.sum(self._rawLumpedMass[self.ids_2nd] * V[self.ids_2nd] ** 2))
+            # Only over the degrees of freedom where 0.5 * m * v**2 is an energy. Summing the whole
+            # vector also collected the first-order fields, whose "mass" is a viscosity and whose
+            # "velocity" is that field's rate -- no energy meaning, and orders of magnitude larger
+            # than the real term (eta ~ 1e-4 against a density ~ 1e-9): every balance then read as
+            # 100 % kinetic.
+            Wkin = 0.5 * float(
+                np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
+            )
 
             Wext = self._externalWork
 
@@ -858,23 +914,52 @@ class NED(NonlinearSolverBase):
             def _share(value):
                 return "{:7.2f} %".format(value / Wext * 100) if Wext > 0.0 else "      -- "
 
+            energyRows = [
+                ["energy", "value", "share of W_ext"],
+                ["external work W_ext", "{:+.6e}".format(Wext), _share(Wext)],
+                ["kinetic", "{:+.6e}".format(Wkin), _share(Wkin)],
+                ["internal (strain)", "{:+.6e}".format(Wint), _share(Wint)],
+                ["unaccounted", "{:+.6e}".format(unaccounted), _share(unaccounted)],
+            ]
+
+            # One row per second-order field that is not in the balance, never summed with another
+            # or into the total. For a hyperbolic non-local field the inertia is a time squared, so
+            # 0.5 * m * rate**2 is a volume rather than an energy -- kept on its own line because
+            # it is the energy in the ringing the damping exists to remove.
+            for fieldName in self.nonMechanicalSecondOrderFields:
+                indices = self.theDofManager.idcsOfFieldsInDofVector[fieldName]
+                energyRows.append(
+                    [
+                        fieldName,
+                        "{:+.6e}".format(0.5 * float(np.sum(self._rawLumpedMass[indices] * V[indices] ** 2))),
+                        "not an energy",
+                    ]
+                )
+
             self.journal.printTable(
-                [
-                    ["energy", "value", "share of W_ext"],
-                    ["external work W_ext", "{:+.6e}".format(Wext), _share(Wext)],
-                    ["kinetic", "{:+.6e}".format(Wkin), _share(Wkin)],
-                    ["internal (strain)", "{:+.6e}".format(Wint), _share(Wint)],
-                    ["unaccounted", "{:+.6e}".format(unaccounted), _share(unaccounted)],
-                ],
+                energyRows,
                 self.identification,
                 2,
             )
 
-            # KE <= W_ext is exact in the continuum because the missing terms are non-negative, so
-            # a violation is not a modelling subtlety -- it is energy appearing from nowhere, which
-            # for an explicit scheme means the time step is above the true stability limit. This
-            # catches the contributions dt_crit does not see: the nonlocal field (whose limit
-            # nothing checks), contact penalty stiffness, and any element shape it misjudges.
+            # KE <= W_ext is exact in the continuum, so a violation is energy from nowhere: for an
+            # explicit scheme, a time step above the true stability limit. It catches what dt_crit
+            # does not see -- the nonlocal field, contact penalty stiffness, a misjudged element
+            # shape. The NaN case is checked first because every ordering against a NaN is False,
+            # including the `Wext > 0.0` below, so a diverged run would pass silently and keep
+            # writing NaN. It fails the step rather than reporting it: nothing after it is
+            # meaningful, and an explicit scheme has no cutback to answer it with.
+            if not (np.isfinite(Wext) and np.isfinite(Wkin)):
+                raise StepFailed(
+                    "THE SOLUTION HAS DIVERGED in increment {:}: the energy balance is no longer a "
+                    "finite number (external work {:e}, kinetic {:e}), which means the state itself "
+                    "is not. The time step is above the true stability limit -- and dt_crit does not "
+                    "see all of it: it never sees contact penalty stiffness, and it sees the nonlocal "
+                    "field only where that field carries a non-mechanical inertia, a first-order one "
+                    "having a forward-Euler limit that nothing checks. Resume from a checkpoint with "
+                    "a smaller courant-number.".format(timeStep.number, Wext, Wkin)
+                )
+
             if Wext > 0.0 and Wkin > Wext * (1.0 + _ENERGY_CREATION_TOLERANCE):
                 self.journal.message(
                     "ENERGY IS BEING CREATED: the kinetic energy {:e} exceeds the external work "
@@ -1317,13 +1402,6 @@ class NED(NonlinearSolverBase):
         if not isRebuild:
             self.journal.printSeperationLine()
 
-        presentVariableNames = list(self.theDofManager.idcsOfFieldsInDofVector.keys())
-
-        if self.theDofManager.idcsOfScalarVariablesInDofVector:
-            presentVariableNames += [
-                "scalar variables",
-            ]
-
         # self.options already reflects every >>options, name=<this solver's name>, ... block applied
         # so far, applied as each block is constructed or re-declared; there is nothing to reset or
         # re-fetch here.
@@ -1351,10 +1429,80 @@ class NED(NonlinearSolverBase):
             el.computeLumpedInertia(Me)
             M[el] += Me
 
+        # Each field's FIRST-derivative coefficient: zero mechanically, the non-local viscosity
+        # always (whether or not that field also has an inertia -- see computeLumpedInertia()
+        # above, the SECOND-derivative coefficient).
+        damping = self.theDofManager.constructDofVector()
+        damping[:] = 0.0
+        for el in model.elements.values():
+            Ce = np.zeros(el.nDof)
+            el.computeLumpedDamping(Ce)
+            damping[el] += Ce
+
+        # Checked here, because the inertia check below never sees it at a second-order DOF: there
+        # the divisor stays the positive inertia and the damping enters only as the rate C/M. A
+        # negative rate amplifies the transient the damping exists to remove, and alpha*dt/2 = -1
+        # makes the update's denominator exactly zero. Both are silent.
+        if not np.all(np.isfinite(damping)) or np.any(damping < 0.0):
+            raise ValueError(
+                "The assembled lumped damping is not a valid dissipation: {:} of {:} entries are "
+                "negative and {:} are not finite (smallest: {:e}). A damping coefficient enters the "
+                "second-order update as the rate C/M, where a negative value amplifies instead of "
+                "damping, and a first-order field divides by it directly.".format(
+                    int(np.count_nonzero(np.asarray(damping) < 0.0)),
+                    damping.shape[0],
+                    int(np.count_nonzero(~np.isfinite(np.asarray(damping)))),
+                    np.nanmin(damping),
+                )
+            )
+
+        # Which time derivative each field carries, read off the two vectors just assembled. An
+        # inertia is what a central-difference update divides by, so a field with one is second
+        # order and a field without one is not; no deck answer that disagreed could be honoured.
+        self.firstOrderFields, self.secondOrderFields = self._classifyFieldsByScheme(M, damping)
+
+        self.ids_1st = self._dofIndicesOfFields(self.firstOrderFields)
+        self.ids_2nd = self._dofIndicesOfFields(self.secondOrderFields)
+
+        self.journal.message(
+            "Time integration, derived from the assembled operators: central difference for {:}; "
+            "forward Euler for {:}".format(
+                ", ".join(self.secondOrderFields) or "(no field)",
+                ", ".join(self.firstOrderFields) or "(no field)",
+            ),
+            self.identification,
+            verbosity,
+        )
+
+        # Which second-order fields may be summed into a linear momentum and which into the energy
+        # balance. The assembled inertia cannot say -- a density, a rotational inertia and a
+        # micro-inertia are all just positive numbers -- and it is a fact about the field rather
+        # than about this analysis, so it comes from the registry. See phenomena.inertiaKind.
+        self.linearMomentumFields = [f for f in self.secondOrderFields if carriesLinearMomentum(f)]
+        self.nonMechanicalSecondOrderFields = [f for f in self.secondOrderFields if not carriesKineticEnergy(f)]
+        self.ids_mechanicalEnergy = self._dofIndicesOfFields(
+            [f for f in self.secondOrderFields if carriesKineticEnergy(f)]
+        )
+
+        # A first-order field integrates by forward Euler, C * rate = P, and needs the damping
+        # computeLumpedDamping() reports here, not the (correctly zero) inertia. From here on this
+        # vector is "the divisor", whichever of the two coefficients a degree of freedom's scheme
+        # actually divides by.
+        M[self.ids_1st] = damping[self.ids_1st]
+
+        # Kept before folding, so the kinetic energy diagnostic accounts for the true velocities of
+        # all nodes (including tied slaves) rather than master-placed folded mass.
+        self._rawLumpedMass = M.copy()
+
         # compute inverses
         if np.any(M == 0.0):
             raise ValueError(
-                "Zero mass found in mass vector. This can be caused by elements with zero density, or by elements with zero volume."
+                "Zero found in the vector the increment divides by, at {:} of {:} degrees of freedom. "
+                "Every FIELD is covered by the classification above, which refuses a field carrying "
+                "neither coefficient, so what is left here are degrees of freedom belonging to no field "
+                "-- scalar variables, which this solver has no equation of motion for.".format(
+                    int(np.count_nonzero(np.asarray(M) == 0.0)), M.shape[0]
+                )
             )
 
         # A negative lumped mass is the classical failure mode of row-summing a quadratic element's
@@ -1364,22 +1512,35 @@ class NED(NonlinearSolverBase):
         # is worth stating rather than trusting.
         if np.any(M < 0.0):
             raise ValueError(
-                "Negative mass found in {:} of {:} entries of the lumped mass vector (smallest: "
-                "{:e}). A negative lumped mass makes the explicit update integrate backwards in time "
-                "at those degrees of freedom.".format(int(np.count_nonzero(M < 0.0)), M.shape[0], M.min())
+                "Negative coefficient found in {:} of {:} entries of the vector the increment "
+                "divides by (smallest: {:e}). It is a lumped inertia at a second-order degree of "
+                "freedom and a damping at a first-order one; either way a negative value makes the "
+                "explicit update integrate backwards in time there.".format(
+                    int(np.count_nonzero(M < 0.0)), M.shape[0], M.min()
+                )
             )
-
-        # Kept before folding so the kinetic energy diagnostic accounts for the true velocities of
-        # all nodes (including tied slaves) rather than master-placed folded mass.
-        self._rawLumpedMass = M.copy()
 
         # Slave DOFs of multi-point constraints carry no own inertia: their mass is folded onto
         # their masters (row-sum lumping of T^T M T, mass-conserving), their Minv stays zero, and
         # their kinematics are assigned directly from the masters each increment.
         if self.mpcTransformation is not None:
             self.mpcTransformation.foldLumpedMass(M)
+            # Folded with the same operator as the inertia it is divided by, so the ratio below is
+            # the damping rate of the FOLDED system. Slaves of one material cancel exactly; slaves
+            # of several blend by inertia, which is what the folded equation of motion has.
+            self.mpcTransformation.foldLumpedMass(damping)
 
         Minv[M != 0.0] = 1.0 / M[M != 0.0]
+
+        # Mass-proportional damping rate alpha = C / M, wherever an inertia is divided by and a
+        # damping was assembled alongside it. Slave DOFs fold to zero inertia and integrate nothing,
+        # so they stay at zero rather than dividing by it, and a DOF whose elements reported no
+        # damping keeps the zero that makes the update exactly the undamped one. Second-order DOFs
+        # only: a first-order one had its inertia overwritten with its damping, so C/M would be 1.0.
+        self._dampingRate = self.theDofManager.constructDofVector()
+        self._dampingRate[:] = 0.0
+        integrating = self.ids_2nd[M[self.ids_2nd] > 0.0]
+        self._dampingRate[integrating] = damping[integrating] / M[integrating]
 
         # kept (instead of 1/Minv) for the kinetic energy: slave DOFs have Minv = 0
         self._lumpedMass = M
@@ -1414,30 +1575,6 @@ class NED(NonlinearSolverBase):
             U[:] = previous.U
             V[:] = previous.V
             P[:] = previous.P
-
-        self.ids_1st = np.empty(0, dtype=int)
-        self.ids_2nd = np.empty(0, dtype=int)
-
-        # check if all fields are specified either in first-order-fields or second-order-fields
-        isSpecified = {presentVariable: False for presentVariable in presentVariableNames}
-        for fieldName in self.options["first-order-fields"] + self.options["second-order-fields"]:
-            if fieldName not in presentVariableNames:
-                raise ValueError(
-                    "Field {:} specified in first-order-fields, but not present in model".format(fieldName)
-                )
-            if isSpecified[fieldName]:
-                raise ValueError(
-                    "Field {:} specified multiple times in first-order-fields and second-order-fields: {:}, {:}".format(
-                        fieldName, self.options["first-order-fields"], self.options["second-order-fields"]
-                    )
-                )
-            isSpecified[fieldName] = True
-
-        # assign indices of fields to first-order and second-order update schemes
-        for fieldName in self.options["first-order-fields"]:
-            self.ids_1st = np.r_[self.ids_1st, self.theDofManager.idcsOfFieldsInDofVector[fieldName]]
-        for fieldName in self.options["second-order-fields"]:
-            self.ids_2nd = np.r_[self.ids_2nd, self.theDofManager.idcsOfFieldsInDofVector[fieldName]]
 
         if isRebuild:
             # The mesh is unchanged (the layout check above establishes that), so the stable time
@@ -1565,20 +1702,221 @@ class NED(NonlinearSolverBase):
         """
 
         total = None
-        for fieldName in self.options["second-order-fields"]:
+        for fieldName in self.linearMomentumFields:
             indices = self.theDofManager.idcsOfFieldsInDofVector[fieldName]
             dimension = model.nodeFields[fieldName].dimension
             perNodeMass = np.asarray(mass[indices]).reshape((-1, dimension))
             perNodeVelocity = np.asarray(V[indices]).reshape((-1, dimension))
             contribution = np.sum(perNodeMass * perNodeVelocity, axis=0)
+
+            # Two fields of different spatial dimension have no common momentum, and numpy would
+            # not say so: adding a shape (1,) contribution to a shape (3,) total BROADCASTS it onto
+            # every spatial component. The non-mechanical fields are excluded above; this is the rest.
+            if total is not None and contribution.shape != total.shape:
+                raise ValueError(
+                    "Second-order field {:} has dimension {:} against {:} for the fields before it, "
+                    "so their momenta have no common components to add.".format(
+                        fieldName, contribution.shape[0], total.shape[0]
+                    )
+                )
+
             total = contribution if total is None else total + contribution
 
         return total if total is not None else np.zeros(0)
 
+    def _perFieldLumpedTotals(self) -> dict[str, float]:
+        """The assembled lumped total of every first- and second-order field, each on its own.
+
+        Never summed across fields. A conservation bug that halves one field's total can be
+        diluted below detection by another field's total if the two differ enough in magnitude
+        -- which happens routinely here, since a mechanical density and a non-local viscosity or
+        non-mechanical inertia are not just different units, they are typically many orders of
+        magnitude apart in value. That is true even between two fields of the SAME kind (two
+        mechanical fields of very different density would have the same problem), so the fix is
+        per field, not per "mechanical vs. not". :meth:`_checkLumpedQuantityConserved` is called
+        once per field with its own total, so a violation anywhere is visible regardless of what
+        else is assembled alongside it.
+
+        Returns
+        -------
+        dict[str, float]
+            Field name to its total lumped mass, viscosity or non-mechanical inertia -- whichever
+            that field's own coefficient is.
+        """
+
+        totals = {}
+        for fieldName in self.firstOrderFields + self.secondOrderFields:
+            indices = self.theDofManager.idcsOfFieldsInDofVector[fieldName]
+            totals[fieldName] = float(np.sum(self._rawLumpedMass[indices]))
+        return totals
+
+    def _dofIndicesOfFields(self, fieldNames: list[str]) -> np.ndarray:
+        """The degrees of freedom of the named fields, concatenated in the order given.
+
+        Parameters
+        ----------
+        fieldNames
+            Names of fields present in the current DofManager.
+
+        Returns
+        -------
+        np.ndarray
+            Their indices in the dof vector; empty (and of integer dtype, which matters -- numpy
+            reads an index of None as np.newaxis) when no field is named.
+        """
+
+        indices = np.empty(0, dtype=int)
+        for fieldName in fieldNames:
+            indices = np.r_[indices, self.theDofManager.idcsOfFieldsInDofVector[fieldName]]
+        return indices
+
+    def _classifyFieldsByScheme(self, inertia: DofVector, damping: DofVector) -> tuple[list[str], list[str]]:
+        """Which fields are integrated second order in time and which first, read off the
+        assembled operators rather than declared.
+
+        The deck used to say this and had no freedom in what to say: an inertia is what a
+        central-difference update divides by, so a field carrying one is second order and a field
+        carrying none is not. Deriving it also closes a hole the declaration had -- a field named
+        in neither list was silently never integrated at all.
+
+        Per FIELD, not per degree of freedom: ``*elementProperty`` takes an element set, so giving
+        a micro-inertia to only some of the elements carrying a field is easy to do by accident,
+        and integrating part of a field as a wave equation and the rest as a diffusion one is not
+        a scheme anybody chose. Such a field is refused rather than split.
+
+        Parameters
+        ----------
+        inertia
+            The assembled lumped inertia, before the first-order entries are overwritten with
+            their damping and before any multi-point-constraint fold -- a tied slave's own
+            inertia has to still be there, or its field would look unintegrable.
+        damping
+            The assembled lumped damping, likewise.
+
+        Returns
+        -------
+        tuple[list[str], list[str]]
+            The first-order and the second-order field names, in the model's field order.
+
+        Raises
+        ------
+        ValueError
+            If any field carries a coefficient on some of its degrees of freedom and not on
+            others, or carries neither coefficient anywhere.
+        """
+
+        firstOrderFields = []
+        secondOrderFields = []
+
+        for fieldName, indices in self.theDofManager.idcsOfFieldsInDofVector.items():
+            carriesInertia = np.asarray(inertia[indices]) != 0.0
+            carriesDamping = np.asarray(damping[indices]) != 0.0
+
+            if carriesInertia.all():
+                secondOrderFields.append(fieldName)
+            elif carriesInertia.any():
+                raise ValueError(
+                    "Field {:} was assembled an inertia on {:} of its {:} degrees of freedom and "
+                    "none on the rest, so it is neither second order in time nor first order. The "
+                    "usual cause is an *elementProperty assigning the inertia (for a non-local "
+                    "field, 'nonlocal micro inertia') over an element set that does not cover "
+                    "every element carrying the field.".format(
+                        fieldName, int(np.count_nonzero(carriesInertia)), carriesInertia.size
+                    )
+                )
+            elif carriesDamping.all():
+                firstOrderFields.append(fieldName)
+            elif carriesDamping.any():
+                raise ValueError(
+                    "Field {:} carries no inertia, so it is integrated by its damping alone -- but "
+                    "a damping was assembled on only {:} of its {:} degrees of freedom, and the "
+                    "rest have nothing to divide by.".format(
+                        fieldName, int(np.count_nonzero(carriesDamping)), carriesDamping.size
+                    )
+                )
+            else:
+                raise ValueError(
+                    "Field {:} carries neither an inertia nor a damping, so there is no time "
+                    "derivative for this solver to integrate it with. Its elements report both "
+                    "through computeLumpedInertia and computeLumpedDamping; an element with zero "
+                    "density or zero volume reports the first as zero.".format(fieldName)
+                )
+
+        return firstOrderFields, secondOrderFields
+
+    def _checkLumpedQuantityConserved(self, label: str, before: float, after: float) -> float:
+        """Check one row-sum-lumped per-element quantity for exact conservation across a
+        topology change, and warn once per step if many individually-tolerable changes have
+        accumulated into a meaningful one.
+
+        Any quantity assigned as a per-element scalar and lumped with the same row-sum weights
+        -- mass, a first-order field's viscosity, a second-order field's non-mechanical inertia
+        -- is conserved by the SAME geometric identity: the children of a refined element tile
+        it and carry the same value. What the quantity physically is plays no part in that;
+        only how it is assembled does, which is why this one check serves all of them.
+
+        Parameters
+        ----------
+        label
+            Name of the quantity, used in the raised message and as the key for its own
+            cumulative drift and warned-once state.
+        before, after
+            The total before and after the change.
+
+        Returns
+        -------
+        float
+            The relative change, for the caller to report.
+
+        Raises
+        ------
+        RuntimeError
+            If the relative change exceeds _LUMPED_QUANTITY_CONSERVATION_TOLERANCE.
+        """
+
+        relativeChange = abs(after - before) / before if before > 0.0 else 0.0
+        self._cumulativeLumpedQuantityDrift[label] = (
+            self._cumulativeLumpedQuantityDrift.get(label, 0.0) + relativeChange
+        )
+
+        if relativeChange > _LUMPED_QUANTITY_CONSERVATION_TOLERANCE:
+            raise RuntimeError(
+                "A topology change did not conserve the total lumped {:}: {:e} became {:e}, a "
+                "relative change of {:e} against a tolerance of {:e}. The children of a refined "
+                "element tile it and carry the same value, so it is conserved geometrically; the "
+                "quadrature that assembles it is exact only up to a polynomial order, which "
+                "admits a small change. A violation of this size is not quadrature -- it means "
+                "the refinement or the lumping is wrong.".format(
+                    label, before, after, relativeChange, _LUMPED_QUANTITY_CONSERVATION_TOLERANCE
+                )
+            )
+
+        # Reported, not raised: each individual change was within the exact-conservation bound, so
+        # what accumulates here is quadrature error rather than a violated invariant, and aborting a
+        # multi-hour run on an accumulated heuristic is out of proportion. The per-change check raises.
+        if self._cumulativeLumpedQuantityDrift[
+            label
+        ] > _CUMULATIVE_LUMPED_QUANTITY_DRIFT_TOLERANCE and not self._warnedAboutCumulativeDrift.get(label, False):
+            self._warnedAboutCumulativeDrift[label] = True
+            self.journal.message(
+                "The accumulated relative {:} drift over this step has reached {:e}, above the "
+                "tolerance of {:e}. Each individual topology change was within its own bound, so "
+                "this is many small quadrature changes adding up rather than one bad refinement; "
+                "the model's {:} is no longer the one the step started with.".format(
+                    label,
+                    self._cumulativeLumpedQuantityDrift[label],
+                    _CUMULATIVE_LUMPED_QUANTITY_DRIFT_TOLERANCE,
+                    label,
+                ),
+                self.identification,
+                1,
+            )
+
+        return relativeChange
+
     def reportTopologyChangeConservation(
         self,
-        massBefore: float,
-        nonlocalInertiaBefore: float,
+        lumpedTotalsBefore: dict[str, float],
         momentumBefore: np.ndarray,
         kineticBefore: float,
         V: DofVector,
@@ -1586,35 +1924,35 @@ class NED(NonlinearSolverBase):
     ):
         """Report what a topology change did to the quantities that ought to survive it.
 
-        Refinement interpolates the velocity onto new nodes and re-lumps the mass, and the three
-        invariants behave differently under that:
+        Refinement interpolates the velocity onto new nodes and re-lumps every per-element
+        scalar property, and the three invariants behave differently under that:
 
-        * **Total mass is conserved exactly.** The children of a refined element tile it and carry the
-          same density, so this is an identity rather than an approximation -- which makes it the
-          cheapest correctness check on the entire transfer, and the one that catches a connectivity
-          or geometry error nothing else would notice. Violating it raises.
-
-          Restricted to the SECOND-ORDER field, which is the only one carrying mass in the physical
-          sense. Summing the whole lumped vector also collects the first-order (nonlocal damage)
-          field, whose "mass" is a viscosity: with eta_nl ~ 1e-4 against a density ~ 1e-9 that block
-          outweighs the real mass by orders of magnitude, so a total-vector check is dominated by a
-          quantity refinement need not conserve at all and would pass a 100 % error in the actual
-          mass. The first-order block is reported separately rather than folded in.
+        * **Every field's own lumped total is conserved exactly**, by the same geometric
+          identity regardless of what that field's coefficient physically is: the children of a
+          refined element tile it and carry the same value. Checked per FIELD, not per family,
+          via :meth:`_checkLumpedQuantityConserved` -- summing across fields first, even ones
+          that agree on units, would let a violation in a numerically small field hide inside a
+          numerically large one. Violating any single field's total raises.
         * **Linear momentum is conserved exactly for a spatially uniform velocity field**, because
           the shape functions are a partition of unity and the child masses sum to the parent's. For
           a general field the discrepancy is second order in the velocity gradient across the parent:
-          discretisation error, not a defect. Reported, not enforced.
+          discretisation error, not a defect. Reported, not enforced. Restricted to the fields whose
+          inertia is a mass, per :func:`~edelweissfe.config.phenomena.carriesLinearMomentum`: a
+          viscosity or a non-mechanical inertia has no associated momentum, and a rotational inertia
+          has an angular one that must not be added to a linear one. Across those fields the sum IS
+          legitimate, because a real total system momentum is exactly the sum of its parts' momenta.
         * **Kinetic energy is not conserved** by interpolation plus re-lumping, and it is the most
           sensitive of the three, being quadratic in the interpolation error. Reported as a relative
           jump; more than roughly a percent is a reason to look at the transfer rather than to
-          believe the physics.
+          believe the physics. Restricted to the fields whose 0.5*m*v**2 is an energy -- the
+          mass-carrying ones and the rotational ones, a wider set than momentum admits -- and
+          reason, and summed across them for the same reason momentum is.
 
         Parameters
         ----------
-        massBefore
-            Total second-order (physical) lumped mass before the change.
-        nonlocalInertiaBefore
-            Total first-order (nonlocal-field) lumped inertia before the change. Reported only.
+        lumpedTotalsBefore
+            Every first- and second-order field's own lumped total before the change, by field
+            name; see :meth:`_perFieldLumpedTotals`.
         momentumBefore
             Per-component momentum before the change.
         kineticBefore
@@ -1627,51 +1965,22 @@ class NED(NonlinearSolverBase):
         Raises
         ------
         RuntimeError
-            If the total lumped mass changed.
+            If any field's own lumped total changed by more than its conservation tolerance.
         """
 
-        massAfter = float(np.sum(self._rawLumpedMass[self.ids_2nd]))
-        nonlocalInertiaAfter = float(np.sum(self._rawLumpedMass[self.ids_1st]))
-        relativeNonlocalInertiaChange = (
-            abs(nonlocalInertiaAfter - nonlocalInertiaBefore) / nonlocalInertiaBefore
-            if nonlocalInertiaBefore > 0.0
-            else 0.0
-        )
+        lumpedTotalsAfter = self._perFieldLumpedTotals()
         momentumAfter = self.secondOrderMomentum(self._rawLumpedMass, V, model)
-        kineticAfter = 0.5 * float(np.sum(self._rawLumpedMass[self.ids_2nd] * V[self.ids_2nd] ** 2))
+        kineticAfter = 0.5 * float(
+            np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
+        )
 
-        relativeMassChange = abs(massAfter - massBefore) / massBefore if massBefore > 0.0 else 0.0
-        self._cumulativeMassDrift += relativeMassChange
-
-        if relativeMassChange > _MASS_CONSERVATION_TOLERANCE:
-            raise RuntimeError(
-                "A topology change did not conserve the total lumped mass: {:e} became {:e}, a "
-                "relative change of {:e} against a tolerance of {:e}. The children of a refined "
-                "element tile it and carry the same density, so the mass is conserved geometrically; "
-                "the quadrature that assembles it is exact only up to a polynomial order, which "
-                "admits a small change. A violation of this size is not quadrature -- it means the "
-                "refinement or the mass lumping is wrong.".format(
-                    massBefore, massAfter, relativeMassChange, _MASS_CONSERVATION_TOLERANCE
-                )
-            )
-
-        # Reported, not raised. By this function's own account each individual change was
-        # within the exact-conservation bound, so what accumulates here is quadrature error, not a
-        # violated invariant -- and aborting a multi-hour run mid-increment on an accumulated
-        # heuristic is out of proportion to what it establishes. The per-change check above is the
-        # invariant, and it still raises.
-        if self._cumulativeMassDrift > _CUMULATIVE_MASS_DRIFT_TOLERANCE and not self._warnedAboutMassDrift:
-            self._warnedAboutMassDrift = True
-            self.journal.message(
-                "The accumulated relative lumped-mass drift over this step has reached {:e}, above "
-                "the tolerance of {:e}. Each individual topology change was within its own bound, so "
-                "this is many small quadrature changes adding up rather than one bad refinement; the "
-                "model mass is no longer the one the step started with.".format(
-                    self._cumulativeMassDrift, _CUMULATIVE_MASS_DRIFT_TOLERANCE
-                ),
-                self.identification,
-                1,
-            )
+        relativeChangeByField = {
+            fieldName: self._checkLumpedQuantityConserved(fieldName, before, lumpedTotalsAfter.get(fieldName, 0.0))
+            for fieldName, before in lumpedTotalsBefore.items()
+        }
+        worstField, worstRelativeChange = (
+            max(relativeChangeByField.items(), key=lambda item: item[1]) if relativeChangeByField else ("", 0.0)
+        )
 
         # Minv = 1/M is formed wherever M != 0.0 and only negative mass is rejected, so a master
         # DOF left with a tiny positive mass yields an enormous Minv and integrates itself to
@@ -1682,11 +1991,9 @@ class NED(NonlinearSolverBase):
         medianMass = float(np.median(integrating)) if integrating.size else 0.0
         massRatio = smallestMass / medianMass if medianMass > 0.0 else 0.0
 
-        # Split by integration scheme. The second-order (displacement) field carries rho-based
-        # inertia and integrates with central difference; the first-order (nonlocal damage) field
-        # carries eta_nl-based inertia and integrates with forward Euler, whose stability limit is
-        # a completely different expression. A collapsing mass means something different in each,
-        # so the aggregate minimum above cannot be acted on without knowing which field it is in.
+        # Split by integration scheme, because the two numbers mean different things: a second-order
+        # DOF divides an inertia into a central-difference update, a first-order one divides a
+        # damping into a forward-Euler update, and their stability limits are different expressions.
         def smallestOf(indices):
             if not indices.size:
                 return 0.0, 0.0
@@ -1704,13 +2011,12 @@ class NED(NonlinearSolverBase):
         relativeKineticJump = abs(kineticAfter - kineticBefore) / kineticBefore if kineticBefore > 0.0 else 0.0
 
         self.journal.message(
-            "Topology change: 2nd-order mass conserved to {:.1e} relative (1st-order inertia "
-            "{:.1e}); smallest integrating mass {:.3e} "
-            "({:.1e} of median) [2nd-order {:.3e} of median {:.3e}; 1st-order {:.3e} of median "
-            "{:.3e}]; largest momentum component change "
+            "Topology change: worst-conserved field '{:}' to {:.1e} relative; smallest integrating "
+            "coefficient {:.3e} ({:.1e} of median) [2nd-order inertia {:.3e} of median {:.3e}; "
+            "1st-order damping {:.3e} of median {:.3e}]; largest momentum component change "
             "{:.3e} (of {:.3e}); kinetic energy {:.6e} -> {:.6e} ({:+.2f} %)".format(
-                relativeMassChange,
-                relativeNonlocalInertiaChange,
+                worstField,
+                worstRelativeChange,
                 smallestMass,
                 massRatio,
                 smallest2nd,

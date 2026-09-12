@@ -260,12 +260,36 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         self,
         M: np.ndarray,
     ):
-        """Evaluate the internal forces for given time, field, and field increment.
+        """Evaluate the diagonal of the lumped inertia of the element, over every field it carries.
+
+        The coefficient of each field's SECOND time derivative: mass on the displacement block,
+        and a micro-inertia on a non-local block that has been given one. A parabolic
+        gradient-enhanced field reports none, which is what tells the solver it is first order in
+        time; see computeLumpedDamping() for what integrates it then.
 
         Parameters
         ----------
         M
-            The diagonal of the lumped mass matrix to be defined.
+            The diagonal of the lumped inertia to be defined.
+        """
+
+    def computeLumpedDamping(
+        self,
+        C: np.ndarray,
+    ):
+        """Evaluate the diagonal of the lumped damping of the element, over every field it carries.
+
+        The coefficient of each field's FIRST time derivative: zero on the displacement block,
+        and the non-local viscosity on a non-local block -- always, whether or not that field also
+        carries a micro-inertia. A first-order field is integrated by this term alone; a
+        second-order one is damped by it. Carrying none is the ordinary case, so the default
+        leaves the buffer alone.
+
+        Parameters
+        ----------
+        C
+            The diagonal of the lumped damping, supplied zero-initialised and written in place.
+            Entries left untouched are read as "no damping here".
         """
 
     @property

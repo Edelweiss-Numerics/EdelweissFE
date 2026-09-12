@@ -310,6 +310,16 @@ class ModelModifier(ModelModifierBase):
                 for element in elementSet:
                     self._sectionOf[element] = section
 
+        # element -> its named properties, for the same reason. A named property is assigned when
+        # the model is prepared, which a child created here never went through, so without this it
+        # starts life without its parent's bulk viscosity or micro-inertia. Both are simply absent
+        # when unset, so losing one does not fail -- it changes the answer in the refined region,
+        # which is exactly where the refinement was asked for.
+        self._elementPropertiesOf = {}
+        for elementProperty in model.elementProperties:
+            for element in model.elementSets[elementProperty.elSetName]:
+                self._elementPropertiesOf.setdefault(element, []).append(elementProperty)
+
         # restrict the octree mirror to the refineable solid elements: a model that also contains
         # e.g. contact-facet elements (2/3 nodes) must not have those become octree roots. Prefer an
         # explicit restriction; otherwise fall back to the 20-node (HEX20-family) elements, which is
@@ -656,6 +666,8 @@ class ModelModifier(ModelModifierBase):
                     child = self._elementClass(self._elementType, elNumber)
                     child.setNodes([model.nodes[label] for label in e["conn"]])
                     self._sectionOf[parentEl].assignSectionPropertiesToElement(child)
+                    for elementProperty in self._elementPropertiesOf.get(parentEl, ()):
+                        child.assignProperty(elementProperty.propertyName, elementProperty.values)
                     # Runs on replay too, identically: apply() is one code path, and element state
                     # is restored by number afterwards either way.
                     self._stateTransfer.transferState(parentEl, [child], self._topology)
@@ -681,6 +693,8 @@ class ModelModifier(ModelModifierBase):
                     model.createElement(child)
                     self._eidToEl[eid] = child
                     self._sectionOf[child] = self._sectionOf[parentEl]
+                    if parentEl in self._elementPropertiesOf:
+                        self._elementPropertiesOf[child] = self._elementPropertiesOf[parentEl]
 
                     change.addedElements.add(child.elNumber)
                     change.parentToChildren.setdefault(parentEl.elNumber, []).append(child.elNumber)
