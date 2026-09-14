@@ -9,7 +9,7 @@
 **    the assembled inertia and damping; no other test has a field on the first-order side.
 **  * GeneralGradientEnhancedDisplacementFiniteElement::computeLumpedInertia, whose displacement
 **    block comes from the material density, and computeLumpedDamping, whose nonlocal block comes
-**    from getNonlocalViscosity(). No `nonlocal micro inertia` is assigned here, so the nonlocal
+**    from getNonlocalViscosity(). The material gives no micro-inertia here, so the nonlocal
 **    block of the inertia is zero and that viscosity is the whole of what the nonlocal field's
 **    update divides by -- which is what makes an elliptic regularisation field explicitly
 **    integrable in the first place. A hexa20 lumped mass is also where a negative entry would show

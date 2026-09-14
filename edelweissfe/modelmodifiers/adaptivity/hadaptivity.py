@@ -312,9 +312,11 @@ class ModelModifier(ModelModifierBase):
 
         # element -> its named properties, for the same reason. A named property is assigned when
         # the model is prepared, which a child created here never went through, so without this it
-        # starts life without its parent's bulk viscosity or micro-inertia. Both are simply absent
-        # when unset, so losing one does not fail -- it changes the answer in the refined region,
-        # which is exactly where the refinement was asked for.
+        # starts life without its parent's bulk viscosity. It is simply absent when unset, so
+        # losing it does not fail -- it changes the answer in the refined region, which is exactly
+        # where the refinement was asked for. (The non-local micro-inertia used to be in this
+        # bracket too; as a material property it now rides along with the section above, and
+        # cannot be lost here at all.)
         self._elementPropertiesOf = {}
         for elementProperty in model.elementProperties:
             for element in model.elementSets[elementProperty.elSetName]:

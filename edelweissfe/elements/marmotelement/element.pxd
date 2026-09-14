@@ -142,10 +142,18 @@ cdef extern from "Marmot/MarmotElement.h":
                         double time,
                         double dT)
 
-        void computeLumpedInertia(double* M)
-        void computeLumpedDamping(double* C)
+        # `except +` on all three: they ask the material for the coefficients they assemble -- the
+        # density, the non-local viscosity and the non-local micro-inertia -- and a material that
+        # refuses (too few properties, or a micro-inertia above the eta^2/4 its own viscosity
+        # admits) throws. Without a handler that C++ exception crosses into generated code that has
+        # none and reaches std::terminate, so a deck error aborts the process with no traceback
+        # instead of raising where the deck can be pointed at.
+        void computeLumpedInertia(double* M) except +ValueError
+        void computeLumpedDamping(double* C) except +ValueError
 
-        void computeCriticalTimeStepForExplicitDynamics(double& criticalTimeStep, const double* QTotal)
+        void computeCriticalTimeStepForExplicitDynamics(
+                        double& criticalTimeStep,
+                        const double* QTotal) except +ValueError
 
         void computeInternalEnergy(double& internalEnergy)
 

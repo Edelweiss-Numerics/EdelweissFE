@@ -1779,10 +1779,10 @@ class NED(NonlinearSolverBase):
         carrying none is not. Deriving it also closes a hole the declaration had -- a field named
         in neither list was silently never integrated at all.
 
-        Per FIELD, not per degree of freedom: ``*elementProperty`` takes an element set, so giving
-        a micro-inertia to only some of the elements carrying a field is easy to do by accident,
-        and integrating part of a field as a wave equation and the rest as a diffusion one is not
-        a scheme anybody chose. Such a field is refused rather than split.
+        Per FIELD, not per degree of freedom: a multi-material mesh can give a micro-inertia to one
+        material and not to another, so covering only some of the elements carrying a field is easy
+        to do by accident, and integrating part of a field as a wave equation and the rest as a
+        diffusion one is not a scheme anybody chose. Such a field is refused rather than split.
 
         Parameters
         ----------
@@ -1818,9 +1818,9 @@ class NED(NonlinearSolverBase):
                 raise ValueError(
                     "Field {:} was assembled an inertia on {:} of its {:} degrees of freedom and "
                     "none on the rest, so it is neither second order in time nor first order. The "
-                    "usual cause is an *elementProperty assigning the inertia (for a non-local "
-                    "field, 'nonlocal micro inertia') over an element set that does not cover "
-                    "every element carrying the field.".format(
+                    "usual cause is a mesh whose materials disagree: for a non-local field the "
+                    "micro-inertia is a material property, so a second material used by some of "
+                    "the elements carrying the field and giving no micro-inertia splits it.".format(
                         fieldName, int(np.count_nonzero(carriesInertia)), carriesInertia.size
                     )
                 )
