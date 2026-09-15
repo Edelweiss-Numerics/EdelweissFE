@@ -249,6 +249,10 @@ def coalesce(changes: list) -> ModelChange | None:
         changedSurfaces |= change.changedSurfaces
         movedNodes |= change.movedNodes
         movedNodes -= transientNodes
+    # A node net-added or net-removed within the window is not "existing", even if some change in it
+    # also reported it as moved (e.g. a geometry-snap modifier moving a node an AMR modifier just
+    # created in the same round) -- movedNodes documents only existing nodes whose coordinates changed.
+    movedNodes -= addedNodes | removedNodes
 
     last = changes[-1]
     return ModelChange(
