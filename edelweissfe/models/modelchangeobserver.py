@@ -45,3 +45,4 @@ class ModelChangeType(Enum):
     COARSENING = auto()  # elements merged / nodes removed
     ELEMENT_EROSION = auto()  # elements deleted
     TOPOLOGY_CHANGE = auto()  # boundary / surface / set changes
+    GEOMETRY_CHANGE = auto()  # existing node coordinates moved; no element/node added or removed

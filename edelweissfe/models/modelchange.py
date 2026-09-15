@@ -82,11 +82,17 @@ class ModelChange:
     changedNodeSets: set = field(default_factory=set)
     changedElementSets: set = field(default_factory=set)
     changedSurfaces: set = field(default_factory=set)
+    #: Existing (neither added nor removed) node labels whose coordinates changed -- e.g. a
+    #: geometry-snap modifier projecting newly-created AMR boundary nodes onto an analytical
+    #: surface. Deliberately separate from ``addedNodes``: a moved node is not new.
+    movedNodes: set = field(default_factory=set)
 
     @property
     def geometryChanged(self) -> bool:
-        """True if any node or element was added or removed."""
-        return bool(self.addedNodes or self.removedNodes or self.addedElements or self.removedElements)
+        """True if any node or element was added, removed, or moved."""
+        return bool(
+            self.addedNodes or self.removedNodes or self.addedElements or self.removedElements or self.movedNodes
+        )
 
     @property
     def isEmpty(self) -> bool:
@@ -106,6 +112,7 @@ class ModelChange:
             or self.changedNodeSets
             or self.changedElementSets
             or self.changedSurfaces
+            or self.movedNodes
         )
 
     def touchesSurface(self, name: str) -> bool:
@@ -223,6 +230,7 @@ def coalesce(changes: list) -> ModelChange | None:
     addedElements, removedElements = set(first.addedElements), set(first.removedElements)
     changedNodeSets, changedElementSets = set(first.changedNodeSets), set(first.changedElementSets)
     changedSurfaces = set(first.changedSurfaces)
+    movedNodes = set(first.movedNodes)
     for change in changes[1:]:
         # labels added within the window and removed again existed only within it; "added" means
         # added by any EARLIER change, hence intersected before this change's additions join in
@@ -239,6 +247,8 @@ def coalesce(changes: list) -> ModelChange | None:
         changedNodeSets |= change.changedNodeSets
         changedElementSets |= change.changedElementSets
         changedSurfaces |= change.changedSurfaces
+        movedNodes |= change.movedNodes
+        movedNodes -= transientNodes
 
     last = changes[-1]
     return ModelChange(
@@ -253,4 +263,5 @@ def coalesce(changes: list) -> ModelChange | None:
         changedNodeSets=changedNodeSets,
         changedElementSets=changedElementSets,
         changedSurfaces=changedSurfaces,
+        movedNodes=movedNodes,
     )
