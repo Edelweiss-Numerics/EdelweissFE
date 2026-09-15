@@ -256,6 +256,66 @@ amrtransparencyprobe``) that does exactly this, registers no observer and implem
 refinement it should have seen -- guarding against a regression that reintroduces replacing a set
 instead of mutating it.
 
+``surfaceSnap`` - Analytical-surface node snapping for AMR-refined curved boundaries
+--------------------------------------------------------------------------------------
+
+Module ``edelweissfe.modelmodifiers.geometry.surfacesnap``
+
+.. automodule:: edelweissfe.modelmodifiers.geometry.surfacesnap
+    :members: __doc__
+
+A coarse HEX20 mesh represents a curved boundary -- a borehole, a cylindrical bore, a fillet -- as
+a polygon of flat facets. ``Hex20Topology.subdivide()`` (used by ``hAdaptivity``, above) evaluates
+the *parent* element's own isoparametric map when it creates new nodes, so a flat parent facet only
+ever produces more flat sub-facets: refinement makes the polygon finer-grained, never rounder.
+``surfaceSnap`` is a purely reactive model modifier (``initiatesTopologyChanges = False``) that
+watches ``hAdaptivity``'s own :class:`~edelweissfe.models.modelchange.ModelChange` and, for every
+newly-created node that lands on a tracked boundary, projects it exactly onto a specified
+analytical surface -- currently a cylinder (``originX/Y/Z`` + ``axisX/Y/Z`` + ``radius``). Every
+pre-existing node is left untouched: the ``nodeSet`` option names a node set whose members must
+*already* lie exactly on the true surface (e.g. a borehole wall exported from an actual cylindrical
+CAD cut), and only faces entirely within that set -- and their new AMR-created nodes -- are ever
+moved.
+
+**Corners vs. midsides.** A new corner node is always radially projected onto the cylinder,
+unconditionally. A new midside node has two modes, via ``midsideNodes``:
+
+* ``straight`` (default) -- recomputed as the mean of its two (already-snapped) corner endpoints,
+  keeping the edge a straight chord. Faceted, but with correctly-placed vertices; cheap and safe.
+* ``curved`` -- independently projected onto the cylinder too, giving a true curved quadratic edge.
+  Better geometric fidelity per element, at the cost of a small extra deviation from a pure straight
+  chord representation elsewhere in the model (see the theory note in the module docstring for the
+  chord-vs-arc argument).
+
+**Hanging nodes and mesh quality are never compromised.** A candidate node that is also an AMR
+hanging-node slave (:class:`~edelweissfe.constraints.hangingnode.Constraint`) is skipped rather than
+snapped -- moving it would break its own multi-point constraint -- and a journal warning names it.
+Before committing a round, every affected element's minimum corner Jacobian determinant is checked
+before and after; if any element would invert or drop below ``qualityDropThreshold`` (default
+``0.5``) of its pre-snap value, the *entire round's* snapping is skipped (nothing moves), though the
+boundary-face bookkeeping still advances so a later, better-conditioned refinement pass gets another
+chance.
+
+.. pprint:: modelmodifier:surfacesnap
+    :caption: Options:
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/AMR_SurfaceSnap/test.inp
+    :language: edelweiss
+    :caption: Example (a coarse, geometrically exact-on-the-cylinder inner wall; refining it and
+              snapping the new boundary nodes with ``midsideNodes=curved``):
+              ``testfiles/edelweiss-only/AMR_SurfaceSnap/test.inp``
+
+**Restart safety.** Which element faces lie on the tracked surface is decision-side state that must
+survive a checkpoint/resume exactly like ``hAdaptivity``'s own tracked node sets do. Rather than
+private Python state, it lives in a genuine, modifier-private :class:`~edelweissfe.sets.nodeset.
+NodeSet` that a restart rebuilds by *replaying* this modifier's own recorded decisions -- the same
+mechanism described below for ``hAdaptivity``, not a parallel one. Because a round can legitimately
+discover new boundary-face membership while moving zero node coordinates (every candidate a
+hanging-node collision, or vetoed by the quality safeguard), :class:`~edelweissfe.models.modelchange.
+ModelChange` carries a dedicated ``movedNodes`` field and :class:`~edelweissfe.models.
+modelchangeobserver.ModelChangeType` a ``GEOMETRY_CHANGE`` kind, so that a coordinate-only (or even
+a zero-coordinate, node-set-only) mutation is never mistaken for an empty, unrecorded one.
+
 Restart / checkpointing
 ------------------------
 

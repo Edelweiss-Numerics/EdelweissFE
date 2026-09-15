@@ -1,0 +1,147 @@
+** Analytical-surface node snapping regression test -- exercises the full surfaceSnap
+** *modelModifier path end to end alongside hAdaptivity: a coarse HEX20 sector mesh models a 90
+** degree, 3-sector arc of a hollow cylindrical shell (inner radius 10, outer radius 16, height 4,
+** y-axis). The inner ('wall') boundary is built geometrically EXACT on the true cylinder -- as a
+** real Cubit export of an actual cylindrical surface would be -- but every other facet, and every
+** node hAdaptivity's own refinement subsequently creates, is flat/faceted by construction
+** (Hex20Topology.subdivide only ever interpolates the parent's own isoparametric map). Without
+** surfaceSnap, refining an element touching 'wall' therefore leaves its new boundary nodes
+** measurably off the true cylinder; with it, every new corner and every new midside
+** (midsideNodes=curved here) is exactly reprojected. Pins the resulting elastic solution against
+** U.ref.
+*material, name=linearelastic, id=mat
+30000.0, 0.2
+
+*section, name=sec, material=mat, type=solid
+ring
+
+*modelModifier, type=hAdaptivity, name=amr
+>>marker, type=nodeSet, nSet=wall, initialOnly=True
+maxLevel=1
+splitFactor=2
+
+*modelModifier, type=surfaceSnap, name=snap
+nodeSet=wall
+originX=0.0, originY=0.0, originZ=0.0
+axisX=0.0, axisY=1.0, axisZ=0.0
+radius=10.0
+midsideNodes=curved
+
+*job, name=amrSurfaceSnap, domain=3d
+*solver, solver=NIST, name=S
+*fieldOutput
+>>perNode, elSet=ring, field=displacement, result=U, name=U
+
+*step, solver=S
+maxInc=1.0, minInc=1.0, maxNumInc=1, maxIter=25, stepLength=1
+>>dirichlet, name=fixBase, nSet=base, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=stretchTop, nSet=top, field=displacement, 2=0.01
+
+*Node
+1, 10.0000000000, 0.0000000000, 0.0000000000
+2, 9.6592582629, 0.0000000000, 2.5881904510
+3, 8.6602540378, 0.0000000000, 5.0000000000
+4, 7.0710678119, 0.0000000000, 7.0710678119
+5, 5.0000000000, 0.0000000000, 8.6602540378
+6, 2.5881904510, 0.0000000000, 9.6592582629
+7, 0.0000000000, 0.0000000000, 10.0000000000
+8, 10.0000000000, 2.0000000000, 0.0000000000
+9, 8.6602540378, 2.0000000000, 5.0000000000
+10, 5.0000000000, 2.0000000000, 8.6602540378
+11, 0.0000000000, 2.0000000000, 10.0000000000
+12, 10.0000000000, 4.0000000000, 0.0000000000
+13, 9.6592582629, 4.0000000000, 2.5881904510
+14, 8.6602540378, 4.0000000000, 5.0000000000
+15, 7.0710678119, 4.0000000000, 7.0710678119
+16, 5.0000000000, 4.0000000000, 8.6602540378
+17, 2.5881904510, 4.0000000000, 9.6592582629
+18, 0.0000000000, 4.0000000000, 10.0000000000
+19, 13.0000000000, 0.0000000000, 0.0000000000
+20, 11.2583302492, 0.0000000000, 6.5000000000
+21, 6.5000000000, 0.0000000000, 11.2583302492
+22, 0.0000000000, 0.0000000000, 13.0000000000
+23, 13.0000000000, 4.0000000000, 0.0000000000
+24, 11.2583302492, 4.0000000000, 6.5000000000
+25, 6.5000000000, 4.0000000000, 11.2583302492
+26, 0.0000000000, 4.0000000000, 13.0000000000
+27, 16.0000000000, 0.0000000000, 0.0000000000
+28, 14.9282032303, 0.0000000000, 4.0000000000
+29, 13.8564064606, 0.0000000000, 8.0000000000
+30, 10.9282032303, 0.0000000000, 10.9282032303
+31, 8.0000000000, 0.0000000000, 13.8564064606
+32, 4.0000000000, 0.0000000000, 14.9282032303
+33, 0.0000000000, 0.0000000000, 16.0000000000
+34, 16.0000000000, 2.0000000000, 0.0000000000
+35, 13.8564064606, 2.0000000000, 8.0000000000
+36, 8.0000000000, 2.0000000000, 13.8564064606
+37, 0.0000000000, 2.0000000000, 16.0000000000
+38, 16.0000000000, 4.0000000000, 0.0000000000
+39, 14.9282032303, 4.0000000000, 4.0000000000
+40, 13.8564064606, 4.0000000000, 8.0000000000
+41, 10.9282032303, 4.0000000000, 10.9282032303
+42, 8.0000000000, 4.0000000000, 13.8564064606
+43, 4.0000000000, 4.0000000000, 14.9282032303
+44, 0.0000000000, 4.0000000000, 16.0000000000
+*Element, type=C3D20
+1, 14, 3, 1, 12, 40, 29, 27, 38, 9, 2, 8, 13, 35, 28, 34, 39, 24, 20, 19, 23
+2, 16, 5, 3, 14, 42, 31, 29, 40, 10, 4, 9, 15, 36, 30, 35, 41, 25, 21, 20, 24
+3, 18, 7, 5, 16, 44, 33, 31, 42, 11, 6, 10, 17, 37, 32, 36, 43, 26, 22, 21, 25
+*elSet, elSet=ring, generate
+1, 3, 1
+*nSet, nSet=wall
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+*nSet, nSet=base
+1
+2
+3
+4
+5
+6
+7
+19
+20
+21
+22
+27
+28
+29
+30
+31
+32
+33
+*nSet, nSet=top
+12
+13
+14
+15
+16
+17
+18
+23
+24
+25
+26
+38
+39
+40
+41
+42
+43
+44
