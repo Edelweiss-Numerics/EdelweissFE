@@ -61,7 +61,7 @@ Built-in coverage
 The ``_BUILTINS`` table below covers these categories:
 
 ``outputmanager`` (10), ``section`` (3), ``constraint`` (12), ``stepaction`` (13),
-``generator`` (10), ``analyticalfield`` (3), ``solver`` (7), ``step`` (2), ``modelmodifier`` (1),
+``generator`` (10), ``analyticalfield`` (3), ``solver`` (7), ``step`` (2), ``modelmodifier`` (2),
 ``statetransferstrategy`` (3), ``element`` (42), ``material`` (7), ``linsolver`` (11).
 
 ``keyword`` is the single source the ``.inp`` parser consults for every top-level keyword
@@ -266,6 +266,7 @@ _BUILTINS[("step", "adaptiveforexplicitsimulations")] = (
 )
 
 _BUILTINS[("modelmodifier", "hadaptivity")] = "edelweissfe.modelmodifiers.adaptivity.hadaptivity:ModelModifier"
+_BUILTINS[("modelmodifier", "surfacesnap")] = "edelweissfe.modelmodifiers.geometry.surfacesnap:ModelModifier"
 
 _BUILTINS[("statetransferstrategy", "nearestqp")] = "edelweissfe.adaptivity.statetransfer:NearestQuadraturePointCopy"
 _BUILTINS[("statetransferstrategy", "projection")] = "edelweissfe.adaptivity.statetransfer:PolynomialProjection"
