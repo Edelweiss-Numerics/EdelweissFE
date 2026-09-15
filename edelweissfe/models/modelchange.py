@@ -81,11 +81,17 @@ class ModelChange:
     changedNodeSets: set = field(default_factory=set)
     changedElementSets: set = field(default_factory=set)
     changedSurfaces: set = field(default_factory=set)
+    #: Existing (neither added nor removed) node labels whose coordinates changed -- e.g. a
+    #: geometry-snap modifier projecting newly-created AMR boundary nodes onto an analytical
+    #: surface. Deliberately separate from ``addedNodes``: a moved node is not new.
+    movedNodes: set = field(default_factory=set)
 
     @property
     def geometryChanged(self) -> bool:
-        """True if any node or element was added or removed."""
-        return bool(self.addedNodes or self.removedNodes or self.addedElements or self.removedElements)
+        """True if any node or element was added, removed, or moved."""
+        return bool(
+            self.addedNodes or self.removedNodes or self.addedElements or self.removedElements or self.movedNodes
+        )
 
     @property
     def isEmpty(self) -> bool:
@@ -105,6 +111,7 @@ class ModelChange:
             or self.changedNodeSets
             or self.changedElementSets
             or self.changedSurfaces
+            or self.movedNodes
         )
 
     def touchesSurface(self, name: str) -> bool:
@@ -163,6 +170,7 @@ class ModelChange:
             changedNodeSets=self.changedNodeSets | other.changedNodeSets,
             changedElementSets=self.changedElementSets | other.changedElementSets,
             changedSurfaces=self.changedSurfaces | other.changedSurfaces,
+            movedNodes=(self.movedNodes | other.movedNodes) - transientNodes,
         )
 
 
