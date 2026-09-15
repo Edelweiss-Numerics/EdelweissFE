@@ -287,14 +287,23 @@ unconditionally. A new midside node has two modes, via ``midsideNodes``:
   chord representation elsewhere in the model (see the theory note in the module docstring for the
   chord-vs-arc argument).
 
-**Hanging nodes and mesh quality are never compromised.** A candidate node that is also an AMR
-hanging-node slave (:class:`~edelweissfe.constraints.hangingnode.Constraint`) is skipped rather than
-snapped -- moving it would break its own multi-point constraint -- and a journal warning names it.
-Before committing a round, every affected element's minimum corner Jacobian determinant is checked
-before and after; if any element would invert or drop below ``qualityDropThreshold`` (default
-``0.5``) of its pre-snap value, the *entire round's* snapping is skipped (nothing moves), though the
-boundary-face bookkeeping still advances so a later, better-conditioned refinement pass gets another
-chance.
+**Hanging nodes and mesh quality are never compromised -- and a skipped node is retried, not
+abandoned.** A candidate node that is also an AMR hanging-node slave
+(:class:`~edelweissfe.constraints.hangingnode.Constraint`) is skipped rather than snapped -- moving
+it would break its own multi-point constraint -- and a journal warning names it. Before committing a
+round, every affected element's minimum corner Jacobian determinant is checked before and after; if
+any element would invert or drop below ``qualityDropThreshold`` (default ``0.5``, must be in
+``(0, 1]``) of its pre-snap value, the *entire round's* snapping is skipped (nothing moves). Either
+way the skipped node stays in a modifier-private *pending* set and is reconsidered on every later
+round that changes anything: a hanging slave stops being one once its coarse neighbour is itself
+refined, and a quality veto can clear once local geometry changes.
+
+**Keeping AMR's own mirror in sync.** ``hAdaptivity`` keeps a private ``AdaptiveMesh`` mirror whose
+node coordinates are cached at the moment each element is created, and never re-read from the live
+model afterward. Without correcting that cache too, a LATER refinement of an element ``surfaceSnap``
+already snapped would silently subdivide from the stale, pre-snap geometry. ``surfaceSnap`` calls
+``HAdaptivityModelModifier.syncNodeCoordinates`` on every ``hAdaptivity`` instance in the model right
+after writing ``model.nodes``, closing this gap.
 
 .. pprint:: modelmodifier:surfacesnap
     :caption: Options:
@@ -305,16 +314,17 @@ chance.
               snapping the new boundary nodes with ``midsideNodes=curved``):
               ``testfiles/edelweiss-only/AMR_SurfaceSnap/test.inp``
 
-**Restart safety.** Which element faces lie on the tracked surface is decision-side state that must
-survive a checkpoint/resume exactly like ``hAdaptivity``'s own tracked node sets do. Rather than
-private Python state, it lives in a genuine, modifier-private :class:`~edelweissfe.sets.nodeset.
-NodeSet` that a restart rebuilds by *replaying* this modifier's own recorded decisions -- the same
-mechanism described below for ``hAdaptivity``, not a parallel one. Because a round can legitimately
-discover new boundary-face membership while moving zero node coordinates (every candidate a
-hanging-node collision, or vetoed by the quality safeguard), :class:`~edelweissfe.models.modelchange.
-ModelChange` carries a dedicated ``movedNodes`` field and :class:`~edelweissfe.models.
-modelchangeobserver.ModelChangeType` a ``GEOMETRY_CHANGE`` kind, so that a coordinate-only (or even
-a zero-coordinate, node-set-only) mutation is never mistaken for an empty, unrecorded one.
+**Restart safety.** Which element faces lie on the tracked surface, and which candidates are still
+pending a retry, is decision-side state that must survive a checkpoint/resume exactly like
+``hAdaptivity``'s own tracked node sets do. Rather than private Python state, both live in genuine,
+modifier-private :class:`~edelweissfe.sets.nodeset.NodeSet` instances that a restart rebuilds by
+*replaying* this modifier's own recorded decisions -- the same mechanism described below for
+``hAdaptivity``, not a parallel one. Because a round can legitimately discover new boundary-face
+membership (or resolve an earlier round's pending node) while moving zero node coordinates,
+:class:`~edelweissfe.models.modelchange.ModelChange` carries a dedicated ``movedNodes`` field and
+:class:`~edelweissfe.models.modelchangeobserver.ModelChangeType` a ``GEOMETRY_CHANGE`` kind, so that
+a coordinate-only (or even a zero-coordinate, node-set-only) mutation is never mistaken for an
+empty, unrecorded one.
 
 Restart / checkpointing
 ------------------------

@@ -436,6 +436,46 @@ class ModelModifier(ModelModifierBase):
 
         return self._refineElementNumbers
 
+    def syncNodeCoordinates(self, coordinatesByLabel: dict) -> None:
+        """Update this instance's own :class:`~edelweissfe.adaptivity.refinement.AdaptiveMesh`
+        mirror's cached node coordinates after an EXTERNAL mutation of ``model.nodes`` -- e.g. a
+        geometry-snap modifier (``edelweissfe.modelmodifiers.geometry.surfacesnap``) reprojecting
+        AMR-created boundary nodes onto an analytical surface.
+
+        Without this, the mirror silently keeps subdividing from its own pre-mutation coordinates:
+        ``AdaptiveMesh.refine`` calls ``Hex20Topology.subdivide(e["coords"], ...)``, where
+        ``e["coords"]`` was captured once, at the moment that element's own parent was refined --
+        never re-read from ``model.nodes`` afterward. A LATER refinement of an already-corrected
+        element would therefore generate its children from the geometry as it stood before the
+        correction, silently discarding it. This is a reactive fix, called from the correcting
+        modifier's own ``apply()`` (it has no way to reach into this mirror on its own); it does
+        nothing for a label this mirror does not track.
+
+        Parameters
+        ----------
+        coordinatesByLabel
+            Mapping of node label to its new coordinate. Only labels this mirror actually knows
+            about (its own registry, or the connectivity of one of its active elements) are
+            touched.
+        """
+
+        reg = self._mesh.registry
+        touched = set()
+        for label, coord in coordinatesByLabel.items():
+            if label in reg.coordinates:
+                reg.coordinates[label] = np.asarray(coord, dtype=float)
+                touched.add(label)
+        if not touched:
+            return
+        # `e["coords"]` is what `AdaptiveMesh.refine` actually subdivides from (see docstring
+        # above) -- resync every active leaf that owns one of the touched labels, not just the
+        # registry dict, or a later refine() would still use the stale per-element array.
+        for eid in self._mesh.active():
+            e = self._mesh.elements[eid]
+            if touched.isdisjoint(e["conn"]):
+                continue
+            e["coords"] = np.array([reg.coordinates[label] for label in e["conn"]])
+
     @property
     def actsOnlyAtSimulationStart(self) -> bool:
         """True exactly when every marker is an ``initialOnly`` one.

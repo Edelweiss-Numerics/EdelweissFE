@@ -136,6 +136,8 @@ class ModelChange:
         create-then-delete."""
         transientElements = self.addedElements & other.removedElements
         transientNodes = self.addedNodes & other.removedNodes
+        netAddedNodes = (self.addedNodes | other.addedNodes) - transientNodes
+        netRemovedNodes = (self.removedNodes | other.removedNodes) - transientNodes
 
         def substituteChildren(children):
             resolved = []
@@ -161,8 +163,8 @@ class ModelChange:
         return ModelChange(
             kind=other.kind,
             version=other.version,
-            addedNodes=(self.addedNodes | other.addedNodes) - transientNodes,
-            removedNodes=(self.removedNodes | other.removedNodes) - transientNodes,
+            addedNodes=netAddedNodes,
+            removedNodes=netRemovedNodes,
             addedElements=(self.addedElements | other.addedElements) - transientElements,
             removedElements=(self.removedElements | other.removedElements) - transientElements,
             parentToChildren=parentToChildren,
@@ -170,7 +172,11 @@ class ModelChange:
             changedNodeSets=self.changedNodeSets | other.changedNodeSets,
             changedElementSets=self.changedElementSets | other.changedElementSets,
             changedSurfaces=self.changedSurfaces | other.changedSurfaces,
-            movedNodes=(self.movedNodes | other.movedNodes) - transientNodes,
+            # A node net-added or net-removed within this merge window is not "existing", even if
+            # some change in the window also reported it as moved (e.g. a geometry-snap modifier
+            # moving a node an AMR modifier just created in the same round) -- movedNodes documents
+            # only existing nodes whose coordinates changed.
+            movedNodes=(self.movedNodes | other.movedNodes) - transientNodes - netAddedNodes - netRemovedNodes,
         )
 
 

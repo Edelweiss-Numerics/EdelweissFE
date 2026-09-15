@@ -37,22 +37,31 @@ modifier's :class:`~edelweissfe.models.modelchange.ModelChange` and snaps exactl
 created nodes on a tracked boundary onto a specified analytical surface (currently: a cylinder),
 leaving every pre-existing node untouched.
 
-See ``PLAN_BOREHOLE_GEOMETRY_SNAP.md`` (EdelweissFE repo root) for the full design rationale, the
-Phase 1 prototype that validated this approach against a real mesh, and open items.
+See the ``surfaceSnap`` section of :doc:`/documentation/modelmodifiers` for the full narrative
+(corner/midside modes, hanging-node and quality-safeguard behaviour, restart safety) and a runnable
+example.
 
-**Restart safety.** Which element faces are "on the tracked surface" is decision-side state that
-must survive a checkpoint/resume exactly like hAdaptivity's own tracked node sets do: by living in
-a genuine :class:`~edelweissfe.sets.nodeset.NodeSet` (:attr:`ModelModifier._wallSetName`, private
-to this modifier instance) that a restart rebuilds by REPLAYING this modifier's own recorded
-:class:`SnapPlan` history -- the same mechanism, not a parallel one. This is why
-:meth:`ModelModifier.apply` grows that node set (via ``model.nodeSets[...].add(...)``) for every
-newly-confirmed wall node, independent of whether that node's coordinates actually moved this
-round: a round can legitimately snap nothing (every candidate is a hanging-node collision, or the
-quality safeguard vetoed all of them) while still discovering real new wall-face membership that
-a LATER round needs to know about. Growing the tracked node set makes
+**Restart safety.** Which element faces are "on the tracked surface", and which candidate nodes
+are still waiting to be snapped, is decision-side state that must survive a checkpoint/resume
+exactly like hAdaptivity's own tracked node sets do: by living in two genuine
+:class:`~edelweissfe.sets.nodeset.NodeSet` instances (:attr:`ModelModifier._wallSetName` and
+:attr:`ModelModifier._pendingSetName`, both private to this modifier instance) that a restart
+rebuilds by REPLAYING this modifier's own recorded :class:`SnapPlan` history -- the same
+mechanism, not a parallel one. This is why :meth:`ModelModifier.apply` grows/shrinks those node
+sets independent of whether any node's coordinates actually moved this round: a round can
+legitimately snap nothing (every candidate is a hanging-node collision, or the quality safeguard
+vetoed all of them) while still discovering real new wall-face membership -- or resolving an
+earlier round's pending one -- that matters later. Touching either tracked set marks
 :class:`~edelweissfe.models.modelchange.ModelChange` non-empty (via ``changedNodeSets``) even when
 ``movedNodes`` is empty, so that round is always recorded and always replays -- no state is ever
 silently lost across a restart.
+
+**Retrying what a round could not snap.** A candidate that could not be snapped this round --
+because it was an AMR hanging-node slave, or because snapping it (or a sibling on the same round)
+would have dropped an affected element's quality below ``qualityDropThreshold`` -- is not
+abandoned: it stays in the pending set and is reconsidered on every later round that changes
+anything, since either condition can resolve (a hanging slave stops being one once its coarse
+neighbour is itself refined; a quality veto can clear once local geometry changes).
 """
 
 from dataclasses import dataclass
@@ -62,6 +71,9 @@ import numpy as np
 from edelweissfe.adaptivity.hex20topology import Hex20Topology
 from edelweissfe.constraints.hangingnode import Constraint as HangingNodeConstraint
 from edelweissfe.journal.journal import Journal
+from edelweissfe.modelmodifiers.adaptivity.hadaptivity import (
+    ModelModifier as HAdaptivityModelModifier,
+)
 from edelweissfe.modelmodifiers.base.modelmodifierbase import ModelModifierBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.modelchange import ModelChange
@@ -106,9 +118,10 @@ class SurfaceSnapSchema:
     qualityDropThreshold: float = schemaField(
         description=(
             "An affected element's minimum corner Jacobian determinant must stay above this "
-            "fraction of its pre-snap value (and stay positive), or the ENTIRE round's snap is "
-            "skipped (nothing is moved, but the boundary-face bookkeeping still advances so a "
-            "later refinement pass gets another chance)."
+            "fraction of its pre-snap value (and stay positive), or the ENTIRE round's snap for "
+            "that element's face is skipped this round (nothing is moved, but the boundary-face "
+            "bookkeeping still advances, and the skipped nodes are retried on a later round). Must "
+            "be in (0, 1]."
         ),
         dtype=float,
         default=0.5,
@@ -133,11 +146,21 @@ class SnapPlan:
     labels: tuple
     coords: tuple
     newWallNodes: tuple
+    #: candidates (new this round, or retried from a past round) that are still not snapped after
+    #: this round -- a hanging-node collision, or vetoed by the quality safeguard. Retried again on
+    #: a later round: a collision can resolve once its coarse neighbour is itself refined, and a
+    #: quality veto can resolve once the local geometry changes.
+    stillPendingLabels: tuple
+    #: previously-pending labels (from an earlier round) that got successfully snapped this round,
+    #: and so should be removed from the pending set.
+    resolvedPendingLabels: tuple
 
-    def __init__(self, labels, coords, newWallNodes):
+    def __init__(self, labels, coords, newWallNodes, stillPendingLabels=(), resolvedPendingLabels=()):
         object.__setattr__(self, "labels", tuple(int(label) for label in labels))
         object.__setattr__(self, "coords", tuple(tuple(float(x) for x in coord) for coord in coords))
         object.__setattr__(self, "newWallNodes", tuple(int(label) for label in newWallNodes))
+        object.__setattr__(self, "stillPendingLabels", tuple(int(label) for label in stillPendingLabels))
+        object.__setattr__(self, "resolvedPendingLabels", tuple(int(label) for label in resolvedPendingLabels))
 
 
 def _projectOntoCylinder(point, origin, axis, radius):
@@ -171,6 +194,13 @@ class ModelModifier(ModelModifierBase):
             )
         if options.nodeSet not in model.nodeSets:
             raise ValueError(f"surfaceSnap modifier {name!r}: node set {options.nodeSet!r} does not exist.")
+        if options.radius <= 0.0:
+            raise ValueError(f"surfaceSnap modifier {name!r}: 'radius' must be positive, got {options.radius!r}.")
+        if not (0.0 < options.qualityDropThreshold <= 1.0):
+            raise ValueError(
+                f"surfaceSnap modifier {name!r}: 'qualityDropThreshold' must be in (0, 1], got "
+                f"{options.qualityDropThreshold!r}."
+            )
 
         self._nodeSetName = options.nodeSet
         self._origin = np.array([options.originX, options.originY, options.originZ], dtype=float)
@@ -191,10 +221,26 @@ class ModelModifier(ModelModifierBase):
         # The tracked "known to lie exactly on the analytical surface" node set -- a genuine model
         # NodeSet, not private Python state, precisely so it is restart-replay-safe (see module
         # docstring). Private to this modifier instance: never referenced by a marker, BC, or any
-        # other consumer, so growing it has no side effect beyond this modifier's own bookkeeping.
+        # other consumer, so growing it has no side effect beyond this modifier's own bookkeeping --
+        # unless a user happens to already have a node set of this exact generated name, which is
+        # rejected rather than silently overwritten (it would otherwise invalidate anything that
+        # already holds that set, e.g. a BC or output).
         self._wallSetName = f"__surfaceSnap_{name}_wallNodes"
+        #: nodes topologically confirmed on the tracked wall but not yet successfully snapped (a
+        #: hanging-node collision or a quality-safeguard veto) -- retried every round something
+        #: changed, since either condition can resolve later (the collision once its coarse
+        #: neighbour is itself refined; the veto once local geometry changes).
+        self._pendingSetName = f"__surfaceSnap_{name}_pendingNodes"
+        for generatedSetName in (self._wallSetName, self._pendingSetName):
+            if generatedSetName in model.nodeSets:
+                raise ValueError(
+                    f"surfaceSnap modifier {name!r}: node set {generatedSetName!r} already exists, "
+                    "and this modifier needs that exact name for its own private bookkeeping. "
+                    "Rename the existing node set (or this modifier, via 'name=')."
+                )
         seedNodes = list(model.nodeSets[self._nodeSetName])
         model.nodeSets[self._wallSetName] = NodeSet(self._wallSetName, seedNodes)
+        model.nodeSets[self._pendingSetName] = NodeSet(self._pendingSetName, [])
 
         if not seedNodes:
             self._journal.message(
@@ -220,16 +266,40 @@ class ModelModifier(ModelModifierBase):
                     dets.append(np.linalg.det(np.asarray(coords).T @ dN))
         return min(dets)
 
+    def _anyElementContaining(self, model: FEModel, label: int):
+        """A HEX20 element currently containing node ``label`` as one of its own 20 nodes, or
+        ``None``. Used only to retry a PENDING (not freshly-discovered-this-round) candidate,
+        where classifying it (corner vs. midside, and a midside's edge endpoints) needs some
+        element's own connectivity -- any one works, since every HEX20 element shares the same
+        canonical local slot ordering. A linear scan of ``model.elements``: acceptable because the
+        pending set is expected to stay small (only genuine hanging-node collisions and
+        quality-vetoed candidates -- a small minority of a wall's own new nodes in practice), not
+        because it is cheap in the general case.
+        """
+        for el in model.elements.values():
+            if len(el.nodes) == 20 and any(n.label == label for n in el.nodes):
+                return el
+        return None
+
     def plan(self, model: FEModel, change: "ModelChange | None", step, timeStep: float) -> "SnapPlan | None":
-        """Find newly-created nodes on a tracked wall face and decide their snapped positions.
+        """Find newly-created nodes on a tracked wall face, plus any still-pending retries, and
+        decide their snapped positions.
 
         Read-only: computes the exact final coordinates to write (so :meth:`apply` needs no
         decision logic of its own), but does not mutate the model. See
         :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan`.
         """
 
-        if change is None or not change.faceMap or not change.addedNodes:
-            return None
+        if change is None:
+            return None  # nothing changed anywhere; a pending retry cannot have anything new to try
+
+        wallLabels = {n.label for n in model.nodeSets[self._wallSetName]}
+        pendingLabels = {n.label for n in model.nodeSets[self._pendingSetName]}
+
+        newWallNodes = set()  # every new node topologically on a wall face, snapped or not
+        candidateKind = {}  # label -> 'corner' | 'midside', for every candidate considered this round
+        elementOf = {}  # label -> an Element to classify/edge-lookup it against
+        affectedElements = set()  # elements whose quality must be checked before vs. after
 
         # Pass 1: every child face tiling a tracked wall face, and which of its 8 nodes are new.
         #
@@ -240,31 +310,49 @@ class ModelModifier(ModelModifierBase):
         # every child tiling it, is already a member of the tracked wall set -- reused corners and
         # some reused edge-midpoints always exist for a genuine HEX20 face subdivision, so this
         # never needs the parent itself.
-        wallLabels = {n.label for n in model.nodeSets[self._wallSetName]}
-        wallFaceEntries = []  # (childElement, faceSlots, newLabelsOnFace)
-        newWallNodes = set()  # every new node topologically on a wall face, snapped or not
-        for (parentLabel, faceID), childPairs in change.faceMap.items():
-            faceIdx = self._topology.faceid_to_face[faceID]
-            faceSlots = self._topology.faces[faceIdx]
-            childData = []  # (childElement, newOnFace)
-            reusedFaceLabels = set()
-            allChildrenExist = True
-            for childLabel, childFaceID in childPairs:
-                childEl = model.elements.get(childLabel)
-                if childEl is None:
-                    allChildrenExist = False
-                    break
-                faceLabels = {childEl.nodes[i].label for i in faceSlots}
-                reusedFaceLabels |= faceLabels - change.addedNodes
-                childData.append((childEl, faceLabels & change.addedNodes))
-            if not allChildrenExist or not reusedFaceLabels or not reusedFaceLabels <= wallLabels:
-                continue
-            for childEl, newOnFace in childData:
-                if newOnFace:
+        if change.faceMap and change.addedNodes:
+            for (parentLabel, faceID), childPairs in change.faceMap.items():
+                faceIdx = self._topology.faceid_to_face[faceID]
+                faceSlots = self._topology.faces[faceIdx]
+                childData = []  # (childElement, newOnFace)
+                reusedFaceLabels = set()
+                allChildrenExist = True
+                for childLabel, childFaceID in childPairs:
+                    childEl = model.elements.get(childLabel)
+                    if childEl is None:
+                        allChildrenExist = False
+                        break
+                    faceLabels = {childEl.nodes[i].label for i in faceSlots}
+                    reusedFaceLabels |= faceLabels - change.addedNodes
+                    childData.append((childEl, faceLabels & change.addedNodes))
+                if not allChildrenExist or not reusedFaceLabels or not reusedFaceLabels <= wallLabels:
+                    continue
+                for childEl, newOnFace in childData:
+                    if not newOnFace:
+                        continue
                     newWallNodes |= newOnFace
-                    wallFaceEntries.append((childEl, faceSlots, newOnFace))
+                    affectedElements.add(childEl)
+                    for i in faceSlots:
+                        label = childEl.nodes[i].label
+                        if label in newOnFace:
+                            candidateKind[label] = "corner" if i in self._cornerSlots else "midside"
+                            elementOf[label] = childEl
 
-        if not newWallNodes:
+        # Pass 1b: retry every label still pending from an earlier round -- a hanging-node
+        # collision may have stopped being one once its coarse neighbour was itself refined, or a
+        # quality-safeguard veto may resolve once local geometry changes.
+        for label in pendingLabels:
+            if label in candidateKind or label not in model.nodes:
+                continue
+            el = self._anyElementContaining(model, label)
+            if el is None:
+                continue
+            slot = next(i for i, n in enumerate(el.nodes) if n.label == label)
+            candidateKind[label] = "corner" if slot in self._cornerSlots else "midside"
+            elementOf[label] = el
+            affectedElements.add(el)
+
+        if not candidateKind:
             return None
 
         hangingSlaves = self._hangingSlaveLabels(model)
@@ -273,52 +361,40 @@ class ModelModifier(ModelModifierBase):
 
         # Pass 2: corners first (always radially projected, regardless of midside mode) -- later
         # midside computation in "straight" mode needs their resolved (post-snap) positions.
-        for childEl, faceSlots, newOnFace in wallFaceEntries:
-            for i in faceSlots:
-                if i not in self._cornerSlots:
-                    continue
-                label = childEl.nodes[i].label
-                if label not in newOnFace or label in labelsToCoord:
-                    continue
-                if label in hangingSlaves:
-                    collisions.add(label)
-                    continue
+        for label, kind in candidateKind.items():
+            if kind != "corner":
+                continue
+            if label in hangingSlaves:
+                collisions.add(label)
+                continue
+            labelsToCoord[label] = _projectOntoCylinder(
+                model.nodes[label].coordinates, self._origin, self._axis, self._radius
+            )
+
+        # Pass 3: midsides.
+        for label, kind in candidateKind.items():
+            if kind != "midside":
+                continue
+            if label in hangingSlaves:
+                collisions.add(label)
+                continue
+            if self._midsideMode == "curved":
                 labelsToCoord[label] = _projectOntoCylinder(
                     model.nodes[label].coordinates, self._origin, self._axis, self._radius
                 )
-
-        # Pass 3: midsides.
-        for childEl, faceSlots, newOnFace in wallFaceEntries:
-            edgeOf = None
-            for i in faceSlots:
-                if i in self._cornerSlots:
-                    continue
-                label = childEl.nodes[i].label
-                if label not in newOnFace or label in labelsToCoord:
-                    continue
-                if label in hangingSlaves:
-                    collisions.add(label)
-                    continue
-                if self._midsideMode == "curved":
-                    labelsToCoord[label] = _projectOntoCylinder(
-                        model.nodes[label].coordinates, self._origin, self._axis, self._radius
-                    )
-                else:
-                    if edgeOf is None:
-                        edgeOf = {
-                            childEl.nodes[im].label: (childEl.nodes[ia].label, childEl.nodes[ib].label)
-                            for ia, im, ib in self._topology.edges
-                        }
-                    a, b = edgeOf[label]
-                    coordA = labelsToCoord.get(a, model.nodes[a].coordinates)
-                    coordB = labelsToCoord.get(b, model.nodes[b].coordinates)
-                    labelsToCoord[label] = 0.5 * (np.asarray(coordA, dtype=float) + np.asarray(coordB, dtype=float))
+            else:
+                el = elementOf[label]
+                ia, ib = next((ia, ib) for ia, im, ib in self._topology.edges if el.nodes[im].label == label)
+                a, b = el.nodes[ia].label, el.nodes[ib].label
+                coordA = labelsToCoord.get(a, model.nodes[a].coordinates)
+                coordB = labelsToCoord.get(b, model.nodes[b].coordinates)
+                labelsToCoord[label] = 0.5 * (np.asarray(coordA, dtype=float) + np.asarray(coordB, dtype=float))
 
         if collisions:
             self._journal.message(
-                f"surfaceSnap modifier {self._name!r}: {len(collisions)} new boundary node(s) are "
-                f"also AMR hanging-node slaves and were NOT snapped (would break their MPC): "
-                f"{sorted(collisions)}",
+                f"surfaceSnap modifier {self._name!r}: {len(collisions)} boundary node(s) are also "
+                f"AMR hanging-node slaves and were NOT snapped (would break their MPC); retried on "
+                f"a later round: {sorted(collisions)}",
                 "surfaceSnap",
                 1,
             )
@@ -327,9 +403,10 @@ class ModelModifier(ModelModifierBase):
         # below qualityDropThreshold of its pre-snap value. All-or-nothing per round, not per
         # node: a partial snap could leave a midside straight-mode mean referencing a corner that
         # was itself rolled back, which is not worth the complexity for what Phase 1 measured to
-        # be a non-occurring case in practice. Either way, newWallNodes (topological membership)
-        # is unaffected -- these nodes ARE on the wall face regardless of whether they got moved.
-        affected = {childEl for childEl, _, newOnFace in wallFaceEntries if newOnFace & labelsToCoord.keys()}
+        # be a non-occurring case in practice. Either way, wall-face/pending membership is
+        # unaffected -- these nodes ARE on the wall face regardless of whether they got moved, and
+        # a veto is retried on a later round (see stillPendingLabels below).
+        affected = {el for el in affectedElements if set(n.label for n in el.nodes) & labelsToCoord.keys()}
         degraded = []
         for el in affected:
             before = self._minCornerJacobian([n.coordinates for n in el.nodes])
@@ -341,18 +418,27 @@ class ModelModifier(ModelModifierBase):
             self._journal.message(
                 f"surfaceSnap modifier {self._name!r}: {len(degraded)} affected element(s) would "
                 f"drop below the quality threshold -- skipping ALL snapping this round (boundary-"
-                f"face tracking still advances): {degraded}",
+                f"face tracking still advances, and the skipped node(s) are retried on a later "
+                f"round): {degraded}",
                 "surfaceSnap",
                 1,
             )
             labelsToCoord = {}
 
+        snappedLabels = set(labelsToCoord)
+        stillPendingLabels = set(candidateKind) - snappedLabels
+        resolvedPendingLabels = pendingLabels & snappedLabels
+
         return SnapPlan(
-            labels=list(labelsToCoord.keys()), coords=list(labelsToCoord.values()), newWallNodes=newWallNodes
+            labels=list(labelsToCoord.keys()),
+            coords=list(labelsToCoord.values()),
+            newWallNodes=newWallNodes,
+            stillPendingLabels=stillPendingLabels,
+            resolvedPendingLabels=resolvedPendingLabels,
         )
 
     def apply(self, model: FEModel, plan: "SnapPlan") -> ModelChange:
-        """Write the plan's coordinates and grow the tracked wall node set.
+        """Write the plan's coordinates and grow/shrink the two tracked node sets.
 
         Pure function of ``(model, plan)``: everything the decision depended on is already
         resolved in ``plan``. See
@@ -361,6 +447,16 @@ class ModelModifier(ModelModifierBase):
 
         for label, coord in zip(plan.labels, plan.coords):
             model.nodes[label].coordinates = np.array(coord, dtype=float)
+
+        if plan.labels:
+            # Every hAdaptivity instance keeps its own AdaptiveMesh mirror with node coordinates
+            # cached at refine time (see HAdaptivityModelModifier.syncNodeCoordinates's own
+            # docstring for why). Without this, a LATER refinement of an already-snapped element
+            # would silently subdivide from the pre-snap geometry, discarding this correction.
+            coordByLabel = dict(zip(plan.labels, plan.coords))
+            for modifier in model.modelModifiers.values():
+                if isinstance(modifier, HAdaptivityModelModifier):
+                    modifier.syncNodeCoordinates(coordByLabel)
 
         change = ModelChange(kind=ModelChangeType.GEOMETRY_CHANGE)
         change.movedNodes = set(plan.labels)
@@ -379,6 +475,14 @@ class ModelModifier(ModelModifierBase):
                 # (and therefore restart-replay) this round even when nothing moved.
                 change.changedNodeSets.add(self._wallSetName)
 
+        if plan.stillPendingLabels or plan.resolvedPendingLabels:
+            pendingSet = model.nodeSets[self._pendingSetName]
+            currentPending = {n.label for n in pendingSet}
+            newPending = (currentPending | set(plan.stillPendingLabels)) - set(plan.resolvedPendingLabels)
+            if newPending != currentPending:
+                pendingSet.replaceMembers([model.nodes[label] for label in sorted(newPending)])
+                change.changedNodeSets.add(self._pendingSetName)
+
         return change
 
     def encodePlan(self, plan: "SnapPlan") -> dict:
@@ -388,6 +492,8 @@ class ModelModifier(ModelModifierBase):
             "labels": np.array(plan.labels, dtype=int),
             "coords": np.array(plan.coords, dtype=float).reshape(-1, 3),
             "newWallNodes": np.array(plan.newWallNodes, dtype=int),
+            "stillPendingLabels": np.array(plan.stillPendingLabels, dtype=int),
+            "resolvedPendingLabels": np.array(plan.resolvedPendingLabels, dtype=int),
         }
 
     def decodePlan(self, data: dict) -> "SnapPlan":
@@ -397,4 +503,6 @@ class ModelModifier(ModelModifierBase):
             labels=[int(label) for label in data["labels"]],
             coords=[tuple(float(x) for x in row) for row in data["coords"]],
             newWallNodes=[int(label) for label in data["newWallNodes"]],
+            stillPendingLabels=[int(label) for label in data["stillPendingLabels"]],
+            resolvedPendingLabels=[int(label) for label in data["resolvedPendingLabels"]],
         )
