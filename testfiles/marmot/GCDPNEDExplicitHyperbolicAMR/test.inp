@@ -36,6 +36,11 @@ gen_all
 *solver, solver=NEDParallel, name=theSolver
 courant-number=0.1
 output-frequency=50
+** ASSERTED, not selected: the scheme is derived from the assembled inertia and damping, and this
+** line only stops the run if the derivation disagrees. It is the guard on the micro-inertia in the
+** material row above -- optional property 21, legitimately zero when absent -- whose omission would
+** silently return the non-local field to the parabolic scheme and change the answer.
+expect-second-order-fields="displacement, nonlocal damage"
 
 *modelModifier, type=hAdaptivity, name=amr
 >>marker, type=nodeSet, nSet=gen_right, initialOnly=True

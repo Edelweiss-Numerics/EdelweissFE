@@ -64,6 +64,11 @@ gen_all
 *solver, solver=NEDParallel, name=theSolver
 courant-number=0.1
 output-frequency=50
+** The counterpart of the hyperbolic decks' assertion, and the reason this one is worth stating:
+** the non-local field is first order here because the material provides NO micro-inertia, which is
+** exactly what an accidental omission also looks like. Asserting it pins which of the two this is.
+expect-second-order-fields="displacement"
+expect-first-order-fields="nonlocal damage"
 
 *modelModifier, type=hAdaptivity, name=amr
 >>marker, type=nodeSet, nSet=gen_right, initialOnly=True

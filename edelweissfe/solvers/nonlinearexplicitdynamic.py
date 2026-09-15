@@ -177,10 +177,15 @@ class NEDSchema:
 
     Every option here is a property of the ANALYSIS -- how far below the stability limit to run,
     how often to report, how often to let the mesh or a contact search change. Nothing here
-    describes the model: which fields exist, which time derivative each carries, and what its
+    *describes* the model: which fields exist, which time derivative each carries, and what its
     coefficient means are all read from the model and from
     :mod:`edelweissfe.config.phenomena`, never asked of the deck. See
     :meth:`NED._classifyFieldsByScheme`.
+
+    The two ``expect-*-fields`` options are the one apparent exception, and are not one: they
+    describe nothing and control nothing. They state what the deck's author believes the derivation
+    will produce, and :meth:`NED._checkDerivedSchemeAgainstTheDeck` stops the run if it does not.
+    Omitted -- as in every deck that predates them -- they assert nothing at all.
     """
 
     courantNumber: float | None = schemaField(
@@ -216,6 +221,28 @@ class NEDSchema:
         dtype=int,
         default=100,
         optionName="contact-update-frequency",
+    )
+    expectSecondOrderFields: list | None = schemaField(
+        description=(
+            "Fields the deck expects to be integrated SECOND order in time (central difference), "
+            "as a comma-separated list. An ASSERTION, not a control: the scheme is always derived "
+            "from the assembled inertia and damping, and this is compared against that derivation "
+            "afterwards, never consulted to decide anything. A named field that turns out first "
+            "order aborts the step. Optional; fields not named are not checked."
+        ),
+        dtype=str,
+        default=None,
+        optionName="expect-second-order-fields",
+    )
+    expectFirstOrderFields: list | None = schemaField(
+        description=(
+            "Fields the deck expects to be integrated FIRST order in time (forward Euler), as a "
+            "comma-separated list. The counterpart of expect-second-order-fields and checked the "
+            "same way. Optional; fields not named are not checked."
+        ),
+        dtype=str,
+        default=None,
+        optionName="expect-first-order-fields",
     )
     reportPerformance: bool = schemaField(
         description=(
@@ -300,6 +327,10 @@ class NED(NonlinearSolverBase):
         "contact-update-frequency": 100,
         "topology-check-frequency": 0,
         "report-performance": False,
+        # Lists, so _updateOptions comma-splits them. Empty means "assert nothing", which is what
+        # every deck that does not mention them gets.
+        "expect-second-order-fields": [],
+        "expect-first-order-fields": [],
     }
 
     def __init__(self, jobInfo, journal, **kwargs):
@@ -1474,6 +1505,8 @@ class NED(NonlinearSolverBase):
             verbosity,
         )
 
+        self._checkDerivedSchemeAgainstTheDeck()
+
         # Which second-order fields may be summed into a linear momentum and which into the energy
         # balance. The assembled inertia cannot say -- a density, a rotational inertia and a
         # micro-inertia are all just positive numbers -- and it is a fact about the field rather
@@ -1769,6 +1802,72 @@ class NED(NonlinearSolverBase):
         for fieldName in fieldNames:
             indices = np.r_[indices, self.theDofManager.idcsOfFieldsInDofVector[fieldName]]
         return indices
+
+    def _checkDerivedSchemeAgainstTheDeck(self):
+        """Compare the derived time-integration scheme against what the deck says it expects.
+
+        An ASSERTION, and deliberately nothing more. ``expect-second-order-fields`` and
+        ``expect-first-order-fields`` are never consulted to decide how a field is integrated --
+        :meth:`_classifyFieldsByScheme` has already done that from the assembled inertia and
+        damping, which remain the single source of truth. This only refuses to continue when the
+        two disagree.
+
+        The distinction matters, because the deck used to *declare* the scheme and that is what was
+        removed: a declaration can contradict the assembled operators, and the old one had a hole
+        through which a field named in neither list was silently never integrated at all. An
+        assertion cannot desynchronize from behaviour, because no behaviour reads it, and omitting
+        it means "do not check" rather than "integrate nothing".
+
+        What it buys is the one failure :meth:`_classifyFieldsByScheme` structurally cannot see. It
+        refuses a field split across its own degrees of freedom, and a field carrying neither
+        coefficient; it cannot refuse a field that is uniformly FIRST order when second order was
+        intended. Such a run completes and reports success with different physics. That is a
+        one-token slip: a non-local field is second order only if its material provides a
+        micro-inertia, which for GCDP is optional material property 21 and legitimately defaults to
+        zero, so forgetting it silently returns the field to the parabolic scheme -- whose own
+        stability limit nothing checks.
+
+        Raises
+        ------
+        ValueError
+            If a field named in either list was derived as the other scheme, or names a field the
+            model does not carry.
+        """
+        derived = {name: "second order" for name in self.secondOrderFields}
+        derived.update({name: "first order" for name in self.firstOrderFields})
+
+        for expected, declaredFields in (
+            ("second order", self.options["expect-second-order-fields"]),
+            ("first order", self.options["expect-first-order-fields"]),
+        ):
+            for fieldName in declaredFields:
+                if fieldName not in derived:
+                    raise ValueError(
+                        "The deck expects field '{:}' to be integrated {:}, but this model carries "
+                        "no such field. It carries: {:}.".format(
+                            fieldName, expected, ", ".join(sorted(derived)) or "(no field)"
+                        )
+                    )
+
+                if derived[fieldName] != expected:
+                    raise ValueError(
+                        "The deck expects field '{:}' to be integrated {:} in time, but it was "
+                        "assembled {:}, so that is how it would have been integrated. The scheme "
+                        "follows from the operators the elements report, never from this "
+                        "declaration -- which exists precisely so that this disagreement stops the "
+                        "run instead of quietly changing the answer.{:}".format(
+                            fieldName,
+                            expected,
+                            derived[fieldName],
+                            (
+                                " A non-local field is second order only if its material provides a "
+                                "micro-inertia; for GCDP that is optional material property 21, and "
+                                "leaving it off legitimately means zero."
+                                if expected == "second order"
+                                else ""
+                            ),
+                        )
+                    )
 
     def _classifyFieldsByScheme(self, inertia: DofVector, damping: DofVector) -> tuple[list[str], list[str]]:
         """Which fields are integrated second order in time and which first, read off the
