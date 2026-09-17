@@ -29,9 +29,49 @@ import itertools
 import os
 import sys
 import threading
+import warnings
+
+import edelweissfe
 
 _threadPools = {}
 _threadPoolsLock = threading.Lock()
+_affinityWarned = False
+
+
+def _restoreWorkerAffinity():
+    """Give a freshly spawned pool worker the CPU affinity the process started with.
+
+    A worker thread inherits the affinity mask of the thread that spawns it. With
+    ``OMP_PROC_BIND`` set, libgomp pins the initial thread to a single place as soon as it is
+    loaded, so every worker created after that runs on that one core and the free-threaded
+    element loop silently serialises -- measured on the anchor pry-out on LEO5: 21 of 32
+    workers confined to one physical core, the element phase 6x slower than unpinned. The
+    mask captured in :mod:`edelweissfe` at import predates any extension, so it is the
+    allocation the process was actually given (Slurm's cgroup included).
+    """
+    global _affinityWarned
+    initial = edelweissfe.initialCpuAffinity
+    if initial is None:
+        return
+    try:
+        current = os.sched_getaffinity(0)
+    except OSError:
+        return
+    if current == initial:
+        return
+    try:
+        os.sched_setaffinity(0, initial)
+    except OSError:
+        return
+    if not _affinityWarned:
+        _affinityWarned = True
+        warnings.warn(
+            "A worker thread inherited a CPU affinity of {:} cpus where the process started with "
+            "{:}; restored. This is what OMP_PROC_BIND/OMP_PLACES do to the initial thread once an "
+            "OpenMP runtime loads -- unset them for EdelweissFE runs.".format(len(current), len(initial)),
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
 
 def isFreeThreadingSupported() -> bool:
@@ -98,7 +138,9 @@ def getThreadPool(numThreads: int) -> concurrent.futures.ThreadPoolExecutor:
         with _threadPoolsLock:
             pool = _threadPools.get(numThreads)
             if pool is None:
-                pool = _threadPools[numThreads] = concurrent.futures.ThreadPoolExecutor(max_workers=numThreads)
+                pool = _threadPools[numThreads] = concurrent.futures.ThreadPoolExecutor(
+                    max_workers=numThreads, initializer=_restoreWorkerAffinity
+                )
 
     return pool
 
