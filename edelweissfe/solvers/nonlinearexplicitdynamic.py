@@ -382,6 +382,13 @@ class NED(NonlinearSolverBase):
         #: Per-constraint force buffer and scatter plan, by constraint name; see
         #: :meth:`assembleConstraintForces`. Cleared whenever the DofManager is rebuilt.
         self._constraintForcePlans = {}
+        #: The elements the per-increment loop actually evaluates -- those with kernels, so
+        #: without the contact facets; see :meth:`buildEquationSystem`, which is what fills this
+        #: in. None rather than an empty dict on purpose: an empty one is a legitimate state for
+        #: the cache above it, but here it would mean "evaluate no elements at all", and a run
+        #: that assembled no internal force would go on quietly producing wrong answers instead
+        #: of stopping.
+        self._kernelElements = None
 
     def _updateOptions(self, updatedOptions: dict, journal):
         """Update options of the solver using a string dict
@@ -816,7 +823,8 @@ class NED(NonlinearSolverBase):
                 - the new reaction vector
         """
 
-        elements = model.elements
+        # only the entities that have kernels to evaluate; see buildEquationSystem()
+        elements = self._kernelElements
         dirichlets = stepActions["dirichlet"].values()
         nodeforces = stepActions["nodeforces"].values()
         distributedLoads = stepActions["distributedload"].values()
@@ -1444,6 +1452,13 @@ class NED(NonlinearSolverBase):
         # (re)built: a refinement changes both a constraint's DOF count and where its DOFs sit, and
         # a stale plan would scatter forces to the wrong degrees of freedom silently.
         self._constraintForcePlans = {}
+
+        # The per-increment element loop calls every entry of this dict on every increment, so the
+        # entities that have no kernels to call -- contact facets -- are left out of it here, once
+        # per equation system rather than once per increment. Rebuilt together with the system, so
+        # a topology change that adds or removes elements is reflected; the element loop's gather
+        # plan is keyed on this dict's identity and follows it.
+        self._kernelElements = {number: element for number, element in model.elements.items() if element.hasKernels}
 
         # initialize mass and damping matrices
         M = self.theDofManager.constructDofVector()  # initialize lumped mass matrix

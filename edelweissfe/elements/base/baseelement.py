@@ -310,6 +310,23 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         """
         return np.zeros(self.nDof)
 
+    @property
+    def hasKernels(self) -> bool:
+        """Whether this entity contributes to the internal force and carries a state of its own.
+
+        Not every entity in the element container is a finite element. A contact facet is kept
+        there for its nodes and its geometry alone: it has no material and no state, and its
+        kernels, its internal energy and its state acceptance are all no-ops. A solver that
+        touches every element on every increment may leave those out instead of calling into
+        them for nothing.
+
+        Returns
+        -------
+        bool
+            True for a finite element proper, False for an entity that carries geometry only.
+        """
+        return True
+
     @abstractmethod
     def computeCriticalTimeStepForExplicitDynamics(
         self,

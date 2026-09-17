@@ -114,6 +114,11 @@ cdef class MarmotElementWrapper:
         return self._elNumber
 
     @property
+    def hasKernels(self):
+        """True: a Marmot element carries a material and a state; see BaseElement.hasKernels."""
+        return True
+
+    @property
     def nSpatialDimensions(self):
         return self._nSpatialDimensions
 
