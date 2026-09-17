@@ -129,6 +129,7 @@ from edelweissfe.config.phenomena import carriesKineticEnergy, carriesLinearMome
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
+from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
@@ -299,6 +300,31 @@ class ExplicitSystem:
     criticalTimeStep: float
 
 
+@dataclass
+class _ReusableExplicitOperators:
+    """The lumped operators of an explicit system, and the model they were assembled from.
+
+    A rebuild asked for by a constraint's connectivity re-assigns which nodes that constraint
+    couples, and touches nothing the lumped inertia, its inverse, the mass-proportional damping
+    rate or the multi-point-constraint transformation are a function of -- so those are exactly
+    what they were, and :meth:`NED.buildEquationSystem` keeps them here instead of assembling
+    them again.
+
+    The recorded model description is what :meth:`NED._operatorsReusable` checks before it does,
+    and anything that does not match makes it assemble from scratch instead.
+    """
+
+    elementKeys: frozenset
+    multiPointConstraintKeys: frozenset
+    nNodes: int
+    nScalarVariables: int
+    lumpedMass: np.ndarray
+    rawLumpedMass: np.ndarray
+    inverseLumpedMass: np.ndarray
+    dampingRate: np.ndarray
+    mpcTransformation: MultiPointConstraintTransformation | None
+
+
 class NED(NonlinearSolverBase):
     """This is the Nonlinear Explicit Dynamic -- solver.
 
@@ -389,6 +415,9 @@ class NED(NonlinearSolverBase):
         #: that assembled no internal force would go on quietly producing wrong answers instead
         #: of stopping.
         self._kernelElements = None
+        #: The lumped operators of the current equation system, kept across a rebuild that only a
+        #: constraint's connectivity asked for; see :class:`_ReusableExplicitOperators`.
+        self._reusableOperators = None
 
     def _updateOptions(self, updatedOptions: dict, journal):
         """Update options of the solver using a string dict
@@ -1392,6 +1421,89 @@ class NED(NonlinearSolverBase):
 
         return any([constraint.updateConnectivity(model) for constraint in self._dynamicConnectivityConstraints])
 
+    def _operatorsReusable(self, model: FEModel, stepActions: dict) -> bool:
+        """Whether the kept lumped operators still describe this model, so that a rebuild may keep
+        them and re-locate the constraints alone.
+
+        The operators are a function of the elements -- which carry the inertia and the damping --
+        of the multi-point constraints, and of the degree-of-freedom layout the two are indexed by.
+        A contact search changes none of those: it re-assigns which nodes a *constraint* couples,
+        which moves the constraints' own DOF footprints and nothing else. A topology change does
+        move them, and never reaches here: it passes no ``previous`` system and builds afresh.
+
+        The multi-point constraints are safe to keep for a structural reason rather than a
+        coincidental one, which is worth being explicit about. They are a separate hierarchy
+        (:class:`~edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase`)
+        with no connectivity-update protocol at all -- ``updateConnectivity`` belongs to
+        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase`, and only those
+        constraints are collected into ``_dynamicConnectivityConstraints`` and can ask for this
+        rebuild -- and the dependency records they produce are a function of the node DOF indices,
+        which a constraint refresh leaves untouched. Should a multi-point constraint ever gain a
+        connectivity of its own, that argument fails and the transformation would have to be
+        rebuilt here rather than kept.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        stepActions
+            The step's actions.
+
+        Returns
+        -------
+        bool
+            Whether the kept operators may be reused.
+        """
+
+        cache = self._reusableOperators
+        if cache is None:
+            return False
+
+        # The inertia and the damping are assembled from the materials, so a step action that
+        # changes a material property mid-step invalidates them.
+        if stepActions["changematerialproperty"]:
+            return False
+
+        return (
+            model.elements.keys() == cache.elementKeys
+            and model.multiPointConstraints.keys() == cache.multiPointConstraintKeys
+            and len(model.nodes) == cache.nNodes
+            and len(model.scalarVariables) == cache.nScalarVariables
+        )
+
+    def _restoreLumpedOperators(self) -> tuple[DofVector, DofVector]:
+        """Put the kept lumped operators back, into vectors carrying the refreshed entity mapping.
+
+        The numbers are the ones :meth:`_assembleLumpedOperators` produced when it last ran. What
+        that method additionally left on the solver -- which fields are first and which second
+        order, and the DOF index sets of each -- is not restored because it was never invalidated:
+        a constraint refresh leaves the fields and their indices exactly as they were, so those
+        attributes still describe this system.
+
+        Returns
+        -------
+        tuple[DofVector, DofVector]
+            The vector the increment divides by, and its inverse.
+        """
+
+        cache = self._reusableOperators
+
+        # The transformation is indexed by the DOF layout, which the refresh did not move.
+        assert cache.mpcTransformation is None or cache.mpcTransformation.nDof == self.theDofManager.nDof
+        self.mpcTransformation = cache.mpcTransformation
+
+        M = self.theDofManager.constructDofVector()
+        M[:] = cache.lumpedMass
+        Minv = self.theDofManager.constructDofVector()
+        Minv[:] = cache.inverseLumpedMass
+        self._rawLumpedMass = self.theDofManager.constructDofVector()
+        self._rawLumpedMass[:] = cache.rawLumpedMass
+        self._dampingRate = self.theDofManager.constructDofVector()
+        self._dampingRate[:] = cache.dampingRate
+        self._lumpedMass = M
+
+        return M, Minv
+
     def _assembleLumpedOperators(self, model: FEModel, step, verbosity: int) -> tuple[DofVector, DofVector]:
         """Assemble everything the explicit update divides by, and everything derived from it.
 
@@ -1568,7 +1680,9 @@ class NED(NonlinearSolverBase):
 
         Called once before the increment loop, and again from inside it whenever a constraint reports
         that its DOF footprint changed -- one method for both, so the path every model takes and the
-        path only a contact model takes cannot drift apart.
+        path only a contact model takes cannot drift apart. On that second path the DofManager is
+        refreshed rather than rebuilt and the lumped operators are kept; see
+        :meth:`_operatorsReusable`.
 
         Parameters
         ----------
@@ -1594,14 +1708,29 @@ class NED(NonlinearSolverBase):
         isRebuild = previous is not None
         verbosity = 2 if isRebuild else 0
 
-        self.journal.message("Creating monolithic equation system", self.identification, verbosity)
-        self.theDofManager = DofManager(
-            model.nodeFields.values(),
-            model.scalarVariables.values(),
-            model.elements.values(),
-            model.constraints.values(),
-            model.nodeSets.values(),
-        )
+        # A rebuild that only a constraint's connectivity asked for moves the constraints' DOF
+        # footprints and nothing else, so the DofManager is refreshed rather than rebuilt -- its
+        # node numbering, its element indices and its DOF count are what they were -- and the
+        # lumped operators are kept; see _operatorsReusable(). Anything else builds from scratch.
+        reuseOperators = isRebuild and self._operatorsReusable(model, step.actions)
+
+        if reuseOperators:
+            self.journal.message(
+                "Constraint connectivity changed: re-locating the constraints' degrees of freedom, "
+                "keeping the lumped operators",
+                self.identification,
+                verbosity,
+            )
+            self.theDofManager.refreshConstraintIndices(model.constraints.values())
+        else:
+            self.journal.message("Creating monolithic equation system", self.identification, verbosity)
+            self.theDofManager = DofManager(
+                model.nodeFields.values(),
+                model.scalarVariables.values(),
+                model.elements.values(),
+                model.constraints.values(),
+                model.nodeSets.values(),
+            )
         self.journal.message(
             "total size of eq. system: {:}".format(self.theDofManager.nDof),
             self.identification,
@@ -1615,12 +1744,27 @@ class NED(NonlinearSolverBase):
         # so far, applied as each block is constructed or re-declared; there is nothing to reset or
         # re-fetch here.
 
-        # The constraint force buffers and their index plans belong to the DofManager that was just
-        # (re)built: a refinement changes both a constraint's DOF count and where its DOFs sit, and
-        # a stale plan would scatter forces to the wrong degrees of freedom silently.
+        # The constraint force buffers and their index plans belong to the constraint indices that
+        # were just (re)located: a refinement or a contact search changes both a constraint's DOF
+        # count and where its DOFs sit, and a stale plan would scatter forces to the wrong degrees
+        # of freedom silently.
         self._constraintForcePlans = {}
 
-        M, Minv = self._assembleLumpedOperators(model, step, verbosity)
+        if reuseOperators:
+            M, Minv = self._restoreLumpedOperators()
+        else:
+            M, Minv = self._assembleLumpedOperators(model, step, verbosity)
+            self._reusableOperators = _ReusableExplicitOperators(
+                elementKeys=frozenset(model.elements.keys()),
+                multiPointConstraintKeys=frozenset(model.multiPointConstraints.keys()),
+                nNodes=len(model.nodes),
+                nScalarVariables=len(model.scalarVariables),
+                lumpedMass=np.array(M),
+                rawLumpedMass=np.array(self._rawLumpedMass),
+                inverseLumpedMass=np.array(Minv),
+                dampingRate=np.array(self._dampingRate),
+                mpcTransformation=self.mpcTransformation,
+            )
 
         U = self.theDofManager.constructDofVector()  # initialize displacement vector
         dU = self.theDofManager.constructDofVector()  # initialize displacement vector

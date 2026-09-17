@@ -150,6 +150,11 @@ class DofManager:
         )
         self.idcsOfHigherOrderEntitiesInDofVector = self.idcsOfElementsInDofVector | self.idcsOfConstraintsInDofVector
 
+        #: Which of the optional structures this manager carries, so that
+        #: :meth:`refreshConstraintIndices` keeps exactly those, and no others, consistent.
+        self._hasAccumulatedNodalFluxes = initializeAccumulatedNodalFluxesFieldwise
+        self._hasVIJPattern = initializeVIJPattern
+
         if initializeAccumulatedNodalFluxesFieldwise:
             self.nAccumulatedNodalFluxesFieldwise = self._computeAccumulatedNodalFluxesFieldWise(self.fields)
 
@@ -196,6 +201,48 @@ class DofManager:
         self.idcsOfFieldsOnNodeSetsInDofVector = self._locateFieldsOnNodeSetsInDofVector(nodeSets)
         self.idcsOfElementsInDofVector = self._locateNodeCouplingEntitiesInDofVector(elements)
         self.idcsOfConstraintsInDofVector = self._locateConstraintsInDofVector(constraints)
+
+    def refreshConstraintIndices(self, constraints: list):
+        """Re-locate the constraints' degrees of freedom after their connectivity changed.
+
+        A contact search re-assigns which nodes a constraint couples. That changes the constraints'
+        DOF footprints and nothing else: no node, field, scalar variable or element is touched, so
+        the DOF numbering and every element's indices stay valid, and only the constraint-derived
+        bookkeeping has to be recomputed -- by the same methods, in the same order, as the
+        constructor computed it. That is a small fraction of what constructing a DofManager for the
+        same model costs, and it is the whole reason this method exists rather than a second
+        constructor call.
+
+        This does NOT re-derive the degree-of-freedom layout itself: the node fields and the scalar
+        variables keep the indices they were given. A change that moves those -- a mesh refinement,
+        a constraint gaining a scalar variable of its own -- is not a connectivity change and needs
+        a new DofManager.
+
+        The merged entity mapping is rebuilt as a new dict object on purpose: consumers cache plans
+        keyed on its identity (the scatter template, the element loop's gather plan), and a mapping
+        mutated in place would leave those plans silently stale.
+
+        Parameters
+        ----------
+        constraints
+            The constraints, with their current connectivity.
+        """
+
+        (
+            self.accumulatedConstraintNDof,
+            self._accumulatedConstraintVIJSize,
+            self._nAccumulatedNodalFluxesFieldwiseFromConstraints,
+            self.largestNumberOfConstraintNDof,
+        ) = self._gatherConstraintsInformation(constraints)
+        self.idcsOfConstraintsInDofVector = self._locateConstraintsInDofVector(constraints)
+        self.idcsOfHigherOrderEntitiesInDofVector = self.idcsOfElementsInDofVector | self.idcsOfConstraintsInDofVector
+
+        if self._hasAccumulatedNodalFluxes:
+            self.nAccumulatedNodalFluxesFieldwise = self._computeAccumulatedNodalFluxesFieldWise(self.fields)
+
+        if self._hasVIJPattern:
+            self._sizeVIJ = self._accumulatedElementVIJSize + self._accumulatedConstraintVIJSize
+            self.I, self.J, self.idcsOfHigherOrderEntitiesInVIJ = self._initializeVIJPattern()
 
     def _reserveSpaceForNodeFields(
         self,
