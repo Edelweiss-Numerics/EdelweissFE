@@ -114,6 +114,11 @@ cdef class MarmotElementWrapper:
         return self._elNumber
 
     @property
+    def hasKernels(self):
+        """True: a Marmot element has kernels and a state; see BaseElement.hasKernels."""
+        return True
+
+    @property
     def nSpatialDimensions(self):
         return self._nSpatialDimensions
 
@@ -442,3 +447,50 @@ cdef class MarmotElementWrapper:
         VIJLocations = np.tile(idcs, (n, 1))
         I_[offset : offset + n**2] = VIJLocations.flatten()
         J_[offset : offset + n**2] = VIJLocations.flatten("F")
+
+
+def computeKernelsExplicitForChunk(elements,
+                                   double[::1] Pe,
+                                   const double[::1] U,
+                                   const double[::1] dU,
+                                   const long[::1] offsets,
+                                   double time,
+                                   double dTime):
+    """Evaluate the explicit kernels of a whole chunk of Marmot elements through raw pointers.
+
+    ``Pe``, ``U`` and ``dU`` are the chunk's contiguous buffers, ``offsets[i]:offsets[i+1]`` the
+    slice of element ``i`` in each of them. Same kernel calls on the same memory as the per-element
+    loop, so the result is bit-identical -- without the three numpy views, two bound-method calls
+    and the boxed scalars that loop paid per element, which is what stopped it scaling under free
+    threading. Every entry of ``elements`` must be a MarmotElementWrapper; a chunk holding anything
+    else raises TypeError, and the caller falls back to the per-element loop for it.
+
+    Returns the chunk's summed internal energy.
+    """
+    cdef Py_ssize_t i, n = len(elements)
+    cdef MarmotElementWrapper el
+    cdef Py_ssize_t b
+    cdef double psi = 0.0
+    cdef double energy = 0.0
+
+    if offsets.shape[0] != n + 1:
+        raise ValueError("offsets must hold one entry per element plus the end")
+    if offsets[n] > Pe.shape[0] or offsets[n] > U.shape[0] or offsets[n] > dU.shape[0]:
+        raise ValueError("chunk buffers are shorter than the offsets require")
+
+    for i in range(n):
+        el = <MarmotElementWrapper?> elements[i]
+        if not el._hasMaterial:
+            raise Exception("Element {:} has no material assigned!".format(el._elNumber))
+        b = offsets[i]
+        try:
+            with nogil:
+                el._initializeStateVarsTemp()
+                el.marmotElement.computeKernelsExplicit(&U[b], &dU[b], &Pe[b], time, dTime)
+        except (RuntimeError, ValueError) as e:
+            raise CutbackRequest(str(e), 0.5)
+        energy = 0.0
+        el.marmotElement.computeInternalEnergy(energy)
+        psi += energy
+
+    return psi

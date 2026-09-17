@@ -105,6 +105,18 @@ class ScatterDofVector(np.ndarray):
         self._global_indices = getattr(obj, "_global_indices", None)
         self._plainView = None
 
+    @property
+    def offsetMap(self) -> dict:
+        """The entity-to-``(offset, size)`` layout of this buffer, for callers that plan their
+        own slicing (the explicit element loop). Read-only by convention.
+
+        Returns
+        -------
+        dict
+            Entity to ``(offset, size)``.
+        """
+        return self._offset_map
+
     def __getitem__(self, key):
         """
         Returns a view into the contiguous scatter buffer.

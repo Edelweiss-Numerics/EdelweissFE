@@ -129,6 +129,11 @@ class ContactFacetElementBase(BaseElement):
         return self._fields
 
     @property
+    def hasKernels(self) -> bool:
+        # A facet carries no material and no state; see BaseElement.hasKernels.
+        return False
+
+    @property
     def dofIndicesPermutation(self) -> np.ndarray:
         return self._dofIndicesPermutation
 

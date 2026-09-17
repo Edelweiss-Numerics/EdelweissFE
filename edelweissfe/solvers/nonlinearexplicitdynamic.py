@@ -816,7 +816,7 @@ class NED(NonlinearSolverBase):
                 - the new reaction vector
         """
 
-        elements = model.elements
+        elements = self._kernelElements
         dirichlets = stepActions["dirichlet"].values()
         nodeforces = stepActions["nodeforces"].values()
         distributedLoads = stepActions["distributedload"].values()
@@ -1444,6 +1444,13 @@ class NED(NonlinearSolverBase):
         # (re)built: a refinement changes both a constraint's DOF count and where its DOFs sit, and
         # a stale plan would scatter forces to the wrong degrees of freedom silently.
         self._constraintForcePlans = {}
+
+        # The per-increment element loop calls every entry of this dict on every increment,
+        # so contact facets -- kernels, energy and state all no-ops -- are left out of it
+        # here, once per equation system. Rebuilt with the system, so a topology change that
+        # adds or removes elements is reflected; the gather plan in
+        # parallelelementcomputation is keyed on this dict's identity and follows it.
+        self._kernelElements = {number: element for number, element in model.elements.items() if element.hasKernels}
 
         # initialize mass and damping matrices
         M = self.theDofManager.constructDofVector()  # initialize lumped mass matrix

@@ -28,6 +28,8 @@
 #  ---------------------------------------------------------------------
 
 
+from typing import NamedTuple
+
 import numpy as np
 
 from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
@@ -38,6 +40,17 @@ from edelweissfe.numerics.parallelizationutilities import (
     isFreeThreadingSupported,
 )
 from edelweissfe.timesteppers.timestep import TimeStep
+
+# The Marmot element extension is optional (a pure-Python build has none); without it every
+# chunk takes the per-element path.
+try:
+    from edelweissfe.elements.marmotelement.element import (
+        MarmotElementWrapper,
+        computeKernelsExplicitForChunk,
+    )
+except ImportError:  # pragma: no cover - depends on the build
+    MarmotElementWrapper = None
+    computeKernelsExplicitForChunk = None
 
 
 def computeElementsInParallel(
@@ -108,26 +121,57 @@ def computeElementsInParallel(
     return P, K, F
 
 
-#: Single-entry cache of the per-chunk gather plan; see :func:`_chunkedGatherPlan`. One entry
-#: suffices because a solver works on one element set at a time, and holding a reference to the
-#: entity mapping it was built for keeps that mapping alive, so identity comparison against it is
-#: sound (a freed dict could otherwise have its id reused by a different one).
-_gatherPlanCache = None
+#: Chunks per worker thread for the explicit loop. Four was right when a chunk paid a Python call
+#: per element and the elements cost the same: fewer, larger chunks meant less overhead. With the
+#: kernels of a chunk in one Cython call the overhead per chunk is negligible, and the elements are
+#: NOT equally expensive -- return mapping at yielding and damaging quadrature points makes the
+#: elements at the damage front several times dearer than the elastic bulk, and they are spatially
+#: clustered, hence clustered in element order. Contiguous chunks of 420 elements were then so
+#: unequal that the map waited on its heaviest chunk (32 threads: 43 ms, flat from 16 threads on);
+#: 16 chunks per thread balance that dynamically through the executor queue (30 ms). Measured on the
+#: anchor pry-out at 53 605 elements; 32 made no further difference.
+_chunksPerThread = 16
 
 
-def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, chunkSize: int) -> list:
-    """Build, or reuse, the flat gather index plan for one chunking of the elements.
+class _PlannedChunk(NamedTuple):
+    """One chunk of the explicit element loop, with everything precomputed that does not change
+    between increments; see :func:`_chunkedPlan`."""
 
-    Each chunk gets the concatenation of its elements' DOF indices, plus the offsets at which
-    each element's slice begins, so a worker can gather the whole chunk with one fancy-index and
-    then hand out views.
+    elements: tuple
+    #: Concatenated global DOF indices of the chunk's elements; one fancy-index gathers the chunk.
+    flatIndices: np.ndarray
+    #: ``offsets[i]:offsets[i+1]`` is element ``i``'s slice of the gathered buffers.
+    offsets: np.ndarray
+    #: Start of the chunk's contiguous range in the scatter buffer, or None if its elements' slots
+    #: are not contiguous there (then each element's force is written to its own slot).
+    scatterStart: int | None
+    scatterEnd: int
+    #: Whether every element is a MarmotElementWrapper, so the chunk's kernels run in one Cython call.
+    allMarmot: bool
+
+
+#: Single-entry cache of the per-chunk plan; see :func:`_chunkedPlan`. One entry suffices because
+#: a solver works on one element set at a time, and holding references to the mappings it was
+#: built for keeps them alive, so identity comparison against them is sound (a freed dict could
+#: otherwise have its id reused by a different one).
+_planCache = None
+
+
+def _chunkedPlan(elements: dict, entitiesInDofVector: dict, scatterOffsetMap: dict, chunkSize: int) -> list:
+    """Build, or reuse, the plan of the explicit element loop for one chunking of the elements.
+
+    Each chunk gets the concatenation of its elements' DOF indices, the offsets at which each
+    element's slice begins, the range its elements occupy in the scatter buffer, and whether all of
+    them are Marmot elements -- so a worker gathers the whole chunk with one fancy-index, evaluates
+    all its kernels in one Cython call against a buffer of its own, and hands the result to the
+    scatter buffer in one slice assignment.
 
     The plan is only valid for the element set and DOF layout it was built from. h-adaptivity
     rebuilds the DofManager on every topology change, which produces a fresh
-    ``idcsOfHigherOrderEntitiesInDofVector`` dict, so identity of that mapping is what detects a
-    stale plan. The element count and chunk size are compared as well: those would catch a
-    rebuild that somehow preserved the mapping object, and a stale plan here would silently
-    gather the wrong degrees of freedom rather than fail.
+    ``idcsOfHigherOrderEntitiesInDofVector`` dict and a fresh scatter layout, so identity of those
+    mappings is what detects a stale plan. The element count, the element dict and the chunk size
+    are compared as well: those would catch a rebuild that somehow preserved the mapping objects,
+    and a stale plan here would silently gather the wrong degrees of freedom rather than fail.
 
     Parameters
     ----------
@@ -135,56 +179,99 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, chunkSize: int
         The elements to compute, in the order they will be chunked.
     entitiesInDofVector
         The entity-to-DOF-index mapping the plan is built against.
+    scatterOffsetMap
+        The entity-to-``(offset, size)`` mapping of the scatter buffer.
     chunkSize
         Number of elements per chunk.
 
     Returns
     -------
     list
-        One ``(chunkElements, flatIndices, offsets)`` tuple per chunk.
+        One :class:`_PlannedChunk` per chunk.
     """
 
-    global _gatherPlanCache
-
-    # Read the global ONCE. Checking the guard against the global and then returning the plan out
-    # of the global again is a time-of-check-to-time-of-use gap: with the GIL disabled, another
-    # thread reaching this function between the two can replace the entry, and the caller would be
-    # handed a plan that was never checked against its own elements -- the exact silent wrong-DOF
-    # failure the guard below exists to prevent. A tuple is replaced atomically, so one read is
-    # a consistent snapshot; the worst a race can then do is have both threads rebuild the plan.
-    cached = _gatherPlanCache
-
+    global _planCache
+    cached = _planCache
     if (
         cached is not None
         and cached[0] is entitiesInDofVector
-        and cached[1] == chunkSize
-        and cached[2] == len(elements)
-        # Keyed on the collection itself, not just its length: the plan stores the chunked
-        # ELEMENTS, so a second caller in the same increment passing a different but equal-length
-        # subset against the same DofManager would otherwise be handed a plan for the wrong
-        # elements with correctly shaped buffers -- the silent wrong-DOF failure this cache is
-        # documented to guard against. Only NEDParallel calls this today, always with
-        # model.elements, so this is latent rather than live.
+        and cached[1] is scatterOffsetMap
+        and cached[2] == chunkSize
+        and cached[3] == len(elements)
         and cached[4] is elements
     ):
-        return cached[3]
+        return cached[5]
 
     plan = []
     for chunk in chunked_iterable(elements.values(), chunkSize):
         indicesPerElement = [entitiesInDofVector[element] for element in chunk]
         offsets = np.zeros(len(chunk) + 1, dtype=np.intp)
         np.cumsum([len(indices) for indices in indicesPerElement], out=offsets[1:])
-        plan.append((chunk, np.concatenate(indicesPerElement), offsets))
 
-    _gatherPlanCache = (entitiesInDofVector, chunkSize, len(elements), plan, elements)
+        scatterStart = scatterOffsetMap[chunk[0]][0]
+        scatterEnd = scatterStart
+        contiguous = True
+        for element, indices in zip(chunk, indicesPerElement):
+            offset, size = scatterOffsetMap[element]
+            if offset != scatterEnd or size != len(indices):
+                contiguous = False
+                break
+            scatterEnd += size
+
+        allMarmot = computeKernelsExplicitForChunk is not None and all(
+            isinstance(element, MarmotElementWrapper) for element in chunk
+        )
+        plan.append(
+            _PlannedChunk(
+                chunk,
+                np.concatenate(indicesPerElement),
+                offsets,
+                scatterStart if contiguous else None,
+                scatterEnd,
+                allMarmot,
+            )
+        )
+
+    _planCache = (entitiesInDofVector, scatterOffsetMap, chunkSize, len(elements), elements, plan)
     return plan
 
 
 def computeElementsInParallelForExplicit(
     elements: dict, Un1: DofVector, dU: DofVector, P: DofVector, timeStep: TimeStep
 ) -> tuple[DofVector, float]:
+    """Evaluate the explicit element kernels across the available threads.
+
+    Every chunk of elements works on buffers of its own: the gathered solution and increment, and
+    the force buffer its elements write to, which is handed to the shared scatter buffer in one
+    slice assignment at the end. Nothing shared is touched per element -- the earlier per-element
+    views into the one shared scatter buffer, a Python ``__getitem__`` on a shared object each,
+    were what kept 32 threads from getting past a third of their throughput under free threading.
+    Where a chunk consists of Marmot elements, its kernels run in one Cython call through raw
+    pointers (:func:`~edelweissfe.elements.marmotelement.element.computeKernelsExplicitForChunk`);
+    any other chunk takes the per-element path. Both call the same kernels on the same memory, so
+    the forces are bit-identical to the per-element loop's.
+
+    Parameters
+    ----------
+    elements
+        The elements to compute.
+    Un1
+        The solution vector.
+    dU
+        The solution increment vector.
+    P
+        The internal force vector, assembled into.
+    timeStep
+        The time step.
+
+    Returns
+    -------
+    tuple[DofVector, float]
+        The assembled force vector and the summed internal energy.
+    """
 
     scatter_P = P.createScatterVector()
+    scatterPlain = scatter_P.view(np.ndarray)
     time = timeStep.totalTime
     dT = timeStep.timeIncrement
 
@@ -198,44 +285,53 @@ def computeElementsInParallelForExplicit(
             "gather plan cannot be used for both."
         )
 
-    # Plain ndarray aliases: the gather below indexes them directly, bypassing the DofVector
-    # entity lookup entirely for the hot path. Taken from the vector's own cached view rather than
-    # built here, so this shares the one alias every entity access already goes through.
     Un1_plain = Un1.asPlainArray()
     dU_plain = dU.asPlainArray()
 
-    def compute_chunk(plannedChunk) -> float:
-        chunkElements, flatIndices, offsets = plannedChunk
+    def compute_chunk(planned: _PlannedChunk) -> float:
+        gatheredU = Un1_plain[planned.flatIndices]
+        gatheredDU = dU_plain[planned.flatIndices]
+        offsets = planned.offsets
 
-        # One gather per chunk rather than two per element. The elements then take views into
-        # these buffers, which allocate nothing.
-        gatheredU = Un1_plain[flatIndices]
-        gatheredDU = dU_plain[flatIndices]
+        if planned.scatterStart is None:
+            # Slots not contiguous: each element writes into its own slot of the scatter buffer.
+            chunk_psi = 0.0
+            for position, element in enumerate(planned.elements):
+                begin = offsets[position]
+                end = offsets[position + 1]
+                element.computeKernelsExplicit(
+                    scatter_P[element], gatheredU[begin:end], gatheredDU[begin:end], time, dT
+                )
+                chunk_psi += element.computeInternalEnergy()
+            return chunk_psi
 
-        chunk_psi = 0.0
-        for position, element in enumerate(chunkElements):
-            begin = offsets[position]
-            end = offsets[position + 1]
-
-            element.computeKernelsExplicit(scatter_P[element], gatheredU[begin:end], gatheredDU[begin:end], time, dT)
-            chunk_psi += element.computeInternalEnergy()
-
+        Pe = np.zeros(planned.scatterEnd - planned.scatterStart)
+        if planned.allMarmot:
+            chunk_psi = computeKernelsExplicitForChunk(planned.elements, Pe, gatheredU, gatheredDU, offsets, time, dT)
+        else:
+            chunk_psi = 0.0
+            for position, element in enumerate(planned.elements):
+                begin = offsets[position]
+                end = offsets[position + 1]
+                element.computeKernelsExplicit(Pe[begin:end], gatheredU[begin:end], gatheredDU[begin:end], time, dT)
+                chunk_psi += element.computeInternalEnergy()
+        scatterPlain[planned.scatterStart : planned.scatterEnd] = Pe
         return chunk_psi
 
     numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
 
-    # Target ~1000 to 5000 elements per chunk depending on mesh size
-    chunk_size = max(1, len(elements) // (numThreads * 4)) if numThreads > 1 else min(len(elements), 4000)
-    plan = _chunkedGatherPlan(elements, Un1.entitiesInDofVector, chunk_size)
+    if numThreads > 1:
+        chunk_size = max(1, len(elements) // (numThreads * _chunksPerThread))
+    else:
+        chunk_size = min(len(elements), 4000)
+
+    plan = _chunkedPlan(elements, Un1.entitiesInDofVector, scatter_P.offsetMap, chunk_size)
 
     if numThreads == 1:
-        # avoid ThreadPoolExecutor/task dispatch overhead when there is nothing to parallelize
         psi_total = sum(compute_chunk(plannedChunk) for plannedChunk in plan)
     else:
         executor = getThreadPool(numThreads)
-        # map returns the chunk_psi from each worker
         psi_total = sum(executor.map(compute_chunk, plan))
 
     scatter_P.assembleInto(P)
-
     return P, psi_total

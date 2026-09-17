@@ -310,6 +310,23 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         """
         return np.zeros(self.nDof)
 
+    @property
+    def hasKernels(self) -> bool:
+        """Whether this element contributes to the internal force and carries a state at all.
+
+        False for entities that live in the element container for their nodes and geometry
+        alone -- contact facets -- whose kernels, energy and state acceptance are no-ops. A
+        solver that calls every element on every increment may leave those out: on the anchor
+        pry-out 36 590 of 90 195 elements are facets, and an explicit increment paid a Python
+        call per facet for nothing.
+
+        Returns
+        -------
+        bool
+            True for a finite element proper.
+        """
+        return True
+
     @abstractmethod
     def computeCriticalTimeStepForExplicitDynamics(
         self,
