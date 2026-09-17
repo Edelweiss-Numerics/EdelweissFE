@@ -1724,12 +1724,17 @@ class NED(NonlinearSolverBase):
             self.theDofManager.refreshConstraintIndices(model.constraints.values())
         else:
             self.journal.message("Creating monolithic equation system", self.identification, verbosity)
+            # An explicit solver assembles no system matrix, so it never reads the sparsity (VIJ)
+            # pattern; and nothing at all reads the index-to-host-object map (see below). Each of
+            # them costs a pass over every element to build.
             self.theDofManager = DofManager(
                 model.nodeFields.values(),
                 model.scalarVariables.values(),
                 model.elements.values(),
                 model.constraints.values(),
                 model.nodeSets.values(),
+                initializeVIJPattern=False,
+                determiningIndexToHostObjectMapping=False,
             )
         self.journal.message(
             "total size of eq. system: {:}".format(self.theDofManager.nDof),

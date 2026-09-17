@@ -120,7 +120,15 @@ class DofManager:
         self.idcsOfNodeFieldsInDofVector = (
             dict()
         )  #: Dictionary mapping a complete NodeField to all its indices in the DofVector
-        self.indexToHostObjectMapping = dict()  #: Reverse dictionary mapping an index to its Host object (e.g., a Node)
+        #: Reverse dictionary mapping an index to its Host object (e.g., a Node).
+        #:
+        #: .. warning::
+        #:    Nothing in EdelweissFE reads this, and nothing calls :meth:`getHostObjectForIndex`
+        #:    either; building it costs a pass over every degree of freedom. It is kept, and
+        #:    still built by default, only because an external caller may rely on it -- but it
+        #:    should either find a consumer or be removed. The explicit solver already asks for
+        #:    it not to be built.
+        self.indexToHostObjectMapping = dict()
         self.accumulatedElementNDof = 0  #: Accumulated number of element DOFs (= sum of element vector sizes)
         self.largestNumberOfElNDof = 0  #: Size of the largest element DOF vector
         self.accumulatedConstraintNDof = 0  #: Accumulated number of constraint DOFs (= sum of constraint vector sizes)
