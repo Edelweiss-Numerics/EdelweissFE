@@ -115,19 +115,20 @@ def computeElementsInParallel(
 _gatherPlanCache = None
 
 
-def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, chunkSize: int) -> list:
+def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, scatterOffsetMap: dict, chunkSize: int) -> list:
     """Build, or reuse, the flat gather index plan for one chunking of the elements.
 
-    Each chunk gets the concatenation of its elements' DOF indices, plus the offsets at which
-    each element's slice begins, so a worker can gather the whole chunk with one fancy-index and
-    then hand out views.
+    Each chunk gets the concatenation of its elements' DOF indices, the offsets at which each
+    element's slice begins, and the positions its elements occupy in the scatter buffer -- so a
+    worker can gather the whole chunk with one fancy-index, hand out views into the gathered
+    buffers, and write the chunk's forces back with one fancy-index.
 
     The plan is only valid for the element set and DOF layout it was built from. h-adaptivity
     rebuilds the DofManager on every topology change, which produces a fresh
-    ``idcsOfHigherOrderEntitiesInDofVector`` dict, so identity of that mapping is what detects a
-    stale plan. The element count and chunk size are compared as well: those would catch a
-    rebuild that somehow preserved the mapping object, and a stale plan here would silently
-    gather the wrong degrees of freedom rather than fail.
+    ``idcsOfHigherOrderEntitiesInDofVector`` dict and a fresh scatter layout, so identity of those
+    mappings is what detects a stale plan. The element count and chunk size are compared as well:
+    those would catch a rebuild that somehow preserved the mapping objects, and a stale plan here
+    would silently gather the wrong degrees of freedom rather than fail.
 
     Parameters
     ----------
@@ -135,13 +136,15 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, chunkSize: int
         The elements to compute, in the order they will be chunked.
     entitiesInDofVector
         The entity-to-DOF-index mapping the plan is built against.
+    scatterOffsetMap
+        The entity-to-``(offset, size)`` layout of the scatter buffer the forces are written to.
     chunkSize
         Number of elements per chunk.
 
     Returns
     -------
     list
-        One ``(chunkElements, flatIndices, offsets)`` tuple per chunk.
+        One ``(chunkElements, flatIndices, offsets, scatterIndices)`` tuple per chunk.
     """
 
     global _gatherPlanCache
@@ -159,6 +162,9 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, chunkSize: int
         and cached[0] is entitiesInDofVector
         and cached[1] == chunkSize
         and cached[2] == len(elements)
+        # The scatter layout is rebuilt whenever the entity mapping is, but it is a separate
+        # object, and the plan stores positions into it -- so it is compared in its own right.
+        and cached[5] is scatterOffsetMap
         # Keyed on the collection itself, not just its length: the plan stores the chunked
         # ELEMENTS, so a second caller in the same increment passing a different but equal-length
         # subset against the same DofManager would otherwise be handed a plan for the wrong
@@ -174,15 +180,46 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, chunkSize: int
         indicesPerElement = [entitiesInDofVector[element] for element in chunk]
         offsets = np.zeros(len(chunk) + 1, dtype=np.intp)
         np.cumsum([len(indices) for indices in indicesPerElement], out=offsets[1:])
-        plan.append((chunk, np.concatenate(indicesPerElement), offsets))
 
-    _gatherPlanCache = (entitiesInDofVector, chunkSize, len(elements), plan, elements)
+        # Where this chunk's forces belong in the scatter buffer, laid out in the same order as
+        # the chunk's own force buffer -- so the write back is one indexed assignment.
+        scatterSlots = [scatterOffsetMap[element] for element in chunk]
+        scatterIndices = np.concatenate([np.arange(offset, offset + size) for offset, size in scatterSlots])
+
+        plan.append((chunk, np.concatenate(indicesPerElement), offsets, scatterIndices))
+
+    _gatherPlanCache = (entitiesInDofVector, chunkSize, len(elements), plan, elements, scatterOffsetMap)
     return plan
 
 
 def computeElementsInParallelForExplicit(
     elements: dict, Un1: DofVector, dU: DofVector, P: DofVector, timeStep: TimeStep
 ) -> tuple[DofVector, float]:
+    """Evaluate the explicit element kernels across the available threads.
+
+    Every chunk of elements works on buffers of its own: the gathered solution and increment, and
+    a force buffer its elements write into, which reaches the shared scatter buffer in one indexed
+    assignment once the chunk is done. Nothing shared is touched per element, which is what lets
+    the loop scale with the GIL disabled; see :func:`_chunkedGatherPlan`.
+
+    Parameters
+    ----------
+    elements
+        The elements to compute.
+    Un1
+        The solution vector.
+    dU
+        The solution increment vector.
+    P
+        The internal force vector, assembled into.
+    timeStep
+        The time step.
+
+    Returns
+    -------
+    tuple[DofVector, float]
+        The assembled internal force vector, and the summed internal energy.
+    """
 
     scatter_P = P.createScatterVector()
     time = timeStep.totalTime
@@ -205,20 +242,32 @@ def computeElementsInParallelForExplicit(
     dU_plain = dU.asPlainArray()
 
     def compute_chunk(plannedChunk) -> float:
-        chunkElements, flatIndices, offsets = plannedChunk
+        chunkElements, flatIndices, offsets, scatterIndices = plannedChunk
 
         # One gather per chunk rather than two per element. The elements then take views into
         # these buffers, which allocate nothing.
         gatheredU = Un1_plain[flatIndices]
         gatheredDU = dU_plain[flatIndices]
 
+        # The chunk's OWN force buffer, rather than a view into the scatter buffer per element.
+        # Taking that view is what stopped this loop from scaling once the GIL was gone: a view
+        # holds a reference to the buffer it looks into, and the scatter buffer is one object
+        # every thread looks into, so every element made all the cores take turns updating the
+        # single reference count in it. This buffer is reached by one thread only, and the shared
+        # one is written once per chunk instead of once per element.
+        Pe = np.zeros(offsets[-1])
+
         chunk_psi = 0.0
         for position, element in enumerate(chunkElements):
             begin = offsets[position]
             end = offsets[position + 1]
 
-            element.computeKernelsExplicit(scatter_P[element], gatheredU[begin:end], gatheredDU[begin:end], time, dT)
+            element.computeKernelsExplicit(Pe[begin:end], gatheredU[begin:end], gatheredDU[begin:end], time, dT)
             chunk_psi += element.computeInternalEnergy()
+
+        # Each element owns its slot in the scatter buffer and appears in exactly one chunk, so
+        # this assigns rather than accumulates -- as the per-element writes it replaces did.
+        scatter_P[scatterIndices] = Pe
 
         return chunk_psi
 
@@ -226,7 +275,7 @@ def computeElementsInParallelForExplicit(
 
     # Target ~1000 to 5000 elements per chunk depending on mesh size
     chunk_size = max(1, len(elements) // (numThreads * 4)) if numThreads > 1 else min(len(elements), 4000)
-    plan = _chunkedGatherPlan(elements, Un1.entitiesInDofVector, chunk_size)
+    plan = _chunkedGatherPlan(elements, Un1.entitiesInDofVector, scatter_P.offsetMap, chunk_size)
 
     if numThreads == 1:
         # avoid ThreadPoolExecutor/task dispatch overhead when there is nothing to parallelize

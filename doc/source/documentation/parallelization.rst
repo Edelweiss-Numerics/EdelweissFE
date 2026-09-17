@@ -40,3 +40,22 @@ those variables for the run:
 
     unset OMP_PROC_BIND OMP_PLACES
     OMP_NUM_THREADS=XX python edelweiss.py INPUT.inp
+
+Thread-local buffers in the element loop
+----------------------------------------
+
+On a free-threaded interpreter the element loop runs Python code on every core at once, and there
+the cost of *sharing* an object becomes visible: a numpy view keeps a reference to the buffer it
+looks into, so taking one view per element into a single buffer shared by all threads makes every
+core update the same reference count, and they end up passing that one cache line back and forth
+instead of computing. The loop looks parallel and does not scale.
+
+The explicit element loop therefore gives each chunk of elements buffers of its own -- the gathered
+solution and increment, and a force buffer the elements write into -- and places the finished chunk
+into the shared scatter buffer in a single indexed assignment. Per element, nothing shared is
+touched. The positions each chunk writes to are precomputed once, in
+:func:`~edelweissfe.solvers.base.parallelelementcomputation._chunkedGatherPlan`, and reused for as
+long as the mesh and the degree-of-freedom layout stay the same.
+
+This is worth keeping in mind when adding a parallel loop of your own: prefer giving each task its
+own buffer and merging once, over having every task write into one shared object as it goes.
