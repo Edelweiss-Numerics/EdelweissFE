@@ -73,6 +73,59 @@ def getNumberOfThreads() -> int:
     return max(1, num_workers)
 
 
+def getNumberOfAvailableCpus() -> int:
+    """Get the number of CPUs this process is actually permitted to run on.
+
+    This is not the machine's core count. A batch scheduler's cgroup, ``taskset``, and an OpenMP
+    runtime honouring ``OMP_PROC_BIND`` all narrow it -- the last of them at the moment it is
+    loaded, which in this framework is whenever the first compiled extension is imported.
+
+    Returns
+    -------
+    int
+        The number of CPUs available to this process, or 0 where the platform cannot report it.
+    """
+
+    try:
+        return len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):  # pragma: no cover - non-Linux
+        return 0
+
+
+def reportThreadAvailability(numThreads: int, journal, senderIdentification: str):
+    """Report how many threads will be used, and warn if the process cannot actually use them.
+
+    A pool of ``numThreads`` workers only runs on ``numThreads`` cores if the process is permitted
+    to use that many, and ``OMP_PROC_BIND``/``OMP_PLACES`` are the common reason for it not to be:
+    they make the OpenMP runtime pin the thread that loads it to a single place, and every thread
+    started afterwards -- the pool's workers included -- inherits that one-core mask. The element
+    loop is then serial in fact while still reporting the threads it asked for, and nothing fails,
+    so this is worth saying out loud rather than leaving to be discovered by measurement.
+
+    Parameters
+    ----------
+    numThreads
+        The number of threads the solver is about to use.
+    journal
+        The journal to report to.
+    senderIdentification
+        The name of the reporting solver.
+    """
+
+    journal.message("Using {:} threads".format(numThreads), senderIdentification)
+
+    availableCpus = getNumberOfAvailableCpus()
+    if availableCpus and availableCpus < numThreads:
+        journal.message(
+            "WARNING: this process is allowed to run on {:} CPUs, fewer than the {:} threads it "
+            "just asked for, so those threads will take turns on the same cores instead of running "
+            "side by side. If OMP_PROC_BIND or OMP_PLACES is set in the environment, unset them "
+            "for EdelweissFE: they pin this process to a single place as soon as an OpenMP runtime "
+            "is loaded, and every thread started after that inherits the pinning.".format(availableCpus, numThreads),
+            senderIdentification,
+        )
+
+
 def getThreadPool(numThreads: int) -> concurrent.futures.ThreadPoolExecutor:
     """Get a persistent thread pool with the requested number of worker threads.
 

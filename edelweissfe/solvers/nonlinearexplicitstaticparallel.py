@@ -31,7 +31,10 @@ Parallel implementation of the NEST solver.
 """
 
 import edelweissfe.utils.performancetiming as performancetiming
-from edelweissfe.numerics.parallelizationutilities import getNumberOfThreads
+from edelweissfe.numerics.parallelizationutilities import (
+    getNumberOfThreads,
+    reportThreadAvailability,
+)
 from edelweissfe.solvers.base.parallelelementcomputation import (
     computeElementsInParallel,
 )
@@ -43,7 +46,7 @@ class NESTParallel(NEST):
 
     def solveStep(self, step, model, fieldOutputController, outputmanagers):
 
-        self.journal.message("Using {:} threads".format(getNumberOfThreads()), self.identification)
+        reportThreadAvailability(getNumberOfThreads(), self.journal, self.identification)
         return super().solveStep(step, model, fieldOutputController, outputmanagers)
 
     @performancetiming.timeit("elements")
