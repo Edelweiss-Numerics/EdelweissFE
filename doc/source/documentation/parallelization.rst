@@ -59,3 +59,21 @@ long as the mesh and the degree-of-freedom layout stay the same.
 
 This is worth keeping in mind when adding a parallel loop of your own: prefer giving each task its
 own buffer and merging once, over having every task write into one shared object as it goes.
+
+Load balancing of the element loop
+----------------------------------
+
+The elements are handed to the threads in chunks. It is tempting to cut exactly one chunk per
+thread, which minimises the bookkeeping, but that is only right when every element costs the same
+-- and in a nonlinear analysis it does not. A quadrature point that is yielding or damaging pays
+for a return mapping that an elastic one does not, so the elements along a propagating front are
+several times more expensive than the bulk. Those elements are neighbours in the mesh and therefore
+neighbours in element order, so chunks cut from that order are systematically unequal, and a
+one-chunk-per-thread split makes the whole loop wait for whichever thread happened to draw the
+front.
+
+The element loop therefore cuts substantially more chunks than there are threads
+(:data:`~edelweissfe.solvers.base.parallelelementcomputation._chunksPerThread`) and lets the thread
+pool hand them out on demand: a thread that drew cheap elements comes back for more work rather
+than idling while a neighbour finishes. This costs one plan entry per chunk and nothing per
+element.

@@ -108,6 +108,13 @@ def computeElementsInParallel(
     return P, K, F
 
 
+#: How many chunks of elements each thread is handed in the explicit element loop, so that the
+#: executor can balance unequal chunks dynamically; see :func:`computeElementsInParallelForExplicit`.
+#: Raising it costs one plan entry and one buffer allocation per chunk, and buys finer balancing,
+#: so it pays until the chunks get small enough for that per-chunk cost to show.
+_chunksPerThread = 16
+
+
 #: Single-entry cache of the per-chunk gather plan; see :func:`_chunkedGatherPlan`. One entry
 #: suffices because a solver works on one element set at a time, and holding a reference to the
 #: entity mapping it was built for keeps that mapping alive, so identity comparison against it is
@@ -273,8 +280,17 @@ def computeElementsInParallelForExplicit(
 
     numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
 
-    # Target ~1000 to 5000 elements per chunk depending on mesh size
-    chunk_size = max(1, len(elements) // (numThreads * 4)) if numThreads > 1 else min(len(elements), 4000)
+    # Many small chunks per thread rather than one large one each, because the elements are not
+    # equally expensive: a quadrature point that is yielding or damaging pays for a return mapping
+    # that an elastic one does not, so the elements at a propagating front cost several times what
+    # the bulk costs. Those elements sit next to each other in the mesh, and therefore next to each
+    # other in element order, so chunks cut from that order are systematically unequal -- and with
+    # one chunk per thread the whole map waits for whichever thread drew the front. Handing the
+    # executor many more chunks than it has threads lets it even that out as it goes: a thread that
+    # drew cheap elements comes back for more work instead of idling.
+    chunk_size = (
+        max(1, len(elements) // (numThreads * _chunksPerThread)) if numThreads > 1 else min(len(elements), 4000)
+    )
     plan = _chunkedGatherPlan(elements, Un1.entitiesInDofVector, scatter_P.offsetMap, chunk_size)
 
     if numThreads == 1:
