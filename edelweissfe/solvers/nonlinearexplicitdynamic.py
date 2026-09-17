@@ -1392,58 +1392,30 @@ class NED(NonlinearSolverBase):
 
         return any([constraint.updateConnectivity(model) for constraint in self._dynamicConnectivityConstraints])
 
-    @performancetiming.timeit("build equation system")
-    def buildEquationSystem(self, model: FEModel, step, previous: ExplicitSystem = None) -> ExplicitSystem:
-        """Build the equation system and everything sized by it.
+    def _assembleLumpedOperators(self, model: FEModel, step, verbosity: int) -> tuple[DofVector, DofVector]:
+        """Assemble everything the explicit update divides by, and everything derived from it.
 
-        Called once before the increment loop, and again from inside it whenever a constraint reports
-        that its DOF footprint changed -- one method for both, so the path every model takes and the
-        path only a contact model takes cannot drift apart.
+        The lumped inertia and the lumped damping are summed from the elements, checked, and used
+        to decide which time derivative each field carries; the multi-point-constraint
+        transformation is built alongside them because it folds the slave degrees of freedom's
+        mass onto their masters. Beyond the two vectors returned, this leaves the derived
+        classification, the raw (unfolded) mass, the damping rate and the field index sets on the
+        solver.
 
         Parameters
         ----------
         model
             The model tree.
         step
-            The step being solved; its actions are needed to check the multi-point constraints
-            against the prescribed Dirichlet conditions.
-        previous
-            The system being replaced, when this is a rebuild rather than the initial build. Its
-            solution, velocity and force are carried over verbatim rather than re-read from the node
-            fields, which do not hold the velocity at all. A rebuild triggered by a constraint's
-            connectivity leaves the mesh -- hence the DOF layout -- untouched, and that is checked
-            rather than assumed: copying between two different layouts would mis-index every vector
-            silently.
+            The step, for the actions the multi-point-constraint transformation consults.
+        verbosity
+            The journal level to report at.
 
         Returns
         -------
-        ExplicitSystem
-            The freshly built system.
+        tuple[DofVector, DofVector]
+            The vector the increment divides by, and its inverse.
         """
-
-        isRebuild = previous is not None
-        verbosity = 2 if isRebuild else 0
-
-        self.journal.message("Creating monolithic equation system", self.identification, verbosity)
-        self.theDofManager = DofManager(
-            model.nodeFields.values(),
-            model.scalarVariables.values(),
-            model.elements.values(),
-            model.constraints.values(),
-            model.nodeSets.values(),
-        )
-        self.journal.message(
-            "total size of eq. system: {:}".format(self.theDofManager.nDof),
-            self.identification,
-            verbosity,
-        )
-
-        if not isRebuild:
-            self.journal.printSeperationLine()
-
-        # self.options already reflects every >>options, name=<this solver's name>, ... block applied
-        # so far, applied as each block is constructed or re-declared; there is nothing to reset or
-        # re-fetch here.
 
         self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
         self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
@@ -1463,11 +1435,6 @@ class NED(NonlinearSolverBase):
         # initialize mass and damping matrices
         M = self.theDofManager.constructDofVector()  # initialize lumped mass matrix
         Minv = self.theDofManager.constructDofVector()  # initialize inverse lumped mass matrix
-
-        U = self.theDofManager.constructDofVector()  # initialize displacement vector
-        dU = self.theDofManager.constructDofVector()  # initialize displacement vector
-        V = self.theDofManager.constructDofVector()  # initilize velocity vector
-        P = self.theDofManager.constructDofVector()  # initialize reaction vector
 
         M[:] = 0.0
         for el in model.elements.values():
@@ -1592,6 +1559,73 @@ class NED(NonlinearSolverBase):
 
         # kept (instead of 1/Minv) for the kinetic energy: slave DOFs have Minv = 0
         self._lumpedMass = M
+
+        return M, Minv
+
+    @performancetiming.timeit("build equation system")
+    def buildEquationSystem(self, model: FEModel, step, previous: ExplicitSystem = None) -> ExplicitSystem:
+        """Build the equation system and everything sized by it.
+
+        Called once before the increment loop, and again from inside it whenever a constraint reports
+        that its DOF footprint changed -- one method for both, so the path every model takes and the
+        path only a contact model takes cannot drift apart.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        step
+            The step being solved; its actions are needed to check the multi-point constraints
+            against the prescribed Dirichlet conditions.
+        previous
+            The system being replaced, when this is a rebuild rather than the initial build. Its
+            solution, velocity and force are carried over verbatim rather than re-read from the node
+            fields, which do not hold the velocity at all. A rebuild triggered by a constraint's
+            connectivity leaves the mesh -- hence the DOF layout -- untouched, and that is checked
+            rather than assumed: copying between two different layouts would mis-index every vector
+            silently.
+
+        Returns
+        -------
+        ExplicitSystem
+            The freshly built system.
+        """
+
+        isRebuild = previous is not None
+        verbosity = 2 if isRebuild else 0
+
+        self.journal.message("Creating monolithic equation system", self.identification, verbosity)
+        self.theDofManager = DofManager(
+            model.nodeFields.values(),
+            model.scalarVariables.values(),
+            model.elements.values(),
+            model.constraints.values(),
+            model.nodeSets.values(),
+        )
+        self.journal.message(
+            "total size of eq. system: {:}".format(self.theDofManager.nDof),
+            self.identification,
+            verbosity,
+        )
+
+        if not isRebuild:
+            self.journal.printSeperationLine()
+
+        # self.options already reflects every >>options, name=<this solver's name>, ... block applied
+        # so far, applied as each block is constructed or re-declared; there is nothing to reset or
+        # re-fetch here.
+
+        # The constraint force buffers and their index plans belong to the DofManager that was just
+        # (re)built: a refinement changes both a constraint's DOF count and where its DOFs sit, and
+        # a stale plan would scatter forces to the wrong degrees of freedom silently.
+        self._constraintForcePlans = {}
+
+        M, Minv = self._assembleLumpedOperators(model, step, verbosity)
+
+        U = self.theDofManager.constructDofVector()  # initialize displacement vector
+        dU = self.theDofManager.constructDofVector()  # initialize displacement vector
+        V = self.theDofManager.constructDofVector()  # initilize velocity vector
+        P = self.theDofManager.constructDofVector()  # initialize reaction vector
 
         if not isRebuild:
             for fieldName, field in model.nodeFields.items():
