@@ -28,25 +28,28 @@
 """
 A structured hex mesh generator for cylindrical geometries.
 
-The cross section (perpendicular to the y axis) is meshed as an O-grid: a
-square core block in the center, surrounded by ``nR`` concentric rings of
-quads that map the square's boundary radially outward onto the circle. This
-avoids triangles and a singular node on the axis, so the resulting quad mesh
-can be extruded into a fully hexahedral mesh. The core block's own
-subdivision is chosen automatically so its elements are similarly sized to
-the ring elements:
+The cylinder is extruded along one of the global coordinate axes, selected
+with ``axis`` (``x``, ``y`` or ``z``; ``y`` by default). The cross section
+(perpendicular to that axis) is meshed as an O-grid: a square core block in
+the center, surrounded by ``nR`` concentric rings of quads that map the
+square's boundary radially outward onto the circle. This avoids triangles
+and a singular node on the axis, so the resulting quad mesh can be extruded
+into a fully hexahedral mesh. The core block's own subdivision is chosen
+automatically so its elements are similarly sized to the ring elements:
 
 .. code-block:: console
 
 nSets, elSets, surface: 'name'_top, _bottom, _outer, _all are automatically
-generated. _top/_bottom refer to the two end faces (constant y), _outer to
-the lateral (mantle) surface at r=radius.
+generated. _top/_bottom refer to the two end faces (perpendicular to
+``axis``), _outer to the lateral (mantle) surface at r=radius.
 
 Additional nSets: 'name'_centerTop/_centerBottom, the single node on the
-cylinder's axis at each end face; 'name'_centerLineXTop/_centerLineXBottom
-and 'name'_centerLineZTop/_centerLineZBottom, the nodes on the two diametral
-lines parallel to the x and z axes, respectively, passing through the axis,
-on the top and bottom end faces only.
+cylinder's axis at each end face; and, for the two global axes spanning the
+cross section, 'name'_centerLine<A>Top/_centerLine<A>Bottom, the nodes on
+the diametral line parallel to axis <A> passing through the cylinder's axis,
+on the top and bottom end faces only. <A> is spelled in upper case, so the
+default ``axis=y`` yields _centerLineXTop/_centerLineXBottom and
+_centerLineZTop/_centerLineZBottom.
 
 Example
 -------
@@ -58,6 +61,21 @@ Generate meshes on the fly using the following syntax:
     *job, name=job, domain=3d, solver=NIST
 
     *modelGenerator, generator=cylinderGenerator, name=gen
+        radius  =5.0
+        lY      =10.0
+        nR      =4
+        nY      =8
+        elType  =C3D8
+
+Extruding along another axis only takes ``axis``; ``lY`` and ``nY`` keep
+their names but are then measured along that axis, and ``x0``/``y0``/``z0``
+still give the center of the bottom face:
+
+.. code-block:: edelweiss
+
+    *modelGenerator, generator=cylinderGenerator, name=gen
+        axis    =z
+        z0      =-10.0
         radius  =5.0
         lY      =10.0
         nR      =4
@@ -91,18 +109,46 @@ class CylinderGeneratorSchema:
     the schema remains constructible for the constructor's default argument.
     """
 
+    axis: str = schemaField(
+        description=(
+            "Global coordinate axis the cylinder is extruded along: 'x', 'y' or 'z'. The remaining two axes "
+            "span the cross section."
+        ),
+        dtype=str,
+        default="y",
+    )
+
     x0: float = schemaField(
-        description="Origin along the x axis (center of the cylinder's cross section).", dtype=float, default=0.0
+        description=(
+            "Origin along the x axis: the bottom face of the cylinder if axis='x', the center of its cross "
+            "section otherwise."
+        ),
+        dtype=float,
+        default=0.0,
     )
     y0: float = schemaField(
-        description="Origin along the y axis (bottom face of the cylinder).", dtype=float, default=0.0
+        description=(
+            "Origin along the y axis: the bottom face of the cylinder if axis='y', the center of its cross "
+            "section otherwise."
+        ),
+        dtype=float,
+        default=0.0,
     )
     z0: float = schemaField(
-        description="Origin along the z axis (center of the cylinder's cross section).", dtype=float, default=0.0
+        description=(
+            "Origin along the z axis: the bottom face of the cylinder if axis='z', the center of its cross "
+            "section otherwise."
+        ),
+        dtype=float,
+        default=0.0,
     )
 
     radius: float = schemaField(description="Radius of the cylinder.", dtype=float, default=1.0)
-    lY: float = schemaField(description="Height of the cylinder along the y axis.", dtype=float, default=1.0)
+    lY: float = schemaField(
+        description="Height of the cylinder, measured along ``axis`` (not necessarily the y axis).",
+        dtype=float,
+        default=1.0,
+    )
 
     nR: int = schemaField(
         description=(
@@ -113,7 +159,11 @@ class CylinderGeneratorSchema:
         dtype=int,
         default=4,
     )
-    nY: int = schemaField(description="Number of elements along the height (y axis).", dtype=int, default=4)
+    nY: int = schemaField(
+        description="Number of elements along the height, i.e., along ``axis`` (not necessarily the y axis).",
+        dtype=int,
+        default=4,
+    )
 
     coreFraction: float = schemaField(
         description="Half-width of the central square core block, as a fraction of the radius.",
@@ -131,6 +181,31 @@ class CylinderGeneratorSchema:
 
     elType: str | None = schemaField(description="Element type.", dtype=str, default=None, required=True)
     elProvider: str | None = schemaField(description="Element provider.", dtype=str, default=None)
+
+
+def _resolveAxis(axis):
+    """Resolve the extrusion axis into global component indices.
+
+    Returns the index of the extrusion axis, the indices of the two global axes spanning the
+    cross section (in ascending order, so the O-grid's local (u, v) coordinates map onto them),
+    and whether the in-plane quad winding has to be reversed.
+
+    The O-grid quads are counterclockwise in the local (u, v) plane, so their normal points along
+    ``e_u x e_v``. That coincides with the extrusion direction only when (u, v, axis) is a
+    right-handed triple, which for the ascending in-plane pairing holds for x (y,z) and z (x,y),
+    but not for y (x,z). In the latter case the winding is reversed so the element normal always
+    points from one layer to the next.
+    """
+    inPlaneAxes = {"x": (1, 2), "y": (0, 2), "z": (0, 1)}
+
+    axis = axis.strip().lower()
+    if axis not in inPlaneAxes:
+        raise Exception("axis must be one of 'x', 'y', 'z', got '{:}'.".format(axis))
+
+    iAxis = "xyz".index(axis)
+    iU, iV = inPlaneAxes[axis]
+
+    return iAxis, iU, iV, axis == "y"
 
 
 def _generateOGridMesh(radius, nCore, nRing, coreFraction):
@@ -299,9 +374,12 @@ class Generator(GeneratorBase):
             The options this generator accepts; ``elType`` is still required, see
             :class:`CylinderGeneratorSchema`.
         """
-        x0 = configuration.x0
-        y0 = configuration.y0
-        z0 = configuration.z0
+        iAxis, iU, iV, reverseWinding = _resolveAxis(configuration.axis)
+
+        # the origin's axial component locates the bottom face, the two in-plane ones the center
+        # of the cross section
+        origin = np.array([configuration.x0, configuration.y0, configuration.z0])
+        axisNames = "XYZ"
 
         radius = configuration.radius
         lY = configuration.lY
@@ -371,13 +449,14 @@ class Generator(GeneratorBase):
             isOuter2D[quads2D[outerQuadMask, 5]] = True
 
         # the mesh is exactly symmetric about both local axes (`nCore` is always even), so the two
-        # diametral lines through the center, parallel to the x and z axes, consist of nodes with
-        # local Z=0 and local X=0, respectively; their intersection is the single center node. Only
-        # needed on the top/bottom (always "full") layers, hence based on `nodes2D` only.
+        # diametral lines through the center, parallel to the global in-plane axes `iU` and `iV`,
+        # consist of nodes with local v=0 and local u=0, respectively; their intersection is the
+        # single center node. Only needed on the top/bottom (always "full") layers, hence based on
+        # `nodes2D` only.
         tol = radius * 1e-6
-        isCenterLineX2D = np.isclose(nodes2D[:, 1], 0.0, atol=tol)
-        isCenterLineZ2D = np.isclose(nodes2D[:, 0], 0.0, atol=tol)
-        isCenter2D = isCenterLineX2D & isCenterLineZ2D
+        isCenterLineU2D = np.isclose(nodes2D[:, 1], 0.0, atol=tol)
+        isCenterLineV2D = np.isclose(nodes2D[:, 0], 0.0, atol=tol)
+        isCenter2D = isCenterLineU2D & isCenterLineV2D
 
         currentNodeLabel = 1
         if model.nodes:
@@ -395,20 +474,44 @@ class Generator(GeneratorBase):
         nodesOuter = []
         nodesCenterBottom = []
         nodesCenterTop = []
-        nodesCenterLineXTop = []
-        nodesCenterLineXBottom = []
-        nodesCenterLineZTop = []
-        nodesCenterLineZBottom = []
+        nodesCenterLineUTop = []
+        nodesCenterLineUBottom = []
+        nodesCenterLineVTop = []
+        nodesCenterLineVBottom = []
+
+        def makeCoordinates(u, v, axial):
+            """Scatter the local (in-plane, axial) coordinates onto the global axes."""
+            coordinates = np.empty(3)
+            coordinates[iU] = origin[iU] + u
+            coordinates[iV] = origin[iV] + v
+            coordinates[iAxis] = axial
+            return coordinates
+
+        def windCorners(c0, c1, c2, c3):
+            """Order the four in-plane corners of a quad for the extruded hex element.
+
+            Two things have to hold at once. The element normal must point from one layer to the
+            next, which for the reversed case means flipping the in-plane order. And the quad's
+            outer edge -- always c1-c2, see the ring construction in `_generateOGridMesh` -- must
+            end up as the local edge 2-3, so that the outer surface is face S5 for either winding;
+            the non-reversed case therefore rotates rather than leaving the order untouched, which
+            preserves the orientation.
+            """
+            return (c0, c3, c2, c1) if reverseWinding else (c3, c0, c1, c2)
+
+        def windMidnodes(m01, m12, m23, m30):
+            """The mid-side nodes of the edges of :func:`windCorners`'s output, in the same order."""
+            return (m30, m23, m12, m01) if reverseWinding else (m30, m01, m12, m23)
 
         if order == 1:
             nNodesY = nY + 1
-            yLayers = np.linspace(y0, y0 + lY, nNodesY)
+            yLayers = np.linspace(origin[iAxis], origin[iAxis] + lY, nNodesY)
 
             layerNodes = []
             for iy in range(nNodesY):
                 layer = []
-                for X, Z in nodes2D:
-                    node = Node(currentNodeLabel, np.array([x0 + X, yLayers[iy], z0 + Z]))
+                for U, V in nodes2D:
+                    node = Node(currentNodeLabel, makeCoordinates(U, V, yLayers[iy]))
                     layer.append(node)
                     model.nodes[currentNodeLabel] = node
                     currentNodeLabel += 1
@@ -416,18 +519,18 @@ class Generator(GeneratorBase):
                 if iy == 0:
                     nodesBottom.extend(layer)
                     nodesCenterBottom.extend(n for n, isC in zip(layer, isCenter2D) if isC)
-                    nodesCenterLineXBottom.extend(n for n, isC in zip(layer, isCenterLineX2D) if isC)
-                    nodesCenterLineZBottom.extend(n for n, isC in zip(layer, isCenterLineZ2D) if isC)
+                    nodesCenterLineUBottom.extend(n for n, isC in zip(layer, isCenterLineU2D) if isC)
+                    nodesCenterLineVBottom.extend(n for n, isC in zip(layer, isCenterLineV2D) if isC)
                 if iy == nNodesY - 1:
                     nodesTop.extend(layer)
                     nodesCenterTop.extend(n for n, isC in zip(layer, isCenter2D) if isC)
-                    nodesCenterLineXTop.extend(n for n, isC in zip(layer, isCenterLineX2D) if isC)
-                    nodesCenterLineZTop.extend(n for n, isC in zip(layer, isCenterLineZ2D) if isC)
+                    nodesCenterLineUTop.extend(n for n, isC in zip(layer, isCenterLineU2D) if isC)
+                    nodesCenterLineVTop.extend(n for n, isC in zip(layer, isCenterLineV2D) if isC)
                 nodesOuter.extend(n for n, isOuter in zip(layer, isOuter2D) if isOuter)
 
             for iy in range(nY):
                 for iq, (c0, c1, c2, c3) in enumerate(quads2D):
-                    rc = (c0, c3, c2, c1)  # reverse in-plane order: normal then points from iy -> iy+1
+                    rc = windCorners(c0, c1, c2, c3)
                     nodeList = [layerNodes[iy][idx] for idx in rc] + [layerNodes[iy + 1][idx] for idx in rc]
 
                     newEl = elType(elTypeName, currentElementLabel)
@@ -447,16 +550,16 @@ class Generator(GeneratorBase):
 
         else:
             nNodesYTotal = 2 * nY + 1
-            yLayers = np.linspace(y0, y0 + lY, nNodesYTotal)
+            yLayers = np.linspace(origin[iAxis], origin[iAxis] + lY, nNodesYTotal)
 
             layerNodes = []
             for t in range(nNodesYTotal):
                 fullLayer = t % 2 == 0
-                coordsXZ = nodes2D if fullLayer else nodesLin
+                coordsUV = nodes2D if fullLayer else nodesLin
                 isOuter = isOuter2D if fullLayer else isOuterCorner2D
                 layer = []
-                for X, Z in coordsXZ:
-                    node = Node(currentNodeLabel, np.array([x0 + X, yLayers[t], z0 + Z]))
+                for U, V in coordsUV:
+                    node = Node(currentNodeLabel, makeCoordinates(U, V, yLayers[t]))
                     layer.append(node)
                     model.nodes[currentNodeLabel] = node
                     currentNodeLabel += 1
@@ -465,20 +568,21 @@ class Generator(GeneratorBase):
                     if t == 0:
                         nodesBottom.extend(layer)
                         nodesCenterBottom.extend(n for n, isC in zip(layer, isCenter2D) if isC)
-                        nodesCenterLineXBottom.extend(n for n, isC in zip(layer, isCenterLineX2D) if isC)
-                        nodesCenterLineZBottom.extend(n for n, isC in zip(layer, isCenterLineZ2D) if isC)
+                        nodesCenterLineUBottom.extend(n for n, isC in zip(layer, isCenterLineU2D) if isC)
+                        nodesCenterLineVBottom.extend(n for n, isC in zip(layer, isCenterLineV2D) if isC)
                     if t == nNodesYTotal - 1:
                         nodesTop.extend(layer)
                         nodesCenterTop.extend(n for n, isC in zip(layer, isCenter2D) if isC)
-                        nodesCenterLineXTop.extend(n for n, isC in zip(layer, isCenterLineX2D) if isC)
-                        nodesCenterLineZTop.extend(n for n, isC in zip(layer, isCenterLineZ2D) if isC)
+                        nodesCenterLineUTop.extend(n for n, isC in zip(layer, isCenterLineU2D) if isC)
+                        nodesCenterLineVTop.extend(n for n, isC in zip(layer, isCenterLineV2D) if isC)
                 nodesOuter.extend(n for n, isOut in zip(layer, isOuter) if isOut)
 
             for iy in range(nY):
                 tBottom, tMid, tTop = 2 * iy, 2 * iy + 1, 2 * iy + 2
                 for iq, (c0, c1, c2, c3, m01, m12, m23, m30) in enumerate(quads2D):
-                    rc = (c0, c3, c2, c1)
-                    rm = (m30, m23, m12, m01)  # mid-side nodes of edges (rc0-rc1, rc1-rc2, rc2-rc3, rc3-rc0)
+                    rc = windCorners(c0, c1, c2, c3)
+                    # mid-side nodes of edges (rc0-rc1, rc1-rc2, rc2-rc3, rc3-rc0)
+                    rm = windMidnodes(m01, m12, m23, m30)
 
                     bottomCorners = [layerNodes[tBottom][idx] for idx in rc]
                     topCorners = [layerNodes[tTop][idx] for idx in rc]
@@ -511,18 +615,16 @@ class Generator(GeneratorBase):
         model.nodeSets["{:}_outer".format(name)] = NodeSet("{:}_outer".format(name), nodesOuter)
         model.nodeSets["{:}_centerTop".format(name)] = NodeSet("{:}_centerTop".format(name), nodesCenterTop)
         model.nodeSets["{:}_centerBottom".format(name)] = NodeSet("{:}_centerBottom".format(name), nodesCenterBottom)
-        model.nodeSets["{:}_centerLineXTop".format(name)] = NodeSet(
-            "{:}_centerLineXTop".format(name), nodesCenterLineXTop
-        )
-        model.nodeSets["{:}_centerLineXBottom".format(name)] = NodeSet(
-            "{:}_centerLineXBottom".format(name), nodesCenterLineXBottom
-        )
-        model.nodeSets["{:}_centerLineZTop".format(name)] = NodeSet(
-            "{:}_centerLineZTop".format(name), nodesCenterLineZTop
-        )
-        model.nodeSets["{:}_centerLineZBottom".format(name)] = NodeSet(
-            "{:}_centerLineZBottom".format(name), nodesCenterLineZBottom
-        )
+        # the two diametral center lines are named after the global axis they are parallel to, so
+        # the default axis='y' keeps yielding _centerLineX* and _centerLineZ*
+        for axisIdx, nodesTopLine, nodesBottomLine in (
+            (iU, nodesCenterLineUTop, nodesCenterLineUBottom),
+            (iV, nodesCenterLineVTop, nodesCenterLineVBottom),
+        ):
+            setName = "{:}_centerLine{:}Top".format(name, axisNames[axisIdx])
+            model.nodeSets[setName] = NodeSet(setName, nodesTopLine)
+            setName = "{:}_centerLine{:}Bottom".format(name, axisNames[axisIdx])
+            model.nodeSets[setName] = NodeSet(setName, nodesBottomLine)
 
         # element sets
         model.elementSets["{:}_all".format(name)] = ElementSet("{:}_all".format(name), elements)
