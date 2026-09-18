@@ -218,6 +218,14 @@ class Constraint(ConstraintBase):
         # slave_i displacement (nDim) + RP displacement (nDim) + RP rotation (nRot).
         self._nUCoupledPerSlave = nDim + nDim + nRot
 
+        # Structural diagonal entries for the nodal displacement DOFs. The constraint itself never
+        # writes them (they stay zero), but they must exist in the sparsity pattern: the reference
+        # point carries no element, so its displacement DOFs would otherwise appear in off-diagonal
+        # coupling blocks only, and a Dirichlet BC on the RP -- which zeroes the row and writes 1.0
+        # on the diagonal *if that entry is stored* -- would leave an all-zero row and a singular
+        # system.
+        self._nDiagonalAnchors = nDim * (nSlaves + 1)
+
         self._reactions = np.zeros(self.nRot + self.nDim)
 
     @classmethod
@@ -261,10 +269,13 @@ class Constraint(ConstraintBase):
         transpose for K_LU.  Additionally there is one shared nRot × nRot block in K_UU
         for the reference-point rotation DOFs (accumulated over all slaves).
 
-        Total = nRot² + nSlaves × 2 × nUCoupledPerSlave × nDim
-              = 9    + nSlaves × 54  (in 3-D)
+        Finally, one structural diagonal entry per nodal displacement DOF (slaves and RP) is
+        appended, see ``_nDiagonalAnchors``.
+
+        Total = nRot² + nSlaves × 2 × nUCoupledPerSlave × nDim + nDim × (nSlaves + 1)
+              = 9    + nSlaves × 54 + 3 × (nSlaves + 1)  (in 3-D)
         """
-        return self.nRot**2 + len(self.slaveNodes) * 2 * self._nUCoupledPerSlave * self.nDim
+        return self.nRot**2 + len(self.slaveNodes) * 2 * self._nUCoupledPerSlave * self.nDim + self._nDiagonalAnchors
 
     def shapeVIJContribution(self, flat_view: np.ndarray) -> RigidBodyStiffnessView:
         """Shape the flat VIJ values slice for this constraint using RigidBodyStiffnessView."""
@@ -288,6 +299,8 @@ class Constraint(ConstraintBase):
             K_UL block: nUc rows (slave_s ∪ RP_u ∪ RP_phi) × nDim cols (Lambda_s)
           * [9 + s*2*nUc*nDim + nUc*nDim : 9 + (s+1)*2*nUc*nDim)
             K_LU block: nDim rows (Lambda_s) × nUc cols (slave_s ∪ RP_u ∪ RP_phi)
+        * trailing [.. : .. + nDim × (nSlaves + 1))
+          diagonal anchors for the nodal displacement DOFs (always zero-valued)
 
         where nUc = nDim + nDim + nRot = 9 (in 3-D).
         """
@@ -324,6 +337,13 @@ class Constraint(ConstraintBase):
                     I_[k] = idcs[L0_local + il]
                     J_[k] = idcs[indcsU_s[iu]]
                     k += 1
+
+        # Diagonal anchors for slave and RP displacement DOFs, so a Dirichlet BC can place its
+        # unit diagonal. The RP rotation diagonal is already covered by K_UU.
+        for i in range(self._nDiagonalAnchors):
+            I_[k] = idcs[i]
+            J_[k] = idcs[i]
+            k += 1
 
     def Rz_2D(self, phi, derivative):
         phi = phi + np.pi / 2 * derivative
