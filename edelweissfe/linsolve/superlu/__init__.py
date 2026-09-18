@@ -35,6 +35,25 @@ so unlike its siblings this one is always importable, which is also what makes i
 
 from collections.abc import Callable
 
+from edelweissfe.linsolve.base import LinearSolver
+
+
+class SuperLUSolver(LinearSolver):
+    """SciPy's SuperLU-backed direct solver. Callable as ``(A, b) -> x``.
+
+    Takes no options; ``setJournal``/``setFieldStructure`` are inherited no-ops (this solver has no
+    field-split structure and does not log).
+    """
+
+    def __call__(self, A, b):
+        # Imported inside the call, not at module scope: several linsolve backends are optional and
+        # genuinely absent in some installs, and `getDefaultLinSolver` relies on catching the
+        # resulting ImportError at construction time (see createSolver below). SciPy is not optional,
+        # but the convention is kept uniform across all factories.
+        from scipy.sparse.linalg import spsolve
+
+        return spsolve(A, b, use_umfpack=False)
+
 
 def createSolver(opts) -> Callable:
     """Create a SuperLU-backed linear solver.
@@ -52,12 +71,7 @@ def createSolver(opts) -> Callable:
     Returns
     -------
     Callable
-        A callable ``(A, b) -> x`` solving ``A x = b`` via
+        A :class:`SuperLUSolver`, callable as ``(A, b) -> x``, solving ``A x = b`` via
         :func:`scipy.sparse.linalg.spsolve` with ``use_umfpack=False``.
     """
-
-    # Imported inside the function body for consistency with the other linsolve factories, even
-    # though SciPy itself is not optional here.
-    from scipy.sparse.linalg import spsolve
-
-    return lambda A, b: spsolve(A, b, use_umfpack=False)
+    return SuperLUSolver()

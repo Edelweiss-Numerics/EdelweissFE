@@ -452,13 +452,19 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fil
         e.args = (f"Error during parsing of keyword {keywordIdentifier}{keyword}: " + e.args[0],)
         raise e
 
-    isDynamicOptionsKeyword = strCaseCmp(topLevelKeyword, "step") and strCaseCmp(keyword, "options")
+    isStepDynamicOptions = strCaseCmp(topLevelKeyword, "step") and strCaseCmp(keyword, "options")
+    isTypeDispatchedMarker = strCaseCmp(topLevelKeyword, "modelModifier") and strCaseCmp(keyword, "marker")
 
-    if isDynamicOptionsKeyword:
-        # This keyword's full option set depends on runtime information the parser does not have
-        # (see stepactions/options.py) -- only 'name' is enforced here; every other key is
-        # passed through raw for a later stage to validate against whatever it actually resolves to.
-        @caseInsensitiveRequiredArgsChecker(["name"])
+    if isStepDynamicOptions or isTypeDispatchedMarker:
+        # A discriminator-dispatched sub-keyword whose full option set the parser cannot know up
+        # front: '>>options' (its options depend on the step action it targets, see
+        # stepactions/options.py) and '>>marker' (its options depend on 'type', and are
+        # validated later against the selected marker's own schema in MarkerBase.fromOptions, via the
+        # 'marker' registry -- so no flat union of every marker's options has to live here). Only the
+        # discriminator is enforced at parse time; every other key is passed through raw.
+        discriminator = "name" if isStepDynamicOptions else "type"
+
+        @caseInsensitiveRequiredArgsChecker([discriminator])
         def checkKeywordInput(*args, **kwargs):
             """this is a dummy function needed to apply kwargsChecker"""
             return

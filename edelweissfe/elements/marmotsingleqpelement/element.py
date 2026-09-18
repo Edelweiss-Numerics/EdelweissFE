@@ -267,6 +267,18 @@ class MarmotMaterialWrappingElement(BaseElement):
     ):
         pass
 
+    def getStateVars(self) -> np.ndarray:
+        """Return a copy of the converged state-variable buffer."""
+
+        return self._stateVars.copy()
+
+    def setStateVars(self, values: np.ndarray):
+        """Overwrite the converged and trial state-variable buffers in place (so the
+        Marmot material wrapper's assigned pointer to the trial buffer stays valid)."""
+
+        self._stateVars[:] = values
+        self._stateVarsTemp[:] = values
+
     def getResultArray(self, result: str, quadraturePoint: int, getPersistentView: bool = True) -> np.ndarray:
         return self._marmotMaterialWrapper.getResultArray(result, getPersistentView)
 

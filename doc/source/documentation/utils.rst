@@ -12,11 +12,20 @@ Matrix assembly is a critical performance bottleneck in Finite Element simulatio
 
 EdelweissFE offers two generators to convert COO (Coordinate) format sparse matrices to CSR (Compressed Sparse Row) format efficiently without re-analysing the sparsity pattern:
 
-1. **Legacy Generator (``csrgenerator``)**: A Cython implementation utilizing a binary search algorithm for mapping.
-2. **High-Performance Generator (``csrgeneratorv2``)**: A parallelized C++ engine with OpenMP support, thread-safe memory layouts, cache friendliness, and vectorized operations.
+1. **Legacy Generator (``csrgenerator``)**: a plain, single-threaded Cython implementation using a
+   binary search for the COO-to-CSR mapping. Kept deliberately simple and short -- **not used by any
+   solver**, its purpose is teaching: reading it end to end is the fastest way to understand what the
+   high-performance generator below does, before its parallelism, memory-layout tricks and the direct
+   scatter-to-CSR alternative are layered on top.
+2. **High-Performance Generator (``csrgeneratorv2``)**: A parallelized C++ engine with OpenMP support, thread-safe memory layouts, cache friendliness, and vectorized operations. This is what every solver actually uses.
 
-Legacy Generator
-~~~~~~~~~~~~~~~~
+.. seealso::
+   :doc:`assembly` compares this stage-then-gather route against direct scatter-to-CSR assembly, which
+   avoids the staging array entirely -- relevant whenever the number of stored contributions greatly
+   exceeds the number of matrix entries, as it does for meshfree discretisations.
+
+Legacy Generator (teaching reference)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Module ``edelweissfe.numerics.csrgenerator``
 
@@ -88,4 +97,16 @@ Adaptive time stepping
 Module ``edelweissfe.timesteppers.adaptivetimestepper``
 
 .. autoclass:: edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper
+   :members:
+
+Parent element faces and facet quadrature
+-----------------------------------------
+
+The canonical face types behind the integrated contact formulation
+(:ref:`integrated-contact-algorithm`): the shape functions of a facet's *parent element face*, and
+the quadrature rules used to integrate against them over a flat contact facet.
+
+Module ``edelweissfe.utils.parentfacegeometry``
+
+.. automodule:: edelweissfe.utils.parentfacegeometry
    :members:

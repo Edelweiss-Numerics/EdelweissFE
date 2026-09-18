@@ -126,6 +126,13 @@ ordinary displacement DOFs of a deformable body's boundary nodes, used as the ma
 :doc:`node-to-deformable-surface contact <constraints>`. Not user-constructed directly -- see the
 :doc:`surfaceElementGenerator <generators>` generator.
 
+Because a facet has neither a material nor a state, its kernels, its internal energy and its state
+acceptance are all no-ops, and it reports ``hasKernels = False``. Solvers that would otherwise call
+into every entry of the element container on every increment -- the explicit dynamic solver does --
+use that to leave the facets out of the element loop rather than calling into them for nothing.
+An element of your own needs to do nothing here: :class:`~edelweissfe.elements.base.baseelement.BaseElement`
+reports ``True``, which is right for any element that carries a material.
+
 .. automodule:: edelweissfe.elements.contactsurfaceelement
     :members: __doc__
 

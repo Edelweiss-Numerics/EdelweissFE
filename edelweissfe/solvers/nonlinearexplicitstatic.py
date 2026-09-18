@@ -182,6 +182,17 @@ class NESTSchema:
     linsolverConfigFile: str | None = schemaField(
         description="A JSON configuration file for the linear solver.", dtype=str, default=""
     )
+    # Inherited behaviour, so it needs an entry here too: NEST reuses NIST.applyDirichletK, which
+    # reads this option, but replaces SolverSpecificOptions wholesale rather than extending it -- so
+    # an option missing from that list is a KeyError at solve time, not a silent default.
+    pruneCondensedMatrixZeros: bool | None = schemaField(
+        description=(
+            "Compact explicitly stored zeros out of the multi-point-constraint-condensed system "
+            "matrix before solving. See NISTSchema for the trade-off; default True."
+        ),
+        dtype=bool,
+        default=True,
+    )
 
 
 class NEST(NIST):
@@ -209,6 +220,7 @@ class NEST(NIST):
         "runge-kutta-error-control": "on",
         "linsolver": "pardiso",
         "linsolverConfigFile": "",
+        "pruneCondensedMatrixZeros": True,
     }
 
     def __init__(self, jobInfo, journal, **kwargs):
@@ -298,6 +310,14 @@ class NEST(NIST):
             with open(linsolverOptions, "r") as f:
                 linsolverOptionDict = json.load(f)
         self.linSolver = getLinSolverByName(self.options.get("linsolver", "default"), linsolverOptionDict)
+        # NEST solves a linear system per Runge-Kutta stage (see solveIncrement, via the inherited
+        # linearSolve()), so its linear solver needs the same initialization NIST gives its own:
+        # setJournal for solvers that log, and setModel for solvers that derive anything beyond the
+        # plain (A, b) call -- a field-split solver such as blockamg raises without the field
+        # structure setModel supplies. NEST's equation system is built once here rather than being
+        # rebuilt on connectivity changes, so one call at construction is enough.
+        self.linSolver.setJournal(self.journal)
+        self.linSolver.setModel(model, self.theDofManager)
 
         U = self.theDofManager.constructDofVector()
         P = self.theDofManager.constructDofVector()

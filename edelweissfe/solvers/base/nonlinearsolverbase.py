@@ -36,7 +36,10 @@ from scipy.sparse import csr_matrix
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
-from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
+from edelweissfe.numerics.mpctransformation import (
+    MultiPointConstraintTransformation,
+    _flattenChainedRecords,
+)
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import DivergingSolution
@@ -62,9 +65,12 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     #: (e.g. surface ties). Subclasses supporting MPCs must set this to True.
     supportsMPC = False
 
-    #: Whether this solver polls model.modelModifiers (e.g. h-adaptivity) every increment.
-    #: Subclasses that call modifier.updateModel(...) in their solveStep loop must set this
-    #: to True; without it, a modifier silently never runs and the model never adapts.
+    #: Whether this solver runs the topology update (e.g. h-adaptivity) at all. Subclasses that
+    #: call model.updateTopology(...) anywhere in solveStep must set this to True; without it, a
+    #: modifier silently never runs and the model never adapts. Setting it does not promise the
+    #: update runs every increment: a solver that runs it once, before its increment loop, sets this
+    #: and then refuses the modifiers that would need it later -- see
+    #: ModelModifierBase.actsOnlyAtSimulationStart and NED.validateModelCapabilities.
     supportsModelModifiers = False
 
     #: The active multi-point-constraint (hanging node / tie) condensation, if any -- None
@@ -91,9 +97,15 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 f"Multi-point constraints (e.g. surface ties) are not supported by the {self.identification} solver."
             )
 
-        if model.modelModifiers and not self.supportsModelModifiers:
+        # Only modifiers that can act on their own matter here. A purely reactive one (the implicit
+        # surface-facet retiling, which every *surface recipe brings along) cannot plan anything
+        # unless another modifier changed the mesh first, so it loses nothing in a solver that never
+        # runs the topology update -- and must not be the reason a model is refused.
+        selfStarting = sorted(name for name, m in model.modelModifiers.items() if m.initiatesTopologyChanges)
+        if selfStarting and not self.supportsModelModifiers:
             raise NotImplementedError(
-                f"Model modifiers (e.g. h-adaptivity) are not supported by the {self.identification} solver."
+                "The {:} solver does not run the topology update, so the model modifier(s) {:} "
+                "would never modify the model.".format(self.identification, ", ".join(selfStarting))
             )
 
     def _updateOptions(self, updatedOptions: dict, journal, strict: bool = False):
@@ -130,6 +142,33 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 self.options[canonicalKey] = str(v).strip().lower() in ("true", "1", "yes", "on")
             else:
                 self.options[canonicalKey] = type(defaultValue)(v)
+
+    def writeRestart(self, restartFile):
+        """Write solver state that a resumed run cannot reconstruct from the converged solution.
+
+        Called once per checkpoint by the restart output manager, alongside the model's and the
+        time stepper's own ``writeRestart``. Most solvers need nothing here: an implicit solver
+        rebuilds everything it uses from the solution it just converged. A no-op by default, so a
+        solver declares such state only when it actually carries some.
+
+        Parameters
+        ----------
+        restartFile
+            The open checkpoint to write to.
+        """
+
+    def readRestart(self, restartFile):
+        """Restore what :meth:`writeRestart` wrote.
+
+        Must tolerate a checkpoint that carries no state for this solver -- one written by a
+        different solver, or written before this solver carried any. A resumed run then behaves as
+        it did before the state was checkpointed, rather than failing.
+
+        Parameters
+        ----------
+        restartFile
+            The open checkpoint to read from.
+        """
 
     def applyOptionsOverride(self, fieldValues: dict) -> None:
         """Apply a partial override of this solver's own ``schema`` fields onto ``self.options``.
@@ -289,7 +328,33 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
             convergedAtAll = convergedAtAll and convergedCorrection and convergedFlux
 
-        self.journal.message(iterationMessage, self.identification)
+        # The width of the real fields' cells only, captured before the linear-solve cell (if any) is
+        # appended -- this is exactly how far a debug detail line below needs to be blank-padded to
+        # land in the "linear solve" column's own lane instead of sprawling across the whole row.
+        realFieldsWidth = len(iterationMessage)
+
+        summary = self.linSolver.lastSolveSummary if self.linSolver.reportsSolveSummary else None
+        if summary is not None and ddU is not None:
+            # ddU is None on the very first iteration of an increment (no linear solve has happened
+            # yet this increment) -- without this guard, the column would show a stale summary left
+            # over from the previous increment's last solve, which belongs to no residual on this row.
+            superscript = {0: "", 1: "¹", 2: "²", 3: "³"}.get(summary.retries, "")
+            itersPart = "{:}{:}".format(summary.iters, superscript)
+            iterationMessage += "{:<12}{:11.2e}{:1} ".format(
+                itersPart, summary.residual, "✓" if summary.residualMet else " "
+            )
+        elif summary is not None:
+            iterationMessage += " " * 25
+
+        self.journal.message(iterationMessage, self.identification, level=2)
+
+        if summary is not None and ddU is not None:
+            for line in summary.detailLines:
+                self.journal.message(
+                    " " * realFieldsWidth + "{:>25}".format(line),
+                    self.linSolver.identification,
+                    level=2,
+                )
 
         return convergedAtAll, nodesWithLargestResidual
 
@@ -551,7 +616,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         return perNodeDofs[:, dirichlet.components].flatten()
 
-    def buildMPCTransformation(self, model: FEModel):
+    def buildMPCTransformation(self, model: FEModel, stepActions: dict = None):
         """Collect the linear dependency records from all multi-point constraints of the model
         and assemble the master-slave condensation operator for the current equation system.
         Must be called whenever the DofManager is (re)built.
@@ -560,6 +625,10 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         ----------
         model
             The model tree.
+        stepActions
+            The step's actions, against which conflicting records are reconciled (see
+            :meth:`_reconcileMPCDirichletConflicts`). Without them the records are used exactly as
+            collected -- there is nothing to reconcile against.
 
         Returns
         -------
@@ -575,21 +644,192 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 f"Multi-point constraints (e.g. surface ties) are not supported by the {self.identification} solver."
             )
 
-        records = [
-            record
-            for mpc in model.multiPointConstraints.values()
-            for record in mpc.getMultiPointConstraints(self.theDofManager)
-        ]
+        records = self._collectMultiPointConstraintRecords(model)
 
-        transformation = MultiPointConstraintTransformation(records, self.theDofManager.nDof)
+        if stepActions is not None:
+            records = self._reconcileMPCDirichletConflicts(records, stepActions)
+
+        transformation = MultiPointConstraintTransformation(
+            records,
+            self.theDofManager.nDof,
+            useAmgclSpgemm=self.options.get("useAmgclMPCCondensation", False),
+        )
 
         self.journal.message(
             "eliminating {:} slave DOF(s) via multi-point constraints".format(transformation.nEliminatedDof),
             self.identification,
-            0,
+            2,
         )
 
         return transformation
+
+    def _prescribedDofValues(self, stepActions: dict) -> dict:
+        """``{globalDofIndex: prescribed increment}`` over **all** Dirichlet BCs of the step.
+
+        The union matters: a tie slave's masters routinely take the relevant component from a
+        different boundary condition than the slave does (a node can sit in both a symmetry set,
+        which prescribes one component, and an encastre set, which prescribes three). Evaluated
+        per-DOF rather than per-node for the same reason -- a BC need not prescribe every component.
+        """
+
+        prescribed = {}
+        for dirichlet in stepActions["dirichlet"].values():
+            if not dirichlet.active:
+                continue
+            # the node set may have been mutated in place since this BC was built -- adaptive
+            # refinement adding boundary nodes -- which resizes the DOF index array derived from it
+            # but not the cached prescribed values, until the BC is asked to catch up
+            dirichlet.reconcileIfSetChanged()
+            indices = np.asarray(self._constrainedDofsOf(dirichlet)).flatten()
+            values = np.asarray(dirichlet.delta).flatten()
+            if indices.shape != values.shape:
+                raise ValueError(
+                    "Dirichlet '{:}': {:} constrained DOF(s) but {:} prescribed value(s) -- the DOF "
+                    "index layout and the delta layout must agree node-by-node.".format(
+                        dirichlet.name, indices.size, values.size
+                    )
+                )
+            for index, value in zip(indices, values):
+                prescribed[int(index)] = float(value)
+        return prescribed
+
+    def _collectMultiPointConstraintRecords(self, model: FEModel) -> list:
+        """Collect every multi-point constraint's records, keeping one claim per slave DOF.
+
+        A DOF may be condensed out only once, so when several constraints ask for the same one, the
+        first in model order keeps it. That is an invariant of the condensation operator, not of any
+        constraint type -- resolving it here, where all records are in one place and every
+        constraint has finished refreshing, is what makes the outcome independent of the order in
+        which constraints happened to be *refreshed*.
+
+        **Model order therefore carries meaning**, and one case depends on it: a hanging node lying
+        on a tie's slave surface is claimed by both. The hanging-node constraint must win -- it has
+        no stand-in, whereas the tie's equation for that node is still delivered by the node's coarse
+        parents, which are themselves tie slaves. ``hAdaptivity`` registers its hanging-node
+        constraint at the FRONT of ``model.multiPointConstraints`` for exactly this reason, and
+        ``tests/test_mpc_slave_claim_arbitration.py`` pins it.
+        """
+
+        records = []
+        claimed = set()
+        dropped = {}
+
+        for name, mpc in model.multiPointConstraints.items():
+            for record in mpc.getMultiPointConstraints(self.theDofManager):
+                if record[0] in claimed:
+                    dropped[name] = dropped.get(name, 0) + 1
+                    continue
+                claimed.add(record[0])
+                records.append(record)
+
+        for name, count in dropped.items():
+            self.journal.message(
+                "{:} slave DOF(s) of '{:}' are already claimed by an earlier multi-point constraint "
+                "(e.g. hanging nodes); their redundant records were dropped".format(count, name),
+                self.identification,
+                2,
+            )
+
+        return records
+
+    def _reconcileMPCDirichletConflicts(self, records: list, stepActions: dict) -> list:
+        """Drop the multi-point-constraint records whose slave DOF is also Dirichlet-prescribed, so
+        the boundary condition takes precedence -- and report what was dropped.
+
+        A DOF cannot be both eliminated by a constraint and prescribed. The alternative -- rejecting
+        the model -- forces the user to subtract the constraint's slave nodes from the boundary
+        condition's node set by hand, offline: a snapshot that goes stale the moment the mesh, the
+        constraint tolerance or an adaptive refinement changes, and which additionally blocks the
+        propagation of that boundary condition to nodes created later, since refinement extends a
+        node set only where the whole parent face already lies within it. Resolving in favour of the
+        boundary condition is what Abaqus does with the same conflict.
+
+        Records are classified, not silently dropped:
+
+        * **redundant** -- the constraint equation already delivers the prescribed value (every
+          master with a non-negligible weight is itself prescribed, and the weighted sum matches).
+          Dropping it changes nothing; reported quietly.
+        * **overridden** -- it does not. Dropping it *does* change the model, so this is reported
+          loudly with the worst offender: it usually means the boundary condition's node set is
+          incomplete, or the constraint is not the one the user thought it was.
+
+        Masters are resolved transitively first (a master may itself be a slave), exactly as the
+        transformation does before it enforces anything.
+
+        Returns
+        -------
+        list
+          The records to keep.
+        """
+
+        prescribed = self._prescribedDofValues(stepActions)
+        if not prescribed:
+            return records
+
+        flattened = dict(_flattenChainedRecords(records))
+
+        dropped = set()
+        nRedundant = 0
+        overridden = []
+        for slaveDof, masters in flattened.items():
+            if slaveDof not in prescribed:
+                continue
+
+            target = prescribed[slaveDof]
+            # a scaled tolerance, never an exact comparison: clamped closest-point projections
+            # routinely leave round-off-scale weights that are not exactly 0.0
+            scale = max((abs(c) for _, c in masters), default=1.0)
+            totalWeight = 0.0
+            delivered = 0.0
+            unresolvedWeight = 0.0
+            for masterDof, coefficient in masters:
+                if abs(coefficient) <= 1e-12 * scale:
+                    continue
+                totalWeight += abs(coefficient)
+                if masterDof in prescribed:
+                    delivered += coefficient * prescribed[masterDof]
+                else:
+                    unresolvedWeight += abs(coefficient)
+
+            dropped.add(slaveDof)
+            if unresolvedWeight <= 1e-12 * scale and abs(delivered - target) <= 1e-12 * max(1.0, abs(target)):
+                nRedundant += 1
+            else:
+                weightFraction = unresolvedWeight / totalWeight if totalWeight > 0.0 else 1.0
+                overridden.append((slaveDof, weightFraction))
+
+        if not dropped:
+            return records
+
+        if nRedundant:
+            self.journal.message(
+                "reconciled {:} Dirichlet/constraint conflict(s) that were exactly redundant "
+                "(the constraint already delivered the prescribed value)".format(nRedundant),
+                self.identification,
+                2,
+            )
+        if overridden:
+            worstDof, worstWeight = max(overridden, key=lambda entry: entry[1])
+            # Rare and actionable, so this stays at level 0 (least indented -- the most visible spot
+            # in the log) and spells out the cause and the fix, unlike the routine messages above it.
+            self.journal.message(
+                "WARNING: {:} multi-point-constraint equation(s) conflicted with a Dirichlet boundary "
+                "condition and were dropped -- a DOF cannot be both eliminated by a constraint and "
+                "directly prescribed, so the boundary condition wins. This changes the model: those "
+                "DOFs now get exactly their prescribed value instead of whatever the constraint (e.g. "
+                "a tie or hanging-node link) would have computed for them. Worst case: DOF {:}, where "
+                "{:.3e} of its constraint weight depends on masters that are themselves NOT prescribed "
+                "-- meaning the constraint's own value would likely have differed. This usually means "
+                "the boundary condition's node set was built independently of the mesh's tie/hanging-"
+                "node topology and is missing some nodes -- check whether it should be extended, or "
+                "whether these DOFs should be excluded from the constraint.".format(
+                    len(overridden), worstDof, worstWeight
+                ),
+                self.identification,
+                0,
+            )
+
+        return [record for record in records if record[0] not in dropped]
 
     def checkMPCDirichletConflicts(self, transformation, stepActions):
         """Raise if any Dirichlet boundary condition of the step prescribes a DOF that is a slave
@@ -606,5 +846,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         if transformation is None:
             return
 
+        # A post-condition, not a gate: _reconcileMPCDirichletConflicts has already removed every
+        # conflicting record by the time the transformation is assembled, so this can only fire if
+        # that reconciliation missed one. Cheap enough to keep as a guard against exactly that.
         for dirichlet in stepActions["dirichlet"].values():
             transformation.checkDirichletConflicts(self._constrainedDofsOf(dirichlet))

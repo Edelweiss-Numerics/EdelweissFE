@@ -38,15 +38,15 @@ from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
-Acceptance test double for the "topological containers have stable identity" contract: caches a
-node set reference exactly the way an ordinary, AMR-unaware constraint would --
-``self._nodes = model.nodeSets[nSet]`` at construction, never re-fetched -- and implements neither
-:class:`~edelweissfe.models.modelchangeobserver.ModelChangeObserver` nor
-:class:`~edelweissfe.models.meshdependent.MeshDependent`. It contributes zero degrees of freedom
-and touches no field, so it never affects the converged solution; its only purpose is to raise if
-its cached node set ever fails to reflect a mid-run mesh refinement, which would mean AMR mutates
-a set in place rather than replacing it. It has no use outside test suites and is not intended as
-a template for an actual boundary condition.
+Acceptance test double for the "topological containers have stable identity" contract:
+caches a node set reference exactly the way an ordinary,
+AMR-unaware constraint would -- ``self._nodes = model.nodeSets[nSet]`` at construction, never
+re-fetched -- and implements no :class:`~edelweissfe.models.meshdependent.MeshDependent` hook.
+It contributes
+zero degrees of freedom and touches no field, so it never affects the converged solution; its only
+purpose is to raise if its cached node set ever fails to reflect a mid-run mesh refinement, which
+would mean AMR silently reintroduced replacing a set instead of mutating it in place. It has no use
+outside test suites and is not intended as a template for an actual boundary condition.
 """
 
 

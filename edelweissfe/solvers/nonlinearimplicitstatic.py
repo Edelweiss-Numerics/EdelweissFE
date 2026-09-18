@@ -110,6 +110,41 @@ class NISTSchema:
     linsolverConfigFile: str | None = schemaField(
         description="A JSON configuration file for the linear solver.", dtype=str, default=""
     )
+    pruneCondensedMatrixZeros: bool | None = schemaField(
+        description=(
+            "Compact explicitly stored zeros out of the multi-point-constraint-condensed system "
+            "matrix before solving (default True, the long-standing behaviour). Setting this False "
+            "keeps the pattern the assembly produced, which is what makes it stable enough across "
+            "Newton iterations for a linear solver to reuse a symbolic factorization -- pruning "
+            "removes whichever entries happen to be exactly zero this iteration, so the pattern "
+            "changes every iteration and reuse can never engage. Off by default because the pruning "
+            "was introduced deliberately: PARDISO's reordering is sensitive to the extra structural "
+            "entries on these path-dependent condensed systems, and keeping them has been observed "
+            "to drift from the converged reference path. Only set False together with a solver that "
+            "actually freezes its reordering, and verify the load path against a reference run."
+        ),
+        dtype=bool,
+        default=True,
+    )
+    useAmgclMPCCondensation: bool | None = schemaField(
+        description=(
+            "Condense the multi-point-constraint system matrix via the direct T^T K T + C "
+            "expression, but through AMGCL's own OpenMP-threaded product()/sum() "
+            "instead of SciPy's single-threaded CSR sparse routines. Offline-measured on a "
+            "reference 280k-dof model at ~2.4-2.6x faster than the direct SciPy expression, "
+            "correctness-verified to floating-point precision. Leaves ~1.6x more raw nnz than the "
+            "plain expression (AMGCL's product()/sum() do not prune exact-cancellation zeros the "
+            "way SciPy's do) -- not eliminated at the MPC-transform step itself, since "
+            "applyDirichletToStiffness already prunes immediately after, gated by the existing "
+            "pruneCondensedMatrixZeros option (default True), uniformly for both condensation "
+            "strategies; that gate exists precisely because PARDISO's reordering on these path-"
+            "dependent condensed systems is known to drift with unpruned explicit-zero structural "
+            "entries, and blockamg's hierarchy-reuse gates on raw nnz. Off by default pending a "
+            "live gate (offline-validated only so far)."
+        ),
+        dtype=bool,
+        default=False,
+    )
 
 
 class NIST(NonlinearSolverBase):
@@ -140,6 +175,8 @@ class NIST(NonlinearSolverBase):
         "equilibrateAfterModelChange": False,
         "linsolver": "pardiso",
         "linsolverConfigFile": "",
+        "pruneCondensedMatrixZeros": True,
+        "useAmgclMPCCondensation": False,
     }
 
     def __init__(self, jobInfo, journal, **kwargs):
@@ -191,6 +228,9 @@ class NIST(NonlinearSolverBase):
             if "linsolver" in self.options
             else getDefaultLinSolver()
         )
+        # Every registered linsolver inherits LinearSolver's setJournal() (a safe no-op-ish default for
+        # solvers that do not log), so this is unconditional -- no isinstance check needed.
+        self.linSolver.setJournal(self.journal)
 
         maxIter = step.maxIter
         criticalIter = step.criticalIter
@@ -218,18 +258,42 @@ class NIST(NonlinearSolverBase):
         try:
             for timeStep in step.getTimeStep():
                 # NOTE: materialize the list before any() -- a generator would short-circuit at
-                # the first modifier/constraint reporting a change, silently skipping
-                # updateModel()/updateConnectivity() for every remaining one (their state/connectivity
-                # would stay stale/empty).
-                modelHasChanged = any(
-                    [modifier.updateModel(model, step, timeStep) for modifier in model.modelModifiers.values()]
-                )
-                connectivityHasChanged = any(
-                    [constraint.updateConnectivity(model) for constraint in model.constraints.values()]
+                # the first modifier/constraint reporting a change.
+                # Phase 1: model modifiers, run to a fixed point inside a topology window.
+                modelHasChanged = model.updateTopology(step, timeStep)
+
+                # Phase 2: mesh-dependent consumers catch up, once, on the net change. Order is
+                # irrelevant here -- they are pure readers of a settled model.
+                #
+                # NO topology window here. Since facet regeneration moved into its own model
+                # modifier, nothing in this phase may create or delete an element -- and the closed
+                # window enforces that rather than asking for it. A consumer that tries now raises
+                # instead of quietly mutating behind the pipeline's back.
+                #
+                # materialise both: neither sweep may be short-circuited by the other
+                refreshed = model.refreshMeshDependents()
+                ticked = any([constraint.updateConnectivity(model) for constraint in model.constraints.values()])
+                connectivityHasChanged = refreshed or ticked
+
+                # One separator, marking the start of this increment's block. Everything about this
+                # increment -- an equation-system rebuild if one is needed, the MPC/Dirichlet
+                # diagnostics that come with it, the Newton table, all of it -- is printed after this
+                # single header, nested one level deeper (see the messages below), instead of being
+                # sandwiched between a second separator of its own.
+                self.journal.printSeperationLine()
+                self.journal.message(
+                    "increment {:}: {:8f}, {:8f}; time {:10f} to {:10f}".format(
+                        timeStep.number,
+                        timeStep.stepProgressIncrement,
+                        timeStep.stepProgress,
+                        timeStep.totalTime - timeStep.timeIncrement,
+                        timeStep.totalTime,
+                    ),
+                    self.identification,
+                    level=1,
                 )
 
                 if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
-                    self.journal.message("Creating monolithic equation system", self.identification, 0)
                     self.theDofManager = DofManager(
                         model.nodeFields.values(),
                         model.scalarVariables.values(),
@@ -237,13 +301,36 @@ class NIST(NonlinearSolverBase):
                         model.constraints.values(),
                         model.nodeSets.values(),
                     )
+                    # findDirichletIndices() keys its cache in part on self.theDofManager, so
+                    # entries from the discarded manager would otherwise keep it (and everything
+                    # it references) alive for the rest of the run.
+                    self._dirichletIndicesCache = None
                     self.journal.message(
-                        "total size of eq. system: {:}".format(self.theDofManager.nDof),
+                        "eq. system rebuilt: {:} dof".format(self.theDofManager.nDof),
                         self.identification,
-                        0,
+                        2,
                     )
 
-                    self.journal.printSeperationLine()
+                    # The per-field block extents, not just the total. Fields are laid out
+                    # field-major in contiguous slices, so this states the block structure of the
+                    # equation system -- which is what a field-split preconditioner needs, and what
+                    # tells you at a glance how a coupled model's DOFs are actually distributed.
+                    for fieldName, fieldIndices in self.theDofManager.idcsOfFieldsInDofVector.items():
+                        self.journal.message(
+                            "field '{:}': {:} dof, [{:}, {:})".format(
+                                fieldName,
+                                fieldIndices.stop - fieldIndices.start,
+                                fieldIndices.start,
+                                fieldIndices.stop,
+                            ),
+                            self.identification,
+                            2,
+                        )
+
+                    # The one interface point a solver needs beyond the plain (A, b) call: it
+                    # derives whatever it wants (field layout, node coordinates, topology) from
+                    # these itself. Re-pushed on every (re)build so it tracks the mesh across AMR.
+                    self.linSolver.setModel(model, self.theDofManager)
 
                     presentVariableNames = list(self.theDofManager.idcsOfFieldsInDofVector.keys())
 
@@ -252,9 +339,17 @@ class NIST(NonlinearSolverBase):
                             "scalar variables",
                         ]
 
-                    nVariables = len(presentVariableNames)
-                    self.iterationHeader = ("{:^25}" * nVariables).format(*presentVariableNames)
-                    self.iterationHeader2 = (" {:<10}  {:<10}  ").format("||R||∞", "||ddU||∞") * nVariables
+                    self.iterationHeader2 = (" {:<10}  {:<10}  ").format("||R||∞", "||ddU||∞") * len(
+                        presentVariableNames
+                    )
+                    if self.linSolver.reportsSolveSummary:
+                        # One more column, exactly like any other field's, for the linear solver's own
+                        # per-iteration diagnostics -- see NonlinearSolverBase.checkConvergence, which
+                        # builds and appends the matching row cell.
+                        presentVariableNames = presentVariableNames + ["linear solve"]
+                        self.iterationHeader2 += (" {:<10}  {:<10}  ").format("iters", "‖r‖")
+
+                    self.iterationHeader = ("{:^25}" * len(presentVariableNames)).format(*presentVariableNames)
                     self.iterationMessageTemplate = "{:11.2e}{:1}{:11.2e}{:1} "
 
                     K = self.theDofManager.constructVIJSystemMatrix()
@@ -270,7 +365,7 @@ class NIST(NonlinearSolverBase):
                     for variable in model.scalarVariables.values():
                         U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
 
-                    self.mpcTransformation = self.buildMPCTransformation(model)
+                    self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
                     self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
 
                     # The old dU/prevTimeStep no longer match the (possibly new) DOF layout, so
@@ -288,18 +383,6 @@ class NIST(NonlinearSolverBase):
                     "notes": "",
                 }
 
-                self.journal.printSeperationLine()
-                self.journal.message(
-                    "increment {:}: {:8f}, {:8f}; time {:10f} to {:10f}".format(
-                        timeStep.number,
-                        timeStep.stepProgressIncrement,
-                        timeStep.stepProgress,
-                        timeStep.totalTime - timeStep.timeIncrement,
-                        timeStep.totalTime,
-                    ),
-                    self.identification,
-                    level=1,
-                )
                 self.journal.message(self.iterationHeader, self.identification, level=2)
                 self.journal.message(self.iterationHeader2, self.identification, level=2)
 
@@ -736,7 +819,16 @@ class NIST(NonlinearSolverBase):
         #   poorly conditioned, path-dependent (contact/friction) condensed systems is
         #   sensitive enough to the extra explicit-zero structural entries to visibly
         #   drift from the converged reference path if they are kept.
-        if self.mpcTransformation is not None:
+        #
+        # The pruning has a measured cost, though, which is why it is now switchable: it removes
+        # whichever entries happen to be exactly zero on *this* iteration, so the pattern differs from
+        # one Newton iteration to the next (observed swings of ~200k nnz within a single increment)
+        # and a linear solver can never reuse its symbolic factorization -- worth ~35% of each
+        # iteration on a 280k-dof model. Turning it off is only half the story: it pays off solely in
+        # combination with a solver that then actually freezes its reordering, and the drift the
+        # comment above describes has to be re-checked against a reference load path before it is
+        # adopted. Hence default True.
+        if self.mpcTransformation is not None and self.options["pruneCondensedMatrixZeros"]:
             K.eliminate_zeros()
 
         return K

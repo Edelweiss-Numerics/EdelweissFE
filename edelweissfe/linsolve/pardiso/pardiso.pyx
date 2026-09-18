@@ -36,6 +36,8 @@ This module provides an interface to the PARDISO solver provided by the Intel Ma
 
 import numpy as np
 
+from edelweissfe.utils import performancetiming
+
 cimport numpy as np
 
 
@@ -100,11 +102,15 @@ cdef class PardisoSolver:
     cdef int rows
     cdef bint ptIsActive  # pt may hold PARDISO-internal allocations (phase -1 required)
     cdef bint hasSymbolicFactorization
+    cdef bint hasNumericFactorization
     cdef bint reuseSymbolicFactorization
 
     # the pattern arrays of the currently analyzed matrix (0-based, for change detection)
     cdef object currentIndices
     cdef object currentIndptr
+    # the value array the stored numeric factorization belongs to, kept alive because phase 33
+    # performs iterative refinement against it -- see solveFactorized
+    cdef object currentData
     # persistent 1-based copies handed to pardiso (fortran indexing)
     cdef int[::1] indicesFortran
     cdef int[::1] indptrFortran
@@ -118,9 +124,11 @@ cdef class PardisoSolver:
         self.msglvl = 0
         self.ptIsActive = False
         self.hasSymbolicFactorization = False
+        self.hasNumericFactorization = False
         self.reuseSymbolicFactorization = reuseSymbolicFactorization
         self.currentIndices = None
         self.currentIndptr = None
+        self.currentData = None
 
         # PARDISO requires pt to be all zeros before the first call
         for i in range(64):
@@ -147,8 +155,10 @@ cdef class PardisoSolver:
 
         self.ptIsActive = False
         self.hasSymbolicFactorization = False
+        self.hasNumericFactorization = False
         self.currentIndices = None
         self.currentIndptr = None
+        self.currentData = None
 
     cdef bint _hasSamePattern(self, A):
         """Check if the sparsity pattern of A matches the analyzed one."""
@@ -195,18 +205,24 @@ cdef class PardisoSolver:
 
         self.rows = A.shape[0]
         # pardiso uses fortran 1-based indexing; scipy may use int64 index arrays for
-        # large matrices, so cast explicitly to the 32-bit interface type
-        self.indicesFortran = np.ascontiguousarray(A.indices + 1, dtype=np.intc)
-        self.indptrFortran = np.ascontiguousarray(A.indptr + 1, dtype=np.intc)
+        # large matrices, so cast explicitly to the 32-bit interface type.
+        #
+        # Timed separately from phase 11 itself because this is a pure O(nnz) allocate-and-copy that
+        # is paid on *every* solve whenever symbolic reuse is off -- an avoidable cost that has
+        # nothing to do with the reordering it precedes, and would otherwise hide inside it.
+        with performancetiming.timeit("pardiso index preparation"):
+            self.indicesFortran = np.ascontiguousarray(A.indices + 1, dtype=np.intc)
+            self.indptrFortran = np.ascontiguousarray(A.indptr + 1, dtype=np.intc)
 
         pardisoinit(self.pt, &self.mtype, &self.iparm[0])
         self.ptIsActive = True
 
         cdef double[::1] data = A.data
 
-        pardiso(self.pt, &self.maxfct, &self.mnum, &self.mtype, &phase,
-                &self.rows, &data[0], &self.indptrFortran[0], &self.indicesFortran[0], &idum, &nRhs,
-                &self.iparm[0], &self.msglvl, &ddum, &ddum, &error)
+        with performancetiming.timeit("pardiso phase 11 (reorder + symbolic factorization)"):
+            pardiso(self.pt, &self.maxfct, &self.mnum, &self.mtype, &phase,
+                    &self.rows, &data[0], &self.indptrFortran[0], &self.indicesFortran[0], &idum, &nRhs,
+                    &self.iparm[0], &self.msglvl, &ddum, &ddum, &error)
 
         if error != 0:
             self._releaseMemory()
@@ -252,21 +268,131 @@ cdef class PardisoSolver:
         cdef int idum = 0
         cdef double ddum = 0
 
+        # This one-shot solve is about to overwrite PARDISO's numeric factors for a different
+        # matrix, which invalidates anything a previous explicit factorize() stored: keeping that
+        # state would let a later solveFactorized() pair these new factors with the old matrix's
+        # values. Drop it before factorizing, so solveFactorized() raises "no factorization
+        # available" instead of returning a silently wrong result.
+        self.hasNumericFactorization = False
+        self.currentData = None
+
         # numerical factorization
         phase = 22
-        pardiso(self.pt, &self.maxfct, &self.mnum, &self.mtype, &phase,
-                &self.rows, &data[0], &self.indptrFortran[0], &self.indicesFortran[0], &idum, &nRhs,
-                &self.iparm[0], &self.msglvl, &ddum, &ddum, &error)
+        with performancetiming.timeit("pardiso phase 22 (numeric factorization)"):
+            pardiso(self.pt, &self.maxfct, &self.mnum, &self.mtype, &phase,
+                    &self.rows, &data[0], &self.indptrFortran[0], &self.indicesFortran[0], &idum, &nRhs,
+                    &self.iparm[0], &self.msglvl, &ddum, &ddum, &error)
 
         if error == 0:
             # back substitution and iterative refinement
             phase = 33
+            with performancetiming.timeit("pardiso phase 33 (back substitution)"):
+                pardiso(self.pt, &self.maxfct, &self.mnum, &self.mtype, &phase,
+                        &self.rows, &data[0], &self.indptrFortran[0], &self.indicesFortran[0], &idum, &nRhs,
+                        &self.iparm[0], &self.msglvl, &b_[0, 0], &x[0, 0], &error)
+
+        if error != 0:
+            # signal failure via NaNs; the nonlinear solvers translate this into a cutback
+            np.asarray(x).fill(np.nan)
+
+        return np.reshape(x, b.shape)
+
+    def factorize(self, A):
+        """
+        Analyze (if needed) and numerically factorize A, without solving anything.
+
+        Together with :meth:`solveFactorized` this splits what :meth:`__call__` fuses, so that one
+        factorization can serve several right hand sides -- which :meth:`__call__` cannot do, because
+        it re-runs the numeric factorization (phase 22) on every call even for an unchanged matrix.
+
+        The motivating use is a lagged (modified Newton) preconditioner: factorize one Newton
+        iterate's matrix, then apply that factorization repeatedly inside a Krylov solve on a later,
+        slightly different iterate. Whether that pays off is an empirical question about how fast the
+        Jacobian drifts; see ``scripts/benchmark_linsolve.py lagged``.
+
+        Parameters
+        ----------
+        A : csr_matrix
+            The system matrix to factorize.
+
+        Raises
+        ------
+        RuntimeError
+            If PARDISO reports a factorization error. Unlike :meth:`__call__`, which signals failure
+            by returning NaNs for the nonlinear solvers to turn into a cutback, this raises: there is
+            no solution vector to poison, and a caller about to reuse this factorization many times
+            needs to know immediately.
+        """
+
+        cdef int phase = 22
+        cdef int error = 0
+        cdef int nRhs = 1
+        cdef int idum = 0
+        cdef double ddum = 0
+
+        if not self.reuseSymbolicFactorization or not self._hasSamePattern(A):
+            self._analyze(A)
+
+        cdef double[::1] data = A.data
+
+        with performancetiming.timeit("pardiso phase 22 (numeric factorization)"):
+            pardiso(self.pt, &self.maxfct, &self.mnum, &self.mtype, &phase,
+                    &self.rows, &data[0], &self.indptrFortran[0], &self.indicesFortran[0], &idum, &nRhs,
+                    &self.iparm[0], &self.msglvl, &ddum, &ddum, &error)
+
+        if error != 0:
+            self.hasNumericFactorization = False
+            self.currentData = None
+            raise RuntimeError("PARDISO numeric factorization failed with error code {:}".format(error))
+
+        # Held onto deliberately: phase 33 runs iterative refinement against the matrix values, and
+        # for a lagged preconditioner those must stay the values this factorization was built from,
+        # not whatever matrix is currently being solved.
+        self.currentData = A.data
+        self.hasNumericFactorization = True
+
+    def solveFactorized(self, b):
+        """
+        Apply the factorization stored by :meth:`factorize` to a right hand side (phase 33 only).
+
+        Cheap relative to a factorization -- back substitution is a small fraction of a solve -- which
+        is the whole point of separating the two.
+
+        Parameters
+        ----------
+        b : ndarray
+            The right hand side vector (or matrix, for multiple right hand sides).
+
+        Returns
+        -------
+        ndarray
+            The solution, or NaNs if PARDISO reports a back-substitution error.
+
+        Raises
+        ------
+        RuntimeError
+            If no factorization is currently stored.
+        """
+
+        if not self.hasNumericFactorization:
+            raise RuntimeError("no numeric factorization available; call factorize() first")
+
+        cdef double[::1] data = self.currentData
+
+        cdef double[::1, :] b_ = np.asfortranarray(b.reshape((self.rows, -1)))
+        cdef int nRhs = b_.shape[1]
+        cdef double[::1, :] x = np.zeros_like(b_, order="F")
+
+        cdef int phase = 33
+        cdef int error = 0
+        cdef int idum = 0
+
+        with performancetiming.timeit("pardiso phase 33 (back substitution)"):
             pardiso(self.pt, &self.maxfct, &self.mnum, &self.mtype, &phase,
                     &self.rows, &data[0], &self.indptrFortran[0], &self.indicesFortran[0], &idum, &nRhs,
                     &self.iparm[0], &self.msglvl, &b_[0, 0], &x[0, 0], &error)
 
         if error != 0:
-            # signal failure via NaNs; the nonlinear solvers translate this into a cutback
             np.asarray(x).fill(np.nan)
 
         return np.reshape(x, b.shape)
@@ -286,8 +412,13 @@ cdef class PardisoSolver:
 
         No-op when ``reuseSymbolicFactorization`` is False, since every solve already
         re-analyzes unconditionally in that case.
+
+        Any factorization stored by :meth:`factorize` is dropped as well: it was built on the pattern
+        being invalidated, so :meth:`solveFactorized` must not keep applying it.
         """
         self.hasSymbolicFactorization = False
+        self.hasNumericFactorization = False
+        self.currentData = None
 
 
 def pardisoSolve(A, b):

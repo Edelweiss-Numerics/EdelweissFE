@@ -36,6 +36,23 @@ PARDISO library at build time. The factory below therefore imports it lazily; se
 
 from collections.abc import Callable
 
+from edelweissfe.linsolve.base import LinearSolver
+
+
+class PanuaPardisoSolver(LinearSolver):
+    """The Panua PARDISO direct solver. Callable as ``(A, b) -> x``.
+
+    A plain Python wrapper around the bare Cython function
+    :func:`~edelweissfe.linsolve.panuapardiso.panuapardiso.panuaPardisoSolve` -- not touching the
+    ``.pyx`` itself keeps this trivially testable without a rebuild.
+    """
+
+    def __init__(self, solveFunction):
+        self._solveFunction = solveFunction
+
+    def __call__(self, A, b):
+        return self._solveFunction(A, b)
+
 
 def createSolver(opts) -> Callable:
     """Create a Panua-PARDISO-backed linear solver.
@@ -54,13 +71,15 @@ def createSolver(opts) -> Callable:
     Returns
     -------
     Callable
-        :func:`~edelweissfe.linsolve.panuapardiso.panuapardiso.panuaPardisoSolve`, i.e. a stateless
-        ``(A, b) -> x`` function.
+        A :class:`PanuaPardisoSolver` wrapping
+        :func:`~edelweissfe.linsolve.panuapardiso.panuapardiso.panuaPardisoSolve`, callable as
+        ``(A, b) -> x``.
 
     Raises
     ------
     ImportError
-        If the optional ``panuapardiso`` extension was not built.
+        If the optional ``panuapardiso`` extension was not built -- raised here, at construction
+        time (matching the pre-refactor behaviour), not deferred to the first solve.
     """
 
     # Imported inside the function body, not at module scope: this extension is optional and
@@ -68,4 +87,4 @@ def createSolver(opts) -> Callable:
     # merely resolves a `linsolver` registry name rather than this one.
     from edelweissfe.linsolve.panuapardiso.panuapardiso import panuaPardisoSolve
 
-    return panuaPardisoSolve
+    return PanuaPardisoSolver(panuaPardisoSolve)

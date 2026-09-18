@@ -65,6 +65,17 @@ class DivergingSolution(Exception):
     """The solutions seems to be diverging within the nonlinear solving scheme."""
 
 
+class RestartError(Exception):
+    """A checkpoint cannot be restored into this model: an unsupported format version, or a replayed
+    topology that does not match the one the checkpoint was written from."""
+
+
+class TopologyError(Exception):
+    """An illegal attempt to change the model topology: creating or deleting an entity outside a
+    :meth:`~edelweissfe.models.femodel.FEModel.topologyChanges` window, or claiming an element
+    number that is already in use."""
+
+
 class ConditionalStop(Exception):
     """Simulation stops sucessfully."""
 

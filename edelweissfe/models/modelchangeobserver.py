@@ -26,13 +26,17 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""Observer interface for modules that cache mesh topology, node/element references, node sets, or
-surfaces and must re-synchronize when the :class:`~edelweissfe.models.femodel.FEModel` is mutated
-mid-analysis (e.g. by adaptive mesh refinement). The FEModel is the subject: it holds a list of
-observers and calls :meth:`ModelChangeObserver.onModelChanged` after a mutation.
+"""The kinds of model mutation a :class:`~edelweissfe.models.modelchange.ModelChange` can describe.
+
+This module once also defined a push-based ``ModelChangeObserver``, notified synchronously at the
+instant of each mutation. It was removed in favour of a single pull mechanism
+(:class:`~edelweissfe.models.meshdependent.MeshDependent`, driven by
+:meth:`~edelweissfe.models.femodel.FEModel.refreshMeshDependents`): model modifiers now run to a
+fixed point in rounds, so a per-mutation callback necessarily fires mid-pipeline -- handing the
+consumer a state that no longer exists by the time the solve begins, and letting a consumer that
+mutates in response do so re-entrantly, inside the modifier's own loop.
 """
 
-from abc import ABC, abstractmethod
 from enum import Enum, auto
 
 
@@ -41,13 +45,3 @@ class ModelChangeType(Enum):
     COARSENING = auto()  # elements merged / nodes removed
     ELEMENT_EROSION = auto()  # elements deleted
     TOPOLOGY_CHANGE = auto()  # boundary / surface / set changes
-
-
-class ModelChangeObserver(ABC):
-    """Interface for any module that caches mesh topology, node/element references, or DOF indices
-    and needs re-synchronization when the FEModel changes (e.g. Dirichlet BCs re-resolving their
-    node set after refinement adds boundary nodes)."""
-
-    @abstractmethod
-    def onModelChanged(self, model, changeType: ModelChangeType, details: dict = None):
-        """Callback invoked immediately after the FEModel topology or sets are mutated."""

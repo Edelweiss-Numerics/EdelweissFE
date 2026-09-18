@@ -35,6 +35,24 @@ see :func:`createSolver`.
 
 from collections.abc import Callable, Mapping
 
+from edelweissfe.linsolve.base import LinearSolver
+
+
+class AMGCLLinearSolver(LinearSolver):
+    """Thin wrapper giving the Cython :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLSolver`
+    extension type the common :class:`~edelweissfe.linsolve.base.LinearSolver` interface
+    (``setJournal``/``setFieldStructure``), for standalone use as a registered ``linsolver`` (e.g. a
+    direct ``linsolver=amgcl`` in an input file). Not used internally by ``blockamg``, which imports
+    and drives ``PyAMGCLSolver`` itself directly (via ``build``/``applyPreconditioner``, not this
+    one-shot ``solve``) -- this wrapper only affects the top-level ``amgcl`` registry entry.
+    """
+
+    def __init__(self, delegate):
+        self._delegate = delegate
+
+    def __call__(self, A, b):
+        return self._delegate.solve(A, b)
+
 
 def createSolver(opts) -> Callable:
     """Create an AMGCL-backed linear solver.
@@ -54,9 +72,9 @@ def createSolver(opts) -> Callable:
     Returns
     -------
     Callable
-        The bound :meth:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLSolver.solve` method of a
-        :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLSolver` configured from ``opts``, i.e. a
-        ``(A, b) -> x`` callable holding onto those options.
+        A :class:`AMGCLLinearSolver` wrapping a
+        :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLSolver` configured from ``opts``, callable as
+        ``(A, b) -> x``.
 
     Raises
     ------
@@ -71,4 +89,4 @@ def createSolver(opts) -> Callable:
 
     amgclOpts = dict(opts) if isinstance(opts, Mapping) else {}
 
-    return PyAMGCLSolver(amgclOpts).solve
+    return AMGCLLinearSolver(PyAMGCLSolver(amgclOpts))

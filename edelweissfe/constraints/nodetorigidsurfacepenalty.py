@@ -141,6 +141,7 @@ class Constraint(ConstraintBase, MeshDependent):
 
         self._nSetName = nSet.name
         self._lastSeenTopologyVersion = model.topologyVersion
+        model.registerMeshDependent(self)
         self._nodes = nSet
         self._rebuildFromNodes()
 
@@ -168,7 +169,7 @@ class Constraint(ConstraintBase, MeshDependent):
         self.indices_component = np.arange(self.component, self._nDof + self.component, self.sizeField)
         self._fieldsOnNodes = [[self._field]] * self._nNodes
 
-    def reconcile(self, model: FEModel, change) -> bool:
+    def refresh(self, model: FEModel, change) -> bool:
         """Refresh the node list from the (possibly grown) watched ``nSet``."""
 
         if not change.touchesNodeSet(self._nSetName):
@@ -178,7 +179,8 @@ class Constraint(ConstraintBase, MeshDependent):
         return True
 
     def updateConnectivity(self, model: FEModel) -> bool:
-        return self.reconcileIfChanged(model)
+        # refreshed by FEModel.refreshMeshDependents; nothing extra to do at this tick
+        return False
 
     @property
     def nodes(self) -> list:

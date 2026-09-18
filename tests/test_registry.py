@@ -548,11 +548,11 @@ def test_isRegistered_sees_all_three_registration_mechanisms():
 # mesh/job keywords plus fifteen pluggable-module/type-dispatch keywords) ---
 
 
-def test_keyword_category_covers_all_21_top_level_keywords_after_u2b():
-    """The ``"keyword"`` category is populated with all 21 top-level keywords -- six structural
-    mesh/job keywords plus fifteen pluggable-module/type-dispatch keywords -- matching the full
-    ``printKeywords()`` surface exactly. This is the final state of the category; only wiring
-    resolution into the running parser remains.
+def test_keyword_category_covers_all_23_top_level_keywords_after_u2b():
+    """U2b completed ``"keyword"`` with all 21 top-level keywords -- U2a's six structural mesh/job
+    keywords plus the fifteen pluggable-module/type-dispatch keywords -- matching the full
+    ``printKeywords()`` surface exactly. U3/U4 added no further names; ``elementproperty`` and
+    ``restart`` are the two keywords added after that gate.
     """
     assert registry.availableNames("keyword") == [
         "advancedmaterial",
@@ -560,6 +560,7 @@ def test_keyword_category_covers_all_21_top_level_keywords_after_u2b():
         "configureplots",
         "constraint",
         "element",
+        "elementproperty",
         "elset",
         "exportplots",
         "fieldoutput",
@@ -571,6 +572,7 @@ def test_keyword_category_covers_all_21_top_level_keywords_after_u2b():
         "node",
         "nset",
         "output",
+        "restart",
         "section",
         "solver",
         "step",

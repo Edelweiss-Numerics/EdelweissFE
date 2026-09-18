@@ -148,29 +148,28 @@ class Generator(GeneratorBase):
             y0 : y0 + h : nNodesY * 1j,
         ]
 
+        # Node labels come from the model's monotonic allocator (FEModel.reserveNodeNumbers), not
+        # from max(model.nodes). Every grid position becomes a model node here, so the whole grid is
+        # reserved as one batch.
         nodes = []
-        # continue the numbering of any pre-existing nodes -- a fixed start at 1 would silently
-        # overwrite the entries of a previously run generator in model.nodes
-        currentNodeLabel = 1
-        if model.nodes:
-            currentNodeLabel += max(model.nodes.keys())
+        reservedNodeLabels = iter(model.reserveNodeNumbers(nNodesX * nNodesY))
 
         for x in range(nNodesX):
             for y in range(nNodesY):
-                node = Node(currentNodeLabel, grid[:, x, y])
-                model.nodes[currentNodeLabel] = node
+                node = Node(next(reservedNodeLabels), grid[:, x, y])
+                model.createNode(node)
                 nodes.append(node)
-                currentNodeLabel += 1
 
         nG = np.asarray(nodes).reshape(nNodesX, nNodesY)
 
-        currentElementLabel = 1
-        if model.elements:
-            currentElementLabel += max(model.elements.keys())
+        # Element numbers come from the model's monotonic allocator (FEModel.reserveElementNumbers),
+        # not from max(model.elements). Reserved one at a time so the count need not be predicted;
+        # nothing else mints during this loop, so the numbers are consecutive exactly as before.
 
         elements = []
         for x in range(nX):
             for y in range(nY):
+                (currentElementLabel,) = model.reserveElementNumbers(1)
                 if testEl.nNodes == 4:
                     newEl = elType(elTypeName, currentElementLabel)
                     newEl.setNodes([nG[x, y], nG[x + 1, y], nG[x + 1, y + 1], nG[x, y + 1]])
@@ -193,9 +192,7 @@ class Generator(GeneratorBase):
                         ]
                     )
                 elements.append(newEl)
-                model.elements[currentElementLabel] = newEl
-
-                currentElementLabel += 1
+                model.createElement(newEl)
 
         model._populateNodeFieldVariablesFromElements()
 

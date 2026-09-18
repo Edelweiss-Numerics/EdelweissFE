@@ -32,13 +32,13 @@ which walked ``edelweissfe.utils.inputlanguage.InputLanguage``'s ``Module`` tree
 (``Module.__doc__``/``InputFileKeyword.__doc__``/``printKeywords()``) -- that mechanism, and this
 script's own former dependency on it, has since been removed. The output format is unchanged (this
 is what makes ``tests/golden/inputlanguage_surface.txt`` still the correct oracle): two sections,
-``===== printKeywords() =====`` for the 21 top-level keywords, then one ``===== module
+``===== printKeywords() =====`` for the 23 top-level keywords, then one ``===== module
 documentation: <dotted path> =====`` block per pluggable module, sorted by dotted module path.
 
 Two rendering formats, both reproduced by :mod:`edelweissfe.utils.schemasurface`:
 
 - :func:`~edelweissfe.utils.schemasurface.renderPrintKeywordsBlock` for the top ``printKeywords()``
-  section, over the 21 ``KeywordBase`` subclasses registered under the registry's ``"keyword"``
+  section, over the 23 ``KeywordBase`` subclasses registered under the registry's ``"keyword"``
   category (``name``/``description``/``schema`` all read off the class via
   :func:`~edelweissfe.utils.schemasurface.specFromKeywordClass` -- no hand-typed spelling).
 - :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface` for every module-doc section, one
@@ -90,13 +90,15 @@ from edelweissfe.utils.schemasurface import (
     specFromKeywordClass,
 )
 
-# ===== printKeywords() section: the 21 top-level keywords ========================================
+# ===== printKeywords() section: the 23 top-level keywords ========================================
 
 #: Exact rendering order of ``inputfileparser.py``'s (now-deleted) ``inputLanguage.addKeyword(...)``
 #: call sequence -- NOT alphabetical, and NOT the order ``config/registry.py``'s ``"keyword"``
 #: category dict happens to be declared in (that dict groups ``job`` next to the other structural
 #: keywords; the legacy parser declared it later, interleaved with ``section``/``material``). This
 #: list is the single place that order is pinned now that no ``Module`` tree exists to iterate.
+#: ``elementProperty`` and ``restart`` have no legacy position -- both were added after the U2 gate
+#: and are appended last, in the order they were actually added.
 _TOP_LEVEL_KEYWORDS_IN_LEGACY_ORDER = [
     "element",
     "elSet",
@@ -119,6 +121,8 @@ _TOP_LEVEL_KEYWORDS_IN_LEGACY_ORDER = [
     "configurePlots",
     "exportPlots",
     "include",
+    "elementProperty",
+    "restart",
 ]
 
 
@@ -400,6 +404,13 @@ _BRACKET_MODULE_SPECS = [
         "plotalongpath",
         "plotAlongPath",
         "Plot result for a nodeSet or an elementSet along the true geometrical distance.",
+    ),
+    _BracketModuleSpec(
+        "edelweissfe.outputmanagers.restart",
+        "outputmanager",
+        "restart",
+        "restart",
+        "Writes restart checkpoints during the analysis.",
     ),
     _BracketModuleSpec(
         "edelweissfe.outputmanagers.statusfile",

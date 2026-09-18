@@ -35,6 +35,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from io import TextIOBase
 
+import h5py
 import numpy as np
 
 from edelweissfe.models.femodel import FEModel
@@ -1120,6 +1121,16 @@ class OutputManager(OutputManagerBase):
             self.journal.message("Skipping output".format(), self.identification, 1)
             return
 
+        # No time has passed since the last frame, so there is nothing new to record. This is a
+        # step's priming zero increment: on a resumed run it reports the time the checkpoint was
+        # taken at, which already has a frame on disk. Writing a second frame there duplicates the
+        # data and leaves the .case file's time values non-strictly-increasing, which the format
+        # does not allow and which makes a reader pair variables with the wrong geometry. The
+        # sentinel timeAtLastOutput of -1e16 is what keeps a cold start's own first frame, where no
+        # time has passed either but nothing has been written yet.
+        if timeSinceLastOutput <= 0.0:
+            return
+
         self.writeOutput(self.model)
 
     def finalizeFailedIncrement(self, **kwargs):
@@ -1211,6 +1222,71 @@ class OutputManager(OutputManagerBase):
         self,
     ):
         self.ensightCase.finalize(replaceTimeValuesByEnumeration=False)
+
+    def getRestartData(self) -> dict[str, np.ndarray] | None:
+        """This export's transient-sequence bookkeeping: each Ensight time/file set's history of
+        already-written time values (flattened CSR-style, since sets can have different lengths),
+        which geometry trends have ever been written (name -> time/file set number -- unlike
+        variable trends, which get (re-)registered on every write regardless of mesh change and so
+        self-heal on resume, a geometry trend is only (re-)registered when the mesh actually
+        changes; a resumed run whose mesh happens to be already stable would otherwise never
+        re-register it, leaving the ``.case`` file's ``GEOMETRY`` section without its ``model:``
+        line even though the geometry file itself exists on disk from before the resume), plus the
+        mesh signature and ``timeAtLastOutput`` used to decide whether to write a fresh geometry
+        chunk / throttle output. File numbering (``writeGeometryTrendChunk``/
+        ``writeVariableTrendChunk`` derive the next chunk's index from ``len(timeValues)``) and the
+        ``.case`` file's own declared step list come directly from ``timeAndFileSets`` -- restoring
+        it is both necessary and sufficient for continuing the same *sequence*, but the geometry
+        trend registration above is a separate, independently-necessary piece for the ``.case``
+        file to still reference the geometry at all.
+
+        ``None`` if nothing has been written yet (nothing to restore).
+        """
+
+        timeAndFileSets = self.ensightCase.timeAndFileSets
+        if not timeAndFileSets:
+            return None
+
+        setNumbers = sorted(timeAndFileSets)
+        sizes = [len(timeAndFileSets[n].timeValues) for n in setNumbers]
+        flatTimeValues = [v for n in setNumbers for v in timeAndFileSets[n].timeValues]
+        meshSignature = self._meshSignature if self._meshSignature is not None else (-1, -1)
+
+        geometryTrends = self.ensightCase.geometryTrends
+        geometryTrendNames = list(geometryTrends.keys())
+        geometryTrendSetNumbers = list(geometryTrends.values())
+
+        return {
+            "setNumbers": np.array(setNumbers, dtype=int),
+            "timeValueSizes": np.array(sizes, dtype=int),
+            "timeValues": np.array(flatTimeValues, dtype=float),
+            "meshSignature": np.array(meshSignature, dtype=int),
+            "timeAtLastOutput": np.array([self.timeAtLastOutput]),
+            "geometryTrendNames": np.array(geometryTrendNames, dtype=h5py.string_dtype(encoding="utf-8")),
+            "geometryTrendSetNumbers": np.array(geometryTrendSetNumbers, dtype=int),
+        }
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore this export's transient-sequence bookkeeping from a restart checkpoint written
+        by :meth:`getRestartData`, so the next chunk written continues the existing sequence
+        (correct file numbering, correct ``.case`` step list) instead of starting a fresh one."""
+
+        offset = 0
+        for setNumber, size in zip(data["setNumbers"], data["timeValueSizes"]):
+            size = int(size)
+            timeValues = list(data["timeValues"][offset : offset + size])
+            offset += size
+            self.ensightCase.timeAndFileSets[int(setNumber)] = EnsightTimeSet(
+                int(setNumber), "no description", 0, 1, timeValues
+            )
+
+        for name, setNumber in zip(data["geometryTrendNames"], data["geometryTrendSetNumbers"]):
+            name = name.decode("utf-8") if isinstance(name, bytes) else str(name)
+            self.ensightCase.geometryTrends[name] = int(setNumber)
+
+        meshSignature = tuple(int(x) for x in data["meshSignature"])
+        self._meshSignature = None if meshSignature == (-1, -1) else meshSignature
+        self.timeAtLastOutput = float(data["timeAtLastOutput"][0])
 
     def _createGeometryParts(self, firstPartID: int):
         model = self.model

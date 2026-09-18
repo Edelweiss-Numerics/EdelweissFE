@@ -11,7 +11,6 @@
 
 *job, name=tiejobned, domain=2d
 *solver, solver=NED, name=theSolver
-second-order-fields="displacement"
 output-frequency=10
 
 *modelGenerator, generator=planeRectQuad, name=lower

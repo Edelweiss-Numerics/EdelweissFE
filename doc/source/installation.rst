@@ -82,7 +82,30 @@ Install Fastor:
     make install
     cd ../..
 
+Build Boost from source:
+
+``boost-cpp``'s only available conda-forge build (1.85.0) pins ``icu<76``, which
+conflicts with the ``icu>=78.3`` that the only free-threaded-Python-compatible
+``matplotlib`` build needs, so it can't be installed into the same environment
+as the rest of ``conda_requirements.txt``. Build the specific Boost libraries
+AMGCL needs (``program_options``, ``serialization``, ``test``) from source
+instead, into the same conda prefix as everything else:
+
+.. code-block:: console
+
+    curl -L -o boost_1_85_0.tar.gz https://archives.boost.io/release/1.85.0/source/boost_1_85_0.tar.gz
+    tar xzf boost_1_85_0.tar.gz
+    cd boost_1_85_0
+    ./bootstrap.sh --prefix=$CONDA_PREFIX --with-libraries=program_options,serialization,test
+    ./b2 install
+    cd ..
+
 Install AMGCL:
+
+Even installed into the same prefix, AMGCL's ``cmake`` won't reliably find
+Boost without an explicit hint (a plain, unhinted ``cmake ..`` here can
+silently pick up an unrelated Boost from elsewhere on the system instead —
+verified, not hypothetical), so point it there explicitly:
 
 .. code-block:: console
 
@@ -90,7 +113,7 @@ Install AMGCL:
     cd amgcl
     mkdir build
     cd build
-    cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
+    cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DBOOST_ROOT=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX ..
     make install
     cd ../..
 
@@ -246,23 +269,38 @@ Install Fastor:
     cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
     make install
 
-Install AMGCL:
+Build Boost from source (``boost-cpp``'s only conda-forge build conflicts
+with the free-threaded-Python-compatible ``matplotlib`` build — see above):
 
 .. code-block:: console
    :caption: Step 11
+
+    cd $EWROOT
+    curl -L -o boost_1_85_0.tar.gz https://archives.boost.io/release/1.85.0/source/boost_1_85_0.tar.gz
+    tar xzf boost_1_85_0.tar.gz
+    cd boost_1_85_0
+    ./bootstrap.sh --prefix=$CONDA_PREFIX --with-libraries=program_options,serialization,test
+    ./b2 install
+
+Install AMGCL (pointing its ``cmake`` explicitly at the Boost just built —
+a plain, unhinted ``cmake ..`` here can silently pick up an unrelated Boost
+from elsewhere on the system instead):
+
+.. code-block:: console
+   :caption: Step 12
 
     cd $EWROOT
     git clone --branch 1.4.7 --depth 1 https://github.com/ddemidov/amgcl.git
     cd amgcl
     mkdir build
     cd build
-    cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
+    cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DBOOST_ROOT=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX ..
     make install
 
 Install Marmot from the master branch:
 
 .. code-block:: console
-   :caption: Step 12
+   :caption: Step 13
 
     cd $EWROOT
     git clone --branch master --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/
@@ -275,7 +313,7 @@ Install Marmot from the master branch:
 Build and test EdelweissFE with Marmot:
 
 .. code-block:: console
-   :caption: Step 13
+   :caption: Step 14
 
     cd $EWROOT/EdelweissFE
     pip install -v .

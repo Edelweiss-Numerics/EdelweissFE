@@ -93,8 +93,25 @@ class SimpleTimeStepper(TimeStepperBase):
             The current time step.
         """
 
-        # zero increment; return value for first function call
-        yield TimeStep(0, 0.0, 0.0, 0.0, 0.0, self.currentTime)
+        # A zero increment, yielded once before the first real one, so an explicit integrator can
+        # build its initial state (mass, internal force, contact) before taking a step.
+        #
+        # It reports the stepper's CURRENT position within the step, not the step's start. Those are
+        # the same thing on a cold start, where finishedStepProgress is 0 -- but not on a resumed
+        # run, and reporting the start there did two wrong things. The solver calls
+        # ``model.advanceToTime(timeStep.totalTime)`` on every increment, so model.time was rewound
+        # to the beginning of the step; and this increment's number is 0, hence a multiple of any
+        # ``output-frequency``, so an output frame stamped with that rewound time was written into
+        # the middle of an otherwise increasing Ensight time set -- leaving it non-monotonic, which
+        # is invalid in the format and makes a reader pair variables with the wrong geometry.
+        yield TimeStep(
+            0,
+            0.0,
+            self.finishedStepProgress,
+            0.0,
+            self.stepLength * self.finishedStepProgress,
+            self.currentTime + self.stepLength * self.finishedStepProgress,
+        )
         self.enforcedTimeIncrement = enforcedTimeIncrement
 
         if self.enforcedTimeIncrement is None:
@@ -110,6 +127,12 @@ class SimpleTimeStepper(TimeStepperBase):
                     self.increment = remainder
 
                 dT = self.stepLength * self.increment
+                # Record the increment actually used. writeRestart checkpoints ``self.dT`` and
+                # restoredTimeIncrement() hands it back to a multi-step integrator on resume, so
+                # leaving it at its ``__init__`` value of 0.0 makes both silently meaningless: an
+                # explicit solver seeded with dT_prev = 0 repeats its leapfrog startup half-step on
+                # every resumed run, which is indistinguishable from a correct cold start.
+                self.dT = dT
                 self.finishedStepProgress += self.increment
                 endTimeOfIncrementInStep = self.stepLength * self.finishedStepProgress
                 endTimeOfIncrementInTotal = self.currentTime + endTimeOfIncrementInStep
@@ -139,6 +162,12 @@ class SimpleTimeStepper(TimeStepperBase):
                     self.increment = remainder
 
                 dT = self.stepLength * self.increment
+                # Record the increment actually used. writeRestart checkpoints ``self.dT`` and
+                # restoredTimeIncrement() hands it back to a multi-step integrator on resume, so
+                # leaving it at its ``__init__`` value of 0.0 makes both silently meaningless: an
+                # explicit solver seeded with dT_prev = 0 repeats its leapfrog startup half-step on
+                # every resumed run, which is indistinguishable from a correct cold start.
+                self.dT = dT
                 self.finishedStepProgress += self.increment
                 endTimeOfIncrementInStep = self.stepLength * self.finishedStepProgress
                 endTimeOfIncrementInTotal = self.currentTime + endTimeOfIncrementInStep
@@ -153,6 +182,27 @@ class SimpleTimeStepper(TimeStepperBase):
                     endTimeOfIncrementInStep,
                     endTimeOfIncrementInTotal,
                 )
+
+    def enforceTimeIncrement(self, timeIncrement: float):
+        """Replace the enforced time increment for the remaining increments. See
+        :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.enforceTimeIncrement`.
+
+        The generator reads ``self.enforcedTimeIncrement`` afresh on every iteration, so assigning it
+        here takes effect from the next increment on -- the one already yielded is untouched, which is
+        what the caller wants: an increment that has been computed is not retroactively resized.
+
+        Parameters
+        ----------
+        timeIncrement
+            The new enforced time increment.
+        """
+
+        if self.enforcedTimeIncrement is None:
+            raise NotImplementedError(
+                "This step is not running on an enforced time increment, so it cannot be given a new " "one mid-step."
+            )
+
+        self.enforcedTimeIncrement = timeIncrement
 
     def changeIncrementSize(self, scaleFactor: float):
         """Change increment size between minIncrement and
@@ -223,3 +273,56 @@ class SimpleTimeStepper(TimeStepperBase):
     def preventIncrementIncrease(self):
         """This time stepper never increases the increment size automatically,
         hence this is a no-op."""
+
+    def restoredTimeIncrement(self) -> float | None:
+        """See :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.
+        restoredTimeIncrement`.
+
+        The discriminator is ``totalIncrements``: readRestart sets it to the value the
+        checkpoint recorded, while a cold start leaves it at zero.
+        """
+
+        if self.totalIncrements <= 0:
+            return None
+
+        return float(self.dT)
+
+    def writeRestart(self, restartFile):
+        """Write this time stepper's progress within the step to a restart checkpoint.
+
+        Deliberately restricted to the *dynamic* progress state (``currentTime``, ``totalIncrements``,
+        ``finishedStepProgress``, ``increment``, ``dT``), not the step's *configuration*
+        (``stepLength``, ``startIncrement``, ``maxIncrement``, ``minIncrement``,
+        ``maxNumberIncrements``) -- see :meth:`~edelweissfe.timesteppers.adaptivetimestepper.
+        AdaptiveTimeStepper.writeRestart`'s docstring for why.
+
+        Parameters
+        ----------
+        restartFile
+            The file to write the restart information to.
+        """
+        f = restartFile
+        f.create_group("timestepper")
+
+        f["timestepper"].attrs["currentTime"] = self.currentTime
+        f["timestepper"].attrs["totalIncrements"] = self.totalIncrements
+        f["timestepper"].attrs["finishedStepProgress"] = self.finishedStepProgress
+        f["timestepper"].attrs["increment"] = self.increment
+        f["timestepper"].attrs["dT"] = self.dT
+
+    def readRestart(self, restartFile):
+        """Restore this time stepper's progress within the step from a restart checkpoint written
+        by :meth:`writeRestart`.
+
+        Parameters
+        ----------
+        restartFile
+            The file to read the restart information from.
+        """
+        f = restartFile
+        self.currentTime = f["timestepper"].attrs["currentTime"]
+        self.totalIncrements = f["timestepper"].attrs["totalIncrements"]
+        self.warnIfResumedAtIncrementCap(self.totalIncrements, self.maxNumberIncrements, self.journal)
+        self.finishedStepProgress = f["timestepper"].attrs["finishedStepProgress"]
+        self.increment = f["timestepper"].attrs["increment"]
+        self.dT = f["timestepper"].attrs["dT"]

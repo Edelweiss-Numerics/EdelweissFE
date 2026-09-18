@@ -37,6 +37,22 @@ from libcpp.vector cimport vector
 import numpy as np
 
 
+# Marmot's warning channel. MarmotJournal is built on a NULL streambuf, so everything it emits is
+# discarded until a consumer points it somewhere. See the setMSGOutputDirection call in element.pyx.
+cdef extern from "<ostream>" namespace "std":
+    cdef cppclass ostream
+
+
+cdef extern from "<iostream>" namespace "std":
+    ostream cout
+
+
+cdef extern from "Marmot/MarmotJournal.h":
+    cdef cppclass MarmotJournal:
+        @staticmethod
+        void setMSGOutputDirection(ostream&)
+
+
 cdef extern from "Marmot/MarmotElement.h" namespace "MarmotElement":
     cdef enum StateTypes:
         Sigma11,
@@ -84,7 +100,7 @@ cdef extern from "Marmot/MarmotElement.h":
 
         void assignProperty(const MarmotMaterialSection& property) except +ValueError
 
-        void assignProperty(const string& propertyName, const double* properties) except +ValueError
+        void assignProperty(const string& propertyName, const double* properties, int nProperties) except +ValueError
 
         vector[string] getPropertyNames() const
 
@@ -126,9 +142,18 @@ cdef extern from "Marmot/MarmotElement.h":
                         double time,
                         double dT)
 
-        void computeLumpedInertia(double* M)
+        # `except +` on all three: they ask the material for the coefficients they assemble -- the
+        # density, the non-local viscosity and the non-local micro-inertia -- and a material that
+        # refuses (too few properties, or a micro-inertia above the eta^2/4 its own viscosity
+        # admits) throws. Without a handler that C++ exception crosses into generated code that has
+        # none and reaches std::terminate, so a deck error aborts the process with no traceback
+        # instead of raising where the deck can be pointed at.
+        void computeLumpedInertia(double* M) except +ValueError
+        void computeLumpedDamping(double* C) except +ValueError
 
-        void computeCriticalTimeStepForExplicitDynamics(double& criticalTimeStep, const double* QTotal)
+        void computeCriticalTimeStepForExplicitDynamics(
+                        double& criticalTimeStep,
+                        const double* QTotal) except +ValueError
 
         void computeInternalEnergy(double& internalEnergy)
 

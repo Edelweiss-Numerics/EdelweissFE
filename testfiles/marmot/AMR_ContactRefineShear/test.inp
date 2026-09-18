@@ -65,8 +65,8 @@ searchDistance=2.0, sliding=small, mu=0.3, tangentPenalty=1e6
 
 *modelModifier, type=hadaptivity, name=amr0
 ** Test modular initial refinement using different marker types
->>marker, type=fieldOutput, fieldOutput=strainFixedForAMR, expression='abs(x) > 0.02'
->>marker, type=fieldOutput, fieldOutput=strainMovingForAMR, expression='abs(x) > 0.02'
+>>marker, type=fieldOutput, fieldOutput=strainFixedForAMR, operator='>', threshold=0.02
+>>marker, type=fieldOutput, fieldOutput=strainMovingForAMR, operator='>', threshold=0.02
 maxLevel=1
 
 *job, name=amrcontactshear, domain=3d
@@ -81,8 +81,8 @@ maxLevel=1
 >>perElement, elSet=fixed_all, result=strain, quadraturePoint=1, name=strainFixed
 >>perElement, elSet=moving_all, result=stress, quadraturePoint=1, name=stressMoving
 >>perElement, elSet=moving_all, result=strain, quadraturePoint=1, name=strainMoving
->>perElement, elSet=fixed_all, result=strain, quadraturePoint=0:8, name=strainFixedForAMR
->>perElement, elSet=moving_all, result=strain, quadraturePoint=0:8, name=strainMovingForAMR
+>>perElement, elSet=fixed_all, result=strain, quadraturePoint=0:8, name=strainFixedForAMR, f(x)='np.abs(x)'
+>>perElement, elSet=moving_all, result=strain, quadraturePoint=0:8, name=strainMovingForAMR, f(x)='np.abs(x)'
 >>fromExpression, name=pN, nSet=slaveSurf_nodes, expression='model.constraints["contact"].getNormalPressures()'
 >>fromExpression, name=pNmean, nSet=slaveSurf_nodes, expression='model.constraints["contact"].getNormalPressures()', f(x)='np.mean(x)'
 >>fromExpression, name=pT, nSet=slaveSurf_nodes, expression='model.constraints["contact"].getTangentialTractions()'

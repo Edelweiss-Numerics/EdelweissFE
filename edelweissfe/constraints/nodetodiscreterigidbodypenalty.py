@@ -283,7 +283,8 @@ class Constraint(ConstraintBase, MeshDependent):
 
         self._nSetName = nSet.name
         self._lastSeenTopologyVersion = model.topologyVersion
-        self.slaveNodes = list(nSet)
+        model.registerMeshDependent(self)
+        self.slaveNodes = self._slaveNodesFrom(nSet)
         self._rebuildFromSlaveNodes()
 
         self.totalNormalForce = 0.0
@@ -304,6 +305,12 @@ class Constraint(ConstraintBase, MeshDependent):
             configuration=configuration,
         )
 
+    def _slaveNodesFrom(self, nSet) -> list:
+        """The slave nodes of ``nSet``. The rigid body's reference point is never one of them: it
+        carries the body's own degrees of freedom and cannot be in contact with itself."""
+
+        return [node for node in nSet if node is not self.rpNode]
+
     def _rebuildFromSlaveNodes(self) -> None:
         """(Re)derive every quantity that depends on the slave node list/count."""
 
@@ -322,17 +329,18 @@ class Constraint(ConstraintBase, MeshDependent):
         )
         self._indicesOfRPInLocal = self._indicesOfRPDispInLocal + self._indicesOfRPRotInLocal
 
-    def reconcile(self, model: FEModel, change) -> bool:
+    def refresh(self, model: FEModel, change) -> bool:
         """Refresh the slave node list from the (possibly grown) watched ``nSet``."""
 
         if not change.touchesNodeSet(self._nSetName):
             return False
-        self.slaveNodes = list(model.nodeSets[self._nSetName])
+        self.slaveNodes = self._slaveNodesFrom(model.nodeSets[self._nSetName])
         self._rebuildFromSlaveNodes()
         return True
 
     def updateConnectivity(self, model: FEModel) -> bool:
-        return self.reconcileIfChanged(model)
+        # refreshed by FEModel.refreshMeshDependents; nothing extra to do at this tick
+        return False
 
     @property
     def nodes(self) -> list:

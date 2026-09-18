@@ -74,7 +74,12 @@ def main():
     testsDirs = sorted(testsDirs, key=str.casefold)
 
     if "all" not in tests:
-        testsDirs = list(set(testsDirs).intersection(set(tests)))
+        # Filter, preserving the sorted order established above. Going through a set discards it,
+        # and the order is load-bearing: a test case may consume a file another one produces (a
+        # *include of a generated mesh, or a restart checkpoint), so a --tests run could otherwise
+        # execute the consumer first and compare against a stale artefact from an earlier run.
+        requested = set(tests)
+        testsDirs = [directory for directory in testsDirs if directory in requested]
 
     failedTests = 0
 

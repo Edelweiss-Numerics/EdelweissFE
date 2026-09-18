@@ -62,7 +62,7 @@ The ``_BUILTINS`` table below covers these categories:
 
 ``outputmanager`` (10), ``section`` (3), ``constraint`` (12), ``stepaction`` (13),
 ``generator`` (11), ``analyticalfield`` (3), ``solver`` (7), ``step`` (2), ``modelmodifier`` (1),
-``statetransferstrategy`` (3), ``element`` (42), ``material`` (7), ``linsolver`` (9).
+``statetransferstrategy`` (3), ``element`` (42), ``material`` (7), ``linsolver`` (10).
 
 ``keyword`` is the single source the ``.inp`` parser consults for every top-level keyword
 (``element``, ``node``, ``nSet``, ``elSet``, ``surface``, ``job``, ``section``, ``elementProperty``,
@@ -165,6 +165,7 @@ _addBuiltins(
         "meshplot",
         "monitor",
         "plotalongpath",
+        "restart",
         "statusfile",
         "timemonitor",
     ],
@@ -193,6 +194,7 @@ _addBuiltins(
         "nodetorigidsurfacepenalty",
         "penaltyindirectcontrol",
         "rigidbody",
+        "surfacetodeformablesurfacepenalty",
         "tie",
     ],
     "edelweissfe.constraints",
@@ -269,6 +271,19 @@ _BUILTINS[("modelmodifier", "hadaptivity")] = "edelweissfe.modelmodifiers.adapti
 _BUILTINS[("statetransferstrategy", "nearestqp")] = "edelweissfe.adaptivity.statetransfer:NearestQuadraturePointCopy"
 _BUILTINS[("statetransferstrategy", "projection")] = "edelweissfe.adaptivity.statetransfer:PolynomialProjection"
 _BUILTINS[("statetransferstrategy", "virgin")] = "edelweissfe.adaptivity.statetransfer:VirginState"
+
+# AMR refinement markers -- resolved by a ``>>marker, type=<name>`` block, one module (marking.py)
+# per marker class. Kept a registry category, like statetransferstrategy, so any adaptivity
+# mechanism (or a third-party package via entry points) constructs markers by name rather than
+# through a hardcoded if/elif living inside one model modifier.
+for _markerName, _markerClass in {
+    "fieldOutput": "FieldOutputMarker",
+    "elementSet": "ElementSetMarker",
+    "nodeSet": "NodeSetMarker",
+    "surface": "SurfaceMarker",
+    "recoveryError": "RecoveryErrorMarker",
+}.items():
+    _BUILTINS[("marker", _markerName.casefold())] = f"edelweissfe.adaptivity.marking:{_markerClass}"
 
 # The element category is keyed by element *type*, and 42 types share just 2 formulation classes, so
 # `_addBuiltins`'s "one module per name, fixed attribute name" convention does not apply -- hence two
@@ -354,15 +369,9 @@ for _materialName, _materialDotted in {
     _BUILTINS[("material", _materialName)] = _materialDotted
 
 # The linsolver category: every `linsolve/*` subpackage exposes a module-level
-# `createSolver(opts) -> Callable[[A, b], x]` factory, which is the single shape the four
-# pre-existing ones collapse to (inline scipy lambdas, an option-constructed class, plain
-# module-level functions, and bound methods of option-constructed objects). The factory lives in
-# each subpackage's `__init__.py` rather than in the solver module itself because four of the
-# implementations are Cython (`amgcl`, `klu`, `panuapardiso`, `pardiso`), and each one imports its
-# backend *inside* the function body -- most of these backends are optional and genuinely absent
-# in some installs, and `config.linsolve.getDefaultLinSolver` relies on catching that ImportError
-# to fall back to scipy. A module-scope import would turn "backend not built" into an import error
-# for anyone merely resolving a name here.
+# `createSolver(opts) -> Callable[[A, b], x]` factory. See each solver's own module docstring
+# for what it does and how the optional-backend import is handled, and
+# doc/source/documentation/linsolvers.rst for how the solvers relate to one another.
 for _linsolverName in [
     "superlu",
     "umfpack",
@@ -371,8 +380,9 @@ for _linsolverName in [
     "klu",
     "petsclu",
     "mumps",
-    "gmres",
     "amgcl",
+    "blockamg",
+    "matrixdump",
 ]:
     _BUILTINS[("linsolver", _linsolverName)] = f"edelweissfe.linsolve.{_linsolverName}:createSolver"
 
@@ -387,6 +397,7 @@ for _keywordName, _keywordDotted in {
     "nSet": "edelweissfe.keywords.nset:NSetKeyword",
     "surface": "edelweissfe.keywords.surface:SurfaceKeyword",
     "job": "edelweissfe.keywords.job:JobKeyword",
+    "restart": "edelweissfe.keywords.restart:RestartKeyword",
     "section": "edelweissfe.keywords.section:SectionKeyword",
     "elementProperty": "edelweissfe.keywords.elementproperty:ElementPropertyKeyword",
     "material": "edelweissfe.keywords.material:MaterialKeyword",

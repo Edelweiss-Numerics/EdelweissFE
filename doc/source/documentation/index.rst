@@ -16,6 +16,7 @@ Documentation
    rigidbodies
    contacttheory
    dofmanager
+   assembly
    fieldoutputmanager
    fields
    elements
@@ -25,6 +26,8 @@ Documentation
    materials
    mesh
    modelmodifiers
+   topologypipeline
+   adaptivitytheory
    output
    parallelization
    phenomena
