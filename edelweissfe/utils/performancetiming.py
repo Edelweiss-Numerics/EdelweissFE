@@ -296,24 +296,32 @@ def makePrettyTable(maxLevels: int = 4, wallTime: float = None) -> PrettyTable:
     return prettytable
 
 
-def extractIncrementTimes(maxLevels: int = 4, skipUnused: bool = False) -> PrettyTable:
+def extractIncrementTimeRows(maxLevels: int = 4, skipUnused: bool = False) -> list[tuple[int, str, float, int]]:
     """
-    Returns a PrettyTable of the time elapsed since the last time
-    this function was called, while keeping the accumulated totals intact.
+    Returns the time elapsed since the last time this function was called, as
+    ``(level, function, time, calls)`` rows, while keeping the accumulated totals intact.
+
+    **Consuming this is destructive**: it advances the snapshot the next delta is measured
+    against, so a caller that needs the same increment's times in more than one place (printed
+    *and* written to a file, say) must call this once and share the rows -- a second call
+    within the same increment reports zeros. :func:`makeIncrementTimesPrettyTable` turns the
+    rows into the printable table for exactly that reason.
 
     Parameters
     ----------
     maxLevels
-        The maximum number of stack levels considered in the table.
+        The maximum number of stack levels considered.
     skipUnused
         Omit categories that were not entered at all during the interval. Off by default so the
         table keeps a stable set of rows between reports. Turn it on where the table is printed
         repeatedly during a run: a category that did not run shows as ``0.00000s`` against real
         numbers, which reads as "this was free" rather than "this did not happen".
-    """
 
-    if not hasattr(extractIncrementTimes, "_last_snapshot") or extractIncrementTimes._last_snapshot is None:
-        extractIncrementTimes._last_snapshot = None
+    Returns
+    -------
+    list[tuple[int, str, float, int]]
+        One ``(level, function, time, calls)`` row per timed category, parents before children.
+    """
 
     current_state = _mergedSnapshot()
 
@@ -331,8 +339,8 @@ def extractIncrementTimes(maxLevels: int = 4, skipUnused: bool = False) -> Prett
 
         return {"time": delta_t, "calls": delta_c, "children": children_deltas}
 
-    delta_tree = compute_delta(current_state, extractIncrementTimes._last_snapshot)
-    extractIncrementTimes._last_snapshot = current_state
+    delta_tree = compute_delta(current_state, extractIncrementTimeRows._last_snapshot)
+    extractIncrementTimeRows._last_snapshot = current_state
 
     def flatten_delta(node, level):
         rows = []
@@ -345,16 +353,47 @@ def extractIncrementTimes(maxLevels: int = 4, skipUnused: bool = False) -> Prett
                 rows += flatten_delta(data, level + 1)
         return rows
 
-    delta_rows = flatten_delta(delta_tree, 0)
+    return flatten_delta(delta_tree, 0)
+
+
+extractIncrementTimeRows._last_snapshot = None
+
+
+def makeIncrementTimesPrettyTable(rows: list[tuple[int, str, float, int]]) -> PrettyTable:
+    """Create a pretty formatted table from :func:`extractIncrementTimeRows` rows.
+
+    Parameters
+    ----------
+    rows
+        The ``(level, function, time, calls)`` rows to format.
+
+    Returns
+    -------
+    PrettyTable
+        The table in pretty format.
+    """
 
     prettytable = PrettyTable()
     prettytable.field_names = ["function", "inc. runtime", "calls", "time/call"]
     prettytable.align = "l"
-    for level, cat, t, calls in delta_rows:
+    for level, cat, t, calls in rows:
         t_per_call = t / calls if calls > 0 else 0.0
         prettytable.add_row([" " * level + cat, "{:.5f}s".format(t), calls, "{:.5f}s".format(t_per_call)])
 
     return prettytable
+
+
+def extractIncrementTimes(maxLevels: int = 4, skipUnused: bool = False) -> PrettyTable:
+    """
+    Returns a PrettyTable of the time elapsed since the last time
+    this function was called, while keeping the accumulated totals intact.
+
+    Convenience composition of :func:`extractIncrementTimeRows` and
+    :func:`makeIncrementTimesPrettyTable`, and destructive for the same reason: use those two
+    directly whenever the rows are needed for anything besides printing.
+    """
+
+    return makeIncrementTimesPrettyTable(extractIncrementTimeRows(maxLevels, skipUnused))
 
 
 def reset():
@@ -365,4 +404,4 @@ def reset():
         root.clear()
         root.time = 0.0
         root.calls = 0
-    extractIncrementTimes._last_snapshot = None
+    extractIncrementTimeRows._last_snapshot = None
