@@ -38,11 +38,39 @@ from edelweissfe.timesteppers.timestep import TimeStep
 
 
 class DirichletBase(StepActionBase):
+    """Base class for a Dirichlet (prescribed-value) boundary condition.
+
+    A Dirichlet BC prescribes selected ``components`` of a ``field`` (e.g. the
+    x- and z-component of the displacement) on every node of a node set
+    ``nSet``. The nonlinear solver imposes it with the row-replacement method,
+    for which it needs exactly two things from the BC:
+
+        * which global DOFs are constrained  -> ``constrainedDofIndices``
+        * by how much they must move this step -> ``getPrescribedIncrement()``
+    """
+
+    #: The field whose components are prescribed, e.g. "displacement".
+    field: str
+    #: The node set the boundary condition acts on.
+    nSet: object
+    #: Number of DOFs (components) the field has per node.
+    fieldSize: int
+    #: The global DOF indices constrained by this BC, in node-major order.
+    #: Populated once per step by the solver (see
+    #: :meth:`NonlinearSolverBase.locateConstrainedDofs`), because it depends on
+    #: the DofManager's layout, which the boundary condition does not know itself.
+    constrainedDofIndices: np.ndarray = None
+
     @property
     @abstractmethod
     def components(self) -> np.ndarray:
-        pass
+        """Column indices, within a node's field DOFs, that are prescribed."""
 
     @abstractmethod
-    def getDelta(self, timeStep: TimeStep) -> np.ndarray:
-        pass
+    def getPrescribedIncrement(self, timeStep: TimeStep) -> np.ndarray:
+        """The increment by which the prescribed DOFs must move in this time step.
+
+        The returned array has shape (number of nodes in ``nSet``, number of
+        prescribed ``components``), so that ``.flatten()`` yields the values in
+        the same node-major order as :attr:`constrainedDofIndices`.
+        """

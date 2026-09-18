@@ -31,6 +31,8 @@
 Replaces the NewtonRaphson scheme of the NISTParallel Solver.
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.models.femodel import FEModel
@@ -38,7 +40,6 @@ from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstaticparallel import NISTParallel
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.stepactions.options import inputLanguage
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -47,21 +48,77 @@ from edelweissfe.utils.exceptions import (
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.math import createModelAccessibleFunction
+from edelweissfe.utils.schema import schemaField
 
-kw = inputLanguage["step"].getModule("adaptive").getKeyword("options")
-kw.addOptionalArg("arcLengthController", "", str, None)
-kw.addOptionalArg("stopCondition", "", str, None)
+
+@dataclass(frozen=True)
+class NISTPArcLengthSchema(NISTParallel.schema):
+    """:class:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema`'s options, plus the two
+    bespoke fields this solver reads from an ``>>options`` block under the (mismatched)
+    ``category=NISTArcLength`` -- not ``category=NISTPArcLength``, this solver's own
+    :attr:`identification`. Neither is a ``*solver`` dataline option (there is no
+    ``SolverSpecificOptions`` entry for either; see :meth:`NISTPArcLength.solveStep`), so both are
+    added here only, not to the parent schema.
+    """
+
+    arcLengthController: str | None = schemaField(
+        description="The step action module serving as the arc length controller.", dtype=str, default=None
+    )
+    stopCondition: str | None = schemaField(
+        description="A model accessible expression defining a conditional stop.", dtype=str, default=None
+    )
 
 
 class NISTPArcLength(NISTParallel):
     identification = "NISTPArcLength"
 
+    supportsMPC = False
+
+    #: Option schema for this solver, per OptionSchemaProvider.
+    schema = NISTPArcLengthSchema
+
     def __init__(self, jobInfo, journal, **kwargs):
         self.Lambda = 0.0
         self.dLambda = 0.0
         self.arcLengthController = None
+        # arcLengthController/stopCondition are not consulted through self.options -- solveStep
+        # reads them from here directly, every step, unconditionally (see applyOptionsOverride).
+        self._arcLengthOptions = {}
 
         return super().__init__(jobInfo, journal, **kwargs)
+
+    def applyOptionsOverride(self, fieldValues: dict) -> None:
+        """Split a validated ``>>options`` override between the two storage locations this solver
+        actually consults: ``arcLengthController``/``stopCondition`` are read directly out of
+        :attr:`_arcLengthOptions` by :meth:`solveStep` (never through ``self.options``, and not
+        every step -- only when present), while every inherited ``NISTSchema`` field goes through
+        the ordinary ``self.options`` dict via the base implementation.
+
+        The pair is replaced *together*, not merged in individually, whenever either is mentioned:
+        ``arcLengthController``/``stopCondition`` live on their own step-action object (category
+        ``"NISTArcLength"``, distinct from the solver's own ``"NISTSolver"``/``"NISTPSolver"``
+        category), and a re-declaration of that object replaces its *entire* option set rather than
+        adding to it -- confirmed against ``testfiles/marmot/IndirectDisplacementControl2``, whose
+        later steps write ``arcLengthController=off`` alone, omitting ``stopCondition`` from an
+        earlier step's declaration specifically to clear it, not to leave it in effect.
+
+        Parameters
+        ----------
+        fieldValues
+            Maps schema field name to its new, already-coerced value.
+        """
+
+        arcLengthFieldNames = ("arcLengthController", "stopCondition")
+        if any(fieldName in fieldValues for fieldName in arcLengthFieldNames):
+            self._arcLengthOptions = {
+                fieldName: fieldValues[fieldName] for fieldName in arcLengthFieldNames if fieldName in fieldValues
+            }
+
+        inheritedFieldValues = {
+            fieldName: value for fieldName, value in fieldValues.items() if fieldName not in arcLengthFieldNames
+        }
+        if inheritedFieldValues:
+            super().applyOptionsOverride(inheritedFieldValues)
 
     def solveStep(
         self,
@@ -70,35 +127,32 @@ class NISTPArcLength(NISTParallel):
         fieldOutputController: FieldOutputController,
         outputmanagers: dict[str, OutputManagerBase],
     ):
+        self.validateModelCapabilities(model)
+
         self.arcLengthController = None
         self.checkConditionalStop = lambda: False
 
         if "arc length parameter" in model.additionalParameters:
             self.Lambda = model.additionalParameters["arc length parameter"]
 
-        arcLengthControllerOptions = [
-            stepAction
-            for stepAction in step.actions["options"].values()
-            if stepAction.options["category"] == "NISTArcLength"
-        ]
-        if not len(arcLengthControllerOptions) < 2:
-            raise Exception("Too many option definitions.")
+        # Sticky: whatever the last >>options, name=<this solver's name>, arcLengthController=...
+        # block set (applyOptionsOverride) -- not re-fetched from step.actions, and not reset if a
+        # later step omits it.
+        arcLengthControllerOptions = self._arcLengthOptions
 
-        # arcLengthControllerOptions = step.actions["options"].get("NISTArcLength")
         if arcLengthControllerOptions:
-            arcLengthControllerOptions = arcLengthControllerOptions[0].options
             arcLengthController = arcLengthControllerOptions.get("arcLengthController")
             if arcLengthController:
                 try:
                     arcLengthControllerStepAction = [action for action in step.actions["indirectcontrol"].values()][0]
                     self.arcLengthController = arcLengthControllerStepAction
                     self.dLambda = 0.0
-                except KeyError:
+                except (KeyError, IndexError):
                     self.journal.errorMessage(
                         f'Arc length controller "{arcLengthController}" not found in current step or not configured correctly',
                         self.identification,
                     )
-                    raise KeyError
+                    raise KeyError(f'Arc length controller "{arcLengthController}" not found in current step')
             else:
                 self.journal.message(
                     "No ArcLengthController specified in current step",
@@ -202,6 +256,9 @@ class NISTPArcLength(NISTParallel):
         distributedLoads = stepActions["distributedload"].values()
         bodyForces = stepActions["bodyforce"].values()
 
+        # Find which global DOFs the Dirichlet BCs constrain, once up front.
+        self.locateConstrainedDofs(dirichlets)
+
         for stepActionType in stepActions.values():
             for action in stepActionType.values():
                 action.applyAtIncrementStart(model, timeStep)
@@ -232,8 +289,8 @@ class NISTPArcLength(NISTParallel):
         zeroTimeStep = TimeStep(timeStep.number, 0.0, 0.0, 0.0, 0.0, 0.0)
 
         while True:
-            for geostatic in stepActions["geostatics"]:
-                geostatic.apply()
+            for geostatic in stepActions["geostatic"].values():
+                geostatic.applyAtIterationStart()
 
             U_np[:] = U_n
             U_np += dU
@@ -260,7 +317,7 @@ class NISTPArcLength(NISTParallel):
             K_f -= K_0
 
             # Dead and Reference load ..
-            R_0[:] = P_0 + (Lambda + dLambda) * P_f + P
+            R_0[:] = P_0 + (Lambda + dLambda) * P_f - P
             R_f[:] = P_f
 
             # add stiffness contribution
@@ -269,12 +326,12 @@ class NISTPArcLength(NISTParallel):
 
             # Dirichlets ..
             if isExtrapolatedIncrement and iterationCounter == 0:
-                R_0 = self.applyDirichlet(zeroTimeStep, R_0, dirichlets)
+                R_0 = self.applyDirichletToResidual(zeroTimeStep, R_0, dirichlets)
             else:
                 modifiedTimeStep = TimeStep(timeStep.number, dLambda, Lambda + dLambda, 0.0, 0.0, 0.0)
-                R_0 = self.applyDirichlet(modifiedTimeStep, R_0, dirichlets)
+                R_0 = self.applyDirichletToResidual(modifiedTimeStep, R_0, dirichlets)
 
-            R_f = self.applyDirichlet(referenceTimeStep, R_f, dirichlets)
+            R_f = self.applyDirichletToResidual(referenceTimeStep, R_f, dirichlets)
 
             if iterationCounter > 0 or isExtrapolatedIncrement:
                 converged, nodesWithLargestResidual = self.checkConvergence(
@@ -293,7 +350,7 @@ class NISTPArcLength(NISTParallel):
                     raise ReachedMaxIterations("Reached max. iterations in current increment, cutting back")
 
             K_ = self.assembleStiffnessCSR(K)
-            K_ = self.applyDirichletK(K_, dirichlets)
+            K_ = self.applyDirichletToStiffness(K_, dirichlets)  # zero rows, unit diagonal
 
             # solve 2 eq. systems at once:
             ddU_ = self.linearSolve(K_, R_)
@@ -405,7 +462,7 @@ class NISTPArcLength(NISTParallel):
                 stepAction.applyAtStepEnd(model, stepMagnitude=self.Lambda)
             for stepAction in stepActions["distributedload"].values():
                 stepAction.applyAtStepEnd(model, stepMagnitude=self.Lambda)
-            for stepAction in stepActions["bodeforce"].values():
+            for stepAction in stepActions["bodyforce"].values():
                 stepAction.applyAtStepEnd(model, stepMagnitude=self.Lambda)
 
         return super().applyStepActionsAtStepEnd(model, stepActions)

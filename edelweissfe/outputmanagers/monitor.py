@@ -29,14 +29,15 @@
 
 # @author: Matthias Neuner
 
+from dataclasses import dataclass
+
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
+from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.math import createMathExpression
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
+from edelweissfe.utils.plotter import Plotter
+from edelweissfe.utils.schema import schemaField
 
 """
 A simple monitor to observe results (fieldOutputs) in the console during analysis.
@@ -48,43 +49,29 @@ A simple monitor to observe results (fieldOutputs) in the console during analysi
         fieldOutput=omega, f(x)='max(x)'
 """
 
-module = Module(
-    "monitor",
-    "A simple monitor to observe results (fieldOutputs) in the console during analysis.",
-)
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class MonitorSchema:
+    """The options this output manager accepts, owned by this module and never mutated from
+    outside it.
 
-keyword = "output"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
+    ``fieldOutput`` is declared ``required=True`` explicitly, but is still given a
+    ``default=None`` so that ``MonitorSchema()`` remains constructible without arguments;
+    ``buildSchemaFromOptions`` still enforces that an ``.inp`` file supplies it.
+    """
 
-module.addRequiredArg("fieldOutput", "Name of the field output to monitor.", str)
-module.addOptionalArg("label", "Name of the output manager.", str, "Monitor")
-module.addOptionalArg("f(x)", "Apply a model accessible function on the result.", str, None)
-
-documentation = [module]
-
-required = [kw.name for kw in module.requiredArgs]
-required += [kw.name for kw in module.requiredKeywords]
-
-optional = [kw.name for kw in module.optionalArgs]
-optional += [kw.name for kw in module.optionalKeywords]
-
-
-@caseInsensitiveKwargsChecker(required, optional)
-@castKwargsValuesAndAddDefaults(module)
-def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
-    kwargs = CaseInsensitiveDict(kwargs)
-
-    fieldOutputName = kwargs["fieldOutput"]
-    fx = kwargs["f(x)"]
-    if not fx:
-        fx = "x"
-
-    name = kwargs["label"]
-
-    return OutputManager(name, FEModel, fieldOutputController, journal, plotter, fieldOutputName, fx)
+    fieldOutput: str | None = schemaField(
+        description="Name of the field output to monitor.", dtype=str, default=None, required=True
+    )
+    label: str = schemaField(description="Name of the output manager.", dtype=str, default="Monitor")
+    #: Spelled ``f(x)`` in the input file, which is not a valid Python identifier -- hence the
+    #: ``optionName`` indirection, see ``edelweissfe.utils.schema.schemaField``.
+    f_x: str | None = schemaField(
+        description="Apply a model accessible function on the result.",
+        dtype=str,
+        default=None,
+        optionName="f(x)",
+    )
 
 
 class OutputManager(OutputManagerBase):
@@ -93,15 +80,57 @@ class OutputManager(OutputManagerBase):
     identification = "Monitor"
     printTemplate = "{:} ({:}): {:}"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter, fieldOutputName, fx):
-        self.name = name
+    #: Option schema for this output manager, per OptionSchemaProvider.
+    schema = MonitorSchema
+
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        fieldOutputController: FieldOutputController,
+        journal: Journal,
+        plotter: Plotter,
+        *,
+        configuration: MonitorSchema = MonitorSchema(),
+    ):
+        """Constructible standalone, with no parser involvement. Options arrive as an
+        already-validated, already-typed schema instance.
+
+        Parameters
+        ----------
+        name
+            The name of this output manager.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controller instance.
+        journal
+            The journal instance for logging.
+        plotter
+            The plotter instance.
+        configuration
+            The options this output manager accepts; defaults to all-defaults.
+        """
+        # `configuration.label` always overrides the `name` argument, since `label` defaults to
+        # "Monitor" and is thus never missing. A per-manager `label` option overriding the name
+        # entirely (rather than merely customizing it) looks like a latent bug, but the behavior
+        # is preserved here.
+        self.name = configuration.label
 
         self.journal = journal
         self.monitorJobs = []
         self.fieldOutputController = fieldOutputController
 
+        fx = configuration.f_x
+        # A *falsy* value -- None (option absent) as well as an explicitly empty string --
+        # falls back to the identity expression "x". A schema default of "x" alone would not
+        # reproduce this, since an explicitly-empty option would then stay empty instead of
+        # falling back.
+        if not fx:
+            fx = "x"
+
         entry = dict()
-        entry["fieldOutput"] = fieldOutputController.fieldOutputs[fieldOutputName]
+        entry["fieldOutput"] = fieldOutputController.fieldOutputs[configuration.fieldOutput]
         entry["f(x)"] = createMathExpression(fx)
 
         self.monitorJobs.append(entry)

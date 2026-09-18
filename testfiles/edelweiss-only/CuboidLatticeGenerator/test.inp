@@ -14,8 +14,8 @@ nZ=1
 elType=C3D8TL
 elProvider=edelweiss
 
-*material, name=neohookewb, id=myMaterial, provider=edelweiss
-10, 0.47
+*material, name=neohooke, id=myMaterial, provider=edelweiss
+2, 10, 0.47
 
 *section, name=section1, material=myMaterial, type=solid
 all

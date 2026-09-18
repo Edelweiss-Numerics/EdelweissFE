@@ -1,0 +1,69 @@
+** AMR + deformable-surface contact integration test (PLAN_AMR_CONTACT.md §5/§6 test 4): two
+** GC3D20/C3D20 blocks in node-to-deformable-surface penalty contact; the lower (master) block is
+** refined mid-run by hAdaptivity while contact is already engaged. Exercises the reconcile() path
+** in nodeToDeformableSurfacePenalty: the master facets (built from surface 'lower_front') must be
+** regenerated from the refined child faces and the constraint's cached facet list/reference
+** coordinates rebound, without losing contact -- before PLAN_AMR_CONTACT.md's P2, the facets would
+** silently go stale (still referencing the coarse element's now-interior corner nodes).
+*material, name=linearelastic, id=mat
+18000, 0.0
+
+*section, name=sec, material=mat, type=solid
+lower_all
+upper_all
+
+*modelGenerator, generator=boxGen, name=lower
+nX      =1
+nY      =1
+nZ      =1
+x0      =0
+y0      =0
+z0      =0
+lX      =1
+lY      =1
+lZ      =1
+elType  =C3D20
+
+*modelGenerator, generator=boxGen, name=upper
+nX      =1
+nY      =1
+nZ      =1
+x0      =0
+y0      =0
+z0      =1.05
+lX      =1
+lY      =1
+lZ      =1
+elType  =C3D20
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen1
+surface = upper_back
+name    = slaveSurf
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen2
+surface = lower_front
+name    = masterSurf
+
+*constraint, name=contact, type=nodeToDeformableSurfacePenalty
+slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=1e6, type=linear,
+searchDistance=2.0, sliding=small
+
+*modelModifier, type=hAdaptivity, name=amr
+>>marker, type=fieldOutput, fieldOutput=stressForAMR, operator='>', threshold=300.0
+maxLevel=1
+refineElSet=lower_all
+
+*job, name=amrcontact, domain=3d
+*solver, solver=NIST, name=theSolver
+*fieldOutput
+>>perNode, elSet=lower_all, field=displacement, result=U, name=dispLower
+>>perNode, elSet=upper_all, field=displacement, result=U, name=dispUpper
+>>fromExpression, name=pN, nSet=slaveSurf_nodes, expression='model.constraints["contact"].getNormalPressures()'
+>>fromExpression, name=pNmean, nSet=slaveSurf_nodes, expression='model.constraints["contact"].getNormalPressures()', f(x)='np.mean(x)'
+>>perElement, elSet=lower_all, result=stress, quadraturePoint=0:27, name=stressForAMR, f(x)='np.abs(x)'
+
+*step, solver=theSolver
+maxInc=0.02, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=fixLower, nSet=lower_back, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=pushUpper, nSet=upper_front, field=displacement, 1=0.0, 2=0.0, 3=-0.15

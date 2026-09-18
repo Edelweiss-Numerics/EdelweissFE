@@ -29,6 +29,7 @@
 import numpy as np
 import numpy.linalg as lin
 
+from edelweissfe.config import registry
 from edelweissfe.elements.base.baseelement import BaseElement
 from edelweissfe.elements.displacementelement._elementcomputationmatrices import (
     computeBOperator,
@@ -140,7 +141,12 @@ class DisplacementElement(BaseElement):
     def __init__(self, elementType: str, elNumber: int):
         self._elType = elementType
         properties = elLibrary[elementType]
-        if eval(properties["elClass"]) is not DisplacementElement:
+        # Guard against being handed an element type belonging to a *different* formulation, e.g.
+        # `DisplacementElement("CPE4TL", 1)`: `elLibrary` supplies quadrature data for both
+        # formulations, so nothing else here would notice. The type -> class mapping is looked up
+        # in the `element` category of the registry, since neither element module imports the
+        # other's class.
+        if registry.lookup("element", elementType)[0] is not DisplacementElement:
             raise Exception("Something went wrong with the element initialization!")
         self._elNumber = elNumber
         self._nNodes = properties["nNodes"]
@@ -191,6 +197,22 @@ class DisplacementElement(BaseElement):
 
         if self.nSpatialDimensions == 2:
             self._t = elementProperties[0]  # thickness
+
+    def assignProperty(self, propertyName: str, properties: np.ndarray):
+        """Assign a property of the element by name."""
+        if propertyName.lower() == "thickness":
+            if self.nSpatialDimensions == 2:
+                self._t = float(properties[0])
+            else:
+                raise Exception("Thickness property is only supported for 2D elements.")
+        else:
+            raise NotImplementedError(f"Property '{propertyName}' is not supported by this element.")
+
+    def getPropertyNames(self) -> list[str]:
+        """Get the names of all the valid properties of the element."""
+        if self.nSpatialDimensions == 2:
+            return ["thickness"]
+        return []
 
     def initializeElement(
         self,
@@ -262,7 +284,7 @@ class DisplacementElement(BaseElement):
         faceID: int,
         load: np.ndarray,
         U: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dTime: float,
     ):
         """Evaluate residual and stiffness for given time, field, and field increment due to a surface load.
@@ -282,20 +304,20 @@ class DisplacementElement(BaseElement):
         U
             The current solution vector.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
 
         raise Exception("Applying a distributed load is currently not possible with this element provider.")
 
-    def computeYourself(
+    def computeKernels(
         self,
         K_: np.ndarray,
         P: np.ndarray,
         U: np.ndarray,
         dU: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dTime: float,
     ):
         """Evaluate the residual and stiffness matrix for given time, field, and field increment due to a displacement or load.
@@ -311,13 +333,14 @@ class DisplacementElement(BaseElement):
         dU
             The current solution vector increment.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
 
         # assume it's plain strain if it's not given by user
-        K = np.reshape(K_, (self._nDof, self._nDof))
+        K = K_ if K_.ndim == 2 else np.reshape(K_, (self._nDof, self._nDof))
+
         # copy all elements
         self._stateVarsTemp = [self._stateVarsRef[i].copy() for i in range(self._nInt)].copy()
         # strain increment
@@ -343,16 +366,16 @@ class DisplacementElement(BaseElement):
             # get stiffness matrix for element j in point i
             K += B.T @ C @ B * detJ * self._t * self._weight[i]
             # calculate P
-            P -= B.T @ stress[self._activeVoigtIndices] * detJ * self._weight[i] * self._t
+            P += B.T @ stress[self._activeVoigtIndices] * detJ * self._weight[i] * self._t
             # update strain in stateVars
             self._stateVarsTemp[i][6:12] += self._dStrain[i]
 
-    def computeYourselfExplicit(
+    def computeKernelsExplicit(
         self,
         P: np.ndarray,
         U: np.ndarray,
         dU: np.ndarray,
-        time: np.ndarray,
+        time: float,
         dTime: float,
     ):
         """Evaluate the residual for given time, field, and field increment due to a displacement or load.
@@ -366,7 +389,7 @@ class DisplacementElement(BaseElement):
         dU
             The current solution vector increment.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
@@ -388,12 +411,12 @@ class DisplacementElement(BaseElement):
             # Jacobi determinant
             detJ = lin.det(self.J[i])
             # calculate P
-            P -= B.T @ stress[self._activeVoigtIndices] * detJ * self._weight[i] * self._t
+            P += B.T @ stress[self._activeVoigtIndices] * detJ * self._weight[i] * self._t
             # update strain in stateVars
             self._stateVarsTemp[i][6:12] += self._dStrain[i]
 
     def computeBodyForce(
-        self, P: np.ndarray, K: np.ndarray, load: np.ndarray, U: np.ndarray, time: np.ndarray, dTime: float
+        self, P: np.ndarray, K: np.ndarray, load: np.ndarray, U: np.ndarray, time: float, dTime: float
     ):
         """Evaluate residual and stiffness for given time, field, and field increment due to a body force load.
 
@@ -408,7 +431,7 @@ class DisplacementElement(BaseElement):
         U
             The current solution vector.
         time
-            Array of step time and total time.
+            The current time.
         dTime
             The time increment.
         """
@@ -519,7 +542,7 @@ class DisplacementElement(BaseElement):
         elif self.nSpatialDimensions == 2:
             return np.sqrt(4 * self.detJ[qp])
         elif self.nSpatialDimensions == 3:
-            return np.qbrt(8 * self.detJ[qp])
+            return np.cbrt(8 * self.detJ[qp])
 
     def acceptLastState(
         self,
@@ -533,6 +556,27 @@ class DisplacementElement(BaseElement):
         self,
     ):
         """Reset to the last valid state."""
+
+    def getStateVars(self) -> np.ndarray:
+        """Return a copy of the converged quadrature-point state-variable buffer."""
+
+        return self._stateVarsRef.reshape(-1).copy()
+
+    def setStateVars(self, values: np.ndarray):
+        """Overwrite the converged quadrature-point state-variable buffer in place, so
+        the ``_stateVars`` per-quadrature-point views (stress/strain/materialstate) stay valid.
+
+        The working buffer is seeded from it as well. :meth:`acceptLastState` copies
+        ``_stateVarsTemp`` *over* ``_stateVarsRef``, and it can run before any element computation
+        has populated that working buffer: both explicit solvers process a zero increment first,
+        for which :meth:`computeYourself` is never called, and then accept it. On a resumed run
+        that copied a freshly allocated buffer of zeros over the state just restored, silently
+        discarding the whole quadrature-point history. A cold start never noticed, because there
+        ``_stateVarsRef`` is zero anyway.
+        """
+
+        self._stateVarsRef[:] = np.asarray(values).reshape(self._stateVarsRef.shape)
+        self._stateVarsTemp = self._stateVarsRef.copy()
 
     def getResultArray(self, result: str, quadraturePoint: int, getPersistentView: bool = True) -> np.ndarray:
         """Get the array of a result, possibly as a persistent view which is continiously

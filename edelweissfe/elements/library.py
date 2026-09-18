@@ -50,7 +50,6 @@ wII = np.array([w2H, w3H, w2H])
 elLibrary = CaseInsensitiveDict(
     # element types for displacementelement
     CPE4=dict(
-        elClass="DisplacementElement",
         nNodes=4,
         nDof=8,
         dofIndices=np.arange(0, 8),
@@ -66,7 +65,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=True,
     ),
     CPE4R=dict(
-        elClass="DisplacementElement",
         nNodes=4,
         nDof=8,
         dofIndices=np.arange(0, 8),
@@ -82,7 +80,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=True,
     ),
     CPE4E=dict(
-        elClass="DisplacementElement",
         nNodes=4,
         nDof=8,
         dofIndices=np.arange(0, 8),
@@ -98,7 +95,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=True,
     ),
     CPE8=dict(
-        elClass="DisplacementElement",
         nNodes=8,
         nDof=16,
         dofIndices=np.arange(0, 16),
@@ -114,7 +110,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=True,
     ),
     CPE8R=dict(
-        elClass="DisplacementElement",
         nNodes=8,
         nDof=16,
         dofIndices=np.arange(0, 16),
@@ -130,7 +125,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=True,
     ),
     CPS4=dict(
-        elClass="DisplacementElement",
         nNodes=4,
         nDof=8,
         dofIndices=np.arange(0, 8),
@@ -146,7 +140,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=False,
     ),
     CPS4R=dict(
-        elClass="DisplacementElement",
         nNodes=4,
         nDof=8,
         dofIndices=np.arange(0, 8),
@@ -162,7 +155,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=False,
     ),
     CPS4E=dict(
-        elClass="DisplacementElement",
         nNodes=4,
         nDof=8,
         dofIndices=np.arange(0, 8),
@@ -178,7 +170,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=False,
     ),
     CPS8=dict(
-        elClass="DisplacementElement",
         nNodes=8,
         nDof=16,
         dofIndices=np.arange(0, 16),
@@ -194,7 +185,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=False,
     ),
     CPS8R=dict(
-        elClass="DisplacementElement",
         nNodes=8,
         nDof=16,
         dofIndices=np.arange(0, 16),
@@ -210,7 +200,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=False,
     ),
     C3D8=dict(
-        elClass="DisplacementElement",
         nNodes=8,
         nDof=24,
         dofIndices=np.arange(0, 24),
@@ -226,7 +215,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=None,
     ),
     C3D8R=dict(
-        elClass="DisplacementElement",
         nNodes=8,
         nDof=24,
         dofIndices=np.arange(0, 24),
@@ -242,7 +230,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=None,
     ),
     C3D8E=dict(
-        elClass="DisplacementElement",
         nNodes=8,
         nDof=24,
         dofIndices=np.arange(0, 24),
@@ -258,7 +245,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=None,
     ),
     C3D20=dict(
-        elClass="DisplacementElement",
         nNodes=20,
         nDof=60,
         dofIndices=np.arange(0, 60),
@@ -274,7 +260,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=None,
     ),
     C3D20R=dict(
-        elClass="DisplacementElement",
         nNodes=20,
         nDof=60,
         dofIndices=np.arange(0, 60),
@@ -291,7 +276,6 @@ elLibrary = CaseInsensitiveDict(
     ),
     # element types for displacementtlelement
     CPE4TL=dict(
-        elClass="DisplacementTLElement",
         nNodes=4,
         nDof=8,
         dofIndices=np.arange(0, 8),
@@ -307,7 +291,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=True,
     ),
     CPE4RTL=dict(
-        elClass="DisplacementTLElement",
         nNodes=4,
         nDof=8,
         dofIndices=np.arange(0, 8),
@@ -323,7 +306,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=True,
     ),
     CPE4ETL=dict(
-        elClass="DisplacementTLElement",
         nNodes=4,
         nDof=8,
         dofIndices=np.arange(0, 8),
@@ -339,7 +321,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=True,
     ),
     CPE8TL=dict(
-        elClass="DisplacementTLElement",
         nNodes=8,
         nDof=16,
         dofIndices=np.arange(0, 16),
@@ -355,7 +336,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=True,
     ),
     CPE8RTL=dict(
-        elClass="DisplacementTLElement",
         nNodes=8,
         nDof=16,
         dofIndices=np.arange(0, 16),
@@ -371,7 +351,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=True,
     ),
     CPS4TL=dict(
-        elClass="DisplacementTLElement",
         nNodes=4,
         nDof=8,
         dofIndices=np.arange(0, 8),
@@ -387,7 +366,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=False,
     ),
     CPS4RTL=dict(
-        elClass="DisplacementTLElement",
         nNodes=4,
         nDof=8,
         dofIndices=np.arange(0, 8),
@@ -403,7 +381,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=False,
     ),
     CPS4ETL=dict(
-        elClass="DisplacementTLElement",
         nNodes=4,
         nDof=8,
         dofIndices=np.arange(0, 8),
@@ -419,7 +396,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=False,
     ),
     CPS8TL=dict(
-        elClass="DisplacementTLElement",
         nNodes=8,
         nDof=16,
         dofIndices=np.arange(0, 16),
@@ -435,7 +411,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=False,
     ),
     CPS8RTL=dict(
-        elClass="DisplacementTLElement",
         nNodes=8,
         nDof=16,
         dofIndices=np.arange(0, 16),
@@ -451,7 +426,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=False,
     ),
     C3D8TL=dict(
-        elClass="DisplacementTLElement",
         nNodes=8,
         nDof=24,
         dofIndices=np.arange(0, 24),
@@ -467,7 +441,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=None,
     ),
     C3D8RTL=dict(
-        elClass="DisplacementTLElement",
         nNodes=8,
         nDof=24,
         dofIndices=np.arange(0, 24),
@@ -483,7 +456,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=None,
     ),
     C3D8ETL=dict(
-        elClass="DisplacementTLElement",
         nNodes=8,
         nDof=24,
         dofIndices=np.arange(0, 24),
@@ -499,7 +471,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=None,
     ),
     C3D20TL=dict(
-        elClass="DisplacementTLElement",
         nNodes=20,
         nDof=60,
         dofIndices=np.arange(0, 60),
@@ -515,7 +486,6 @@ elLibrary = CaseInsensitiveDict(
         plStrain=None,
     ),
     C3D20RTL=dict(
-        elClass="DisplacementTLElement",
         nNodes=20,
         nDof=60,
         dofIndices=np.arange(0, 60),

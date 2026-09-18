@@ -53,12 +53,12 @@ maxInc=1.0, minInc=1e-5, maxNumInc=10000, maxIter=25, stepLength=1
 
 *step, solver=theSolver
 maxInc=1e-1, minInc=1e-6, maxNumInc=100000, maxIter=25, stepLength=1
->>options, category=Ensight, intermediateSaveInterval=2, minDTForOutput=0.01
->>options, category=NISTSolver, extrapolation=linear,
+>>options, name=ensight_tens, intermediateSaveInterval=2, minDTForOutput=0.01
+>>options, name=theSolver, extrapolation=linear
 >>dirichlet, name=right, nSet=gen_right,  field=displacement, 1=-0.1
 
 *step, solver=theSolver
 maxInc=1e-1, minInc=1e-6, maxNumInc=100000, maxIter=25, stepLength=1
->>options, category=Ensight, intermediateSaveInterval=2, minDTForOutput=0.01
->>options, category=NISTSolver, extrapolation=linear,
+>>options, name=ensight_tens, intermediateSaveInterval=2, minDTForOutput=0.01
+>>options, name=theSolver, extrapolation=linear
 >>dirichlet, name=right, nSet=gen_right,  field=displacement, 1=0.2

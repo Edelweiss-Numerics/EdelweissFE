@@ -30,13 +30,46 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
+from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.vijentitybase import VIJEntityBase
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.schema import OptionSchemaProvider
 from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
-class ConstraintBase(ABC, VIJEntityBase):
+class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
+    #: Scratch buffer for the tangent that :meth:`applyConstraintExplicit` computes and discards.
+    #: Declared here so every constraint has it without touching its constructor; replaced by an
+    #: instance-level array on first use, and re-allocated only when the DOF footprint changes.
+    _discardedTangentScratch = None
+
+    @classmethod
+    def fromConstraintDefinition(
+        cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
+    ) -> "ConstraintBase":
+        """Create this constraint from a parsed ``.inp`` constraint definition.
+
+        The one place a module's input-file shape (set/surface *names*, string-typed booleans) is
+        turned into the typed arguments its real constructor takes. Override it together with a
+        typed ``__init__``; leave it alone and the dict-consuming constructor is used unchanged.
+
+        Parameters
+        ----------
+        name
+            The name of the constraint.
+        definition
+            The parsed option mapping for this constraint (the datalines-derived ``kwargs``).
+        model
+            The model tree.
+
+        Returns
+        -------
+        ConstraintBase
+            The constructed constraint.
+        """
+        return cls(name, model, **definition)
+
     @abstractmethod
     def __init__(self, name: str, model: FEModel, *args, **kwargs):
         """The constraint base class.
@@ -91,6 +124,67 @@ class ConstraintBase(ABC, VIJEntityBase):
     def nDof(self) -> int:
         """The total number of degrees of freedom this constraint is associated with."""
 
+    def updateConnectivity(self, model: FEModel) -> bool:
+        """Called once at the start of every increment, before the global equation system is
+        (re)created, so a constraint can refresh a dynamic candidate set (e.g. proximity-based
+        contact pairs) and declare whether its ``nodes``/``fieldsOnNodes``/``nDof`` footprint has
+        changed since the last call.
+
+        The default implementation does nothing and reports no change, which is correct for every
+        constraint whose DOF footprint is fixed at construction (i.e. every constraint that does
+        not override this method).
+
+        Parameters
+        ----------
+        model
+            The current model.
+
+        Returns
+        -------
+        bool
+            True if this constraint's contribution to the global system has changed and the
+            equation system must be rebuilt before the next Newton solve.
+        """
+
+        return False
+
+    def acceptLastState(self):
+        """Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` when an increment
+        is accepted, so a stateful constraint (e.g. frictional contact) can promote the state of
+        the last (converged) Newton iterate to its history.
+
+        The default implementation does nothing, which is correct for every stateless constraint
+        (i.e. every constraint that does not override this method)."""
+
+    def getRestartData(self) -> dict[str, np.ndarray] | None:
+        """Return this constraint's converged internal history (state not covered by its
+        :attr:`scalarVariables`, e.g. frictional-contact history) to be serialized by
+        :meth:`~edelweissfe.models.femodel.FEModel.writeRestart`, or ``None`` if the constraint is
+        stateless.
+
+        The default implementation returns ``None``, which is correct for every constraint that
+        does not override it (its full state is either recomputed each increment or already covered
+        by :attr:`scalarVariables`).
+
+        Returns
+        -------
+        dict[str, np.ndarray] | None
+            A flat mapping of array name to array, or ``None``.
+        """
+
+        return None
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore this constraint's converged internal history from a restart checkpoint.
+
+        Parameters
+        ----------
+        data
+            The mapping previously returned by :meth:`getRestartData`.
+        """
+
+        raise NotImplementedError("This constraint does not carry restartable internal history.")
+
     def getNumberOfAdditionalNeededScalarVariables(
         self,
     ) -> int:
@@ -117,6 +211,74 @@ class ConstraintBase(ABC, VIJEntityBase):
         """
 
         self.scalarVariables = scalarVariables
+
+    def _checkSetChanged(self, theSet) -> bool:
+        """Lazily detect whether ``theSet`` (a stable-identity
+        :class:`~edelweissfe.sets.nodeset.NodeSet` or :class:`~edelweissfe.sets.elementset.ElementSet`)
+        was mutated in-place (e.g. by AMR) since this constraint last checked it.
+
+        A constraint that pre-sizes a derived array to the set's size calls this at its own
+        per-increment entry point (e.g. :meth:`updateConnectivity`) to recompute that array
+        lazily, without registering as a
+        :class:`~edelweissfe.models.meshdependent.MeshDependent`.
+
+        Parameters
+        ----------
+        theSet
+            The set whose version is being tracked.
+
+        Returns
+        -------
+        bool
+            True once per version bump of ``theSet`` since the last call for this same set.
+        """
+        setVersions = self.__dict__.setdefault("_setVersions", {})
+        key = id(theSet)
+        changed = setVersions.get(key, theSet._version) != theSet._version
+        setVersions[key] = theSet._version
+        return changed
+
+    def applyConstraintExplicit(
+        self,
+        U_np: np.ndarray,
+        dU: np.ndarray,
+        PExt: np.ndarray,
+        timeStep: TimeStep,
+    ):
+        """Evaluate this constraint without producing a tangent matrix.
+
+        Used by explicit solvers where no system tangent matrix is assembled. The default
+        implementation forwards to :meth:`applyConstraint` with a dummy tangent contribution
+        so existing constraints remain functional without modification.
+
+        Constraints where tangent computation is costly should override this method to evaluate
+        only the residual / force vector directly.
+
+        Parameters
+        ----------
+        U_np
+            The current solution, restricted to this constraint's degrees of freedom.
+        dU
+            The current solution increment, likewise restricted.
+        PExt
+            The local residual / force vector to augment.
+        timeStep
+            The current time step.
+        """
+
+        # nDof**2 for any constraint that does not override getVIJContributionSize, allocated on
+        # every increment for a tangent no explicit solver reads. Kept and re-zeroed instead: the
+        # zeroing preserves the previous semantics exactly, whatever applyConstraint assumes about
+        # the buffer it is handed.
+        size = self.getVIJContributionSize()
+        scratch = self._discardedTangentScratch
+        if scratch is None or scratch.size != size:
+            scratch = self._discardedTangentScratch = np.zeros(size)
+        else:
+            scratch[:] = 0.0
+
+        K = self.shapeVIJContribution(scratch)
+        self.applyConstraint(U_np, dU, PExt, K, timeStep)
 
     @abstractmethod
     def applyConstraint(

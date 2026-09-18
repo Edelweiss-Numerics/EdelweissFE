@@ -43,21 +43,32 @@ Keyword: ``*generator``
         multiple lines of defintion ...
 """
 
-import importlib
+from edelweissfe.config import registry
 
 
-def getGeneratorFunction(name: str) -> type:
-    """Get the function type of the requested generator.
+def getGeneratorClass(name: str) -> type:
+    """Return the class implementing generator ``name``.
+
+    Resolved through the registry (``generator`` category), which lets built-in generators,
+    entry points, and in-process :func:`~edelweissfe.config.registry.register` calls all be
+    reached the same way.
 
     Parameters
     ----------
     name
         The name of the generator class type to load.
+
     Returns
     -------
     type
-        The generator function type.
+        The generator class type.
+
+    Raises
+    ------
+    edelweissfe.config.registry.RegistryLookupError
+        If no generator is registered under ``name``.
     """
 
-    module = importlib.import_module("edelweissfe.generators." + name.lower())
-    return module.generateModelData
+    generatorClass, _ = registry.lookup("generator", name)
+
+    return generatorClass
