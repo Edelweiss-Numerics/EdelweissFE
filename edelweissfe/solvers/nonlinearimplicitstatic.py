@@ -352,10 +352,14 @@ class NIST(NonlinearSolverBase):
                     if self.linSolver.reportsSolveSummary:
                         # One more column, exactly like any other field's, for the linear solver's own
                         # per-iteration diagnostics -- see NonlinearSolverBase.checkConvergence, which
-                        # builds and appends the matching row cell. A wider gap than between the real
-                        # fields themselves, so the linear solver's column reads as its own group
-                        # instead of blurring into the last real field's.
-                        gap = "   "
+                        # builds and appends the matching row cell. A visible gap from the real fields'
+                        # columns, so the linear solver's column reads as its own group instead of
+                        # blurring into the last real field's -- capped at 1 extra space: the Journal
+                        # wraps level-2 messages at leftColumn-4 = 76 chars, each field/group already
+                        # costs a full 25 of that, and this model's own row (2 real fields + this one)
+                        # is already at 75 without any gap at all, so anything wider wraps the row's
+                        # tail onto its own line, which looks far worse than a tight gap.
+                        gap = " "
                         self.iterationHeader += gap + "{:^25}".format("linear solve")
                         self.iterationHeader2 += gap + subHeaderCell.format("iters", "‖r‖")
 

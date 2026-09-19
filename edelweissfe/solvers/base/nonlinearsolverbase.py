@@ -334,9 +334,10 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         realFieldsWidth = len(iterationMessage)
 
         # Matches the extra gap NonlinearImplicitStatic inserts before the "linear solve" header
-        # group -- without it here too, the header's wider gap and the row's values drift apart
-        # column by column for every field after the first.
-        linSolverGap = "   "
+        # group -- without it here too, the header's gap and the row's values drift apart column by
+        # column for every field after the first. Only 1 space: the Journal wraps level-2 messages at
+        # 76 chars and this row is already at 75 without it, see that gap's own comment.
+        linSolverGap = " "
 
         summary = self.linSolver.lastSolveSummary if self.linSolver.reportsSolveSummary else None
         if summary is not None and ddU is not None:
