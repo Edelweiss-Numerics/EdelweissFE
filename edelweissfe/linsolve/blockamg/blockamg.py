@@ -340,6 +340,18 @@ class BlockAMGSolver(LinearSolver):
         per unit of *simulated time* rather than per increment, the per-increment saving is largely
         or wholly given back. ``gapSafetyFactor`` is the knob between the two regimes (smaller =
         more accurate = closer to the default's Newton behaviour); the sweet spot is unexplored.
+
+        **Bug found and fixed 2026-09-19 (`gapMaxFactor`):** the EMA in :meth:`__call__` that learns
+        the gap across solves was floored at 1.0 but had no ceiling. In a genuinely degraded regime
+        (documented normal range 1.0-3.5) a single solve that fails to converge at all can report a
+        measured gap many orders of magnitude too large; the EMA carries that into the next solve's
+        ``firstPassEta``, which then also fails, feeding back an even larger gap -- a positive-feedback
+        runaway with no floor other than ``firstPassEta``'s own 1e-14 clamp. Observed live on the
+        AnchorPryOut hef70 model: 5+ consecutive solves each burning ~2400 outer iterations while the
+        achieved true residual *worsened* monotonically (7.7e-3 -> 5.1e-2 -> 3.2e-1 -> 7.5e-1 -> 9.4e-1),
+        i.e. the solver was returning answers converging AWAY from the requested tolerance, not towards
+        it. ``gapMaxFactor`` (default 1e3, comfortably above the documented normal range) caps the EMA
+        so a single catastrophic solve cannot poison every solve after it.
     hierarchyStalenessFactor
         Refresh the AMG hierarchies before the *next* solve if this solve's outer GMRES count exceeded
         this factor times the previous solve's -- a growing count is the signal that the reused
@@ -464,6 +476,7 @@ class BlockAMGSolver(LinearSolver):
         hierarchyStalenessFactor: float = 1.5,
         gapCompensatedTolerance: bool = False,
         gapSafetyFactor: float = 0.3,
+        gapMaxFactor: float = 1e3,
         trueResidualMaxContinuations: int = 2,
         verbosity: str = "warning",
         warnOuterIterationsThreshold: int = 100,
@@ -507,6 +520,7 @@ class BlockAMGSolver(LinearSolver):
         self._hierarchyStalenessFactor = hierarchyStalenessFactor
         self._gapCompensatedTolerance = gapCompensatedTolerance
         self._gapSafetyFactor = gapSafetyFactor
+        self._gapMaxFactor = gapMaxFactor
         self._trueResidualMaxContinuations = trueResidualMaxContinuations
         if verbosity not in _VERBOSITY_LEVELS:
             raise ValueError("verbosity must be one of {:}, got {!r}".format(_VERBOSITY_LEVELS, verbosity))
@@ -1370,7 +1384,14 @@ class BlockAMGSolver(LinearSolver):
         # given), smoothed so one atypical solve cannot swing the next one's first-pass tolerance.
         _measuredGap = trueResidual / max(firstPassEta, 1e-300)
         if np.isfinite(_measuredGap) and _measuredGap > 0.0:
-            self._trueResidualGap = max(0.5 * self._trueResidualGap + 0.5 * _measuredGap, 1.0)
+            # Clamped both sides: floored at 1.0 (a gap below 1 would mean the scaled residual is a
+            # *worse* proxy than reporting no gap at all, which the forcing-tolerance math below does
+            # not expect) and ceiled at gapMaxFactor -- without the ceiling, one solve that fails to
+            # converge (trueResidual near 1 against a tiny firstPassEta) reports a measured gap many
+            # orders too large, the EMA carries it forward, and every subsequent solve's firstPassEta
+            # collapses towards its own 1e-14 floor with no self-correction. See the runaway documented
+            # in this class's docstring (`gapMaxFactor`, found 2026-09-19).
+            self._trueResidualGap = min(max(0.5 * self._trueResidualGap + 0.5 * _measuredGap, 1.0), self._gapMaxFactor)
 
         with performancetiming.timeit("true-residual continuations"):
             continuationEta = min(eta, firstPassEta) if self._gapCompensatedTolerance else eta
