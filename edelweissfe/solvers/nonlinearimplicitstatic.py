@@ -339,17 +339,26 @@ class NIST(NonlinearSolverBase):
                             "scalar variables",
                         ]
 
-                    self.iterationHeader2 = (" {:<10}  {:<10}  ").format("||R||∞", "||ddU||∞") * len(
-                        presentVariableNames
-                    )
+                    # Each field/variable cell holds two 12-wide sub-cells (a value plus its 1-char
+                    # convergence marker -- see NonlinearSolverBase.checkConvergence's
+                    # iterationMessageTemplate, "{:11.2e}{:1}" per metric) plus a trailing separating
+                    # space, 25 chars total. Centering each label over its own 12-wide sub-cell --
+                    # rather than left-justifying it in an unrelated 10-wide slot -- is what actually
+                    # lines header labels up with the values printed below them.
+                    subHeaderCell = "{:^12}{:^12} "
+                    self.iterationHeader = ("{:^25}" * len(presentVariableNames)).format(*presentVariableNames)
+                    self.iterationHeader2 = subHeaderCell.format("||R||∞", "||ddU||∞") * len(presentVariableNames)
+
                     if self.linSolver.reportsSolveSummary:
                         # One more column, exactly like any other field's, for the linear solver's own
                         # per-iteration diagnostics -- see NonlinearSolverBase.checkConvergence, which
-                        # builds and appends the matching row cell.
-                        presentVariableNames = presentVariableNames + ["linear solve"]
-                        self.iterationHeader2 += (" {:<10}  {:<10}  ").format("iters", "‖r‖")
+                        # builds and appends the matching row cell. A wider gap than between the real
+                        # fields themselves, so the linear solver's column reads as its own group
+                        # instead of blurring into the last real field's.
+                        gap = "   "
+                        self.iterationHeader += gap + "{:^25}".format("linear solve")
+                        self.iterationHeader2 += gap + subHeaderCell.format("iters", "‖r‖")
 
-                    self.iterationHeader = ("{:^25}" * len(presentVariableNames)).format(*presentVariableNames)
                     self.iterationMessageTemplate = "{:11.2e}{:1}{:11.2e}{:1} "
 
                     K = self.theDofManager.constructVIJSystemMatrix()

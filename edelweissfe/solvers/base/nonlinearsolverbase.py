@@ -333,6 +333,11 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         # land in the "linear solve" column's own lane instead of sprawling across the whole row.
         realFieldsWidth = len(iterationMessage)
 
+        # Matches the extra gap NonlinearImplicitStatic inserts before the "linear solve" header
+        # group -- without it here too, the header's wider gap and the row's values drift apart
+        # column by column for every field after the first.
+        linSolverGap = "   "
+
         summary = self.linSolver.lastSolveSummary if self.linSolver.reportsSolveSummary else None
         if summary is not None and ddU is not None:
             # ddU is None on the very first iteration of an increment (no linear solve has happened
@@ -340,11 +345,11 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             # over from the previous increment's last solve, which belongs to no residual on this row.
             superscript = {0: "", 1: "¹", 2: "²", 3: "³"}.get(summary.retries, "")
             itersPart = "{:}{:}".format(summary.iters, superscript)
-            iterationMessage += "{:<12}{:11.2e}{:1} ".format(
+            iterationMessage += linSolverGap + "{:<12}{:11.2e}{:1} ".format(
                 itersPart, summary.residual, "✓" if summary.residualMet else " "
             )
         elif summary is not None:
-            iterationMessage += " " * 25
+            iterationMessage += linSolverGap + " " * 25
 
         self.journal.message(iterationMessage, self.identification, level=2)
 
