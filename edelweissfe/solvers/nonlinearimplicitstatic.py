@@ -339,26 +339,16 @@ class NIST(NonlinearSolverBase):
                             "scalar variables",
                         ]
 
-                    # Each field/variable cell holds two 12-wide sub-cells (a value plus its 1-char
-                    # convergence marker -- see NonlinearSolverBase.checkConvergence's
-                    # iterationMessageTemplate, "{:11.2e}{:1}" per metric) plus a trailing separating
-                    # space, 25 chars total. Centering each label over its own 12-wide sub-cell --
-                    # rather than left-justifying it in an unrelated 10-wide slot -- is what actually
-                    # lines header labels up with the values printed below them.
+                    # Centers each label over its 12-wide value+marker cell (see checkConvergence's
+                    # iterationMessageTemplate).
                     subHeaderCell = "{:^12}{:^12} "
                     self.iterationHeader = ("{:^25}" * len(presentVariableNames)).format(*presentVariableNames)
                     self.iterationHeader2 = subHeaderCell.format("||R||∞", "||ddU||∞") * len(presentVariableNames)
 
                     if self.linSolver.reportsSolveSummary:
-                        # One more column, exactly like any other field's, for the linear solver's own
-                        # per-iteration diagnostics -- see NonlinearSolverBase.checkConvergence, which
-                        # builds and appends the matching row cell. A visible gap from the real fields'
-                        # columns, so the linear solver's column reads as its own group instead of
-                        # blurring into the last real field's -- capped at 1 extra space: the Journal
-                        # wraps level-2 messages at leftColumn-4 = 76 chars, each field/group already
-                        # costs a full 25 of that, and this model's own row (2 real fields + this one)
-                        # is already at 75 without any gap at all, so anything wider wraps the row's
-                        # tail onto its own line, which looks far worse than a tight gap.
+                        # Extra column for the linear solver's diagnostics; checkConvergence appends
+                        # the matching row cell. Gap capped at 1 space -- wider wraps the row past the
+                        # Journal's 76-char limit for level-2 messages.
                         gap = " "
                         self.iterationHeader += gap + "{:^25}".format("linear solve")
                         self.iterationHeader2 += gap + subHeaderCell.format("iters", "‖r‖")

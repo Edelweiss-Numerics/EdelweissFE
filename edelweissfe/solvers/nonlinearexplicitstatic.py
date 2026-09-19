@@ -289,13 +289,8 @@ class NEST(NIST):
 
         nVariables = len(presentVariableNames)
         self.iterationHeader = ("{:^25}" * nVariables).format(*presentVariableNames)
-        # Each field's cell holds two 12-wide sub-cells (a value plus its 1-char convergence marker
-        # -- see NonlinearSolverBase.checkConvergence's iterationMessageTemplate, "{:11.2e}{:1}" per
-        # metric) plus a trailing separating space, 25 chars total. Centering each label over its own
-        # 12-wide sub-cell -- rather than left-justifying it in an unrelated 10-wide slot -- is what
-        # actually lines header labels up with the values printed below them. Kept in sync with
-        # NonlinearImplicitStatic's identical real-field header, which additionally appends a
-        # "linear solve" column that never applies here (explicit dynamics has no implicit solve).
+        # Centers each label over its 12-wide value+marker cell; kept in sync with
+        # NonlinearImplicitStatic's identical real-field header.
         self.iterationHeader2 = ("{:^12}{:^12} ").format("||R||∞", "||ddU||∞") * nVariables
         self.iterationMessageTemplate = "{:11.2e}{:1}{:11.2e}{:1} "
 
