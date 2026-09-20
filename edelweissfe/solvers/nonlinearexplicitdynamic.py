@@ -258,6 +258,21 @@ class NEDSchema:
         default=False,
         optionName="report-performance",
     )
+    lumpedQuantityConservationTolerance: float | None = schemaField(
+        description=(
+            "Relative-change tolerance for the per-topology-change conservation check on a "
+            "row-sum-lumped quantity (mass, a first-order field's viscosity, a second-order "
+            "field's non-mechanical inertia). Children of a refined element tile it and carry the "
+            "same value, so this is conserved geometrically; the default is already generous "
+            "relative to floating-point precision and exists to catch a genuinely wrong refinement "
+            "or lumping, not to absorb ordinary quadrature noise. Raise this only when a specific, "
+            "understood run trips it by a small margin (see "
+            "NonlinearExplicitDynamic._checkLumpedQuantityConserved)."
+        ),
+        dtype=float,
+        default=_LUMPED_QUANTITY_CONSERVATION_TOLERANCE,
+        optionName="lumped-quantity-conservation-tolerance",
+    )
 
 
 @dataclass
@@ -353,6 +368,7 @@ class NED(NonlinearSolverBase):
         "contact-update-frequency": 100,
         "topology-check-frequency": 0,
         "report-performance": False,
+        "lumped-quantity-conservation-tolerance": _LUMPED_QUANTITY_CONSERVATION_TOLERANCE,
         # Lists, so _updateOptions comma-splits them. Empty means "assert nothing", which is what
         # every deck that does not mention them gets.
         "expect-second-order-fields": [],
@@ -2168,7 +2184,8 @@ class NED(NonlinearSolverBase):
         Raises
         ------
         RuntimeError
-            If the relative change exceeds _LUMPED_QUANTITY_CONSERVATION_TOLERANCE.
+            If the relative change exceeds the ``lumped-quantity-conservation-tolerance`` option
+            (default :data:`_LUMPED_QUANTITY_CONSERVATION_TOLERANCE`).
         """
 
         relativeChange = abs(after - before) / before if before > 0.0 else 0.0
@@ -2176,16 +2193,15 @@ class NED(NonlinearSolverBase):
             self._cumulativeLumpedQuantityDrift.get(label, 0.0) + relativeChange
         )
 
-        if relativeChange > _LUMPED_QUANTITY_CONSERVATION_TOLERANCE:
+        tolerance = self.options.get("lumped-quantity-conservation-tolerance", _LUMPED_QUANTITY_CONSERVATION_TOLERANCE)
+        if relativeChange > tolerance:
             raise RuntimeError(
                 "A topology change did not conserve the total lumped {:}: {:e} became {:e}, a "
                 "relative change of {:e} against a tolerance of {:e}. The children of a refined "
                 "element tile it and carry the same value, so it is conserved geometrically; the "
                 "quadrature that assembles it is exact only up to a polynomial order, which "
                 "admits a small change. A violation of this size is not quadrature -- it means "
-                "the refinement or the lumping is wrong.".format(
-                    label, before, after, relativeChange, _LUMPED_QUANTITY_CONSERVATION_TOLERANCE
-                )
+                "the refinement or the lumping is wrong.".format(label, before, after, relativeChange, tolerance)
             )
 
         # Reported, not raised: each individual change was within the exact-conservation bound, so
