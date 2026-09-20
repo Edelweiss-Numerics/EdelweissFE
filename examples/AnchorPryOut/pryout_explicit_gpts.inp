@@ -1,0 +1,29 @@
+**=================================================================================================
+** BONDED ANCHOR PRY-OUT, full scale  --  explicit dynamic (NEDParallel), Gauss-point-to-segment contact
+**=================================================================================================
+** One of two variants of the same 280k-dof model. See README.md for what this example is, what it
+** costs, and how to read the result.
+**
+**     pryout_implicit_gpts.inp   implicit static  + Gauss-point-to-segment contact
+**     pryout_explicit_gpts.inp   explicit dynamic + Gauss-point-to-segment contact
+**
+** Everything the two have in common lives in the shared includes below, so a variant is only the
+** three lines that make it that variant: its materials (the explicit one is mass-scaled), its
+** solver, and its steps. The mesh, the sections, all fourteen facet surfaces, all five ties, the
+** contact pairs and the adaptivity criterion are literally the same files.
+**
+** Both ramp the fixture plate to the SAME 5.0 mm and refine on the SAME criterion, so they are
+** comparable at equal displacement rather than at equal cost.
+**
+**   edelweissfe pryout_explicit_gpts.inp
+**
+** THIS IS NOT A SMOKE TEST. See README.md -- expect hours, not minutes.
+**=================================================================================================
+*include, input=./materials_explicit.inc
+*include, input=./model.inc
+*include, input=./contact_gpts.inc
+*include, input=./adaptivity.inc
+*include, input=./outputs.inc
+*include, input=./steps_explicit.inc
+
+*job, name=anchorPryOut, domain=3d
