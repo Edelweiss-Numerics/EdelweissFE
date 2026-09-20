@@ -151,6 +151,10 @@ cdef extern from "Marmot/MarmotElement.h":
         void computeLumpedInertia(double* M) except +ValueError
         void computeLumpedDamping(double* C) except +ValueError
 
+        # The full (nDof x nDof) mass matrix, in the same flat layout as the stiffness written by
+        # computeKernels. Same `except +` reasoning as above: it asks the material for its density.
+        void computeConsistentInertia(double* M) except +ValueError
+
         void computeCriticalTimeStepForExplicitDynamics(
                         double& criticalTimeStep,
                         const double* QTotal) except +ValueError

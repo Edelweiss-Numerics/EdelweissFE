@@ -30,6 +30,47 @@ Solvers
 
 .. pprint:: solver:NISTPArcLength
 
+``NID`` - Nonlinear Implicit Dynamic (Newmark-beta)
+----------------------------------------------------
+
+.. automodule:: edelweissfe.solvers.nonlinearimplicitdynamic
+   :members:
+
+.. pprint:: solver:NID
+
+The relevant blocks of a deck, abridged from the regression case ``testfiles/marmot/NID`` -- a bar
+under a suddenly applied end load, oscillating about its static deflection:
+
+.. code-block:: edelweiss
+
+    *solver, solver=NID, name=theSolver
+    newmarkBeta=0.25
+    newmarkGamma=0.5
+
+    *fieldOutput
+    >>perNode, nSet=gen_right, field=displacement, result=U, name=tipU, f(x)='np.mean(x[:,0])', saveHistory=True
+    >>perNode, nSet=gen_right, field=displacement, result=V, name=tipV, f(x)='np.mean(x[:,0])', saveHistory=True
+    >>perNode, nSet=gen_right, field=displacement, result=A, name=tipA, f(x)='np.mean(x[:,0])', saveHistory=True
+
+    *step, solver=theSolver
+    stepLength=2.0, startInc=0.01, maxInc=0.01, minInc=1e-4, maxNumInc=1000, maxIter=25
+    >>dirichlet, name=fixedEnd, nSet=gen_left, field=displacement, 1=0.0
+    >>nodeforces, name=endLoad, nSet=gen_right, field=displacement, 1=0.0987, f(t)='1'
+
+The time increment is the step's increment (``stepLength`` times the step-progress increment), so a
+constant ``dt`` is obtained with ``startInc = maxInc``; a cutback shrinks it like any other implicit
+increment. The velocity and acceleration are available to every ``*fieldOutput`` as ``result=V`` and
+``result=A`` on the displacement field, and travel with the ``*output, type=restart`` checkpoints,
+which is what makes a resumed run continue the same trajectory rather than restart it from rest.
+
+The material must report a density (for ``LinearElastic``, the third material parameter): the mass
+is assembled from it, and a time-integrated degree of freedom that receives none is refused rather
+than integrated as though it had inertia.
+
+Verified in ``tests/test_nid_newmark.py`` and ``tests/test_nid_restart.py`` against the exact
+discrete Newmark recurrence of the same problem, against the continuous closed form at second order,
+for exact conservation of the discrete energy, and for restart equivalence of ``U``, ``V`` and ``A``.
+
 ``NEST`` - Nonlinear Explicit Static
 -------------------------------------
 

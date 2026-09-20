@@ -39,7 +39,7 @@ from time import time as getCurrentTime
 import h5py
 
 from edelweissfe.config.configurator import loadConfiguration, updateConfiguration
-from edelweissfe.config.phenomena import domainMapping
+from edelweissfe.config.phenomena import carriesLinearMomentum, domainMapping
 from edelweissfe.config.solvers import getSolverByName
 from edelweissfe.helpers.inputfilehelpers import (
     createFieldOutputFromInputFile,
@@ -134,10 +134,22 @@ def finiteElementSimulation(
     for updateConfig in inputfile["updateConfiguration"]:
         updateConfiguration(updateConfig, jobInfo, journal)
 
-    # Create the default entries 'U' (flux) and 'P' (effort)
+    # Create the default entries 'U' (flux) and 'P' (effort) on every node field, and the kinematic
+    # entries 'V' (velocity) and 'A' (acceleration) on the ones a dynamic solver integrates in time
+    # -- those whose inertia is a mass. They stay zero until such a solver publishes into them.
+    #
+    # Created here, before the field outputs take their sample at job initialisation, so that a
+    # ``result=V``/``result=A`` output is valid from the start (a per-node field output reads
+    # ``nodeField[result]`` directly and would otherwise raise) rather than only from the first
+    # increment a dynamic solver has finished. Restricted to the mass-carrying fields because a
+    # velocity of a non-local damage or a temperature field is not a kinematic quantity any solver
+    # here publishes, and an always-zero entry on every field would travel into every checkpoint.
     for nodeField in model.nodeFields.values():
         nodeField.createFieldValueEntry("U")
         nodeField.createFieldValueEntry("P")
+        if carriesLinearMomentum(nodeField.name):
+            nodeField.createFieldValueEntry("V")
+            nodeField.createFieldValueEntry("A")
 
     model._linkFieldVariableObjects(model.nodeSets["all"])
 

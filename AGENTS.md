@@ -139,7 +139,7 @@ the `edelweissfe` CLI and `run_tests_edelweissfe`):
 #### Solvers & Parallelization
 - **Nonlinear Solvers** (`edelweissfe/solvers/`): Implicit/explicit static/dynamic solvers (`NIST`, `NEST`, `NED`),
   each with serial and `...Parallel` thread-parallel variants (e.g. `NISTParallel`), plus arc-length methods
-  (`NISTPArcLength`).
+  (`NISTPArcLength`) and Newmark-beta implicit dynamics (`NID`, consistent mass, extends `NIST`'s Newton loop).
 - **Thread Parallelism & Free-Threading**: Element loops dispatch element chunks across persistent thread pools
   (`edelweissfe/numerics/parallelizationutilities.py::getThreadPool`). `ScatterDofVector` uses precomputed layout
   templates (`ScatterDofVectorTemplate`) and `np.bincount` for lock-free parallel accumulation. Third-party C
