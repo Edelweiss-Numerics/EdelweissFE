@@ -193,6 +193,9 @@ class _FieldOutputBase:
         self.timeHistory = []
         self.export = export
         self._reshape_to_dimensions = reshape_to_dimensions
+        #: Set transiently by ``initializeJob(resuming=True)``, and consumed (reset to ``False``)
+        #: by the next ``initializeStep`` -- see the docstring there.
+        self._resuming = False
 
     def getLastResult(
         self,
@@ -326,18 +329,44 @@ class _FieldOutputBase:
                 ).reshape((1, -1)),
             )
 
-    def initializeJob(self):
+    def initializeJob(self, resuming: bool = False):
         """Initalize everything. Will also update the results
         based on the proved start time and solution.
+
+        Parameters
+        ----------
+        resuming
+            Whether this job is resuming from a ``*restart, readFrom=...`` checkpoint. When
+            ``True``, an existing ``{export}.csv`` (written by the interrupted run) is kept and
+            appended to instead of being truncated -- otherwise every restart would silently wipe
+            all history written before the checkpoint being resumed from.
         """
 
         self.updateResults(self.model)
+        self._resuming = resuming
 
         if self.export:
-            f = open(f"{self.export}.csv", "w")
+            f = open(f"{self.export}.csv", "a" if resuming else "w")
             f.close()
 
     def initializeStep(self, step):
+        """Write the current (just-updated) result as the first row of this step.
+
+        Skipped once, on the step a restart resumes into: the restored state
+        ``initializeJob(resuming=True)`` just sampled is exactly the state the interrupted run
+        already exported as the last row of ``{export}.csv`` -- a checkpoint is always written
+        right after the same completed-increment hook that exports this field output (see
+        ``outputmanagers/restart.py``), so writing it again here would duplicate that row a second
+        time. One copy of it is unavoidable regardless (a cold start has the same duplicate at
+        t=0, from the zero increment every explicit solver run starts with landing on an
+        output-frequency boundary and re-exporting a result that has not advanced) -- skipping
+        here just keeps a resume's seam consistent with that pre-existing cold-start artifact
+        instead of tripling the row.
+        """
+        if self._resuming:
+            self._resuming = False
+            return
+
         if self.export:
             self.writeLastResult()
 
@@ -915,9 +944,9 @@ class FieldOutputController:
             quadraturePoints,
         )
 
-    def initializeJob(self):
+    def initializeJob(self, resuming: bool = False):
         for fieldOutput in self.fieldOutputs.values():
-            fieldOutput.initializeJob()
+            fieldOutput.initializeJob(resuming=resuming)
 
     def finalizeIncrement(
         self,
