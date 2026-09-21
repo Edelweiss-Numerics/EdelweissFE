@@ -199,6 +199,44 @@ the converged root); for a history-dependent material it yields a physically dis
 which is the intended effect. The equilibration solve integrates materials with ``dT = 0``, so it
 suits rate-independent models; rate-dependent materials see no time advance during it by design.
 
+Refinement under a dynamic solver
+---------------------------------
+
+Both dynamic solvers refine mid-run. What makes that possible is that their kinematic state lives
+in ordinary node-field entries -- ``V`` (velocity) for
+:mod:`~edelweissfe.solvers.nonlinearexplicitdynamic`, ``V`` and ``A`` (acceleration) for
+:mod:`~edelweissfe.solvers.nonlinearimplicitdynamic` -- so the nodes a refinement creates receive
+them through the very same isoparametric warm start that already carries ``U``
+(``hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES``). No solver-specific interpolation exists, and
+none should: using one operator for all of them is what keeps ``U``, ``V`` and ``A`` consistent
+with one another on a new node.
+
+Three statements about a refinement, in decreasing strength, apply to both:
+
+* the **total mass** of every dynamic field is conserved -- geometrically, since the children tile
+  their parent at the same density -- and is *asserted* at every event (``NID``'s
+  ``massConservationTolerance``, ``NED``'s ``lumped-quantity-conservation-tolerance``);
+* the **linear momentum** is conserved exactly for a spatially uniform velocity field, because the
+  shape functions are a partition of unity; for a general field the discrepancy is second order in
+  the velocity gradient across the refined parent, which is discretisation error, not a defect;
+* the **kinetic energy** is not conserved in general and is the most sensitive of the three, being
+  quadratic in the interpolation error. Both solvers report the relative jump at every event; more
+  than roughly a percent is a reason to look at the transfer rather than to believe the physics.
+
+The two differ in what happens *after* the transfer, and the difference is the integrator's, not
+the adaptivity's. ``NED`` has no equilibrium iteration to absorb an imbalance, so it zeroes the
+internal force for one increment and lets the material respond over the following ones. ``NID``
+does have one -- but it also holds an acceleration, and an *interpolated* acceleration is not in
+equilibrium with the mass just reassembled on the refined mesh. So ``NID`` re-solves the
+acceleration from equilibrium on the increment after a topology change, with the same machinery a
+step start uses; ``computeInitialAcceleration=False`` keeps the interpolated one instead. A rebuild
+of the equation system that is *not* a topology change -- a contact constraint re-reporting its
+connectivity -- moves no node and does not trigger it.
+
+``NID`` ignores ``equilibrateAfterModelChange``: that option's re-equilibration increment is a
+zero-time one, and in zero time a dynamic model cannot move. Its dynamic counterpart is the
+acceleration re-solve above, which is always on unless switched off.
+
 Compatibility with facet-based contact and tie
 -------------------------------------------------
 

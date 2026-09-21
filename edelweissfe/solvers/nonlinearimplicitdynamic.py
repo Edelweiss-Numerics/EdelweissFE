@@ -124,10 +124,39 @@ mechanism the explicit solver uses for its velocity. That makes them part of eve
 ``result=A``), with no solver-specific restart code beyond a marker that tells a resumed run not to
 recompute the initial acceleration.
 
-**Not supported in this version.** Model modifiers (adaptive mesh refinement): the transfer of
-velocity and acceleration onto a refined mesh is not established for this solver, so a model with a
-self-starting modifier is refused rather than silently integrated from rest on its new nodes.
-Rayleigh or any other damping model beyond what the elements report as their lumped damping.
+**Live h-adaptivity.** A ``*modelModifier, type=hAdaptivity`` refining the mesh mid-step is
+supported. Three things make that work, and only the third is this solver's own:
+
+* Being node-field entries, ``V`` and ``A`` are carried onto the nodes a refinement creates by the
+  same isoparametric interpolation from the parent element that already carries ``U``
+  (:data:`~edelweissfe.modelmodifiers.adaptivity.hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES`).
+  Nothing here interpolates anything itself.
+* The mass and the damping are not transferred at all: they are reassembled from the elements that
+  now exist, because the parent rebuilds its
+  :class:`~edelweissfe.numerics.dofmanager.DofManager` on a topology change and everything bound to
+  it is rebuilt with it. There is therefore no re-lumping error of the kind an explicit solver has
+  to account for -- the total mass is an assembly of the new mesh, not a redistribution of the old.
+* The interpolated acceleration is only as good as an interpolation of the *previous* mesh's
+  acceleration, and it is not in equilibrium with the operators that were just reassembled. So the
+  increment after a topology change **recomputes the acceleration from equilibrium**, with the
+  cold-start machinery a step start already uses (``computeInitialAcceleration``, which also
+  switches this off). The displacement and the velocity are kept: they are the kinematic state, and
+  interpolation is the best statement of them the new mesh admits. Only a change that the topology
+  pipeline actually recorded re-arms it -- a mere change of a constraint's connectivity (a contact
+  candidate list) rebuilds the equation system without moving a node, and must not restart the
+  acceleration of every degree of freedom in the model.
+
+What is exactly conserved across a refinement, and what is not, is reported at every event and
+follows from the same partition-of-unity argument the explicit solver's own live-adaptivity notes
+make: the assembled total mass is a geometric identity (children tile their parent at the same
+density) and is *asserted*; the linear momentum and the kinetic energy are exact for a spatially
+uniform velocity field and differ at second order in the velocity gradient across a refined parent
+otherwise, which is discretisation error rather than a defect, and are reported only. Unlike an
+explicit run, the increment that follows re-establishes equilibrium by Newton iteration, so an
+imbalance the transfer leaves behind is absorbed rather than radiated.
+
+**Not supported in this version.** Rayleigh or any other damping model beyond what the elements
+report as their lumped damping.
 """
 
 from dataclasses import dataclass
@@ -151,6 +180,13 @@ from edelweissfe.utils.schema import schemaField
 #: element matrices :math:`\int \rho N^T N`, each symmetric by construction, so any asymmetry
 #: beyond round-off means an element wrote something that is not a mass matrix into its slot.
 _MASS_SYMMETRY_TOLERANCE = 1e-10
+
+#: Relative change of a field's total assembled mass above which a topology change is rejected.
+#: The children of a refined element tile it and carry the same density, so the total is conserved
+#: geometrically; the quadrature that assembles it is exact only up to a polynomial order, which
+#: admits a small change on a distorted element. The same default, and the same reasoning, as the
+#: explicit solver's ``lumped-quantity-conservation-tolerance``.
+_MASS_CONSERVATION_TOLERANCE = 1e-6
 
 #: An increment shorter than this fraction of the time elapsed in the step is the round-off
 #: remainder of the time stepper's progress accumulation, not an increment, and is skipped with the
@@ -188,10 +224,24 @@ class NIDSchema(NISTSchema):
         description=(
             "Compute the acceleration at the start of every step from equilibrium with the loads at "
             "the step's start, instead of continuing from the carried-over acceleration. Skipped "
-            "automatically when the step resumes from a restart checkpoint."
+            "automatically when the step resumes from a restart checkpoint. Also re-armed for the "
+            "increment following a topology change (h-adaptivity), whose interpolated acceleration "
+            "is not in equilibrium with the operators reassembled on the refined mesh."
         ),
         dtype=bool,
         default=True,
+    )
+    massConservationTolerance: float | None = schemaField(
+        description=(
+            "Relative-change tolerance for the per-topology-change check on a dynamic field's total "
+            "assembled mass. Children of a refined element tile it and carry the same density, so "
+            "this is conserved geometrically; the default is already generous relative to floating-"
+            "point precision and exists to catch a genuinely wrong refinement, not to absorb "
+            "ordinary quadrature noise. The counterpart of the explicit solver's "
+            "lumped-quantity-conservation-tolerance."
+        ),
+        dtype=float,
+        default=_MASS_CONSERVATION_TOLERANCE,
     )
 
 
@@ -231,6 +281,28 @@ class _NewmarkSystem:
     A: DofVector
 
 
+@dataclass(frozen=True)
+class _ConservedQuantities:
+    """What a topology change ought to leave alone, measured on one :class:`_NewmarkSystem`.
+
+    Parameters
+    ----------
+    massByField
+        Each dynamic field's own total assembled mass. Per field, never summed across them: a
+        violation in a numerically small field would otherwise hide inside a large one.
+    momentum
+        The linear momentum :math:`M v`, per spatial component. Per component, not summed over
+        them: adding a momentum's x, y and z contributions produces a number with no physical
+        meaning and would hide a component-wise error behind a cancellation.
+    kineticEnergy
+        :math:`\\tfrac{1}{2} v^T M v`.
+    """
+
+    massByField: dict
+    momentum: np.ndarray
+    kineticEnergy: float
+
+
 class NonlinearImplicitDynamic(NIST):
     """This is the Nonlinear Implicit Dynamic -- solver (``NID``), Newmark-beta time integration on
     top of the Newton loop of :class:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST`.
@@ -245,9 +317,10 @@ class NonlinearImplicitDynamic(NIST):
 
     identification = "NID"
 
-    #: Adaptive mesh refinement is refused: the transfer of the velocity and acceleration onto a
-    #: refined mesh is not established for this solver; see the module docstring.
-    supportsModelModifiers = False
+    #: Live h-adaptivity is supported: the velocity and the acceleration ride the node-field warm
+    #: start onto new nodes, the mass and the damping are reassembled on the refined mesh, and the
+    #: acceleration is re-equilibrated on the increment that follows. See the module docstring.
+    supportsModelModifiers = True
 
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NIDSchema
@@ -256,6 +329,7 @@ class NonlinearImplicitDynamic(NIST):
         "newmarkBeta": 0.25,
         "newmarkGamma": 0.5,
         "computeInitialAcceleration": True,
+        "massConservationTolerance": _MASS_CONSERVATION_TOLERANCE,
     }
 
     def __init__(self, jobInfo, journal, **kwargs):
@@ -272,6 +346,11 @@ class NonlinearImplicitDynamic(NIST):
         #: resumed step, and consumed there exactly once -- the same staging the explicit solver
         #: uses for its external work.
         self._resumedFromCheckpoint = False
+        #: Length of ``model.topologyHistory`` when the current equation system was assembled.
+        #: A change in it is what distinguishes a rebuild caused by the mesh actually changing
+        #: from one caused by a constraint re-reporting its connectivity; see
+        #: :meth:`_ensureNewmarkSystem`.
+        self._topologyRecordsAtLastBuild = 0
 
         self._validateNewmarkParameters()
 
@@ -688,8 +767,23 @@ class NonlinearImplicitDynamic(NIST):
         of a step and whenever the topology or a constraint's connectivity changes; the operators
         are bound to that manager by identity and follow it. The velocity and acceleration are then
         read back from the node fields, where the last converged increment (or the checkpoint, or
-        nothing -- a start from rest) left them. A step changing a material property mid-step
-        invalidates the density, so the operators are reassembled every increment of such a step.
+        nothing -- a start from rest) left them, and where a refinement has meanwhile interpolated
+        them onto the nodes it created. A step changing a material property mid-step invalidates the
+        density, so the operators are reassembled every increment of such a step.
+
+        A rebuild that follows a recorded **topology change** additionally re-arms the
+        initial-acceleration solve and reports what the change did to the conserved quantities --
+        see the module docstring. Two conditions narrow that, and both matter:
+
+        * ``system is not None``: the first build of a step is not it. A step boundary rebuilds the
+          manager too, and :meth:`solveStep` has already decided there whether that step starts cold
+          (its own ``computeInitialAcceleration``/restart logic) -- re-deciding it here would
+          override that decision with a different one, for every existing multi-step deck.
+        * a grown ``model.topologyHistory``: a rebuild triggered by a constraint re-reporting its
+          connectivity (a contact candidate list, which can tick on any increment) has moved no
+          node and interpolated nothing, so there is no stale acceleration to replace and no
+          conservation statement to make. Restarting the acceleration of the whole model on it
+          would be both wrong and, repeated per increment, expensive.
 
         Parameters
         ----------
@@ -709,6 +803,12 @@ class NonlinearImplicitDynamic(NIST):
 
         if not dofManagerChanged and not stepActions["changematerialproperty"]:
             return system
+
+        # Safe to advance unconditionally here: a topology change always rebuilds the manager, so
+        # it can never be missed by an increment that returned above.
+        topologyRecords = len(model.topologyHistory)
+        topologyChanged = topologyRecords != self._topologyRecordsAtLastBuild
+        self._topologyRecordsAtLastBuild = topologyRecords
 
         dynamicDofs, dynamicFields = self._locateDynamicDofs()
 
@@ -743,7 +843,153 @@ class NonlinearImplicitDynamic(NIST):
             A=A,
         )
 
+        if dofManagerChanged and system is not None and topologyChanged:
+            self.reportTopologyChangeConservation(
+                self._conservedQuantities(system, model),
+                self._conservedQuantities(self._newmarkSystem, model),
+            )
+            self._initialAccelerationPending = bool(self.options["computeInitialAcceleration"])
+            self.journal.message(
+                (
+                    "acceleration will be recomputed from equilibrium on the refined mesh"
+                    if self._initialAccelerationPending
+                    else "keeping the interpolated acceleration (computeInitialAcceleration is off)"
+                ),
+                self.identification,
+                1,
+            )
+
         return self._newmarkSystem
+
+    def _conservedQuantities(self, system: _NewmarkSystem, model: FEModel) -> _ConservedQuantities:
+        """Total mass, linear momentum and kinetic energy of one Newmark system.
+
+        Read off that system's own :class:`~edelweissfe.numerics.dofmanager.DofManager`, so the
+        same method measures the state before and after a rebuild without either one having to
+        know about the other.
+
+        A field occupies a contiguous slice of the dof vector, node-major with the component
+        innermost -- what ``writeNodeFieldToDofVector``'s flatten establishes -- so reshaping the
+        slice recovers the per-node vectors, and the row sums of the mass over the slice count
+        every field component once, hence the division by the field's dimension.
+
+        Parameters
+        ----------
+        system
+            The system to measure.
+        model
+            The model tree, for the fields' spatial dimension.
+
+        Returns
+        -------
+        _ConservedQuantities
+            The three quantities.
+
+        Raises
+        ------
+        ValueError
+            If two dynamic fields differ in spatial dimension, so that their momenta have no
+            common components to add.
+        """
+
+        V = np.asarray(system.V)
+        MV = np.asarray(system.M @ V)
+        rowSums = np.asarray(system.M.sum(axis=1)).ravel()
+
+        massByField = {}
+        momentum = None
+        for fieldName in system.dynamicFields:
+            indices = system.dofManager.idcsOfFieldsInDofVector[fieldName]
+            dimension = model.nodeFields[fieldName].dimension
+            massByField[fieldName] = float(np.sum(rowSums[indices])) / dimension
+
+            contribution = MV[indices].reshape((-1, dimension)).sum(axis=0)
+            if momentum is not None and contribution.shape != momentum.shape:
+                raise ValueError(
+                    "Dynamic field {:} has dimension {:} against {:} for the fields before it, so "
+                    "their momenta have no common components to add.".format(
+                        fieldName, contribution.shape[0], momentum.shape[0]
+                    )
+                )
+            momentum = contribution if momentum is None else momentum + contribution
+
+        return _ConservedQuantities(
+            massByField=massByField,
+            momentum=momentum if momentum is not None else np.zeros(0),
+            kineticEnergy=0.5 * float(V @ MV),
+        )
+
+    def reportTopologyChangeConservation(self, before: _ConservedQuantities, after: _ConservedQuantities):
+        """Report what a topology change did to the quantities that ought to survive it.
+
+        The three behave differently, and saying which is which is the whole point of reporting
+        them together:
+
+        * **Every dynamic field's total mass is conserved exactly.** The children of a refined
+          element tile it at the same density, and the mass is *reassembled* here rather than
+          transferred, so this is an identity of the assembly and not a property of any transfer.
+          It is the cheapest correctness check on the whole refinement, so it **raises**.
+        * **Linear momentum is conserved exactly for a spatially uniform velocity field**, because
+          the shape functions carrying the velocity onto new nodes are a partition of unity and the
+          children's masses sum to the parent's. For a general field the discrepancy is second
+          order in the velocity gradient across the parent: discretisation error, not a defect.
+          Reported, not enforced.
+        * **Kinetic energy is not conserved** by interpolation in general, and it is the most
+          sensitive of the three, being quadratic in the interpolation error. Reported as a
+          relative jump; more than roughly a percent is a reason to look at the transfer rather
+          than to believe the physics.
+
+        Parameters
+        ----------
+        before, after
+            The quantities measured on the system before and on the one after the change.
+
+        Raises
+        ------
+        RuntimeError
+            If any dynamic field's total mass changed by more than ``massConservationTolerance``.
+        """
+
+        tolerance = self.options["massConservationTolerance"]
+        worstField, worstRelativeChange = "", 0.0
+        for fieldName, massBefore in before.massByField.items():
+            massAfter = after.massByField.get(fieldName, 0.0)
+            relativeChange = abs(massAfter - massBefore) / massBefore if massBefore > 0.0 else 0.0
+            if relativeChange > tolerance:
+                raise RuntimeError(
+                    "A topology change did not conserve the total mass of field '{:}': {:e} became "
+                    "{:e}, a relative change of {:e} against a tolerance of {:e}. The children of a "
+                    "refined element tile it and carry the same density, and the mass is reassembled "
+                    "from the elements that now exist -- so a change of this size means the "
+                    "refinement itself is wrong, not that the quadrature moved.".format(
+                        fieldName, massBefore, massAfter, relativeChange, tolerance
+                    )
+                )
+            if relativeChange >= worstRelativeChange:
+                worstField, worstRelativeChange = fieldName, relativeChange
+
+        momentumChange = float(np.max(np.abs(after.momentum - before.momentum))) if before.momentum.size else 0.0
+        momentumScale = float(np.max(np.abs(before.momentum))) if before.momentum.size else 0.0
+        kineticJump = (
+            abs(after.kineticEnergy - before.kineticEnergy) / before.kineticEnergy
+            if before.kineticEnergy > 0.0
+            else 0.0
+        )
+
+        self.journal.message(
+            "Topology change: worst-conserved mass, field '{:}', to {:.1e} relative; largest momentum "
+            "component change {:.3e} (of {:.3e}); kinetic energy {:.6e} -> {:.6e} ({:+.2f} %)".format(
+                worstField,
+                worstRelativeChange,
+                momentumChange,
+                momentumScale,
+                before.kineticEnergy,
+                after.kineticEnergy,
+                kineticJump * 100.0 * (1.0 if after.kineticEnergy >= before.kineticEnergy else -1.0),
+            ),
+            self.identification,
+            1,
+        )
 
     def _locateDynamicDofs(self) -> tuple[np.ndarray, list]:
         """The degrees of freedom integrated in time: those of every field whose inertia is a mass.
@@ -881,28 +1127,33 @@ class NonlinearImplicitDynamic(NIST):
     def _computeInitialAcceleration(
         self, system: _NewmarkSystem, U_n: DofVector, stepActions: dict, model: FEModel, timeStep: TimeStep
     ):
-        """Compute the acceleration at the start of the step from equilibrium, and commit it.
+        """Compute the acceleration from equilibrium at the start of an increment, and commit it.
 
         Solves :math:`M a_0 = P_\\mathrm{ext}(t_0) - P_\\mathrm{int}(u_0) - C v_0` on the dynamic,
-        free degrees of freedom. The loads are evaluated with a synthetic time step at the step's
-        own start (zero step progress and zero time increment -- an ``f(t)`` amplitude at
-        :math:`t = 0`), the elements with a zero displacement increment, which leaves their state
-        untouched. Prescribed degrees of freedom get a zero acceleration; degrees of freedom this
-        solver does not integrate get a unit diagonal and a zero right-hand side so the system stays
-        regular there.
+        free degrees of freedom. The loads are evaluated with a synthetic time step at the start of
+        the increment passed in (zero step-progress increment and zero time increment -- an ``f(t)``
+        amplitude at that instant), the elements with a zero displacement increment, which leaves
+        their state untouched. Prescribed degrees of freedom get a zero acceleration; degrees of
+        freedom this solver does not integrate get a unit diagonal and a zero right-hand side so the
+        system stays regular there.
+
+        Called on the first increment of a cold-started step, where :math:`t_0` is the step's own
+        start, and on the increment after a topology change, where it is that increment's start and
+        the acceleration it replaces is the one a refinement interpolated -- see
+        :meth:`_ensureNewmarkSystem`. The two are the same computation; only the instant differs.
 
         Parameters
         ----------
         system
             The current Newmark system; its acceleration is overwritten.
         U_n
-            The displacement at the start of the step.
+            The displacement at the start of the increment.
         stepActions
             The step's actions.
         model
             The model tree.
         timeStep
-            The first time step of the step; the start is derived from it.
+            The increment about to be solved; the start is derived from it.
         """
 
         startTimeStep = TimeStep(
@@ -955,8 +1206,9 @@ class NonlinearImplicitDynamic(NIST):
         self._publishKinematics(system, model)
 
         self.journal.message(
-            "initial acceleration from equilibrium at the step start: ||a0||inf = {:e}".format(
-                float(np.max(np.abs(A0[system.dynamicDofs]))) if system.dynamicDofs.size else 0.0
+            "acceleration from equilibrium at t = {:g}: ||a0||inf = {:e}".format(
+                startTimeStep.stepTime,
+                float(np.max(np.abs(A0[system.dynamicDofs]))) if system.dynamicDofs.size else 0.0,
             ),
             self.identification,
             2,

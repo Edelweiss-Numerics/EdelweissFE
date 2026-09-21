@@ -67,9 +67,18 @@ The material must report a density (for ``LinearElastic``, the third material pa
 is assembled from it, and a time-integrated degree of freedom that receives none is refused rather
 than integrated as though it had inertia.
 
-Verified in ``tests/test_nid_newmark.py`` and ``tests/test_nid_restart.py`` against the exact
-discrete Newmark recurrence of the same problem, against the continuous closed form at second order,
-for exact conservation of the discrete energy, and for restart equivalence of ``U``, ``V`` and ``A``.
+A ``*modelModifier, type=hAdaptivity`` refining the mesh mid-step is supported: ``V`` and ``A`` are
+carried onto new nodes by the node-field warm start, the mass and damping are reassembled on the
+refined mesh, and the acceleration is re-solved from equilibrium on the increment that follows --
+see :doc:`modelmodifiers`, "Refinement under a dynamic solver", for what is conserved exactly across
+such an event and what is not.
+
+Verified in ``tests/test_nid_newmark.py``, ``tests/test_nid_restart.py`` and
+``tests/test_nid_amr.py`` against the exact discrete Newmark recurrence of the same problem, against
+the continuous closed form at second order, for exact conservation of the discrete energy, for
+restart equivalence of ``U``, ``V`` and ``A``, and -- under live refinement -- for exact transfer of
+a velocity field of degree at most one onto new nodes together with exact conservation of mass,
+momentum and kinetic energy in that case.
 
 ``NEST`` - Nonlinear Explicit Static
 -------------------------------------

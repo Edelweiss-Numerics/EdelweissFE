@@ -237,18 +237,28 @@ def _connectedComponents(elements: list) -> dict:
 
 
 #: The node-field value entries carried across a refinement by isoparametric interpolation from the
-#: parent element. ``"U"`` is the solution and is always present. ``"V"`` is the velocity, which only
-#: exists when an explicit dynamic solver put it there -- and it *has* to be carried, because unlike
-#: an implicit solver, which reconstructs everything it needs from ``"U"``, a central-difference
-#: scheme holds kinetic state that nothing else can reproduce: a new node whose velocity defaulted to
-#: zero would silently lose it. Interpolating it with the same operator as ``"U"`` is also what keeps
-#: the two consistent -- the shape functions are a partition of unity, so a uniform velocity field is
-#: reproduced exactly and the patch's momentum is conserved exactly in that case (the general case
-#: differs at second order in the velocity gradient across the parent, which is discretisation error,
-#: not a defect).
+#: parent element. ``"U"`` is the solution and is always present. ``"V"`` (velocity) and ``"A"``
+#: (acceleration) are the kinematic state of a dynamic solver -- and they *have* to be carried,
+#: because unlike a quasi-static solver, which reconstructs everything it needs from ``"U"``, a time
+#: integrator holds state that nothing else can reproduce: a new node whose velocity defaulted to
+#: zero would silently lose it. Interpolating them with the same operator as ``"U"`` is also what
+#: keeps them consistent with it -- the shape functions are a partition of unity, so a uniform
+#: velocity field is reproduced exactly and the patch's momentum is conserved exactly in that case
+#: (the general case differs at second order in the velocity gradient across the parent, which is
+#: discretisation error, not a defect).
+#:
+#: ``"A"`` is carried for the same reason, with one qualification the implicit dynamic solver acts
+#: on: an interpolated acceleration is not in equilibrium with the operators that are reassembled on
+#: the refined mesh, so that solver re-solves it from equilibrium on the next increment (see
+#: :mod:`~edelweissfe.solvers.nonlinearimplicitdynamic`). The interpolation is still what that solve
+#: starts from, and what a solver that switches the re-solve off keeps.
+#:
+#: Carrying an entry a given run never writes is free: the entries exist (zero) on every
+#: mass-carrying node field from job setup on, and interpolating zeros yields zeros -- so a static
+#: or explicit run is unaffected by ``"A"`` being listed here.
 #:
 #: An entry absent from a given node field is skipped, so this list is safe to extend.
-WARM_STARTED_NODE_FIELD_ENTRIES = ("U", "V")
+WARM_STARTED_NODE_FIELD_ENTRIES = ("U", "V", "A")
 
 
 class ModelModifier(ModelModifierBase):
