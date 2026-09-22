@@ -794,6 +794,12 @@ class ModelModifier(ModelModifierBase):
             # Both U (current) and P (previous converged) get the same warm-start value, so the first
             # Newton iteration after refinement sees a normal residual rather than a spurious dU = U - P
             # = U - 0 cold-restart spike on every retained/new node (P-field warm-start fix).
+            #
+            # On the replay path the model postpones this resize (and the relink below) to the end of
+            # the replay window -- see FEModel.topologyChanges(deferFieldBookkeeping) -- so the
+            # loops below then run over the pre-mutation field layout: dead work, like the snapshot
+            # above, and overwritten by readRestart. The decision lives in the model, not here:
+            # this method issues the same calls live and replayed.
             model._resizeNodeFieldsForNodes(self._journal)
             for fieldName, nodeField in model.nodeFields.items():
                 if "U" not in nodeField:

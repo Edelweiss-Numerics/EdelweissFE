@@ -36,6 +36,8 @@ set + serendipity weights for the exact hanging-node MPC.
 """
 
 from collections import defaultdict
+from itertools import product
+from math import floor
 
 import numpy as np
 
@@ -191,18 +193,21 @@ def _box_of(coords):
 
 
 def _grid_key(coord, h):
-    return (int(np.floor(coord[0] / h)), int(np.floor(coord[1] / h)), int(np.floor(coord[2] / h)))
+    # math.floor, not np.floor: same IEEE double division and the same floor, so the same integer
+    # key, but without a numpy ufunc dispatch per component -- this runs once per node and, via
+    # _grid_cells_for_box, several times per active cell on every adaptation.
+    return (floor(coord[0] / h), floor(coord[1] / h), floor(coord[2] / h))
 
 
 def _grid_cells_for_box(bMin, bMax, h, pad=1):
     """Yield the grid-cell keys overlapping an axis-aligned box (padded), for a uniform-hash broad
     phase that makes hanging classification and 2:1 balancing local (O(n) instead of O(n^2))."""
-    lo = [int(np.floor(bMin[i] / h)) - pad for i in range(3)]
-    hi = [int(np.floor(bMax[i] / h)) + pad for i in range(3)]
-    for i in range(lo[0], hi[0] + 1):
-        for j in range(lo[1], hi[1] + 1):
-            for k in range(lo[2], hi[2] + 1):
-                yield (i, j, k)
+    lo = [floor(bMin[i] / h) - pad for i in range(3)]
+    hi = [floor(bMax[i] / h) + pad for i in range(3)]
+    # itertools.product, not three nested Python loops: the same keys in the same order (first axis
+    # outermost), as a one-shot iterator exactly like the generator it replaces -- callers that
+    # iterate the result twice see the same consumption semantics as before.
+    return product(range(lo[0], hi[0] + 1), range(lo[1], hi[1] + 1), range(lo[2], hi[2] + 1))
 
 
 def _boxes_overlap(boxA, boxB, tol=1e-8):
@@ -254,7 +259,12 @@ class AdaptiveMesh:
         self.topology = topology
         self.registry = NodeRegistry(decimals, reserve_labels=reserve_labels)
         self.splitFactor = splitFactor  # n: each refined element is split into n**3 children per axis
-        self.elements = {}  # eid -> dict(conn, coords, level, active, parent, children)
+        self.elements = {}  # eid -> dict(conn, coords, box, extent, level, active, parent, children)
+        # The active cells, kept alongside elements[eid]["active"] so that active() does not scan
+        # the whole hierarchy on every call. Insertion-ordered: a child's eid exceeds every existing
+        # one, so appending children after removing their parent keeps the ascending-eid order the
+        # scan produced -- which balance_2to1 relies on for the order it refines in.
+        self._active = {}  # eid -> None
         self.elementSets = {}  # name -> set(eid)      (children inherit membership on refine)
         self.nodeSets = {}  # name -> set(node label)
         self.surfaces = {}  # name -> set((eid, faceID))  (element-based, Marmot faceID convention)
@@ -315,6 +325,11 @@ class AdaptiveMesh:
         coords = np.asarray(coords, dtype=float)
         eid = self._next
         self._next += 1
+        # A cell's coordinates never change after this, so its bounding box and largest extent are
+        # computed here, once. Before, box() recomputed them on every call, and the balancing and
+        # hanging-node passes call it several times per active cell on every adaptation -- a cost
+        # that scales with the whole mesh rather than with what the adaptation changed.
+        box = _box_of(coords)
         self.elements[eid] = dict(
             conn=(
                 self.registry.connectivity(coords, componentId)
@@ -322,12 +337,15 @@ class AdaptiveMesh:
                 else self._childConnectivity(parentConn, childIndex, coords, componentId)
             ),
             coords=coords,
+            box=box,
+            extent=float((box[1] - box[0]).max()),
             level=level,
             active=True,
             parent=parent,
             children=[],
             componentId=componentId,
         )
+        self._active[eid] = None
         return eid
 
     def add_root(self, coords, componentId: int = 0) -> int:
@@ -340,10 +358,12 @@ class AdaptiveMesh:
         return self._add(coords, level=0, parent=None, componentId=componentId)
 
     def active(self) -> list:
-        return [eid for eid, e in self.elements.items() if e["active"]]
+        """The active (leaf) cells, in ascending eid order."""
+        return list(self._active)
 
     def box(self, eid):
-        return _box_of(self.elements[eid]["coords"])
+        """The axis-aligned bounding box ``(min, max)`` of a cell; cached at creation, see :meth:`_add`."""
+        return self.elements[eid]["box"]
 
     def find_by_center(self, center, tol=1e-6):
         """Return the active element whose bounding-box center matches (utility for scripting)."""
@@ -370,6 +390,7 @@ class AdaptiveMesh:
             for childIndex, ch in enumerate(self.topology.subdivide(e["coords"], self.splitFactor))
         ]
         e["active"] = False
+        del self._active[eid]
         e["children"] = kids
 
         # element sets + section assignment: children inherit every membership of the parent
@@ -407,8 +428,8 @@ class AdaptiveMesh:
     def _cellSize(self, act):
         """A spatial-hash cell size: the smallest active element's largest extent, so a fine element
         spans ~one cell and a one-level-coarser neighbour a few."""
-        exts = [float((self.box(eid)[1] - self.box(eid)[0]).max()) for eid in act]
-        return max(min(exts), 1e-12) if exts else 1.0
+        elements = self.elements
+        return max(min(elements[eid]["extent"] for eid in act), 1e-12) if act else 1.0
 
     def balance_2to1(self, tol=1e-8) -> int:
         """Refine coarser elements until no face-adjacent active pair differs by >1 level.
@@ -420,18 +441,46 @@ class AdaptiveMesh:
         while True:
             act = self.active()
             lev = {eid: self.elements[eid]["level"] for eid in act}
+            # Only a pair whose levels differ by two or more can violate the 2:1 rule, so only an
+            # element at least two levels above the coarsest one can be the finer partner, and only
+            # an element at least two levels below the finest one the coarser. A mesh whose active
+            # levels span less than that -- every mesh refined by a single level, and every pass but
+            # the first of a cascade -- is balanced by construction, and the neighbour search below
+            # would only confirm it, at the cost of a grid over every active cell. That is not a
+            # small cost: a coarse far-field element spans hundreds of cells at the finest element's
+            # size, and on 30k active cells the search took 2-3 s per adaptation for a to_refine set
+            # that was always empty. Necessary conditions, not sufficient ones: whatever passes them
+            # gets the unchanged exact test, in the unchanged order.
+            minLevel, maxLevel = min(lev.values()), max(lev.values())
+            if maxLevel - minLevel < 2:
+                break
             crd = {eid: self.elements[eid]["coords"] for eid in act}
             box = {eid: self.box(eid) for eid in act}
             h = self._cellSize(act)
+            # The grid holds only the candidate finer partners, and cellMaxLevel the finest level
+            # among them per cell: an element 'a' whose padded cells hold nothing two levels finer
+            # cannot need refinement and is skipped before the neighbour union.
             grid = defaultdict(set)
+            cellMaxLevel = {}
             for eid in act:
+                level = lev[eid]
+                if level < minLevel + 2:
+                    continue
                 for cell in _grid_cells_for_box(box[eid][0], box[eid][1], h, pad=0):
                     grid[cell].add(eid)
+                    if cellMaxLevel.get(cell, -1) < level:
+                        cellMaxLevel[cell] = level
 
             to_refine = set()
             for a in act:
+                finerThan = lev[a] + 1
+                if finerThan >= maxLevel:
+                    continue
+                cells = list(_grid_cells_for_box(box[a][0], box[a][1], h))
+                if not any(cellMaxLevel.get(cell, -1) > finerThan for cell in cells):
+                    continue
                 neighbours = set()
-                for cell in _grid_cells_for_box(box[a][0], box[a][1], h):
+                for cell in cells:
                     neighbours |= grid.get(cell, set())
                 for b in neighbours:
                     if a is b or lev[a] > lev[b] - 2:
@@ -492,8 +541,18 @@ class AdaptiveMesh:
         # grid itself, for a few dict compares per element, and it is what keeps the scan below from
         # paying for the conforming majority of the mesh -- see hasFinerNeighbour.
         cellMaxLevel = {}
+        # Both indices exist to answer one question -- "does this element have a strictly FINER
+        # neighbour?" -- so an element at the coarsest active level can never be the answer and is
+        # not registered: it is finer than nothing. Registering it changed no cellMaxLevel (the
+        # comparison there is strict) and no neighbour test (lev[f] > level is false for it), but
+        # on a mesh refined by one level it was the bulk of the mesh -- and a coarse far-field cell
+        # spans hundreds of grid cells at the finest cell's size, so it was also the bulk of this
+        # index build: 1.6 s per adaptation on 30k active cells.
+        coarsestLevel = min(lev.values()) if lev else 0
         for eid in act:
             level, componentId = lev[eid], comp[eid]
+            if level == coarsestLevel:
+                continue
             for cell in _grid_cells_for_box(box[eid][0], box[eid][1], h_cell, pad=0):
                 elemGrid[cell].add(eid)
                 key = (cell, componentId)

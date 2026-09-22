@@ -102,12 +102,22 @@ class FEModel:
         #: Ordered record of every applied model-modifier decision; see :meth:`updateTopology`. This
         #: IS the restart history -- a resumed run replays it rather than re-deciding.
         self.topologyHistory = []
-        #: Compare each replayed round's fingerprint against the recorded one. On by default: it is
-        #: the difference between "the resumed run diverged" and "it diverged HERE".
+        #: Compare the replayed topology's fingerprint against the recorded one, once, after the whole
+        #: history has been replayed. On by default: it is the difference between "the resumed run
+        #: diverged" and "it did not". See :meth:`replayTopologyHistory`.
         self.verifyTopologyFingerprints = True
+        #: Additionally compute and compare a fingerprint after *every* replayed record, which turns
+        #: "the resumed run diverged" into "it diverged HERE". Off by default: it costs one whole-mesh
+        #: walk per record, so a long history replays in O(records x mesh) rather than O(mesh).
+        #: Switch it on to locate a divergence the final check reported.
+        self.verifyTopologyFingerprintsPerRecord = False
+        #: Deferred node-field bookkeeping; see :meth:`topologyChanges` (``deferFieldBookkeeping``).
+        self._fieldBookkeepingDeferred = False
+        self._deferredNodeFieldResizeJournal = None
+        self._deferredFieldVariableLinkNodes = None
 
     @contextmanager
-    def topologyChanges(self):
+    def topologyChanges(self, deferFieldBookkeeping: bool = False):
         """The only scope in which elements may be created or deleted.
 
         Opened once around model setup, and once per increment around the model modifiers. Outside
@@ -118,14 +128,53 @@ class FEModel:
 
         Nesting is permitted and is a no-op for the inner scope: setup-time helpers may open a
         window without knowing whether their caller already did.
+
+        Parameters
+        ----------
+        deferFieldBookkeeping
+            Postpone the node-field bookkeeping a mesh mutator requests through
+            :meth:`_resizeNodeFieldsForNodes` and :meth:`_linkFieldVariableObjects` until this
+            window closes, and run it exactly once then. Both are idempotent recomputations from the
+            model's *current* nodes and elements -- neither one touches numbering, connectivity or
+            anything the :meth:`topologyFingerprint` covers -- so the state after one flush at the
+            end equals the state after a flush per mutation; only the intermediate, immediately
+            overwritten field layouts are skipped. That is what :meth:`replayTopologyHistory` wants:
+            no increment is solved between two replayed records, so nothing consumes those layouts,
+            and a flush per record makes a long replay O(records x mesh) instead of O(mesh). The
+            live per-increment window does *not* defer -- the solver runs on the fields right after
+            each update. Honoured by the outermost window only, like the window itself.
         """
 
         wasOpen = self._topologyOpen
         self._topologyOpen = True
+        deferring = deferFieldBookkeeping and not wasOpen
+        if deferring:
+            self._fieldBookkeepingDeferred = True
         try:
             yield
+            if deferring:
+                self._fieldBookkeepingDeferred = False
+                self._flushDeferredFieldBookkeeping()
         finally:
             self._topologyOpen = wasOpen
+            if deferring:
+                self._fieldBookkeepingDeferred = False
+                self._deferredNodeFieldResizeJournal = None
+                self._deferredFieldVariableLinkNodes = None
+
+    def _flushDeferredFieldBookkeeping(self):
+        """Run the node-field bookkeeping postponed inside a deferring :meth:`topologyChanges`
+        window, in the order a mutator issues it: resize first, then relink -- relinking against a
+        NodeField that does not yet hold every node's field variable raises."""
+
+        journal = self._deferredNodeFieldResizeJournal
+        nodes = self._deferredFieldVariableLinkNodes
+        self._deferredNodeFieldResizeJournal = None
+        self._deferredFieldVariableLinkNodes = None
+        if journal is not None:
+            self._resizeNodeFieldsForNodes(journal)
+        if nodes is not None:
+            self._linkFieldVariableObjects(nodes)
 
     def reserveElementNumbers(self, count: int = 1) -> range:
         """Reserve ``count`` fresh element numbers.
@@ -421,9 +470,11 @@ class FEModel:
         Recorded per round in the topology history, this turns "the resumed run diverged somewhere"
         into "increment 471, round 2, modifier amr" -- a divergence you can bisect rather than hunt.
 
-        Not cheap: it walks the whole mesh, measured at 0.188 s on 64k elements / 69k nodes, and
-        :meth:`recordTopologyChange` pays it unconditionally for every *applied* modifier decision
-        (``verifyTopologyFingerprints`` gates only the replay-time comparison, not this).
+        Not cheap: it walks the whole mesh, measured at 0.188 s on 64k elements / 69k nodes. A live
+        run pays it once per *applied* modifier decision, in :meth:`recordTopologyChange`. A replay
+        pays it once for the whole history (:meth:`replayTopologyHistory` carries the recorded
+        digests forward and checks the final one), unless ``verifyTopologyFingerprintsPerRecord``
+        asks for the per-record walk to locate a divergence.
 
         Uses blake2b rather than :func:`hash`, whose string hashing is randomised per process and
         would make the digest differ between two runs of the *same* code.
@@ -445,7 +496,7 @@ class FEModel:
         return digest.hexdigest()
 
     def recordTopologyChange(
-        self, roundNumber: int, name: str, modifier, plan, modelChange, time: float = None
+        self, roundNumber: int, name: str, modifier, plan, modelChange, time: float = None, fingerprint: str = None
     ) -> TopologyRecord:
         """Register everything an applied decision produced: the replay record and the changeset.
 
@@ -468,7 +519,8 @@ class FEModel:
         changesets in the same order as the run it replays.
 
         Cost is one :meth:`topologyFingerprint` per *applied* decision -- not per iteration, but not
-        free either: 0.188 s measured on 64k elements / 69k nodes.
+        free either: 0.188 s measured on 64k elements / 69k nodes -- unless the caller supplies the
+        fingerprint, which a replay does (see :meth:`replayTopologyHistory`).
 
         Parameters
         ----------
@@ -476,6 +528,11 @@ class FEModel:
             Model time to stamp the record with. Defaults to the current :attr:`time`; a replay
             passes the recorded time instead, so a resumed run's history carries the times the
             decisions were originally made rather than the time it was resumed at.
+        fingerprint
+            The digest to record. Defaults to :meth:`topologyFingerprint` of the model as it is
+            now, which is what a live run wants. A replay passes the digest the original run
+            recorded, so the replayed history carries the digests that were verified rather than
+            fresh ones that would launder a divergence into the next checkpoint.
         """
 
         if modelChange is not None:
@@ -486,7 +543,7 @@ class FEModel:
             roundNumber=roundNumber,
             time=float(self.time if time is None else time),
             plan=modifier.encodePlan(plan),
-            fingerprint=self.topologyFingerprint(),
+            fingerprint=self.topologyFingerprint() if fingerprint is None else fingerprint,
             nElementsAdded=len(modelChange.addedElements) if modelChange is not None else 0,
             nElementsRemoved=len(modelChange.removedElements) if modelChange is not None else 0,
             nNodesAdded=len(modelChange.addedNodes) if modelChange is not None else 0,
@@ -502,6 +559,14 @@ class FEModel:
         replay-specific code path to drift from the live one -- which is what the previous design
         had, and why a resumed run silently renumbered its elements.
 
+        What a replay does *not* repeat per record is the whole-mesh work around ``apply`` whose
+        result is a pure function of the final mesh: the :meth:`topologyFingerprint` walk (the
+        recorded digests are carried forward and the final one is checked) and the node-field
+        bookkeeping (deferred to the end of the window, see :meth:`topologyChanges`). A history of
+        a few hundred refinements on a mesh of tens of thousands of elements replayed in minutes
+        otherwise, all of it spent re-deriving state that the next record, or :meth:`readRestart`,
+        overwrote right away.
+
         Parameters
         ----------
         records
@@ -512,12 +577,15 @@ class FEModel:
         Raises
         ------
         TopologyError
-            If a replayed round's fingerprint differs from the recorded one (when
-            :attr:`verifyTopologyFingerprints`), naming the exact record -- so a divergence is
-            located rather than merely detected.
+            If the replayed topology's fingerprint differs from the one recorded with the last
+            record (when :attr:`verifyTopologyFingerprints`). With
+            :attr:`verifyTopologyFingerprintsPerRecord` every record is checked as it is replayed
+            and the error names the first diverging one -- so a divergence is located rather than
+            merely detected.
         """
 
-        with self.topologyChanges():
+        perRecord = self.verifyTopologyFingerprints and self.verifyTopologyFingerprintsPerRecord
+        with self.topologyChanges(deferFieldBookkeeping=True):
             for index, record in enumerate(records):
                 modifier = self.modelModifiers.get(record.modifier)
                 if modifier is None:
@@ -528,18 +596,35 @@ class FEModel:
                     )
                 plan = modifier.decodePlan(record.plan)
                 modelChange = modifier.apply(self, plan)
+                # Carry the recorded digest forward instead of recomputing it: a record without one
+                # (an older checkpoint) is the only case that still pays the walk.
                 replayed = self.recordTopologyChange(
-                    record.roundNumber, record.modifier, modifier, plan, modelChange, time=record.time
+                    record.roundNumber,
+                    record.modifier,
+                    modifier,
+                    plan,
+                    modelChange,
+                    time=record.time,
+                    fingerprint=None if perRecord else (record.fingerprint or None),
                 )
-                if self.verifyTopologyFingerprints and record.fingerprint:
-                    if replayed.fingerprint != record.fingerprint:
-                        raise TopologyError(
-                            "restart replay diverged at record {:} of {:}: modifier {!r}, round {:}, "
-                            "time {:}. The replayed topology does not match the recorded one, so this "
-                            "modifier's apply() is not a pure function of (model, plan).".format(
-                                index, len(records), record.modifier, record.roundNumber, record.time
-                            )
+                if perRecord and record.fingerprint and replayed.fingerprint != record.fingerprint:
+                    raise TopologyError(
+                        "restart replay diverged at record {:} of {:}: modifier {!r}, round {:}, "
+                        "time {:}. The replayed topology does not match the recorded one, so this "
+                        "modifier's apply() is not a pure function of (model, plan).".format(
+                            index, len(records), record.modifier, record.roundNumber, record.time
                         )
+                    )
+        if self.verifyTopologyFingerprints and not perRecord and records and records[-1].fingerprint:
+            if self.topologyFingerprint() != records[-1].fingerprint:
+                last = records[-1]
+                raise TopologyError(
+                    "restart replay diverged: after replaying all {:} record(s) the topology does not "
+                    "match the fingerprint recorded with the last one (modifier {!r}, round {:}, time "
+                    "{:}). Some modifier's apply() is not a pure function of (model, plan); set "
+                    "verifyTopologyFingerprintsPerRecord=True to locate the first diverging "
+                    "record.".format(len(records), last.modifier, last.roundNumber, last.time)
+                )
         for name, modifier in self.modelModifiers.items():
             modifier.restoreDecisionState([r for r in records if r.modifier == name])
         if journal is not None:
@@ -680,7 +765,14 @@ class FEModel:
         ----------
         nodes
             Nodes to be linked
+
+        Inside a deferring :meth:`topologyChanges` window this only notes the request; the link is
+        made once, for these nodes as they are then, when the window closes.
         """
+
+        if self._fieldBookkeepingDeferred:
+            self._deferredFieldVariableLinkNodes = nodes
+            return
 
         for node in nodes:
             for field, fieldVariable in node.fields.items():
@@ -768,11 +860,21 @@ class FEModel:
         multipliers of constraints) are rebuilt, but values are preserved by name for constraints
         that still exist, so their converged state survives the refinement too.
 
+        Everything here is recomputed from the current elements, constraints and ``nodeSets["all"]``
+        -- the node order of the resized fields is the model's node creation order, which is why one
+        call after several mutations yields the same layout as one call per mutation. Inside a
+        deferring :meth:`topologyChanges` window the call is therefore only noted, and made once when
+        the window closes.
+
         Parameters
         ----------
         journal
             The journal instance.
         """
+        if self._fieldBookkeepingDeferred:
+            self._deferredNodeFieldResizeJournal = journal
+            return
+
         journal.message(
             "Activating fields on nodes from Elements and Constraints",
             self.identification,
