@@ -312,7 +312,11 @@ and optionally the recovery method, bulk fraction and budget cap::
 
 The predictive marker's ``fieldOutput`` (here ``alphaPForAMR``) is an ordinary ``perElement``
 output of the local driving variable, covering the quadrature points of interest with no ``f(x)``
-reduction. The full option set of the ``recoveryError`` sub-keyword:
+reduction. Both markers accept a ``halo`` option (0 by default): a number of node-adjacent-element
+rings added around the marked set, bounded to the refineable elements -- useful when a bare threshold
+would leave a conforming band's immediate surroundings coarse, e.g. ``>>marker, type=fieldOutput,
+fieldOutput=alphaPForAMR, operator='>', threshold=1e-4, halo=1``. The full option set of the
+``recoveryError`` sub-keyword:
 
 .. pprint:: modelmodifier:hadaptivity
     :caption: ``hAdaptivity`` options (the ``>>marker`` sub-keyword is rendered as its own table):
@@ -330,7 +334,7 @@ Implementation
 --------------
 
 .. automodule:: edelweissfe.adaptivity.marking
-    :members: RecoveryErrorMarker
+    :members: RecoveryErrorMarker, FieldOutputMarker
 
 Per increment the marker gathers, for every eligible 20-node element, its node coordinates and
 nonlocal-field values plus a compact global node index, then evaluates the indicator
