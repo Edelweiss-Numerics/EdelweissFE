@@ -389,7 +389,6 @@ class SurfaceMarker(MarkerBase):
 #     >>perElement, ..., result=stress, f(x)='eigVal(x.reshape(-1,6))[:,0].reshape(x.shape[0],x.shape[1])'
 #     >>marker, type=fieldOutput, fieldOutput=<that output>, operator='>=', threshold=<factor*f_t>
 # refines every element whose largest principal stress reaches the threshold at any quadrature point.
-# See examples/WinklerL_AMR.
 
 
 def _sprPolynomialBasis(localCoords, order):

@@ -235,7 +235,7 @@ class _FieldOutputBase:
                 raise Exception(
                     "fieldOutput {:} has a per-node/per-element history with varying shapes across "
                     "increments (e.g. due to adaptive mesh refinement); a rectangular history is not "
-                    "well-defined. Use a reducing f(x) (as in examples/WinklerL_AMR/test_amr.inp) "
+                    "well-defined. Use a reducing f(x) (as for RF in examples/WinklerL/WinklerL_blockamg_amr.inp) "
                     "instead of saveHistory=True in this case.".format(self.name)
                 )
 
