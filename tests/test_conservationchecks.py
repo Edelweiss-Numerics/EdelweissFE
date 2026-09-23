@@ -23,16 +23,16 @@
 #  version 2.1 of the License, or (at your option) any later version.
 #  ---------------------------------------------------------------------
 """The topology-change conservation checks both dynamic solvers share
-(:mod:`edelweissfe.solvers.base.topologychangeconservation`)."""
+(:mod:`edelweissfe.solvers.base.conservationchecks`)."""
 
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from edelweissfe.solvers.base.topologychangeconservation import (
+from edelweissfe.solvers.base.conservationchecks import (
     CUMULATIVE_DRIFT_TOLERANCE,
-    ConservationLedger,
+    ConservationCheck,
     linearMomentum,
 )
 
@@ -74,21 +74,21 @@ def test_momenta_of_different_dimension_are_not_added():
 
 
 def test_a_violated_total_raises():
-    ledger = ConservationLedger(_RecordingJournal(), "test")
-    assert ledger.check("mass", 1.0, 1.0 + 1e-9, 1e-6) == pytest.approx(1e-9)
+    check = ConservationCheck(_RecordingJournal(), "test")
+    assert check.check("mass", 1.0, 1.0 + 1e-9, 1e-6) == pytest.approx(1e-9)
     with pytest.raises(RuntimeError, match="did not conserve the total mass"):
-        ledger.check("mass", 1.0, 1.1, 1e-6)
+        check.check("mass", 1.0, 1.1, 1e-6)
 
 
 def test_accumulated_drift_is_warned_about_once_per_step_and_reset():
     journal = _RecordingJournal()
-    ledger = ConservationLedger(journal, "test")
+    check = ConservationCheck(journal, "test")
     perChange = 0.4 * CUMULATIVE_DRIFT_TOLERANCE  # each within a per-change tolerance of 1e-3
 
     for _ in range(5):
-        ledger.check("mass", 1.0, 1.0 + perChange, 1e-3)
+        check.check("mass", 1.0, 1.0 + perChange, 1e-3)
     assert len(journal.messages) == 1 and "accumulated relative drift" in journal.messages[0]
 
-    ledger.reset()
-    ledger.check("mass", 1.0, 1.0 + perChange, 1e-3)
+    check.reset()
+    check.check("mass", 1.0, 1.0 + perChange, 1e-3)
     assert len(journal.messages) == 1, "the drift of a previous step was carried into the next"

@@ -59,7 +59,7 @@ from edelweissfe.utils.inputfileparser import parseInputFile
 #: The unpatched methods, captured once at import -- a test that runs the solver more than once must
 #: wrap THESE rather than whatever is currently on the class, or the wrappers chain. Same reason as
 #: in test_explicit_operator_reuse.py.
-_TRUE_ENSURE = NonlinearImplicitDynamic._ensureNewmarkSystem
+_TRUE_ENSURE = NonlinearImplicitDynamic._updateNewmarkSystem
 _TRUE_REPORT = NonlinearImplicitDynamic.reportTopologyChangeConservation
 _TRUE_INITIAL_ACCELERATION = NonlinearImplicitDynamic._computeInitialAcceleration
 
@@ -194,7 +194,7 @@ def _instrument(monkeypatch, suppressRearm: bool = False) -> _Recorder:
     """Wrap the three solver methods this file makes assertions about.
 
     ``suppressRearm`` restores ``_initialAccelerationPending`` to whatever it was on entry to
-    ``_ensureNewmarkSystem``, which is exactly and only the behaviour this change added -- the
+    ``_updateNewmarkSystem``, which is exactly and only the behaviour this change added -- the
     disarming happens in ``solveIncrement``, not here. So a run with it set is the shipped solver
     minus this feature, and nothing else.
     """
@@ -238,7 +238,7 @@ def _instrument(monkeypatch, suppressRearm: bool = False) -> _Recorder:
         recorder.initialAccelerations.append(float(timeStep.stepTime - timeStep.timeIncrement))
         return _TRUE_INITIAL_ACCELERATION(self, system, U_n, stepActions, model, timeStep)
 
-    monkeypatch.setattr(NonlinearImplicitDynamic, "_ensureNewmarkSystem", recordingEnsure)
+    monkeypatch.setattr(NonlinearImplicitDynamic, "_updateNewmarkSystem", recordingEnsure)
     monkeypatch.setattr(NonlinearImplicitDynamic, "reportTopologyChangeConservation", recordingReport)
     monkeypatch.setattr(NonlinearImplicitDynamic, "_computeInitialAcceleration", recordingInitialAcceleration)
 

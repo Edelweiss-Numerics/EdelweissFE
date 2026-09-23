@@ -631,7 +631,7 @@ class NIST(NonlinearSolverBase):
 
         self.applyStepActionsAtIncrementStart(model, timeStep, stepActions)
 
-        self.prepareIncrement(U_n, stepActions, model, timeStep)
+        self.initializeIncrement(U_n, stepActions, model, timeStep)
 
         dU, isExtrapolatedIncrement = self.extrapolateLastIncrement(
             extrapolation, timeStep, dU, dirichlets, prevTimeStep, model
@@ -653,7 +653,7 @@ class NIST(NonlinearSolverBase):
             R[:] = -P
             R += PExt
 
-            self.augmentResidualAndTangent(dU, R, F, K, timeStep)
+            self.assembleAdditionalTerms(dU, R, F, K, timeStep)
 
             # Condense the residual BEFORE the Dirichlet handling below: T^T folds slave-row
             # residuals into their master rows, which may themselves carry a prescribed delta --
@@ -707,14 +707,18 @@ class NIST(NonlinearSolverBase):
             dU += ddU
             iterationCounter += 1
 
-        self.commitIncrement(model)
+        self.finalizeIncrement(model)
 
         return U_np, dU, P, iterationCounter, incrementResidualHistory
 
-    def prepareIncrement(self, U_n: DofVector, stepActions: dict, model: FEModel, timeStep: TimeStep):
-        """Hook of :meth:`solveIncrement`, called once per increment, after the step actions have
-        been applied at the increment's start and before the increment is extrapolated. Does
-        nothing here; a subclass that adds terms to the Newton loop sets up what they need.
+    def initializeIncrement(self, U_n: DofVector, stepActions: dict, model: FEModel, timeStep: TimeStep):
+        """Prepare what :meth:`assembleAdditionalTerms` needs during this increment's Newton
+        iterations. Called by :meth:`solveIncrement` once per increment, after the step actions have
+        been applied at the increment's start and before the increment is extrapolated.
+
+        A static analysis needs nothing here. A dynamic one, for example, assembles its mass matrix
+        here and computes the terms the time integration adds to the stiffness for this time
+        increment -- see :class:`~edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic`.
 
         Parameters
         ----------
@@ -728,14 +732,19 @@ class NIST(NonlinearSolverBase):
             The time step.
         """
 
-    def augmentResidualAndTangent(
+    def assembleAdditionalTerms(
         self, dU: DofVector, R: DofVector, F: DofVector, K: VIJSystemMatrix, timeStep: TimeStep
     ):
-        """Hook of :meth:`solveIncrement`, called in every Newton iteration right after the
-        residual :math:`R = P_\\mathrm{ext} - P_\\mathrm{int}` is formed -- before the
+        """Assemble terms of the equation system beyond the internal and external forces. Called
+        by :meth:`solveIncrement` in every Newton iteration, next to :meth:`computeElements`,
+        :meth:`assembleLoads` and :meth:`assembleConstraints`: right after the residual
+        :math:`R = P_\\mathrm{ext} - P_\\mathrm{int}` is formed, and before the
         multi-point-constraint condensation, the Dirichlet handling, the convergence test and the
-        conversion of the tangent to CSR, all of which then act on what this adds. Does nothing
-        here.
+        linear solve -- which therefore all act on what is added here.
+
+        A static analysis has no such terms. A dynamic one, for example, subtracts the inertia force
+        :math:`M \\ddot{u}` from the residual and adds the corresponding mass term to the stiffness
+        -- see :class:`~edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic`.
 
         Parameters
         ----------
@@ -751,10 +760,13 @@ class NIST(NonlinearSolverBase):
             The time step.
         """
 
-    def commitIncrement(self, model: FEModel):
-        """Hook of :meth:`solveIncrement`, called once the Newton loop has converged, i.e. only for
-        an increment that is accepted; a failing one leaves by exception before it. Does nothing
-        here.
+    def finalizeIncrement(self, model: FEModel):
+        """Store what the converged increment leaves behind. Called by :meth:`solveIncrement` once
+        its Newton loop has converged -- only for an accepted increment, since a failing one leaves
+        by exception before it.
+
+        A static analysis stores nothing here. A dynamic one, for example, stores the velocity and
+        acceleration of the converged increment, as the starting point of the next one.
 
         Parameters
         ----------

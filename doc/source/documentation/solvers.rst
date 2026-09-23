@@ -65,7 +65,7 @@ which is what makes a resumed run continue the same trajectory rather than resta
 
 ``NIDParallel`` is the same solver with the element loop evaluated in parallel (see below). The
 mass and the damping are assembled at a step's start and after every topology change; when a
-contact constraint merely changes its connectivity, they are carried over into the rebuilt equation
+contact constraint merely changes its connectivity, they are reused in the rebuilt equation
 system instead, which matters for contact problems whose candidate lists change on nearly every
 increment.
 

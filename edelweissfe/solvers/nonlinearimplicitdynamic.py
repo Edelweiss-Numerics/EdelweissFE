@@ -68,10 +68,10 @@ so that the effective residual and tangent handed to the Newton loop are
 Everything else -- element evaluation, loads, constraints, multi-point-constraint condensation,
 Dirichlet handling, the convergence test, cutbacks and the linear solver -- is the parent's: this
 solver runs :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement` itself and
-enters it only through its three hooks -- :meth:`NonlinearImplicitDynamic.prepareIncrement`
-(operators, tangent terms, initial acceleration), :meth:`NonlinearImplicitDynamic.augmentResidualAndTangent`
+enters it only through its three hooks -- :meth:`NonlinearImplicitDynamic.initializeIncrement`
+(mass, damping, dynamic stiffness, initial acceleration), :meth:`NonlinearImplicitDynamic.assembleAdditionalTerms`
 (two terms in the residual and two in the tangent, where the parent forms ``R = P_ext - P_int``
-and before the tangent is converted to CSR) and :meth:`NonlinearImplicitDynamic.commitIncrement`
+and before the tangent is converted to CSR) and :meth:`NonlinearImplicitDynamic.finalizeIncrement`
 (the converged velocity and acceleration become the state).
 
 **Parameters.** The default :math:`\\beta = 1/4`, :math:`\\gamma = 1/2` is the average-acceleration
@@ -95,8 +95,8 @@ the same layout. Both are assembled when the equation system is (re)built -- at 
 after a topology change -- not per Newton iteration. A rebuild caused only by a constraint changing
 its connectivity (a contact candidate list, which can change on every increment) leaves every
 element, and with it every element's slot in the layout, where it was: the operators are then
-carried over into the new layout rather than reassembled -- see
-:meth:`NonlinearImplicitDynamic._carryOperatorsOver`. The one exception is a step that changes a
+reused in the new layout rather than reassembled -- see
+:meth:`NonlinearImplicitDynamic._reuseMassAndDamping`. The one exception is a step that changes a
 material property mid-step (``>>changematerialproperty``), which invalidates the density and makes
 them reassemble every increment.
 
@@ -188,10 +188,10 @@ from edelweissfe.config.phenomena import carriesLinearMomentum
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
-from edelweissfe.solvers.base.topologychangeconservation import (
+from edelweissfe.solvers.base.conservationchecks import (
     CONSERVATION_TOLERANCE,
-    ConservationLedger,
-    describeMomentumAndKineticEnergy,
+    ConservationCheck,
+    formatMomentumAndKineticEnergy,
     linearMomentum,
 )
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST, NISTSchema
@@ -310,7 +310,7 @@ class _NewmarkIncrement:
         The time increment.
     beta, gamma
         The Newmark parameters.
-    tangentTerms
+    dynamicStiffness
         :math:`M / (\\beta \\Delta t^2) + \\gamma C / (\\beta \\Delta t)` as a VIJ value vector.
     V_np, A_np
         The trial velocity and acceleration of the current iteration.
@@ -320,7 +320,7 @@ class _NewmarkIncrement:
     dT: float
     beta: float
     gamma: float
-    tangentTerms: np.ndarray
+    dynamicStiffness: np.ndarray
     V_np: DofVector
     A_np: DofVector
 
@@ -393,14 +393,14 @@ class NonlinearImplicitDynamic(NIST):
         #: Length of ``model.topologyHistory`` when the current equation system was assembled.
         #: A change in it is what distinguishes a rebuild caused by the mesh actually changing
         #: from one caused by a constraint re-reporting its connectivity; see
-        #: :meth:`_ensureNewmarkSystem`.
+        #: :meth:`_updateNewmarkSystem`.
         self._topologyRecordsAtLastBuild = 0
         #: The per-topology-change mass check and the drift it accumulates over a step; see
-        #: :class:`~edelweissfe.solvers.base.topologychangeconservation.ConservationLedger`.
-        self._conservationLedger = ConservationLedger(journal, self.identification)
+        #: :class:`~edelweissfe.solvers.base.conservationchecks.ConservationCheck`.
+        self._conservationCheck = ConservationCheck(journal, self.identification)
         #: The state shared by the Newton iterations of the current increment; see
-        #: :class:`_NewmarkIncrement`. Set by :meth:`prepareIncrement`.
-        self._increment = None
+        #: :class:`_NewmarkIncrement`. Set by :meth:`initializeIncrement`.
+        self._currentIncrement = None
         #: The non-time-integrated fields a discarded inertia has already been warned about.
         self._fieldsWarnedAboutDiscardedInertia = set()
 
@@ -500,7 +500,7 @@ class NonlinearImplicitDynamic(NIST):
         self._validateNewmarkParameters()
 
         self._newmarkSystem = None
-        self._conservationLedger.reset()
+        self._conservationCheck.reset()
 
         resumed = self._resumedFromCheckpoint
         self._resumedFromCheckpoint = False
@@ -543,7 +543,7 @@ class NonlinearImplicitDynamic(NIST):
         """Newton-Raphson scheme on the Newmark-effective equation of motion of an increment.
 
         The parent's loop, into which the dynamics enter through its hooks
-        (:meth:`prepareIncrement`, :meth:`augmentResidualAndTangent`, :meth:`commitIncrement`). A
+        (:meth:`initializeIncrement`, :meth:`assembleAdditionalTerms`, :meth:`finalizeIncrement`). A
         zero-length increment -- the one the time stepper
         yields before the first real increment of a step -- has no equation of motion and is
         skipped with the state kept: displacement and velocity are continuous in time, and a load
@@ -618,7 +618,7 @@ class NonlinearImplicitDynamic(NIST):
             U_n, dU, P, K, stepActions, model, timeStep, prevTimeStep, extrapolation, maxIter, maxGrowingIter
         )
 
-    def prepareIncrement(self, U_n: DofVector, stepActions: dict, model: FEModel, timeStep: TimeStep):
+    def initializeIncrement(self, U_n: DofVector, stepActions: dict, model: FEModel, timeStep: TimeStep):
         """Bring the Newmark operators up to date with the equation system, form the two terms the
         dynamics add to the tangent, and -- at a cold step start or after a topology change --
         compute the acceleration from equilibrium; see the parent's hook.
@@ -639,7 +639,7 @@ class NonlinearImplicitDynamic(NIST):
             The time step.
         """
 
-        system = self._ensureNewmarkSystem(model, stepActions)
+        system = self._updateNewmarkSystem(model, stepActions)
 
         beta = self.options["newmarkBeta"]
         gamma = self.options["newmarkGamma"]
@@ -647,16 +647,16 @@ class NonlinearImplicitDynamic(NIST):
         # d(A_np)/d(dU) and d(V_np)/d(dU), the factors the mass and the damping enter the tangent
         # with. dT is fixed within the increment, so these two terms are too: formed once here
         # rather than scaled and added as two full-length value vectors on every Newton iteration.
-        tangentTerms = (1.0 / (beta * dT * dT)) * np.asarray(system.Mvij) + (gamma / (beta * dT)) * np.asarray(
+        dynamicStiffness = (1.0 / (beta * dT * dT)) * np.asarray(system.Mvij) + (gamma / (beta * dT)) * np.asarray(
             system.Cvij
         )
 
-        self._increment = _NewmarkIncrement(
+        self._currentIncrement = _NewmarkIncrement(
             system=system,
             dT=dT,
             beta=beta,
             gamma=gamma,
-            tangentTerms=tangentTerms,
+            dynamicStiffness=dynamicStiffness,
             V_np=self.theDofManager.constructDofVector(),
             A_np=self.theDofManager.constructDofVector(),
         )
@@ -665,7 +665,7 @@ class NonlinearImplicitDynamic(NIST):
             self._initialAccelerationPending = False
             self._computeInitialAcceleration(system, U_n, stepActions, model, timeStep)
 
-    def augmentResidualAndTangent(
+    def assembleAdditionalTerms(
         self, dU: DofVector, R: DofVector, F: DofVector, K: VIJSystemMatrix, timeStep: TimeStep
     ):
         """Add the inertia and damping forces to the residual and their derivatives to the
@@ -685,10 +685,10 @@ class NonlinearImplicitDynamic(NIST):
             The time step.
         """
 
-        increment = self._increment
+        increment = self._currentIncrement
         system = increment.system
 
-        self._newmarkKinematics(
+        self._newmarkVelocityAndAcceleration(
             dU,
             system.V,
             system.A,
@@ -713,9 +713,9 @@ class NonlinearImplicitDynamic(NIST):
 
         # Same VIJ layout as K, so the effective tangent is an entry-wise sum, before the parent's
         # CSR conversion, MPC condensation and Dirichlet row replacement.
-        K += increment.tangentTerms
+        K += increment.dynamicStiffness
 
-    def commitIncrement(self, model: FEModel):
+    def finalizeIncrement(self, model: FEModel):
         """The converged trial kinematics become the state; see the parent's hook. Only an accepted
         increment gets here -- a failing one leaves by exception and keeps the previous velocity
         and acceleration for the cutback.
@@ -726,18 +726,18 @@ class NonlinearImplicitDynamic(NIST):
             The model tree.
         """
 
-        increment = self._increment
+        increment = self._currentIncrement
         system = increment.system
 
         system.V[:] = increment.V_np
         system.A[:] = increment.A_np
-        self._publishKinematics(system, model)
+        self._writeVelocityAndAccelerationToNodeFields(system, model)
 
         kineticEnergy = 0.5 * float(np.dot(np.asarray(system.V), system.M @ np.asarray(system.V)))
         self.journal.message("kinetic energy {:e}".format(kineticEnergy), self.identification, 2)
 
     @staticmethod
-    def _newmarkKinematics(
+    def _newmarkVelocityAndAcceleration(
         dU: DofVector,
         V_n: DofVector,
         A_n: DofVector,
@@ -782,7 +782,7 @@ class NonlinearImplicitDynamic(NIST):
         A_np[dynamicDofs] = ANew
         V_np[dynamicDofs] = VNew
 
-    def _publishKinematics(self, system: _NewmarkSystem, model: FEModel):
+    def _writeVelocityAndAccelerationToNodeFields(self, system: _NewmarkSystem, model: FEModel):
         """Write the committed velocity and acceleration to the ``V`` and ``A`` entries of the
         dynamic fields' node fields -- what field outputs read, what a checkpoint stores, and what
         the next equation system reads them back from.
@@ -800,7 +800,7 @@ class NonlinearImplicitDynamic(NIST):
             self.theDofManager.writeDofVectorToNodeField(system.V, field, "V")
             self.theDofManager.writeDofVectorToNodeField(system.A, field, "A")
 
-    def _ensureNewmarkSystem(self, model: FEModel, stepActions: dict) -> _NewmarkSystem:
+    def _updateNewmarkSystem(self, model: FEModel, stepActions: dict) -> _NewmarkSystem:
         """The Newmark operators and state for the parent's current equation system, assembled if
         that system is new and reused otherwise.
 
@@ -870,19 +870,19 @@ class NonlinearImplicitDynamic(NIST):
         else:
             V, A = system.V, system.A
 
-        carriedOver = None
+        reusedMassAndDamping = None
         if (
             dofManagerChanged
             and system is not None
             and not topologyChanged
             and not stepActions["changematerialproperty"]
         ):
-            carriedOver = self._carryOperatorsOver(system, model)
+            reusedMassAndDamping = self._reuseMassAndDamping(system, model)
 
-        if carriedOver is not None:
-            Mvij, Cvij, M, C = carriedOver
+        if reusedMassAndDamping is not None:
+            Mvij, Cvij, M, C = reusedMassAndDamping
         else:
-            Mvij, Cvij, M, C = self._assembleOperators(model, dynamicDofs, dynamicFields)
+            Mvij, Cvij, M, C = self._assembleMassAndDamping(model, dynamicDofs, dynamicFields)
 
         self._newmarkSystem = _NewmarkSystem(
             dofManager=self.theDofManager,
@@ -914,8 +914,8 @@ class NonlinearImplicitDynamic(NIST):
 
         return self._newmarkSystem
 
-    @performancetiming.timeit("carry mass and damping over")
-    def _carryOperatorsOver(
+    @performancetiming.timeit("reuse mass and damping")
+    def _reuseMassAndDamping(
         self, system: _NewmarkSystem, model: FEModel
     ) -> tuple[VIJSystemMatrix, VIJSystemMatrix, csr_matrix, csr_matrix] | None:
         """The mass and the damping of ``system``, moved into the layout of the current
@@ -983,7 +983,7 @@ class NonlinearImplicitDynamic(NIST):
         Cvij[:nElementVIJ] = system.Cvij[:nElementVIJ]
 
         self.journal.message(
-            "constraint connectivity changed only: mass and damping carried over, not reassembled",
+            "constraint connectivity changed only: mass and damping reused, not reassembled",
             self.identification,
             2,
         )
@@ -1064,7 +1064,7 @@ class NonlinearImplicitDynamic(NIST):
     def reportTopologyChangeConservation(self, before: _ConservedQuantities, after: _ConservedQuantities):
         """Report what a topology change did to the quantities that ought to survive it: every
         dynamic field's total mass is checked (and raises when violated), momentum and kinetic
-        energy are reported -- see :mod:`~edelweissfe.solvers.base.topologychangeconservation`
+        energy are reported -- see :mod:`~edelweissfe.solvers.base.conservationchecks`
         for which of them is exact when. The mass is reassembled here rather than transferred, so
         its conservation is an identity of the assembly and the cheapest correctness check on the
         whole refinement.
@@ -1083,7 +1083,7 @@ class NonlinearImplicitDynamic(NIST):
         tolerance = self.options["massConservationTolerance"]
         worstField, worstRelativeChange = "", 0.0
         for fieldName, massBefore in before.massByField.items():
-            relativeChange = self._conservationLedger.check(
+            relativeChange = self._conservationCheck.check(
                 "mass of field '{:}'".format(fieldName), massBefore, after.massByField.get(fieldName, 0.0), tolerance
             )
             if relativeChange >= worstRelativeChange:
@@ -1093,7 +1093,7 @@ class NonlinearImplicitDynamic(NIST):
             "Topology change: worst-conserved mass, field '{:}', to {:.1e} relative; {:}".format(
                 worstField,
                 worstRelativeChange,
-                describeMomentumAndKineticEnergy(
+                formatMomentumAndKineticEnergy(
                     before.momentum, after.momentum, before.kineticEnergy, after.kineticEnergy
                 ),
             ),
@@ -1133,7 +1133,7 @@ class NonlinearImplicitDynamic(NIST):
         return np.flatnonzero(isDynamic), dynamicFields
 
     @performancetiming.timeit("assemble mass and damping")
-    def _assembleOperators(
+    def _assembleMassAndDamping(
         self, model: FEModel, dynamicDofs: np.ndarray, dynamicFields: list
     ) -> tuple[VIJSystemMatrix, VIJSystemMatrix, csr_matrix, csr_matrix]:
         """Assemble the consistent mass and the diagonal damping, in the stiffness' VIJ layout and
@@ -1293,7 +1293,7 @@ class NonlinearImplicitDynamic(NIST):
         Called on the first increment of a cold-started step, where :math:`t_0` is the step's own
         start, and on the increment after a topology change, where it is that increment's start and
         the acceleration it replaces is the one a refinement interpolated -- see
-        :meth:`_ensureNewmarkSystem`. The two are the same computation; only the instant differs.
+        :meth:`_updateNewmarkSystem`. The two are the same computation; only the instant differs.
 
         Parameters
         ----------
@@ -1356,7 +1356,7 @@ class NonlinearImplicitDynamic(NIST):
 
         system.A[:] = 0.0
         system.A[system.dynamicDofs] = A0[system.dynamicDofs]
-        self._publishKinematics(system, model)
+        self._writeVelocityAndAccelerationToNodeFields(system, model)
 
         self.journal.message(
             "acceleration from equilibrium at t = {:g}: ||a0||inf = {:e}".format(

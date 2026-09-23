@@ -25,19 +25,19 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""``NID`` under contact: carrying the mass and the damping over a connectivity-only rebuild.
+"""``NID`` under contact: reusing the mass and the damping across a connectivity-only rebuild.
 
 A contact constraint changes its connectivity as the bodies approach and slide, and the parent
 solver builds a new equation system every time it does. Reassembling the mass and the damping on
 each of those rebuilds would be a full element loop per increment for operators that cannot have
-changed -- no node moved, no element changed -- so ``NID`` carries them over into the new layout
-instead (``_carryOperatorsOver``). What has to hold:
+changed -- no node moved, no element changed -- so ``NID`` reuses them in the new layout
+instead (``_reuseMassAndDamping``). What has to hold:
 
 * **It happens.** On a deck whose contact connectivity really changes mid-step, the operators are
-  carried over on those rebuilds, and the constraint part of the layout really differs between the
-  two managers -- otherwise the carry-over was never the non-trivial case.
+  reused on those rebuilds, and the constraint part of the layout really differs between the
+  two managers -- otherwise the reuse was never the non-trivial case.
 * **It changes nothing.** The run is bit-for-bit identical to the same run with every rebuild
-  forced to reassemble. The carried-over operators are the reassembled ones, so anything short of
+  forced to reassemble. The reused operators are the reassembled ones, so anything short of
   identity is a bug, not round-off.
 """
 
@@ -47,8 +47,8 @@ from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulatio
 from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 from edelweissfe.utils.inputfileparser import parseInputFile
 
-_TRUE_CARRY_OVER = NonlinearImplicitDynamic._carryOperatorsOver
-_TRUE_ASSEMBLE = NonlinearImplicitDynamic._assembleOperators
+_TRUE_REUSE = NonlinearImplicitDynamic._reuseMassAndDamping
+_TRUE_ASSEMBLE = NonlinearImplicitDynamic._assembleMassAndDamping
 
 _DECK = """
 *material, name=linearelastic, id=mat
@@ -103,14 +103,14 @@ maxInc=0.05, startInc=0.05, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=0
 
 
 def _run(tmp_path, name: str, monkeypatch, forceReassembly: bool):
-    record = {"carriedOver": [], "assembled": 0}
+    record = {"reused": [], "assembled": 0}
 
-    def carryOver(self, system, model):
+    def reuse(self, system, model):
         if forceReassembly:
             return None
-        result = _TRUE_CARRY_OVER(self, system, model)
+        result = _TRUE_REUSE(self, system, model)
         if result is not None:
-            record["carriedOver"].append(
+            record["reused"].append(
                 (len(system.dofManager.I), len(self.theDofManager.I), system.dofManager.I, self.theDofManager.I)
             )
         return result
@@ -119,8 +119,8 @@ def _run(tmp_path, name: str, monkeypatch, forceReassembly: bool):
         record["assembled"] += 1
         return _TRUE_ASSEMBLE(self, model, dynamicDofs, dynamicFields)
 
-    monkeypatch.setattr(NonlinearImplicitDynamic, "_carryOperatorsOver", carryOver)
-    monkeypatch.setattr(NonlinearImplicitDynamic, "_assembleOperators", assemble)
+    monkeypatch.setattr(NonlinearImplicitDynamic, "_reuseMassAndDamping", reuse)
+    monkeypatch.setattr(NonlinearImplicitDynamic, "_assembleMassAndDamping", assemble)
 
     path = tmp_path / f"{name}.inp"
     path.write_text(_DECK)
@@ -129,22 +129,22 @@ def _run(tmp_path, name: str, monkeypatch, forceReassembly: bool):
     return record, [np.array(field[entry]) for entry in "UVA"], model
 
 
-def test_operators_are_carried_over_a_contact_connectivity_change(tmp_path, monkeypatch):
-    record, _, model = _run(tmp_path, "carried", monkeypatch, forceReassembly=False)
+def test_mass_and_damping_are_reused_across_a_contact_connectivity_change(tmp_path, monkeypatch):
+    record, _, model = _run(tmp_path, "reused", monkeypatch, forceReassembly=False)
 
-    assert record["carriedOver"], "no connectivity-only rebuild happened; the deck exercises nothing"
+    assert record["reused"], "no connectivity-only rebuild happened; the deck exercises nothing"
     assert record["assembled"] == 1, "reassembled {:} times".format(record["assembled"])
     assert any(
-        nOld != nNew or not np.array_equal(IOld, INew) for nOld, nNew, IOld, INew in record["carriedOver"]
-    ), "the constraint part of the layout never changed, so the carry-over was always trivial"
+        nOld != nNew or not np.array_equal(IOld, INew) for nOld, nNew, IOld, INew in record["reused"]
+    ), "the constraint part of the layout never changed, so the reuse was always trivial"
     assert model.time > 0.0
 
 
-def test_carrying_over_is_bit_identical_to_reassembling(tmp_path, monkeypatch):
-    carried, carriedState, _ = _run(tmp_path, "carried", monkeypatch, forceReassembly=False)
+def test_reusing_is_bit_identical_to_reassembling(tmp_path, monkeypatch):
+    reused, reusedState, _ = _run(tmp_path, "reused", monkeypatch, forceReassembly=False)
     reassembled, reassembledState, _ = _run(tmp_path, "reassembled", monkeypatch, forceReassembly=True)
 
-    assert carried["carriedOver"] and reassembled["assembled"] > 1
+    assert reused["reused"] and reassembled["assembled"] > 1
 
-    for c, r, name in zip(carriedState, reassembledState, "UVA"):
+    for c, r, name in zip(reusedState, reassembledState, "UVA"):
         np.testing.assert_array_equal(c, r, err_msg=name)

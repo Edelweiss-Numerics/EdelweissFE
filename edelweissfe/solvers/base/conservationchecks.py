@@ -36,7 +36,7 @@ in decreasing strength, and they hold for the explicit and the implicit dynamic 
   geometric identity; the quadrature that assembles it is exact only to a polynomial order, which
   admits a small change on a distorted element. Checked per field, never summed across fields: a
   violation in a numerically small field would otherwise hide inside a large one. Violating it
-  raises (:class:`ConservationLedger`).
+  raises (:class:`ConservationCheck`).
 * **Linear momentum is conserved exactly for a spatially uniform velocity field**, because the
   shape functions are a partition of unity; for a general field the discrepancy is second order in
   the velocity gradient across the refined parent -- discretisation error, not a defect. Reported
@@ -120,7 +120,7 @@ def linearMomentum(
     return total if total is not None else np.zeros(0)
 
 
-def describeMomentumAndKineticEnergy(
+def formatMomentumAndKineticEnergy(
     momentumBefore: np.ndarray, momentumAfter: np.ndarray, kineticBefore: float, kineticAfter: float
 ) -> str:
     """The momentum and kinetic-energy part of a topology-change report, in one wording for every
@@ -153,12 +153,12 @@ def describeMomentumAndKineticEnergy(
     )
 
 
-class ConservationLedger:
+class ConservationCheck:
     """The per-change check of a conserved total, and the drift those changes accumulate over a
     step.
 
     Each total is checked against the tolerance on its own and raises on a violation. What a single
-    check cannot bound is many individually tolerable changes adding up; the ledger sums them per
+    check cannot bound is many individually tolerable changes adding up; the check sums them per
     total and warns once per step when the sum exceeds :data:`CUMULATIVE_DRIFT_TOLERANCE` --
     reported, not raised, because what accumulates there is quadrature error rather than a violated
     invariant, and aborting a multi-hour run on an accumulated heuristic is out of proportion.

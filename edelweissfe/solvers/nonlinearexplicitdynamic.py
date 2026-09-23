@@ -131,13 +131,13 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
 from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
-from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
-from edelweissfe.solvers.base.topologychangeconservation import (
+from edelweissfe.solvers.base.conservationchecks import (
     CONSERVATION_TOLERANCE,
-    ConservationLedger,
-    describeMomentumAndKineticEnergy,
+    ConservationCheck,
+    formatMomentumAndKineticEnergy,
     linearMomentum,
 )
+from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
@@ -260,7 +260,7 @@ class NEDSchema:
             "relative to floating-point precision and exists to catch a genuinely wrong refinement "
             "or lumping, not to absorb ordinary quadrature noise. Raise this only when a specific, "
             "understood run trips it by a small margin (see "
-            "edelweissfe.solvers.base.topologychangeconservation)."
+            "edelweissfe.solvers.base.conservationchecks)."
         ),
         dtype=float,
         default=CONSERVATION_TOLERANCE,
@@ -400,7 +400,7 @@ class NED(NonlinearSolverBase):
         self._warnedAboutMissingExternalWork = False
         #: The per-topology-change conservation check of every field's lumped total, and the
         #: drift those changes accumulate over a step; reset at every step start.
-        self._conservationLedger = ConservationLedger(journal, self.identification)
+        self._conservationCheck = ConservationCheck(journal, self.identification)
         #: Work done on the model by its prescribed degrees of freedom, accumulated every
         #: increment. Compared against the kinetic energy to detect energy creation; see
         #: _ENERGY_CREATION_TOLERANCE.
@@ -526,7 +526,7 @@ class NED(NonlinearSolverBase):
         stepWallClockTic = perf_counter()
 
         self._externalWork = self._consumeResumedExternalWork()
-        self._conservationLedger.reset()
+        self._conservationCheck.reset()
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
 
@@ -1912,7 +1912,7 @@ class NED(NonlinearSolverBase):
 
     def secondOrderMomentum(self, mass: DofVector, V: DofVector, model: FEModel) -> np.ndarray:
         """The linear momentum of the fields whose inertia is a mass, per spatial component; see
-        :func:`~edelweissfe.solvers.base.topologychangeconservation.linearMomentum`.
+        :func:`~edelweissfe.solvers.base.conservationchecks.linearMomentum`.
 
         Parameters
         ----------
@@ -1941,7 +1941,7 @@ class NED(NonlinearSolverBase):
         non-mechanical inertia are not just different units, they are typically many orders of
         magnitude apart in value. That is true even between two fields of the SAME kind (two
         mechanical fields of very different density would have the same problem), so the fix is
-        per field, not per "mechanical vs. not". The conservation ledger checks each field
+        per field, not per "mechanical vs. not". The conservation check tests each field
         once with its own total, so a violation anywhere is visible regardless of what
         else is assembled alongside it.
 
@@ -2134,7 +2134,7 @@ class NED(NonlinearSolverBase):
         * **Every field's own lumped total is conserved exactly**, by the same geometric
           identity regardless of what that field's coefficient physically is: the children of a
           refined element tile it and carry the same value. Checked per FIELD, not per family,
-          via :class:`~edelweissfe.solvers.base.topologychangeconservation.ConservationLedger` -- summing across fields first, even ones
+          via :class:`~edelweissfe.solvers.base.conservationchecks.ConservationCheck` -- summing across fields first, even ones
           that agree on units, would let a violation in a numerically small field hide inside a
           numerically large one. Violating any single field's total raises.
         * **Linear momentum is conserved exactly for a spatially uniform velocity field**, because
@@ -2180,7 +2180,7 @@ class NED(NonlinearSolverBase):
 
         tolerance = self.options["lumped-quantity-conservation-tolerance"]
         relativeChangeByField = {
-            fieldName: self._conservationLedger.check(
+            fieldName: self._conservationCheck.check(
                 "lumped coefficient of field '{:}'".format(fieldName),
                 before,
                 lumpedTotalsAfter.get(fieldName, 0.0),
@@ -2228,7 +2228,7 @@ class NED(NonlinearSolverBase):
                 median2nd,
                 smallest1st,
                 median1st,
-                describeMomentumAndKineticEnergy(momentumBefore, momentumAfter, kineticBefore, kineticAfter),
+                formatMomentumAndKineticEnergy(momentumBefore, momentumAfter, kineticBefore, kineticAfter),
             ),
             self.identification,
             1,
