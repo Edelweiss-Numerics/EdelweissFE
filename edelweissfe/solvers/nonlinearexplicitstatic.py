@@ -526,7 +526,8 @@ class NEST(NIST):
             R = self.applyDirichletToResidual(timeStep, R, dirichlets)
 
             K_ = self.assembleStiffnessCSR(K)
-            K_ = self.applyDirichletToStiffness(K_, dirichlets)  # zero rows, unit diagonal
+            # identity rows, and the columns eliminated into R
+            K_ = self.applyDirichletToStiffness(K_, dirichlets, R)
 
             # solve for increment
             dU_[k] = self.linearSolve(K_, R)
