@@ -100,6 +100,14 @@ def createSolver(opts) -> Callable:
             first time one of these fields' hierarchies is built -- not known at construction time,
             so nothing needs to be pushed in ahead of it.
 
+        ``hierarchyDropTol``, ``hierarchyDropLumping``
+            Sparsification of each field's diagonal block before its AMG hierarchy is built -- see
+            :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`.
+        ``gapMaxFactor``
+            Upper bound of the gap factor ``gapCompensatedTolerance`` applies.
+
+        A key not listed here raises a ``ValueError`` instead of being ignored.
+
         As with the other factories, a non-mapping ``opts`` is tolerated (the implicit-static solver
         passes ``""`` when no configuration file is given), in which case every default applies.
 
@@ -114,6 +122,7 @@ def createSolver(opts) -> Callable:
     optionMap = opts if isinstance(opts, Mapping) else {}
 
     kwargs = {}
+    recognized = {"outerTol", "fieldPreconds", "p1FieldNames"}
     if "outerTol" in optionMap:
         value = optionMap["outerTol"]
         kwargs["outerTol"] = None if value in (None, "adaptive") else float(value)
@@ -144,12 +153,26 @@ def createSolver(opts) -> Callable:
         ("dumpOnDegradationMaxDumps", int),
         ("dumpOnDegradationContextSolves", int),
         ("hotReloadConfigFile", str),
+        ("hierarchyDropTol", float),
+        ("hierarchyDropLumping", bool),
+        ("gapMaxFactor", float),
     ):
         if key in optionMap:
             kwargs[key] = cast(optionMap[key])
+        recognized.add(key)
     if "fieldPreconds" in optionMap:
         kwargs["fieldPreconds"] = dict(optionMap["fieldPreconds"])
     if "p1FieldNames" in optionMap:
         kwargs["p1FieldNames"] = list(optionMap["p1FieldNames"])
+
+    # A key this factory does not know would otherwise be dropped without a word -- a typo, or a
+    # setting that only the constructor takes, then silently has no effect on the run.
+    unknown = sorted(set(optionMap) - recognized)
+    if unknown:
+        raise ValueError(
+            "blockamg: unknown configuration key(s) {:}; recognized keys are {:}.".format(
+                ", ".join(unknown), ", ".join(sorted(recognized))
+            )
+        )
 
     return BlockAMGSolver(**kwargs)

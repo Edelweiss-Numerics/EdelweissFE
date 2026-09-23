@@ -434,7 +434,7 @@ Configuration keys
 
 ``blockamg`` is selected after the ``*solver`` keyword. A ``linsolverConfigFile`` is optional: the
 block structure is discovered from the model, so the file carries only solver knobs, and every key is
-optional.
+optional. A key that is not listed in the tables below raises an error rather than being ignored.
 
 .. code-block:: edelweiss
 
