@@ -353,10 +353,11 @@ class ModelModifier(ModelModifierBase):
         # and materializes/deletes elements directly in the model.
         self._refineElementNumbers = {el.elNumber for el in refineElements}
 
-        # element type: infer from a refineable element if not given
-        anyEl = refineElements[0]
-        self._elementType = options.elementType or anyEl.elType
-        self._elementClass = getElementClass(self._elementType, self._provider)
+        # element type of the children: the one given, or else each child is of its own parent's
+        # type -- a multi-material mesh (e.g. GC3D20R concrete next to C3D20R steel) keeps each
+        # element family's field layout and material interface across refinement
+        self._elementType = options.elementType
+        self._elementClasses = {}
 
         # bodies of the refineable mesh: node labels are namespaced per body, so coincident nodes of
         # two bodies (a tied interface -- 'adjust' makes it flush by default --, a zero-gap contact
@@ -597,6 +598,12 @@ class ModelModifier(ModelModifierBase):
         self._committedOccasionEids.append(list(markedEids))
         return change
 
+    def _makeElement(self, elementType, elNumber):
+        """Instantiate a child element of the given type, resolving (and caching) its class once per type."""
+        if elementType not in self._elementClasses:
+            self._elementClasses[elementType] = getElementClass(elementType, self._provider)
+        return self._elementClasses[elementType](elementType, elNumber)
+
     def _materialize(self, model: FEModel, records: dict):
         mesh = self._mesh
         reg = mesh.registry
@@ -675,7 +682,7 @@ class ModelModifier(ModelModifierBase):
                     e = mesh.elements[eid]
                     parentEid = e["parent"]
                     parentEl = self._eidToEl[parentEid]
-                    child = self._elementClass(self._elementType, elNumber)
+                    child = self._makeElement(self._elementType or parentEl.elType, elNumber)
                     child.setNodes([model.nodes[label] for label in e["conn"]])
                     self._sectionOf[parentEl].assignSectionPropertiesToElement(child)
                     for elementProperty in self._elementPropertiesOf.get(parentEl, ()):
