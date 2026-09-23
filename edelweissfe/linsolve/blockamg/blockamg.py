@@ -340,6 +340,11 @@ class BlockAMGSolver(LinearSolver):
         per unit of *simulated time* rather than per increment, the per-increment saving is largely
         or wholly given back. ``gapSafetyFactor`` is the knob between the two regimes (smaller =
         more accurate = closer to the default's Newton behaviour); the sweet spot is unexplored.
+
+    gapMaxFactor
+        Upper clamp on the gap EMA (default 1e3, well above the documented 1.0-3.5 range). Without
+        it, one non-converged solve can report an outsized gap that compounds through the EMA into
+        an ever-tighter, unmeetable tolerance for every solve after it.
     hierarchyStalenessFactor
         Refresh the AMG hierarchies before the *next* solve if this solve's outer GMRES count exceeded
         this factor times the previous solve's -- a growing count is the signal that the reused
@@ -464,6 +469,7 @@ class BlockAMGSolver(LinearSolver):
         hierarchyStalenessFactor: float = 1.5,
         gapCompensatedTolerance: bool = False,
         gapSafetyFactor: float = 0.3,
+        gapMaxFactor: float = 1e3,
         trueResidualMaxContinuations: int = 2,
         verbosity: str = "warning",
         warnOuterIterationsThreshold: int = 100,
@@ -507,6 +513,7 @@ class BlockAMGSolver(LinearSolver):
         self._hierarchyStalenessFactor = hierarchyStalenessFactor
         self._gapCompensatedTolerance = gapCompensatedTolerance
         self._gapSafetyFactor = gapSafetyFactor
+        self._gapMaxFactor = gapMaxFactor
         self._trueResidualMaxContinuations = trueResidualMaxContinuations
         if verbosity not in _VERBOSITY_LEVELS:
             raise ValueError("verbosity must be one of {:}, got {!r}".format(_VERBOSITY_LEVELS, verbosity))
@@ -1370,7 +1377,9 @@ class BlockAMGSolver(LinearSolver):
         # given), smoothed so one atypical solve cannot swing the next one's first-pass tolerance.
         _measuredGap = trueResidual / max(firstPassEta, 1e-300)
         if np.isfinite(_measuredGap) and _measuredGap > 0.0:
-            self._trueResidualGap = max(0.5 * self._trueResidualGap + 0.5 * _measuredGap, 1.0)
+            # Ceiled at gapMaxFactor too: an unbounded gap from one non-converged solve compounds
+            # through the EMA into an ever-tighter, unmeetable tolerance.
+            self._trueResidualGap = min(max(0.5 * self._trueResidualGap + 0.5 * _measuredGap, 1.0), self._gapMaxFactor)
 
         with performancetiming.timeit("true-residual continuations"):
             continuationEta = min(eta, firstPassEta) if self._gapCompensatedTolerance else eta

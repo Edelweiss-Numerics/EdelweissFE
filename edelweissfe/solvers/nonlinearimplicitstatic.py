@@ -339,17 +339,20 @@ class NIST(NonlinearSolverBase):
                             "scalar variables",
                         ]
 
-                    self.iterationHeader2 = (" {:<10}  {:<10}  ").format("||R||∞", "||ddU||∞") * len(
-                        presentVariableNames
-                    )
-                    if self.linSolver.reportsSolveSummary:
-                        # One more column, exactly like any other field's, for the linear solver's own
-                        # per-iteration diagnostics -- see NonlinearSolverBase.checkConvergence, which
-                        # builds and appends the matching row cell.
-                        presentVariableNames = presentVariableNames + ["linear solve"]
-                        self.iterationHeader2 += (" {:<10}  {:<10}  ").format("iters", "‖r‖")
-
+                    # Centers each label over its 12-wide value+marker cell (see checkConvergence's
+                    # iterationMessageTemplate).
+                    subHeaderCell = "{:^12}{:^12} "
                     self.iterationHeader = ("{:^25}" * len(presentVariableNames)).format(*presentVariableNames)
+                    self.iterationHeader2 = subHeaderCell.format("||R||∞", "||ddU||∞") * len(presentVariableNames)
+
+                    if self.linSolver.reportsSolveSummary:
+                        # Extra column for the linear solver's diagnostics; checkConvergence appends
+                        # the matching row cell. Gap capped at 1 space -- wider wraps the row past the
+                        # Journal's 76-char limit for level-2 messages.
+                        gap = " "
+                        self.iterationHeader += gap + "{:^25}".format("linear solve")
+                        self.iterationHeader2 += gap + subHeaderCell.format("iters", "‖r‖")
+
                     self.iterationMessageTemplate = "{:11.2e}{:1}{:11.2e}{:1} "
 
                     K = self.theDofManager.constructVIJSystemMatrix()

@@ -221,7 +221,15 @@ def getFieldSize(field, domainSize):
     if fType == "vector":
         return domainSize
     if fType == "rotation vector":
-        if domainSize == 2:
+        # _createNodeFieldsFromNodes() calls this for every *declared* phenomenon, whether or
+        # not any element of the model actually requests it for a given node -- an unused field
+        # is filtered out there afterwards (its NodeField ends up with zero nodes), not here.
+        # So this only has to return *some* valid size for domainSize == 1, not defend that a
+        # rotation vector is a sensible field to actually use on a 1D domain; no element in this
+        # codebase currently does. A two dimensional domain has an unambiguous single out-of-plane
+        # rotation axis; a one dimensional domain does not have an equally natural one, so 1 here
+        # is a placeholder to keep every 1D model buildable, not a physical claim.
+        if domainSize in (1, 2):
             return 1
         elif domainSize == 3:
             return 3

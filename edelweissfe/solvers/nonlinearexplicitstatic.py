@@ -289,7 +289,9 @@ class NEST(NIST):
 
         nVariables = len(presentVariableNames)
         self.iterationHeader = ("{:^25}" * nVariables).format(*presentVariableNames)
-        self.iterationHeader2 = (" {:<10}  {:<10}  ").format("||R||∞", "||ddU||∞") * nVariables
+        # Centers each label over its 12-wide value+marker cell; kept in sync with
+        # NonlinearImplicitStatic's identical real-field header.
+        self.iterationHeader2 = ("{:^12}{:^12} ").format("||R||∞", "||ddU||∞") * nVariables
         self.iterationMessageTemplate = "{:11.2e}{:1}{:11.2e}{:1} "
 
         self.computationTimes = createTimingDict()

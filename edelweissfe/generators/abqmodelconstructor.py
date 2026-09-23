@@ -192,10 +192,14 @@ class AbqModelConstructor:
                 # breaking depend on Python's hash-based set iteration order instead.
                 elementSets[name] = ElementSet(name, list(dict.fromkeys(els)))
             else:
-                elementSets[name] = []
+                els = []
                 for line in data:
                     for elSet in line:
-                        elementSets[name] += elementSets[elSet]
+                        els += list(elementSets[elSet])
+                # A name-union *ELSET must also become a proper ElementSet (not a bare list), or
+                # it is unhashable and breaks any consumer that caches by set identity (e.g.
+                # NodeField.subset()).
+                elementSets[name] = ElementSet(name, set(els))
 
         # generate dictionary of nodeObjects belonging to a specified nodeset
         # or generate nodeset by generate definition in inputfile

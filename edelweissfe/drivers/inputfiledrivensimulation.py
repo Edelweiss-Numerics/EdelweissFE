@@ -172,7 +172,7 @@ def finiteElementSimulation(
     stepManager = createStepManagerFromInputFile(inputfile)
     fieldOutputController = createFieldOutputFromInputFile(inputfile, model, journal)
     model.fieldOutputController = fieldOutputController
-    fieldOutputController.initializeJob()
+    fieldOutputController.initializeJob(resuming=resumeCheckpoint is not None)
 
     outputManagers = createOutputManagersFromInputFile(
         inputfile, jobName, model, fieldOutputController, journal, plotter
