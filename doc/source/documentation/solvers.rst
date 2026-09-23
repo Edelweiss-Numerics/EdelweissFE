@@ -80,6 +80,14 @@ restart equivalence of ``U``, ``V`` and ``A``, and -- under live refinement -- f
 a velocity field of degree at most one onto new nodes together with exact conservation of mass,
 momentum and kinetic energy in that case.
 
+``NIDParallel`` - Nonlinear Implicit Dynamic (Newmark-beta, parallel)
+----------------------------------------------------------------------
+
+.. automodule:: edelweissfe.solvers.nonlinearimplicitdynamicparallel
+   :members:
+
+.. pprint:: solver:NIDParallel
+
 ``NEST`` - Nonlinear Explicit Static
 -------------------------------------
 

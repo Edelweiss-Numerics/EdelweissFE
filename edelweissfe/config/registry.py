@@ -258,6 +258,7 @@ for _solverName, _target in {
     "NEST": "nonlinearexplicitstatic:NEST",
     "NED": "nonlinearexplicitdynamic:NED",
     "NID": "nonlinearimplicitdynamic:NonlinearImplicitDynamic",
+    "NIDParallel": "nonlinearimplicitdynamicparallel:NIDParallel",
     "NISTParallel": "nonlinearimplicitstaticparallel:NISTParallel",
     "NESTParallel": "nonlinearexplicitstaticparallel:NESTParallel",
     "NEDParallel": "nonlinearexplicitdynamicparallel:NEDParallel",

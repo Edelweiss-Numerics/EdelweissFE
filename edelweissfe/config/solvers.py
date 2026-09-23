@@ -38,6 +38,7 @@ Currently, EdelweissFE provides
  * a parallel nonlinear implicit static solver (NISTParallel),
  * a parallel nonlinear explicit static solver (NESTParallel),
  * a parallel nonlinear explicit dynamic solver (NEDParallel),
+ * a parallel nonlinear implicit dynamic solver (NIDParallel),
  * and a parallel arc length solver (NISTPArcLength).
 
 Choose the solver in the ``*solver`` definition:
