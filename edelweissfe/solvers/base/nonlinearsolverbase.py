@@ -207,13 +207,13 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
     @performancetiming.timeit("dirichlet R")
     def applyDirichletToResidual(self, timeStep: TimeStep, R: DofVector, dirichlets: list[StepActionBase]):
-        """Impose the Dirichlet BCs on the residual using the row-replacement method.
+        """Impose the Dirichlet BCs on the residual.
 
         For every constrained DOF we *overwrite* its residual entry with the
         value we want the linear solve to return for that DOF's increment.
-        Together with :meth:`applyDirichletToStiffness` (which zeroes the DOF's
-        row of K and puts 1.0 on the diagonal), the linearized system
-        ``K ddU = R`` then reproduces exactly that increment for the DOF.
+        Together with :meth:`applyDirichletToStiffness` (which replaces the DOF's
+        row of K by the identity and eliminates its column into R), the
+        linearized system ``K ddU = R`` then reproduces exactly that increment for the DOF.
 
         Parameters
         ----------

@@ -687,12 +687,13 @@ class NIST(NonlinearSolverBase):
                 R[:] = self.mpcTransformation.transformResidual(R, dU)
 
             # --- Impose the Dirichlet (prescribed-value) boundary conditions ---
-            # Row-replacement method: for each constrained DOF i we overwrite its
-            # row of the linearized system  K ddU = R  so that the linear solve
-            # returns a *known* value for the increment ddU[i]:
-            #     K: zero row i, set K[i, i] = 1   (see applyDirichletToStiffness)
+            # For each constrained DOF i we overwrite its row of the linearized system
+            # K ddU = R  so that the linear solve returns a *known* value for the
+            # increment ddU[i]:
             #     R: set R[i] to the value ddU[i] must take
-            # Together these give  ddU[i] = R[i]  exactly.
+            #     K: zero row i, set K[i, i] = 1, and eliminate column i: R[r] -= K[r, i] R[i]
+            #        for every other row r, then K[r, i] = 0   (see applyDirichletToStiffness)
+            # Together these give  ddU[i] = R[i]  exactly, and keep a symmetric K symmetric.
             if iterationCounter == 0 and not isExtrapolatedIncrement and dirichlets:
                 # First iteration: the constrained DOFs must still move by their
                 # prescribed increment for this step, so we ask the solve for it.
@@ -726,7 +727,8 @@ class NIST(NonlinearSolverBase):
             if self.mpcTransformation is not None:
                 K_ = self.mpcTransformation.transformSystemMatrix(K_)
 
-            K_ = self.applyDirichletToStiffness(K_, dirichlets)  # zero rows, unit diagonal
+            # identity rows, and the columns eliminated into R
+            K_ = self.applyDirichletToStiffness(K_, dirichlets, R)
 
             ddU = self.linearSolve(K_, R)
             dU += ddU
@@ -893,8 +895,11 @@ class NIST(NonlinearSolverBase):
         return PExt, K
 
     @performancetiming.timeit("dirichlet K on CSR")
-    def applyDirichletToStiffness(self, K: csr_matrix, dirichlets: list[StepActionBase]) -> csr_matrix:
-        K = applyDirichletToStiffness(K, dirichlets)
+    def applyDirichletToStiffness(self, K: csr_matrix, dirichlets: list[StepActionBase], rhs=None) -> csr_matrix:
+        """Impose the Dirichlet BCs on the system matrix -- and, given the right-hand side(s) ``rhs``
+        (modified in place), eliminate the constrained DOFs from the columns as well; see
+        :func:`edelweissfe.solvers.base.dirichlet.applyDirichletToStiffness`."""
+        K = applyDirichletToStiffness(K, dirichlets, rhs)
 
         # Compacting the just-zeroed entries out of K is a storage/performance concern,
         # not part of applying the boundary condition -- and whether it's even safe

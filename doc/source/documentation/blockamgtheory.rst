@@ -81,9 +81,11 @@ The solve pipeline
 
 ``blockamg`` sees only the condensed, Dirichlet-eliminated system: the nonlinear solver applies the
 multi-point-constraint transform :math:`\hat K = T^\mathsf{T} K T + C` (hanging nodes, ties) and then
-Dirichlet elimination (zero the row, unit diagonal) before calling the linear solver. Both are
-size-preserving and leave the DOF manager's ordering intact, so the field blocks still describe the
-matrix that actually arrives.
+the symmetric Dirichlet elimination before calling the linear solver: each constrained row becomes
+the identity row, and each constrained column is zeroed after its coupling to the prescribed value
+has been moved to the right-hand side -- so a symmetric operator stays symmetric, as smoothed
+aggregation and the Chebyshev smoother assume. Both steps are size-preserving and leave the DOF
+manager's ordering intact, so the field blocks still describe the matrix that actually arrives.
 
 Beyond that matrix and right-hand side, the solver is told nothing about the Newton loop -- like
 every registered linear solver it is called as ``(A, b) -> x``. Both of its stateful mechanisms
@@ -96,7 +98,7 @@ every registered linear solver it is called as ``(A, b) -> x``. Both of its stat
        assembled K (VIJ -> CSR)  and  residual R
                 |
                 |  MPC condensation      K <- T' K T + C       both size preserving:
-                |  Dirichlet elimination  row i -> e_i          DOF ordering unchanged
+                |  Dirichlet elimination  row, column i -> e_i  DOF ordering unchanged
                 |
                 |  setModel(model, dofManager)  -- on a (re)build only
                 |      -> field blocks, nodal dimensions, node coordinates
