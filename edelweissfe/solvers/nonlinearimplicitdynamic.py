@@ -65,10 +65,15 @@ so that the effective residual and tangent handed to the Newton loop are
     \\boldsymbol{K}_\\mathrm{eff} &= \\boldsymbol{K} + \\frac{1}{\\beta \\, \\Delta t^2} \\boldsymbol{M}
         + \\frac{\\gamma}{\\beta \\, \\Delta t} \\boldsymbol{C}.
 
-Everything else -- element evaluation, loads, constraints, multi-point-constraint condensation,
-Dirichlet handling, the convergence test, cutbacks and the linear solver -- is the parent's, byte
-for byte: the dynamics enter only as two terms in the residual and two in the tangent, inserted
-where the parent forms ``R = P_ext - P_int`` and before the tangent is converted to CSR.
+The building blocks -- element evaluation, loads, constraints, multi-point-constraint condensation,
+Dirichlet handling, the convergence test, cutbacks and the linear solver -- are the parent's
+methods, called unchanged. The Newton loop that strings them together is NOT inherited:
+:meth:`NonlinearImplicitDynamic.solveIncrement` is a copy of
+:meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement` with the dynamics spliced
+in -- two terms in the residual and two in the tangent, where the parent forms
+``R = P_ext - P_int`` and before the tangent is converted to CSR -- because the parent's loop offers
+no hook to insert them. A change to the control flow of the parent's loop therefore has to be
+carried over by hand.
 
 **Parameters.** The default :math:`\\beta = 1/4`, :math:`\\gamma = 1/2` is the average-acceleration
 (trapezoidal) rule: second-order accurate, unconditionally stable for linear problems and free of
@@ -87,15 +92,21 @@ to the tangent is an entry-wise addition of two value vectors, before the parent
 update, its multi-point-constraint condensation and its Dirichlet row replacement, all of which
 therefore act on the effective matrix without knowing it is one. The damping :math:`\\boldsymbol{C}`
 is the diagonal each element reports through ``computeLumpedDamping``, placed on the diagonal of
-the same layout. Both are assembled when the equation system is (re)built -- on the first increment
-and after a change of a constraint's connectivity -- not per Newton iteration; the one exception is
-a step that changes a material property mid-step (``>>changematerialproperty``), which invalidates
-the density and makes them reassemble every increment.
+the same layout. Both are assembled when the equation system is (re)built -- at a step's start and
+after a topology change -- not per Newton iteration. A rebuild caused only by a constraint changing
+its connectivity (a contact candidate list, which can change on every increment) leaves every
+element, and with it every element's slot in the layout, where it was: the operators are then
+carried over into the new layout rather than reassembled -- see
+:meth:`NonlinearImplicitDynamic._carryOperatorsOver`. The one exception is a step that changes a
+material property mid-step (``>>changematerialproperty``), which invalidates the density and makes
+them reassemble every increment.
 
 **Which fields.** Only the fields whose inertia is a mass
 (:func:`~edelweissfe.config.phenomena.carriesLinearMomentum`, i.e. the displacement) are integrated
 in time. Rows and columns of the mass and the damping belonging to any other field are zeroed, and
-those fields keep the parent's quasi-static treatment. A model with no such field is refused.
+those fields keep the parent's quasi-static treatment. A nonzero inertia an element reports there --
+a rotational inertia, or the micro-inertia of a gradient-enhanced element -- is discarded with a
+warning, once per field. A model with no such field is refused.
 
 **Zero-length and negligible increments.** The time stepper yields a zero-length increment before
 the first real one of every step. A quasi-static solver equilibrates it; this solver skips it with
@@ -155,8 +166,17 @@ otherwise, which is discretisation error rather than a defect, and are reported 
 explicit run, the increment that follows re-establishes equilibrium by Newton iteration, so an
 imbalance the transfer leaves behind is absorbed rather than radiated.
 
+**Prescribed motion.** On a degree of freedom with a Dirichlet condition the acceleration is the
+one the Newmark relations imply for the prescribed displacement history, starting from zero at the
+step's start. For a prescribed displacement that is not smooth in time -- a velocity ramp switched
+on suddenly -- the average-acceleration rule answers with an acceleration that oscillates from
+increment to increment on those degrees of freedom, and the consistent mass, having off-diagonal
+entries, passes the corresponding inertia forces on to the free neighbours. A smooth amplitude, or
+some algorithmic damping (``newmarkGamma > 1/2``), keeps that out of the response.
+
 **Not supported in this version.** Rayleigh or any other damping model beyond what the elements
-report as their lumped damping.
+report as their lumped damping; elements without a consistent mass (the pure-Python element
+library), which are refused at the first increment.
 """
 
 from dataclasses import dataclass
@@ -169,7 +189,6 @@ from edelweissfe.config.phenomena import carriesLinearMomentum
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
-from edelweissfe.solvers.base.dirichlet import applyDirichletToStiffness
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST, NISTSchema
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import DivergingSolution, ReachedMaxIterations
@@ -351,6 +370,8 @@ class NonlinearImplicitDynamic(NIST):
         #: from one caused by a constraint re-reporting its connectivity; see
         #: :meth:`_ensureNewmarkSystem`.
         self._topologyRecordsAtLastBuild = 0
+        #: The non-time-integrated fields a discarded inertia has already been warned about.
+        self._fieldsWarnedAboutDiscardedInertia = set()
 
         self._validateNewmarkParameters()
 
@@ -829,7 +850,19 @@ class NonlinearImplicitDynamic(NIST):
         else:
             V, A = system.V, system.A
 
-        Mvij, Cvij, M, C = self._assembleOperators(model, dynamicDofs, dynamicFields)
+        carriedOver = None
+        if (
+            dofManagerChanged
+            and system is not None
+            and not topologyChanged
+            and not stepActions["changematerialproperty"]
+        ):
+            carriedOver = self._carryOperatorsOver(system, model)
+
+        if carriedOver is not None:
+            Mvij, Cvij, M, C = carriedOver
+        else:
+            Mvij, Cvij, M, C = self._assembleOperators(model, dynamicDofs, dynamicFields)
 
         self._newmarkSystem = _NewmarkSystem(
             dofManager=self.theDofManager,
@@ -860,6 +893,82 @@ class NonlinearImplicitDynamic(NIST):
             )
 
         return self._newmarkSystem
+
+    @performancetiming.timeit("carry mass and damping over")
+    def _carryOperatorsOver(
+        self, system: _NewmarkSystem, model: FEModel
+    ) -> tuple[VIJSystemMatrix, VIJSystemMatrix, csr_matrix, csr_matrix] | None:
+        """The mass and the damping of ``system``, moved into the layout of the current
+        :class:`~edelweissfe.numerics.dofmanager.DofManager` without reassembling them -- or None if
+        that manager differs from the old one in anything the operators depend on.
+
+        The parent builds a new manager whenever a constraint reports a change of its connectivity,
+        which a contact candidate list does on almost every increment. Such a change moves no node
+        and touches no element: the degree-of-freedom numbering, the elements, their order and so
+        their slots in the VIJ layout -- which come first, ahead of every constraint's -- are all
+        where they were, and only the constraints' slots behind them change. Mass and damping live
+        entirely in the elements' slots (a constraint carries none), so the CSR operators are
+        unchanged and the VIJ value vectors only need their element part copied into a vector of the
+        new length. That replaces a loop over every element and the checks on the assembled mass.
+
+        Nothing about that is assumed: the numbering, the element set, every element's slot and the
+        row and column indices of all element slots are compared, and anything that differs falls
+        back to a full assembly.
+
+        Parameters
+        ----------
+        system
+            The Newmark system of the previous manager.
+        model
+            The model tree.
+
+        Returns
+        -------
+        tuple[VIJSystemMatrix, VIJSystemMatrix, csr_matrix, csr_matrix] | None
+            The mass and the damping as VIJ value vectors of the current manager and as CSR
+            matrices, or None if they have to be reassembled.
+        """
+
+        old = system.dofManager
+        new = self.theDofManager
+
+        if new.nDof != old.nDof or new.idcsOfFieldsInDofVector != old.idcsOfFieldsInDofVector:
+            return None
+        if new.idcsOfElementsInDofVector.keys() != old.idcsOfElementsInDofVector.keys():
+            return None
+
+        nElementVIJ = 0
+        for el in model.elements.values():
+            start = new.idcsOfHigherOrderEntitiesInVIJ[el]
+            if start != old.idcsOfHigherOrderEntitiesInVIJ[el]:
+                return None
+            nElementVIJ = max(nElementVIJ, start + el.getVIJContributionSize())
+
+        if not (
+            np.array_equal(new.I[:nElementVIJ], old.I[:nElementVIJ])
+            and np.array_equal(new.J[:nElementVIJ], old.J[:nElementVIJ])
+        ):
+            return None
+
+        # Behind the elements' slots lie only constraints', which carry no mass and no damping; a
+        # nonzero there means the prefix assumption is wrong, not that the operators may be moved.
+        if np.any(np.asarray(system.Mvij)[nElementVIJ:]) or np.any(np.asarray(system.Cvij)[nElementVIJ:]):
+            return None
+
+        Mvij = new.constructVIJSystemMatrix()
+        Cvij = new.constructVIJSystemMatrix()
+        Mvij[:] = 0.0
+        Cvij[:] = 0.0
+        Mvij[:nElementVIJ] = system.Mvij[:nElementVIJ]
+        Cvij[:nElementVIJ] = system.Cvij[:nElementVIJ]
+
+        self.journal.message(
+            "constraint connectivity changed only: mass and damping carried over, not reassembled",
+            self.identification,
+            2,
+        )
+
+        return Mvij, Cvij, system.M, system.C
 
     def _conservedQuantities(self, system: _NewmarkSystem, model: FEModel) -> _ConservedQuantities:
         """Total mass, linear momentum and kinetic energy of one Newmark system.
@@ -1062,7 +1171,16 @@ class NonlinearImplicitDynamic(NIST):
             if not el.hasKernels:
                 continue
 
-            el.computeConsistentInertia(Mvij[el])
+            try:
+                el.computeConsistentInertia(Mvij[el])
+            except NotImplementedError as error:
+                raise NotImplementedError(
+                    "{:} needs a consistent mass matrix, which element {:} ({:}) does not provide; "
+                    "use elements that implement computeConsistentInertia (the Marmot elements), or "
+                    "the explicit solver NED, which needs only a lumped mass.".format(
+                        self.identification, el.elNumber, type(el).__name__
+                    )
+                ) from error
 
             Ce = np.zeros(el.nDof)
             el.computeLumpedDamping(Ce)
@@ -1077,6 +1195,7 @@ class NonlinearImplicitDynamic(NIST):
         isDynamic = np.zeros(nDof, dtype=bool)
         isDynamic[dynamicDofs] = True
         couplesDynamicOnly = isDynamic[I] & isDynamic[J]
+        self._warnAboutDiscardedInertia(Mvij, Cvij, couplesDynamicOnly)
         Mvij[~couplesDynamicOnly] = 0.0
         Cvij[~couplesDynamicOnly] = 0.0
 
@@ -1122,6 +1241,42 @@ class NonlinearImplicitDynamic(NIST):
             )
 
         return Mvij, Cvij, M, C
+
+    def _warnAboutDiscardedInertia(self, Mvij: VIJSystemMatrix, Cvij: VIJSystemMatrix, couplesDynamicOnly: np.ndarray):
+        """Warn, once per field, when an element reported a nonzero inertia or damping on a field
+        this solver keeps quasi-static -- a rotational inertia, or a gradient-enhanced element's
+        micro-inertia -- which is about to be discarded.
+
+        Parameters
+        ----------
+        Mvij, Cvij
+            The assembled mass and damping, before the entries are zeroed.
+        couplesDynamicOnly
+            Per VIJ entry, whether it couples two time-integrated degrees of freedom.
+        """
+
+        discarded = ~couplesDynamicOnly & ((np.asarray(Mvij) != 0.0) | (np.asarray(Cvij) != 0.0))
+        if not np.any(discarded):
+            return
+
+        I = self.theDofManager.I  # noqa: E741
+        J = self.theDofManager.J
+        isAffected = np.zeros(self.theDofManager.nDof, dtype=bool)
+        isAffected[I[discarded]] = True
+        isAffected[J[discarded]] = True
+
+        for fieldName, indices in self.theDofManager.idcsOfFieldsInDofVector.items():
+            if carriesLinearMomentum(fieldName) or fieldName in self._fieldsWarnedAboutDiscardedInertia:
+                continue
+            if np.any(isAffected[indices]):
+                self._fieldsWarnedAboutDiscardedInertia.add(fieldName)
+                self.journal.message(
+                    "WARNING: the elements report a nonzero inertia or damping on field '{:}', which {:} "
+                    "does not integrate in time; it is discarded and the field is treated "
+                    "quasi-statically.".format(fieldName, self.identification),
+                    self.identification,
+                    0,
+                )
 
     @performancetiming.timeit("initial acceleration")
     def _computeInitialAcceleration(
@@ -1197,7 +1352,7 @@ class NonlinearImplicitDynamic(NIST):
 
         for dirichlet in dirichlets:
             R[dirichlet.constrainedDofIndices] = 0.0
-        MEff = applyDirichletToStiffness(MEff, dirichlets)
+        MEff = self.applyDirichletToStiffness(MEff, dirichlets)
 
         A0 = self.linearSolve(MEff, R)
 

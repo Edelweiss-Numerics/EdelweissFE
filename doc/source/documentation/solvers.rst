@@ -63,6 +63,16 @@ increment. The velocity and acceleration are available to every ``*fieldOutput``
 ``result=A`` on the displacement field, and travel with the ``*output, type=restart`` checkpoints,
 which is what makes a resumed run continue the same trajectory rather than restart it from rest.
 
+``NIDParallel`` is the same solver with the element loop evaluated in parallel (see below). The
+mass and the damping are assembled at a step's start and after every topology change; when a
+contact constraint merely changes its connectivity, they are carried over into the rebuilt equation
+system instead, which matters for contact problems whose candidate lists change on nearly every
+increment.
+
+Reduced-integration elements (``C3D20R``, ``GC3D20R``, ...) need a Marmot whose consistent mass is
+integrated with the full rule of the element shape (Marmot PR #101): with the element's own reduced
+rule the mass is singular, and the equilibrium solve for the initial acceleration with it.
+
 The material must report a density (for ``LinearElastic``, the third material parameter): the mass
 is assembled from it, and a time-integrated degree of freedom that receives none is refused rather
 than integrated as though it had inertia.

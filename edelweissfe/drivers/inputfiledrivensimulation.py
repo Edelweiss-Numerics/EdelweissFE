@@ -143,7 +143,9 @@ def finiteElementSimulation(
     # ``nodeField[result]`` directly and would otherwise raise) rather than only from the first
     # increment a dynamic solver has finished. Restricted to the mass-carrying fields because a
     # velocity of a non-local damage or a temperature field is not a kinematic quantity any solver
-    # here publishes, and an always-zero entry on every field would travel into every checkpoint.
+    # here publishes. On those fields they are created for every run, a quasi-static one included,
+    # where they stay zero -- and, like every other entry, travel into its restart checkpoints and
+    # through a refinement's warm start.
     for nodeField in model.nodeFields.values():
         nodeField.createFieldValueEntry("U")
         nodeField.createFieldValueEntry("P")

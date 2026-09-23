@@ -102,3 +102,41 @@ def test_refuses_a_dynamic_dof_with_no_mass(tmp_path):
     deck = _deck(0.02, maxNumInc=1).replace(f"{E!r}, 0.0, {RHO!r}", f"{E!r}, 0.0, 0.0")
     with pytest.raises(ValueError, match="received no mass"):
         _run(tmp_path, "nid_massless", deck)
+
+
+def test_refuses_an_element_without_a_consistent_mass_with_a_clear_message(tmp_path):
+    """The pure-Python element library implements only the lumped mass the explicit solver needs.
+    Refused at the first increment, naming the element and what to use instead -- not with the bare
+    ``NotImplementedError`` of the element base class from deep inside the assembly."""
+
+    deck = (
+        _deck(0.02, maxNumInc=1)
+        .replace("*material, name=LinearElastic, id=bar", "*material, name=linearelastic, id=bar, provider=edelweiss")
+        .replace("elType=C3D8", "elType=C3D8\nelProvider=edelweiss")
+    )
+    with pytest.raises(NotImplementedError, match="needs a consistent mass matrix.*NED"):
+        _run(tmp_path, "nid_python_element", deck)
+
+
+def test_a_reduced_integration_element_starts_under_load(tmp_path):
+    """The initial acceleration solves the consistent mass on its own, M a0 = R. Integrated with a
+    reduced element's own rule, that mass is singular (a C3D20R's, from 8 points, has rank 24 of
+    60), and a load present at the step's start then produced an arbitrary a0 of order 1e14 and a
+    failed increment. Marmot integrates the consistent mass with the full rule of the shape since;
+    the reduced element must now behave like the fully integrated one of the same mesh, whose
+    stiffness it does not share but whose mass it does."""
+
+    def maxima(elType):
+        deck = _deck(0.02, maxNumInc=30).replace("elType=C3D8", f"elType={elType}").replace("nX=1", "nX=3")
+        model, _ = _run(tmp_path, f"nid_loaded_start_{elType}", deck)
+        field = model.nodeFields["displacement"]
+        return model.time, [float(np.max(np.abs(field[entry]))) for entry in "UVA"]
+
+    timeReduced, (uReduced, vReduced, aReduced) = maxima("C3D20R")
+    timeFull, (uFull, _, aFull) = maxima("C3D20")
+
+    assert timeReduced == timeFull > 0.0, "the reduced-integration run did not reach the end"
+    assert np.isfinite([uReduced, vReduced, aReduced]).all()
+    # same mass, softer stiffness: comparable response, nothing of the 1e14 of a singular a0
+    assert aReduced < 10.0 * aFull, (aReduced, aFull)
+    assert uReduced < 10.0 * uFull, (uReduced, uFull)

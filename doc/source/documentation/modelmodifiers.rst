@@ -215,7 +215,9 @@ Three statements about a refinement, in decreasing strength, apply to both:
 
 * the **total mass** of every dynamic field is conserved -- geometrically, since the children tile
   their parent at the same density -- and is *asserted* at every event (``NID``'s
-  ``massConservationTolerance``, ``NED``'s ``lumped-quantity-conservation-tolerance``);
+  ``massConservationTolerance``, ``NED``'s ``lumped-quantity-conservation-tolerance``). The check
+  assumes a topology change that keeps the material volume; a modifier that removes material --
+  deleting elements -- would be refused by it;
 * the **linear momentum** is conserved exactly for a spatially uniform velocity field, because the
   shape functions are a partition of unity; for a general field the discrepancy is second order in
   the velocity gradient across the refined parent, which is discretisation error, not a defect;

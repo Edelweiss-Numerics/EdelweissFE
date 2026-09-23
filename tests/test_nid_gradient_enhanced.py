@@ -29,29 +29,24 @@
 field (``nonlocal damage``) that is not integrated in time, which ``test_nid_newmark.py``'s plain
 ``C3D8``/``LinearElastic`` bar cannot exercise -- there is only one field there.
 
-Promotes an ad hoc manual check from PR #154's own description into a real regression test: on
-this exact element/material combination, ``NID`` must integrate the mechanical field in time while
-leaving the nonlocal field quasi-static, exactly as
-:mod:`edelweissfe.solvers.nonlinearimplicitdynamic`'s module docstring says it does.
+On this element/material combination ``NID`` must integrate the mechanical field in time while
+leaving the nonlocal field quasi-static, as :mod:`edelweissfe.solvers.nonlinearimplicitdynamic`'s
+module docstring states.
 
-Uses ``AT2PHASEFIELD``, not ``GCDP``: ``GCDP`` lives in a Marmot module that is deliberately NOT a
-git submodule (access-controlled, cloned by hand only -- see the workspace's ``CLAUDE.md``), so the
-public CI Marmot build never registers it and this test would ``NotImplementedError`` there every
-time, unconditionally. ``AT2PhaseField`` is a public module built by every Marmot checkout and, like
-``GCDP``, declares optional ``density``/``nonlocalViscosity``/``microInertia`` material properties
-(idx 4/5/6) through the same
-``MarmotMaterialGeneralGradientEnhancedHypoElastic`` base class -- so it exercises the identical
-multi-field bookkeeping without the access-control problem.
+Uses ``AT2PHASEFIELD`` because it is part of every public Marmot build, and it declares the optional
+``density``/``nonlocalViscosity``/``microInertia`` material properties (idx 4/5/6) through
+``MarmotMaterialGeneralGradientEnhancedHypoElastic``, the base class every gradient-enhanced
+hypoelastic material shares -- so the multi-field bookkeeping it exercises is that of all of them.
 
-``AT2PHASEFIELD`` requires ``density`` and ``nonlocalViscosity`` as material properties for ``NID``
-(idx 4/5) that a purely static deck never needs -- omitting them is exactly the mistake made once
-already this session (with ``GCDP``), and it fails loudly (Marmot raises naming the missing
-property) rather than silently.
+``AT2PHASEFIELD`` requires ``density`` and ``nonlocalViscosity`` (idx 4/5) under ``NID``, which a
+quasi-static deck never needs; a deck omitting them fails loudly, with Marmot naming the missing
+property.
 """
 
 import numpy as np
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
+from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 # A small enough tip force that the elastic strain energy stays far below what would drive the
@@ -129,3 +124,25 @@ def test_displacement_is_dynamic_nonlocal_damage_stays_quasistatic(tmp_path):
     tipU = np.asarray(fieldOutputController.fieldOutputs["tipU"].getResultHistory())
     assert np.all(np.isfinite(tipU))
     assert tipU[-1] > 0.0
+
+
+def test_the_discarded_nonlocal_inertia_is_warned_about_once(tmp_path, monkeypatch):
+    """The element reports a damping on the nonlocal field (its ``nonlocalViscosity``), which this
+    solver discards because it keeps that field quasi-static. That must not happen silently, and
+    the displacement field, which keeps its inertia, must not be named."""
+
+    trueWarn = NonlinearImplicitDynamic._warnAboutDiscardedInertia
+    warned = []
+
+    def recordingWarn(self, Mvij, Cvij, couplesDynamicOnly):
+        before = set(self._fieldsWarnedAboutDiscardedInertia)
+        trueWarn(self, Mvij, Cvij, couplesDynamicOnly)
+        warned.extend(self._fieldsWarnedAboutDiscardedInertia - before)
+
+    monkeypatch.setattr(NonlinearImplicitDynamic, "_warnAboutDiscardedInertia", recordingWarn)
+
+    path = tmp_path / "nid_gc3d8_at2_warn.inp"
+    path.write_text(DECK)
+    finiteElementSimulation(parseInputFile(str(path)), verbose=False, suppressPlots=True)
+
+    assert warned == ["nonlocal damage"], warned
