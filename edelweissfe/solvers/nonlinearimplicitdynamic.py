@@ -65,15 +65,14 @@ so that the effective residual and tangent handed to the Newton loop are
     \\boldsymbol{K}_\\mathrm{eff} &= \\boldsymbol{K} + \\frac{1}{\\beta \\, \\Delta t^2} \\boldsymbol{M}
         + \\frac{\\gamma}{\\beta \\, \\Delta t} \\boldsymbol{C}.
 
-The building blocks -- element evaluation, loads, constraints, multi-point-constraint condensation,
-Dirichlet handling, the convergence test, cutbacks and the linear solver -- are the parent's
-methods, called unchanged. The Newton loop that strings them together is NOT inherited:
-:meth:`NonlinearImplicitDynamic.solveIncrement` is a copy of
-:meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement` with the dynamics spliced
-in -- two terms in the residual and two in the tangent, where the parent forms
-``R = P_ext - P_int`` and before the tangent is converted to CSR -- because the parent's loop offers
-no hook to insert them. A change to the control flow of the parent's loop therefore has to be
-carried over by hand.
+Everything else -- element evaluation, loads, constraints, multi-point-constraint condensation,
+Dirichlet handling, the convergence test, cutbacks and the linear solver -- is the parent's: this
+solver runs :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement` itself and
+enters it only through its three hooks -- :meth:`NonlinearImplicitDynamic.prepareIncrement`
+(operators, tangent terms, initial acceleration), :meth:`NonlinearImplicitDynamic.augmentResidualAndTangent`
+(two terms in the residual and two in the tangent, where the parent forms ``R = P_ext - P_int``
+and before the tangent is converted to CSR) and :meth:`NonlinearImplicitDynamic.commitIncrement`
+(the converged velocity and acceleration become the state).
 
 **Parameters.** The default :math:`\\beta = 1/4`, :math:`\\gamma = 1/2` is the average-acceleration
 (trapezoidal) rule: second-order accurate, unconditionally stable for linear problems and free of
@@ -189,9 +188,14 @@ from edelweissfe.config.phenomena import carriesLinearMomentum
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
+from edelweissfe.solvers.base.topologychangeconservation import (
+    CONSERVATION_TOLERANCE,
+    ConservationLedger,
+    describeMomentumAndKineticEnergy,
+    linearMomentum,
+)
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST, NISTSchema
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.exceptions import DivergingSolution, ReachedMaxIterations
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
 
@@ -199,13 +203,6 @@ from edelweissfe.utils.schema import schemaField
 #: element matrices :math:`\int \rho N^T N`, each symmetric by construction, so any asymmetry
 #: beyond round-off means an element wrote something that is not a mass matrix into its slot.
 _MASS_SYMMETRY_TOLERANCE = 1e-10
-
-#: Relative change of a field's total assembled mass above which a topology change is rejected.
-#: The children of a refined element tile it and carry the same density, so the total is conserved
-#: geometrically; the quadrature that assembles it is exact only up to a polynomial order, which
-#: admits a small change on a distorted element. The same default, and the same reasoning, as the
-#: explicit solver's ``lumped-quantity-conservation-tolerance``.
-_MASS_CONSERVATION_TOLERANCE = 1e-6
 
 #: An increment shorter than this fraction of the time elapsed in the step is the round-off
 #: remainder of the time stepper's progress accumulation, not an increment, and is skipped with the
@@ -260,7 +257,7 @@ class NIDSchema(NISTSchema):
             "lumped-quantity-conservation-tolerance."
         ),
         dtype=float,
-        default=_MASS_CONSERVATION_TOLERANCE,
+        default=CONSERVATION_TOLERANCE,
     )
 
 
@@ -298,6 +295,34 @@ class _NewmarkSystem:
     C: csr_matrix
     V: DofVector
     A: DofVector
+
+
+@dataclass
+class _NewmarkIncrement:
+    """What the Newton iterations of one increment share: the system, the increment's Newmark
+    coefficients and tangent terms, and the trial kinematics of the current iteration.
+
+    Parameters
+    ----------
+    system
+        The Newmark system of the increment.
+    dT
+        The time increment.
+    beta, gamma
+        The Newmark parameters.
+    tangentTerms
+        :math:`M / (\\beta \\Delta t^2) + \\gamma C / (\\beta \\Delta t)` as a VIJ value vector.
+    V_np, A_np
+        The trial velocity and acceleration of the current iteration.
+    """
+
+    system: _NewmarkSystem
+    dT: float
+    beta: float
+    gamma: float
+    tangentTerms: np.ndarray
+    V_np: DofVector
+    A_np: DofVector
 
 
 @dataclass(frozen=True)
@@ -348,7 +373,7 @@ class NonlinearImplicitDynamic(NIST):
         "newmarkBeta": 0.25,
         "newmarkGamma": 0.5,
         "computeInitialAcceleration": True,
-        "massConservationTolerance": _MASS_CONSERVATION_TOLERANCE,
+        "massConservationTolerance": CONSERVATION_TOLERANCE,
     }
 
     def __init__(self, jobInfo, journal, **kwargs):
@@ -370,6 +395,12 @@ class NonlinearImplicitDynamic(NIST):
         #: from one caused by a constraint re-reporting its connectivity; see
         #: :meth:`_ensureNewmarkSystem`.
         self._topologyRecordsAtLastBuild = 0
+        #: The per-topology-change mass check and the drift it accumulates over a step; see
+        #: :class:`~edelweissfe.solvers.base.topologychangeconservation.ConservationLedger`.
+        self._conservationLedger = ConservationLedger(journal, self.identification)
+        #: The state shared by the Newton iterations of the current increment; see
+        #: :class:`_NewmarkIncrement`. Set by :meth:`prepareIncrement`.
+        self._increment = None
         #: The non-time-integrated fields a discarded inertia has already been warned about.
         self._fieldsWarnedAboutDiscardedInertia = set()
 
@@ -469,6 +500,7 @@ class NonlinearImplicitDynamic(NIST):
         self._validateNewmarkParameters()
 
         self._newmarkSystem = None
+        self._conservationLedger.reset()
 
         resumed = self._resumedFromCheckpoint
         self._resumedFromCheckpoint = False
@@ -510,8 +542,9 @@ class NonlinearImplicitDynamic(NIST):
     ) -> tuple[DofVector, DofVector, DofVector, int, dict]:
         """Newton-Raphson scheme on the Newmark-effective equation of motion of an increment.
 
-        The parent's loop, with the inertia and damping terms inserted into the residual and the
-        tangent -- see the module docstring. A zero-length increment -- the one the time stepper
+        The parent's loop, into which the dynamics enter through its hooks
+        (:meth:`prepareIncrement`, :meth:`augmentResidualAndTangent`, :meth:`commitIncrement`). A
+        zero-length increment -- the one the time stepper
         yields before the first real increment of a step -- has no equation of motion and is
         skipped with the state kept: displacement and velocity are continuous in time, and a load
         appearing at that instant is answered by the initial acceleration, not by a displacement.
@@ -554,9 +587,6 @@ class NonlinearImplicitDynamic(NIST):
 
         dT = timeStep.timeIncrement
 
-        iterationCounter = 0
-        incrementResidualHistory = dict.fromkeys(self.theDofManager.idcsOfFieldsInDofVector, (0.0, 0))
-
         if dT <= _NEGLIGIBLE_INCREMENT_FRACTION * abs(timeStep.stepTime):
             # A zero-length increment has no equation of motion. The displacement and the velocity
             # are continuous in time, so the state cannot change in zero time, and a load that
@@ -582,139 +612,129 @@ class NonlinearImplicitDynamic(NIST):
                 2,
             )
             dU[:] = 0.0
-            return U_n, dU, P, iterationCounter, incrementResidualHistory
+            return U_n, dU, P, 0, dict.fromkeys(self.theDofManager.idcsOfFieldsInDofVector, (0.0, 0))
+
+        return super().solveIncrement(
+            U_n, dU, P, K, stepActions, model, timeStep, prevTimeStep, extrapolation, maxIter, maxGrowingIter
+        )
+
+    def prepareIncrement(self, U_n: DofVector, stepActions: dict, model: FEModel, timeStep: TimeStep):
+        """Bring the Newmark operators up to date with the equation system, form the two terms the
+        dynamics add to the tangent, and -- at a cold step start or after a topology change --
+        compute the acceleration from equilibrium; see the parent's hook.
+
+        After the step actions, which the parent has applied just before: a
+        ``>>changematerialproperty`` acting on this increment changes the density the mass is
+        assembled from.
+
+        Parameters
+        ----------
+        U_n
+            The solution at the start of the increment.
+        stepActions
+            The active step actions.
+        model
+            The model tree.
+        timeStep
+            The time step.
+        """
+
+        system = self._ensureNewmarkSystem(model, stepActions)
 
         beta = self.options["newmarkBeta"]
         gamma = self.options["newmarkGamma"]
-        # d(A_np)/d(dU) and d(V_np)/d(dU), the factors the mass and the damping enter the tangent with
-        accelerationFactor = 1.0 / (beta * dT * dT)
-        velocityFactor = gamma / (beta * dT)
+        dT = timeStep.timeIncrement
+        # d(A_np)/d(dU) and d(V_np)/d(dU), the factors the mass and the damping enter the tangent
+        # with. dT is fixed within the increment, so these two terms are too: formed once here
+        # rather than scaled and added as two full-length value vectors on every Newton iteration.
+        tangentTerms = (1.0 / (beta * dT * dT)) * np.asarray(system.Mvij) + (gamma / (beta * dT)) * np.asarray(
+            system.Cvij
+        )
 
-        elements = model.elements
-        constraints = model.constraints
-
-        R = self.theDofManager.constructDofVector()
-        F = self.theDofManager.constructDofVector()
-        PExt = self.theDofManager.constructDofVector()
-        U_np = self.theDofManager.constructDofVector()
-        V_np = self.theDofManager.constructDofVector()
-        A_np = self.theDofManager.constructDofVector()
-        ddU = None
-
-        dirichlets = stepActions["dirichlet"].values()
-        nodeforces = stepActions["nodeforces"].values()
-        distributedLoads = stepActions["distributedload"].values()
-        bodyForces = stepActions["bodyforce"].values()
-
-        # Find which global DOFs the Dirichlet BCs constrain, once up front.
-        self.locateConstrainedDofs(dirichlets)
-
-        self.applyStepActionsAtIncrementStart(model, timeStep, stepActions)
-
-        # After the step actions, not before: a ``>>changematerialproperty`` acting on this
-        # increment changes the density the mass is assembled from, and assembling first would use
-        # the previous increment's.
-        system = self._ensureNewmarkSystem(model, stepActions)
-
-        # dT is fixed within the increment, so the two terms the dynamics add to the tangent are
-        # too: form them once here rather than scaling and adding two full-length value vectors
-        # onto K on every Newton iteration.
-        KDynamic = accelerationFactor * np.asarray(system.Mvij) + velocityFactor * np.asarray(system.Cvij)
+        self._increment = _NewmarkIncrement(
+            system=system,
+            dT=dT,
+            beta=beta,
+            gamma=gamma,
+            tangentTerms=tangentTerms,
+            V_np=self.theDofManager.constructDofVector(),
+            A_np=self.theDofManager.constructDofVector(),
+        )
 
         if self._initialAccelerationPending:
             self._initialAccelerationPending = False
             self._computeInitialAcceleration(system, U_n, stepActions, model, timeStep)
 
-        dU, isExtrapolatedIncrement = self.extrapolateLastIncrement(
-            extrapolation, timeStep, dU, dirichlets, prevTimeStep, model
+    def augmentResidualAndTangent(
+        self, dU: DofVector, R: DofVector, F: DofVector, K: VIJSystemMatrix, timeStep: TimeStep
+    ):
+        """Add the inertia and damping forces to the residual and their derivatives to the
+        tangent; see the parent's hook. The trial displacement increment fixes the trial kinematics.
+
+        Parameters
+        ----------
+        dU
+            The current trial solution increment.
+        R
+            The residual, augmented in place.
+        F
+            The reference flux scale of the convergence test, augmented in place.
+        K
+            The tangent in VIJ layout, augmented in place.
+        timeStep
+            The time step.
+        """
+
+        increment = self._increment
+        system = increment.system
+
+        self._newmarkKinematics(
+            dU,
+            system.V,
+            system.A,
+            increment.dT,
+            increment.beta,
+            increment.gamma,
+            system.dynamicDofs,
+            increment.V_np,
+            increment.A_np,
         )
+        PInertia = system.M @ np.asarray(increment.A_np)
+        PDamping = system.C @ np.asarray(increment.V_np)
 
-        V_n = system.V
-        A_n = system.A
+        R -= PInertia
+        R -= PDamping
 
-        while True:
-            for geostatic in stepActions["geostatic"].values():
-                geostatic.applyAtIterationStart()
+        # The inertia and damping forces are fluxes of the same field as the internal forces, so
+        # they enter the reference scale of the relative flux tolerance too. Without them a body in
+        # free flight -- no internal force at all -- would be held to an absolute 1e-7.
+        F += np.abs(PInertia)
+        F += np.abs(PDamping)
 
-            U_np[:] = U_n
-            U_np += dU
+        # Same VIJ layout as K, so the effective tangent is an entry-wise sum, before the parent's
+        # CSR conversion, MPC condensation and Dirichlet row replacement.
+        K += increment.tangentTerms
 
-            P[:] = K[:] = F[:] = PExt[:] = 0.0
+    def commitIncrement(self, model: FEModel):
+        """The converged trial kinematics become the state; see the parent's hook. Only an accepted
+        increment gets here -- a failing one leaves by exception and keeps the previous velocity
+        and acceleration for the cutback.
 
-            P, K, F = self.computeElements(elements, U_np, dU, P, K, F, timeStep)
-            PExt, K = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_np, PExt, K, timeStep)
-            PExt, K = self.assembleConstraints(constraints, U_np, dU, PExt, K, timeStep)
+        Parameters
+        ----------
+        model
+            The model tree.
+        """
 
-            # --- the dynamics: the trial displacement increment fixes the trial kinematics ---
-            self._newmarkKinematics(dU, V_n, A_n, dT, beta, gamma, system.dynamicDofs, V_np, A_np)
-            PInertia = system.M @ np.asarray(A_np)
-            PDamping = system.C @ np.asarray(V_np)
+        increment = self._increment
+        system = increment.system
 
-            R[:] = -P
-            R += PExt
-            R -= PInertia
-            R -= PDamping
-
-            # The inertia and damping forces are fluxes of the same field as the internal forces,
-            # so they enter the reference scale of the relative flux tolerance too. Without them a
-            # body in free flight -- no internal force at all -- would be held to an absolute 1e-7.
-            F += np.abs(PInertia)
-            F += np.abs(PDamping)
-
-            # Same VIJ layout as K, so the effective tangent is an entry-wise sum, before the CSR
-            # conversion, the MPC condensation and the Dirichlet row replacement below.
-            K += KDynamic
-
-            # Condense the residual BEFORE the Dirichlet handling below: T^T folds slave-row
-            # residuals into their master rows, which may themselves carry a prescribed delta --
-            # transforming afterwards would corrupt it.
-            if self.mpcTransformation is not None:
-                R[:] = self.mpcTransformation.transformResidual(R, dU)
-
-            # Row-replacement Dirichlet handling, exactly as in the parent; see there.
-            if iterationCounter == 0 and not isExtrapolatedIncrement and dirichlets:
-                R = self.applyDirichletToResidual(timeStep, R, dirichlets)
-            else:
-                for dirichlet in dirichlets:
-                    R[dirichlet.constrainedDofIndices] = 0.0
-
-                converged, nodesWithLargestResidual = self.checkConvergence(
-                    R, ddU, F, iterationCounter, incrementResidualHistory
-                )
-
-                if converged:
-                    break
-
-                if self.checkDivergingSolution(incrementResidualHistory, maxGrowingIter):
-                    self.printResidualOutlierNodes(nodesWithLargestResidual)
-                    raise DivergingSolution("Residual grew {:} times, cutting back".format(maxGrowingIter))
-
-                if iterationCounter == maxIter:
-                    self.printResidualOutlierNodes(nodesWithLargestResidual)
-                    raise ReachedMaxIterations("Reached max. iterations in current increment, cutting back")
-
-            K_ = self.assembleStiffnessCSR(K)
-
-            if self.mpcTransformation is not None:
-                K_ = self.mpcTransformation.transformSystemMatrix(K_)
-
-            K_ = self.applyDirichletToStiffness(K_, dirichlets)  # zero rows, unit diagonal
-
-            ddU = self.linearSolve(K_, R)
-            dU += ddU
-            iterationCounter += 1
-
-        # Converged: the trial kinematics become the state. Committed here, and only here, because a
-        # normal return IS the parent's acceptance of the increment -- every failure path above
-        # leaves the loop by exception and keeps V_n/A_n for the cutback.
-        system.V[:] = V_np
-        system.A[:] = A_np
+        system.V[:] = increment.V_np
+        system.A[:] = increment.A_np
         self._publishKinematics(system, model)
 
         kineticEnergy = 0.5 * float(np.dot(np.asarray(system.V), system.M @ np.asarray(system.V)))
         self.journal.message("kinetic energy {:e}".format(kineticEnergy), self.identification, 2)
-
-        return U_np, dU, P, iterationCounter, incrementResidualHistory
 
     @staticmethod
     def _newmarkKinematics(
@@ -1003,50 +1023,51 @@ class NonlinearImplicitDynamic(NIST):
 
         V = np.asarray(system.V)
         MV = np.asarray(system.M @ V)
-        rowSums = np.asarray(system.M.sum(axis=1)).ravel()
-
-        massByField = {}
-        momentum = None
-        for fieldName in system.dynamicFields:
-            indices = system.dofManager.idcsOfFieldsInDofVector[fieldName]
-            dimension = model.nodeFields[fieldName].dimension
-            massByField[fieldName] = float(np.sum(rowSums[indices])) / dimension
-
-            contribution = MV[indices].reshape((-1, dimension)).sum(axis=0)
-            if momentum is not None and contribution.shape != momentum.shape:
-                raise ValueError(
-                    "Dynamic field {:} has dimension {:} against {:} for the fields before it, so "
-                    "their momenta have no common components to add.".format(
-                        fieldName, contribution.shape[0], momentum.shape[0]
-                    )
-                )
-            momentum = contribution if momentum is None else momentum + contribution
 
         return _ConservedQuantities(
-            massByField=massByField,
-            momentum=momentum if momentum is not None else np.zeros(0),
+            massByField=self._totalMassByField(system.M, system.dofManager, system.dynamicFields, model),
+            momentum=linearMomentum(MV, system.dofManager, system.dynamicFields, model),
             kineticEnergy=0.5 * float(V @ MV),
         )
 
+    @staticmethod
+    def _totalMassByField(M: csr_matrix, dofManager: DofManager, fieldNames: list, model: FEModel) -> dict:
+        """Each field's own total assembled mass, never summed across fields.
+
+        The row sums of the consistent mass over a field's slice count every spatial component of
+        the field once, hence the division by the field's dimension.
+
+        Parameters
+        ----------
+        M
+            The consistent mass.
+        dofManager
+            The manager it is indexed by.
+        fieldNames
+            The fields whose inertia is a mass.
+        model
+            The model tree, for the fields' spatial dimension.
+
+        Returns
+        -------
+        dict
+            Field name to its total mass.
+        """
+
+        rowSums = np.asarray(M.sum(axis=1)).ravel()
+        return {
+            fieldName: float(np.sum(rowSums[dofManager.idcsOfFieldsInDofVector[fieldName]]))
+            / model.nodeFields[fieldName].dimension
+            for fieldName in fieldNames
+        }
+
     def reportTopologyChangeConservation(self, before: _ConservedQuantities, after: _ConservedQuantities):
-        """Report what a topology change did to the quantities that ought to survive it.
-
-        The three behave differently, and saying which is which is the whole point of reporting
-        them together:
-
-        * **Every dynamic field's total mass is conserved exactly.** The children of a refined
-          element tile it at the same density, and the mass is *reassembled* here rather than
-          transferred, so this is an identity of the assembly and not a property of any transfer.
-          It is the cheapest correctness check on the whole refinement, so it **raises**.
-        * **Linear momentum is conserved exactly for a spatially uniform velocity field**, because
-          the shape functions carrying the velocity onto new nodes are a partition of unity and the
-          children's masses sum to the parent's. For a general field the discrepancy is second
-          order in the velocity gradient across the parent: discretisation error, not a defect.
-          Reported, not enforced.
-        * **Kinetic energy is not conserved** by interpolation in general, and it is the most
-          sensitive of the three, being quadratic in the interpolation error. Reported as a
-          relative jump; more than roughly a percent is a reason to look at the transfer rather
-          than to believe the physics.
+        """Report what a topology change did to the quantities that ought to survive it: every
+        dynamic field's total mass is checked (and raises when violated), momentum and kinetic
+        energy are reported -- see :mod:`~edelweissfe.solvers.base.topologychangeconservation`
+        for which of them is exact when. The mass is reassembled here rather than transferred, so
+        its conservation is an identity of the assembly and the cheapest correctness check on the
+        whole refinement.
 
         Parameters
         ----------
@@ -1062,39 +1083,19 @@ class NonlinearImplicitDynamic(NIST):
         tolerance = self.options["massConservationTolerance"]
         worstField, worstRelativeChange = "", 0.0
         for fieldName, massBefore in before.massByField.items():
-            massAfter = after.massByField.get(fieldName, 0.0)
-            relativeChange = abs(massAfter - massBefore) / massBefore if massBefore > 0.0 else 0.0
-            if relativeChange > tolerance:
-                raise RuntimeError(
-                    "A topology change did not conserve the total mass of field '{:}': {:e} became "
-                    "{:e}, a relative change of {:e} against a tolerance of {:e}. The children of a "
-                    "refined element tile it and carry the same density, and the mass is reassembled "
-                    "from the elements that now exist -- so a change of this size means the "
-                    "refinement itself is wrong, not that the quadrature moved.".format(
-                        fieldName, massBefore, massAfter, relativeChange, tolerance
-                    )
-                )
+            relativeChange = self._conservationLedger.check(
+                "mass of field '{:}'".format(fieldName), massBefore, after.massByField.get(fieldName, 0.0), tolerance
+            )
             if relativeChange >= worstRelativeChange:
                 worstField, worstRelativeChange = fieldName, relativeChange
 
-        momentumChange = float(np.max(np.abs(after.momentum - before.momentum))) if before.momentum.size else 0.0
-        momentumScale = float(np.max(np.abs(before.momentum))) if before.momentum.size else 0.0
-        kineticJump = (
-            abs(after.kineticEnergy - before.kineticEnergy) / before.kineticEnergy
-            if before.kineticEnergy > 0.0
-            else 0.0
-        )
-
         self.journal.message(
-            "Topology change: worst-conserved mass, field '{:}', to {:.1e} relative; largest momentum "
-            "component change {:.3e} (of {:.3e}); kinetic energy {:.6e} -> {:.6e} ({:+.2f} %)".format(
+            "Topology change: worst-conserved mass, field '{:}', to {:.1e} relative; {:}".format(
                 worstField,
                 worstRelativeChange,
-                momentumChange,
-                momentumScale,
-                before.kineticEnergy,
-                after.kineticEnergy,
-                kineticJump * 100.0 * (1.0 if after.kineticEnergy >= before.kineticEnergy else -1.0),
+                describeMomentumAndKineticEnergy(
+                    before.momentum, after.momentum, before.kineticEnergy, after.kineticEnergy
+                ),
             ),
             self.identification,
             1,
@@ -1230,10 +1231,7 @@ class NonlinearImplicitDynamic(NIST):
                 )
             )
 
-        rowSums = np.asarray(M.sum(axis=1)).ravel()
-        for fieldName in dynamicFields:
-            indices = self.theDofManager.idcsOfFieldsInDofVector[fieldName]
-            totalMass = float(np.sum(rowSums[indices])) / model.nodeFields[fieldName].dimension
+        for fieldName, totalMass in self._totalMassByField(M, self.theDofManager, dynamicFields, model).items():
             self.journal.message(
                 "consistent mass assembled: field '{:}' carries a total mass of {:e}".format(fieldName, totalMass),
                 self.identification,

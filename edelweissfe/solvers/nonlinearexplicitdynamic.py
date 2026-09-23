@@ -132,6 +132,12 @@ from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatr
 from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
+from edelweissfe.solvers.base.topologychangeconservation import (
+    CONSERVATION_TOLERANCE,
+    ConservationLedger,
+    describeMomentumAndKineticEnergy,
+    linearMomentum,
+)
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
@@ -144,14 +150,6 @@ from edelweissfe.utils.exceptions import (
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
 
-#: Tolerance on the relative change, across one topology change, of any row-sum-lumped
-#: per-element quantity (a mass, a viscosity, a non-mechanical inertia). Children tile their
-#: parent and carry its value, so conservation is a geometric identity -- but the assembly is
-#: Gauss quadrature, exact only to a polynomial order, and a distorted hexa20's Jacobian is not
-#: polynomial. Measured on the anchor pry-out, one live refinement moves the total mass by
-#: 4.63e-08 relative; a real refinement or lumping error would be O(1).
-_LUMPED_QUANTITY_CONSERVATION_TOLERANCE = 1e-6
-
 #: Fractional margin by which the kinetic energy may exceed the external work before it is
 #: reported as energy creation. KE <= W_ext is exact in the continuum, but the discrete run has
 #: two legitimate sources of small violation: lumping the mass matrix, and the interpolate-then-
@@ -159,11 +157,6 @@ _LUMPED_QUANTITY_CONSERVATION_TOLERANCE = 1e-6
 #: reportTopologyChangeConservation). One per cent is far above both and far below the runaway an
 #: unstable time step produces -- v5 of the anchor pry-out reached 1e+38 mm.
 _ENERGY_CREATION_TOLERANCE = 1e-2
-
-#: Tolerance on the accumulated drift of any one lumped quantity over a whole step: a single
-#: change being within tolerance does not bound a run with hundreds of refinements. At the
-#: measured 4.63e-08 per change this permits over two thousand of them.
-_CUMULATIVE_LUMPED_QUANTITY_DRIFT_TOLERANCE = 1e-4
 
 
 @dataclass(frozen=True)
@@ -267,10 +260,10 @@ class NEDSchema:
             "relative to floating-point precision and exists to catch a genuinely wrong refinement "
             "or lumping, not to absorb ordinary quadrature noise. Raise this only when a specific, "
             "understood run trips it by a small margin (see "
-            "NonlinearExplicitDynamic._checkLumpedQuantityConserved)."
+            "edelweissfe.solvers.base.topologychangeconservation)."
         ),
         dtype=float,
-        default=_LUMPED_QUANTITY_CONSERVATION_TOLERANCE,
+        default=CONSERVATION_TOLERANCE,
         optionName="lumped-quantity-conservation-tolerance",
     )
 
@@ -368,7 +361,7 @@ class NED(NonlinearSolverBase):
         "contact-update-frequency": 100,
         "topology-check-frequency": 0,
         "report-performance": False,
-        "lumped-quantity-conservation-tolerance": _LUMPED_QUANTITY_CONSERVATION_TOLERANCE,
+        "lumped-quantity-conservation-tolerance": CONSERVATION_TOLERANCE,
         # Lists, so _updateOptions comma-splits them. Empty means "assert nothing", which is what
         # every deck that does not mention them gets.
         "expect-second-order-fields": [],
@@ -405,14 +398,9 @@ class NED(NonlinearSolverBase):
         self._dampingRate = None
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
-        #: Summed relative drift of each lumped quantity (mass, first-order viscosity,
-        #: non-mechanical inertia) over every topology change, keyed by name and checked
-        #: against _CUMULATIVE_LUMPED_QUANTITY_DRIFT_TOLERANCE so that many
-        #: individually-tolerable changes cannot silently add up to a meaningful one.
-        self._cumulativeLumpedQuantityDrift = {}
-        #: Whether the cumulative-drift warning has already fired for a given quantity name,
-        #: so it is reported once per step rather than once per topology change.
-        self._warnedAboutCumulativeDrift = {}
+        #: The per-topology-change conservation check of every field's lumped total, and the
+        #: drift those changes accumulate over a step; reset at every step start.
+        self._conservationLedger = ConservationLedger(journal, self.identification)
         #: Work done on the model by its prescribed degrees of freedom, accumulated every
         #: increment. Compared against the kinetic energy to detect energy creation; see
         #: _ENERGY_CREATION_TOLERANCE.
@@ -538,10 +526,9 @@ class NED(NonlinearSolverBase):
         stepWallClockTic = perf_counter()
 
         self._externalWork = self._consumeResumedExternalWork()
-        self._cumulativeLumpedQuantityDrift = {}
+        self._conservationLedger.reset()
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
-        self._warnedAboutCumulativeDrift = {}
 
         # Constraints whose DOF footprint is the outcome of a search, i.e. contact. Collected once,
         # so a model without any pays nothing for the per-increment tick in the loop below.
@@ -1924,13 +1911,8 @@ class NED(NonlinearSolverBase):
         return P
 
     def secondOrderMomentum(self, mass: DofVector, V: DofVector, model: FEModel) -> np.ndarray:
-        """The linear momentum of the second-order fields, per spatial component.
-
-        Per component, not summed over the whole block: adding a momentum's x, y and z contributions
-        together produces a number with no physical meaning and would hide a component-wise error
-        behind a cancellation. A field occupies a contiguous slice of the dof vector, node-major with
-        the component innermost -- that is what ``writeNodeFieldToDofVector``'s ``flatten()``
-        establishes -- so reshaping the slice recovers the per-node vectors.
+        """The linear momentum of the fields whose inertia is a mass, per spatial component; see
+        :func:`~edelweissfe.solvers.base.topologychangeconservation.linearMomentum`.
 
         Parameters
         ----------
@@ -1948,28 +1930,7 @@ class NED(NonlinearSolverBase):
             The momentum, one entry per spatial component.
         """
 
-        total = None
-        for fieldName in self.linearMomentumFields:
-            indices = self.theDofManager.idcsOfFieldsInDofVector[fieldName]
-            dimension = model.nodeFields[fieldName].dimension
-            perNodeMass = np.asarray(mass[indices]).reshape((-1, dimension))
-            perNodeVelocity = np.asarray(V[indices]).reshape((-1, dimension))
-            contribution = np.sum(perNodeMass * perNodeVelocity, axis=0)
-
-            # Two fields of different spatial dimension have no common momentum, and numpy would
-            # not say so: adding a shape (1,) contribution to a shape (3,) total BROADCASTS it onto
-            # every spatial component. The non-mechanical fields are excluded above; this is the rest.
-            if total is not None and contribution.shape != total.shape:
-                raise ValueError(
-                    "Second-order field {:} has dimension {:} against {:} for the fields before it, "
-                    "so their momenta have no common components to add.".format(
-                        fieldName, contribution.shape[0], total.shape[0]
-                    )
-                )
-
-            total = contribution if total is None else total + contribution
-
-        return total if total is not None else np.zeros(0)
+        return linearMomentum(np.asarray(mass) * np.asarray(V), self.theDofManager, self.linearMomentumFields, model)
 
     def _perFieldLumpedTotals(self) -> dict[str, float]:
         """The assembled lumped total of every first- and second-order field, each on its own.
@@ -1980,8 +1941,8 @@ class NED(NonlinearSolverBase):
         non-mechanical inertia are not just different units, they are typically many orders of
         magnitude apart in value. That is true even between two fields of the SAME kind (two
         mechanical fields of very different density would have the same problem), so the fix is
-        per field, not per "mechanical vs. not". :meth:`_checkLumpedQuantityConserved` is called
-        once per field with its own total, so a violation anywhere is visible regardless of what
+        per field, not per "mechanical vs. not". The conservation ledger checks each field
+        once with its own total, so a violation anywhere is visible regardless of what
         else is assembled alongside it.
 
         Returns
@@ -2157,76 +2118,6 @@ class NED(NonlinearSolverBase):
 
         return firstOrderFields, secondOrderFields
 
-    def _checkLumpedQuantityConserved(self, label: str, before: float, after: float) -> float:
-        """Check one row-sum-lumped per-element quantity for exact conservation across a
-        topology change, and warn once per step if many individually-tolerable changes have
-        accumulated into a meaningful one.
-
-        Any quantity assigned as a per-element scalar and lumped with the same row-sum weights
-        -- mass, a first-order field's viscosity, a second-order field's non-mechanical inertia
-        -- is conserved by the SAME geometric identity: the children of a refined element tile
-        it and carry the same value. What the quantity physically is plays no part in that;
-        only how it is assembled does, which is why this one check serves all of them.
-
-        Parameters
-        ----------
-        label
-            Name of the quantity, used in the raised message and as the key for its own
-            cumulative drift and warned-once state.
-        before, after
-            The total before and after the change.
-
-        Returns
-        -------
-        float
-            The relative change, for the caller to report.
-
-        Raises
-        ------
-        RuntimeError
-            If the relative change exceeds the ``lumped-quantity-conservation-tolerance`` option
-            (default :data:`_LUMPED_QUANTITY_CONSERVATION_TOLERANCE`).
-        """
-
-        relativeChange = abs(after - before) / before if before > 0.0 else 0.0
-        self._cumulativeLumpedQuantityDrift[label] = (
-            self._cumulativeLumpedQuantityDrift.get(label, 0.0) + relativeChange
-        )
-
-        tolerance = self.options.get("lumped-quantity-conservation-tolerance", _LUMPED_QUANTITY_CONSERVATION_TOLERANCE)
-        if relativeChange > tolerance:
-            raise RuntimeError(
-                "A topology change did not conserve the total lumped {:}: {:e} became {:e}, a "
-                "relative change of {:e} against a tolerance of {:e}. The children of a refined "
-                "element tile it and carry the same value, so it is conserved geometrically; the "
-                "quadrature that assembles it is exact only up to a polynomial order, which "
-                "admits a small change. A violation of this size is not quadrature -- it means "
-                "the refinement or the lumping is wrong.".format(label, before, after, relativeChange, tolerance)
-            )
-
-        # Reported, not raised: each individual change was within the exact-conservation bound, so
-        # what accumulates here is quadrature error rather than a violated invariant, and aborting a
-        # multi-hour run on an accumulated heuristic is out of proportion. The per-change check raises.
-        if self._cumulativeLumpedQuantityDrift[
-            label
-        ] > _CUMULATIVE_LUMPED_QUANTITY_DRIFT_TOLERANCE and not self._warnedAboutCumulativeDrift.get(label, False):
-            self._warnedAboutCumulativeDrift[label] = True
-            self.journal.message(
-                "The accumulated relative {:} drift over this step has reached {:e}, above the "
-                "tolerance of {:e}. Each individual topology change was within its own bound, so "
-                "this is many small quadrature changes adding up rather than one bad refinement; "
-                "the model's {:} is no longer the one the step started with.".format(
-                    label,
-                    self._cumulativeLumpedQuantityDrift[label],
-                    _CUMULATIVE_LUMPED_QUANTITY_DRIFT_TOLERANCE,
-                    label,
-                ),
-                self.identification,
-                1,
-            )
-
-        return relativeChange
-
     def reportTopologyChangeConservation(
         self,
         lumpedTotalsBefore: dict[str, float],
@@ -2243,7 +2134,7 @@ class NED(NonlinearSolverBase):
         * **Every field's own lumped total is conserved exactly**, by the same geometric
           identity regardless of what that field's coefficient physically is: the children of a
           refined element tile it and carry the same value. Checked per FIELD, not per family,
-          via :meth:`_checkLumpedQuantityConserved` -- summing across fields first, even ones
+          via :class:`~edelweissfe.solvers.base.topologychangeconservation.ConservationLedger` -- summing across fields first, even ones
           that agree on units, would let a violation in a numerically small field hide inside a
           numerically large one. Violating any single field's total raises.
         * **Linear momentum is conserved exactly for a spatially uniform velocity field**, because
@@ -2287,8 +2178,14 @@ class NED(NonlinearSolverBase):
             np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
         )
 
+        tolerance = self.options["lumped-quantity-conservation-tolerance"]
         relativeChangeByField = {
-            fieldName: self._checkLumpedQuantityConserved(fieldName, before, lumpedTotalsAfter.get(fieldName, 0.0))
+            fieldName: self._conservationLedger.check(
+                "lumped coefficient of field '{:}'".format(fieldName),
+                before,
+                lumpedTotalsAfter.get(fieldName, 0.0),
+                tolerance,
+            )
             for fieldName, before in lumpedTotalsBefore.items()
         }
         worstField, worstRelativeChange = (
@@ -2319,15 +2216,10 @@ class NED(NonlinearSolverBase):
         smallest2nd, median2nd = smallestOf(self.ids_2nd)
         smallest1st, median1st = smallestOf(self.ids_1st)
 
-        momentumChange = float(np.max(np.abs(momentumAfter - momentumBefore))) if momentumBefore.size else 0.0
-        momentumScale = float(np.max(np.abs(momentumBefore))) if momentumBefore.size else 0.0
-        relativeKineticJump = abs(kineticAfter - kineticBefore) / kineticBefore if kineticBefore > 0.0 else 0.0
-
         self.journal.message(
             "Topology change: worst-conserved field '{:}' to {:.1e} relative; smallest integrating "
             "coefficient {:.3e} ({:.1e} of median) [2nd-order inertia {:.3e} of median {:.3e}; "
-            "1st-order damping {:.3e} of median {:.3e}]; largest momentum component change "
-            "{:.3e} (of {:.3e}); kinetic energy {:.6e} -> {:.6e} ({:+.2f} %)".format(
+            "1st-order damping {:.3e} of median {:.3e}]; {:}".format(
                 worstField,
                 worstRelativeChange,
                 smallestMass,
@@ -2336,11 +2228,7 @@ class NED(NonlinearSolverBase):
                 median2nd,
                 smallest1st,
                 median1st,
-                momentumChange,
-                momentumScale,
-                kineticBefore,
-                kineticAfter,
-                relativeKineticJump * 100.0 * (1.0 if kineticAfter >= kineticBefore else -1.0),
+                describeMomentumAndKineticEnergy(momentumBefore, momentumAfter, kineticBefore, kineticAfter),
             ),
             self.identification,
             1,
