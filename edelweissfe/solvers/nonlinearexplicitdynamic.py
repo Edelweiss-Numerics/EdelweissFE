@@ -240,12 +240,9 @@ class NEDSchema:
     )
     reportPerformance: bool = schemaField(
         description=(
-            "Print a performance table on every progress report, covering the interval since the "
-            "previous one. Off by default. An explicit run is millions of increments long, so the "
-            "table printed at the end of the step is otherwise the only one anyone sees, and it "
-            "averages the whole run into one row per phase -- this shows the cost structure as it "
-            "is now, which is what reveals a refinement or a contact search that has become "
-            "expensive while the analysis is still running."
+            "Print the cumulative performance table (totals since the start of the step) on every "
+            "progress report. Off by default. An explicit run is millions of increments long, so "
+            "the table printed at the end of the step is otherwise the only one anyone sees."
         ),
         dtype=bool,
         default=False,
@@ -598,15 +595,11 @@ class NED(NonlinearSolverBase):
                     )
 
                     if self.options["report-performance"]:
-                        # The *interval* table, not the cumulative one: what the solver has been
-                        # doing since the previous report is what tells a running analysis whether
-                        # its cost structure has moved -- a refinement that enlarged the mesh, a
-                        # contact search that started admitting far more candidates, a material
-                        # that entered a more expensive branch. The cumulative table, printed once
-                        # at the end of the step, averages all of that away, and on a run of
-                        # millions of increments it is also the only table anyone would ever see.
+                        # The cumulative table, as at the end of the step: an explicit run is
+                        # millions of increments long, and without this the final table is the
+                        # only one anyone would ever see.
                         self.journal.printPrettyTable(
-                            performancetiming.extractIncrementTimes(skipUnused=True),
+                            performancetiming.makePrettyTable(wallTime=perf_counter() - stepWallClockTic),
                             self.identification,
                         )
 

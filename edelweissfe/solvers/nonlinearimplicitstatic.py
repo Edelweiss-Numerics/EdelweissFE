@@ -31,6 +31,7 @@
 
 import json
 from dataclasses import dataclass
+from time import perf_counter
 
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -145,6 +146,16 @@ class NISTSchema:
         dtype=bool,
         default=False,
     )
+    reportPerformanceFrequency: int | None = schemaField(
+        description=(
+            "Print the cumulative performance table (totals since the start of the step) every this "
+            "many increments, in addition to the one printed at the end of the step. 0 (default) "
+            "disables the periodic report."
+        ),
+        dtype=int,
+        default=0,
+        optionName="report-performance-frequency",
+    )
 
 
 class NIST(NonlinearSolverBase):
@@ -177,6 +188,7 @@ class NIST(NonlinearSolverBase):
         "linsolverConfigFile": "",
         "pruneCondensedMatrixZeros": True,
         "useAmgclMPCCondensation": False,
+        "report-performance-frequency": 0,
     }
 
     def __init__(self, jobInfo, journal, **kwargs):
@@ -255,6 +267,9 @@ class NIST(NonlinearSolverBase):
 
         self.applyStepActionsAtStepStart(model, step.actions)
 
+        reportPerformanceFrequency = self.options["report-performance-frequency"]
+        stepWallClockTic = perf_counter()
+
         try:
             for timeStep in step.getTimeStep():
                 # NOTE: materialize the list before any() -- a generator would short-circuit at
@@ -292,6 +307,16 @@ class NIST(NonlinearSolverBase):
                     self.identification,
                     level=1,
                 )
+
+                if (
+                    reportPerformanceFrequency
+                    and timeStep.number > 0
+                    and timeStep.number % reportPerformanceFrequency == 0
+                ):
+                    self.journal.printPrettyTable(
+                        performancetiming.makePrettyTable(wallTime=perf_counter() - stepWallClockTic),
+                        self.identification,
+                    )
 
                 if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
                     self.theDofManager = DofManager(
@@ -551,7 +576,7 @@ class NIST(NonlinearSolverBase):
             self.applyStepActionsAtStepEnd(model, step.actions)
 
         finally:
-            prettyTable = performancetiming.makePrettyTable()
+            prettyTable = performancetiming.makePrettyTable(wallTime=perf_counter() - stepWallClockTic)
             self.journal.printPrettyTable(prettyTable, self.identification)
             performancetiming.reset()
 

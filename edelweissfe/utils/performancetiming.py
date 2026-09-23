@@ -245,9 +245,10 @@ def makePrettyTable(maxLevels: int = 4, wallTime: float = None) -> PrettyTable:
     maxLevels
         The maximum number of stack levels considered in the table.
     wallTime
-        The wall-clock time the timed work actually took, measured by the caller. If given, two
-        summary rows are appended: the sum of the top-level categories, and the difference between
-        that sum and this figure.
+        The wall-clock time the timed work actually took, measured by the caller. If given, the
+        shares are relative to it, and a wall-clock row plus the share left unaccounted by the
+        top-level categories are appended. Otherwise the shares are relative to the sum of the
+        top-level categories, which is always printed as the one absolute time in the table.
 
         The difference row is the point of the parameter. Without it a reader adds up the categories
         and takes the total for the whole run, which it is not: only what somebody thought to
@@ -264,34 +265,39 @@ def makePrettyTable(maxLevels: int = 4, wallTime: float = None) -> PrettyTable:
 
     theTable = _makeTable(_mergedSnapshot(), 0, maxLevels)
 
+    # Top level only: the nested rows are already counted inside their parents, so summing every
+    # row would double-count everything below level 0.
+    timed = sum(t for level, _, t, _ in theTable if level == 0)
+    # Every share is relative to the same reference -- the wall clock if it is known, otherwise
+    # what was timed -- so nested rows read directly as a fraction of the whole run, not of their
+    # parent.
+    reference = wallTime if wallTime is not None else timed
+
+    def share(t: float) -> str:
+        return "{:.2f}%".format(t / reference * 100.0 if reference > 0.0 else 0.0)
+
     prettytable = PrettyTable()
-    prettytable.field_names = ["function", "acc. runtime", "calls", "time/call"]
+    prettytable.field_names = ["function", "share", "calls", "time/call"]
     prettytable.align = "l"
+    # Keeps the narrow numeric columns from being squeezed when the journal fits the table to its width.
+    prettytable.max_width["function"] = 46
 
     for level, cat, t, calls in theTable:
         t_per_call = t / calls if calls > 0 else 0.0
         prettytable.add_row(
             (
                 "{:}{:}".format(" " * level, cat),
-                "{:.5f}s".format(t),
+                share(t),
                 calls,
                 "{:.5f}s".format(t_per_call),
             )
         )
 
+    prettytable.add_row(("=" * 24, "", "", ""))
+    prettytable.add_row(("sum of the above: {:.5f}s".format(timed), "", "", ""))
     if wallTime is not None:
-        # Top level only: the nested rows are already counted inside their parents, so summing every
-        # row would double-count everything below level 0.
-        timed = sum(t for level, _, t, _ in theTable if level == 0)
-        unaccounted = wallTime - timed
-        share = unaccounted / wallTime * 100.0 if wallTime > 0.0 else 0.0
-
-        prettytable.add_row(("=" * 24, "", "", ""))
-        prettytable.add_row(("sum of the above", "{:.5f}s".format(timed), "", ""))
-        prettytable.add_row(("wall clock", "{:.5f}s".format(wallTime), "", ""))
-        prettytable.add_row(
-            ("unaccounted", "{:.5f}s".format(unaccounted), "", "{:.1f}%".format(share)),
-        )
+        prettytable.add_row(("wall clock: {:.5f}s".format(wallTime), "", "", ""))
+        prettytable.add_row(("unaccounted", share(wallTime - timed), "", ""))
 
     return prettytable
 
