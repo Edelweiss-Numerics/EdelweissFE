@@ -141,7 +141,7 @@ class HAdaptivitySchema:
     )
     elementProvider: str = schemaField(description="Element provider.", dtype=str, default="marmot")
     stateTransfer: str = schemaField(
-        description="Quadrature-point state-transfer strategy for the whole state block: nearestQp|projection|virgin.",
+        description="Quadrature-point state-transfer strategy for the whole state block: nearestQp|projection|limitedProjection|virgin.",
         dtype=str,
         default="nearestQp",
     )

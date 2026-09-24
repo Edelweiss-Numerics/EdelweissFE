@@ -65,6 +65,14 @@ class PolynomialProjection(StateTransferStrategy):
         self._degree = degree
 
     def _transferColumns(self, parentValues, parentRefCoords, childRefCoords, childInitValues, columns):
+        res = self._fitAndResample(parentValues[:, columns], parentRefCoords, childRefCoords)
+        if np.all(parentValues[:, columns] >= -1e-12):
+            res = np.maximum(res, 0.0)
+        return res
+
+    def _fitAndResample(self, parentValues, parentRefCoords, childRefCoords):
+        """Least-squares fit of the polynomial to ``parentValues`` (``(nQpParent, nColumns)``) and
+        its unbounded evaluation at ``childRefCoords``; returns ``(nQpChild, nColumns)``."""
         nQpParent = parentRefCoords.shape[0]
         if self._degree is not None:
             degree = self._degree
@@ -76,8 +84,5 @@ class PolynomialProjection(StateTransferStrategy):
 
         parentBasis = _monomialBasis(parentRefCoords, degree)
         childBasis = _monomialBasis(childRefCoords, degree)
-        coeffs, *_ = np.linalg.lstsq(parentBasis, parentValues[:, columns], rcond=None)
-        res = childBasis @ coeffs
-        if np.all(parentValues[:, columns] >= -1e-12):
-            res = np.maximum(res, 0.0)
-        return res
+        coeffs, *_ = np.linalg.lstsq(parentBasis, parentValues, rcond=None)
+        return childBasis @ coeffs

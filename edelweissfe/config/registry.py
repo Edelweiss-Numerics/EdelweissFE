@@ -62,7 +62,7 @@ The ``_BUILTINS`` table below covers these categories:
 
 ``outputmanager`` (10), ``section`` (3), ``constraint`` (12), ``stepaction`` (13),
 ``generator`` (10), ``analyticalfield`` (3), ``solver`` (7), ``step`` (2), ``modelmodifier`` (1),
-``statetransferstrategy`` (3), ``element`` (42), ``material`` (7), ``linsolver`` (10).
+``statetransferstrategy`` (4), ``element`` (42), ``material`` (7), ``linsolver`` (10).
 
 ``keyword`` is the single source the ``.inp`` parser consults for every top-level keyword
 (``element``, ``node``, ``nSet``, ``elSet``, ``surface``, ``job``, ``section``, ``elementProperty``,
@@ -276,6 +276,9 @@ _BUILTINS[("modelmodifier", "hadaptivity")] = "edelweissfe.modelmodifiers.adapti
 
 _BUILTINS[("statetransferstrategy", "nearestqp")] = "edelweissfe.adaptivity.statetransfer:NearestQuadraturePointCopy"
 _BUILTINS[("statetransferstrategy", "projection")] = "edelweissfe.adaptivity.statetransfer:PolynomialProjection"
+_BUILTINS[("statetransferstrategy", "limitedprojection")] = (
+    "edelweissfe.adaptivity.statetransfer:LimitedPolynomialProjection"
+)
 _BUILTINS[("statetransferstrategy", "virgin")] = "edelweissfe.adaptivity.statetransfer:VirginState"
 
 # AMR refinement markers -- resolved by a ``>>marker, type=<name>`` block, one module (marking.py)

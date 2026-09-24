@@ -29,6 +29,9 @@
 """Pluggable quadrature-point state-transfer strategies for adaptive mesh refinement."""
 
 from edelweissfe.adaptivity.statetransfer.base import StateTransferStrategy
+from edelweissfe.adaptivity.statetransfer.limitedprojection import (
+    LimitedPolynomialProjection,
+)
 from edelweissfe.adaptivity.statetransfer.nearestquadraturepoint import (
     NearestQuadraturePointCopy,
 )
@@ -51,6 +54,7 @@ __all__ = [
     "NearestQuadraturePointCopy",
     "VirginState",
     "PolynomialProjection",
+    "LimitedPolynomialProjection",
     "PerStateVarStateTransfer",
     "transferStateNearestQp",
 ]

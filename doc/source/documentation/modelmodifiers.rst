@@ -211,6 +211,11 @@ selectable with the ``stateTransfer`` argument (default ``nearestQp``):
 * ``projection`` -- :class:`~edelweissfe.adaptivity.statetransfer.projection.PolynomialProjection`:
   a tensor-product polynomial is fitted to the parent quadrature-point values by least squares and
   resampled at the children. Smooth across octants, but may produce an inadmissible internal state.
+* ``limitedProjection`` -- :class:`~edelweissfe.adaptivity.statetransfer.limitedprojection.LimitedPolynomialProjection`:
+  ``projection`` with a Barth-Jespersen-type limiter per child element: the child mean is kept and the
+  deviations are scaled so that no child value leaves the parent's value range. No new extrema
+  (non-negative variables stay non-negative) while the parent integral is preserved -- the
+  preferred way to project a steep history variable such as a hardening variable.
 * ``virgin`` -- :class:`~edelweissfe.adaptivity.statetransfer.virgin.VirginState`: children keep
   their freshly-initialised state; history is discarded (sound only when refining ahead of the
   process zone).
