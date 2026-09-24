@@ -102,6 +102,25 @@ class TestDiscreteRigidBody(unittest.TestCase):
         np.testing.assert_array_equal(rotationMatrix, rotationMatrixFromPseudoVector(rpRotation))
         np.testing.assert_array_equal(dPhysicalSpin_dTheta, rotationMatrix @ rightJacobianSO3(rpRotation))
 
+    def _rejectedSurface(self, surface: pv.PolyData) -> str:
+        rigidBody = self._rigidBodyFromSurface(self._unitCube())
+        rigidBody.surfaceMesh = surface
+        rigidBody._queryEngine = None
+        with self.assertRaises(ValueError) as context:
+            rigidBody.referenceTriangles()
+        return str(context.exception)
+
+    def test_non_triangular_surface_is_rejected(self):
+        quadCube = pv.Cube(center=self.cubeCenter, x_length=1.0, y_length=1.0, z_length=1.0)
+        self.assertIn("triangles only", self._rejectedSurface(quadCube))
+
+    def test_zero_area_triangle_is_rejected(self):
+        # A closed tetrahedron whose fourth vertex sits on the edge between the first two: the face
+        # through these three points has zero area.
+        points = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.5, 0.0, 0.0]])
+        faces = np.hstack([[3, 0, 1, 3], [3, 0, 2, 1], [3, 0, 3, 2], [3, 1, 2, 3]])
+        self.assertIn("zero area", self._rejectedSurface(pv.PolyData(points, faces)))
+
 
 if __name__ == "__main__":
     unittest.main()

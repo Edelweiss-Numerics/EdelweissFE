@@ -33,6 +33,11 @@ import unittest
 
 import numpy as np
 import pyvista as pv
+from _hexa20cube import (  # noqa: E402  (tests/ is on sys.path)
+    _SIDE,
+    _YMIN,
+    _hexa20Coordinates,
+)
 
 import edelweissfe.utils.inputfileparser  # noqa: F401 bootstrap input language
 from edelweissfe.constraints.surfacetodiscreterigidbodypenalty import (
@@ -40,11 +45,6 @@ from edelweissfe.constraints.surfacetodiscreterigidbodypenalty import (
 )
 from edelweissfe.constraints.surfacetodiscreterigidbodypenalty import (
     SurfaceToDiscreteRigidBodyPenaltySchema,
-)
-from edelweissfe.constraints.test_surfacetodeformablesurfacepenalty import (
-    _SIDE,
-    _YMIN,
-    _hexa20Coordinates,
 )
 from edelweissfe.elements.displacementelement.element import DisplacementElement
 from edelweissfe.fields.nodefield import NodeField
@@ -54,6 +54,8 @@ from edelweissfe.generators.discreterigidbodygenerator import (
 from edelweissfe.generators.surfaceelementgenerator import buildContactFacets
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.models.modelchange import ModelChange
+from edelweissfe.models.modelchangeobserver import ModelChangeType
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
@@ -67,7 +69,7 @@ class TestSurfaceToDiscreteRigidBodyContact(unittest.TestCase):
     def tearDown(self):
         self.directory.cleanup()
 
-    def _blockOnRigidSupport(self, penetration: float, openSurface: bool = False) -> tuple:
+    def _blockOnRigidSupport(self, penetration: float, openSurface: bool = False, mixedElements: bool = False) -> tuple:
         """A hexa20 cube on y in [0, 2], and a rigid box below it whose top face at y = ``penetration``
         overlaps the cube's Ymin face (the slave surface). The rigid body's reference point sits at
         the center of the contact face.
@@ -79,7 +81,7 @@ class TestSurfaceToDiscreteRigidBodyContact(unittest.TestCase):
         """
 
         stlFile = os.path.join(self.directory.name, "support.stl")
-        box = pv.Box(bounds=(-1.0, _SIDE + 1.0, -1.0, penetration, -1.0, _SIDE + 1.0)).triangulate()
+        box = pv.Box(bounds=(-1.0, _SIDE + 1.0, penetration - 1.0, penetration, -1.0, _SIDE + 1.0)).triangulate()
         if openSurface:
             box = box.extract_cells(range(10)).extract_surface(algorithm="dataset_surface")
         box.save(stlFile)
@@ -97,7 +99,22 @@ class TestSurfaceToDiscreteRigidBodyContact(unittest.TestCase):
             element.setNodes(nodes)
             model.createElement(element)
 
-            model.surfaces["slaveFace"] = {_YMIN: ElementSet("s", [element])}
+            slaveElements = [element]
+            if mixedElements:
+                # A hexa8 cube next to the hexa20 one, for a slave surface of two element types.
+                hexa8Nodes = []
+                for label, x in zip(model.reserveNodeNumbers(8), coordinates[:8]):
+                    node = Node(label, x + np.array([_SIDE, 0.0, 0.0]))
+                    model.nodes[label] = node
+                    hexa8Nodes.append(node)
+                (elNumber,) = model.reserveElementNumbers(1)
+                hexa8 = DisplacementElement("C3D8", elNumber)
+                hexa8.setNodes(hexa8Nodes)
+                model.createElement(hexa8)
+                slaveElements.append(hexa8)
+                nodes += hexa8Nodes
+
+            model.surfaces["slaveFace"] = {_YMIN: ElementSet("s", slaveElements)}
             slaveSetName, _ = buildContactFacets(model, "slaveFace", "slv", "midside", "facetConsistent", self.journal)
 
             rigidBody = generateDiscreteRigidBodyFromMeshFile(
@@ -202,6 +219,65 @@ class TestSurfaceToDiscreteRigidBodyContact(unittest.TestCase):
         model, slaveSurface, rigidBody = self._blockOnRigidSupport(penetration=0.01, openSurface=True)
         with self.assertRaises(ValueError):
             self._constraint(model, slaveSurface, rigidBody)
+
+    def test_invalid_options_are_rejected(self):
+        model, slaveSurface, rigidBody = self._blockOnRigidSupport(penetration=0.01)
+        with self.assertRaises(ValueError) as context:
+            self._constraint(model, slaveSurface, rigidBody, penalty=0.0)
+        self.assertIn("penalty must be positive", str(context.exception))
+
+        with self.assertRaises(ValueError) as context:
+            self._constraint(model, slaveSurface, rigidBody, sliding="finite")
+        self.assertIn("only 'small' is implemented", str(context.exception))
+
+        with self.assertRaises(ValueError) as context:
+            RigidSurfaceContact("theContact", FEModel(2), slaveSurface, rigidBody, self.journal)
+        self.assertIn("only implemented for 3D", str(context.exception))
+
+    def test_mixed_element_types_are_rejected(self):
+        model, slaveSurface, rigidBody = self._blockOnRigidSupport(penetration=0.01, mixedElements=True)
+        with self.assertRaises(ValueError) as context:
+            self._constraint(model, slaveSurface, rigidBody)
+        self.assertIn("a single element type is required", str(context.exception))
+
+    def test_search_distance_limits_the_assignment(self):
+        """A point farther than searchDistance from the rigid surface is not assigned a triangle, and
+        a point is never assigned a triangle whose plane it lies behind by more than searchDistance."""
+
+        for gap in (5.0, 1.2):
+            model, slaveSurface, rigidBody = self._blockOnRigidSupport(penetration=-gap)
+            constraint = self._constraint(model, slaveSurface, rigidBody, searchDistance=1.0)
+            np.testing.assert_array_equal(constraint._frozenBodyNormals, 0.0)
+            self._forces(constraint, np.zeros(constraint.nDof))
+            np.testing.assert_array_equal(constraint.getGaps(), 0.0)
+
+        model, slaveSurface, rigidBody = self._blockOnRigidSupport(penetration=1.5)
+        constraint = self._constraint(model, slaveSurface, rigidBody, searchDistance=1.0)
+        self.assertTrue(np.all(constraint._frozenBodyNormals[:, 1] < 0.5), "the top face lies 1.5 above the points")
+
+    def test_without_search_distance_every_point_is_assigned(self):
+        model, slaveSurface, rigidBody = self._blockOnRigidSupport(penetration=-5.0)
+        constraint = self._constraint(model, slaveSurface, rigidBody, searchDistance=None)
+        np.testing.assert_array_equal(constraint._frozenBodyNormals, [[0.0, 1.0, 0.0]] * constraint.nPoints)
+        self._forces(constraint, np.zeros(constraint.nDof))
+        np.testing.assert_allclose(constraint.getGaps(), 5.0, rtol=1e-6)
+
+    def test_refresh_ignores_changes_that_do_not_touch_the_slave_surface(self):
+        model, slaveSurface, rigidBody = self._blockOnRigidSupport(penetration=0.01)
+        constraint = self._constraint(model, slaveSurface, rigidBody)
+        self.assertFalse(constraint.refresh(model, ModelChange(kind=ModelChangeType.REFINEMENT)))
+
+    def test_empty_slave_surface_carries_no_force(self):
+        model, _, rigidBody = self._blockOnRigidSupport(penetration=0.01)
+        constraint = self._constraint(model, ElementSet("empty", []), rigidBody)
+        self.assertEqual(constraint.nDof, 6)
+        np.testing.assert_array_equal(self._forces(constraint, np.zeros(constraint.nDof)), 0.0)
+
+    def test_slave_surface_nodes_are_the_facet_nodes(self):
+        model, slaveSurface, rigidBody = self._blockOnRigidSupport(penetration=0.01)
+        constraint = self._constraint(model, slaveSurface, rigidBody)
+        self.assertEqual(len(constraint.slaveSurfaceNodes), 8)
+        self.assertEqual(len(constraint.getSlaveNodalNormalForces()), 8)
 
 
 if __name__ == "__main__":

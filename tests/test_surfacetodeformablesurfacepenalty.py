@@ -35,6 +35,12 @@ two iterations even with a wrong tangent and would not expose one.
 import unittest
 
 import numpy as np
+from _hexa20cube import (  # noqa: E402  (tests/ is on sys.path)
+    _SIDE,
+    _YMAX,
+    _YMIN,
+    _hexa20Coordinates,
+)
 
 import edelweissfe.utils.inputfileparser  # noqa: F401 bootstrap input language
 from edelweissfe.constraints.surfacetodeformablesurfacepenalty import (
@@ -49,53 +55,12 @@ from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.generators.surfaceelementgenerator import buildContactFacets
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.models.modelchange import ModelChange
+from edelweissfe.models.modelchangeobserver import ModelChangeType
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.meshtools import currentNodeCoordinates
-
-_HEXA20_EDGES = (
-    (0, 1),
-    (1, 2),
-    (2, 3),
-    (3, 0),
-    (4, 5),
-    (5, 6),
-    (6, 7),
-    (7, 4),
-    (0, 4),
-    (1, 5),
-    (2, 6),
-    (3, 7),
-)
-
-_SIDE = 2.0
-
-#: Face numbers of the hexa20 node ordering, per the generator's face tables.
-_YMIN, _YMAX = 1, 2
-
-
-def _hexa20Coordinates(yOffset: float) -> list:
-    """The 20 node coordinates of a side-``_SIDE`` cube whose y span starts at ``yOffset``.
-
-    The corner ring order is boxGen's own -- (0,0), (0,S), (S,S), (S,0) in the (x, z) plane -- which
-    is what the generator's face tables were verified against. Transposing two corners still yields
-    a geometrically valid cube whose face areas and shape-function integrals are unchanged, but it
-    reverses the face normals, so a contact fixture built that way reports penetration where there
-    is separation. Hence the orientation assertion in the tests below.
-    """
-
-    corners = [
-        np.array([0.0, yOffset, 0.0]),
-        np.array([0.0, yOffset, _SIDE]),
-        np.array([_SIDE, yOffset, _SIDE]),
-        np.array([_SIDE, yOffset, 0.0]),
-        np.array([0.0, yOffset + _SIDE, 0.0]),
-        np.array([0.0, yOffset + _SIDE, _SIDE]),
-        np.array([_SIDE, yOffset + _SIDE, _SIDE]),
-        np.array([_SIDE, yOffset + _SIDE, 0.0]),
-    ]
-    return corners + [0.5 * (corners[a] + corners[b]) for a, b in _HEXA20_EDGES]
 
 
 class TestIntegratedSurfaceContact(unittest.TestCase):
@@ -583,6 +548,11 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             self._constraint(model, slaveSurface, masterSurface, contactType="cubic")
         self.assertIn("is not supported", str(ctx.exception))
+
+    def test_refresh_ignores_changes_that_do_not_touch_the_surfaces(self):
+        model, slaveSurface, masterSurface = self._twoBlockModel(penetration=0.05)
+        constraint = self._constraint(model, slaveSurface, masterSurface)
+        self.assertFalse(constraint.refresh(model, ModelChange(kind=ModelChangeType.REFINEMENT)))
 
 
 if __name__ == "__main__":

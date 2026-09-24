@@ -78,6 +78,10 @@ class TestFacetProjections(unittest.TestCase):
         np.testing.assert_array_equal(normal, [0.0, -1.0])
         self.assertEqual(length, 2.0)
 
+    def test_unsupported_facet_shape_is_rejected(self):
+        with self.assertRaises(ValueError):
+            facetNormalAndMeasure(np.zeros((4, 3)))
+
 
 if __name__ == "__main__":
     unittest.main()

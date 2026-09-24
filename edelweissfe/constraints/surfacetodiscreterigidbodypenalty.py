@@ -276,13 +276,6 @@ class Constraint(ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
 
         self.slave = ContactPointsOnSlaveSurface(slaveSurface, self.nQuadraturePoints, self.name)
 
-        rigidBodyNodes = set(self.rigidBody.surfaceNodes) | {self.rpNode}
-        if not rigidBodyNodes.isdisjoint(self.slave.allParentNodes()):
-            raise ValueError(
-                f"Constraint '{self.name}': slave surface '{self._slaveSurfaceSetName}' contains nodes of "
-                f"rigid body '{self.rigidBody.name}'."
-            )
-
         parentNodeCounts = {len(nodes) for nodes in self.slave.parentNodes}
         if len(parentNodeCounts) > 1:
             raise ValueError(
