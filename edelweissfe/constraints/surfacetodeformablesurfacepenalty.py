@@ -31,7 +31,6 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
-from edelweissfe.elements.contactsurfaceelement import facetNormalAndMeasure
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
@@ -39,6 +38,7 @@ from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.facetcontactgeometry import (
     closestFacetCandidates,
+    facetNormalAndMeasure,
     line2ClosestPoint,
     tria3ClosestPoint,
 )

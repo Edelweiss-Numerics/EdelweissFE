@@ -31,7 +31,6 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
-from edelweissfe.elements.contactsurfaceelement import facetNormalAndMeasure
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
@@ -39,10 +38,13 @@ from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.facetcontactgeometry import (
     closestFacetCandidates,
+    facetNormalAndMeasure,
     line2ClosestPoint,
     line2GapGradientHessian,
+    line2Projection,
     tria3ClosestPoint,
     tria3GapGradientHessian,
+    tria3Projection,
 )
 from edelweissfe.utils.meshtools import currentNodeCoordinates
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
@@ -212,35 +214,6 @@ class DeformableSurfaceContactStiffnessView:
             self.K_ff.append(ff)
             self.K_pf.append(pf)
             self.K_fp.append(fp)
-
-
-def _tria3Containment(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray, x3: np.ndarray) -> tuple[float, float, bool]:
-    """Barycentric-like in-plane coordinates (alpha, beta) of the projection of xs onto the
-    (possibly non-orthogonal) basis spanned by (x2-x1, x3-x1), and whether that projection falls
-    inside the triangle."""
-
-    e1 = x2 - x1
-    e2 = x3 - x1
-    r = xs - x1
-    n = np.cross(e1, e2)
-    n = n / np.linalg.norm(n)
-    rTangential = r - r.dot(n) * n
-
-    A = np.array([[e1.dot(e1), e1.dot(e2)], [e1.dot(e2), e2.dot(e2)]])
-    b = np.array([e1.dot(rTangential), e2.dot(rTangential)])
-    alpha, beta = np.linalg.solve(A, b)
-
-    inside = alpha >= 0.0 and beta >= 0.0 and (alpha + beta) <= 1.0
-    return alpha, beta, inside
-
-
-def _line2Containment(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> tuple[float, bool]:
-    """Parametric coordinate t of the projection of xs onto the edge (x1,x2), and whether that
-    projection falls inside the segment."""
-
-    e = x2 - x1
-    t = (xs - x1).dot(e) / e.dot(e)
-    return t, 0.0 <= t <= 1.0
 
 
 class Constraint(ConstraintBase, MeshDependent):
@@ -828,13 +801,13 @@ class Constraint(ConstraintBase, MeshDependent):
                 H = None
             else:
                 if nFacetNodes == 3:
-                    alpha, beta, inside = _tria3Containment(xs, *facetCoords)
+                    alpha, beta, inside = tria3Projection(xs, *facetCoords)
                     if not inside:
                         activeIdx += 1
                         continue
                     g, w, H = tria3GapGradientHessian(xs, *facetCoords)
                 else:
-                    t, inside = _line2Containment(xs, *facetCoords)
+                    t, inside = line2Projection(xs, *facetCoords)
                     if not inside:
                         activeIdx += 1
                         continue

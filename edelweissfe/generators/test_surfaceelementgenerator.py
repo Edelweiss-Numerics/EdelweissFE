@@ -43,10 +43,7 @@ from edelweissfe.constraints.nodetodeformablesurfacepenalty import (
 from edelweissfe.constraints.nodetodeformablesurfacepenalty import (
     NodeToDeformableSurfacePenaltySchema,
 )
-from edelweissfe.elements.contactsurfaceelement import (
-    Tria3ContactFacet,
-    facetNormalAndMeasure,
-)
+from edelweissfe.elements.contactsurfaceelement import Tria3ContactFacet
 from edelweissfe.elements.displacementelement.element import DisplacementElement
 from edelweissfe.generators.surfaceelementgenerator import (
     buildContactFacets,
@@ -56,6 +53,7 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
+from edelweissfe.utils.facetcontactgeometry import facetNormalAndMeasure
 from edelweissfe.utils.parentfacegeometry import (
     facetQuadratureRule,
     parentFaceShapeFunctions,

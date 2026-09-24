@@ -30,6 +30,7 @@ import numpy as np
 
 from edelweissfe.elements.base.baseelement import BaseElement
 from edelweissfe.points.node import Node
+from edelweissfe.utils.facetcontactgeometry import facetNormalAndMeasure
 
 """
 Thin, geometry-only "contact facet" elements: flat (linear) surface patches attached to the
@@ -39,43 +40,6 @@ surface penalty contact. They carry no material, no volume, and no independent D
 ordinary displacement DOFs, which are shared with (and driven by) whatever real element(s) also
 reference those nodes.
 """
-
-
-def facetNormalAndMeasure(coords: np.ndarray) -> tuple[np.ndarray, float]:
-    """The (non-unit-normalized only in intermediate steps) outward normal and measure (area for a
-    Tria3 facet, length for a Line2 facet) of a flat facet, as a function of its current node
-    coordinates.
-
-    Parameters
-    ----------
-    coords
-        Array of shape ``(3, 3)`` (Tria3, 3D) or ``(2, 2)`` (Line2, 2D) with the facet's current
-        node coordinates in its fixed local order.
-
-    Returns
-    -------
-    tuple[numpy.ndarray, float]
-        The outward unit normal, and the facet's measure (area or length).
-    """
-
-    nNodes, domainSize = coords.shape
-
-    if nNodes == 3 and domainSize == 3:
-        e1 = coords[1] - coords[0]
-        e2 = coords[2] - coords[0]
-        c = np.cross(e1, e2)
-        cNorm = np.linalg.norm(c)
-        return c / cNorm, 0.5 * cNorm
-
-    elif nNodes == 2 and domainSize == 2:
-        e = coords[1] - coords[0]
-        eNorm = np.linalg.norm(e)
-        # Outward normal is e rotated by -90 degrees, consistent with a counter-clockwise
-        # (node 1 -> node 2) traversal of the solid's boundary.
-        n = np.array([e[1], -e[0]]) / eNorm
-        return n, eNorm
-
-    raise ValueError(f"facetNormalAndMeasure: unsupported facet shape {coords.shape}.")
 
 
 class ContactFacetElementBase(BaseElement):

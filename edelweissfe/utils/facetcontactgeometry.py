@@ -254,6 +254,76 @@ def line2ClosestPoint(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> tuple[n
     return weights, float(np.linalg.norm(xs - closestPoint))
 
 
+def tria3Projection(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray, x3: np.ndarray) -> tuple[float, float, bool]:
+    """Barycentric-like in-plane coordinates (alpha, beta) of the projection of xs onto the
+    (possibly non-orthogonal) basis spanned by (x2-x1, x3-x1), and whether that projection falls
+    inside the triangle.
+
+    Unlike :func:`tria3ClosestPoint`, the projection is not clamped to the triangle."""
+
+    e1 = x2 - x1
+    e2 = x3 - x1
+    r = xs - x1
+    n = np.cross(e1, e2)
+    n = n / np.linalg.norm(n)
+    rTangential = r - r.dot(n) * n
+
+    A = np.array([[e1.dot(e1), e1.dot(e2)], [e1.dot(e2), e2.dot(e2)]])
+    b = np.array([e1.dot(rTangential), e2.dot(rTangential)])
+    alpha, beta = np.linalg.solve(A, b)
+
+    inside = alpha >= 0.0 and beta >= 0.0 and (alpha + beta) <= 1.0
+    return alpha, beta, inside
+
+
+def line2Projection(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> tuple[float, bool]:
+    """Parametric coordinate t of the projection of xs onto the edge (x1,x2), and whether that
+    projection falls inside the segment.
+
+    Unlike :func:`line2ClosestPoint`, the projection is not clamped to the segment."""
+
+    e = x2 - x1
+    t = (xs - x1).dot(e) / e.dot(e)
+    return t, 0.0 <= t <= 1.0
+
+
+def facetNormalAndMeasure(coords: np.ndarray) -> tuple[np.ndarray, float]:
+    """The (non-unit-normalized only in intermediate steps) outward normal and measure (area for a
+    Tria3 facet, length for a Line2 facet) of a flat facet, as a function of its current node
+    coordinates.
+
+    Parameters
+    ----------
+    coords
+        Array of shape ``(3, 3)`` (Tria3, 3D) or ``(2, 2)`` (Line2, 2D) with the facet's current
+        node coordinates in its fixed local order.
+
+    Returns
+    -------
+    tuple[numpy.ndarray, float]
+        The outward unit normal, and the facet's measure (area or length).
+    """
+
+    nNodes, domainSize = coords.shape
+
+    if nNodes == 3 and domainSize == 3:
+        e1 = coords[1] - coords[0]
+        e2 = coords[2] - coords[0]
+        c = np.cross(e1, e2)
+        cNorm = np.linalg.norm(c)
+        return c / cNorm, 0.5 * cNorm
+
+    elif nNodes == 2 and domainSize == 2:
+        e = coords[1] - coords[0]
+        eNorm = np.linalg.norm(e)
+        # Outward normal is e rotated by -90 degrees, consistent with a counter-clockwise
+        # (node 1 -> node 2) traversal of the solid's boundary.
+        n = np.array([e[1], -e[0]]) / eNorm
+        return n, eNorm
+
+    raise ValueError(f"facetNormalAndMeasure: unsupported facet shape {coords.shape}.")
+
+
 def closestFacetCandidates(queryPoints: np.ndarray, facetCoords: list, searchDistance: float | None) -> list:
     """For each query point, the facets that could possibly be its closest one.
 
