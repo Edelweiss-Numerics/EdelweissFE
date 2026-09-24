@@ -32,7 +32,7 @@ import numpy as np
 
 from edelweissfe.rigidbodies.rigidbody import RigidBody
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.rotations import rotationMatrixFromPseudoVector
+from edelweissfe.utils.rotations import rightJacobianSO3, rotationMatrixFromPseudoVector
 
 
 class DiscreteRigidBody(RigidBody):
@@ -63,6 +63,7 @@ class DiscreteRigidBody(RigidBody):
 
         self.surfaceMesh = surfaceMesh
         self._queryEngine = None
+        self._referenceTriangles = None
         self._stackedSurfaceCoordinatesCache = None
 
         # Facets replace DiscreteRigidElement.
@@ -177,6 +178,80 @@ class DiscreteRigidBody(RigidBody):
             coords, _ = self._currentAndReferenceSurfaceCoordinates(kinematics)
         return np.min(coords, axis=0), np.max(coords, axis=0)
 
+    def poseFromDofs(self, rpDisplacement: np.ndarray, rpRotation: np.ndarray) -> tuple:
+        """The rigid body pose for given reference point DOF values.
+
+        A contact constraint evaluates the pose from its own current trial solution, not from the
+        last converged NodeField state that :meth:`getCurrentKinematics` reads.
+
+        Parameters
+        ----------
+        rpDisplacement
+            The displacement of the reference point.
+        rpRotation
+            The rotation pseudo-vector of the reference point.
+
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]
+            The current reference point position, the rotation matrix :math:`R`, and
+            ``dPhysicalSpin_dTheta`` :math:`= R \\, J_r(\\boldsymbol{\\theta})`, which maps a perturbation
+            of the stored pseudo-vector DOF onto the spatial rotation it produces (the identity only
+            at zero rotation), see :func:`~edelweissfe.utils.rotations.rightJacobianSO3`.
+        """
+        rotationMatrix = rotationMatrixFromPseudoVector(rpRotation)
+        dPhysicalSpin_dTheta = rotationMatrix @ rightJacobianSO3(rpRotation)
+        currentRpPosition = self.rpNode.coordinates + rpDisplacement
+        return currentRpPosition, rotationMatrix, dPhysicalSpin_dTheta
+
+    def _surfaceQueryEngine(self):
+        """The VTK-based surface query engine, created on first use."""
+        if self._queryEngine is None:
+            from edelweissfe.utils.discretesurfacequery import DiscreteSurfaceQuery
+
+            self._queryEngine = DiscreteSurfaceQuery(mesh=self.surfaceMesh)
+        return self._queryEngine
+
+    def referenceTriangles(self) -> tuple[np.ndarray, np.ndarray]:
+        """The triangles of the rigid surface and their outward unit normals, in the reference
+        configuration (the body frame).
+
+        The rigid surface must be closed, so that outside and inside are well defined, and must not
+        contain triangles of zero area, whose normal is undefined. Both are checked here, since a
+        violation otherwise shows up only as unphysical contact forces much later in a run.
+
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray]
+            The triangle vertex coordinates, of shape (nTriangles, 3, 3), and the outward unit
+            normals, of shape (nTriangles, 3).
+        """
+        if self._referenceTriangles is None:
+            surface = self._surfaceQueryEngine().mesh
+            if not surface.is_all_triangles:
+                raise ValueError(f"Discrete rigid body '{self.name}': the surface must consist of triangles only.")
+            if surface.n_open_edges > 0:
+                raise ValueError(
+                    f"Discrete rigid body '{self.name}': the surface is not closed "
+                    f"({surface.n_open_edges} open edges), so its outward normals are undefined."
+                )
+            triangleCoordinates = np.asarray(surface.points)[surface.regular_faces]
+            doubleAreas = np.linalg.norm(
+                np.cross(
+                    triangleCoordinates[:, 1] - triangleCoordinates[:, 0],
+                    triangleCoordinates[:, 2] - triangleCoordinates[:, 0],
+                ),
+                axis=1,
+            )
+            degenerate = np.flatnonzero(doubleAreas <= 1e-12 * doubleAreas.max())
+            if degenerate.size:
+                raise ValueError(
+                    f"Discrete rigid body '{self.name}': {degenerate.size} triangle(s) of zero area "
+                    f"(first: {degenerate[0]}), whose normals are undefined."
+                )
+            self._referenceTriangles = (triangleCoordinates, np.array(self._surfaceQueryEngine().mesh_cell_normals))
+        return self._referenceTriangles
+
     def querySurface(self, coords: np.ndarray, proximityDistance: float = None, kinematics: tuple = None):
         """Compute signed distances and outward face normals of the rigid
         surface, in its current configuration, for an array of query points.
@@ -206,10 +281,7 @@ class DiscreteRigidBody(RigidBody):
         normals : numpy.ndarray, shape (nPoints, 3)
             The outward unit normals of the closest faces.
         """
-        if self._queryEngine is None:
-            from edelweissfe.utils.discretesurfacequery import DiscreteSurfaceQuery
-
-            self._queryEngine = DiscreteSurfaceQuery(mesh=self.surfaceMesh)
+        queryEngine = self._surfaceQueryEngine()
 
         n_points = coords.shape[0]
         if proximityDistance is not None:
@@ -226,7 +298,7 @@ class DiscreteRigidBody(RigidBody):
             active_indices = np.arange(n_points)
 
         u_rp, R, rp_initial = kinematics if kinematics is not None else self.getCurrentKinematics()
-        active_dists, active_normals = self._queryEngine.query(
+        active_dists, active_normals = queryEngine.query(
             coords_to_query, translation=u_rp, rotation_matrix=R, rotation_center=rp_initial
         )
 

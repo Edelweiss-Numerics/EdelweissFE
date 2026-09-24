@@ -38,11 +38,7 @@ from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.rigidbodies.discreterigidbody import DiscreteRigidBody
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.rotations import (
-    rightJacobianSO3,
-    rotationMatrixFromPseudoVector,
-    skewMatrix,
-)
+from edelweissfe.utils.rotations import skewMatrix
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
@@ -387,13 +383,11 @@ class Constraint(ConstraintBase, MeshDependent):
         # local U_np slice instead, so slave and RP kinematics are always consistent.
         u_rp = U_np[self._indicesOfRPDispInLocal]
         theta_rp = U_np[self._indicesOfRPRotInLocal]
-        R = rotationMatrixFromPseudoVector(theta_rp)
-        kinematics = (u_rp, R, self.rpNode.coordinates)
-
         # dPhysicalSpin_dTheta maps a perturbation of the *stored* pseudo-vector DOF theta_rp onto the
         # physical (spatial) infinitesimal rotation it actually produces -- the identity only at
-        # theta_rp = 0; see rightJacobianSO3 and the class docstring.
-        dPhysicalSpin_dTheta = R @ rightJacobianSO3(theta_rp)
+        # theta_rp = 0; see DiscreteRigidBody.poseFromDofs and the class docstring.
+        rpCurrent, R, dPhysicalSpin_dTheta = self.rigidBody.poseFromDofs(u_rp, theta_rp)
+        kinematics = (u_rp, R, self.rpNode.coordinates)
 
         dists, normals = self.rigidBody.querySurface(
             coords, proximityDistance=self.searchDistance, kinematics=kinematics
@@ -402,8 +396,6 @@ class Constraint(ConstraintBase, MeshDependent):
         activeMask = dists < 0.0
         if not np.any(activeMask):
             return
-
-        rpCurrent = self.rpNode.coordinates + u_rp
 
         for s in np.where(activeMask)[0]:
             n_s = normals[s]
