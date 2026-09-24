@@ -66,8 +66,10 @@ class PolynomialProjection(StateTransferStrategy):
 
     def _transferColumns(self, parentValues, parentRefCoords, childRefCoords, childInitValues, columns):
         res = self._fitAndResample(parentValues[:, columns], parentRefCoords, childRefCoords)
-        if np.all(parentValues[:, columns] >= -1e-12):
-            res = np.maximum(res, 0.0)
+        # decided per column: projecting a whole state block mixes non-negative history variables
+        # with signed ones (stress), and a joint test would disable the clamp for all of them
+        nonNegative = np.all(parentValues[:, columns] >= -1e-12, axis=0)
+        res[:, nonNegative] = np.maximum(res[:, nonNegative], 0.0)
         return res
 
     def _fitAndResample(self, parentValues, parentRefCoords, childRefCoords):

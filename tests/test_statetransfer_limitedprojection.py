@@ -94,3 +94,13 @@ def test_constantFieldExact():
 
 def test_registered():
     assert getStateTransferStrategyClass("limitedProjection") is LimitedPolynomialProjection
+
+
+def test_plainProjectionClampsEachNonNegativeColumn(steepField):
+    """Regression: projecting a whole block (signed stress next to a non-negative hardening variable)
+    used to test non-negativity jointly over all columns, so one signed column disabled the clamp for
+    all of them and a projected alphaP went negative (edge breakout, stateTransfer=projection)."""
+    signed = np.column_stack([steepField[:, 0], steepField[:, 1] - 5.0])
+    children = np.vstack(transferToAllChildren(PolynomialProjection(), signed))
+    assert children[:, 1].min() < 0.0
+    assert children[:, 0].min() >= 0.0
