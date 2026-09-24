@@ -31,6 +31,13 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.constraints.base.forcesonlyexplicitevaluation import (
+    ForcesOnlyExplicitEvaluation,
+)
+from edelweissfe.constraints.base.penaltylaw import (
+    normalPenaltyForce,
+    validatedContactType,
+)
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
@@ -216,7 +223,7 @@ class DeformableSurfaceContactStiffnessView:
             self.K_fp.append(fp)
 
 
-class Constraint(ConstraintBase, MeshDependent):
+class Constraint(ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
     """
     Penalty based unilateral contact between the tributary-area-weighted nodes of a deformable
     slave surface and a deformable master surface, both represented by flat (Tria3/Line2) contact
@@ -365,9 +372,7 @@ class Constraint(ConstraintBase, MeshDependent):
         self.penalty = configuration.penalty
         if self.penalty <= 0.0:
             raise ValueError("The penalty must be positive: a non-positive penalty silently disables contact.")
-        self.type = configuration.contactType.lower()
-        if self.type not in ["linear", "quadratic"]:
-            raise ValueError(f"Constraint type '{self.type}' is not supported. Use 'linear' or 'quadratic'.")
+        self.type = validatedContactType(configuration.contactType)
         self.searchDistance = configuration.searchDistance
 
         self.sliding = configuration.sliding.lower()
@@ -739,18 +744,6 @@ class Constraint(ConstraintBase, MeshDependent):
                     J_[k] = pIdcs[j]
                     k += 1
 
-    def applyConstraintExplicit(
-        self,
-        U_np: np.ndarray,
-        dU: np.ndarray,
-        PExt: np.ndarray,
-        timeStep: TimeStep,
-    ):
-        """Forces without a tangent, by running the one loop with ``K=None``. Overrides the base
-        implementation to avoid constructing an unused tangent matrix container."""
-
-        self.applyConstraint(U_np, dU, PExt, None, timeStep)
-
     def applyConstraint(
         self,
         U_np: np.ndarray,
@@ -830,20 +823,15 @@ class Constraint(ConstraintBase, MeshDependent):
                 # multiplier decays to zero within a few increments after separation.
                 f_n = lambdaForce
                 stiffness = 0.0
-            elif self.type == "linear":
-                f_n = lambdaForce + penaltyTimesArea * g
-                stiffness = penaltyTimesArea
             else:
-                # Repulsive force growing quadratically with penetration: f_n must carry the sign
-                # of g (negative in contact) so that PExt -= f_n * w pushes the slave outward,
-                # matching the linear branch; stiffness = df_n/dg is then positive for g < 0.
-                f_n = lambdaForce - 0.5 * penaltyTimesArea * g**2
-                stiffness = -penaltyTimesArea * g
+                # f_n carries the sign of g (negative in contact), so that PExt -= f_n * w pushes
+                # the slave outward; see edelweissfe.constraints.base.penaltylaw.
+                penaltyForce, stiffness = normalPenaltyForce(self.type, penaltyTimesArea, g)
+                f_n = lambdaForce + penaltyForce
 
             PLocal = -f_n * w
 
-            # K is None when the caller discards the tangent -- see
-            # ConstraintBase.applyConstraintExplicit.
+            # K is None in explicit runs -- see ForcesOnlyExplicitEvaluation.
             KLocal = None
             if K is not None:
                 KLocal = stiffness * np.outer(w, w)
@@ -990,10 +978,8 @@ class Constraint(ConstraintBase, MeshDependent):
                 # zero with the linear measure (there is no penalty force to transfer).
                 if g >= 0.0:
                     penaltyForcePart = penaltyTimesArea * g
-                elif self.type == "linear":
-                    penaltyForcePart = penaltyTimesArea * g
                 else:
-                    penaltyForcePart = -0.5 * penaltyTimesArea * g**2
+                    penaltyForcePart, _ = normalPenaltyForce(self.type, penaltyTimesArea, g)
 
                 self._lambdaN[s] = min(0.0, self._lambdaN[s] + penaltyForcePart)
 

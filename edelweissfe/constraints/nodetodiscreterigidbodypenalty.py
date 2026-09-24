@@ -31,6 +31,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.constraints.base.penaltylaw import validatedContactType
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
@@ -244,9 +245,7 @@ class Constraint(ConstraintBase, MeshDependent):
             )
 
         self.penalty = configuration.penalty
-        self.type = configuration.contactType.lower()
-        if self.type not in ["linear", "quadratic"]:
-            raise ValueError(f"Constraint type '{self.type}' is not supported. Use 'linear' or 'quadratic'.")
+        self.type = validatedContactType(configuration.contactType)
         self.searchDistance = configuration.searchDistance
 
         self.nDim = model.domainSize

@@ -31,6 +31,17 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.constraints.base.contactpointsonslavesurface import (
+    ContactPointsOnSlaveSurface,
+    checkFacetsCarryParentFaces,
+)
+from edelweissfe.constraints.base.forcesonlyexplicitevaluation import (
+    ForcesOnlyExplicitEvaluation,
+)
+from edelweissfe.constraints.base.penaltylaw import (
+    normalPenaltyForce,
+    validatedContactType,
+)
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
@@ -43,10 +54,7 @@ from edelweissfe.utils.facetcontactgeometry import (
     tria3ClosestPoint,
 )
 from edelweissfe.utils.meshtools import currentNodeCoordinates
-from edelweissfe.utils.parentfacegeometry import (
-    facetQuadratureRule,
-    parentFaceShapeFunctions,
-)
+from edelweissfe.utils.parentfacegeometry import parentFaceShapeFunctions
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
@@ -191,7 +199,7 @@ class SurfaceToDeformableSurfacePenaltySchema:
     )
 
 
-class Constraint(ConstraintBase, MeshDependent):
+class Constraint(ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
     """
     Penalty based unilateral contact between two deformable surfaces, integrated at quadrature
     points over the slave surface's facets and distributed with both sides' parent element face
@@ -293,9 +301,7 @@ class Constraint(ConstraintBase, MeshDependent):
         if self.penalty <= 0.0:
             raise ValueError("The penalty must be positive: a non-positive penalty silently disables contact.")
 
-        self.type = configuration.contactType.lower()
-        if self.type not in ["linear", "quadratic"]:
-            raise ValueError(f"Constraint type '{self.type}' is not supported. Use 'linear' or 'quadratic'.")
+        self.type = validatedContactType(configuration.contactType)
 
         self.sliding = configuration.sliding.lower()
         if self.sliding != "small":
@@ -314,7 +320,7 @@ class Constraint(ConstraintBase, MeshDependent):
         self.totalNormalForce = 0.0
 
         self.journal.message(
-            f"contact '{self.name}': {self.nPoints} points ({len(self._slaveFacets)} slave facets x "
+            f"contact '{self.name}': {self.nPoints} points ({len(self.slave.facets)} slave facets x "
             f"{self.nQuadraturePoints} quadrature points), {len(self.facetElements)} master facets, "
             f"sliding={self.sliding}, type={self.type}",
             self.identification,
@@ -336,75 +342,18 @@ class Constraint(ConstraintBase, MeshDependent):
             The element set of master contact facets.
         """
 
-        self._slaveFacets = list(slaveSurface)
+        self.slave = ContactPointsOnSlaveSurface(slaveSurface, self.nQuadraturePoints, self.name)
         self.facetElements = list(masterSurface)
 
-        for side, facets in (("slave", self._slaveFacets), ("master", self.facetElements)):
-            unstamped = [facet.elNumber for facet in facets if facet.parentFaceType is None]
-            if unstamped:
-                raise ValueError(
-                    f"Constraint '{self.name}': {side} facet {unstamped[0]} carries no parent face. "
-                    "The integrated contact formulation distributes the contact pressure with the "
-                    "parent element face's shape functions, so the facets must come from the "
-                    "surface element generator, which stamps them."
-                )
-
-        # A per-node weighting has no meaning in this formulation and, unlike the node-based
-        # constraint, there is no code path that could apply one: the pressure is distributed with
-        # the parent face's own shape functions, evaluated at the quadrature points. Accepting a
-        # surface stamped with a weight transform would silently give a different answer from the
-        # sibling constraint on the same input, which is the one outcome worth refusing outright --
-        # the whole point of the parent-face basis is that it fixes the corner mismatch the
-        # weighting only minimises.
-        for side, facets, setName in (
-            ("slave", self._slaveFacets, self._slaveSurfaceSetName),
-            ("master", self.facetElements, self._masterSurfaceSetName),
-        ):
-            weighted = [facet.elNumber for facet in facets if facet.weightTransform is not None]
-            if weighted:
-                raise ValueError(
-                    f"Constraint '{self.name}': {side} surface '{setName}' was generated with "
-                    f"nodalWeights='serendipityOptimal' (facet {weighted[0]} and "
-                    f"{len(weighted) - 1} more carry a weight transform), which this constraint "
-                    "cannot honour -- it distributes the contact pressure with the parent face's "
-                    "shape functions, not with per-node weights, and needs no corner reweighting "
-                    "to begin with. Generate these facets with the default "
-                    "nodalWeights='facetConsistent'."
-                )
+        checkFacetsCarryParentFaces(self.facetElements, "master", self._masterSurfaceSetName, self.name)
 
         masterNodes = {node for facet in self.facetElements for node in facet.parentFaceNodes}
-        slaveNodes = {node for facet in self._slaveFacets for node in facet.parentFaceNodes}
-        if not masterNodes.isdisjoint(slaveNodes):
+        if not masterNodes.isdisjoint(self.slave.allParentNodes()):
             raise ValueError(
                 f"Constraint '{self.name}': slave surface '{self._slaveSurfaceSetName}' and master "
                 f"surface '{self._masterSurfaceSetName}' share nodes -- self-contact is not "
                 "supported."
             )
-
-        # Per slave facet: its parent face's nodes and reference coordinates, the parent-face shape
-        # functions at each of its quadrature points (constant -- the parametric locations are
-        # fixed), and each point's integration weight in the reference configuration (consistent
-        # with the small-deformation setting, as the node-based constraint's tributary areas are).
-        self._slaveParentNodes = []
-        self._slaveParentRefCoords = []
-        self._slaveShapeFunctions = []
-        self._slaveIntegrationWeights = []
-
-        for facet in self._slaveFacets:
-            barycentric, weights = facetQuadratureRule(facet.nNodes, self.nQuadraturePoints)
-            _, measure = facetNormalAndMeasure(np.array([n.coordinates for n in facet.nodes]))
-            parametric = barycentric @ facet.vertexParametricCoords
-            self._slaveParentNodes.append(list(facet.parentFaceNodes))
-            self._slaveParentRefCoords.append(np.array([n.coordinates for n in facet.parentFaceNodes]))
-            self._slaveShapeFunctions.append(
-                np.array([parentFaceShapeFunctions(facet.parentFaceType, xi) for xi in parametric])
-            )
-            self._slaveIntegrationWeights.append(measure * weights)
-
-        # The contact points, flattened: (slave facet index, quadrature point index) pairs.
-        self._pointFacet = np.repeat(np.arange(len(self._slaveFacets)), self.nQuadraturePoints)
-        self._pointQuadraturePoint = np.tile(np.arange(self.nQuadraturePoints), len(self._slaveFacets))
-        self.nPoints = len(self._pointFacet)
 
         self._referenceCoordsFacets = [np.array([n.coordinates for n in el.nodes]) for el in self.facetElements]
         self._masterParentRefCoords = [
@@ -422,11 +371,6 @@ class Constraint(ConstraintBase, MeshDependent):
         # scratch value an augmented-Lagrange update would consume once implemented.
         self._normalForceCurrent = np.zeros(self.nPoints)
         self._gapCurrent = np.zeros(self.nPoints)
-
-        # The unique nodes of the slave facets, in the same first-encounter order the surface
-        # element generator uses for its '<prefix>_nodes' node set -- so a fromExpression field
-        # output over that set lines up with getSlaveNodalNormalForces().
-        self.slaveSurfaceNodes = list(dict.fromkeys(node for facet in self._slaveFacets for node in facet.nodes))
 
         self._nodes = []
         self._fieldsOnNodes = []
@@ -466,6 +410,16 @@ class Constraint(ConstraintBase, MeshDependent):
     def nDof(self) -> int:
         return self._nDof
 
+    @property
+    def nPoints(self) -> int:
+        """The number of contact points, see :class:`ContactPointsOnSlaveSurface`."""
+        return self.slave.nPoints
+
+    @property
+    def slaveSurfaceNodes(self) -> list:
+        """The unique slave facet nodes, see :attr:`ContactPointsOnSlaveSurface.surfaceNodes`."""
+        return self.slave.surfaceNodes
+
     def updateConnectivity(self, model: FEModel) -> bool:
         """Freeze each contact point's closest-point projection onto the master surface, and
         redeclare the constraint's DOF footprint accordingly.
@@ -477,7 +431,7 @@ class Constraint(ConstraintBase, MeshDependent):
         shape functions -- the ones that may go negative at a corner -- are evaluated.
         """
 
-        slavePointCoords = self._currentSlavePointCoordinates(model)
+        slavePointCoords = self.slave.currentPointCoordinates(model)
         facetCoords = [
             currentNodeCoordinates(el.nodes, model, self._referenceCoordsFacets[i])
             for i, el in enumerate(self.facetElements)
@@ -531,7 +485,7 @@ class Constraint(ConstraintBase, MeshDependent):
             if newAssignment[p] is None:
                 continue
             pointNodes = (
-                self._slaveParentNodes[self._pointFacet[p]] + self.facetElements[newAssignment[p]].parentFaceNodes
+                self.slave.parentNodes[self.slave.pointFacet[p]] + self.facetElements[newAssignment[p]].parentFaceNodes
             )
             newNodes.extend(pointNodes)
             newFieldsOnNodes.extend([["displacement"]] * len(pointNodes))
@@ -572,16 +526,6 @@ class Constraint(ConstraintBase, MeshDependent):
 
         return hasChanged
 
-    def _currentSlavePointCoordinates(self, model: FEModel) -> np.ndarray:
-        """The current positions of all contact points, on the *curved* slave parent surface."""
-
-        coords = np.empty((self.nPoints, self.nDim))
-        for f, nodes in enumerate(self._slaveParentNodes):
-            currentCoords = currentNodeCoordinates(nodes, model, self._slaveParentRefCoords[f])
-            first = f * self.nQuadraturePoints
-            coords[first : first + self.nQuadraturePoints] = self._slaveShapeFunctions[f] @ currentCoords
-        return coords
-
     def refresh(self, model: FEModel, change) -> bool:
         """Rebuild both sides from the regenerated facet sets if ``change`` touched either surface's
         source elements.
@@ -593,9 +537,8 @@ class Constraint(ConstraintBase, MeshDependent):
         frictional or multiplier history to carry.
         """
 
-        slaveRecipe = model.contactFacetRecipes.get(self._slaveSurfaceSetName)
         masterRecipe = model.contactFacetRecipes.get(self._masterSurfaceSetName)
-        touchedSlave = slaveRecipe is not None and change.touchesSurface(slaveRecipe[0])
+        touchedSlave = self.slave.isTouchedBy(model, change)
         touchedMaster = masterRecipe is not None and change.touchesSurface(masterRecipe[0])
         if not (touchedSlave or touchedMaster):
             return False
@@ -630,7 +573,7 @@ class Constraint(ConstraintBase, MeshDependent):
             self._batched = None
             return
 
-        slaveCounts = {len(self._slaveShapeFunctions[self._pointFacet[p]][0]) for p in active}
+        slaveCounts = {len(self.slave.shapeFunctions[self.slave.pointFacet[p]][0]) for p in active}
         masterCounts = {len(self._frozenMasterShapeFunctions[p]) for p in active}
         if len(slaveCounts) != 1 or len(masterCounts) != 1:
             self._batched = None
@@ -647,13 +590,13 @@ class Constraint(ConstraintBase, MeshDependent):
         masterRef = np.empty((nActive, nMasterNodes, nDim))
 
         for k, p in enumerate(active):
-            f = self._pointFacet[p]
-            q = self._pointQuadraturePoint[p]
-            Ns[k] = self._slaveShapeFunctions[f][q]
+            f = self.slave.pointFacet[p]
+            q = self.slave.pointQuadraturePoint[p]
+            Ns[k] = self.slave.shapeFunctions[f][q]
             Nm[k] = self._frozenMasterShapeFunctions[p]
             nBar[k] = self._frozenNormals[p]
-            weights[k] = self._slaveIntegrationWeights[f][q]
-            slaveRef[k] = self._slaveParentRefCoords[f]
+            weights[k] = self.slave.integrationWeights[f][q]
+            slaveRef[k] = self.slave.parentReferenceCoordinates[f]
             masterRef[k] = self._masterParentRefCoords[self._assignedFacetIdx[p]]
 
         # Local DOF layout, mirroring the node declaration above exactly: each active point owns a
@@ -704,12 +647,7 @@ class Constraint(ConstraintBase, MeshDependent):
         g = gaps[closed]
         penaltyTimesArea = self.penalty * b["weights"][closed]
 
-        if self.type == "linear":
-            f_n = penaltyTimesArea * g
-            stiffness = penaltyTimesArea
-        else:
-            f_n = -0.5 * penaltyTimesArea * g**2
-            stiffness = -penaltyTimesArea * g
+        f_n, stiffness = normalPenaltyForce(self.type, penaltyTimesArea, g)
 
         # w = kron([Ns, -Nm], nBar), per point
         c = np.concatenate((b["Ns"][closed], -b["Nm"][closed]), axis=1)
@@ -747,7 +685,7 @@ class Constraint(ConstraintBase, MeshDependent):
         return [
             self.nDim
             * (
-                len(self._slaveParentNodes[self._pointFacet[p]])
+                len(self.slave.parentNodes[self.slave.pointFacet[p]])
                 + len(self.facetElements[self._assignedFacetIdx[p]].parentFaceNodes)
             )
             for p in range(self.nPoints)
@@ -769,27 +707,6 @@ class Constraint(ConstraintBase, MeshDependent):
 
     def shapeVIJContribution(self, flat_view: np.ndarray) -> IntegratedSurfaceContactStiffnessView:
         return IntegratedSurfaceContactStiffnessView(flat_view, self._activeBlockSizes())
-
-    def applyConstraintExplicit(
-        self,
-        U_np: np.ndarray,
-        dU: np.ndarray,
-        PExt: np.ndarray,
-        timeStep: TimeStep,
-    ):
-        """Forces without a tangent, by running the one loop with ``K=None``.
-
-        Overriding this is a necessity here rather than an optimization, and the override must match
-        the base class's spelling of the hook exactly. The base implementation asks for a tangent
-        container through the ordinary VIJ protocol and then discards it; for this constraint that
-        container is ``nPoints * ((nSlaveParentNodes + nMasterParentNodes) * nDim)**2`` doubles --
-        of order 50 MB per increment on the anchor pry-out -- plus one dense outer product per
-        contact point to fill it. An override under the wrong name is therefore not a cosmetic slip:
-        it is silently dead code, every result is unchanged, and the only symptom is an
-        inexplicably slow run. One loop rather than two, so the physics cannot drift between the
-        implicit and explicit paths."""
-
-        self.applyConstraint(U_np, dU, PExt, None, timeStep)
 
     def applyConstraint(
         self,
@@ -820,8 +737,8 @@ class Constraint(ConstraintBase, MeshDependent):
             if facetIdx is None:
                 continue
 
-            f = self._pointFacet[p]
-            slaveShapeFunctions = self._slaveShapeFunctions[f][self._pointQuadraturePoint[p]]
+            f = self.slave.pointFacet[p]
+            slaveShapeFunctions = self.slave.shapeFunctions[f][self.slave.pointQuadraturePoint[p]]
             masterShapeFunctions = self._frozenMasterShapeFunctions[p]
             nBar = self._frozenNormals[p]
 
@@ -833,7 +750,7 @@ class Constraint(ConstraintBase, MeshDependent):
             masterIdcs = list(range(localOffset, localOffset + nMasterDof))
             localOffset += nMasterDof
 
-            slaveCoords = self._slaveParentRefCoords[f] + U_np[slaveIdcs].reshape((-1, self.nDim))
+            slaveCoords = self.slave.parentReferenceCoordinates[f] + U_np[slaveIdcs].reshape((-1, self.nDim))
             masterCoords = self._masterParentRefCoords[facetIdx] + U_np[masterIdcs].reshape((-1, self.nDim))
 
             # Both points ride the *curved* parent surfaces; see the class docstring on why the
@@ -857,20 +774,14 @@ class Constraint(ConstraintBase, MeshDependent):
             # plays, so the force laws below are identical to that constraint's, sign conventions
             # included: f_n carries the sign of g (negative in contact) so that PExt -= f_n * w
             # pushes the surfaces apart, and stiffness = df_n/dg is positive for g < 0.
-            penaltyTimesArea = self.penalty * self._slaveIntegrationWeights[f][self._pointQuadraturePoint[p]]
+            penaltyTimesArea = self.penalty * self.slave.integrationWeights[f][self.slave.pointQuadraturePoint[p]]
 
-            if self.type == "linear":
-                f_n = penaltyTimesArea * g
-                stiffness = penaltyTimesArea
-            else:
-                f_n = -0.5 * penaltyTimesArea * g**2
-                stiffness = -penaltyTimesArea * g
+            f_n, stiffness = normalPenaltyForce(self.type, penaltyTimesArea, g)
 
             globalIdcs = slaveIdcs + masterIdcs
             PExt[globalIdcs] += -f_n * w
 
-            # K is None when the caller discards the tangent -- see
-            # ConstraintBase.applyConstraintExplicit.
+            # K is None in explicit runs -- see ForcesOnlyExplicitEvaluation.
             if K is not None:
                 K.blocks[activeIdx] += stiffness * np.outer(w, w)
 
@@ -887,13 +798,7 @@ class Constraint(ConstraintBase, MeshDependent):
         or :meth:`getSlaveNodalNormalForces` instead.
         """
 
-        weights = np.concatenate(self._slaveIntegrationWeights) if self.nPoints else np.zeros(0)
-        return np.divide(
-            -self._normalForceCurrent,
-            weights,
-            out=np.zeros_like(self._normalForceCurrent),
-            where=weights > 0,
-        )
+        return self.slave.normalPressures(self._normalForceCurrent)
 
     def getGaps(self) -> np.ndarray:
         """The current gap at each contact point (negative when penetrating), ordered like
@@ -922,12 +827,4 @@ class Constraint(ConstraintBase, MeshDependent):
         complete picture.
         """
 
-        forceOfNode = dict.fromkeys(self.slaveSurfaceNodes, 0.0)
-        for p in range(self.nPoints):
-            if self._assignedFacetIdx[p] is None or self._normalForceCurrent[p] == 0.0:
-                continue
-            shapeFunctions = self._slaveShapeFunctions[self._pointFacet[p]][self._pointQuadraturePoint[p]]
-            for node, shapeFunction in zip(self._slaveParentNodes[self._pointFacet[p]], shapeFunctions):
-                if node in forceOfNode:
-                    forceOfNode[node] += -self._normalForceCurrent[p] * shapeFunction
-        return np.array([forceOfNode[node] for node in self.slaveSurfaceNodes])
+        return self.slave.nodalNormalForces(self._normalForceCurrent)

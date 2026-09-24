@@ -382,7 +382,7 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
         from everything else.
         """
 
-        slavePoints = constraint._currentSlavePointCoordinates(model)
+        slavePoints = constraint.slave.currentPointCoordinates(model)
         gaps = np.full(constraint.nPoints, np.nan)
         for p in range(constraint.nPoints):
             facetIdx = constraint._assignedFacetIdx[p]
