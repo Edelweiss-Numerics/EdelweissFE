@@ -121,8 +121,14 @@ Module ``edelweissfe.constraints.nodetorigidsurfacepenalty``
     :language: edelweiss
     :caption: Example: ``testfiles/marmot/NodeToRigidSurfacePenaltyConstraintLinear/test.inp``
 
-``nodetodiscreterigidbodypenalty`` - Contact against a discrete rigid body
+``nodetodiscreterigidbodypenalty`` - Contact against a discrete rigid body (deprecated)
 -----------------------------------------------------------------------------------------------
+
+.. deprecated::
+    Use ``surfacetodiscreterigidbodypenalty`` below. On quadratic (hexa20/quad8) slave faces a
+    node-based penalty cannot transmit the tensile corner loads of a uniform pressure, so the corner
+    nodes lift off (see :ref:`serendipity-liftoff`), and its per-node penalty makes the contact
+    stiffness depend on the mesh.
 
 Module ``edelweissfe.constraints.nodetodiscreterigidbodypenalty``
 
@@ -290,6 +296,37 @@ Module ``edelweissfe.constraints.surfacetodeformablesurfacepenalty``
     :language: edelweiss
     :caption: Example (explicit dynamics):
               ``testfiles/edelweiss-only/NEDSurfaceContact/test.inp``
+
+``surfacetodiscreterigidbodypenalty`` - Integrated contact against a discrete rigid body
+-----------------------------------------------------------------------------------------------
+
+The integrated counterpart of ``nodetodiscreterigidbodypenalty``, and the rigid-body counterpart
+of ``surfacetodeformablesurfacepenalty``: contact is evaluated at quadrature points over a slave
+facet surface and distributed with the slave parent-face shape functions, against the triangulated,
+closed surface of a :doc:`discrete rigid body <rigidbodies>`. The theory is documented in
+:ref:`integrated-contact-rigid-body`. Use it for any contact against rigid supports or indenters,
+in particular with quadratic slave faces.
+
+Scope: normal penalty contact under ``sliding=small``, 3D, implicit and explicit solver paths, live
+AMR of the slave side. The slave surface must consist of a single element type.
+
+Module ``edelweissfe.constraints.surfacetodiscreterigidbodypenalty``
+
+.. automodule:: edelweissfe.constraints.surfacetodiscreterigidbodypenalty
+    :members: __doc__
+
+.. pprint:: constraint:surfacetodiscreterigidbodypenalty
+    :caption: Options:
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/SurfaceToDiscreteRigidBodyContactPatchHexa20/test.inp
+    :language: edelweiss
+    :caption: Example (hexa20 block on a rigid support):
+              ``testfiles/edelweiss-only/SurfaceToDiscreteRigidBodyContactPatchHexa20/test.inp``
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/NEDSurfaceToDiscreteRigidBodyContact/test.inp
+    :language: edelweiss
+    :caption: Example (explicit dynamics):
+              ``testfiles/edelweiss-only/NEDSurfaceToDiscreteRigidBodyContact/test.inp``
 
 ``tie`` - Surface-to-surface tie (DOF elimination)
 --------------------------------------------------

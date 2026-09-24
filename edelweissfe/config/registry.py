@@ -195,6 +195,7 @@ _addBuiltins(
         "penaltyindirectcontrol",
         "rigidbody",
         "surfacetodeformablesurfacepenalty",
+        "surfacetodiscreterigidbodypenalty",
         "tie",
     ],
     "edelweissfe.constraints",

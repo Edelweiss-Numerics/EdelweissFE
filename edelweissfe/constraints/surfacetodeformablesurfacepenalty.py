@@ -42,6 +42,9 @@ from edelweissfe.constraints.base.penaltylaw import (
     normalPenaltyForce,
     validatedContactType,
 )
+from edelweissfe.constraints.base.surfacecontactpenaltyschema import (
+    SurfaceContactPenaltySchema,
+)
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
@@ -136,66 +139,20 @@ class IntegratedSurfaceContactStiffnessView:
 
 
 @dataclass(frozen=True)
-class SurfaceToDeformableSurfacePenaltySchema:
-    """The options this constraint accepts, owned by this module and never mutated from outside it.
-
-    Mirrors :class:`~edelweissfe.constraints.nodetodeformablesurfacepenalty.
-    NodeToDeformableSurfacePenaltySchema` where the meaning is the same, including the ``type`` /
-    ``contactType`` spelling (a dataclass field literally called ``type`` would shadow the builtin,
-    which this project's conventions avoid). ``penalty`` here is an interface stiffness modulus per
-    unit area exactly as there, but it multiplies a quadrature weight rather than a nodal tributary
-    area -- the same physical dimension, applied pointwise.
+class SurfaceToDeformableSurfacePenaltySchema(SurfaceContactPenaltySchema):
+    """The options this constraint accepts: the shared slave-side and penalty options of
+    :class:`~edelweissfe.constraints.base.surfacecontactpenaltyschema.SurfaceContactPenaltySchema`,
+    plus the master surface. ``penalty`` here is an interface stiffness modulus per unit area exactly
+    as in the node-based constraint, but it multiplies a quadrature weight rather than a nodal
+    tributary area -- the same physical dimension, applied pointwise.
     """
 
-    slaveSurface: str | None = schemaField(
-        description="The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) "
-        "forming the slave surface; contact is integrated over these facets at quadrature points.",
-        dtype=str,
-        default=None,
-        required=True,
-    )
     masterSurface: str | None = schemaField(
         description="The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) "
         "forming the master surface.",
         dtype=str,
         default=None,
         required=True,
-    )
-    penalty: float | None = schemaField(
-        description="The numerical penalty value, an interface stiffness modulus per unit slave " "surface area.",
-        dtype=float,
-        default=None,
-        required=True,
-    )
-    contactType: str = schemaField(
-        description="The formulation type: 'linear' (linear force, constant stiffness with jump) "
-        "or 'quadratic' (quadratic force, linear stiffness).",
-        dtype=str,
-        default="linear",
-        optionName="type",
-    )
-    nQuadraturePoints: int = schemaField(
-        description="The number of quadrature points per slave facet: 1, 3 or 6 for a Tria3 facet "
-        "(3D), 1, 2 or 3 for a Line2 facet (2D). The default of 3 integrates the parent face's "
-        "shape functions exactly over a facet, which is what makes the consistent nodal loads -- "
-        "including the negative corner loads of a serendipity face -- come out exactly.",
-        dtype=int,
-        default=3,
-    )
-    searchDistance: float | None = schemaField(
-        description="An optional broadphase distance for the per-increment candidate-facet search. "
-        "If not given, every contact point is always assigned its single closest facet, without a "
-        "distance gate.",
-        dtype=float,
-        default=None,
-    )
-    sliding: str = schemaField(
-        description="The kinematic treatment of the contact geometry. Only 'small' (Abaqus-style "
-        "small sliding: the closest-point projection -- master facet, parametric location and "
-        "normal -- is frozen once per increment from the last converged configuration, making the "
-        "gap linear in the displacement DOFs) is implemented; 'finite' is rejected.",
-        dtype=str,
-        default="small",
     )
 
 
