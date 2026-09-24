@@ -52,6 +52,7 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.utils.meshtools import currentNodeCoordinates
 
 _HEXA20_EDGES = (
     (0, 1),
@@ -387,7 +388,7 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
             facetIdx = constraint._assignedFacetIdx[p]
             if facetIdx is None:
                 continue
-            masterCoords = constraint._currentCoordinates(
+            masterCoords = currentNodeCoordinates(
                 constraint.facetElements[facetIdx].parentFaceNodes,
                 model,
                 constraint._masterParentRefCoords[facetIdx],

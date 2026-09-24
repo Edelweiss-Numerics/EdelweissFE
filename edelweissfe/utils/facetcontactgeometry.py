@@ -26,9 +26,6 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-import numpy as np
-from scipy.spatial import cKDTree
-
 """
 Exact gap function, gradient, and full Hessian (including the second-derivative term arising
 from the cross-product-then-normalize/rotate-then-normalize construction of the facet normal) for
@@ -48,16 +45,10 @@ Do not hand-edit these formulas without re-verifying them the same way; this kin
 normalize/rotate second-derivative algebra is very easy to get subtly wrong.
 """
 
+import numpy as np
+from scipy.spatial import cKDTree
 
-def _skew(v: np.ndarray) -> np.ndarray:
-    """The skew-symmetric cross-product matrix of a 3-vector, such that ``_skew(v) @ x == v x x``."""
-    return np.array(
-        [
-            [0.0, -v[2], v[1]],
-            [v[2], 0.0, -v[0]],
-            [-v[1], v[0], 0.0],
-        ]
-    )
+from edelweissfe.utils.rotations import skewMatrix
 
 
 def tria3GapGradientHessian(
@@ -93,7 +84,7 @@ def tria3GapGradientHessian(
     blocks = ("xs", "x1", "x2", "x3")
 
     dr_dBlock = {"xs": np.eye(3), "x1": -np.eye(3), "x2": np.zeros((3, 3)), "x3": np.zeros((3, 3))}
-    dc_dBlock = {"xs": np.zeros((3, 3)), "x1": -_skew(x2 - x3), "x2": -_skew(e2), "x3": _skew(e1)}
+    dc_dBlock = {"xs": np.zeros((3, 3)), "x1": -skewMatrix(x2 - x3), "x2": -skewMatrix(e2), "x3": skewMatrix(e1)}
 
     projectorOntoTangentPlane = np.eye(3) - np.outer(n, n)
     dn_dBlock = {k: (projectorOntoTangentPlane @ dc_dBlock[k]) / m for k in blocks}
@@ -129,7 +120,7 @@ def tria3GapGradientHessian(
             crossNormalizeTerm = -(1.0 / m) * (
                 np.outer(dm_dBlock[a], dn_dBlock[b].T @ r) + g * (dc_dBlock[a].T @ dn_dBlock[b])
             )
-            skewArgumentTerm = dcSign[a] * (1.0 / m) * (_skew(rTangential) @ du_dBlock[a][b])
+            skewArgumentTerm = dcSign[a] * (1.0 / m) * (skewMatrix(rTangential) @ du_dBlock[a][b])
             normalizeDenominatorTerm = -(1.0 / m**2) * np.outer(rTangential @ dc_dBlock[a], dm_dBlock[b])
 
             d2n_a_contractedWithR = crossNormalizeTerm + skewArgumentTerm + normalizeDenominatorTerm

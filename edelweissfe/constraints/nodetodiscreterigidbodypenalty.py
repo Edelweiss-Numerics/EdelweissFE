@@ -37,6 +37,11 @@ from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.rigidbodies.discreterigidbody import DiscreteRigidBody
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.rotations import (
+    rightJacobianSO3,
+    rotationMatrixFromPseudoVector,
+    skewMatrix,
+)
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
@@ -94,39 +99,6 @@ class NodeToDiscreteRigidBodyPenaltySchema:
         dtype=float,
         default=None,
     )
-
-
-def _skew(v: np.ndarray) -> np.ndarray:
-    """The skew-symmetric cross-product matrix of a 3-vector, such that ``_skew(v) @ x == v x x``."""
-    return np.array(
-        [
-            [0.0, -v[2], v[1]],
-            [v[2], 0.0, -v[0]],
-            [-v[1], v[0], 0.0],
-        ]
-    )
-
-
-def _rightJacobianSO3(theta: np.ndarray) -> np.ndarray:
-    """The right Jacobian of the SO(3) exponential map at the rotation pseudo-vector ``theta``.
-
-    For a fixed body-frame vector :math:`\\bar{\\mathbf{v}}` and
-    :math:`R(\\boldsymbol{\\theta}) = \\exp(\\mathrm{skew}(\\boldsymbol{\\theta}))`, this satisfies
-
-    .. math::
-        \\frac{\\partial (R(\\boldsymbol{\\theta}) \\bar{\\mathbf{v}})}{\\partial \\boldsymbol{\\theta}}
-        = -\\mathrm{skew}(R(\\boldsymbol{\\theta}) \\bar{\\mathbf{v}}) \\, R(\\boldsymbol{\\theta}) \\,
-        J_r(\\boldsymbol{\\theta})
-
-    i.e. it maps a perturbation of the *stored, total* pseudo-vector DOF onto the corresponding
-    spatial rotation increment -- exact for any accumulated rotation, not just a small-angle
-    approximation (which would correspond to ``J_r(theta) = I``).
-    """
-    angle = np.linalg.norm(theta)
-    K = _skew(theta)
-    if angle < 1e-8:
-        return np.eye(3) - 0.5 * K + np.dot(K, K) / 6.0
-    return np.eye(3) - (1.0 - np.cos(angle)) / angle**2 * K + (angle - np.sin(angle)) / angle**3 * np.dot(K, K)
 
 
 class DiscreteRigidBodyContactStiffnessView:
@@ -197,14 +169,14 @@ class Constraint(ConstraintBase, MeshDependent):
         J_r(\\boldsymbol{\\theta}_{RP})
 
     where :math:`J_r` is the right Jacobian of the SO(3) exponential map (see
-    :func:`_rightJacobianSO3`), and ``dPhysicalSpin_dTheta`` maps a perturbation of the *stored*
+    :func:`~edelweissfe.utils.rotations.rightJacobianSO3`), and ``dPhysicalSpin_dTheta`` maps a perturbation of the *stored*
     rotation pseudo-vector DOF onto the physical (spatial) infinitesimal rotation it actually
     produces (see :meth:`Constraint.applyConstraint`). The plain physical moment
     :math:`\\mathbf{r}_s \\times \\mathbf{n}_s` is only the exact gap gradient w.r.t. the RP
     rotation DOF when the RP has zero *total accumulated* rotation (where
     ``dPhysicalSpin_dTheta = I``); in general the ``dPhysicalSpin_dTheta``:math:`^T` factor is
     required because the rotation DOF stores the raw total pseudo-vector (fed directly through
-    :meth:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.rotationMatrixFromPseudoVector`
+    :func:`~edelweissfe.utils.rotations.rotationMatrixFromPseudoVector`
     every iteration, not a per-increment-reset relative rotation) -- incrementing that raw
     coordinate by :math:`\\delta\\boldsymbol{\\theta}` does not correspond to a physical spin of
     :math:`\\delta\\boldsymbol{\\theta}` unless the RP is currently unrotated, since the exponential
@@ -416,13 +388,13 @@ class Constraint(ConstraintBase, MeshDependent):
         # local U_np slice instead, so slave and RP kinematics are always consistent.
         u_rp = U_np[self._indicesOfRPDispInLocal]
         theta_rp = U_np[self._indicesOfRPRotInLocal]
-        R = DiscreteRigidBody.rotationMatrixFromPseudoVector(theta_rp)
+        R = rotationMatrixFromPseudoVector(theta_rp)
         kinematics = (u_rp, R, self.rpNode.coordinates)
 
         # dPhysicalSpin_dTheta maps a perturbation of the *stored* pseudo-vector DOF theta_rp onto the
         # physical (spatial) infinitesimal rotation it actually produces -- the identity only at
-        # theta_rp = 0; see _rightJacobianSO3 and the class docstring.
-        dPhysicalSpin_dTheta = R @ _rightJacobianSO3(theta_rp)
+        # theta_rp = 0; see rightJacobianSO3 and the class docstring.
+        dPhysicalSpin_dTheta = R @ rightJacobianSO3(theta_rp)
 
         dists, normals = self.rigidBody.querySurface(
             coords, proximityDistance=self.searchDistance, kinematics=kinematics
@@ -476,9 +448,9 @@ class Constraint(ConstraintBase, MeshDependent):
             #   d(w_rp,disp)/d(theta_rp) =  dn_dTheta
             #   d(w_rp,rot)/d(u_s)       =  dPhysicalSpin_dTheta^T @ dMoment_dUs
             #   d(w_rp,rot)/d(u_rp)      =  dPhysicalSpin_dTheta^T @ dMoment_dUrp
-            dn_dTheta = -_skew(n_s) @ dPhysicalSpin_dTheta
-            dMoment_dUs = -_skew(n_s)
-            dMoment_dUrp = _skew(n_s)
+            dn_dTheta = -skewMatrix(n_s) @ dPhysicalSpin_dTheta
+            dMoment_dUs = -skewMatrix(n_s)
+            dMoment_dUrp = skewMatrix(n_s)
 
             K.K_prp[s][:, self.nDim :] += f_n * (-dn_dTheta)
             K.K_rpp[s][self.nDim :, :] += f_n * (dPhysicalSpin_dTheta.T @ dMoment_dUs)

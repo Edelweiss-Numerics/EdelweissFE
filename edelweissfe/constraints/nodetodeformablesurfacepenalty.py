@@ -44,6 +44,7 @@ from edelweissfe.utils.facetcontactgeometry import (
     tria3ClosestPoint,
     tria3GapGradientHessian,
 )
+from edelweissfe.utils.meshtools import currentNodeCoordinates
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
@@ -490,14 +491,6 @@ class Constraint(ConstraintBase, MeshDependent):
     def nDof(self) -> int:
         return self._nDof
 
-    def _currentCoordinates(self, nodes: list, model: FEModel, referenceCoords: np.ndarray) -> np.ndarray:
-        dispField = model.nodeFields.get("displacement")
-        if dispField is None or "U" not in dispField:
-            return referenceCoords.copy()
-        idcs = dispField._indicesOfNodesInArray
-        u = np.array([dispField["U"][idcs[n]] if n in idcs else np.zeros(self.nDim) for n in nodes])
-        return referenceCoords + u
-
     def updateConnectivity(self, model: FEModel) -> bool:
         """Re-assign each slave node to its single closest facet, based on the last converged
         configuration. Called once per increment by the solver, before the equation system is
@@ -507,9 +500,9 @@ class Constraint(ConstraintBase, MeshDependent):
 
         # refreshed by FEModel.refreshMeshDependents; nothing extra to do at this tick
 
-        slaveCoords = self._currentCoordinates(self.slaveNodes, model, self._referenceCoordsSlaves)
+        slaveCoords = currentNodeCoordinates(self.slaveNodes, model, self._referenceCoordsSlaves)
         facetCoords = [
-            self._currentCoordinates(el.nodes, model, self._referenceCoordsFacets[i])
+            currentNodeCoordinates(el.nodes, model, self._referenceCoordsFacets[i])
             for i, el in enumerate(self.facetElements)
         ]
 

@@ -42,6 +42,7 @@ from edelweissfe.utils.facetcontactgeometry import (
     line2ClosestPoint,
     tria3ClosestPoint,
 )
+from edelweissfe.utils.meshtools import currentNodeCoordinates
 from edelweissfe.utils.parentfacegeometry import (
     facetQuadratureRule,
     parentFaceShapeFunctions,
@@ -465,14 +466,6 @@ class Constraint(ConstraintBase, MeshDependent):
     def nDof(self) -> int:
         return self._nDof
 
-    def _currentCoordinates(self, nodes: list, model: FEModel, referenceCoords: np.ndarray) -> np.ndarray:
-        dispField = model.nodeFields.get("displacement")
-        if dispField is None or "U" not in dispField:
-            return referenceCoords.copy()
-        idcs = dispField._indicesOfNodesInArray
-        u = np.array([dispField["U"][idcs[n]] if n in idcs else np.zeros(self.nDim) for n in nodes])
-        return referenceCoords + u
-
     def updateConnectivity(self, model: FEModel) -> bool:
         """Freeze each contact point's closest-point projection onto the master surface, and
         redeclare the constraint's DOF footprint accordingly.
@@ -486,7 +479,7 @@ class Constraint(ConstraintBase, MeshDependent):
 
         slavePointCoords = self._currentSlavePointCoordinates(model)
         facetCoords = [
-            self._currentCoordinates(el.nodes, model, self._referenceCoordsFacets[i])
+            currentNodeCoordinates(el.nodes, model, self._referenceCoordsFacets[i])
             for i, el in enumerate(self.facetElements)
         ]
 
@@ -584,7 +577,7 @@ class Constraint(ConstraintBase, MeshDependent):
 
         coords = np.empty((self.nPoints, self.nDim))
         for f, nodes in enumerate(self._slaveParentNodes):
-            currentCoords = self._currentCoordinates(nodes, model, self._slaveParentRefCoords[f])
+            currentCoords = currentNodeCoordinates(nodes, model, self._slaveParentRefCoords[f])
             first = f * self.nQuadraturePoints
             coords[first : first + self.nQuadraturePoints] = self._slaveShapeFunctions[f] @ currentCoords
         return coords

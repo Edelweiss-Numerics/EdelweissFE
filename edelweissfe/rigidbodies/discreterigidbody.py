@@ -32,6 +32,7 @@ import numpy as np
 
 from edelweissfe.rigidbodies.rigidbody import RigidBody
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.rotations import rotationMatrixFromPseudoVector
 
 
 class DiscreteRigidBody(RigidBody):
@@ -107,7 +108,7 @@ class DiscreteRigidBody(RigidBody):
         rot_field = self.model.nodeFields.get("rotation")
         if rot_field is not None and "U" in rot_field and self.rpNode in rot_field.nodes:
             theta = rot_field["U"][rot_field.indexOfNode(self.rpNode)]
-            R = self.rotationMatrixFromPseudoVector(theta)
+            R = rotationMatrixFromPseudoVector(theta)
 
         # In EdelweissFE, the RP node's coordinates are the *reference* (initial) coordinates.
         return u_rp, R, self.rpNode.coordinates
@@ -234,18 +235,6 @@ class DiscreteRigidBody(RigidBody):
         normals = np.zeros((n_points, 3))
         normals[active_indices] = active_normals
         return dists, normals
-
-    @staticmethod
-    def rotationMatrixFromPseudoVector(theta: np.ndarray) -> np.ndarray:
-        """Convert a 3-component rotation pseudo-vector to a 3x3 rotation matrix
-        via the exponential map (Rodrigues' formula)."""
-        angle = np.linalg.norm(theta)
-        if angle < 1e-12:
-            return np.eye(3)
-        axis = theta / angle
-        K = np.array([[0, -axis[2], axis[1]], [axis[2], 0, -axis[0]], [-axis[1], axis[0], 0]])
-        R = np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * np.dot(K, K)
-        return R
 
     def getVisualizationNodes(self) -> List:
         return self.surfaceNodes
