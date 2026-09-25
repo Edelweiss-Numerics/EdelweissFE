@@ -138,6 +138,10 @@ Relevant module ``edelweissfe.generators.executepythoncode``
     :language: edelweiss
     :caption: Example: ``testfiles/marmot/PythonCodeModelGeneration/test.inp``
 
+.. literalinclude:: ../../../testfiles/edelweiss-only/PythonCodeModelGenerationIndented/test.inp
+    :language: edelweiss
+    :caption: Example with indented code: ``testfiles/edelweiss-only/PythonCodeModelGenerationIndented/test.inp``
+
 ``surfaceElementGenerator`` - Contact facet elements from a *surface
 ----------------------------------------------------------------------
 
