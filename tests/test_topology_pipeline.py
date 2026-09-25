@@ -423,6 +423,7 @@ def test_fingerprint_is_stable_across_processes():
     import os
     import subprocess
     import sys
+    import tempfile
 
     script = (
         "import numpy as np\n"
@@ -440,8 +441,14 @@ def test_fingerprint_is_stable_across_processes():
     digests = set()
     for seed in ("0", "1", "random"):
         env = dict(os.environ, PYTHONHASHSEED=seed)
+        # NOT cwd=_REPO_ROOT: `-c` sets sys.path[0] to the (resolved) cwd, and the repo root
+        # contains an uncompiled edelweissfe/ source tree (no built Cython extensions -- those
+        # only exist in the real, installed site-packages copy under a non-editable `pip install
+        # .`). That local package would shadow the installed one and break the very import this
+        # test needs. A neutral cwd keeps the import resolving to whatever is actually on
+        # sys.path via the installed package.
         result = subprocess.run(
-            [sys.executable, "-c", script], capture_output=True, text=True, cwd=str(_REPO_ROOT), env=env
+            [sys.executable, "-c", script], capture_output=True, text=True, cwd=tempfile.gettempdir(), env=env
         )
         assert result.returncode == 0, result.stderr
         digests.add(result.stdout.strip())

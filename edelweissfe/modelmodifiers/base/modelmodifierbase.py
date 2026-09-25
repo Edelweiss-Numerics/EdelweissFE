@@ -46,6 +46,29 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
     #: disqualify that solver. See NonlinearSolverBase.validateModelCapabilities.
     initiatesTopologyChanges = True
 
+    @property
+    def actsOnlyAtSimulationStart(self) -> bool:
+        """Whether every topology change this modifier can plan happens on the very first topology
+        update of the analysis.
+
+        True means a solver that runs the topology update exactly once, before its increment loop, is
+        enough for this modifier; False means the update has to be re-run as the solution evolves. The
+        distinction exists because those are genuinely different capabilities: re-running the update
+        mid-analysis invalidates everything derived from the mesh, which an implicit solver rebuilds
+        from its node fields but an explicit one cannot, its velocity state being solver-local. See
+        :meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.validateModelCapabilities`.
+
+        A purely reactive modifier (``initiatesTopologyChanges == False``) cannot act on its own at
+        all, so it never needs a later update and answers True.
+
+        Returns
+        -------
+        bool
+            Whether this modifier is fully served by a single topology update at the start.
+        """
+
+        return not self.initiatesTopologyChanges
+
     def __init__(self, name: str, model: FEModel, journal: Journal, **kwargs):
         self._name = name
         self._model = model

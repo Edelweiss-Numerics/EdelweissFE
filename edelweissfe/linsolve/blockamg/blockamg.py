@@ -78,6 +78,7 @@ symmetric-aggregation-based hierarchy already reaches a working feasibility poin
 """
 
 import collections
+import inspect
 import json
 import os
 import time
@@ -87,7 +88,7 @@ import scipy.sparse as sp
 from scipy.sparse.linalg import LinearOperator, gmres
 
 import edelweissfe.utils.performancetiming as performancetiming
-from edelweissfe.linsolve.base import FieldBlock, LinearSolver
+from edelweissfe.linsolve.base import FieldBlock, LinearSolver, LinearSolveSummary
 from edelweissfe.linsolve.nullspace import rigidBodyNullspace, translationNullspace
 
 # Ordered low-to-high; index comparison decides whether a message at a given level should print.
@@ -97,7 +98,11 @@ from edelweissfe.linsolve.nullspace import rigidBodyNullspace, translationNullsp
 # not affect, the Journal instance's own message-level suppression (see _log()) -- this gate decides
 # whether blockamg attempts to log at all; Journal's own level decides whether the attempt is shown.
 _VERBOSITY_LEVELS = ("silent", "warning", "info", "debug")
-_JOURNAL_LEVEL = {"warning": 0, "info": 1, "debug": 2}
+# Journal indentation level, not verbosity: "info"/"debug" both nest at level 2, alongside the Newton
+# residual line each solve corresponds to -- they are the same nesting depth (a per-Newton-iteration
+# detail), just gated by different verbosity settings. "warning" stays at level 0 (the least indented,
+# most visible spot in the log) regardless of nesting, since a warning is rare and meant to stand out.
+_JOURNAL_LEVEL = {"warning": 0, "info": 2, "debug": 2}
 _IDENTIFICATION = "BlockAMGSolver"
 
 # "backendPrecision" and "backendBlockSize" are not AMGCL parameters -- they select the AMGCL
@@ -335,6 +340,11 @@ class BlockAMGSolver(LinearSolver):
         per unit of *simulated time* rather than per increment, the per-increment saving is largely
         or wholly given back. ``gapSafetyFactor`` is the knob between the two regimes (smaller =
         more accurate = closer to the default's Newton behaviour); the sweet spot is unexplored.
+
+    gapMaxFactor
+        Upper clamp on the gap EMA (default 1e3, well above the documented 1.0-3.5 range). Without
+        it, one non-converged solve can report an outsized gap that compounds through the EMA into
+        an ever-tighter, unmeetable tolerance for every solve after it.
     hierarchyStalenessFactor
         Refresh the AMG hierarchies before the *next* solve if this solve's outer GMRES count exceeded
         this factor times the previous solve's -- a growing count is the signal that the reused
@@ -396,7 +406,30 @@ class BlockAMGSolver(LinearSolver):
         Every dumped solve (trigger or context) also records ``mustRefresh``/``patternChanged``/
         ``newIncrement``/``previousOuterIters`` in the manifest, so the hierarchy-staleness question
         can often be answered directly from the manifest without needing a replay at all.
+    hotReloadConfigFile
+        Path to this solver's own JSON config file. When set, every solve checks whether the file
+        changed on disk and, if it did, re-reads it and applies the recognized settings, forcing a
+        hierarchy rebuild. Unset (the default) means the settings are fixed at construction.
+
+        This exists to make solver settings testable against a *live* run. A degraded AMG hierarchy
+        typically only appears tens of hours into a nonlinear analysis, and rebuilding that state to
+        try one parameter is the expensive part of every tuning round -- so the parameter can now be
+        changed in place instead, with the log recording which settings were in force from which
+        solve onwards.
+
+        Editing a file a running process reads is inherently racy, so the reload is built to fail
+        safely: the file is parsed *before* its modification stamp is accepted, so the half-written
+        state an editor briefly leaves behind is retried on the next solve rather than recorded as
+        seen, and a missing, unreadable or malformed config is reported while the settings in force
+        are kept. Nothing about a bad edit can end the run -- which matters precisely because the
+        runs worth using this on are the ones that were expensive to reach.
+
+        Unrecognized keys are reported rather than ignored, and so are recognized ones that cannot
+        be applied after construction.
     """
+
+    #: See :attr:`~edelweissfe.linsolve.base.LinearSolver.identification`.
+    identification = _IDENTIFICATION
 
     #: Degradation dumps written across every instance in this process, so
     #: ``dumpOnDegradationMaxDumps`` is a genuine process-wide ceiling -- the same reasoning as
@@ -436,6 +469,7 @@ class BlockAMGSolver(LinearSolver):
         hierarchyStalenessFactor: float = 1.5,
         gapCompensatedTolerance: bool = False,
         gapSafetyFactor: float = 0.3,
+        gapMaxFactor: float = 1e3,
         trueResidualMaxContinuations: int = 2,
         verbosity: str = "warning",
         warnOuterIterationsThreshold: int = 100,
@@ -443,6 +477,7 @@ class BlockAMGSolver(LinearSolver):
         dumpOnDegradationThreshold: int = None,
         dumpOnDegradationMaxDumps: int = 10,
         dumpOnDegradationContextSolves: int = 0,
+        hotReloadConfigFile: str = None,
     ):
         self._outerTol = outerTol
         self._outerRestart = outerRestart
@@ -478,6 +513,7 @@ class BlockAMGSolver(LinearSolver):
         self._hierarchyStalenessFactor = hierarchyStalenessFactor
         self._gapCompensatedTolerance = gapCompensatedTolerance
         self._gapSafetyFactor = gapSafetyFactor
+        self._gapMaxFactor = gapMaxFactor
         self._trueResidualMaxContinuations = trueResidualMaxContinuations
         if verbosity not in _VERBOSITY_LEVELS:
             raise ValueError("verbosity must be one of {:}, got {!r}".format(_VERBOSITY_LEVELS, verbosity))
@@ -490,6 +526,12 @@ class BlockAMGSolver(LinearSolver):
         )
         self._dumpOnDegradationMaxDumps = dumpOnDegradationMaxDumps
         self._dumpOnDegradationContextSolves = dumpOnDegradationContextSolves
+
+        # Hot reload: the path to watch, and the file contents it was last applied from. Seeded as
+        # None rather than from the file, so the first solve reads and reports the settings actually
+        # in force -- which is the whole point when the file is being edited during a long run.
+        self._hotReloadConfigFile = hotReloadConfigFile
+        self._hotReloadStamp = None
         if self._dumpOnDegradationDir is not None:
             os.makedirs(self._dumpOnDegradationDir, exist_ok=True)
         # Rolling window of the last dumpOnDegradationContextSolves solves (each entry: solveCount, A,
@@ -506,7 +548,6 @@ class BlockAMGSolver(LinearSolver):
         BlockAMGSolver._instancesCreated += 1
 
         self._solveCount = 0
-        self._fieldsAnnounced = None
 
         # Eisenstat-Walker forcing state.
         self._lastResidualNorm = None
@@ -535,6 +576,26 @@ class BlockAMGSolver(LinearSolver):
         # condition under which AMGCL's own preallocated scratch vectors are no longer valid.
         self._lgmresSolver = None
         self._lgmresN = None
+
+        self._lastSolveSummary = None
+
+    @property
+    def reportsSolveSummary(self) -> bool:
+        """Whether the nonlinear solver should render a "linear solve" column for this instance.
+
+        Tied to this instance's own verbosity rather than a bare ``True`` -- at ``"silent"`` or
+        ``"warning"`` (the default) there is nothing routine to show, matching those settings' own
+        contract (see the ``verbosity`` parameter docstring above); only at ``"info"`` or ``"debug"``
+        does :attr:`lastSolveSummary` carry anything worth a column.
+        """
+        return self._verbosityIndex >= _VERBOSITY_LEVELS.index("info")
+
+    @property
+    def lastSolveSummary(self) -> "LinearSolveSummary | None":
+        """The most recent call's diagnostics -- see
+        :attr:`~edelweissfe.linsolve.base.LinearSolver.lastSolveSummary`. ``None`` before the first
+        call."""
+        return self._lastSolveSummary
 
     def _log(self, level: str, message: str) -> None:
         """Emit ``message`` through the injected Journal (see ``setJournal``, inherited from
@@ -832,11 +893,136 @@ class BlockAMGSolver(LinearSolver):
                 },
             )
 
+    # Settings whose stored attribute does not follow the self._<name> convention. Listed
+    # explicitly rather than inferred, because a wrong guess here would apply a setting to nothing
+    # and report success while doing so.
+    _HOT_RELOAD_ALIASES = {
+        "verbosity": "_verbosityIndex",
+        "p1FieldNames": "_p1FieldNamesRequested",
+    }
+    # Changing which file is watched, from inside that file, is not a thing worth supporting.
+    _HOT_RELOAD_IGNORED = ("hotReloadConfigFile",)
+
+    def _maybeHotReloadConfig(self) -> bool:
+        """Re-read the JSON config if it changed on disk; return whether anything was applied.
+
+        Point ``hotReloadConfigFile`` at the config's own path to enable this. It exists so that
+        solver settings can be tried against a *live* run: a degraded AMG hierarchy typically only
+        appears tens of hours into a nonlinear analysis, and rebuilding that state to test one
+        parameter is the expensive part of every tuning round.
+
+        Anything applied forces a hierarchy refresh through ``_refreshNext``, and every derived
+        cache (node coordinates, P1 topology, lazily built P1 maps) is dropped first, because those
+        were built under the *old* settings.
+
+        The file is parsed before its stamp is accepted, so a half-written file -- the normal
+        transient state of an editor saving in place -- is retried on the next solve instead of
+        being recorded as "seen". No failure here can end the run: a missing, unreadable or
+        malformed config is reported and the settings in force are kept. That asymmetry is
+        deliberate. The feature's whole purpose is to be used on a run that is expensive to have
+        reached, so a typo in a config edit must never be able to destroy it.
+        """
+        if self._hotReloadConfigFile is None:
+            return False
+
+        # The contents themselves are the stamp, not (mtime, size): on kernels with coarse file
+        # timestamps, two same-size saves within one clock tick share an mtime, and the second edit
+        # would be skipped for good. The file is a few hundred bytes, read once per solve.
+        try:
+            with open(self._hotReloadConfigFile, "r") as configFile:
+                stamp = configFile.read()
+        except OSError as error:
+            self._log("warning", "hot reload: cannot read {:}: {:}".format(self._hotReloadConfigFile, error))
+            return False
+
+        if stamp == self._hotReloadStamp:
+            return False
+
+        try:
+            newOptions = json.loads(stamp)
+            if not isinstance(newOptions, dict):
+                raise ValueError("expected a JSON object, got {:}".format(type(newOptions).__name__))
+        except ValueError as error:
+            self._log(
+                "warning",
+                "hot reload: {:} is not readable as a JSON object ({:}); keeping the settings in "
+                "force and retrying on the next solve".format(self._hotReloadConfigFile, error),
+            )
+            return False
+
+        self._hotReloadStamp = stamp
+
+        validNames = set(inspect.signature(type(self).__init__).parameters) - {"self"}
+
+        # Diff first, mutate second: the cache invalidation below has to happen before anything is
+        # applied (a p1Maps entry supplied by the new file must not then be dropped as a stale lazy
+        # one), and that needs to know whether there is a change at all.
+        pending, rejected, unknown = [], [], []
+        for name, value in newOptions.items():
+            if name in self._HOT_RELOAD_IGNORED:
+                continue
+            if name not in validNames:
+                unknown.append(name)
+                continue
+
+            if name == "verbosity":
+                if value not in _VERBOSITY_LEVELS:
+                    rejected.append("{:} (must be one of {:})".format(name, _VERBOSITY_LEVELS))
+                    continue
+                newValue = _VERBOSITY_LEVELS.index(value)
+            elif name == "p1FieldNames":
+                newValue = set(value or [])
+            elif name in ("fieldPreconds", "p1Maps"):
+                newValue = value or {}
+            else:
+                newValue = value
+
+            attribute = self._HOT_RELOAD_ALIASES.get(name, "_" + name)
+            if not hasattr(self, attribute):
+                rejected.append("{:} (recognized at construction but not hot-reloadable)".format(name))
+                continue
+
+            oldValue = getattr(self, attribute)
+            if newValue != oldValue:
+                pending.append((name, attribute, oldValue, newValue))
+
+        if pending:
+            for fieldName in self._lazyP1MapNames:
+                self._p1Maps.pop(fieldName, None)
+            self._lazyP1MapNames.clear()
+            self._nodeCoordinateCache.clear()
+            self._pNodeCache.clear()
+
+            for _, attribute, _, newValue in pending:
+                setattr(self, attribute, newValue)
+
+            self._refreshNext = True
+
+        # Reported at "warning" so it lands in the log of a run whose verbosity is not raised: what
+        # settings were in force from which solve onwards is the one thing a later reader of a
+        # hot-reloaded run cannot reconstruct otherwise.
+        if pending or rejected or unknown:
+            summary = ["hot reload of {:} at solve #{:}".format(self._hotReloadConfigFile, self._solveCount)]
+            for name, _, oldValue, newValue in pending:
+                summary.append("  applied  {:}: {!r} -> {!r}".format(name, oldValue, newValue))
+            for entry in rejected:
+                summary.append("  REJECTED {:}".format(entry))
+            for name in unknown:
+                summary.append("  UNKNOWN  {:} (not a BlockAMGSolver setting)".format(name))
+            if not pending:
+                summary.append("  no effective change; hierarchies kept")
+            else:
+                summary.append("  hierarchies will be rebuilt on this solve")
+            self._log("warning", "\n".join(summary))
+
+        return bool(pending)
+
     def __call__(self, A, b):
         solveStartTime = time.time()
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLMatrix, PyAMGCLSolver
 
         self._solveCount += 1
+        self._maybeHotReloadConfig()
         A = A.tocsr()
         n = A.shape[0]
         blocks = self._resolveBlocks(n)
@@ -858,11 +1044,6 @@ class BlockAMGSolver(LinearSolver):
             )
             self._lgmresN = n
 
-        fieldNames = [block.name for block in blocks]
-        if fieldNames != self._fieldsAnnounced:
-            self._log("info", "blockamg: fields = {:}".format(fieldNames))
-            self._fieldsAnnounced = fieldNames
-
         residualNorm = float(np.linalg.norm(b))
         newIncrement = (
             self._lastResidualNorm is not None and residualNorm > self._residualGrowthFactor * self._lastResidualNorm
@@ -881,15 +1062,32 @@ class BlockAMGSolver(LinearSolver):
         # nothing to reuse yet, the field-block layout changed (e.g. an AMR event resized the DOF
         # vector), the sparsity pattern changed, a residual jump marks a new increment / cutback, or the
         # previous solve's own outer count asked for it (drifted too far from the one before it).
+        wasStale = self._refreshNext
         mustRefresh = (
             self._preconditioners is None
             or blocks != self._blocks
             or n != self._n
             or patternChanged
             or newIncrement
-            or self._refreshNext
+            or wasStale
         )
         self._refreshNext = False
+
+        # Captured now, in priority order matching mustRefresh above -- by the time the debug detail
+        # is built at the end of this call, self._refreshNext has already been overwritten for the
+        # *next* call, so "why" has to be recorded at the point mustRefresh itself is decided.
+        if not mustRefresh:
+            rebuildReason = None
+        elif self._preconditioners is None:
+            rebuildReason = "first"
+        elif blocks != self._blocks or n != self._n:
+            rebuildReason = "amr"
+        elif patternChanged:
+            rebuildReason = "pattern"
+        elif newIncrement:
+            rebuildReason = "increment"
+        else:
+            rebuildReason = "stale"
 
         with performancetiming.timeit("equilibration"):
             if mustRefresh:
@@ -1181,7 +1379,9 @@ class BlockAMGSolver(LinearSolver):
         # given), smoothed so one atypical solve cannot swing the next one's first-pass tolerance.
         _measuredGap = trueResidual / max(firstPassEta, 1e-300)
         if np.isfinite(_measuredGap) and _measuredGap > 0.0:
-            self._trueResidualGap = max(0.5 * self._trueResidualGap + 0.5 * _measuredGap, 1.0)
+            # Ceiled at gapMaxFactor too: an unbounded gap from one non-converged solve compounds
+            # through the EMA into an ever-tighter, unmeetable tolerance.
+            self._trueResidualGap = min(max(0.5 * self._trueResidualGap + 0.5 * _measuredGap, 1.0), self._gapMaxFactor)
 
         with performancetiming.timeit("true-residual continuations"):
             continuationEta = min(eta, firstPassEta) if self._gapCompensatedTolerance else eta
@@ -1249,23 +1449,33 @@ class BlockAMGSolver(LinearSolver):
         self._lastEta = eta
 
         solveElapsedTime = time.time() - solveStartTime
-        self._log(
-            "info",
-            "blockamg: solve #{:<4d} {:7s} {:3d}it eta={:.1e} res={:.1e} cont={:} time={:7.3f}s".format(
-                self._solveCount,
-                "REFRESH" if mustRefresh else "reuse",
-                outerIters,
-                eta,
-                trueResidual,
-                continuations,
-                solveElapsedTime,
-            ),
+
+        # Populated unconditionally (cheap: one dataclass construction) -- reportsSolveSummary, not
+        # this, is what decides whether the nonlinear solver ever looks at it, so there is nothing to
+        # gate here beyond detailLines, which is genuinely wasted work at anything below "debug".
+        detailLines = ()
+        if self._verbosityIndex >= _VERBOSITY_LEVELS.index("debug"):
+            precondWord = "rebuilt({:})".format(rebuildReason) if mustRefresh else "reused"
+            detailLines = (
+                precondWord,
+                "η={:.1e} · {:.1f}s".format(eta, solveElapsedTime),
+            )
+        self._lastSolveSummary = LinearSolveSummary(
+            iters=outerIters,
+            residual=trueResidual,
+            residualMet=trueResidual <= eta,
+            retries=continuations,
+            detailLines=detailLines,
         )
         if outerIters > self._warnOuterIterationsThreshold:
+            # Rare and actionable, so this stays at "warning" (Journal level 0, the least indented and
+            # most visible spot in the log) and spells out the likely cause, unlike the routine
+            # per-solve line above it.
             self._log(
                 "warning",
-                "blockamg: WARNING solve #{:} needed {:} outer GMRES iterations (> threshold {:}) -- "
-                "possible preconditioner degradation".format(
+                "⚠ solve #{:} needed {:} outer GMRES iterations, above the warning threshold of {:}. "
+                "Likely a preconditioner-quality problem, not a physics one -- worth checking whether "
+                "the Jacobian changed sharply since the last hierarchy rebuild.".format(
                     self._solveCount, outerIters, self._warnOuterIterationsThreshold
                 ),
             )
@@ -1316,16 +1526,20 @@ class BlockAMGSolver(LinearSolver):
         if trueResidual > eta:
             self._log(
                 "warning",
-                "blockamg: WARNING solve #{:} true residual {:.2e} still exceeds requested eta={:.2e} "
-                "after {:} continuation(s) -- did not fully converge".format(
+                "⚠ solve #{:} did not fully converge: ‖r‖={:.1e} still exceeds η={:.1e} after {:} "
+                "retries. This usually means the block preconditioner no longer matches the current "
+                "system (e.g. after heavy contact/damage changes since it was last rebuilt), not that "
+                "the system itself is unsolvable. If it recurs, try a smaller hierarchyStalenessFactor "
+                "(rebuilds the preconditioner sooner) or a lower etaMax.".format(
                     self._solveCount, trueResidual, eta, continuations
                 ),
             )
         if info != 0:
             self._log(
                 "warning",
-                "blockamg: WARNING solve #{:} GMRES reported info={:} (did not converge within "
-                "maxiter on its own preconditioned-residual criterion)".format(self._solveCount, info),
+                "⚠ solve #{:} GMRES itself did not converge within outerMaxiter x outerRestart "
+                "iterations. Raise outerMaxiter/outerRestart, or check whether the system is simply "
+                "too hard for this preconditioner at its current settings.".format(self._solveCount),
             )
 
         return x

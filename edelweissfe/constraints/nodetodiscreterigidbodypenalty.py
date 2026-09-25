@@ -31,17 +31,31 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.constraints.base.penaltylaw import validatedContactType
+from edelweissfe.constraints.base.rigidbodycontactstiffness import (
+    RigidBodyContactStiffnessView,
+    fillRigidBodyContactIndices,
+    rigidBodyContactContributionSize,
+)
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.rigidbodies.discreterigidbody import DiscreteRigidBody
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.rotations import skewMatrix
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
 A penalty based unilateral contact constraint between a node set of ordinary FE nodes and the
 surface of a :class:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody`.
+
+.. deprecated:: 26.11
+    Use :mod:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty` instead. A node-based
+    penalty cannot transmit the tensile corner loads of serendipity (quad8/hexa20) faces: the corner
+    nodes lift off and the rigid support produces spurious tensile stresses and damage near them. The
+    node-based penalty is also per node rather than per unit area, so the contact stiffness changes
+    with the mesh, e.g. under AMR.
 
 This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if an AMR refinement
 (e.g. :mod:`~edelweissfe.modelmodifiers.adaptivity.hadaptivity`) adds nodes to the watched slave
@@ -96,86 +110,6 @@ class NodeToDiscreteRigidBodyPenaltySchema:
     )
 
 
-def _skew(v: np.ndarray) -> np.ndarray:
-    """The skew-symmetric cross-product matrix of a 3-vector, such that ``_skew(v) @ x == v x x``."""
-    return np.array(
-        [
-            [0.0, -v[2], v[1]],
-            [v[2], 0.0, -v[0]],
-            [-v[1], v[0], 0.0],
-        ]
-    )
-
-
-def _rightJacobianSO3(theta: np.ndarray) -> np.ndarray:
-    """The right Jacobian of the SO(3) exponential map at the rotation pseudo-vector ``theta``.
-
-    For a fixed body-frame vector :math:`\\bar{\\mathbf{v}}` and
-    :math:`R(\\boldsymbol{\\theta}) = \\exp(\\mathrm{skew}(\\boldsymbol{\\theta}))`, this satisfies
-
-    .. math::
-        \\frac{\\partial (R(\\boldsymbol{\\theta}) \\bar{\\mathbf{v}})}{\\partial \\boldsymbol{\\theta}}
-        = -\\mathrm{skew}(R(\\boldsymbol{\\theta}) \\bar{\\mathbf{v}}) \\, R(\\boldsymbol{\\theta}) \\,
-        J_r(\\boldsymbol{\\theta})
-
-    i.e. it maps a perturbation of the *stored, total* pseudo-vector DOF onto the corresponding
-    spatial rotation increment -- exact for any accumulated rotation, not just a small-angle
-    approximation (which would correspond to ``J_r(theta) = I``).
-    """
-    angle = np.linalg.norm(theta)
-    K = _skew(theta)
-    if angle < 1e-8:
-        return np.eye(3) - 0.5 * K + np.dot(K, K) / 6.0
-    return np.eye(3) - (1.0 - np.cos(angle)) / angle**2 * K + (angle - np.sin(angle)) / angle**3 * np.dot(K, K)
-
-
-class DiscreteRigidBodyContactStiffnessView:
-    """Provides structured 2-D sub-views for the sparse stiffness matrix slice of
-    :class:`Constraint`.
-
-    Only the reference point (RP) self-block, and the per-slave self-block and slave-RP coupling
-    blocks are populated -- there is no coupling between different slave nodes.
-
-    Attributes
-    ----------
-    K_rprp : numpy.ndarray
-        2-D view of shape ``(rprp_dof, rprp_dof)`` for the RP translation+rotation self-block,
-        shared (and accumulated in-place) across all slave nodes.
-    K_pp : list[numpy.ndarray]
-        List of ``nSlaves`` views of shape ``(nDim, nDim)``, the self-block of each slave node.
-    K_prp : list[numpy.ndarray]
-        List of ``nSlaves`` views of shape ``(nDim, rprp_dof)``, slave-to-RP coupling.
-    K_rpp : list[numpy.ndarray]
-        List of ``nSlaves`` views of shape ``(rprp_dof, nDim)``, RP-to-slave coupling (transpose of
-        ``K_prp``).
-    """
-
-    def __init__(self, flat_array: np.ndarray, nDim: int, nRot: int, nSlaves: int):
-        rprpDof = nDim + nRot
-        kRprpSize = rprpDof**2
-
-        self.K_rprp = flat_array[0:kRprpSize].reshape((rprpDof, rprpDof))
-
-        self.K_pp = []
-        self.K_prp = []
-        self.K_rpp = []
-
-        offset = kRprpSize
-        for _ in range(nSlaves):
-            pp = flat_array[offset : offset + nDim * nDim].reshape((nDim, nDim))
-            offset += nDim * nDim
-
-            prp = flat_array[offset : offset + nDim * rprpDof].reshape((nDim, rprpDof))
-            offset += nDim * rprpDof
-
-            rpp = flat_array[offset : offset + rprpDof * nDim].reshape((rprpDof, nDim))
-            offset += rprpDof * nDim
-
-            self.K_pp.append(pp)
-            self.K_prp.append(prp)
-            self.K_rpp.append(rpp)
-
-
 class Constraint(ConstraintBase, MeshDependent):
     """
     Penalty based unilateral contact between a slave node set and a discrete rigid body.
@@ -197,14 +131,14 @@ class Constraint(ConstraintBase, MeshDependent):
         J_r(\\boldsymbol{\\theta}_{RP})
 
     where :math:`J_r` is the right Jacobian of the SO(3) exponential map (see
-    :func:`_rightJacobianSO3`), and ``dPhysicalSpin_dTheta`` maps a perturbation of the *stored*
+    :func:`~edelweissfe.utils.rotations.rightJacobianSO3`), and ``dPhysicalSpin_dTheta`` maps a perturbation of the *stored*
     rotation pseudo-vector DOF onto the physical (spatial) infinitesimal rotation it actually
     produces (see :meth:`Constraint.applyConstraint`). The plain physical moment
     :math:`\\mathbf{r}_s \\times \\mathbf{n}_s` is only the exact gap gradient w.r.t. the RP
     rotation DOF when the RP has zero *total accumulated* rotation (where
     ``dPhysicalSpin_dTheta = I``); in general the ``dPhysicalSpin_dTheta``:math:`^T` factor is
     required because the rotation DOF stores the raw total pseudo-vector (fed directly through
-    :meth:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.rotationMatrixFromPseudoVector`
+    :func:`~edelweissfe.utils.rotations.rotationMatrixFromPseudoVector`
     every iteration, not a per-increment-reset relative rotation) -- incrementing that raw
     coordinate by :math:`\\delta\\boldsymbol{\\theta}` does not correspond to a physical spin of
     :math:`\\delta\\boldsymbol{\\theta}` unless the RP is currently unrotated, since the exponential
@@ -272,9 +206,7 @@ class Constraint(ConstraintBase, MeshDependent):
             )
 
         self.penalty = configuration.penalty
-        self.type = configuration.contactType.lower()
-        if self.type not in ["linear", "quadratic"]:
-            raise ValueError(f"Constraint type '{self.type}' is not supported. Use 'linear' or 'quadratic'.")
+        self.type = validatedContactType(configuration.contactType)
         self.searchDistance = configuration.searchDistance
 
         self.nDim = model.domainSize
@@ -297,6 +229,13 @@ class Constraint(ConstraintBase, MeshDependent):
         :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
         separate from ``__init__``."""
         configuration = buildSchemaFromOptions(cls.schema, definition)
+        if journal is not None:
+            journal.message(
+                f"contact '{name}': nodeToDiscreteRigidBodyPenalty is deprecated -- use "
+                "surfaceToDiscreteRigidBodyPenalty, which transmits the tensile corner loads of "
+                "serendipity (quad8/hexa20) faces instead of lifting their corners off.",
+                "NodeToRigidContact",
+            )
         return cls(
             name,
             model,
@@ -357,49 +296,26 @@ class Constraint(ConstraintBase, MeshDependent):
     def getVIJContributionSize(self) -> int:
         """No coupling between different slave nodes: one shared RP self-block, plus per-slave
         self-block and slave-RP coupling blocks."""
-        return self.rprpDof**2 + self.nSlaves * (self.nDim**2 + 2 * self.nDim * self.rprpDof)
+        return rigidBodyContactContributionSize(self.rprpDof, [self.nDim] * self.nSlaves)
 
-    def shapeVIJContribution(self, flat_view: np.ndarray) -> DiscreteRigidBodyContactStiffnessView:
-        return DiscreteRigidBodyContactStiffnessView(flat_view, nDim=self.nDim, nRot=self.nRot, nSlaves=self.nSlaves)
+    def shapeVIJContribution(self, flat_view: np.ndarray) -> RigidBodyContactStiffnessView:
+        return RigidBodyContactStiffnessView(flat_view, self.rprpDof, [self.nDim] * self.nSlaves)
 
     def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
-        rprpDof = self.rprpDof
-        k = offset
-
-        rpIdcs = [idcs[i] for i in self._indicesOfRPInLocal]
-        for i in range(rprpDof):
-            for j in range(rprpDof):
-                I_[k] = rpIdcs[i]
-                J_[k] = rpIdcs[j]
-                k += 1
-
-        for s in range(self.nSlaves):
-            pIdcs = [idcs[i] for i in self._indicesOfSlaveInLocal[s]]
-
-            for i in range(self.nDim):
-                for j in range(self.nDim):
-                    I_[k] = pIdcs[i]
-                    J_[k] = pIdcs[j]
-                    k += 1
-
-            for i in range(self.nDim):
-                for j in range(rprpDof):
-                    I_[k] = pIdcs[i]
-                    J_[k] = rpIdcs[j]
-                    k += 1
-
-            for i in range(rprpDof):
-                for j in range(self.nDim):
-                    I_[k] = rpIdcs[i]
-                    J_[k] = pIdcs[j]
-                    k += 1
+        fillRigidBodyContactIndices(
+            idcs[self._indicesOfRPInLocal],
+            [idcs[slaveIndices] for slaveIndices in self._indicesOfSlaveInLocal],
+            I_,
+            J_,
+            offset,
+        )
 
     def applyConstraint(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
         PExt: np.ndarray,
-        K: DiscreteRigidBodyContactStiffnessView,
+        K: RigidBodyContactStiffnessView,
         timeStep: TimeStep,
     ):
         self.totalNormalForce = 0.0
@@ -416,13 +332,11 @@ class Constraint(ConstraintBase, MeshDependent):
         # local U_np slice instead, so slave and RP kinematics are always consistent.
         u_rp = U_np[self._indicesOfRPDispInLocal]
         theta_rp = U_np[self._indicesOfRPRotInLocal]
-        R = DiscreteRigidBody.rotationMatrixFromPseudoVector(theta_rp)
-        kinematics = (u_rp, R, self.rpNode.coordinates)
-
         # dPhysicalSpin_dTheta maps a perturbation of the *stored* pseudo-vector DOF theta_rp onto the
         # physical (spatial) infinitesimal rotation it actually produces -- the identity only at
-        # theta_rp = 0; see _rightJacobianSO3 and the class docstring.
-        dPhysicalSpin_dTheta = R @ _rightJacobianSO3(theta_rp)
+        # theta_rp = 0; see DiscreteRigidBody.poseFromDofs and the class docstring.
+        rpCurrent, R, dPhysicalSpin_dTheta = self.rigidBody.poseFromDofs(u_rp, theta_rp)
+        kinematics = (u_rp, R, self.rpNode.coordinates)
 
         dists, normals = self.rigidBody.querySurface(
             coords, proximityDistance=self.searchDistance, kinematics=kinematics
@@ -431,8 +345,6 @@ class Constraint(ConstraintBase, MeshDependent):
         activeMask = dists < 0.0
         if not np.any(activeMask):
             return
-
-        rpCurrent = self.rpNode.coordinates + u_rp
 
         for s in np.where(activeMask)[0]:
             n_s = normals[s]
@@ -459,9 +371,9 @@ class Constraint(ConstraintBase, MeshDependent):
             PExt[pIdcs] -= f_n * w_p
             PExt[rpIdcs] -= f_n * w_rp
 
-            K.K_pp[s] += stiffness * np.outer(w_p, w_p)
-            K.K_prp[s] += stiffness * np.outer(w_p, w_rp)
-            K.K_rpp[s] += stiffness * np.outer(w_rp, w_p)
+            K.K_ss[s] += stiffness * np.outer(w_p, w_p)
+            K.K_srp[s] += stiffness * np.outer(w_p, w_rp)
+            K.K_rps[s] += stiffness * np.outer(w_rp, w_p)
             K.K_rprp += stiffness * np.outer(w_rp, w_rp)
 
             # Geometric stiffness from the rigid rotation of the (locally flat) facet normal, and from
@@ -476,12 +388,12 @@ class Constraint(ConstraintBase, MeshDependent):
             #   d(w_rp,disp)/d(theta_rp) =  dn_dTheta
             #   d(w_rp,rot)/d(u_s)       =  dPhysicalSpin_dTheta^T @ dMoment_dUs
             #   d(w_rp,rot)/d(u_rp)      =  dPhysicalSpin_dTheta^T @ dMoment_dUrp
-            dn_dTheta = -_skew(n_s) @ dPhysicalSpin_dTheta
-            dMoment_dUs = -_skew(n_s)
-            dMoment_dUrp = _skew(n_s)
+            dn_dTheta = -skewMatrix(n_s) @ dPhysicalSpin_dTheta
+            dMoment_dUs = -skewMatrix(n_s)
+            dMoment_dUrp = skewMatrix(n_s)
 
-            K.K_prp[s][:, self.nDim :] += f_n * (-dn_dTheta)
-            K.K_rpp[s][self.nDim :, :] += f_n * (dPhysicalSpin_dTheta.T @ dMoment_dUs)
+            K.K_srp[s][:, self.nDim :] += f_n * (-dn_dTheta)
+            K.K_rps[s][self.nDim :, :] += f_n * (dPhysicalSpin_dTheta.T @ dMoment_dUs)
             K.K_rprp[0 : self.nDim, self.nDim :] += f_n * dn_dTheta
             K.K_rprp[self.nDim :, 0 : self.nDim] += f_n * (dPhysicalSpin_dTheta.T @ dMoment_dUrp)
 

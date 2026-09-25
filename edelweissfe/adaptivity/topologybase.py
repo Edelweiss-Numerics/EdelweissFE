@@ -59,6 +59,15 @@ class TopologyBase(ABC):
         """Mapping from external FaceID to internal face index."""
 
     @abstractmethod
+    def reference_node_param(self) -> np.ndarray:
+        """Parametric coordinates of this element's own nodes, in the same reference cube and the
+        same local order that :meth:`subdivision_children_param` uses.
+
+        Refinement needs this to recognise, in exact arithmetic, that a child node has landed on a
+        node the parent already owns -- so it reuses that node instead of minting a second one at
+        the same place."""
+
+    @abstractmethod
     def subdivision_children_param(self, n: int) -> list:
         """Parametric coordinates (in the parent domain) of the nodes of each child element."""
 

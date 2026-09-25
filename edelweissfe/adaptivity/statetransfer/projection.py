@@ -77,4 +77,7 @@ class PolynomialProjection(StateTransferStrategy):
         parentBasis = _monomialBasis(parentRefCoords, degree)
         childBasis = _monomialBasis(childRefCoords, degree)
         coeffs, *_ = np.linalg.lstsq(parentBasis, parentValues[:, columns], rcond=None)
-        return childBasis @ coeffs
+        res = childBasis @ coeffs
+        if np.all(parentValues[:, columns] >= -1e-12):
+            res = np.maximum(res, 0.0)
+        return res

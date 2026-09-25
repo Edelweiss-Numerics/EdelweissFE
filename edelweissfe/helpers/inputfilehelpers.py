@@ -540,11 +540,13 @@ def createPlotterFromInputFile(inputfile: dict, journal: Journal) -> Plotter:
         The resulting plotter instance
     """
     plotConfigurations = [
-        convertLineToStringDictionary(c) for configEntry in inputfile["configurePlots"] for c in configEntry["data"]
+        convertLineToStringDictionary(c)
+        for configEntry in inputfile["configurePlots"]
+        for c in configEntry["datalines"]
     ]
 
     exportJobs = [
-        convertLineToStringDictionary(c) for configEntry in inputfile["exportPlots"] for c in configEntry["data"]
+        convertLineToStringDictionary(c) for configEntry in inputfile["exportPlots"] for c in configEntry["datalines"]
     ]
 
     plotter = Plotter(journal, plotConfigurations, exportJobs)

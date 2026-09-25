@@ -31,18 +31,29 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
-from edelweissfe.elements.contactsurfaceelement import facetNormalAndMeasure
+from edelweissfe.constraints.base.forcesonlyexplicitevaluation import (
+    ForcesOnlyExplicitEvaluation,
+)
+from edelweissfe.constraints.base.penaltylaw import (
+    normalPenaltyForce,
+    validatedContactType,
+)
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.facetcontactgeometry import (
+    closestFacetCandidates,
+    facetNormalAndMeasure,
     line2ClosestPoint,
     line2GapGradientHessian,
+    line2Projection,
     tria3ClosestPoint,
     tria3GapGradientHessian,
+    tria3Projection,
 )
+from edelweissfe.utils.meshtools import currentNodeCoordinates
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
@@ -212,36 +223,7 @@ class DeformableSurfaceContactStiffnessView:
             self.K_fp.append(fp)
 
 
-def _tria3Containment(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray, x3: np.ndarray) -> tuple[float, float, bool]:
-    """Barycentric-like in-plane coordinates (alpha, beta) of the projection of xs onto the
-    (possibly non-orthogonal) basis spanned by (x2-x1, x3-x1), and whether that projection falls
-    inside the triangle."""
-
-    e1 = x2 - x1
-    e2 = x3 - x1
-    r = xs - x1
-    n = np.cross(e1, e2)
-    n = n / np.linalg.norm(n)
-    rTangential = r - r.dot(n) * n
-
-    A = np.array([[e1.dot(e1), e1.dot(e2)], [e1.dot(e2), e2.dot(e2)]])
-    b = np.array([e1.dot(rTangential), e2.dot(rTangential)])
-    alpha, beta = np.linalg.solve(A, b)
-
-    inside = alpha >= 0.0 and beta >= 0.0 and (alpha + beta) <= 1.0
-    return alpha, beta, inside
-
-
-def _line2Containment(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> tuple[float, bool]:
-    """Parametric coordinate t of the projection of xs onto the edge (x1,x2), and whether that
-    projection falls inside the segment."""
-
-    e = x2 - x1
-    t = (xs - x1).dot(e) / e.dot(e)
-    return t, 0.0 <= t <= 1.0
-
-
-class Constraint(ConstraintBase, MeshDependent):
+class Constraint(ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
     """
     Penalty based unilateral contact between the tributary-area-weighted nodes of a deformable
     slave surface and a deformable master surface, both represented by flat (Tria3/Line2) contact
@@ -280,6 +262,19 @@ class Constraint(ConstraintBase, MeshDependent):
     evaluated in the reference configuration). ``penalty`` is thus an interface stiffness modulus
     per unit area, the assembled forces approximate a contact *pressure* distribution, and the
     contact response is insensitive to slave surface refinement.
+
+    Both the slave-side area shares and the master-side distribution of the transferred force are
+    set by the surface element generator, whose ``nodalWeights`` option selects between them. Under
+    ``nodalWeights=serendipityOptimal`` the corner nodes of quadratic faces carry a *zero*
+    tributary area -- deliberately: it is the resultant-exact, non-negative weighting closest to
+    the parent face's own consistent nodal loads, whose corner entries are negative and hence
+    unreachable for a unilateral spring. Such a node stays in the slave node list (so the ordering
+    of :meth:`getNormalPressures` and of the generated ``<prefix>_nodes`` set is unaffected) but
+    contributes no force and is reported at zero pressure. It therefore also carries no
+    penetration guard. Note that no measured benefit has been demonstrated for that option: a
+    quadratic face under near-uniform pressure opens its corner gaps regardless, which makes the
+    corner weight moot. See the :doc:`contact theory documentation
+    </documentation/contacttheory>`.
 
     With ``sliding=small`` (Abaqus-style small sliding), the closest-point projection of each
     slave onto the master surface -- assigned facet, *clamped* local coordinates (closed-domain
@@ -355,7 +350,8 @@ class Constraint(ConstraintBase, MeshDependent):
         # tributary area: the sum of its area shares over its incident slave facets (assigned by
         # the surface element generator; consistent with a uniform pressure on the source faces),
         # evaluated in the reference configuration (consistent with the small-deformation
-        # setting).
+        # setting). A share may be zero (nodalWeights=serendipityOptimal zeroes the corner nodes of
+        # quadratic faces); such nodes are kept, inert, to preserve the slave node ordering.
         tributaryAreaOfSlaveNode = {}
         for slaveFacet in self.slaveFacetElements:
             for node, share in zip(slaveFacet.nodes, slaveFacet.nodalAreaShares):
@@ -376,14 +372,13 @@ class Constraint(ConstraintBase, MeshDependent):
         self.penalty = configuration.penalty
         if self.penalty <= 0.0:
             raise ValueError("The penalty must be positive: a non-positive penalty silently disables contact.")
-        self.type = configuration.contactType.lower()
-        if self.type not in ["linear", "quadratic"]:
-            raise ValueError(f"Constraint type '{self.type}' is not supported. Use 'linear' or 'quadratic'.")
+        self.type = validatedContactType(configuration.contactType)
         self.searchDistance = configuration.searchDistance
 
         self.sliding = configuration.sliding.lower()
         if self.sliding not in ["finite", "small"]:
             raise ValueError(f"Constraint sliding '{self.sliding}' is not supported. Use 'finite' or 'small'.")
+        self._validateMasterWeightTransforms()
 
         self.mu = configuration.mu
         if self.mu < 0.0:
@@ -474,14 +469,6 @@ class Constraint(ConstraintBase, MeshDependent):
     def nDof(self) -> int:
         return self._nDof
 
-    def _currentCoordinates(self, nodes: list, model: FEModel, referenceCoords: np.ndarray) -> np.ndarray:
-        dispField = model.nodeFields.get("displacement")
-        if dispField is None or "U" not in dispField:
-            return referenceCoords.copy()
-        idcs = dispField._indicesOfNodesInArray
-        u = np.array([dispField["U"][idcs[n]] if n in idcs else np.zeros(self.nDim) for n in nodes])
-        return referenceCoords + u
-
     def updateConnectivity(self, model: FEModel) -> bool:
         """Re-assign each slave node to its single closest facet, based on the last converged
         configuration. Called once per increment by the solver, before the equation system is
@@ -491,9 +478,9 @@ class Constraint(ConstraintBase, MeshDependent):
 
         # refreshed by FEModel.refreshMeshDependents; nothing extra to do at this tick
 
-        slaveCoords = self._currentCoordinates(self.slaveNodes, model, self._referenceCoordsSlaves)
+        slaveCoords = currentNodeCoordinates(self.slaveNodes, model, self._referenceCoordsSlaves)
         facetCoords = [
-            self._currentCoordinates(el.nodes, model, self._referenceCoordsFacets[i])
+            currentNodeCoordinates(el.nodes, model, self._referenceCoordsFacets[i])
             for i, el in enumerate(self.facetElements)
         ]
 
@@ -506,18 +493,24 @@ class Constraint(ConstraintBase, MeshDependent):
             # frozen for the whole increment, making the gap linear in the displacement DOFs.
             closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
             nSlavesWithDiscardedHistory = 0
+            candidatesPerSlave = closestFacetCandidates(slaveCoords, facetCoords, self.searchDistance)
             for s in range(self.nSlaves):
                 bestDistance = np.inf
                 bestFacet = None
                 bestWeights = None
-                for i in range(len(self.facetElements)):
+                for i in candidatesPerSlave[s]:
                     weights, distance = closestPointFunction(slaveCoords[s], *facetCoords[i])
                     if distance < bestDistance:
                         bestDistance, bestFacet, bestWeights = distance, i, weights
 
                 if bestFacet is not None and (self.searchDistance is None or bestDistance <= self.searchDistance):
                     newAssignment[s] = bestFacet
-                    self._frozenWeights[s] = bestWeights
+                    # The search and its clamping run on the true barycentric weights; only what is
+                    # *stored* -- hence what distributes the force and enters the gap gradient -- is
+                    # transformed. See _validateMasterWeightTransforms for why this is admissible
+                    # here and refused for finite sliding.
+                    weightTransform = self.facetElements[bestFacet].weightTransform
+                    self._frozenWeights[s] = bestWeights if weightTransform is None else weightTransform @ bestWeights
                     normal, _ = facetNormalAndMeasure(facetCoords[bestFacet])
                     previousNormal = self._frozenNormals[s]
                     self._frozenNormals[s] = normal
@@ -620,6 +613,41 @@ class Constraint(ConstraintBase, MeshDependent):
             self._rebindMaster(model)
         return True
 
+    def _validateMasterWeightTransforms(self) -> None:
+        """Refuse a master surface whose facets carry a weight transform unless sliding is small.
+
+        A facet's weight transform redistributes the contact point's interpolation weights among
+        the facet's nodes (see the surface element generator's ``nodalWeights`` option). Under
+        ``sliding=small`` that is variationally harmless: the facet is flat, the weights are a
+        partition of unity, and the frozen normal is normal to the facet plane at the increment's
+        start, so ``g = nBar . (xs - sum_a w_a x_a)`` takes the same value for *any* partition of
+        unity over the -- coplanar -- facet nodes. The gap, its gradient ``w = kron(c, nBar)`` and
+        the symmetry of ``stiffness * outer(w, w)`` are all preserved; only the distribution of the
+        transferred force among the facet's nodes changes, which is the entire point. The
+        substitution perturbs the gap only as the facet tilts away from the frozen normal within
+        the increment, i.e. at exactly the order the small-sliding formulation already discards by
+        freezing the normal and dropping the Hessian.
+
+        Under ``sliding=finite`` none of that holds: the gap is measured to the exact closest point
+        with a live normal, so substituting the weights would make the force distribution differ
+        from the transpose of the gap gradient (a non-symmetric, Petrov--Galerkin operator) and
+        would leave the geometric term ``f_n * H`` inconsistent with it. Rather than half-support
+        that, refuse it.
+        """
+
+        if self.sliding == "small":
+            return
+
+        offending = [el.elNumber for el in self.facetElements if el.weightTransform is not None]
+        if offending:
+            raise ValueError(
+                f"Constraint '{self.name}': master surface '{self._masterSurfaceSetName}' was "
+                f"generated with nodalWeights='serendipityOptimal' (facet {offending[0]} and "
+                f"{len(offending) - 1} more carry a weight transform), which requires "
+                "sliding=small. Either set sliding=small on this constraint, or generate the "
+                "master facets with the default nodalWeights='facetConsistent'."
+            )
+
     def _rebindSlave(self, model: FEModel) -> None:
         """Rebuild the slave-side node list/tributary areas from the regenerated facet set,
         preserving frictional history and the AL multiplier of retained slave nodes by identity."""
@@ -654,6 +682,7 @@ class Constraint(ConstraintBase, MeshDependent):
 
         self.facetElements = list(model.elementSets[self._masterSurfaceSetName])
         self._referenceCoordsFacets = [np.array([n.coordinates for n in el.nodes]) for el in self.facetElements]
+        self._validateMasterWeightTransforms()
 
         self._assignedFacetIdx = [None] * self.nSlaves
         self._frozenWeights = [None] * self.nSlaves
@@ -720,9 +749,11 @@ class Constraint(ConstraintBase, MeshDependent):
         U_np: np.ndarray,
         dU: np.ndarray,
         PExt: np.ndarray,
-        K: DeformableSurfaceContactStiffnessView,
+        K: DeformableSurfaceContactStiffnessView | None,
         timeStep: TimeStep,
     ):
+        """Evaluate the contact forces, and the tangent unless ``K`` is None."""
+
         self.totalNormalForce = 0.0
 
         localOffset = 0
@@ -763,13 +794,13 @@ class Constraint(ConstraintBase, MeshDependent):
                 H = None
             else:
                 if nFacetNodes == 3:
-                    alpha, beta, inside = _tria3Containment(xs, *facetCoords)
+                    alpha, beta, inside = tria3Projection(xs, *facetCoords)
                     if not inside:
                         activeIdx += 1
                         continue
                     g, w, H = tria3GapGradientHessian(xs, *facetCoords)
                 else:
-                    t, inside = _line2Containment(xs, *facetCoords)
+                    t, inside = line2Projection(xs, *facetCoords)
                     if not inside:
                         activeIdx += 1
                         continue
@@ -792,33 +823,37 @@ class Constraint(ConstraintBase, MeshDependent):
                 # multiplier decays to zero within a few increments after separation.
                 f_n = lambdaForce
                 stiffness = 0.0
-            elif self.type == "linear":
-                f_n = lambdaForce + penaltyTimesArea * g
-                stiffness = penaltyTimesArea
             else:
-                # Repulsive force growing quadratically with penetration: f_n must carry the sign
-                # of g (negative in contact) so that PExt -= f_n * w pushes the slave outward,
-                # matching the linear branch; stiffness = df_n/dg is then positive for g < 0.
-                f_n = lambdaForce - 0.5 * penaltyTimesArea * g**2
-                stiffness = -penaltyTimesArea * g
+                # f_n carries the sign of g (negative in contact), so that PExt -= f_n * w pushes
+                # the slave outward; see edelweissfe.constraints.base.penaltylaw.
+                penaltyForce, stiffness = normalPenaltyForce(self.type, penaltyTimesArea, g)
+                f_n = lambdaForce + penaltyForce
 
             PLocal = -f_n * w
-            KLocal = stiffness * np.outer(w, w)
-            if H is not None:
-                KLocal += f_n * H
+
+            # K is None in explicit runs -- see ForcesOnlyExplicitEvaluation.
+            KLocal = None
+            if K is not None:
+                KLocal = stiffness * np.outer(w, w)
+                if H is not None:
+                    KLocal += f_n * H
 
             if self.mu > 0.0:
-                PFriction, KFriction = self._computeFriction(s, c, nBar, f_n, stiffness, w, dU, pIdcs, fIdcs)
+                PFriction, KFriction = self._computeFriction(
+                    s, c, nBar, f_n, stiffness, w, dU, pIdcs, fIdcs, computeTangent=(KLocal is not None)
+                )
                 PLocal += PFriction
-                KLocal += KFriction
+                if KLocal is not None:
+                    KLocal += KFriction
 
             globalIdcs = pIdcs + fIdcs
             PExt[globalIdcs] += PLocal
 
-            K.K_pp[activeIdx] += KLocal[: self.nDim, : self.nDim]
-            K.K_ff[activeIdx] += KLocal[self.nDim :, self.nDim :]
-            K.K_pf[activeIdx] += KLocal[: self.nDim, self.nDim :]
-            K.K_fp[activeIdx] += KLocal[self.nDim :, : self.nDim]
+            if KLocal is not None:
+                K.K_pp[activeIdx] += KLocal[: self.nDim, : self.nDim]
+                K.K_ff[activeIdx] += KLocal[self.nDim :, self.nDim :]
+                K.K_pf[activeIdx] += KLocal[: self.nDim, self.nDim :]
+                K.K_fp[activeIdx] += KLocal[self.nDim :, : self.nDim]
 
             self._normalForceCurrent[s] = f_n
             self.totalNormalForce += f_n
@@ -866,7 +901,8 @@ class Constraint(ConstraintBase, MeshDependent):
         dU: np.ndarray,
         pIdcs: list,
         fIdcs: list,
-    ) -> tuple[np.ndarray, np.ndarray]:
+        computeTangent: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
         """Coulomb friction in the frozen small-sliding frame: elastic (stick) predictor from the
         converged tangential force and the incremental tangential relative displacement, radial
         return onto the friction cone ``|f_T| <= mu * N`` on slip.
@@ -896,19 +932,22 @@ class Constraint(ConstraintBase, MeshDependent):
         if stickForceMagnitude <= slipLimit:
             tangentialForce = stickForce
             # d(stickForce)_d(dURelative) = -kTangent * projector; K = -G.T dfT_dU G
-            KFriction = np.kron(np.outer(c, c), kTangent * projectorOntoTangentPlane)
+            KFriction = np.kron(np.outer(c, c), kTangent * projectorOntoTangentPlane) if computeTangent else None
         else:
             slipDirection = stickForce / stickForceMagnitude
             tangentialForce = slipLimit * slipDirection
-            # dfT_dU = slipDirection * mu * dN_dU + slipLimit * dSlipDirection_dU, with
-            # dN_dU = -stiffness * w and dSlipDirection_dU built from the stick predictor;
-            # the first term makes KFriction nonsymmetric (normal-tangential coupling).
-            KFriction = self.mu * stiffness * np.outer(np.kron(c, slipDirection), w)
-            KFriction += np.kron(
-                np.outer(c, c),
-                (slipLimit * kTangent / stickForceMagnitude)
-                * ((np.eye(nDim) - np.outer(slipDirection, slipDirection)) @ projectorOntoTangentPlane),
-            )
+            if computeTangent:
+                # dfT_dU = slipDirection * mu * dN_dU + slipLimit * dSlipDirection_dU, with
+                # dN_dU = -stiffness * w and dSlipDirection_dU built from the stick predictor;
+                # the first term makes KFriction nonsymmetric (normal-tangential coupling).
+                KFriction = self.mu * stiffness * np.outer(np.kron(c, slipDirection), w)
+                KFriction += np.kron(
+                    np.outer(c, c),
+                    (slipLimit * kTangent / stickForceMagnitude)
+                    * ((np.eye(nDim) - np.outer(slipDirection, slipDirection)) @ projectorOntoTangentPlane),
+                )
+            else:
+                KFriction = None
 
         self._tangentialForceCurrent[s] = tangentialForce
         PFriction = np.kron(c, tangentialForce)
@@ -939,10 +978,8 @@ class Constraint(ConstraintBase, MeshDependent):
                 # zero with the linear measure (there is no penalty force to transfer).
                 if g >= 0.0:
                     penaltyForcePart = penaltyTimesArea * g
-                elif self.type == "linear":
-                    penaltyForcePart = penaltyTimesArea * g
                 else:
-                    penaltyForcePart = -0.5 * penaltyTimesArea * g**2
+                    penaltyForcePart, _ = normalPenaltyForce(self.type, penaltyTimesArea, g)
 
                 self._lambdaN[s] = min(0.0, self._lambdaN[s] + penaltyForcePart)
 

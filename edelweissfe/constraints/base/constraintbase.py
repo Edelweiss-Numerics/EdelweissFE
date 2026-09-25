@@ -39,6 +39,11 @@ from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
 class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
+    #: Scratch buffer for the tangent that :meth:`applyConstraintExplicit` computes and discards.
+    #: Declared here so every constraint has it without touching its constructor; replaced by an
+    #: instance-level array on first use, and re-allocated only when the DOF footprint changes.
+    _discardedTangentScratch = None
+
     @classmethod
     def fromConstraintDefinition(
         cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
@@ -232,6 +237,48 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         changed = setVersions.get(key, theSet._version) != theSet._version
         setVersions[key] = theSet._version
         return changed
+
+    def applyConstraintExplicit(
+        self,
+        U_np: np.ndarray,
+        dU: np.ndarray,
+        PExt: np.ndarray,
+        timeStep: TimeStep,
+    ):
+        """Evaluate this constraint without producing a tangent matrix.
+
+        Used by explicit solvers where no system tangent matrix is assembled. The default
+        implementation forwards to :meth:`applyConstraint` with a dummy tangent contribution
+        so existing constraints remain functional without modification.
+
+        Constraints where tangent computation is costly should override this method to evaluate
+        only the residual / force vector directly.
+
+        Parameters
+        ----------
+        U_np
+            The current solution, restricted to this constraint's degrees of freedom.
+        dU
+            The current solution increment, likewise restricted.
+        PExt
+            The local residual / force vector to augment.
+        timeStep
+            The current time step.
+        """
+
+        # nDof**2 for any constraint that does not override getVIJContributionSize, allocated on
+        # every increment for a tangent no explicit solver reads. Kept and re-zeroed instead: the
+        # zeroing preserves the previous semantics exactly, whatever applyConstraint assumes about
+        # the buffer it is handed.
+        size = self.getVIJContributionSize()
+        scratch = self._discardedTangentScratch
+        if scratch is None or scratch.size != size:
+            scratch = self._discardedTangentScratch = np.zeros(size)
+        else:
+            scratch[:] = 0.0
+
+        K = self.shapeVIJContribution(scratch)
+        self.applyConstraint(U_np, dU, PExt, K, timeStep)
 
     @abstractmethod
     def applyConstraint(

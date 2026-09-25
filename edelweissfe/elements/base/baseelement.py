@@ -260,12 +260,69 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         self,
         M: np.ndarray,
     ):
-        """Evaluate the internal forces for given time, field, and field increment.
+        """Evaluate the diagonal of the lumped inertia of the element, over every field it carries.
+
+        The coefficient of each field's SECOND time derivative: mass on the displacement block,
+        and a micro-inertia on a non-local block that has been given one. A parabolic
+        gradient-enhanced field reports none, which is what tells the solver it is first order in
+        time; see computeLumpedDamping() for what integrates it then.
 
         Parameters
         ----------
         M
-            The diagonal of the lumped mass matrix to be defined.
+            The diagonal of the lumped inertia to be defined.
+        """
+
+    def computeConsistentInertia(
+        self,
+        M: np.ndarray,
+    ):
+        """Evaluate the consistent (full) inertia matrix of the element, over every field it
+        carries.
+
+        The counterpart of :meth:`computeLumpedInertia` for an implicit dynamic solver, which
+        assembles a sparse global mass matrix rather than dividing by a diagonal: the coefficient
+        matrix of each field's SECOND time derivative, :math:`\\int_\\Omega \\rho N^T N \\, dV` on
+        the displacement block. Written into ``M`` in the same layout the element uses for its
+        stiffness in ``computeKernels``, so that a slice of the VIJ system matrix can be handed over
+        directly and the assembled mass shares the stiffness' sparsity pattern.
+
+        Not abstract: an element formulation without one is refused at assembly time by the solver
+        that needs it, rather than every element being forced to implement a matrix only the
+        implicit dynamic solver reads.
+
+        Parameters
+        ----------
+        M
+            The consistent inertia to be defined, in the element's stiffness layout.
+
+        Raises
+        ------
+        NotImplementedError
+            If the element does not provide a consistent inertia.
+        """
+
+        raise NotImplementedError(
+            "{:} does not provide a consistent inertia matrix (computeConsistentInertia).".format(type(self).__name__)
+        )
+
+    def computeLumpedDamping(
+        self,
+        C: np.ndarray,
+    ):
+        """Evaluate the diagonal of the lumped damping of the element, over every field it carries.
+
+        The coefficient of each field's FIRST time derivative: zero on the displacement block,
+        and the non-local viscosity on a non-local block -- always, whether or not that field also
+        carries a micro-inertia. A first-order field is integrated by this term alone; a
+        second-order one is damped by it. Carrying none is the ordinary case, so the default
+        leaves the buffer alone.
+
+        Parameters
+        ----------
+        C
+            The diagonal of the lumped damping, supplied zero-initialised and written in place.
+            Entries left untouched are read as "no damping here".
         """
 
     @property
@@ -285,6 +342,23 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
             The initial velocity of the element's DOFs (size ``nDof``).
         """
         return np.zeros(self.nDof)
+
+    @property
+    def hasKernels(self) -> bool:
+        """Whether this entity contributes to the internal force and carries a state of its own.
+
+        Not every entity in the element container is a finite element. A contact facet is kept
+        there for its nodes and its geometry alone: it has no material and no state, and its
+        kernels, its internal energy and its state acceptance are all no-ops. A solver that
+        touches every element on every increment may leave those out instead of calling into
+        them for nothing.
+
+        Returns
+        -------
+        bool
+            True for a finite element proper, False for an entity that carries geometry only.
+        """
+        return True
 
     @abstractmethod
     def computeCriticalTimeStepForExplicitDynamics(

@@ -542,7 +542,7 @@ class DisplacementElement(BaseElement):
         elif self.nSpatialDimensions == 2:
             return np.sqrt(4 * self.detJ[qp])
         elif self.nSpatialDimensions == 3:
-            return np.qbrt(8 * self.detJ[qp])
+            return np.cbrt(8 * self.detJ[qp])
 
     def acceptLastState(
         self,
@@ -564,9 +564,19 @@ class DisplacementElement(BaseElement):
 
     def setStateVars(self, values: np.ndarray):
         """Overwrite the converged quadrature-point state-variable buffer in place, so
-        the ``_stateVars`` per-quadrature-point views (stress/strain/materialstate) stay valid."""
+        the ``_stateVars`` per-quadrature-point views (stress/strain/materialstate) stay valid.
+
+        The working buffer is seeded from it as well. :meth:`acceptLastState` copies
+        ``_stateVarsTemp`` *over* ``_stateVarsRef``, and it can run before any element computation
+        has populated that working buffer: both explicit solvers process a zero increment first,
+        for which :meth:`computeYourself` is never called, and then accept it. On a resumed run
+        that copied a freshly allocated buffer of zeros over the state just restored, silently
+        discarding the whole quadrature-point history. A cold start never noticed, because there
+        ``_stateVarsRef`` is zero anyway.
+        """
 
         self._stateVarsRef[:] = np.asarray(values).reshape(self._stateVarsRef.shape)
+        self._stateVarsTemp = self._stateVarsRef.copy()
 
     def getResultArray(self, result: str, quadraturePoint: int, getPersistentView: bool = True) -> np.ndarray:
         """Get the array of a result, possibly as a persistent view which is continiously

@@ -47,9 +47,12 @@ the last converged increment written via ``*restart, readFrom=...``.
     :caption: Example:
 
     *output, type=restart, name=restart
-        writeInterval=10
-        baseName=restart
-        numberOfFilesToKeep=3
+        writeInterval=10, baseName=restart, numberOfFilesToKeep=3
+
+Put every option on ONE dataline. This manager does not aggregate datalines (its schema is not a
+:class:`~edelweissfe.utils.schema.DatalineAggregatingSchema`), so the input-file helper builds one
+manager per dataline -- three datalines silently produce three managers, each with its own ring
+buffer, of which two would take the default ``writeInterval`` of 1 and checkpoint on every output.
 """
 
 
@@ -180,6 +183,7 @@ class OutputManager(OutputManagerBase):
             f.attrs["stepNumber"] = self._currentStep.number
             self.model.writeRestart(f)
             self._currentStep.timeStepper.writeRestart(f)
+            self._currentStep.solver.writeRestart(f)
 
             # Sibling output managers' own sequence bookkeeping (e.g. Ensight's transient time/file
             # sets, whose file numbering a resumed run would otherwise restart from zero, orphaning

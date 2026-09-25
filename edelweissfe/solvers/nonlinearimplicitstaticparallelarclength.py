@@ -350,7 +350,8 @@ class NISTPArcLength(NISTParallel):
                     raise ReachedMaxIterations("Reached max. iterations in current increment, cutting back")
 
             K_ = self.assembleStiffnessCSR(K)
-            K_ = self.applyDirichletToStiffness(K_, dirichlets)  # zero rows, unit diagonal
+            # identity rows, and the columns eliminated into both right-hand sides R_0 and R_f
+            K_ = self.applyDirichletToStiffness(K_, dirichlets, R_)
 
             # solve 2 eq. systems at once:
             ddU_ = self.linearSolve(K_, R_)

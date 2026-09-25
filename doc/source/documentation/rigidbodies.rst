@@ -6,7 +6,7 @@ A rigid body couples the motion of many surface (visualization) nodes to a singl
 and are never written to a node field. Instead, their current configuration is a pure function of
 the RP's kinematics, so the only unknowns a rigid body contributes to the global system are the RP
 displacement and (in 3D) rotation DOFs. Rigid bodies are consumed by contact constraints such as
-:doc:`nodetodiscreterigidbodypenalty <constraints>` and are rendered by the output managers via
+:doc:`surfacetodiscreterigidbodypenalty <constraints>` and are rendered by the output managers via
 their surface nodes.
 
 .. contents::
@@ -49,6 +49,12 @@ broadphase convenience, not part of the solve: every nonlinear solver invokes it
 solver variants (serial, parallel, arc-length, explicit) keep the visualization geometry consistent.
 Contact constraints do not rely on it — they query the surface with the RP pose taken directly from
 the current Newton iterate (see below).
+That pose is provided by
+:meth:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.poseFromDofs`. The integrated
+contact constraint searches the body-frame triangles of
+:meth:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.referenceTriangles`, which
+requires a closed surface without zero-area triangles, so that every triangle has a defined outward
+normal.
 
 Mass properties
 ---------------

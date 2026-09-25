@@ -209,6 +209,16 @@ class FieldOutputMarkerSchema(MarkerOptionsBase):
         dtype=str,
         default=">=",
     )
+    halo: int = schemaField(
+        description=(
+            "Number of rings of node-adjacent elements to add around the thresholded set (a "
+            "refinement buffer), e.g. to keep a localization band's flanks conforming with an "
+            "interior that has not yet crossed the threshold. Grows only within refineable elements. "
+            "0 (default) disables."
+        ),
+        dtype=int,
+        default=0,
+    )
 
 
 class FieldOutputMarker(MarkerBase):
@@ -223,11 +233,21 @@ class FieldOutputMarker(MarkerBase):
     says *when* it is large enough to refine. Marking is driven by the exact numbers the fieldOutput
     reports, and an element is marked if ``np.any`` of the comparison over its result row holds, so a
     multi-QP / multi-component row is decided by its worst entry.
+
+    Parameters
+    ----------
+    halo
+        Number of rings of node-adjacent elements to add around the thresholded set (see
+        :func:`_growByNeighbors`), the same buffer mechanism as
+        :class:`RecoveryErrorMarker`'s own ``halo``. Applied after the threshold decision, so the
+        final marked count can exceed what the bare threshold would have produced. Grows only within
+        the refineable elements, so it never leaks onto elements outside ``refineElSet``. ``0``
+        (default) keeps the bare thresholded set.
     """
 
     schema = FieldOutputMarkerSchema
 
-    def __init__(self, fieldOutputName, threshold, operator=">=", initialOnly=False):
+    def __init__(self, fieldOutputName, threshold, operator=">=", halo=0, initialOnly=False):
         super().__init__(initialOnly)
         self.fieldOutputName = fieldOutputName
         self.threshold = float(threshold)
@@ -238,11 +258,18 @@ class FieldOutputMarker(MarkerBase):
             )
         self.operator = operator
         self._compare = _COMPARISON_OPERATORS[operator]
+        self.halo = int(halo)
 
     @classmethod
     def fromOptions(cls, options):
         opts = buildSchemaFromOptions(cls.schema, options)
-        return cls(opts.fieldOutput, opts.threshold, operator=opts.operator, initialOnly=opts.initialOnly)
+        return cls(
+            opts.fieldOutput,
+            opts.threshold,
+            operator=opts.operator,
+            halo=opts.halo,
+            initialOnly=opts.initialOnly,
+        )
 
     def mark(self, model, refineElements, mesh):
         elements, values = _perElementFieldOutputResult(model, self.fieldOutputName)
@@ -250,6 +277,8 @@ class FieldOutputMarker(MarkerBase):
         for element, row in zip(elements, values):
             if bool(np.any(self._compare(np.asarray(row), self.threshold))):
                 marked.add(element)
+        if self.halo > 0 and marked:
+            marked = _growByNeighbors(marked, refineElements, self.halo)
         return marked
 
 
@@ -360,7 +389,6 @@ class SurfaceMarker(MarkerBase):
 #     >>perElement, ..., result=stress, f(x)='eigVal(x.reshape(-1,6))[:,0].reshape(x.shape[0],x.shape[1])'
 #     >>marker, type=fieldOutput, fieldOutput=<that output>, operator='>=', threshold=<factor*f_t>
 # refines every element whose largest principal stress reaches the threshold at any quadrature point.
-# See examples/WinklerL_AMR.
 
 
 def _sprPolynomialBasis(localCoords, order):

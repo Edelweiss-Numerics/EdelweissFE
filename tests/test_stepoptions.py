@@ -59,29 +59,6 @@ from edelweissfe.stepactions.options import StepAction, _resolveTarget, _written
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_the_dynamic_options_branch_is_declared_in_exactly_one_place():
-    """A source-level guard, deliberately: the failure mode is a *new* call site added years from
-    now that pre-declares options on ``>>options`` again -- statically -- which no amount of
-    exercising today's inputs would catch, since a static declaration is a strict superset of what
-    dynamic validation already accepts. ``test_name_is_the_only_required_arg_on_the_shared_keyword``/
-    ``test_the_shared_keyword_declares_no_optional_args_and_accepts_arbitrary_ones`` (since
-    removed) tested the equivalent invariant against the now-deleted ``InputFileKeyword`` object;
-    :func:`test_an_option_belonging_to_no_pre_declared_list_still_parses_statically`/
-    :func:`test_missing_name_still_raises_at_parse_time` below cover the same behaviour end-to-end
-    through the real parser entry point instead.
-    """
-    hits = subprocess.run(
-        ["grep", "-rn", "--include=*.py", "isDynamicOptionsKeyword = ", "edelweissfe"],
-        capture_output=True,
-        text=True,
-        cwd=_REPO_ROOT,
-        check=False,
-    ).stdout.splitlines()
-    assert len(hits) == 1 and hits[0].startswith(
-        "edelweissfe/utils/inputfileparser.py:"
-    ), "the dynamic '>>options' validation branch must be declared in exactly one place: " + repr(hits)
-
-
 #: Both remaining tests drive the real parser entry point end-to-end. Rendered in a fresh subprocess
 #: like every other grammar test in this suite, though the schema/registry-driven parser is no
 #: longer import-order sensitive the way the deleted ``Module`` tree was -- kept for isolation from

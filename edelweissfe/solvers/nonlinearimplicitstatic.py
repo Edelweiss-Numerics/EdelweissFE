@@ -31,6 +31,7 @@
 
 import json
 from dataclasses import dataclass
+from time import perf_counter
 
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -145,6 +146,16 @@ class NISTSchema:
         dtype=bool,
         default=False,
     )
+    reportPerformanceFrequency: int | None = schemaField(
+        description=(
+            "Print the cumulative performance table (totals since the start of the step) every this "
+            "many increments, in addition to the one printed at the end of the step. 0 (default) "
+            "disables the periodic report."
+        ),
+        dtype=int,
+        default=0,
+        optionName="report-performance-frequency",
+    )
 
 
 class NIST(NonlinearSolverBase):
@@ -177,6 +188,7 @@ class NIST(NonlinearSolverBase):
         "linsolverConfigFile": "",
         "pruneCondensedMatrixZeros": True,
         "useAmgclMPCCondensation": False,
+        "report-performance-frequency": 0,
     }
 
     def __init__(self, jobInfo, journal, **kwargs):
@@ -255,6 +267,9 @@ class NIST(NonlinearSolverBase):
 
         self.applyStepActionsAtStepStart(model, step.actions)
 
+        reportPerformanceFrequency = self.options["report-performance-frequency"]
+        stepWallClockTic = perf_counter()
+
         try:
             for timeStep in step.getTimeStep():
                 # NOTE: materialize the list before any() -- a generator would short-circuit at
@@ -275,8 +290,35 @@ class NIST(NonlinearSolverBase):
                 ticked = any([constraint.updateConnectivity(model) for constraint in model.constraints.values()])
                 connectivityHasChanged = refreshed or ticked
 
+                # One separator, marking the start of this increment's block. Everything about this
+                # increment -- an equation-system rebuild if one is needed, the MPC/Dirichlet
+                # diagnostics that come with it, the Newton table, all of it -- is printed after this
+                # single header, nested one level deeper (see the messages below), instead of being
+                # sandwiched between a second separator of its own.
+                self.journal.printSeperationLine()
+                self.journal.message(
+                    "increment {:}: {:8f}, {:8f}; time {:10f} to {:10f}".format(
+                        timeStep.number,
+                        timeStep.stepProgressIncrement,
+                        timeStep.stepProgress,
+                        timeStep.totalTime - timeStep.timeIncrement,
+                        timeStep.totalTime,
+                    ),
+                    self.identification,
+                    level=1,
+                )
+
+                if (
+                    reportPerformanceFrequency
+                    and timeStep.number > 0
+                    and timeStep.number % reportPerformanceFrequency == 0
+                ):
+                    self.journal.printPrettyTable(
+                        performancetiming.makePrettyTable(wallTime=perf_counter() - stepWallClockTic),
+                        self.identification,
+                    )
+
                 if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
-                    self.journal.message("Creating monolithic equation system", self.identification, 0)
                     self.theDofManager = DofManager(
                         model.nodeFields.values(),
                         model.scalarVariables.values(),
@@ -289,9 +331,9 @@ class NIST(NonlinearSolverBase):
                     # it references) alive for the rest of the run.
                     self._dirichletIndicesCache = None
                     self.journal.message(
-                        "total size of eq. system: {:}".format(self.theDofManager.nDof),
+                        "eq. system rebuilt: {:} dof".format(self.theDofManager.nDof),
                         self.identification,
-                        0,
+                        2,
                     )
 
                     # The per-field block extents, not just the total. Fields are laid out
@@ -300,17 +342,15 @@ class NIST(NonlinearSolverBase):
                     # tells you at a glance how a coupled model's DOFs are actually distributed.
                     for fieldName, fieldIndices in self.theDofManager.idcsOfFieldsInDofVector.items():
                         self.journal.message(
-                            "  field '{:}': {:} dofs, [{:}, {:})".format(
+                            "field '{:}': {:} dof, [{:}, {:})".format(
                                 fieldName,
                                 fieldIndices.stop - fieldIndices.start,
                                 fieldIndices.start,
                                 fieldIndices.stop,
                             ),
                             self.identification,
-                            0,
+                            2,
                         )
-
-                    self.journal.printSeperationLine()
 
                     # The one interface point a solver needs beyond the plain (A, b) call: it
                     # derives whatever it wants (field layout, node coordinates, topology) from
@@ -324,9 +364,20 @@ class NIST(NonlinearSolverBase):
                             "scalar variables",
                         ]
 
-                    nVariables = len(presentVariableNames)
-                    self.iterationHeader = ("{:^25}" * nVariables).format(*presentVariableNames)
-                    self.iterationHeader2 = (" {:<10}  {:<10}  ").format("||R||∞", "||ddU||∞") * nVariables
+                    # Centers each label over its 12-wide value+marker cell (see checkConvergence's
+                    # iterationMessageTemplate).
+                    subHeaderCell = "{:^12}{:^12} "
+                    self.iterationHeader = ("{:^25}" * len(presentVariableNames)).format(*presentVariableNames)
+                    self.iterationHeader2 = subHeaderCell.format("||R||∞", "||ddU||∞") * len(presentVariableNames)
+
+                    if self.linSolver.reportsSolveSummary:
+                        # Extra column for the linear solver's diagnostics; checkConvergence appends
+                        # the matching row cell. Gap capped at 1 space -- wider wraps the row past the
+                        # Journal's 76-char limit for level-2 messages.
+                        gap = " "
+                        self.iterationHeader += gap + "{:^25}".format("linear solve")
+                        self.iterationHeader2 += gap + subHeaderCell.format("iters", "‖r‖")
+
                     self.iterationMessageTemplate = "{:11.2e}{:1}{:11.2e}{:1} "
 
                     K = self.theDofManager.constructVIJSystemMatrix()
@@ -342,7 +393,7 @@ class NIST(NonlinearSolverBase):
                     for variable in model.scalarVariables.values():
                         U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
 
-                    self.mpcTransformation = self.buildMPCTransformation(model)
+                    self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
                     self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
 
                     # The old dU/prevTimeStep no longer match the (possibly new) DOF layout, so
@@ -360,18 +411,6 @@ class NIST(NonlinearSolverBase):
                     "notes": "",
                 }
 
-                self.journal.printSeperationLine()
-                self.journal.message(
-                    "increment {:}: {:8f}, {:8f}; time {:10f} to {:10f}".format(
-                        timeStep.number,
-                        timeStep.stepProgressIncrement,
-                        timeStep.stepProgress,
-                        timeStep.totalTime - timeStep.timeIncrement,
-                        timeStep.totalTime,
-                    ),
-                    self.identification,
-                    level=1,
-                )
                 self.journal.message(self.iterationHeader, self.identification, level=2)
                 self.journal.message(self.iterationHeader2, self.identification, level=2)
 
@@ -537,7 +576,7 @@ class NIST(NonlinearSolverBase):
             self.applyStepActionsAtStepEnd(model, step.actions)
 
         finally:
-            prettyTable = performancetiming.makePrettyTable()
+            prettyTable = performancetiming.makePrettyTable(wallTime=perf_counter() - stepWallClockTic)
             self.journal.printPrettyTable(prettyTable, self.identification)
             performancetiming.reset()
 
@@ -617,6 +656,8 @@ class NIST(NonlinearSolverBase):
 
         self.applyStepActionsAtIncrementStart(model, timeStep, stepActions)
 
+        self.initializeIncrement(U_n, stepActions, model, timeStep)
+
         dU, isExtrapolatedIncrement = self.extrapolateLastIncrement(
             extrapolation, timeStep, dU, dirichlets, prevTimeStep, model
         )
@@ -637,6 +678,8 @@ class NIST(NonlinearSolverBase):
             R[:] = -P
             R += PExt
 
+            self.assembleAdditionalTerms(dU, R, F, K, timeStep)
+
             # Condense the residual BEFORE the Dirichlet handling below: T^T folds slave-row
             # residuals into their master rows, which may themselves carry a prescribed delta --
             # transforming afterwards would corrupt it.
@@ -644,12 +687,13 @@ class NIST(NonlinearSolverBase):
                 R[:] = self.mpcTransformation.transformResidual(R, dU)
 
             # --- Impose the Dirichlet (prescribed-value) boundary conditions ---
-            # Row-replacement method: for each constrained DOF i we overwrite its
-            # row of the linearized system  K ddU = R  so that the linear solve
-            # returns a *known* value for the increment ddU[i]:
-            #     K: zero row i, set K[i, i] = 1   (see applyDirichletToStiffness)
+            # For each constrained DOF i we overwrite its row of the linearized system
+            # K ddU = R  so that the linear solve returns a *known* value for the
+            # increment ddU[i]:
             #     R: set R[i] to the value ddU[i] must take
-            # Together these give  ddU[i] = R[i]  exactly.
+            #     K: zero row i, set K[i, i] = 1, and eliminate column i: R[r] -= K[r, i] R[i]
+            #        for every other row r, then K[r, i] = 0   (see applyDirichletToStiffness)
+            # Together these give  ddU[i] = R[i]  exactly, and keep a symmetric K symmetric.
             if iterationCounter == 0 and not isExtrapolatedIncrement and dirichlets:
                 # First iteration: the constrained DOFs must still move by their
                 # prescribed increment for this step, so we ask the solve for it.
@@ -683,13 +727,79 @@ class NIST(NonlinearSolverBase):
             if self.mpcTransformation is not None:
                 K_ = self.mpcTransformation.transformSystemMatrix(K_)
 
-            K_ = self.applyDirichletToStiffness(K_, dirichlets)  # zero rows, unit diagonal
+            # identity rows, and the columns eliminated into R
+            K_ = self.applyDirichletToStiffness(K_, dirichlets, R)
 
             ddU = self.linearSolve(K_, R)
             dU += ddU
             iterationCounter += 1
 
+        self.finalizeIncrement(model)
+
         return U_np, dU, P, iterationCounter, incrementResidualHistory
+
+    def initializeIncrement(self, U_n: DofVector, stepActions: dict, model: FEModel, timeStep: TimeStep):
+        """Prepare what :meth:`assembleAdditionalTerms` needs during this increment's Newton
+        iterations. Called by :meth:`solveIncrement` once per increment, after the step actions have
+        been applied at the increment's start and before the increment is extrapolated.
+
+        A static analysis needs nothing here. A dynamic one, for example, assembles its mass matrix
+        here and computes the terms the time integration adds to the stiffness for this time
+        increment -- see :class:`~edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic`.
+
+        Parameters
+        ----------
+        U_n
+            The solution at the start of the increment.
+        stepActions
+            The active step actions.
+        model
+            The model tree.
+        timeStep
+            The time step.
+        """
+
+    def assembleAdditionalTerms(
+        self, dU: DofVector, R: DofVector, F: DofVector, K: VIJSystemMatrix, timeStep: TimeStep
+    ):
+        """Assemble terms of the equation system beyond the internal and external forces. Called
+        by :meth:`solveIncrement` in every Newton iteration, next to :meth:`computeElements`,
+        :meth:`assembleLoads` and :meth:`assembleConstraints`: right after the residual
+        :math:`R = P_\\mathrm{ext} - P_\\mathrm{int}` is formed, and before the
+        multi-point-constraint condensation, the Dirichlet handling, the convergence test and the
+        linear solve -- which therefore all act on what is added here.
+
+        A static analysis has no such terms. A dynamic one, for example, subtracts the inertia force
+        :math:`M \\ddot{u}` from the residual and adds the corresponding mass term to the stiffness
+        -- see :class:`~edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic`.
+
+        Parameters
+        ----------
+        dU
+            The current trial solution increment.
+        R
+            The residual, to be augmented in place.
+        F
+            The reference flux scale of the convergence test, to be augmented in place.
+        K
+            The tangent in VIJ layout, to be augmented in place.
+        timeStep
+            The time step.
+        """
+
+    def finalizeIncrement(self, model: FEModel):
+        """Store what the converged increment leaves behind. Called by :meth:`solveIncrement` once
+        its Newton loop has converged -- only for an accepted increment, since a failing one leaves
+        by exception before it.
+
+        A static analysis stores nothing here. A dynamic one, for example, stores the velocity and
+        acceleration of the converged increment, as the starting point of the next one.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        """
 
     @performancetiming.timeit("distributed loads")
     def computeDistributedLoads(
@@ -785,8 +895,11 @@ class NIST(NonlinearSolverBase):
         return PExt, K
 
     @performancetiming.timeit("dirichlet K on CSR")
-    def applyDirichletToStiffness(self, K: csr_matrix, dirichlets: list[StepActionBase]) -> csr_matrix:
-        K = applyDirichletToStiffness(K, dirichlets)
+    def applyDirichletToStiffness(self, K: csr_matrix, dirichlets: list[StepActionBase], rhs=None) -> csr_matrix:
+        """Impose the Dirichlet BCs on the system matrix -- and, given the right-hand side(s) ``rhs``
+        (modified in place), eliminate the constrained DOFs from the columns as well; see
+        :func:`edelweissfe.solvers.base.dirichlet.applyDirichletToStiffness`."""
+        K = applyDirichletToStiffness(K, dirichlets, rhs)
 
         # Compacting the just-zeroed entries out of K is a storage/performance concern,
         # not part of applying the boundary condition -- and whether it's even safe

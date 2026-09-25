@@ -30,6 +30,7 @@ import numpy as np
 
 from edelweissfe.elements.base.baseelement import BaseElement
 from edelweissfe.points.node import Node
+from edelweissfe.utils.facetcontactgeometry import facetNormalAndMeasure
 
 """
 Thin, geometry-only "contact facet" elements: flat (linear) surface patches attached to the
@@ -41,43 +42,6 @@ reference those nodes.
 """
 
 
-def facetNormalAndMeasure(coords: np.ndarray) -> tuple[np.ndarray, float]:
-    """The (non-unit-normalized only in intermediate steps) outward normal and measure (area for a
-    Tria3 facet, length for a Line2 facet) of a flat facet, as a function of its current node
-    coordinates.
-
-    Parameters
-    ----------
-    coords
-        Array of shape ``(3, 3)`` (Tria3, 3D) or ``(2, 2)`` (Line2, 2D) with the facet's current
-        node coordinates in its fixed local order.
-
-    Returns
-    -------
-    tuple[numpy.ndarray, float]
-        The outward unit normal, and the facet's measure (area or length).
-    """
-
-    nNodes, domainSize = coords.shape
-
-    if nNodes == 3 and domainSize == 3:
-        e1 = coords[1] - coords[0]
-        e2 = coords[2] - coords[0]
-        c = np.cross(e1, e2)
-        cNorm = np.linalg.norm(c)
-        return c / cNorm, 0.5 * cNorm
-
-    elif nNodes == 2 and domainSize == 2:
-        e = coords[1] - coords[0]
-        eNorm = np.linalg.norm(e)
-        # Outward normal is e rotated by -90 degrees, consistent with a counter-clockwise
-        # (node 1 -> node 2) traversal of the solid's boundary.
-        n = np.array([e[1], -e[0]]) / eNorm
-        return n, eNorm
-
-    raise ValueError(f"facetNormalAndMeasure: unsupported facet shape {coords.shape}.")
-
-
 class ContactFacetElementBase(BaseElement):
     """Base class for flat contact facet elements. Subclasses only need to set the class
     attributes ``_nNodes``, ``_domainSize`` and ``_ensightType``.
@@ -86,6 +50,15 @@ class ContactFacetElementBase(BaseElement):
     _nNodes = None
     _domainSize = None
     _ensightType = None
+
+    #: Neutral default, so the property is well-defined before initializeElement() runs.
+    _weightTransform = None
+
+    #: The parent element face this facet tiles, stamped by the surface element generator; see
+    #: setParentFace. None until stamped, which is what the integrated contact formulation checks.
+    _parentFaceType = None
+    _parentFaceNodes = None
+    _vertexParametricCoords = None
 
     def __init__(self, elementType: str, elNumber: int):
         self._elType = elementType
@@ -120,6 +93,11 @@ class ContactFacetElementBase(BaseElement):
         return self._fields
 
     @property
+    def hasKernels(self) -> bool:
+        # A facet carries geometry, not a material; see BaseElement.hasKernels.
+        return False
+
+    @property
     def dofIndicesPermutation(self) -> np.ndarray:
         return self._dofIndicesPermutation
 
@@ -144,6 +122,7 @@ class ContactFacetElementBase(BaseElement):
 
     def initializeElement(self):
         self._referenceCoordinates = np.array([n.coordinates for n in self._nodes])
+        self._weightTransform = None
 
         # Default per-node tributary area shares: an equal split of the facet's own measure.
         # The surface element generator overrides these for facets triangulating a linear quad
@@ -162,6 +141,94 @@ class ContactFacetElementBase(BaseElement):
 
     def setNodalAreaShares(self, shares: np.ndarray):
         self._nodalAreaShares = np.asarray(shares, dtype=float)
+
+    def setParentFace(self, faceType: str, parentFaceNodes: list, vertexParametricCoords: np.ndarray):
+        """Record the element face this facet was cut from.
+
+        This is what an integrated (Gauss-point-to-segment) contact formulation needs and a
+        node-based one does not: it lets a quadrature point on this facet be located in the *parent
+        face's* parametric space and the pressure there be distributed with the parent face's own --
+        for a serendipity face, partly negative -- shape functions. See
+        :mod:`~edelweissfe.utils.parentfacegeometry`.
+
+        Parameters
+        ----------
+        faceType
+            The parent face's canonical type, a key of
+            :data:`~edelweissfe.utils.parentfacegeometry.PARENT_FACE_PARAMETRIC_COORDS`.
+        parentFaceNodes
+            The parent face's nodes, in that canonical ordering. A superset of this facet's own
+            nodes.
+        vertexParametricCoords
+            The parametric coordinates of *this facet's* nodes in the parent face, shape
+            ``(nNodes, domainSize - 1)`` and aligned with ``nodes``.
+        """
+
+        self._parentFaceType = faceType
+        self._parentFaceNodes = list(parentFaceNodes)
+        self._vertexParametricCoords = np.asarray(vertexParametricCoords, dtype=float)
+
+    @property
+    def parentFaceType(self) -> str | None:
+        """The parent face's canonical type, or None if this facet was never stamped."""
+
+        return self._parentFaceType
+
+    @property
+    def parentFaceNodes(self) -> list | None:
+        """The parent face's nodes in canonical order, or None if this facet was never stamped."""
+
+        return self._parentFaceNodes
+
+    @property
+    def vertexParametricCoords(self) -> np.ndarray | None:
+        """This facet's own nodes' parametric coordinates in the parent face, aligned with
+        ``nodes``; a quadrature point at barycentric ``b`` sits at ``b @ vertexParametricCoords``.
+        None if this facet was never stamped."""
+
+        return self._vertexParametricCoords
+
+    @property
+    def weightTransform(self) -> np.ndarray | None:
+        """The linear map applied to this facet's contact-point interpolation weights before they
+        distribute a slave force to this facet's nodes, or ``None`` for the plain (barycentric)
+        distribution.
+
+        ``None`` -- not an identity matrix -- is the neutral value, so the overwhelmingly common
+        case costs a comparison rather than a matrix product per slave and per increment. The map
+        is column-stochastic (its columns sum to one), so the transformed weights remain a
+        partition of unity and the transferred force is unchanged in magnitude; only its
+        distribution among the facet's nodes changes. See the surface element generator's
+        ``nodalWeights`` option for the one map currently in use."""
+
+        return self._weightTransform
+
+    def setWeightTransform(self, transform: np.ndarray | None):
+        """Install (or clear, with ``None``) this facet's weight transform.
+
+        Parameters
+        ----------
+        transform
+            A column-stochastic ``(nNodes, nNodes)`` map, or ``None`` for the plain barycentric
+            distribution.
+        """
+
+        if transform is None:
+            self._weightTransform = None
+            return
+
+        transform = np.asarray(transform, dtype=float)
+        if transform.shape != (self._nNodes, self._nNodes):
+            raise ValueError(
+                f"{self._elType}: a weight transform must be ({self._nNodes}, {self._nNodes}), "
+                f"got {transform.shape}."
+            )
+        if not np.allclose(transform.sum(axis=0), 1.0):
+            raise ValueError(
+                f"{self._elType}: a weight transform must be column-stochastic (columns summing "
+                "to one), otherwise it would not preserve the transferred force."
+            )
+        self._weightTransform = transform
 
     def setMaterial(self, materialName: str, materialProperties: np.ndarray):
         raise ValueError(

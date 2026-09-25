@@ -121,8 +121,14 @@ Module ``edelweissfe.constraints.nodetorigidsurfacepenalty``
     :language: edelweiss
     :caption: Example: ``testfiles/marmot/NodeToRigidSurfacePenaltyConstraintLinear/test.inp``
 
-``nodetodiscreterigidbodypenalty`` - Contact against a discrete rigid body
+``nodetodiscreterigidbodypenalty`` - Contact against a discrete rigid body (deprecated)
 -----------------------------------------------------------------------------------------------
+
+.. deprecated:: 26.11
+    Use ``surfacetodiscreterigidbodypenalty`` below. On quadratic (hexa20/quad8) slave faces a
+    node-based penalty cannot transmit the tensile corner loads of a uniform pressure, so the corner
+    nodes lift off (see :ref:`serendipity-liftoff`), and its per-node penalty makes the contact
+    stiffness depend on the mesh.
 
 Module ``edelweissfe.constraints.nodetodiscreterigidbodypenalty``
 
@@ -251,6 +257,77 @@ Module ``edelweissfe.constraints.nodetodeformablesurfacepenalty``
     :caption: Example (small sliding, Coulomb friction, hexa20 midside triangulation):
               ``testfiles/edelweiss-only/NodeToDeformableSurfaceContactFrictionHexa20/test.inp``
 
+``surfacetodeformablesurfacepenalty`` - Integrated surface-to-surface contact
+-----------------------------------------------------------------------------
+
+The integrated (Gauss-point-to-segment) counterpart of the constraint above: contact is evaluated
+at *quadrature points* over the slave surface's facets, and the resulting pressure is distributed
+with each side's **parent element face** shape functions rather than with the flat facets' own.
+
+Use this instead of ``nodetodeformablesurfacepenalty`` on quadratic (hexa20/quad8) contact
+surfaces. There, a node-based penalty scheme cannot transmit a correct pressure at all -- the
+consistent nodal load of a uniform pressure at a serendipity corner is *tensile*, which a
+unilateral spring cannot exert, so the discrete solution opens every corner gap instead. The
+mechanism, the measurements, and why no choice of nodal weights can repair it are documented in
+:ref:`serendipity-liftoff`; the integrated formulation and its own limits are in
+:ref:`integrated-contact`. On *matched* linear faces the parent-face basis coincides with the facet
+basis, so the two constraints agree to 13 digits and there is nothing to gain -- but on
+**non-matching** meshes the integrated formulation is a substantial improvement at any element
+order, linear included, as the figure in :ref:`integrated-contact` shows.
+
+Scope: normal penalty contact under ``sliding=small``, on both the implicit and the explicit solver
+path. Coulomb friction and augmented Lagrange are **not** implemented here (the node-based
+constraint has both), and ``sliding=finite`` is rejected rather than approximated.
+
+Module ``edelweissfe.constraints.surfacetodeformablesurfacepenalty``
+
+.. automodule:: edelweissfe.constraints.surfacetodeformablesurfacepenalty
+    :members: __doc__
+
+.. pprint:: constraint:surfacetodeformablesurfacepenalty
+    :caption: Options:
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/SurfaceToDeformableSurfaceContactPatchHexa20/test.inp
+    :language: edelweiss
+    :caption: Example (the hexa20 acceptance test, with the measured results in its header):
+              ``testfiles/edelweiss-only/SurfaceToDeformableSurfaceContactPatchHexa20/test.inp``
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/NEDSurfaceContact/test.inp
+    :language: edelweiss
+    :caption: Example (explicit dynamics):
+              ``testfiles/edelweiss-only/NEDSurfaceContact/test.inp``
+
+``surfacetodiscreterigidbodypenalty`` - Integrated contact against a discrete rigid body
+-----------------------------------------------------------------------------------------------
+
+The integrated counterpart of ``nodetodiscreterigidbodypenalty``, and the rigid-body counterpart
+of ``surfacetodeformablesurfacepenalty``: contact is evaluated at quadrature points over a slave
+facet surface and distributed with the slave parent-face shape functions, against the triangulated,
+closed surface of a :doc:`discrete rigid body <rigidbodies>`. The theory is documented in
+:ref:`integrated-contact-rigid-body`. Use it for any contact against rigid supports or indenters,
+in particular with quadratic slave faces.
+
+Scope: normal penalty contact under ``sliding=small``, 3D, implicit and explicit solver paths, live
+AMR of the slave side. The slave surface must consist of a single element type.
+
+Module ``edelweissfe.constraints.surfacetodiscreterigidbodypenalty``
+
+.. automodule:: edelweissfe.constraints.surfacetodiscreterigidbodypenalty
+    :members: __doc__
+
+.. pprint:: constraint:surfacetodiscreterigidbodypenalty
+    :caption: Options:
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/SurfaceToDiscreteRigidBodyContactPatchHexa20/test.inp
+    :language: edelweiss
+    :caption: Example (hexa20 block on a rigid support):
+              ``testfiles/edelweiss-only/SurfaceToDiscreteRigidBodyContactPatchHexa20/test.inp``
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/NEDSurfaceToDiscreteRigidBodyContact/test.inp
+    :language: edelweiss
+    :caption: Example (explicit dynamics):
+              ``testfiles/edelweiss-only/NEDSurfaceToDiscreteRigidBodyContact/test.inp``
+
 ``tie`` - Surface-to-surface tie (DOF elimination)
 --------------------------------------------------
 
@@ -305,6 +382,84 @@ Module ``edelweissfe.constraints.tie``
 .. literalinclude:: ../../../testfiles/edelweiss-only/TieNED/test.inp
     :language: edelweiss
     :caption: Example (explicit dynamics): ``testfiles/edelweiss-only/TieNED/test.inp``
+
+Contested slave degrees of freedom
+----------------------------------
+
+A degree of freedom can be condensed out only once, so when several multi-point constraints ask for
+the same slave DOF, exactly one may keep it. This arises routinely under :math:`h`-adaptivity: a
+hanging node created on a refined tie interface is a ``hangingnode`` slave, and the tie would like to
+constrain it too.
+
+The decision is made **centrally**, where every constraint's records are collected, and not inside
+any constraint: the first constraint in model order keeps the DOF, and later claims on it are
+dropped and reported. Resolving it centrally is what makes the result independent of the order in
+which constraints are *refreshed* -- a constraint that inspected its peers mid-refresh would read
+some of them in their pre-refinement state.
+
+**Model order therefore carries meaning.** For the hanging-node case the precedence is not
+arbitrary, and it is expressed by ``hAdaptivity`` registering its hanging-node constraint at the
+front of the model's multi-point constraints:
+
+* If the **hanging-node constraint** keeps the node, the refined and unrefined meshes stay exactly
+  conforming, and the node is still tied -- indirectly but almost exactly, because its coarse parent
+  nodes are themselves tie slaves and it is their interpolation.
+* If the **tie** keeps it instead, the node is bonded exactly, but nothing holds it on its coarse
+  parent edge any more, and the refined and unrefined meshes come apart there.
+
+One constraint has a stand-in for its condition and the other does not, which is what settles it.
+Measured on the coarse anchor pry-out, the two precedences differ by 5.3e-02 relative displacement
+and eventually by the refined mesh itself.
+
+.. note::
+
+   This used to be resolved inside the tie, which built its records against its peers'
+   ``claimedSlaveNodes()`` while the refresh sweep was still running -- so peers that had not yet
+   refreshed answered with their *pre-refinement* claims. A node that had been a hanging node before
+   the latest refinement, and was not one after it, was reported as still claimed, and the tie
+   dropped it, leaving it constrained by nothing at all.
+
+Multi-point constraints and Dirichlet boundary conditions
+----------------------------------------------------------
+
+A degree of freedom eliminated by a multi-point constraint -- a ``tie`` slave, a ``hangingnode``
+slave -- cannot also be prescribed by a Dirichlet boundary condition: the constraint already
+determines it from its masters, and a prescribed value would be a second, independent equation for
+the same unknown. Where a boundary condition's node set overlaps a constraint's slave nodes, the
+solvers resolve the overlap automatically: the conflicting constraint equation is dropped,
+for that component only, so that the boundary condition takes precedence. This is how Abaqus
+resolves the same overlap, and it needs no configuration.
+
+The alternative -- rejecting such a model and requiring the user to subtract the constraint's slave
+nodes from the boundary condition's node set -- is worth understanding, because input files written
+for solvers that demand it often carry such a subtraction. It is a snapshot: computed against one
+mesh, one tie tolerance and one refinement state, and silently no longer correct when any of them
+changes, with no diagnostic, because what remains is a plain list of node labels that no longer
+records why those labels were chosen. It also interferes with :math:`h`-adaptivity, which extends a
+node set to newly created nodes only where the *whole* parent face or edge already lies within the
+set: every face touching a subtracted node stops propagating the boundary condition to its children,
+so the boundary condition thins out with each refinement. Such subtractions should be removed rather
+than maintained.
+
+Dropped equations are reported in two classes, and the distinction matters:
+
+*redundant*
+    Every master carrying non-negligible weight is itself prescribed, and the weighted sum
+    reproduces the value prescribed on the slave. The constraint equation and the boundary condition
+    say the same thing, so dropping either changes nothing. Reported as a count, at journal level 1.
+    This is the expected case for a symmetry plane cutting through a tied interface: the slave and
+    its masters all lie on the plane and all carry the same prescribed value.
+
+*not implied*
+    They do not say the same thing -- some master is unprescribed, or the weighted sum disagrees.
+    The boundary condition still wins, but the model has genuinely changed, so this is reported as a
+    warning naming how much of the constraint weight rests on unprescribed masters. It is a signal
+    worth chasing rather than silencing: the usual cause is a boundary condition whose node set is
+    incomplete, so that masters which ought to carry the condition do not.
+
+Masters are resolved transitively before classification -- a master may itself be a slave of another
+constraint -- and weights are compared against a scaled tolerance, never against exact zero, since
+clamped closest-point projections routinely leave weights at round-off magnitude.
 
 ``hangingnode`` - Hanging-node coupling for adaptive mesh refinement
 --------------------------------------------------------------------

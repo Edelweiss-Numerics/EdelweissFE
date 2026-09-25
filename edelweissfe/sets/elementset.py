@@ -35,7 +35,13 @@ if checkSuccessfulExtension("edelweissfe.elements.marmotelement.element"):
 else:
     MarmotElementWrapper = None
 
-if checkSuccessfulExtension("edelweissfe.elements.marmotsingleqpelement.marmotmaterialhypoelasticwrapper"):
+if checkSuccessfulExtension("edelweissfe.materials.marmot.marmothypoelastic") or checkSuccessfulExtension(
+    "edelweissfe.materials.marmot.marmotgradientenhancedhypoelastic"
+):
+    # MarmotMaterialWrappingElement can drive either point-wise material family; each has its
+    # own separately compiled extension, and only one of the two building is enough for the
+    # element to be partially usable (see materialdrivers.py's createMaterial methods for the
+    # per-family lazy import that fails, cleanly, if its own extension isn't built).
     from edelweissfe.elements.marmotsingleqpelement.element import (
         MarmotMaterialWrappingElement,
     )

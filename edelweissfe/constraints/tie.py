@@ -247,7 +247,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
             )
 
         self.tiedRecords, self.untiedSlaveNodes = self._buildTiedRecords(
-            model, slaveFacetElements, masterFacetElements, adjust=configuration.adjust
+            slaveFacetElements, masterFacetElements, adjust=configuration.adjust
         )
         self._publishTiedUntiedNodeSets(model)
 
@@ -273,7 +273,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
             configuration=configuration,
         )
 
-    def _buildTiedRecords(self, model: FEModel, slaveFacetElements, masterFacetElements, adjust: bool):
+    def _buildTiedRecords(self, slaveFacetElements, masterFacetElements, adjust: bool):
         """Project every unique slave-surface node onto its closest master facet (reference
         configuration) and freeze the resulting clamped weights. With ``adjust``, additionally snap
         each tied node onto its projected point (only if also within ``adjustTolerance``), removing
@@ -291,19 +291,16 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         size and retroactively tighten the tolerance for nodes evaluated afterwards, for a gap that
         never changed.
 
-        Slave nodes already claimed as slaves by another multi-point constraint of the model are
-        skipped: a DOF may be condensed out only once, and a second record for it would be rejected
-        by the condensation operator. Dropping the tie record is exact, not a silencer -- the typical
-        case is a hanging node created by adaptive refinement of the slave surface, whose masters are
-        the coarse-trace nodes of that very surface and are themselves tied, so its interpolated
-        motion already is the tied motion and the tie equation is redundant."""
+        Deliberately a pure function of the two surfaces: it does NOT consult peer constraints. A
+        slave DOF claimed by more than one multi-point constraint is a *global* invariant of the
+        condensation operator, not a property of a tie, and is arbitrated centrally where all
+        constraints' records are collected -- see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.
+        _collectMultiPointConstraintRecords`. Resolving it here required reaching into peers'
+        mutable state mid-refresh, which made the outcome depend on refresh order and silently left
+        nodes unconstrained."""
 
         slaveNodes = list(dict.fromkeys(node for el in slaveFacetElements for node in el.nodes))
-
-        alreadyClaimedNodes = set()
-        for constraint in model.multiPointConstraints.values():
-            if constraint is not self:
-                alreadyClaimedNodes |= constraint.claimedSlaveNodes()
 
         closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
         masterFacetCoords = [np.array([n.coordinates for n in el.nodes]) for el in masterFacetElements]
@@ -333,13 +330,8 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
 
         tiedRecords = []
         untiedSlaveNodes = []
-        nSkippedClaimedNodes = 0
 
         for slaveNode in slaveNodes:
-            if slaveNode in alreadyClaimedNodes:
-                nSkippedClaimedNodes += 1
-                continue
-
             bestWeights = None
             bestFacetIdx = None
             bestDistance = np.inf
@@ -369,13 +361,6 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
                 slaveNode.coordinates[:] = bestWeights @ masterFacetCoords[bestFacetIdx]
 
             tiedRecords.append((slaveNode, masterFacetElements[bestFacetIdx].nodes, bestWeights))
-
-        if nSkippedClaimedNodes:
-            self._journal.message(
-                "{:} slave node(s) are already slaves of another multi-point constraint "
-                "(e.g. hanging nodes); their redundant tie records were dropped".format(nSkippedClaimedNodes),
-                self.name,
-            )
 
         return tiedRecords, untiedSlaveNodes
 
@@ -432,7 +417,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         slaveFacetElements = list(model.elementSets[self._slaveSurfaceSetName])
         masterFacetElements = list(model.elementSets[self._masterSurfaceSetName])
         self.tiedRecords, self.untiedSlaveNodes = self._buildTiedRecords(
-            model, slaveFacetElements, masterFacetElements, adjust=False
+            slaveFacetElements, masterFacetElements, adjust=False
         )
         self._publishTiedUntiedNodeSets(model)
         return True

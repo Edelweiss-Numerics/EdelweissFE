@@ -9,8 +9,7 @@ Choose a linsolver after the ``*solver`` keyword:
 .. code-block:: edelweiss
 
     *solver, solver=NIST, name=theSolver
-    linsolver=gmres
-    linsolverConfigFile=opt.json
+    linsolver=pardiso
 
 .. list-table:: Currently available linear solvers
     :width: 100%
@@ -41,9 +40,6 @@ Choose a linsolver after the ``*solver`` keyword:
     * - ``mumps``
       - ✓
       - ``edelweissfe.linsolve.mumps.mumps``
-    * - ``gmres``
-      - ✗
-      - ``edelweissfe.linsolve.gmres.gmres``
     * - ``amgcl``
       - ✗
       - ``edelweissfe.linsolve.amgcl.amgcl``
@@ -68,8 +64,6 @@ the run's bottleneck or exceeds available memory.
 
 **Iterative solvers** never factorize the full matrix, trading exactness for O(n) memory:
 
-* ``gmres`` -- GMRES preconditioned by a ``pyamg`` smoothed-aggregation hierarchy over the whole
-  matrix.
 * ``amgcl`` -- the AMGCL library's own solver/preconditioner combinations, configured through its
   JSON parameter tree.
 * ``blockamg`` -- a *field-split* variant for coupled multi-field models: one AMG hierarchy per
@@ -87,20 +81,7 @@ the run's bottleneck or exceeds available memory.
   with ``scripts/benchmark_linsolve.py`` so every variant sees byte-identical input. Use it to
   investigate solver performance, never in a production run.
 
-Several linsolvers accept an optional configuration file ``linsolverConfigFile`` (a ``.json`` file), among them ``gmres``, ``amgcl``, ``blockamg`` and ``matrixdump``; the direct solvers ignore it (``pardiso`` additionally reads a single ``reuseSymbolicFactorization`` flag).
-
-Choose the options for the linsolver (in this case ``gmres``) in an extra file:
-
-.. code-block:: json
-
-    	{
-	"precondopts":
-	{
-	"presmoother": ["block_gauss_seidel", {"iterations": 15}],
-	"postsmoother": ["block_gauss_seidel", {"iterations": 15}],
-	},
-	"linsolveopts": {"maxiter": 1, "restart": 1500}
-	}
+Several linsolvers accept an optional configuration file ``linsolverConfigFile`` (a ``.json`` file), among them ``amgcl``, ``blockamg`` and ``matrixdump``; the direct solvers ignore it (``pardiso`` additionally reads a single ``reuseSymbolicFactorization`` flag). See each solver's own section below for its configuration format.
 
 
 The ``blockamg`` solver

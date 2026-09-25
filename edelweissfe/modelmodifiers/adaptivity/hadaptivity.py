@@ -236,6 +236,31 @@ def _connectedComponents(elements: list) -> dict:
     return componentOfElement
 
 
+#: The node-field value entries carried across a refinement by isoparametric interpolation from the
+#: parent element. ``"U"`` is the solution and is always present. ``"V"`` (velocity) and ``"A"``
+#: (acceleration) are the kinematic state of a dynamic solver -- and they *have* to be carried,
+#: because unlike a quasi-static solver, which reconstructs everything it needs from ``"U"``, a time
+#: integrator holds state that nothing else can reproduce: a new node whose velocity defaulted to
+#: zero would silently lose it. Interpolating them with the same operator as ``"U"`` is also what
+#: keeps them consistent with it -- the shape functions are a partition of unity, so a uniform
+#: velocity field is reproduced exactly and the patch's momentum is conserved exactly in that case
+#: (the general case differs at second order in the velocity gradient across the parent, which is
+#: discretisation error, not a defect).
+#:
+#: ``"A"`` is carried for the same reason, with one qualification the implicit dynamic solver acts
+#: on: an interpolated acceleration is not in equilibrium with the operators that are reassembled on
+#: the refined mesh, so that solver re-solves it from equilibrium on the next increment (see
+#: :mod:`~edelweissfe.solvers.nonlinearimplicitdynamic`). The interpolation is still what that solve
+#: starts from, and what a solver that switches the re-solve off keeps.
+#:
+#: Carrying an entry a given run never writes is free: the entries exist (zero) on every
+#: mass-carrying node field from job setup on, and interpolating zeros yields zeros -- so a static
+#: or explicit run is unaffected by ``"A"`` being listed here.
+#:
+#: An entry absent from a given node field is skipped, so this list is safe to extend.
+WARM_STARTED_NODE_FIELD_ENTRIES = ("U", "V", "A")
+
+
 class ModelModifier(ModelModifierBase):
     #: Option schema for this model modifier, per OptionSchemaProvider. Documentation-only
     #: (see HAdaptivitySchema's own docstring) -- construction still goes through the
@@ -295,6 +320,18 @@ class ModelModifier(ModelModifierBase):
                 for element in elementSet:
                     self._sectionOf[element] = section
 
+        # element -> its named properties, for the same reason. A named property is assigned when
+        # the model is prepared, which a child created here never went through, so without this it
+        # starts life without its parent's bulk viscosity. It is simply absent when unset, so
+        # losing it does not fail -- it changes the answer in the refined region, which is exactly
+        # where the refinement was asked for. (The non-local micro-inertia used to be in this
+        # bracket too; as a material property it now rides along with the section above, and
+        # cannot be lost here at all.)
+        self._elementPropertiesOf = {}
+        for elementProperty in model.elementProperties:
+            for element in model.elementSets[elementProperty.elSetName]:
+                self._elementPropertiesOf.setdefault(element, []).append(elementProperty)
+
         # restrict the octree mirror to the refineable solid elements: a model that also contains
         # e.g. contact-facet elements (2/3 nodes) must not have those become octree roots. Prefer an
         # explicit restriction; otherwise fall back to the 20-node (HEX20-family) elements, which is
@@ -316,10 +353,11 @@ class ModelModifier(ModelModifierBase):
         # and materializes/deletes elements directly in the model.
         self._refineElementNumbers = {el.elNumber for el in refineElements}
 
-        # element type: infer from a refineable element if not given
-        anyEl = refineElements[0]
-        self._elementType = options.elementType or anyEl.elType
-        self._elementClass = getElementClass(self._elementType, self._provider)
+        # element type of the children: the one given, or else each child is of its own parent's
+        # type -- a multi-material mesh (e.g. GC3D20R concrete next to C3D20R steel) keeps each
+        # element family's field layout and material interface across refinement
+        self._elementType = options.elementType
+        self._elementClasses = {}
 
         # bodies of the refineable mesh: node labels are namespaced per body, so coincident nodes of
         # two bodies (a tied interface -- 'adjust' makes it flush by default --, a zero-gap contact
@@ -380,9 +418,21 @@ class ModelModifier(ModelModifierBase):
             if pairs:
                 self._mesh.define_surface(surfaceName, pairs)
 
-        # companion hanging-node MPC (records set in memory), registered as a multi-point constraint
+        # Companion hanging-node MPC (records set in memory), registered as a multi-point
+        # constraint -- at the FRONT, which is load-bearing and not cosmetic.
+        #
+        # A hanging node lying on a tie's slave surface is claimed by both constraints, and only one
+        # may condense it out. The hanging-node constraint has to win: nothing else in the model
+        # keeps that node on its coarse parent edge, so if the tie takes it the refined and
+        # unrefined meshes come apart there. The tie loses nothing in return -- the node's coarse
+        # parents are themselves tie slaves, so its tied motion is still delivered through them.
+        #
+        # NonlinearSolverBase._collectMultiPointConstraintRecords resolves contested DOFs by model
+        # order, so registering first is what expresses that precedence. Measured on
+        # examples/AnchorPryOutCoarse: the two precedences differ by 5.3e-02 relative displacement
+        # and eventually by the mesh itself. tests/test_mpc_slave_claim_arbitration.py pins it.
         self._hanging = HangingNodeConstraint(name + "_hanging", model)
-        model.multiPointConstraints[name + "_hanging"] = self._hanging
+        model.multiPointConstraints = {name + "_hanging": self._hanging, **model.multiPointConstraints}
         self._converged = False  # set True once an increment has converged
         self._lastRefinedTime = None  # model.time of the last refinement (guards re-refine on cutback)
         self._isFirstCall = True
@@ -396,6 +446,23 @@ class ModelModifier(ModelModifierBase):
         ``>>marker`` lines instead -- including ``initialOnly`` ones."""
 
         return self._refineElementNumbers
+
+    @property
+    def actsOnlyAtSimulationStart(self) -> bool:
+        """True exactly when every marker is an ``initialOnly`` one.
+
+        Not an approximation: :meth:`plan` evaluates *only* the ``initialOnly`` markers on its first
+        call and *only* the others on every later one, so a modifier whose markers are all
+        ``initialOnly`` provably plans nothing after that first call. See
+        :attr:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.actsOnlyAtSimulationStart`.
+
+        Returns
+        -------
+        bool
+            Whether this modifier is fully served by a single topology update at the start.
+        """
+
+        return all(marker.initialOnly for marker in self.markers)
 
     @timeit("AMR")
     def plan(self, model: FEModel, change, step, timeStep: float) -> "RefinementPlan | None":
@@ -531,6 +598,12 @@ class ModelModifier(ModelModifierBase):
         self._committedOccasionEids.append(list(markedEids))
         return change
 
+    def _makeElement(self, elementType, elNumber):
+        """Instantiate a child element of the given type, resolving (and caching) its class once per type."""
+        if elementType not in self._elementClasses:
+            self._elementClasses[elementType] = getElementClass(elementType, self._provider)
+        return self._elementClasses[elementType](elementType, elNumber)
+
     def _materialize(self, model: FEModel, records: dict):
         mesh = self._mesh
         reg = mesh.registry
@@ -551,11 +624,12 @@ class ModelModifier(ModelModifierBase):
         # mesh. If this ever costs measurably, the flag belongs in the recorded plan, not in an
         # ambient replay mode.
         for fieldName, nodeField in model.nodeFields.items():
-            if "U" in nodeField:
-                U = np.asarray(nodeField["U"])
-                oldValues[fieldName] = {
-                    node: U[nodeField._indicesOfNodesInArray[node]].copy() for node in nodeField.nodes
-                }
+            for entryName in WARM_STARTED_NODE_FIELD_ENTRIES:
+                if entryName in nodeField:
+                    entryValues = np.asarray(nodeField[entryName])
+                    oldValues[(fieldName, entryName)] = {
+                        node: entryValues[nodeField._indicesOfNodesInArray[node]].copy() for node in nodeField.nodes
+                    }
 
         # new nodes
         newNodes = {}
@@ -566,7 +640,7 @@ class ModelModifier(ModelModifierBase):
                 newNodes[label] = node
 
         active = set(mesh.active())
-        newValues = {fieldName: {} for fieldName in oldValues}  # interpolated values for new nodes
+        newValues = {key: {} for key in oldValues}  # interpolated values for new nodes, per (field, entry)
 
         # Every octree cell that must become a model element but is not one yet. Usually that is
         # exactly the children of the cells refined in this call. It is not always: 2:1 balancing
@@ -608,9 +682,11 @@ class ModelModifier(ModelModifierBase):
                     e = mesh.elements[eid]
                     parentEid = e["parent"]
                     parentEl = self._eidToEl[parentEid]
-                    child = self._elementClass(self._elementType, elNumber)
+                    child = self._makeElement(self._elementType or parentEl.elType, elNumber)
                     child.setNodes([model.nodes[label] for label in e["conn"]])
                     self._sectionOf[parentEl].assignSectionPropertiesToElement(child)
+                    for elementProperty in self._elementPropertiesOf.get(parentEl, ()):
+                        child.assignProperty(elementProperty.propertyName, elementProperty.values)
                     # Runs on replay too, identically: apply() is one code path, and element state
                     # is restored by number afterwards either way.
                     self._stateTransfer.transferState(parentEl, [child], self._topology)
@@ -624,18 +700,20 @@ class ModelModifier(ModelModifierBase):
                         node = model.nodes[label]
                         if label in newNodes and any(node not in newValues[f] for f in oldValues):
                             N = self._topology.shape_functions(*childParams[i])
-                            for fieldName, vals in oldValues.items():
+                            for key, vals in oldValues.items():
                                 # An intermediate parent's own nodes are new, so they are not in the
                                 # pre-mutation snapshot -- the level above interpolated them, and the
                                 # next level down interpolates from that in turn.
-                                interpolated = newValues[fieldName]
+                                interpolated = newValues[key]
                                 parentVals = [vals[pn] if pn in vals else interpolated.get(pn) for pn in parentEl.nodes]
                                 if all(v is not None for v in parentVals):
-                                    newValues[fieldName][node] = N @ np.array(parentVals)
+                                    newValues[key][node] = N @ np.array(parentVals)
 
                     model.createElement(child)
                     self._eidToEl[eid] = child
                     self._sectionOf[child] = self._sectionOf[parentEl]
+                    if parentEl in self._elementPropertiesOf:
+                        self._elementPropertiesOf[child] = self._elementPropertiesOf[parentEl]
 
                     change.addedElements.add(child.elNumber)
                     change.parentToChildren.setdefault(parentEl.elNumber, []).append(child.elNumber)
@@ -733,6 +811,12 @@ class ModelModifier(ModelModifierBase):
             # Both U (current) and P (previous converged) get the same warm-start value, so the first
             # Newton iteration after refinement sees a normal residual rather than a spurious dU = U - P
             # = U - 0 cold-restart spike on every retained/new node (P-field warm-start fix).
+            #
+            # On the replay path the model postpones this resize (and the relink below) to the end of
+            # the replay window -- see FEModel.topologyChanges(deferFieldBookkeeping) -- so the
+            # loops below then run over the pre-mutation field layout: dead work, like the snapshot
+            # above, and overwritten by readRestart. The decision lives in the model, not here:
+            # this method issues the same calls live and replayed.
             model._resizeNodeFieldsForNodes(self._journal)
             for fieldName, nodeField in model.nodeFields.items():
                 if "U" not in nodeField:
@@ -741,8 +825,8 @@ class ModelModifier(ModelModifierBase):
                     nodeField.createFieldValueEntry("P")
                 U = nodeField["U"]
                 P = nodeField["P"]
-                old = oldValues.get(fieldName, {})
-                new = newValues.get(fieldName, {})
+                old = oldValues.get((fieldName, "U"), {})
+                new = newValues.get((fieldName, "U"), {})
                 for node in nodeField.nodes:
                     idx = nodeField._indicesOfNodesInArray[node]
                     if node in old:
@@ -751,6 +835,23 @@ class ModelModifier(ModelModifierBase):
                     elif node in new:
                         U[idx] = new[node]
                         P[idx] = new[node]
+
+                # Every other warm-started entry gets the interpolation and nothing else -- in
+                # particular NOT the "P := U" trick above, which exists only so an implicit solver
+                # sees a sane first residual. An entry that is not present here (the usual case for
+                # "V", which only an explicit solver creates) is simply skipped.
+                for entryName in WARM_STARTED_NODE_FIELD_ENTRIES:
+                    if entryName == "U" or entryName not in nodeField:
+                        continue
+                    entryValues = nodeField[entryName]
+                    oldEntry = oldValues.get((fieldName, entryName), {})
+                    newEntry = newValues.get((fieldName, entryName), {})
+                    for node in nodeField.nodes:
+                        idx = nodeField._indicesOfNodesInArray[node]
+                        if node in oldEntry:
+                            entryValues[idx] = oldEntry[node]
+                        elif node in newEntry:
+                            entryValues[idx] = newEntry[node]
 
         # Separately timed: this relinks EVERY node's field variables, so its cost scales with the
         # whole mesh rather than with what this refinement actually changed.

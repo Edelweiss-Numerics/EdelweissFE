@@ -1,0 +1,29 @@
+** Hughes-Winget wrapper: Marmot's small-strain VonMises model driven inside an updated-Lagrangian
+** finite-strain element (C3D8UL) through HughesWingetWrapper, registered as VONMISES/HUGHES-WINGET.
+**
+** The block is sheared by 40% of its height while the top face is free to move vertically, so the
+** interior nodes carry a genuine finite-strain, plastically yielding state with a substantial
+** rotational part -- which is exactly what the co-rotational stress update and the rotational term
+** of the algorithmic tangent are there for.
+*material, name=VonMises/Hughes-Winget, id=myMaterial
+210000, 0.3, 550, 1000, 200, 1400
+
+*section, name=section1, material=myMaterial, type=solid
+all
+
+*job, name=hwjob, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=boxGen, name=gen
+nX=2
+nY=2
+nZ=2
+lX=10
+lY=10
+lZ=10
+elType=C3D8UL
+
+*step, solver=theSolver
+maxInc=1e-1, minInc=1e-4, maxNumInc=1000, maxIter=25, stepLength=1
+>>dirichlet, name=bottom, nSet=gen_bottom, field=displacement, 1=0, 2=0, 3=0
+>>dirichlet, name=top, nSet=gen_top, field=displacement, 1=4.0, 3=0.0

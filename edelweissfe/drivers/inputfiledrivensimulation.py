@@ -39,7 +39,7 @@ from time import time as getCurrentTime
 import h5py
 
 from edelweissfe.config.configurator import loadConfiguration, updateConfiguration
-from edelweissfe.config.phenomena import domainMapping
+from edelweissfe.config.phenomena import carriesLinearMomentum, domainMapping
 from edelweissfe.config.solvers import getSolverByName
 from edelweissfe.helpers.inputfilehelpers import (
     createFieldOutputFromInputFile,
@@ -134,10 +134,24 @@ def finiteElementSimulation(
     for updateConfig in inputfile["updateConfiguration"]:
         updateConfiguration(updateConfig, jobInfo, journal)
 
-    # Create the default entries 'U' (flux) and 'P' (effort)
+    # Create the default entries 'U' (flux) and 'P' (effort) on every node field, and the kinematic
+    # entries 'V' (velocity) and 'A' (acceleration) on the ones a dynamic solver integrates in time
+    # -- those whose inertia is a mass. They stay zero until such a solver publishes into them.
+    #
+    # Created here, before the field outputs take their sample at job initialisation, so that a
+    # ``result=V``/``result=A`` output is valid from the start (a per-node field output reads
+    # ``nodeField[result]`` directly and would otherwise raise) rather than only from the first
+    # increment a dynamic solver has finished. Restricted to the mass-carrying fields because a
+    # velocity of a non-local damage or a temperature field is not a kinematic quantity any solver
+    # here publishes. On those fields they are created for every run, a quasi-static one included,
+    # where they stay zero -- and, like every other entry, travel into its restart checkpoints and
+    # through a refinement's warm start.
     for nodeField in model.nodeFields.values():
         nodeField.createFieldValueEntry("U")
         nodeField.createFieldValueEntry("P")
+        if carriesLinearMomentum(nodeField.name):
+            nodeField.createFieldValueEntry("V")
+            nodeField.createFieldValueEntry("A")
 
     model._linkFieldVariableObjects(model.nodeSets["all"])
 
@@ -172,7 +186,7 @@ def finiteElementSimulation(
     stepManager = createStepManagerFromInputFile(inputfile)
     fieldOutputController = createFieldOutputFromInputFile(inputfile, model, journal)
     model.fieldOutputController = fieldOutputController
-    fieldOutputController.initializeJob()
+    fieldOutputController.initializeJob(resuming=resumeCheckpoint is not None)
 
     outputManagers = createOutputManagersFromInputFile(
         inputfile, jobName, model, fieldOutputController, journal, plotter
@@ -224,7 +238,20 @@ def finiteElementSimulation(
                     continue
                 if step.number == resumeStepNumber:
                     step.timeStepper.readRestart(resumeCheckpoint)
+                    # Accumulators the solver cannot recompute from the converged solution -- the
+                    # explicit solver's external work is one; see its own readRestart.
+                    step.solver.readRestart(resumeCheckpoint)
                     resumeStepNumber = None
+
+                    # Nothing reads the checkpoint after this point, and it must not stay open:
+                    # the restart output manager's ring buffer rotates onto the oldest slot by
+                    # mtime, which -- once the ring has filled -- can be this very file, and HDF5
+                    # cannot truncate a file it still holds open. The resumed run then dies
+                    # mid-step with "unable to truncate a file which is already open", which reads
+                    # like a solver failure and is not one. Closing it here rather than after the
+                    # step loop is what keeps the writer's slot free.
+                    resumeCheckpoint.close()
+                    resumeCheckpoint = None
 
             tic = getCurrentTime()
             try:
@@ -255,9 +282,12 @@ def finiteElementSimulation(
         print("")
         journal.errorMessage("Interrupted by user", identification)
 
-    except StepFailed:
+    except StepFailed as e:
         print("")
-        journal.errorMessage("Simulation failed", identification)
+        message = str(e)
+        journal.errorMessage(
+            "Simulation failed: {:}".format(message) if message else "Simulation failed", identification
+        )
 
     except Exception as e:
         print("")

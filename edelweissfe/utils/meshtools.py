@@ -31,10 +31,14 @@ Created on Sun Jul 23 21:03:23 2017
 @author: Matthias Neuner
 """
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from edelweissfe.sets.nodeset import NodeSet
+
+if TYPE_CHECKING:
+    from edelweissfe.models.femodel import FEModel
 
 
 def extractNodesFromElementSet(elementSet):
@@ -105,3 +109,33 @@ def extractNodeCoordinatesFromElset(elementSet, displacementResult=False, displa
         elCoordinatesList.append(np.asarray(nodeArray))
 
     return elCoordinatesList
+
+
+def currentNodeCoordinates(nodes: list, model: "FEModel", referenceCoordinates: np.ndarray) -> np.ndarray:
+    """The current coordinates of nodes: reference coordinates plus the current displacement.
+
+    Nodes without a displacement entry keep their reference coordinates.
+
+    Parameters
+    ----------
+    nodes
+        The nodes, in the row order of ``referenceCoordinates``.
+    model
+        The model tree, holding the displacement field.
+    referenceCoordinates
+        The reference coordinates of the nodes, of shape (nNodes, nDim).
+
+    Returns
+    -------
+    np.ndarray
+        The current coordinates, of shape (nNodes, nDim).
+    """
+    displacementField = model.nodeFields.get("displacement")
+    if displacementField is None or "U" not in displacementField:
+        return referenceCoordinates.copy()
+    indexOfNode = displacementField._indicesOfNodesInArray
+    nDim = referenceCoordinates.shape[1]
+    displacements = np.array(
+        [displacementField["U"][indexOfNode[n]] if n in indexOfNode else np.zeros(nDim) for n in nodes]
+    )
+    return referenceCoordinates + displacements

@@ -41,6 +41,47 @@ class TimeStepperBase(ABC):
     the incrementation of a simulation step.
     """
 
+    #: Overridden by every stepper; a default so base-class diagnostics can name their source.
+    identification = "TimeStepper"
+
+    def warnIfResumedAtIncrementCap(self, incrementsAlreadyDone: int, maxNumberIncrements: int, journal):
+        """Warn when a checkpoint is resumed at or past the step's increment cap.
+
+        ``maxNumInc`` counts increments from the start of the analysis, not from the resume, and it
+        is deliberately taken from the step's own configuration rather than the checkpoint -- see
+        the subclasses' ``writeRestart`` -- precisely so it can be raised between runs. The
+        consequence is a trap: resume without raising it far enough and the stepper's very first
+        check ends the step, the solver catches that as a step which finished normally, and the job
+        exits reporting success having advanced nothing. That is indistinguishable from a completed
+        run, and it has been mistaken for one: a diagnostic arm resumed at increment 130 000 with
+        maxNumInc still at 60 000 ran a single zero increment, reported success, and was very
+        nearly read as evidence that a crash did not reproduce.
+
+        This does not change the behaviour -- the cap is absolute by design -- only the silence.
+
+        Parameters
+        ----------
+        incrementsAlreadyDone
+            The increment count restored from the checkpoint.
+        maxNumberIncrements
+            The cap this step was configured with.
+        journal
+            The journal to report on.
+        """
+        if incrementsAlreadyDone < maxNumberIncrements:
+            return
+
+        journal.message(
+            "WARNING: this checkpoint is already at increment {:}, at or past this step's "
+            "maxNumInc of {:}, so the resumed step will end immediately WITHOUT advancing the "
+            "solution -- and the job will then report success. maxNumInc counts increments from "
+            "the start of the analysis, not from the resume: raise it above {:} to continue.".format(
+                incrementsAlreadyDone, maxNumberIncrements, incrementsAlreadyDone
+            ),
+            self.identification,
+            0,
+        )
+
     @abstractmethod
     def generateTimeStep(self, enforcedTimeIncrement: float = None) -> TimeStep:
         """Generate the (sequence of) time steps.
@@ -69,6 +110,31 @@ class TimeStepperBase(ABC):
             The factor for scaling based on the discarded increment.
         """
 
+    def enforceTimeIncrement(self, timeIncrement: float):
+        """Replace the enforced time increment for the remaining increments of the step.
+
+        Only meaningful for a stepper driven by an externally imposed increment rather than by its own
+        adaptation. The caller is an explicit solver whose stable time increment is a property of the
+        mesh, so it changes when the mesh does -- an h-adaptivity event mid-step can shrink the
+        smallest element and therefore the increment every subsequent increment must use. The
+        increment is passed to :meth:`generateTimeStep` once, before the first increment, so there
+        would otherwise be no way to revise it.
+
+        Parameters
+        ----------
+        timeIncrement
+            The new enforced time increment.
+
+        Raises
+        ------
+        NotImplementedError
+            If this stepper is not driven by an enforced time increment.
+        """
+
+        raise NotImplementedError(
+            f"{type(self).__name__} is not driven by an enforced time increment, so it cannot be given " "a new one."
+        )
+
     @abstractmethod
     def changeIncrementSize(self, scaleFactor: float):
         """Modify the size of the next increment by a given scale factor
@@ -84,6 +150,23 @@ class TimeStepperBase(ABC):
     def preventIncrementIncrease(self):
         """May be called before an increment is requested, to prevent
         an automatic increase of the increment size, e.g., in case of bad convergence."""
+
+    def restoredTimeIncrement(self) -> float | None:
+        """The size of the increment already completed when this time stepper was restored from a
+        restart checkpoint.
+
+        A multi-step integrator needs the previous increment size to continue, and on a resumed run
+        that increment belongs to the run that wrote the checkpoint. Deliberately NOT abstract: a
+        time stepper that does not persist its progress inherits the cold-start answer rather than
+        being forced to implement something it has no state for.
+
+        Returns
+        -------
+        float | None
+            The completed increment size, or None if this time stepper is starting cold.
+        """
+
+        return None
 
     @abstractmethod
     def writeRestart(self, restartFile):

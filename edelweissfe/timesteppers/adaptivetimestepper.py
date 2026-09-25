@@ -139,6 +139,13 @@ class AdaptiveTimeStepper(TimeStepperBase):
                 theIncrement = self.increment
 
             dT = self.stepLength * theIncrement
+            # Record the increment actually used, for the same reason as
+            # :class:`~edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper`: writeRestart
+            # checkpoints ``self.dT``. The zero increment optionally generated first is deliberately
+            # NOT recorded -- it is not a completed increment, and a multi-step integrator resuming
+            # from it needs the last real one.
+            if theIncrement > 0.0:
+                self.dT = dT
             self.finishedStepProgress += theIncrement
             endTimeOfIncrementInStep = self.stepLength * self.finishedStepProgress
             endTimeOfIncrementInTotal = self.currentTime + endTimeOfIncrementInStep
@@ -292,6 +299,7 @@ class AdaptiveTimeStepper(TimeStepperBase):
         self.currentTime = f["timestepper"].attrs["currentTime"]
         self.nPassedGoodIncrements = f["timestepper"].attrs["nPassedGoodIncrements"]
         self.incrementCounter = f["timestepper"].attrs["incrementCounter"]
+        self.warnIfResumedAtIncrementCap(self.incrementCounter, self.maxNumberIncrements, self.journal)
         self.finishedStepProgress = f["timestepper"].attrs["finishedStepProgress"]
         self.increment = f["timestepper"].attrs["increment"]
         self.allowedToIncreasedNext = f["timestepper"].attrs["allowedToIncreasedNext"]

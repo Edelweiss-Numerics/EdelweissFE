@@ -165,11 +165,27 @@ resulting :meth:`~edelweissfe.models.femodel.FEModel.topologyFingerprint`. A res
 through :meth:`~edelweissfe.models.femodel.FEModel.replayTopologyHistory`, which calls the same
 ``apply``. ``plan`` is never called during a replay.
 
-The fingerprint is not decoration. Recorded per decision, it turns *"the resumed run diverged
-somewhere"* into *"it diverged at record 12, modifier* ``amr`` *, round 2"* -- a divergence you can
-bisect rather than hunt. It is not free either: it walks the whole mesh, measured at 0.188 s on 64k
-elements / 69k nodes, and that is paid once per *applied* decision -- not per iteration, but often
-enough to notice on a large model.
+The fingerprint is not decoration. Recorded per decision, it is what lets a resumed run prove it
+rebuilt the mesh it was checkpointed with. It is not free either: it walks the whole mesh, measured
+at 0.188 s on 64k elements / 69k nodes, and a live run pays that once per *applied* decision -- not
+per iteration, but often enough to notice on a large model.
+
+A replay pays it **once**: the recorded digests are carried forward into the replayed history, and
+the mesh is checked against the last one after the whole history has been applied. Checking every
+record instead would make replaying a long history O(records x mesh) rather than O(mesh) -- a few
+hundred refinements on a mesh of tens of thousands of elements took minutes that way. When the
+final check does report a divergence, set
+:attr:`~edelweissfe.models.femodel.FEModel.verifyTopologyFingerprintsPerRecord` and replay again:
+that turns *"the resumed run diverged somewhere"* into *"it diverged at record 12, modifier*
+``amr`` *, round 2"* -- a divergence you can bisect rather than hunt.
+
+For the same reason the node-field bookkeeping a mutator requests after each change -- activating
+field variables on every node, resizing every NodeField, relinking every field variable -- is
+deferred to the end of the replay window and run once
+(:meth:`~edelweissfe.models.femodel.FEModel.topologyChanges` with ``deferFieldBookkeeping``). It
+is recomputed from the final mesh either way, so the result is the same; only the intermediate
+layouts, which no increment ever solves on, are skipped. The live per-increment window does not
+defer, and ``apply`` itself is unaware of the difference: it issues the same calls in both cases.
 
 **What is not checkpointed:** decision-side state, such as a marker's buffer of pending marks. The
 next ``plan`` re-derives it from the restored solution state -- exactly as the live run would have.
