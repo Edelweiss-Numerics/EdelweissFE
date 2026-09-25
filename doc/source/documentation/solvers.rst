@@ -145,6 +145,27 @@ action changes a material property mid-step. Anything that does not match falls 
 build. A topology change -- a mesh refinement -- is not a connectivity change and never takes this
 path at all: it builds the system from scratch.
 
+Work per increment outside the elements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An explicit increment is cheap, so the work around the element loop counts. Two things keep it
+small:
+
+- **One velocity update for all degrees of freedom.** First-order degrees of freedom are updated
+  by forward Euler, second-order ones by the central difference with mass-proportional damping.
+  Both are written as one formula with per-degree-of-freedom coefficients
+  (:class:`~edelweissfe.solvers.nonlinearexplicitdynamic._VelocityUpdateCoefficients`), formed
+  once per equation system and time increment. The update then runs on whole vectors instead of
+  indexed subsets, and gives the same result to the bit.
+- **Element states integrated in place.** An implicit solver keeps a trial copy of every element
+  state, because it may reject an increment and restart from the accepted state. An explicit
+  solver never rejects an increment, so it asks the elements to integrate directly into the
+  accepted state (:meth:`~edelweissfe.models.femodel.FEModel.integrateElementStatesInPlace`).
+  This saves two copies of the whole state per element and increment. Elements that cannot do
+  this (:attr:`~edelweissfe.elements.base.baseelement.BaseElement.integratesStateInPlace` stays
+  ``False``) keep their trial state and are accepted as usual. The request is repeated after every
+  topology update, which creates new elements, and withdrawn at the end of the step.
+
 ``NEDParallel`` - Nonlinear Explicit Dynamic (parallel)
 --------------------------------------------------------
 

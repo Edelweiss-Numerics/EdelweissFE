@@ -851,6 +851,7 @@ class NED(NonlinearSolverBase):
             self.applyStepActionsAtStepEnd(model, step.actions)
 
         finally:
+            model.integrateElementStatesInPlace(False)
             prettyTable = performancetiming.makePrettyTable(wallTime=perf_counter() - stepWallClockTic)
             self.journal.printPrettyTable(prettyTable, self.identification)
             performancetiming.reset()
@@ -1485,6 +1486,10 @@ class NED(NonlinearSolverBase):
         """
 
         modelHasChanged = model.updateTopology(step, model.time)
+
+        # Explicit dynamics never rejects an increment, so no element needs a trial state buffer.
+        # Asked again after every topology update, because refinement creates new elements.
+        model.integrateElementStatesInPlace(True)
 
         refreshed = model.refreshMeshDependents()
         ticked = any([constraint.updateConnectivity(model) for constraint in model.constraints.values()])
