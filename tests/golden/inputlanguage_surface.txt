@@ -571,6 +571,7 @@ Dynamic h-adaptivity model modifier for HEX20 hanging-node AMR.
     [stateTransfer] Quadrature-point state-transfer strategy for the whole state block: nearestQp|projection|limitedProjection|reconstructStressFromStrain|virgin. (<class 'str'>, default = nearestQp)
     [stateTransferOverrides] Per-state-variable overrides routing named variables to a different strategy, e.g. 'strain:projection, stress:virgin'. Comma-separated 'name:strategy' pairs. (<class 'str'>, default = None)
     [elasticModulusForStressReconstruction] Young's modulus used by stateTransfer=reconstructStressFromStrain to rebuild an elastic child's stress from its compatible strain. Required by, and only used by, that strategy. (<class 'float'>, default = None)
+    [damageStateVarForStressReconstruction] Name of the material's scalar damage state variable (e.g. omega). Used by stateTransfer=reconstructStressFromStrain: a point whose only non-virgin material state is this damage is still rebuilt, as (1 - damage) C : strain. (<class 'str'>, default = None)
     [poissonRatioForStressReconstruction] Poisson's ratio used by stateTransfer=reconstructStressFromStrain. Required by, and only used by, that strategy. (<class 'float'>, default = None)
   optional keywords
     < marker > AMR marker definition. At least one is required.
