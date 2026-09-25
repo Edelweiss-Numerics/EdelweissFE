@@ -361,20 +361,33 @@ class Constraint(ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
 
         candidatesPerPoint = closestFacetCandidates(bodyFramePoints, list(self._rigidTriangles), self.searchDistance)
 
+        # Beyond an edge or a vertex, several triangles share the same (clamped) closest point. Of
+        # those, the one whose plane the point lies farthest in front of measures the gap correctly;
+        # any other would support the point by its infinite plane where the body is not. STL
+        # coordinates are single precision, hence the tolerance for "the same distance".
+        allVertices = self._rigidTriangles.reshape(-1, 3)
+        equalDistanceTolerance = 1e-6 * np.linalg.norm(allVertices.max(axis=0) - allVertices.min(axis=0))
+
         self._frozenBodyNormals[:] = 0.0
         self._frozenPlaneOffsets[:] = 0.0
         for p, candidates in enumerate(candidatesPerPoint):
             closestTriangle = None
             closestDistance = np.inf
+            closestSignedDistanceToPlane = -np.inf
             for t in candidates:
                 triangle = self._rigidTriangles[t]
-                if self.searchDistance is not None:
-                    signedDistanceToPlane = self._rigidTriangleNormals[t] @ (bodyFramePoints[p] - triangle[0])
-                    if signedDistanceToPlane < -self.searchDistance:
-                        continue
+                signedDistanceToPlane = self._rigidTriangleNormals[t] @ (bodyFramePoints[p] - triangle[0])
+                if self.searchDistance is not None and signedDistanceToPlane < -self.searchDistance:
+                    continue
                 _, distance = tria3ClosestPoint(bodyFramePoints[p], *triangle)
-                if distance < closestDistance:
+                isCloser = distance < closestDistance - equalDistanceTolerance
+                isEquallyCloseButInFront = (
+                    distance <= closestDistance + equalDistanceTolerance
+                    and signedDistanceToPlane > closestSignedDistanceToPlane
+                )
+                if isCloser or isEquallyCloseButInFront:
                     closestTriangle, closestDistance = t, distance
+                    closestSignedDistanceToPlane = signedDistanceToPlane
 
             if closestTriangle is None:
                 continue

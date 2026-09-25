@@ -69,10 +69,18 @@ class TestSurfaceToDiscreteRigidBodyContact(unittest.TestCase):
     def tearDown(self):
         self.directory.cleanup()
 
-    def _blockOnRigidSupport(self, penetration: float, openSurface: bool = False, mixedElements: bool = False) -> tuple:
+    def _blockOnRigidSupport(
+        self,
+        penetration: float,
+        openSurface: bool = False,
+        mixedElements: bool = False,
+        supportXMax: float = _SIDE + 1.0,
+        reverseTriangleOrder: bool = False,
+    ) -> tuple:
         """A hexa20 cube on y in [0, 2], and a rigid box below it whose top face at y = ``penetration``
         overlaps the cube's Ymin face (the slave surface). The rigid body's reference point sits at
-        the center of the contact face.
+        the center of the contact face. A ``supportXMax`` below ``_SIDE`` lets the cube overhang the
+        support's edge, and ``reverseTriangleOrder`` stores the support's triangles in reverse order.
 
         Returns
         -------
@@ -81,9 +89,11 @@ class TestSurfaceToDiscreteRigidBodyContact(unittest.TestCase):
         """
 
         stlFile = os.path.join(self.directory.name, "support.stl")
-        box = pv.Box(bounds=(-1.0, _SIDE + 1.0, penetration - 1.0, penetration, -1.0, _SIDE + 1.0)).triangulate()
+        box = pv.Box(bounds=(-1.0, supportXMax, penetration - 1.0, penetration, -1.0, _SIDE + 1.0)).triangulate()
         if openSurface:
             box = box.extract_cells(range(10)).extract_surface(algorithm="dataset_surface")
+        if reverseTriangleOrder:
+            box = pv.PolyData(box.points, faces=box.faces.reshape(-1, 4)[::-1].ravel())
         box.save(stlFile)
 
         model = FEModel(3)
@@ -261,6 +271,28 @@ class TestSurfaceToDiscreteRigidBodyContact(unittest.TestCase):
         np.testing.assert_array_equal(constraint._frozenBodyNormals, [[0.0, 1.0, 0.0]] * constraint.nPoints)
         self._forces(constraint, np.zeros(constraint.nDof))
         np.testing.assert_allclose(constraint.getGaps(), 5.0, rtol=1e-6)
+
+    def test_overhanging_points_are_not_supported_by_an_extended_plane(self):
+        """A cube overhanging the support's edge at x = 1, slightly above it: beyond the edge, the top
+        and the side triangles share the closest point. The side triangle must win whatever the
+        triangle order, so pushing the cube down loads only the points above the support."""
+
+        for reverseTriangleOrder in (False, True):
+            model, slaveSurface, rigidBody = self._blockOnRigidSupport(
+                penetration=-0.01, supportXMax=1.0, reverseTriangleOrder=reverseTriangleOrder
+            )
+            constraint = self._constraint(model, slaveSurface, rigidBody)
+            pointX = constraint.slave.currentPointCoordinates(model)[:, 0]
+            overhanging = pointX > 1.0 + 1e-6
+            self.assertTrue(overhanging.any() and (~overhanging).any())
+            np.testing.assert_allclose(constraint._frozenBodyNormals[overhanging, 0], 1.0, atol=1e-6)
+
+            U = np.zeros(constraint.nDof)
+            U[1 : constraint.nSlaveDof : 3] = -0.03
+            self._forces(constraint, U)
+            gaps = constraint.getGaps()
+            self.assertTrue(np.all(gaps[overhanging] > 0.0), f"reverseTriangleOrder={reverseTriangleOrder}")
+            self.assertTrue(np.all(gaps[~overhanging] < 0.0), f"reverseTriangleOrder={reverseTriangleOrder}")
 
     def test_refresh_ignores_changes_that_do_not_touch_the_slave_surface(self):
         model, slaveSurface, rigidBody = self._blockOnRigidSupport(penetration=0.01)

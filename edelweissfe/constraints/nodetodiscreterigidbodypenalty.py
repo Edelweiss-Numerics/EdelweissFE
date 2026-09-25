@@ -50,7 +50,7 @@ from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 A penalty based unilateral contact constraint between a node set of ordinary FE nodes and the
 surface of a :class:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody`.
 
-.. deprecated::
+.. deprecated:: 26.11
     Use :mod:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty` instead. A node-based
     penalty cannot transmit the tensile corner loads of serendipity (quad8/hexa20) faces: the corner
     nodes lift off and the rigid support produces spurious tensile stresses and damage near them. The

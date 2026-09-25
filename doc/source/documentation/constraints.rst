@@ -124,7 +124,7 @@ Module ``edelweissfe.constraints.nodetorigidsurfacepenalty``
 ``nodetodiscreterigidbodypenalty`` - Contact against a discrete rigid body (deprecated)
 -----------------------------------------------------------------------------------------------
 
-.. deprecated::
+.. deprecated:: 26.11
     Use ``surfacetodiscreterigidbodypenalty`` below. On quadratic (hexa20/quad8) slave faces a
     node-based penalty cannot transmit the tensile corner loads of a uniform pressure, so the corner
     nodes lift off (see :ref:`serendipity-liftoff`), and its per-node penalty makes the contact
