@@ -765,9 +765,12 @@ class ModelModifier(ModelModifierBase):
                         child.assignProperty(elementProperty.propertyName, elementProperty.values)
                     # Runs on replay too, identically: apply() is one code path, and element state
                     # is restored by number afterwards either way.
-                    self._stateTransfer.transferState(
-                        parentEl, [child], self._topology, self._parentNodalDisplacement(parentEl, oldValues, newValues)
+                    parentNodalDisplacement = (
+                        self._parentNodalDisplacement(parentEl, oldValues, newValues)
+                        if self._stateTransfer.needsParentNodalDisplacement
+                        else None
                     )
+                    self._stateTransfer.transferState(parentEl, [child], self._topology, parentNodalDisplacement)
 
                     # warm start: interpolate each NEW node's field values from the parent via the
                     # HEX20 isoparametric map, so the increment restarts from a consistent state,

@@ -89,6 +89,8 @@ class ReconstructStressFromStrain(StateTransferStrategy):
     the material does not yet expose its elastic stiffness to the element wrapper.
     """
 
+    needsParentNodalDisplacement = True
+
     def __init__(self, fallback: StateTransferStrategy, youngsModulus: float, poissonRatio: float):
         self._fallback = fallback
         self._elasticStiffness = LinearElasticMaterial(np.array([youngsModulus, poissonRatio])).elasticityMatrix()

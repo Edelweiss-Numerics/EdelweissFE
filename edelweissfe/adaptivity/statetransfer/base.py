@@ -81,6 +81,10 @@ class StateTransferStrategy(ABC):
     to answer "given the parent's per-quadrature-point values, what are the children's?".
     """
 
+    #: Whether :meth:`transferState` reads ``parentNodalDisplacement``. Only then does the caller
+    #: assemble it; every other strategy is passed ``None``.
+    needsParentNodalDisplacement = False
+
     def transferState(self, parent, children, topology, parentNodalDisplacement):
         """Transfer the whole state block of ``parent`` into each element of ``children``.
 
