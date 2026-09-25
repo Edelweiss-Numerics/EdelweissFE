@@ -45,7 +45,7 @@ def getStateTransferStrategyClass(name: str) -> type:
     Parameters
     ----------
     name
-        Strategy name (case-insensitive): ``nearestQp``, ``projection``, ``limitedProjection`` or ``virgin``.
+        Strategy name (case-insensitive): ``nearestQp``, ``projection``, ``limitedProjection``, ``reconstructStressFromStrain`` or ``virgin``.
 
     Returns
     -------

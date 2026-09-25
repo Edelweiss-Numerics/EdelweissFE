@@ -62,7 +62,7 @@ The ``_BUILTINS`` table below covers these categories:
 
 ``outputmanager`` (10), ``section`` (3), ``constraint`` (12), ``stepaction`` (13),
 ``generator`` (10), ``analyticalfield`` (3), ``solver`` (7), ``step`` (2), ``modelmodifier`` (1),
-``statetransferstrategy`` (4), ``element`` (42), ``material`` (7), ``linsolver`` (10).
+``statetransferstrategy`` (5), ``element`` (42), ``material`` (7), ``linsolver`` (10).
 
 ``keyword`` is the single source the ``.inp`` parser consults for every top-level keyword
 (``element``, ``node``, ``nSet``, ``elSet``, ``surface``, ``job``, ``section``, ``elementProperty``,
@@ -278,6 +278,9 @@ _BUILTINS[("statetransferstrategy", "nearestqp")] = "edelweissfe.adaptivity.stat
 _BUILTINS[("statetransferstrategy", "projection")] = "edelweissfe.adaptivity.statetransfer:PolynomialProjection"
 _BUILTINS[("statetransferstrategy", "limitedprojection")] = (
     "edelweissfe.adaptivity.statetransfer:LimitedPolynomialProjection"
+)
+_BUILTINS[("statetransferstrategy", "reconstructstressfromstrain")] = (
+    "edelweissfe.adaptivity.statetransfer:ReconstructStressFromStrain"
 )
 _BUILTINS[("statetransferstrategy", "virgin")] = "edelweissfe.adaptivity.statetransfer:VirginState"
 

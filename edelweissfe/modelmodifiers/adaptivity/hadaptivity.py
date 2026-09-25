@@ -35,7 +35,13 @@ import numpy as np
 
 from edelweissfe.adaptivity.hex20topology import Hex20Topology
 from edelweissfe.adaptivity.refinement import AdaptiveMesh
+from edelweissfe.adaptivity.statetransfer.nearestquadraturepoint import (
+    NearestQuadraturePointCopy,
+)
 from edelweissfe.adaptivity.statetransfer.perstatevar import PerStateVarStateTransfer
+from edelweissfe.adaptivity.statetransfer.reconstructstress import (
+    ReconstructStressFromStrain,
+)
 from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.markerlibrary import getMarkerClass
 from edelweissfe.config.registry import RegistryLookupError
@@ -141,7 +147,7 @@ class HAdaptivitySchema:
     )
     elementProvider: str = schemaField(description="Element provider.", dtype=str, default="marmot")
     stateTransfer: str = schemaField(
-        description="Quadrature-point state-transfer strategy for the whole state block: nearestQp|projection|limitedProjection|virgin.",
+        description="Quadrature-point state-transfer strategy for the whole state block: nearestQp|projection|limitedProjection|reconstructStressFromStrain|virgin.",
         dtype=str,
         default="nearestQp",
     )
@@ -151,6 +157,22 @@ class HAdaptivitySchema:
             "'strain:projection, stress:virgin'. Comma-separated 'name:strategy' pairs."
         ),
         dtype=str,
+        default=None,
+    )
+    elasticModulusForStressReconstruction: float | None = schemaField(
+        description=(
+            "Young's modulus used by stateTransfer=reconstructStressFromStrain to rebuild an elastic "
+            "child's stress from its compatible strain. Required by, and only used by, that strategy."
+        ),
+        dtype=float,
+        default=None,
+    )
+    poissonRatioForStressReconstruction: float | None = schemaField(
+        description=(
+            "Poisson's ratio used by stateTransfer=reconstructStressFromStrain. Required by, and only "
+            "used by, that strategy."
+        ),
+        dtype=float,
         default=None,
     )
     marker: tuple = subKeywordField(
@@ -174,21 +196,44 @@ class RefinementPlan:
         object.__setattr__(self, "eids", tuple(int(eid) for eid in eids))
 
 
-def _buildStateTransferStrategy(defaultName, overridesSpec):
+def _buildStateTransferStrategy(defaultName, overridesSpec, youngsModulus=None, poissonRatio=None):
     """Construct the state-transfer strategy from the input arguments. With no per-variable
     overrides this is just the named default strategy; otherwise a
     :class:`~edelweissfe.adaptivity.statetransfer.perstatevar.PerStateVarStateTransfer` wrapping the
-    default with the named overrides."""
-    default = getStateTransferStrategyClass(defaultName)()
-    if not overridesSpec:
-        return default
+    default with the named overrides.
+
+    ``reconstructStressFromStrain`` is a whole-block strategy -- it writes stress and strain
+    together and decides per quadrature point -- so it is only valid as ``stateTransfer``. It wraps
+    a fallback built from ``nearestQp`` plus the given overrides, which handles every point it does
+    not rebuild (and all non-stress/strain columns). It needs the elastic constants explicitly.
+    """
     overrides = {}
-    for entry in overridesSpec.split(","):
+    for entry in (overridesSpec or "").split(","):
         entry = entry.strip()
         if not entry:
             continue
         name, strategyName = entry.rsplit(":", 1)
-        overrides[name.strip()] = getStateTransferStrategyClass(strategyName.strip())()
+        strategyClass = getStateTransferStrategyClass(strategyName.strip())
+        if strategyClass is ReconstructStressFromStrain:
+            raise ValueError(
+                "hAdaptivity: 'reconstructStressFromStrain' writes stress and strain together and "
+                "cannot be routed to a single state variable; use stateTransfer=reconstructStressFromStrain."
+            )
+        overrides[name.strip()] = strategyClass()
+
+    defaultClass = getStateTransferStrategyClass(defaultName)
+    if defaultClass is ReconstructStressFromStrain:
+        if youngsModulus is None or poissonRatio is None:
+            raise ValueError(
+                "hAdaptivity: stateTransfer=reconstructStressFromStrain needs the elastic constants "
+                "elasticModulusForStressReconstruction and poissonRatioForStressReconstruction."
+            )
+        fallback = NearestQuadraturePointCopy()
+        if overrides:
+            fallback = PerStateVarStateTransfer(fallback, overrides)
+        return ReconstructStressFromStrain(fallback, youngsModulus, poissonRatio)
+
+    default = defaultClass()
     return PerStateVarStateTransfer(default, overrides) if overrides else default
 
 
@@ -311,7 +356,12 @@ class ModelModifier(ModelModifierBase):
         # modifier did -- the one a restart replays -- is model.topologyHistory.
         self._committedOccasions = []
         self.splitFactor = options.splitFactor
-        self._stateTransfer = _buildStateTransferStrategy(options.stateTransfer, options.stateTransferOverrides)
+        self._stateTransfer = _buildStateTransferStrategy(
+            options.stateTransfer,
+            options.stateTransferOverrides,
+            options.elasticModulusForStressReconstruction,
+            options.poissonRatioForStressReconstruction,
+        )
         self._provider = options.elementProvider
         # element -> its section, so children inherit the parent's material (multi-material meshes)
         self._sectionOf = {}
@@ -592,6 +642,9 @@ class ModelModifier(ModelModifierBase):
         self._hanging.setRecords(records)
         # The change is not announced here: it is returned below, and the pipeline records it (see
         # FEModel.recordTopologyChange). Consumers re-index later, once, in refreshMeshDependents.
+        transferReport = self._stateTransfer.reportAndResetTransferStatistics()
+        if transferReport is not None:
+            self._journal.message("AMR state transfer: " + transferReport, "hadaptivity", 0)
         self._journal.message(
             "AMR ModelModifier: marked {:}, refined -> active elements {:} -> {:}, {:} hanging nodes".format(
                 len(markedEids), nBefore, len(self._mesh.active()), len(records)
@@ -602,6 +655,24 @@ class ModelModifier(ModelModifierBase):
         self._committedOccasions.append(markedElementNumbers)
         self._committedOccasionEids.append(list(markedEids))
         return change
+
+    @staticmethod
+    def _parentNodalDisplacement(parentEl, oldValues, newValues):
+        """The parent's nodal displacement, ``(nNodes, nDim)`` in ``parentEl.nodes`` order: the
+        converged values of the pre-mutation snapshot, or -- for an intermediate parent created by
+        2:1 balancing within this call, whose nodes are new -- the values interpolated for them one
+        level up. ``None`` if the model carries no displacement field."""
+        key = ("displacement", "U")
+        if key not in oldValues:
+            return None
+        snapshot, interpolated = oldValues[key], newValues[key]
+        values = [snapshot[n] if n in snapshot else interpolated.get(n) for n in parentEl.nodes]
+        if any(v is None for v in values):
+            raise TopologyError(
+                f"AMR: no displacement known for a node of parent element {parentEl.elNumber}; the state "
+                "transfer needs the parent's full nodal displacement."
+            )
+        return np.array(values)
 
     def _makeElement(self, elementType, elNumber):
         """Instantiate a child element of the given type, resolving (and caching) its class once per type."""
@@ -694,7 +765,9 @@ class ModelModifier(ModelModifierBase):
                         child.assignProperty(elementProperty.propertyName, elementProperty.values)
                     # Runs on replay too, identically: apply() is one code path, and element state
                     # is restored by number afterwards either way.
-                    self._stateTransfer.transferState(parentEl, [child], self._topology)
+                    self._stateTransfer.transferState(
+                        parentEl, [child], self._topology, self._parentNodalDisplacement(parentEl, oldValues, newValues)
+                    )
 
                     # warm start: interpolate each NEW node's field values from the parent via the
                     # HEX20 isoparametric map, so the increment restarts from a consistent state,

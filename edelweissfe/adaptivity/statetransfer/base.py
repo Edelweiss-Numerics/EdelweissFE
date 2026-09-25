@@ -81,7 +81,7 @@ class StateTransferStrategy(ABC):
     to answer "given the parent's per-quadrature-point values, what are the children's?".
     """
 
-    def transferState(self, parent, children, topology):
+    def transferState(self, parent, children, topology, parentNodalDisplacement):
         """Transfer the whole state block of ``parent`` into each element of ``children``.
 
         Parameters
@@ -92,6 +92,11 @@ class StateTransferStrategy(ABC):
             The freshly created & initialised child elements (same type / material as the parent).
         topology
             The TopologyBase instance for the element type.
+        parentNodalDisplacement
+            ``(nParentNodes, nDim)`` converged displacement of the parent's nodes, in the order of
+            ``parent.nodes``. The children's nodes are warm-started by interpolating exactly this
+            field, so it defines the children's compatible strain. Most strategies only map
+            quadrature-point state and ignore it.
         """
         parentBlock = perQuadraturePointBlockSize(parent)
         parentValues = parent.getStateVars().reshape(parent.getNumberOfQuadraturePoints(), parentBlock)
@@ -111,6 +116,11 @@ class StateTransferStrategy(ABC):
                 parentValues, parentRefCoords, childRefCoords, childInit, allColumns
             )
             child.setStateVars(result.reshape(-1))
+
+    def reportAndResetTransferStatistics(self) -> str | None:
+        """A one-line summary of what the transfers since the last call did, for the journal, and
+        reset the counters. ``None`` (the default) when a strategy has nothing to report."""
+        return None
 
     @abstractmethod
     def _transferColumns(self, parentValues, parentRefCoords, childRefCoords, childInitValues, columns) -> np.ndarray:
