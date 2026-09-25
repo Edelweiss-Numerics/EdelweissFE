@@ -502,7 +502,10 @@ class AdaptiveMesh:
 
         def hasFinerNeighbour(eid):
             level, componentId = lev[eid], comp[eid]
-            cells = _grid_cells_for_box(box[eid][0], box[eid][1], h_cell)
+            # A list, not the generator itself: both passes below must visit every cell. A shared
+            # generator would be consumed by the first pass up to the cell where it found a finer
+            # element, and the second pass would then never search that cell (or any before it).
+            cells = list(_grid_cells_for_box(box[eid][0], box[eid][1], h_cell))
 
             # Cheap necessary condition first: if no cell this element's box touches holds ANY
             # strictly finer element of the same body, it cannot have a finer neighbour. Away from
