@@ -37,6 +37,7 @@ from edelweissfe.constraints.base.contactpointsonslavesurface import (
 from edelweissfe.constraints.base.forcesonlyexplicitevaluation import (
     ForcesOnlyExplicitEvaluation,
 )
+from edelweissfe.constraints.base.frozencontactsearch import FrozenContactSearch
 from edelweissfe.constraints.base.penaltylaw import (
     normalPenaltyForce,
     validatedContactType,
@@ -94,7 +95,7 @@ class SurfaceToDiscreteRigidBodyPenaltySchema(SurfaceContactPenaltySchema):
     )
 
 
-class Constraint(ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
+class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
     """
     Penalty based unilateral contact between a slave surface and a discrete rigid body, integrated
     at quadrature points over the slave facets.
@@ -397,6 +398,21 @@ class Constraint(ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
             normal = self._rigidTriangleNormals[closestTriangle]
             self._frozenBodyNormals[p] = normal
             self._frozenPlaneOffsets[p] = normal @ (self._rigidTriangles[closestTriangle][0] - rpReferencePosition)
+
+    def _searchLayout(self) -> dict[str, np.ndarray]:
+        return {
+            "slaveFacets": np.array([facet.elNumber for facet in self.slave.facets], dtype=np.int64),
+            "nQuadraturePoints": np.array([self.nQuadraturePoints], dtype=np.int64),
+            "nRigidTriangles": np.array([len(self._rigidTriangles)], dtype=np.int64),
+        }
+
+    def _frozenProjection(self) -> dict[str, np.ndarray]:
+        return {"bodyNormals": self._frozenBodyNormals, "planeOffsets": self._frozenPlaneOffsets}
+
+    def _adoptFrozenProjection(self, projection: dict[str, np.ndarray]) -> bool:
+        self._frozenBodyNormals[:] = projection["bodyNormals"]
+        self._frozenPlaneOffsets[:] = projection["planeOffsets"]
+        return False  # the DOF footprint does not depend on the search
 
     def refresh(self, model: FEModel, change) -> bool:
         """Rebuild the slave side from the regenerated facet set if ``change`` touched its source

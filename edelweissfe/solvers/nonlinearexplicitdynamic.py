@@ -553,7 +553,9 @@ class NED(NonlinearSolverBase):
         # system exists is what makes it both cheap and safe: the mesh is final before the lumped
         # mass, the multi-point-constraint condensation and the critical time step are derived from
         # it, and no velocity state exists yet that would have to be carried onto new nodes.
-        self.updateTopologyAndConnectivity(model, step)
+        #
+        # A resumed step continues with the checkpointed contact search.
+        self.updateTopologyAndConnectivity(model, step, resumed=step.restoredTimeIncrement() is not None)
 
         theSystem = self.buildEquationSystem(model, step)
 
@@ -1358,7 +1360,7 @@ class NED(NonlinearSolverBase):
                 )
 
     @performancetiming.timeit("topology update")
-    def updateTopologyAndConnectivity(self, model: FEModel, step) -> bool:
+    def updateTopologyAndConnectivity(self, model: FEModel, step, resumed: bool = False) -> bool:
         """Run the topology update, then let every mesh-dependent consumer catch up on it.
 
         The same two-phase sequence the implicit solver runs at the start of each of its increments
@@ -1374,6 +1376,9 @@ class NED(NonlinearSolverBase):
             The model tree.
         step
             The step being solved.
+        resumed
+            First update of a resumed step: constraints call
+            :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.resumeConnectivity`.
 
         Returns
         -------
@@ -1386,7 +1391,12 @@ class NED(NonlinearSolverBase):
         modelHasChanged = model.updateTopology(step, model.time)
 
         refreshed = model.refreshMeshDependents()
-        ticked = any([constraint.updateConnectivity(model) for constraint in model.constraints.values()])
+        ticked = any(
+            [
+                c.resumeConnectivity(model) if resumed else c.updateConnectivity(model)
+                for c in model.constraints.values()
+            ]
+        )
 
         return modelHasChanged or refreshed or ticked
 

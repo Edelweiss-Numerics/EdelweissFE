@@ -38,6 +38,13 @@ from edelweissfe.constraints.base.contactpointsonslavesurface import (
 from edelweissfe.constraints.base.forcesonlyexplicitevaluation import (
     ForcesOnlyExplicitEvaluation,
 )
+from edelweissfe.constraints.base.frozencontactsearch import (
+    FrozenContactSearch,
+    packAssignment,
+    packPerPointArrays,
+    unpackAssignment,
+    unpackPerPointArrays,
+)
 from edelweissfe.constraints.base.penaltylaw import (
     normalPenaltyForce,
     validatedContactType,
@@ -156,7 +163,7 @@ class SurfaceToDeformableSurfacePenaltySchema(SurfaceContactPenaltySchema):
     )
 
 
-class Constraint(ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
+class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
     """
     Penalty based unilateral contact between two deformable surfaces, integrated at quadrature
     points over the slave surface's facets and distributed with both sides' parent element face
@@ -430,6 +437,11 @@ class Constraint(ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
                 self._frozenMasterShapeFunctions[p] = None
                 self._frozenNormals[p] = None
 
+        return self._declareFootprint(newAssignment)
+
+    def _declareFootprint(self, newAssignment: list) -> bool:
+        """Adopt a master facet assignment (searched or restored) and redeclare the DOF footprint."""
+
         hasChanged = newAssignment != self._assignedFacetIdx
         self._assignedFacetIdx = newAssignment
 
@@ -482,6 +494,31 @@ class Constraint(ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
             )
 
         return hasChanged
+
+    def _searchLayout(self) -> dict[str, np.ndarray]:
+        return {
+            "slaveFacets": np.array([facet.elNumber for facet in self.slave.facets], dtype=np.int64),
+            "nQuadraturePoints": np.array([self.nQuadraturePoints], dtype=np.int64),
+            "masterFacets": np.array([facet.elNumber for facet in self.facetElements], dtype=np.int64),
+        }
+
+    def _frozenProjection(self) -> dict[str, np.ndarray]:
+        shapeFunctionCounts, shapeFunctions = packPerPointArrays(self._frozenMasterShapeFunctions)
+        normalCounts, normals = packPerPointArrays(self._frozenNormals)
+        return {
+            "assignedFacetIdx": packAssignment(self._assignedFacetIdx),
+            "shapeFunctionCounts": shapeFunctionCounts,
+            "shapeFunctions": shapeFunctions,
+            "normalCounts": normalCounts,
+            "normals": normals,
+        }
+
+    def _adoptFrozenProjection(self, projection: dict[str, np.ndarray]) -> bool:
+        self._frozenMasterShapeFunctions = unpackPerPointArrays(
+            projection["shapeFunctionCounts"], projection["shapeFunctions"]
+        )
+        self._frozenNormals = unpackPerPointArrays(projection["normalCounts"], projection["normals"])
+        return self._declareFootprint(unpackAssignment(projection["assignedFacetIdx"]))
 
     def refresh(self, model: FEModel, change) -> bool:
         """Rebuild both sides from the regenerated facet sets if ``change`` touched either surface's
