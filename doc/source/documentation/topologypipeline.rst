@@ -179,6 +179,15 @@ final check does report a divergence, set
 that turns *"the resumed run diverged somewhere"* into *"it diverged at record 12, modifier*
 ``amr`` *, round 2"* -- a divergence you can bisect rather than hunt.
 
+The fingerprint hashes every element's number, type and connectivity and every node's label and
+**reference** coordinates -- the mesh, not the motion. The surface nodes of a discrete rigid body are
+the one exception to the rule that a node's ``coordinates`` are its reference coordinates: the body
+writes its current position into them. It therefore reports their reference coordinates to the
+fingerprint
+(:meth:`~edelweissfe.rigidbodies.rigidbody.RigidBody.referenceCoordinatesOfMovedNodes`). Otherwise a
+decision recorded after the body had moved could never be verified on resume, because the replay runs
+before the displacement is restored, with the body still at its reference position.
+
 For the same reason the node-field bookkeeping a mutator requests after each change -- activating
 field variables on every node, resizing every NodeField, relinking every field variable -- is
 deferred to the end of the replay window and run once
