@@ -173,7 +173,7 @@ class NIST(NonlinearSolverBase):
         "extrapolation": "linear",
         "extrapolateAfterModelChange": True,
         "equilibrateAfterModelChange": False,
-        "linsolver": "pardiso",
+        "linsolver": "",
         "linsolverConfigFile": "",
         "pruneCondensedMatrixZeros": True,
         "useAmgclMPCCondensation": False,
@@ -225,7 +225,7 @@ class NIST(NonlinearSolverBase):
         linsolverOptionDict = json.load(open(linsolverOptions, "r")) if linsolverOptions else ""
         self.linSolver = (
             getLinSolverByName(self.options["linsolver"], linsolverOptionDict)
-            if "linsolver" in self.options
+            if self.options["linsolver"]
             else getDefaultLinSolver()
         )
         # Every registered linsolver inherits LinearSolver's setJournal() (a safe no-op-ish default for

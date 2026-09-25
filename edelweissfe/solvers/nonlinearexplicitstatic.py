@@ -32,7 +32,7 @@ from dataclasses import dataclass
 import numpy as np
 
 import edelweissfe.utils.performancetiming as performancetiming
-from edelweissfe.config.linsolve import getLinSolverByName
+from edelweissfe.config.linsolve import getDefaultLinSolver, getLinSolverByName
 from edelweissfe.config.timing import createTimingDict
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
@@ -218,7 +218,7 @@ class NEST(NIST):
         "runge-kutta-stages": 2,
         "runge-kutta-error-tolerance": 1e-3,
         "runge-kutta-error-control": "on",
-        "linsolver": "pardiso",
+        "linsolver": "",
         "linsolverConfigFile": "",
         "pruneCondensedMatrixZeros": True,
     }
@@ -309,7 +309,11 @@ class NEST(NIST):
         if linsolverOptions:
             with open(linsolverOptions, "r") as f:
                 linsolverOptionDict = json.load(f)
-        self.linSolver = getLinSolverByName(self.options.get("linsolver", "default"), linsolverOptionDict)
+        self.linSolver = (
+            getLinSolverByName(self.options["linsolver"], linsolverOptionDict)
+            if self.options["linsolver"]
+            else getDefaultLinSolver()
+        )
         # NEST solves a linear system per Runge-Kutta stage (see solveIncrement, via the inherited
         # linearSolve()), so its linear solver needs the same initialization NIST gives its own:
         # setJournal for solvers that log, and setModel for solvers that derive anything beyond the
