@@ -85,14 +85,27 @@ class ReconstructStressFromStrain(StateTransferStrategy):
     which transfers the whole block first; those points are counted and reported. Energy and other
     element-level columns follow ``fallback``.
 
+    Damage: a scalar damage variable (``damageStateVarName``, e.g. GCDP's ``omega``, which a nonlocal
+    damage field drives even where there is no plastic flow) scales the stress but not the effective
+    stress, :math:`\\boldsymbol{\\sigma} = (1 - \\omega)\\, \\mathbb{C} : \\boldsymbol{\\varepsilon}`. When it is
+    named, that column is left out of the virgin test, keeps its transferred value and scales the
+    rebuilt stress; otherwise any non-zero damage makes the point fall back.
+
     The elastic stiffness is passed explicitly (``youngsModulus``, ``poissonRatio``) as a stopgap:
     the material does not yet expose its elastic stiffness to the element wrapper.
     """
 
     needsParentNodalDisplacement = True
 
-    def __init__(self, fallback: StateTransferStrategy, youngsModulus: float, poissonRatio: float):
+    def __init__(
+        self,
+        fallback: StateTransferStrategy,
+        youngsModulus: float,
+        poissonRatio: float,
+        damageStateVarName: str | None = None,
+    ):
         self._fallback = fallback
+        self._damageStateVarName = damageStateVarName
         self._elasticStiffness = LinearElasticMaterial(np.array([youngsModulus, poissonRatio])).elasticityMatrix()
         self._nRebuilt = 0
         self._nFallback = 0
@@ -109,18 +122,28 @@ class ReconstructStressFromStrain(StateTransferStrategy):
         stressOffset, stressSize = parent.getStateVarSlice("stress")
         strainOffset, strainSize = parent.getStateVarSlice("strain")
         materialStateOffset, _ = parent.getStateVarSlice("begin of material state")
+        blockSize = perQuadraturePointBlockSize(parent)
+        virginTested = np.zeros(blockSize, dtype=bool)
+        virginTested[materialStateOffset:] = True
+        damageColumn = None
+        if self._damageStateVarName is not None:
+            damageColumn, _ = parent.getStateVarSlice(self._damageStateVarName)
+            virginTested[damageColumn] = False
         parentNodeCoords = np.array([n.coordinates for n in parent.nodes], dtype=float)
         displacement = np.asarray(parentNodalDisplacement, dtype=float).reshape(len(parent.nodes), -1)
 
         for child, virgin in zip(children, virginStates):
             transferred = child.getStateVars().reshape(virgin.shape).copy()
-            elastic = np.all(transferred[:, materialStateOffset:] == virgin[:, materialStateOffset:], axis=1)
+            elastic = np.all(transferred[:, virginTested] == virgin[:, virginTested], axis=1)
             childRefCoords = quadraturePointReferenceCoordinates(child, parentNodeCoords, topology)
             strains = compatibleStrainAtReferenceCoordinates(
                 topology, parentNodeCoords, displacement, childRefCoords[elastic]
             )
             transferred[elastic, strainOffset : strainOffset + strainSize] = strains
-            transferred[elastic, stressOffset : stressOffset + stressSize] = strains @ self._elasticStiffness.T
+            effectiveStress = strains @ self._elasticStiffness.T
+            if damageColumn is not None:
+                effectiveStress *= (1.0 - transferred[elastic, damageColumn])[:, None]
+            transferred[elastic, stressOffset : stressOffset + stressSize] = effectiveStress
             child.setStateVars(transferred.reshape(-1))
             self._nRebuilt += int(elastic.sum())
             self._nFallback += int((~elastic).sum())

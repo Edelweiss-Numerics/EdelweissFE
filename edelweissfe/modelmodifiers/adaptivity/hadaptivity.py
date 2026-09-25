@@ -167,6 +167,15 @@ class HAdaptivitySchema:
         dtype=float,
         default=None,
     )
+    damageStateVarForStressReconstruction: str | None = schemaField(
+        description=(
+            "Name of the material's scalar damage state variable (e.g. omega). Used by "
+            "stateTransfer=reconstructStressFromStrain: a point whose only non-virgin material state is "
+            "this damage is still rebuilt, as (1 - damage) C : strain."
+        ),
+        dtype=str,
+        default=None,
+    )
     poissonRatioForStressReconstruction: float | None = schemaField(
         description=(
             "Poisson's ratio used by stateTransfer=reconstructStressFromStrain. Required by, and only "
@@ -196,7 +205,9 @@ class RefinementPlan:
         object.__setattr__(self, "eids", tuple(int(eid) for eid in eids))
 
 
-def _buildStateTransferStrategy(defaultName, overridesSpec, youngsModulus=None, poissonRatio=None):
+def _buildStateTransferStrategy(
+    defaultName, overridesSpec, youngsModulus=None, poissonRatio=None, damageStateVarName=None
+):
     """Construct the state-transfer strategy from the input arguments. With no per-variable
     overrides this is just the named default strategy; otherwise a
     :class:`~edelweissfe.adaptivity.statetransfer.perstatevar.PerStateVarStateTransfer` wrapping the
@@ -231,7 +242,7 @@ def _buildStateTransferStrategy(defaultName, overridesSpec, youngsModulus=None, 
         fallback = NearestQuadraturePointCopy()
         if overrides:
             fallback = PerStateVarStateTransfer(fallback, overrides)
-        return ReconstructStressFromStrain(fallback, youngsModulus, poissonRatio)
+        return ReconstructStressFromStrain(fallback, youngsModulus, poissonRatio, damageStateVarName)
 
     default = defaultClass()
     return PerStateVarStateTransfer(default, overrides) if overrides else default
@@ -361,6 +372,7 @@ class ModelModifier(ModelModifierBase):
             options.stateTransferOverrides,
             options.elasticModulusForStressReconstruction,
             options.poissonRatioForStressReconstruction,
+            options.damageStateVarForStressReconstruction,
         )
         self._provider = options.elementProvider
         # element -> its section, so children inherit the parent's material (multi-material meshes)

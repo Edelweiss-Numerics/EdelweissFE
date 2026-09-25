@@ -227,9 +227,14 @@ selectable with the ``stateTransfer`` argument (default ``nearestQp``):
   journal. It writes stress and strain together, so it is valid only as ``stateTransfer``, never as
   an override, and it needs ``elasticModulusForStressReconstruction`` and
   ``poissonRatioForStressReconstruction`` (a stopgap until the material exposes its elastic
-  stiffness). Example: ``stateTransfer=reconstructStressFromStrain``,
+  stiffness). A scalar damage variable that grows without plastic flow -- e.g. GCDP's ``omega``,
+  driven by the nonlocal damage field ahead of the process zone -- would otherwise make most points
+  near a crack fall back: name it with ``damageStateVarForStressReconstruction`` and such points are
+  rebuilt as :math:`(1-\omega)\,\mathbb{C}:\boldsymbol{\varepsilon}`, keeping their transferred damage.
+  Example: ``stateTransfer=reconstructStressFromStrain``,
   ``stateTransferOverrides='alphaP:limitedProjection'``,
-  ``elasticModulusForStressReconstruction=30600``, ``poissonRatioForStressReconstruction=0.2``.
+  ``elasticModulusForStressReconstruction=30600``, ``poissonRatioForStressReconstruction=0.2``,
+  ``damageStateVarForStressReconstruction=omega``.
 * ``virgin`` -- :class:`~edelweissfe.adaptivity.statetransfer.virgin.VirginState`: children keep
   their freshly-initialised state; history is discarded (sound only when refining ahead of the
   process zone).

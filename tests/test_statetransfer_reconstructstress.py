@@ -49,7 +49,7 @@ E, NU = 30600.0, 0.2
 C = LinearElasticMaterial(np.array([E, NU])).elasticityMatrix()
 GAUSS = np.array(list(itertools.product((-1 / np.sqrt(3), 1 / np.sqrt(3)), repeat=3)))
 # per-QP block as Marmot's displacement elements lay it out: stress, strain, two energies, material
-SLICES = {"stress": (0, 6), "strain": (6, 6), "begin of material state": (14, 0)}
+SLICES = {"stress": (0, 6), "strain": (6, 6), "begin of material state": (14, 0), "omega": (15, 1)}
 BLOCK = 16  # ... + two material state variables
 TOPOLOGY = Hex20Topology()
 
@@ -169,3 +169,28 @@ def test_builderNeedsElasticConstantsAndRejectsPerVariableUse():
         _buildStateTransferStrategy("nearestQp", "stress:reconstructStressFromStrain")
     strategy = _buildStateTransferStrategy("reconstructStressFromStrain", "alphaP:limitedProjection", E, NU)
     assert isinstance(strategy, ReconstructStressFromStrain)
+
+
+def test_namedDamageScalesTheRebuiltStressAndDoesNotForceTheFallback():
+    """Damage without plastic flow (a nonlocal damage field reaching an elastic point): with the
+    damage variable named, the point is rebuilt as (1 - omega) C : strain; unnamed, it falls back."""
+    gradient = np.array([[1.0e-4, 0.0, 0.0], [0.0, -2.0e-5, 3.0e-5], [0.0, 3.0e-5, 5.0e-5]])
+    parentState = np.zeros((8, BLOCK))
+    parentState[:, 15] = 0.3
+    parent = _Element(PARENT_COORDS, parentState.reshape(-1))
+    U = np.array([gradient @ x for x in PARENT_COORDS])
+
+    named = ReconstructStressFromStrain(NearestQuadraturePointCopy(), E, NU, damageStateVarName="omega")
+    for child in children():
+        named.transferState(parent, [child], TOPOLOGY, U)
+        block = child.getStateVars().reshape(8, BLOCK)
+        np.testing.assert_allclose(block[:, 15], 0.3)
+        np.testing.assert_allclose(
+            block[:, 0:6], np.tile(0.7 * C @ voigtStrain(gradient), (8, 1)), rtol=1e-12, atol=1e-12
+        )
+    assert "at 64 child" in named.reportAndResetTransferStatistics()
+
+    unnamed = ReconstructStressFromStrain(NearestQuadraturePointCopy(), E, NU)
+    for child in children():
+        unnamed.transferState(parent, [child], TOPOLOGY, U)
+    assert "at 0 child" in unnamed.reportAndResetTransferStatistics()
