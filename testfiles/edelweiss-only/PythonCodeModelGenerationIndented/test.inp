@@ -71,9 +71,9 @@ nSet=load
 
 *step, solver=theSolver
 maxInc=5e-1, minInc=1e-8, maxNumInc=1000, maxIter=25
->>dirichlet, name=support, nSet=support,  field=displacement, 2=0, 3=0
->>dirichlet, name=support-rot, nSet=support,  field=rotation, 1=0, 2=0
->>dirichlet, name=load, nSet=load-rp,  field=displacement, 2=-5, 3=0
->>dirichlet, name=load-rot, nSet=load-rp,  field=rotation, 1=0, 2=0
+>>dirichlet, name=support, nSet=support,  field=displacement, 2=0
+>>dirichlet, name=support-rot, nSet=support,  field=rotation, 1=0, 2=0, 3=0
+>>dirichlet, name=load, nSet=load-rp,  field=displacement, 2=-5
+>>dirichlet, name=load-rot, nSet=load-rp,  field=rotation, 1=0, 2=0, 3=0
 >>dirichlet, name=sym-x, nSet=gen_right, field=displacement, 1=0
 >>dirichlet, name=sym-z, nSet=gen_back, field=displacement, 3=0,
