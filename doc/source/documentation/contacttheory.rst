@@ -1092,7 +1092,10 @@ projection of the last search (master facet or rigid triangle, shape functions, 
 an older configuration than a restart checkpoint's, so it is written to the checkpoint
 (:mod:`~edelweissfe.constraints.base.frozencontactsearch`) and a resumed explicit step adopts it
 instead of searching; the resumed run is then bitwise identical to the uninterrupted one. A
-checkpoint without it, or written for other contact points, falls back to a fresh search.
+checkpoint without it, or written for other contact points, falls back to a fresh search. A topology
+check (``topology-check-frequency``) searches every constraint after the output of its increment and
+zeroes the net force if the mesh changed; a step resumed from a checkpoint of that increment does the
+same at its start.
 
 
 Verification and benchmarks

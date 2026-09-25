@@ -222,3 +222,35 @@ def test_foreign_or_missing_projection_falls_back_to_a_search(resumedContact, ca
         assert "afresh" in capsys.readouterr().out
         for key, values in constraint.getRestartData().items():
             assert np.array_equal(values, searched[key]), key
+
+
+_LIVE_REFINEMENT = """
+*modelModifier, type=hAdaptivity, name=amr
+>>marker, type=elementSet, elSet=upper_all, initialOnly=False
+refineElSet=upper_all
+maxLevel=1
+"""
+
+
+@pytest.fixture(scope="module")
+def liveRefinementReference(tmp_path_factory):
+    directory = tmp_path_factory.mktemp("liveRefinement")
+    return _fields(_run(directory, "full", "surfaceToDeformableSurfacePenalty", 1500, _LIVE_REFINEMENT, amr=True))
+
+
+@pytest.mark.parametrize(
+    "nTruncated",
+    [100, 1000, 1300, 1340],
+    ids=["onCheckThatRefines", "onCheckThatChangesContactConnectivity", "onCheck", "betweenChecks"],
+)
+def test_resume_after_live_refinement(tmp_path, liveRefinementReference, nTruncated):
+    """The slave body is refined by the topology check at increment 100 (every 100 increments),
+    which rebuilds its contact points; the check at 1000 changes only the contact connectivity."""
+
+    resumed, _ = _truncateAndResume(
+        tmp_path, "surfaceToDeformableSurfacePenalty", 1500, nTruncated, _LIVE_REFINEMENT, amr=True
+    )
+    assert len(resumed.elements) > 2 * 27
+    fields = _fields(resumed)
+    for key, values in liveRefinementReference.items():
+        assert np.array_equal(fields[key], values), key
