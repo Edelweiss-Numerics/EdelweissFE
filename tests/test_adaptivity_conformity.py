@@ -143,3 +143,29 @@ def test_refiningBeyondTheLatticeDepthRaises():
     with pytest.raises(TopologyError, match="maximum refinement depth"):
         builder.mesh.refine(eid)
     assert np.isfinite(builder.mesh.elements[eid]["coords"]).all()
+
+
+def test_aSplitNodeIsCaught():
+    """Two labels at one point (here: one child node deliberately renamed) are two unconnected nodes;
+    the check reports it instead of letting the mesh tear."""
+    mesh = _coarseNextToRefined()
+    child = next(e for e in mesh.active() if mesh.elements[e]["level"] == 1)
+    impostor = max(mesh.registry.coordinates) + 1
+    mesh.registry.seed(impostor, mesh.registry.coordinates[mesh.elements[child]["conn"][0]], 0)
+    mesh.elements[child]["conn"][0] = impostor
+    mesh._boundaryNodesCache = None
+    with pytest.raises(TopologyError, match="split or merged"):
+        mesh.check_conformity(mesh.hanging_mpc_records())
+
+
+def test_rootsFarFromAnyRefinementAreLeftOut():
+    """Only refined roots and their vertex neighbours can carry hanging nodes; a distant root neither
+    contributes nor disturbs the result."""
+    near = _coarseNextToRefined()
+    builder = AdaptiveMeshBuilder(2)
+    builder.addRoot(hex20_box_coords(-2.0, 0.0, 0.0, 2.0, 0.0, 2.0))
+    builder.mesh.refine(builder.addRoot(hex20_box_coords(0.0, 2.0, 0.0, 2.0, 0.0, 2.0)))
+    builder.addRoot(hex20_box_coords(10.0, 12.0, 0.0, 2.0, 0.0, 2.0))  # far away, unrefined
+    far = builder.mesh
+    far.check_conformity(far.hanging_mpc_records())
+    assert len(far.hanging_mpc_records()) == len(near.hanging_mpc_records())

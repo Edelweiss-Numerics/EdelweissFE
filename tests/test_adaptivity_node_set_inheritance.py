@@ -35,6 +35,7 @@ from _adaptivemeshbuilder import AdaptiveMeshBuilder
 
 from edelweissfe.adaptivity.hex20shapefunctions import hex20_box_coords
 from edelweissfe.adaptivity.hex20topology import Hex20Topology
+from edelweissfe.adaptivity.refinement import AdaptiveMesh
 
 TOPOLOGY = Hex20Topology()
 
@@ -100,3 +101,39 @@ def test_anIncompleteFacePassesOnlyItsCompleteEdges():
     for e in completeEdges:
         expected |= _nodesOnRootEntity(mesh, {conn[e[0]], conn[e[2]]})
     assert mesh.nodeSets["partial"] == expected
+
+
+def test_elementSetsAndSurfacesAreInheritedByTheChildren():
+    """Children join every element set of their parent, and an element-based surface on a parent face
+    passes to exactly the children tiling that face, with the same face id."""
+    builder = AdaptiveMeshBuilder(2)
+    mesh = builder.mesh
+    root = builder.addRoot(hex20_box_coords(0.0, 1.0, 0.0, 1.0, 0.0, 1.0))
+    mesh.define_element_set("body", [root])
+    faceId = 1
+    mesh.define_surface("top", [(root, faceId)])
+    kids = mesh.refine(root)
+    assert mesh.elementSets["body"] == {root, *kids}
+    tiling = {kids[j] for j in TOPOLOGY.face_child_indices(TOPOLOGY.faceid_to_face[faceId], 2)}
+    assert mesh.surfaces["top"] == {(kid, faceId) for kid in tiling}
+    assert len(tiling) == 4
+
+
+def test_refiningAnInactiveElementReturnsItsChildren():
+    mesh = AdaptiveMesh(splitFactor=2)  # the default topology is HEX20
+    builder = AdaptiveMeshBuilder(2)
+    root = builder.addRoot(hex20_box_coords(0.0, 1.0, 0.0, 1.0, 0.0, 1.0))
+    kids = builder.mesh.refine(root)
+    assert builder.mesh.refine(root) == kids
+    assert isinstance(mesh.topology, Hex20Topology)
+
+
+def test_aNodeSetAwayFromTheRefinedElementIsUnchanged():
+    builder = AdaptiveMeshBuilder(2)
+    mesh = builder.mesh
+    root = builder.addRoot(hex20_box_coords(0.0, 1.0, 0.0, 1.0, 0.0, 1.0))
+    other = builder.addRoot(hex20_box_coords(5.0, 6.0, 0.0, 1.0, 0.0, 1.0))
+    elsewhere = set(mesh.elements[other]["conn"])
+    mesh.define_node_set("elsewhere", elsewhere)
+    mesh.refine(root)
+    assert mesh.nodeSets["elsewhere"] == elsewhere
