@@ -94,22 +94,3 @@ class TopologyBase(ABC):
     @abstractmethod
     def element_face_corners(self, coords: np.ndarray) -> list:
         """The 4 corner coordinates of each face of the element."""
-
-    @abstractmethod
-    def hanging_weights(self, master_coords, slave_coord, kind: str) -> np.ndarray:
-        """Exact coarse-trace weights of a slave on its master entity.
-
-        Parameters
-        ----------
-        master_coords
-            Physical coordinates of the master entity's own nodes.
-        slave_coord
-            Physical coordinate of the hanging (slave) node.
-        kind
-            The master entity kind, as classified by :meth:`classify_hanging_on_element`
-            (e.g. ``"edge"`` or ``"face"``).
-        """
-
-    @abstractmethod
-    def classify_hanging_on_element(self, coarse_conn, registry, candidate_labels, tol=1e-8) -> list:
-        """Classify which candidate nodes hang on a coarse element's faces/edges."""

@@ -48,7 +48,6 @@ from edelweissfe.adaptivity.geometry import (
 )
 from edelweissfe.adaptivity.rootentities import RootEntityTable
 from edelweissfe.utils.exceptions import TopologyError
-from edelweissfe.utils.performancetiming import timeit
 
 
 def _latticeOf(params, n: int) -> np.ndarray:
@@ -394,9 +393,59 @@ class AdaptiveMesh:
 
     def node_keys(self, eid) -> list:
         """The topological keys (see :class:`~edelweissfe.adaptivity.rootentities.RootEntityTable`) of
-        the element's own nodes, in slot order."""
-        rootEid = self.elements[eid]["rootEid"]
-        return [self.rootEntities.key(rootEid, xi) for xi in self.node_reference_points(eid)]
+        the element's own nodes, in slot order. Cached: an element's box never changes."""
+        e = self.elements[eid]
+        if "nodeKeys" not in e:
+            e["nodeKeys"] = [self.rootEntities.key(e["rootEid"], xi) for xi in self.node_reference_points(eid)]
+        return e["nodeKeys"]
+
+    def _foreignBoundaryNodes(self) -> list:
+        """Every node that lies on the boundary of an active element without being one of its nodes,
+        as ``(eid, label, zeta)`` with ``zeta`` the node's exact reference coordinates in that element.
+
+        Exact and exhaustive by construction: every node position is an exact point of its root, and
+        the root mesh's vertices, edges and faces are named by their corner labels, so a node on an
+        element's boundary is found whichever element -- or neighbouring root -- it belongs to. Also
+        verifies that no point carries two nodes and no node two points.
+        """
+        act = self.active()
+        labelOfKey, keyOfLabel = {}, {}
+        for eid in act:
+            for label, key in zip(self.elements[eid]["conn"], self.node_keys(eid)):
+                if labelOfKey.setdefault(key, label) != label or keyOfLabel.setdefault(label, key) != key:
+                    raise TopologyError(
+                        f"AMR conformity: node {label} and node {labelOfKey[key]} occupy one point {key} "
+                        f"(or node {label} sits at two points); refinement split or merged a node"
+                    )
+
+        # Only a refined root, or a root sharing a vertex, edge or face with one, can carry a node on
+        # an element's boundary that is not the element's own; conforming unrefined regions are skipped.
+        refinedRoots = {self.elements[eid]["rootEid"] for eid in act if self.elements[eid]["level"] > 0}
+        relevantRoots = set(refinedRoots)
+        for key in labelOfKey:
+            roots = self.rootEntities.roots_sharing(key)
+            if refinedRoots.intersection(roots):
+                relevantRoots.update(roots)
+        closure = {root: [] for root in relevantRoots}  # root -> [(label, exact point in that root)]
+        for key, label in labelOfKey.items():
+            for root in self.rootEntities.roots_sharing(key):
+                if root in closure:
+                    closure[root].append((label, self.rootEntities.local_point(root, key)))
+
+        foreign = []
+        for eid in act:
+            e = self.elements[eid]
+            if e["rootEid"] not in closure:
+                continue
+            own = set(e["conn"])
+            low, size = e["referenceLow"], e["referenceSize"]
+            for label, xi in closure[e["rootEid"]]:
+                if label in own:
+                    continue
+                zeta = tuple(2 * (xi[k] - low[k]) / size - 1 for k in range(3))
+                if all(abs(z) <= 1 for z in zeta) and any(abs(z) == 1 for z in zeta):
+                    foreign.append((eid, label, zeta))
+        return foreign
 
     def check_hanging_completeness(self, slaveLabels):
         """Raise unless the active mesh is conforming up to the given hanging-node slaves.
@@ -422,44 +471,7 @@ class AdaptiveMesh:
             Naming the offending nodes and elements.
         """
         slaveLabels = set(slaveLabels)
-        act = self.active()
-        labelOfKey, keyOfLabel = {}, {}
-        for eid in act:
-            for label, key in zip(self.elements[eid]["conn"], self.node_keys(eid)):
-                if labelOfKey.setdefault(key, label) != label or keyOfLabel.setdefault(label, key) != key:
-                    raise TopologyError(
-                        f"AMR conformity: node {label} and node {labelOfKey[key]} occupy one point {key} "
-                        f"(or node {label} sits at two points); refinement split or merged a node"
-                    )
-
-        # Only a refined root, or a root sharing a vertex, edge or face with one, can carry a node on
-        # an element face that is not the element's own; conforming unrefined regions are skipped.
-        refinedRoots = {self.elements[eid]["rootEid"] for eid in act if self.elements[eid]["level"] > 0}
-        relevantRoots = set(refinedRoots)
-        for key in labelOfKey:
-            roots = self.rootEntities.roots_sharing(key)
-            if refinedRoots.intersection(roots):
-                relevantRoots.update(roots)
-        closure = {root: [] for root in relevantRoots}  # root -> [(label, exact point in that root)]
-        for key, label in labelOfKey.items():
-            for root in self.rootEntities.roots_sharing(key):
-                if root in closure:
-                    closure[root].append((label, self.rootEntities.local_point(root, key)))
-
-        unconstrained = []
-        for eid in act:
-            e = self.elements[eid]
-            if e["rootEid"] not in closure:
-                continue
-            own = set(e["conn"])
-            low, size = e["referenceLow"], e["referenceSize"]
-            for label, xi in closure[e["rootEid"]]:
-                if label in own or label in slaveLabels:
-                    continue
-                inBox = all(low[k] <= xi[k] <= low[k] + size for k in range(3))
-                onBoundary = any(xi[k] == low[k] or xi[k] == low[k] + size for k in range(3))
-                if inBox and onBoundary:
-                    unconstrained.append((label, eid))
+        unconstrained = [(label, eid) for eid, label, _ in self._foreignBoundaryNodes() if label not in slaveLabels]
         if unconstrained:
             nodes = sorted({label for label, _ in unconstrained})
             raise TopologyError(
@@ -602,138 +614,51 @@ class AdaptiveMesh:
                 nExtra += 1
         return nExtra
 
-    def classify_hanging(self, tol=1e-8) -> list:
-        """Classify all hanging nodes in the current active mesh.
+    def classify_hanging(self) -> list:
+        """All hanging nodes of the active mesh, with their masters and exact weights.
 
-        For each active element treated as a potential coarse master, find nodes lying on its
-        boundary that are not its own nodes. Each hanging node is deduplicated across candidate
-        masters, preferring the lowest-dimensional entity (edge before face) and, among equals, the
-        coarsest (lowest-level) master -- which guarantees global continuity with the coarsest trace.
+        A hanging node is a node on the boundary of an active element that is not one of its own
+        nodes (see :meth:`_foreignBoundaryNodes` -- exact, exhaustive, no geometry). Its master
+        entity is the element's edge it lies on (two reference coordinates at +-1) or else its face
+        (one at +-1); its weights are the element's own shape functions at the node's exact reference
+        point, which on that edge or face are non-zero only for the entity's nodes -- the exact coarse
+        trace, on curved and warped elements alike. A node hanging on several elements keeps the
+        lowest-dimensional entity and, among equals, the coarsest element, which guarantees global
+        continuity with the coarsest trace.
 
         Returns
         -------
         list of dict
-            {"slave", "kind", "masters"} -- ready to drive one hanging-node MPC per unique master set.
+            ``{"slave", "kind", "masters", "weights"}``, sorted by slave label.
         """
-        act = self.active()
-        coords = self.registry.coordinates
-        # Timed separately from the scan below: these indices are rebuilt from scratch on every
-        # call, over the WHOLE active mesh, whereas the scan itself is restricted to the refined
-        # interface shell. If the index build dominates, the cost to attack is incrementality, not
-        # the search.
-        timerIndex = timeit("hanging: whole-mesh index build")
-        timerIndex.__enter__()
-        used = {lab for eid in act for lab in self.elements[eid]["conn"]}
-
-        # spatial hash of nodes, so each element only tests nearby candidate nodes (local, not O(n*N))
-        h_cell = self._cellSize(act)
-        nodeGrid = defaultdict(list)
-        for lab in used:
-            nodeGrid[_grid_key(coords[lab], h_cell)].append(lab)
-
-        # A coarse element hosts a hanging node ONLY where a FINER element abuts it: a same-level
-        # conforming neighbour shares the element's own nodes, and a coarser neighbour makes THIS
-        # element the slave, not the master. So the master candidates are exactly the active elements
-        # that have a strictly finer overlapping neighbour -- the thin "interface shell". Restricting
-        # the scan to those makes the per-adaptation cost scale with the refined interface area, not
-        # with the total number of active elements (which grows every adaptation).
-        lev = {eid: self.elements[eid]["level"] for eid in act}
-        box = {eid: self.box(eid) for eid in act}
-        # a hanging node is a within-body notion: two bodies meeting at a flush interface (tie,
-        # zero-gap contact, crack plane) merely touch, and neither may master the other's nodes
-        comp = {eid: self.elements[eid]["componentId"] for eid in act}
-        componentOf = self.registry.componentOf
-        elemGrid = defaultdict(set)
-        # Highest refinement level present in each (grid cell, body). Built in the same pass as the
-        # grid itself, for a few dict compares per element, and it is what keeps the scan below from
-        # paying for the conforming majority of the mesh -- see hasFinerNeighbour.
-        cellMaxLevel = {}
-        # Both indices exist to answer one question -- "does this element have a strictly FINER
-        # neighbour?" -- so an element at the coarsest active level can never be the answer and is
-        # not registered: it is finer than nothing. Registering it changed no cellMaxLevel (the
-        # comparison there is strict) and no neighbour test (lev[f] > level is false for it), but
-        # on a mesh refined by one level it was the bulk of the mesh -- and a coarse far-field cell
-        # spans hundreds of grid cells at the finest cell's size, so it was also the bulk of this
-        # index build: 1.6 s per adaptation on 30k active cells.
-        coarsestLevel = min(lev.values()) if lev else 0
-        for eid in act:
-            level, componentId = lev[eid], comp[eid]
-            if level == coarsestLevel:
-                continue
-            for cell in _grid_cells_for_box(box[eid][0], box[eid][1], h_cell, pad=0):
-                elemGrid[cell].add(eid)
-                key = (cell, componentId)
-                if cellMaxLevel.get(key, -1) < level:
-                    cellMaxLevel[key] = level
-
-        def hasFinerNeighbour(eid):
-            level, componentId = lev[eid], comp[eid]
-            # A list, not the generator itself: both passes below must visit every cell. A shared
-            # generator would be consumed by the first pass up to the cell where it found a finer
-            # element, and the second pass would then never search that cell (or any before it).
-            cells = list(_grid_cells_for_box(box[eid][0], box[eid][1], h_cell))
-
-            # Cheap necessary condition first: if no cell this element's box touches holds ANY
-            # strictly finer element of the same body, it cannot have a finer neighbour. Away from
-            # a refinement front -- i.e. almost everywhere -- this exits before the set unions
-            # below, which otherwise ran for every active element and made this scan the second
-            # largest per-round cost.
-            if not any(cellMaxLevel.get((cell, componentId), -1) > level for cell in cells):
-                return False
-
-            # ... and only then the exact test, unchanged: the filter above is necessary, not
-            # sufficient (a finer element may sit in a shared cell without its box overlapping).
-            neighbours = set()
-            for cell in cells:
-                neighbours |= elemGrid.get(cell, set())
-            return any(
-                lev[f] > level and _boxes_overlap(box[eid], box[f])
-                for f in neighbours
-                if f != eid and comp[f] == componentId
-            )
-
-        timerIndex.__exit__(None, None, None)
-
-        best = {}  # slave -> (dim, level, masters)
-        timerScan = timeit("hanging: interface-shell scan")
-        timerScan.__enter__()
-        for eid in act:
-            if not hasFinerNeighbour(eid):
-                continue  # no level jump here -> this element cannot host a hanging node
+        reference = np.rint(self.topology.reference_node_param()).astype(int)
+        best = {}  # slave -> (dim, level, kind, masters, weights)
+        for eid, label, zeta in self._foreignBoundaryNodes():
             E = self.elements[eid]
-            Eset = set(E["conn"])
-            bMin, bMax = box[eid]
-            compEid = comp[eid]
-            cands = set()
-            for cell in _grid_cells_for_box(bMin, bMax, h_cell):
-                for lab in nodeGrid.get(cell, ()):
-                    if lab in Eset or componentOf[lab] != compEid:
-                        continue
-                    # A hanging node lies on a face/edge of E, hence within E's node-AABB. The padded
-                    # broad-phase gather above also pulls in a shell of nodes just
-                    # outside E (so nothing on the boundary is missed to grid rounding); those cannot
-                    # be hanging on E, so reject them here with a cheap box test before the exact
-                    # per-edge/face geometry probes, which otherwise run 12 + 6 tests on each such
-                    # node for nothing. Exact: no true hanging node is ever outside this box.
-                    c = coords[lab]
-                    if (
-                        bMin[0] - tol <= c[0] <= bMax[0] + tol
-                        and bMin[1] - tol <= c[1] <= bMax[1] + tol
-                        and bMin[2] - tol <= c[2] <= bMax[2] + tol
-                    ):
-                        cands.add(lab)
-            for h in self.topology.classify_hanging_on_element(E["conn"], self.registry, cands, tol):
-                dim = 1 if h["kind"] == "edge" else 2
-                key = (dim, E["level"])
-                cur = best.get(h["slave"])
-                if cur is None or key < (cur[0], cur[1]):
-                    best[h["slave"]] = (dim, E["level"], h["masters"])
+            onBoundary = [k for k in range(3) if abs(zeta[k]) == 1]
+            if len(onBoundary) == 2:
+                kind, dim = "edge", 1
+                edge = next(
+                    ed for ed in self.topology.edges if all(reference[i][k] == zeta[k] for i in ed for k in onBoundary)
+                )
+                axis = next(k for k in range(3) if k not in onBoundary)
+                t = float(zeta[axis] * reference[edge[2]][axis])  # -1 at the edge's first node, +1 at its last
+                weights = np.array([0.5 * t * (t - 1.0), 1.0 - t**2, 0.5 * t * (t + 1.0)])
+                entity = edge
+            elif len(onBoundary) == 1:
+                kind, dim = "face", 2
+                axis = onBoundary[0]
+                entity = next(f for f in self.topology.faces if all(reference[i][axis] == zeta[axis] for i in f))
+                weights = self.topology.shape_functions(*(float(z) for z in zeta))[list(entity)]
+            else:
+                raise TopologyError(f"AMR: node {label} lies on a corner of element {eid} without being its node")
+            key = (dim, E["level"])
+            current = best.get(label)
+            if current is None or key < current[:2]:
+                best[label] = (dim, E["level"], kind, [E["conn"][i] for i in entity], weights)
+        return [{"slave": s, "kind": v[2], "masters": v[3], "weights": v[4]} for s, v in sorted(best.items())]
 
-        timerScan.__exit__(None, None, None)
-
-        return [{"slave": s, "kind": "edge" if v[0] == 1 else "face", "masters": v[2]} for s, v in best.items()]
-
-    def hanging_mpc_records(self, tol=1e-8) -> dict:
+    def hanging_mpc_records(self) -> dict:
         """Flattened master-slave records for DOF-elimination MPCs.
 
         Returns {slaveLabel: [(masterLabel, weight), ...]} where every master is an INDEPENDENT
@@ -743,12 +668,9 @@ class AdaptiveMesh:
         flattens chains generally (including across other MPCs, e.g. a tie facet referencing a
         hanging slave). Weights are field-independent (equal-order).
         """
-        coords = self.registry.coordinates
         raw = {}  # slaveLabel -> [(masterLabel, weight)]
-        for h in self.classify_hanging(tol):
-            mc = [coords[m] for m in h["masters"]]
-            w = self.topology.hanging_weights(mc, coords[h["slave"]], h["kind"])
-            raw[h["slave"]] = list(zip(h["masters"], w))
+        for h in self.classify_hanging():
+            raw[h["slave"]] = list(zip(h["masters"], h["weights"]))
 
         slaves = set(raw)
         memo = {}

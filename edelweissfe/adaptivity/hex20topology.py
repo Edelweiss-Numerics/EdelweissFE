@@ -38,11 +38,6 @@ providing its own such adapter -- this file is the template to copy.
 
 import numpy as np
 
-from edelweissfe.adaptivity.geometry import (
-    bilinear_inverse,
-    point_in_convex_quad,
-    quadratic_edge_parameter,
-)
 from edelweissfe.adaptivity.hex20shapefunctions import (
     EDGES,
     FACEID_TO_FACE,
@@ -51,7 +46,6 @@ from edelweissfe.adaptivity.hex20shapefunctions import (
     hex20_box_coords,
     hex20_shape,
     hex20_shape_grad,
-    quad8_shape,
     subdivision_children_param,
 )
 from edelweissfe.adaptivity.topologybase import TopologyBase
@@ -117,45 +111,3 @@ class Hex20Topology(TopologyBase):
     def element_face_corners(self, coords: np.ndarray) -> list:
         coords = np.asarray(coords, dtype=float)
         return [coords[[f[0], f[1], f[2], f[3]]] for f in self.faces]
-
-    def hanging_weights(self, master_coords, slave_coord, kind: str) -> np.ndarray:
-        mc = np.asarray(master_coords, dtype=float)
-        p = np.asarray(slave_coord, dtype=float)
-        if kind == "face":
-            xi, eta = bilinear_inverse(p, mc[0:4])
-            return quad8_shape(xi, eta)
-        elif kind == "edge":
-            ca, cm, cb = mc[0], mc[1], mc[2]
-            t, _ = quadratic_edge_parameter(p, ca, cm, cb)
-            return np.array([0.5 * t * (t - 1.0), 1.0 - t**2, 0.5 * t * (t + 1.0)])
-        raise ValueError(f"Hex20Topology has no hanging-node entity of kind {kind!r} (expected 'edge' or 'face').")
-
-    def classify_hanging_on_element(self, coarse_conn, registry, candidate_labels, tol=1e-8) -> list:
-        coarse_conn = list(coarse_conn)
-        coarse_set = set(coarse_conn)
-        coords = registry.coordinates
-        results = []
-
-        for lab in candidate_labels:
-            if lab in coarse_set:
-                continue
-            p = coords[lab]
-
-            matched = False
-            for edge in self.edges:
-                ea, em, eb = (coarse_conn[edge[0]], coarse_conn[edge[1]], coarse_conn[edge[2]])
-                _, dist = quadratic_edge_parameter(p, coords[ea], coords[em], coords[eb])
-                if dist < tol:
-                    results.append({"slave": lab, "kind": "edge", "masters": [ea, em, eb]})
-                    matched = True
-                    break
-            if matched:
-                continue
-
-            for face in self.faces:
-                fcorners = np.array([coords[coarse_conn[i]] for i in face[:4]])
-                if point_in_convex_quad(p, fcorners):
-                    results.append({"slave": lab, "kind": "face", "masters": [coarse_conn[i] for i in face]})
-                    break
-
-        return results

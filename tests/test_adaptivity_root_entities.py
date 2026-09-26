@@ -32,9 +32,10 @@ Keys: a point on a face (edge, vertex) shared by two root elements gets the iden
 either root, for every relative orientation of the two elements' local numbering -- all 48 symmetries
 of the cube -- because entities are named by corner labels and measured in a frame those labels fix.
 
-Conformity check: exact, no tolerance. It must reject the unconstrained face-interior hanging nodes
-that the geometric classifier leaves on a curved and warped face, accept a correct mesh (flat faces,
-splitFactor 2 and 3, two-level chains), and reject a mesh from which a single slave was dropped.
+Conformity check: exact, no tolerance. It must accept a correct mesh (flat faces, splitFactor 2 and 3,
+two-level chains, a curved and warped face) and reject one from which a single slave was dropped --
+including exactly the five face-interior slaves the former geometric classifier dropped on a curved
+and warped face.
 """
 
 import itertools
@@ -154,9 +155,20 @@ def test_droppingASingleSlaveIsCaught():
         mesh.check_hanging_completeness(set(records) - {dropped})
 
 
-def test_theGeometricClassifierOnACurvedWarpedFaceIsCaught():
-    """The check needs no geometry: on the curved and warped face it finds exactly the face-interior
-    hanging nodes the flat corner-plane test leaves unconstrained (5 per 2x2 fine face)."""
+def test_aCurvedWarpedMeshIsConforming():
+    """On the curved and warped face -- where the former flat corner-plane classifier left the five
+    face-interior hanging nodes unconstrained -- the topological classifier constrains every one."""
     mesh = _boxMesh(curvedWarped=True)
+    records = mesh.hanging_mpc_records()
+    mesh.check_hanging_completeness(records)
+    assert len(records) == 13
+
+
+def test_theCheckCatchesTheFormerCurvedFaceDefect():
+    """The check needs no geometry: dropping the five face-interior slaves -- exactly what the former
+    classifier did on this face -- is caught."""
+    mesh = _boxMesh(curvedWarped=True)
+    faceSlaves = {h["slave"] for h in mesh.classify_hanging() if h["kind"] == "face"}
+    assert len(faceSlaves) == 5
     with pytest.raises(TopologyError, match=r"5 node\(s\) lie on the boundary"):
-        mesh.check_hanging_completeness(mesh.hanging_mpc_records())
+        mesh.check_hanging_completeness(set(mesh.hanging_mpc_records()) - faceSlaves)
