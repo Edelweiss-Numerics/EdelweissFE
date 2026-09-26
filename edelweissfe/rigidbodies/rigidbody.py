@@ -48,6 +48,21 @@ class RigidBody(ABC):
         Update the kinematics of the rigid body according to its prescribed or computed motion.
         """
 
+    def referenceCoordinatesOfMovedNodes(self) -> Dict[int, np.ndarray]:
+        """The reference coordinates of the nodes whose ``coordinates`` this body moves along with it.
+
+        A node's ``coordinates`` are normally its reference coordinates, and the topology fingerprint
+        (:meth:`~edelweissfe.models.femodel.FEModel.topologyFingerprint`) hashes them. A rigid body that
+        writes its current configuration into its nodes reports their reference coordinates here, so
+        that the fingerprint describes the mesh and not the body's current position.
+
+        Returns
+        -------
+        Dict[int, numpy.ndarray]
+            The reference coordinates, keyed by node label. Empty if this body moves no nodes.
+        """
+        return {}
+
     @abstractmethod
     def getCurrentKinematics(self):
         """

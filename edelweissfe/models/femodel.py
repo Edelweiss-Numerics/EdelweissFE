@@ -464,7 +464,11 @@ class FEModel:
 
         Covers exactly what a replay must get right and nothing else: every element's number, type
         and connectivity (in order -- a rotated connectivity is a real difference), and every node's
-        label and coordinates. Deliberately excludes solution state, so a mismatch means the *mesh*
+        label and reference coordinates. The surface nodes of a discrete rigid body hold its current
+        position instead; the body reports their reference coordinates
+        (:meth:`~edelweissfe.rigidbodies.rigidbody.RigidBody.referenceCoordinatesOfMovedNodes`), so that
+        the motion of a rigid body is not mistaken for a change of the mesh. A resumed run replays the
+        topology before it restores the displacement, i.e. with the body still at its reference position. Deliberately excludes solution state, so a mismatch means the *mesh*
         diverged, not that the solver took a different path.
 
         Recorded per round in the topology history, this turns "the resumed run diverged somewhere"
@@ -485,6 +489,10 @@ class FEModel:
             A 32-character hex digest.
         """
 
+        referenceCoordinatesOfMovedNodes = {}
+        for rigidBody in self.rigidBodies.values():
+            referenceCoordinatesOfMovedNodes.update(rigidBody.referenceCoordinatesOfMovedNodes())
+
         digest = hashlib.blake2b(digest_size=16)
         for elNumber in sorted(self.elements):
             element = self.elements[elNumber]
@@ -492,7 +500,8 @@ class FEModel:
             digest.update(b",".join(b"%d" % node.label for node in element.nodes))
         for label in sorted(self.nodes):
             digest.update(b"N|%d|" % label)
-            digest.update(np.asarray(self.nodes[label].coordinates, dtype=float).tobytes())
+            referenceCoordinates = referenceCoordinatesOfMovedNodes.get(label, self.nodes[label].coordinates)
+            digest.update(np.asarray(referenceCoordinates, dtype=float).tobytes())
         return digest.hexdigest()
 
     def recordTopologyChange(

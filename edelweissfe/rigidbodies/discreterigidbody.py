@@ -70,6 +70,10 @@ class DiscreteRigidBody(RigidBody):
         # Format: [{'type': 'tria3', 'nodes': [node1, node2, node3]}, ...]
         self.facets = kwargs.get("facets", [])
 
+        # The surface nodes' coordinates follow the body (see updateKinematics), so keep their reference
+        # coordinates for the topology fingerprint.
+        self.referenceSurfaceCoordinates = np.array([n.coordinates for n in self.surfaceNodes], dtype=float)
+
         # Precompute initial relative positions of surface nodes w.r.t. the RP
         self.initialRelativePositions = np.array([n.coordinates - self.rpNode.coordinates for n in self.surfaceNodes])
 
@@ -86,6 +90,16 @@ class DiscreteRigidBody(RigidBody):
             (el_num,) = model.reserveElementNumbers(1)
             self.pointMassElement = PointMass(el_num, [self.rpNode], model, self.mass, self.inertia)
             model.createElement(self.pointMassElement)
+
+    def referenceCoordinatesOfMovedNodes(self) -> dict:
+        """The reference coordinates of the surface nodes, which :meth:`updateKinematics` moves.
+
+        Returns
+        -------
+        dict
+            The reference coordinates, keyed by surface node label.
+        """
+        return dict(zip((node.label for node in self.surfaceNodes), self.referenceSurfaceCoordinates))
 
     def getCurrentKinematics(self):
         """Return the current rigid body motion.
