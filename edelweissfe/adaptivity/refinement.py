@@ -336,7 +336,7 @@ class AdaptiveMesh:
             conn.append(self.registry.label_for_identity(tuple(spanning), coords[slot], componentId))
         return conn
 
-    def _add(self, coords, level, parent, componentId: int = 0, parentConn=None, childIndex=None):
+    def _add(self, coords, level, parent, componentId: int = 0, parentConn=None, childIndex=None, labels=None):
         coords = np.asarray(coords, dtype=float)
         eid = self._next
         self._next += 1
@@ -358,9 +358,13 @@ class AdaptiveMesh:
             referenceLow = tuple(parentElement["referenceLow"][k] + position[k] * referenceSize for k in range(3))
         self.elements[eid] = dict(
             conn=(
-                self.registry.connectivity(coords, componentId)
-                if parentConn is None
-                else self._childConnectivity(parentConn, childIndex, coords, componentId)
+                self._childConnectivity(parentConn, childIndex, coords, componentId)
+                if parentConn is not None
+                else (
+                    self.registry.connectivity(coords, componentId)
+                    if labels is None
+                    else self._rootConnectivity(labels)
+                )
             ),
             coords=coords,
             box=box,
@@ -380,14 +384,26 @@ class AdaptiveMesh:
         self._foreignBoundaryNodesCache = None
         return eid
 
-    def add_root(self, coords, componentId: int = 0) -> int:
+    def add_root(self, coords, componentId: int = 0, labels=None) -> int:
         """Add a level-0 element from its 20 node coordinates (C3D20 order).
 
         ``componentId`` identifies the connected body (mesh component) the element belongs to. Node
         labels are namespaced per body, and hanging nodes are only ever classified within one body,
         so two bodies sharing a flush interface are never welded together by refinement.
+
+        ``labels`` are the element's node labels in the model (same order). A model-backed mesh must
+        pass them: the root mesh's connectivity is then the model's own, exactly. Without them (a
+        standalone octree) the labels are looked up, or minted, by rounded coordinate.
         """
-        return self._add(coords, level=0, parent=None, componentId=componentId)
+        return self._add(coords, level=0, parent=None, componentId=componentId, labels=labels)
+
+    def _rootConnectivity(self, labels) -> list:
+        """A root element's node labels as given by the model; every one must have been seeded."""
+        labels = [int(label) for label in labels]
+        unknown = [label for label in labels if label not in self.registry.coordinates]
+        if unknown:
+            raise ValueError(f"root element node(s) {unknown} were not seeded into the refinement registry")
+        return labels
 
     def active(self) -> list:
         """The active (leaf) cells, in ascending eid order."""

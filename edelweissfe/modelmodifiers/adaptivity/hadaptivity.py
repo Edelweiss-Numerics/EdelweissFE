@@ -381,7 +381,7 @@ class ModelModifier(ModelModifierBase):
             for n in el.nodes:
                 self._mesh.registry.seed(n.label, n.coordinates, componentId)
             coords = np.array([n.coordinates for n in el.nodes])
-            eid = self._mesh.add_root(coords, componentId)
+            eid = self._mesh.add_root(coords, componentId, labels=[n.label for n in el.nodes])
             self._eidToEl[eid] = el
         # nodes outside the refineable mesh are not seeded, but their labels are taken:
         # keep the registry's high-water mark above them so new nodes never collide with them

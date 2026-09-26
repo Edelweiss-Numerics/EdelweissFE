@@ -172,3 +172,17 @@ def test_theCheckCatchesTheFormerCurvedFaceDefect():
     assert len(faceSlaves) == 5
     with pytest.raises(TopologyError, match=r"5 node\(s\) lie on the boundary"):
         mesh.check_hanging_completeness(set(mesh.hanging_mpc_records()) - faceSlaves)
+
+
+def test_rootsTakeTheModelsNodeLabels():
+    """A model-backed mesh passes its roots' node labels: they are used as they are, never re-derived
+    from rounded coordinates; a label that was not seeded is an error, not a silently minted node."""
+    X = hex20_box_coords(0.0, 1.0, 0.0, 1.0, 0.0, 1.0)
+    labels = list(range(101, 121))
+    mesh = AdaptiveMesh(splitFactor=2, topology=Hex20Topology())
+    for label, x in zip(labels, X):
+        mesh.registry.seed(label, x, 0)
+    root = mesh.add_root(X, 0, labels=labels)
+    assert mesh.elements[root]["conn"] == labels
+    with pytest.raises(ValueError, match="not seeded"):
+        mesh.add_root(hex20_box_coords(1.0, 2.0, 0.0, 1.0, 0.0, 1.0), 0, labels=list(range(201, 221)))
