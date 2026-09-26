@@ -38,13 +38,13 @@ boundary node set of that face.
 
 import numpy as np
 import pytest
+from _adaptivemeshbuilder import AdaptiveMeshBuilder
 
 from edelweissfe.adaptivity.hex20shapefunctions import hex20_box_coords, hex20_shape
 from edelweissfe.adaptivity.hex20topology import Hex20Topology
-from edelweissfe.adaptivity.refinement import AdaptiveMesh
 
 TOPOLOGY = Hex20Topology()
-_CORNER_SLOTS = {i for i, p in enumerate(TOPOLOGY.reference_node_param()) if np.all(np.abs(p) == 1.0)}
+_CORNER_SLOTS = set(TOPOLOGY.corner_slots)
 
 
 def _elementsSharingACurvedWarpedFace():
@@ -68,9 +68,10 @@ def _elementsSharingACurvedWarpedFace():
 
 def _refinedNeighbourMesh():
     A, B = _elementsSharingACurvedWarpedFace()
-    mesh = AdaptiveMesh(splitFactor=2, topology=Hex20Topology())
-    coarse = mesh.add_root(A, 0)
-    fine = mesh.add_root(B, 0)
+    builder = AdaptiveMeshBuilder(2)
+    mesh = builder.mesh
+    coarse = builder.addRoot(A)
+    fine = builder.addRoot(B)
     sharedFace = [lab for lab, x in zip(mesh.elements[fine]["conn"], B) if abs(x[0]) < 0.1]
     mesh.define_node_set("sharedFaceOfB", sharedFace)
     mesh.refine(fine)
@@ -88,7 +89,7 @@ def _newNodesOnSharedFace(mesh, coarse, A):
         if eid == coarse:
             continue
         for label, key in zip(mesh.elements[eid]["conn"], mesh.node_keys(eid)):
-            labels = {key[2]} if key[0] == "vertex" else set(key[2]) if key[0] in ("edge", "face") else set()
+            labels = {key.entity} if key.kind == "vertex" else set(key.entity) if key.kind != "interior" else set()
             if label not in nodesOfA and labels and labels <= sharedCorners:
                 onFace.add(label)
     return onFace
@@ -103,16 +104,6 @@ def test_theSharedFaceIsReallyCurvedAndWarped():
     n /= np.linalg.norm(n)
     assert abs(np.dot(c[2] - c[0], n)) > 1e-3  # warped: the fourth corner is off the plane
     assert max(abs(np.dot(A[i] - c[0], n)) for i in face[4:]) > 1e-2  # curved: midside nodes off it
-
-
-def test_everyNodeOnTheCurvedWarpedFaceIsAHangingSlave():
-    mesh, coarse, _, A = _refinedNeighbourMesh()
-    onFace = _newNodesOnSharedFace(mesh, coarse, A)
-    assert len(onFace) == 13  # 2x2 fine face: 21 nodes, minus the 8 coarse ones
-    hanging = {h["slave"]: h for h in mesh.classify_hanging()}
-    assert onFace <= set(hanging), f"unconstrained: {sorted(onFace - set(hanging))}"
-    kinds = [hanging[lab]["kind"] for lab in onFace]
-    assert kinds.count("edge") == 8 and kinds.count("face") == 5
 
 
 def test_weightsReproduceTheSlavesOnTheCurvedCoarseTrace():

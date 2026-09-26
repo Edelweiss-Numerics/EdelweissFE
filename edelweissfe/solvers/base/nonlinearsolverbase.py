@@ -723,8 +723,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                     if not mpc.mayYieldSlaveToEarlierClaim:
                         raise TopologyError(
                             f"multi-point constraint '{name}' must keep every slave it declares, but DOF "
-                            f"{record[0]} is already claimed by a constraint earlier in model order; it "
-                            "has to come first (hAdaptivity registers its hanging-node constraint at the front)"
+                            f"{record[0]} is already claimed by a constraint earlier in model order; such a "
+                            "constraint has to be registered before any constraint that may claim its slaves"
                         )
                     dropped[name] = dropped.get(name, 0) + 1
                     continue

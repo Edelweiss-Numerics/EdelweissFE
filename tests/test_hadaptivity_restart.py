@@ -43,7 +43,6 @@ import h5py
 import numpy as np
 import pytest
 
-from edelweissfe.adaptivity.refinement import _box_of
 from edelweissfe.helpers.inputfilehelpers import fillFEModelFromInputFile
 from edelweissfe.journal.journal import Journal
 from edelweissfe.modelmodifiers.adaptivity.hadaptivity import RefinementPlan
@@ -275,13 +274,9 @@ def test_multi_round_replay_matches_the_live_run_exactly(tmp_path):
     assert len(modelA.topologyHistory) == 3
     assert modelA.topologyHistory[-1].nElementsAdded > 8, "the last round should have cascaded"
 
-    # the octree mirror's caches (active set, bounding boxes) agree with a scan of the hierarchy
+    # the octree mirror's active-set cache agrees with a scan of the hierarchy
     mesh = modelA.modelModifiers["amr"]._mesh
     assert mesh.active() == [eid for eid, e in mesh.elements.items() if e["active"]]
-    for eid, cell in mesh.elements.items():
-        expectedMin, expectedMax = _box_of(cell["coords"])
-        assert np.array_equal(mesh.box(eid)[0], expectedMin) and np.array_equal(mesh.box(eid)[1], expectedMax)
-        assert cell["extent"] == float((expectedMax - expectedMin).max())
 
     # give every field value something to be restored to, so a wrong layout cannot hide behind zeros
     rng = np.random.default_rng(7)

@@ -89,9 +89,9 @@ def _flattenChainedRecords(
 
     Distinct MPC instances are free to compose this way -- e.g. a tie constraint's projected facet
     can legitimately reference a hanging-node MPC's slave node as one of its own interpolation
-    nodes. :class:`~edelweissfe.adaptivity.refinement.AdaptiveMesh` already flattens chains *within*
-    the hanging-node MPC's own records; this generalizes the same substitution *across* all of a
-    model's multi-point constraints, in whatever order they were collected.
+    nodes. The substitution works across all of a model's multi-point constraints, in whatever order
+    they were collected; :meth:`~edelweissfe.adaptivity.refinement.AdaptiveMesh.hanging_mpc_records`
+    uses it for the chains within the hanging-node constraint's own records.
 
     Parameters
     ----------

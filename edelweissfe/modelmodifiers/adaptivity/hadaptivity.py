@@ -364,9 +364,9 @@ class ModelModifier(ModelModifierBase):
         # pair, a duplicated-node crack plane) are never deduplicated into one label
         componentOfElement = _connectedComponents(refineElements)
 
-        # build the AdaptiveMesh mirror, sharing node labels with the live model. Only the nodes of
-        # the refineable elements are seeded: a node the octree does not own must not be able to
-        # claim a coordinate key, and only an octree-owned node can be seeded with a body.
+        # build the AdaptiveMesh mirror, sharing node labels with the live model: the roots are the
+        # refineable elements with the model's own connectivity. Only their nodes are seeded -- with
+        # their coordinates and body -- since only octree-owned nodes can be seeded with a body.
         self._topology = Hex20Topology()
         # The mirror mints its new node labels from the model's own allocator, so octree and
         # model share one monotonic node counter instead of each keeping their own.
@@ -381,7 +381,7 @@ class ModelModifier(ModelModifierBase):
             for n in el.nodes:
                 self._mesh.registry.seed(n.label, n.coordinates, componentId)
             coords = np.array([n.coordinates for n in el.nodes])
-            eid = self._mesh.add_root(coords, componentId, labels=[n.label for n in el.nodes])
+            eid = self._mesh.add_root(coords, [n.label for n in el.nodes], componentId)
             self._eidToEl[eid] = el
         # nodes outside the refineable mesh are not seeded, but their labels are taken:
         # keep the registry's high-water mark above them so new nodes never collide with them
@@ -584,7 +584,7 @@ class ModelModifier(ModelModifierBase):
         with timeit("conformity check"):
             # Exact and topological: raises if any node on an active element's boundary is neither one
             # of its nodes nor a hanging-node slave, i.e. if the refined interface is not conforming.
-            self._mesh.check_hanging_completeness(records)
+            self._mesh.check_conformity(records)
 
         with timeit("materialize"):
             change = self._materialize(model, records)

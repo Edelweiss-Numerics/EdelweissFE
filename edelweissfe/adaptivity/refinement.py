@@ -25,142 +25,93 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
+"""Octree refinement of HEX20 elements: subdivision, 2:1 balancing, hanging-node classification and
+the conformity check -- all decided topologically, in exact integer arithmetic.
 
-"""HEX20 octree refinement: subdivision, coordinate-based node registry, and hanging-node
-classification.
+Vocabulary (see also :mod:`edelweissfe.adaptivity.rootentities`)
+-----------------------------------------------------------------
+Reference box
+    Every element lies inside one root element and covers an axis-aligned box of that root's reference
+    lattice: an integer origin and an integer edge length (``2M`` for the root itself, divided by the
+    split factor at every level). An element's own nodes therefore sit at exact lattice points.
+Own node / hanging node
+    A node is one of an element's *own* nodes if it is in the element's connectivity. A node that lies
+    on the boundary of an active element without being one of its own nodes *hangs* on it: its value is
+    tied to the element's trace on that edge or face by a hanging-node constraint.
+Conformity
+    The active mesh is conforming up to the hanging-node constraints iff every node on the boundary of
+    an active element is an own node or a hanging node (:meth:`AdaptiveMesh.check_conformity`).
 
-Geometry-level building blocks that operate on node coordinates and connectivity, independent of
-the live FEModel. Subdivision honours curved parents via the parent isoparametric map. Hanging
-nodes are classified against the coarse entity (face or edge) they lie on, which yields the master
-set + serendipity weights for the exact hanging-node MPC.
+Physical coordinates are carried along -- the finite elements need them, and children are placed with
+the parent's isoparametric map, so curved parents stay curved -- but no decision about which nodes
+coincide, touch or hang is ever taken from them.
 """
 
 from collections import defaultdict
 from fractions import Fraction
 from itertools import product
-from math import floor
+from typing import NamedTuple
 
 import numpy as np
 
 from edelweissfe.adaptivity.rootentities import RootEntityTable
+from edelweissfe.numerics.mpctransformation import _flattenChainedRecords
 from edelweissfe.utils.exceptions import TopologyError
 
-
-def _latticeOf(params, n: int) -> np.ndarray:
-    """Exact integer lattice indices of parametric coordinates on the subdivision grid.
-
-    Every node a subdivision of a serendipity element can produce lies at ``-1 + k / n`` along each
-    axis for an integer ``k`` in ``[0, 2n]`` -- the corners of the sub-cells and the midside nodes
-    halfway between them. Converting the parametric coordinate to that integer turns a node's
-    position within its parent into exact data, which is what lets node identity be decided by
-    integer arithmetic instead of by rounding a floating-point coordinate.
-    """
-    scaled = (np.asarray(params, dtype=float) + 1.0) * n
-    lattice = np.rint(scaled).astype(np.int64)
-    if np.abs(scaled - lattice).max() > 1e-9:
-        raise ValueError(
-            "a subdivision produced a node off the 1/n parametric lattice, so its position within "
-            "the parent cannot be represented exactly; node identity would have to fall back on "
-            "comparing coordinates"
-        )
-    return lattice
+#: The deepest refinement level the exact reference lattice can represent. The lattice resolution is
+#: ``splitFactor ** MAXIMUM_REFINEMENT_DEPTH`` units per half root edge, which stays an ordinary
+#: integer for any practical split factor; refining beyond this depth raises.
+MAXIMUM_REFINEMENT_DEPTH = 20
 
 
 class NodeRegistry:
-    """Coordinate-keyed node registry that mints unique labels and deduplicates shared nodes.
+    """Hands out node labels for the nodes that refinement creates, and remembers their coordinates.
 
-    Keys are namespaced per connected component (body): across a flush interface -- a tied surface
-    pair, a zero-gap contact pair, a duplicated-node crack plane -- two topologically distinct nodes
-    legitimately share one coordinate, and must not be deduplicated into a single label.
+    A new node is named by its *identity* -- which corners of its parent span it, and in what exact
+    integer proportion (see :meth:`AdaptiveMesh._childConnectivity`) -- so every parent that touches
+    the point derives the same identity and gets the same label. Identities are kept per body
+    (``componentId``): two bodies touching at a flush interface never share a node.
+
+    Parameters
+    ----------
+    reserve_labels
+        The ``count -> range`` label allocator of the model this registry mirrors, i.e.
+        ``FEModel.reserveNodeNumbers``, so model and octree draw from one counter and cannot collide.
+        Without one (a standalone octree, e.g. in tests) the registry mints ``max + 1`` itself.
     """
 
-    def __init__(self, decimals: int = 8, reserve_labels=None):
-        self.decimals = decimals
-        self._byKey = {}  # (componentId, rounded-coord) key -> label; seeding and root elements only
-        self._byIdentity = {}  # (componentId, topological identity) -> label; everything refinement mints
+    def __init__(self, reserve_labels=None):
+        self._labelOfIdentity = {}  # (componentId, identity) -> label
         self.coordinates = {}  # label -> np.ndarray(coord)
         self.componentOf = {}  # label -> componentId of the body the node belongs to
         self._maxLabel = 0
-        # ``count -> range`` allocator of the model this registry mirrors, i.e.
-        # FEModel.reserveNodeNumbers. Given one, the registry stops being a second, independent
-        # source of node labels: model and octree then draw from one counter and cannot drift into
-        # a collision. Left out (the standalone octree, and its tests, own no model) it falls back
-        # to minting max+1 itself, which is only safe while nothing else mints.
         self._reserveLabels = reserve_labels
 
-    def _key(self, coord, componentId: int):
-        return (componentId, tuple(round(float(v), self.decimals) for v in coord))
-
     def seed(self, label: int, coord, componentId: int = 0):
-        """Pre-register an existing (label, coordinate) of one body, so a live model's node labels
-        are reused.
-
-        Seeding the same node repeatedly (it is shared by several elements of the body) is a no-op.
-        A coordinate already claimed by a DIFFERENT label of the same body means two distinct nodes
-        occupy the same point, which a coordinate-keyed registry cannot disambiguate -- rejected
-        here rather than silently collapsed.
-        """
-        key = self._key(coord, componentId)
-        taken = self._byKey.get(key)
-        if taken is not None and taken != label:
-            raise ValueError(
-                "two distinct nodes ({:d} and {:d}) of the same body occupy the point {:s}; "
-                "adaptive refinement identifies nodes by their coordinates and cannot "
-                "disambiguate them".format(taken, label, np.array2string(np.asarray(coord, dtype=float)))
-            )
-        self._byKey[key] = label
-        # a copy, never an alias of a live Node's array: an in-place coordinate mutation would
-        # otherwise desync the stored coordinate from the key it was registered under
+        """Register an existing node of the model (a node of a root element): its coordinates and body."""
+        # a copy, never an alias of a live Node's array
         self.coordinates[label] = np.array(coord, dtype=float)
         self.componentOf[label] = componentId
         self._maxLabel = max(self._maxLabel, label)
 
     def reserve_labels_up_to(self, label: int):
-        """Raise the label high-water mark without registering a coordinate, so freshly minted
-        labels cannot collide with existing labels the registry does not track (nodes outside the
-        refineable mesh, e.g. those of contact facets)."""
+        """Raise the label high-water mark, so new labels cannot collide with labels the registry does
+        not track (nodes outside the refineable mesh, e.g. those of contact facets)."""
         self._maxLabel = max(self._maxLabel, label)
 
-    def label(self, coord, componentId: int = 0) -> int:
-        """Return the label of a coordinate within one body, minting a fresh label if unseen.
+    def label_of_new_node(self, identity, coord, componentId: int = 0) -> int:
+        """The label of the node with the given identity, minting a fresh one the first time.
 
-        Only the minting branch draws a number; a coordinate that is already known -- the common
-        case, since every interior node is shared by several elements -- consumes nothing.
-        """
-        key = self._key(coord, componentId)
-        lab = self._byKey.get(key)
-        if lab is None:
-            lab = self._mint()
-            self._byKey[key] = lab
-            self.coordinates[lab] = np.array(coord, dtype=float)
-            self.componentOf[lab] = componentId
-        return lab
-
-    def label_for_identity(self, identity, coord, componentId: int = 0) -> int:
-        """Return the label of a node named by its *topological* identity, minting one if new.
-
-        ``identity`` names the node by which corners of its parent span it and in what exact integer
-        proportion, so two elements sharing a face or an edge derive the identical identity for a
-        point on it -- without comparing coordinates, and regardless of how their local axes happen
-        to be oriented relative to one another.
-
-        This is what :meth:`label` cannot do. Rounding a coordinate to a fixed number of decimals
-        splits one node into two whenever the exact value lands on a rounding tie and the two
-        parents' last bits disagree, and a mesh written with a fixed number of decimals produces
-        such ties systematically rather than by accident: on the anchor pry-out mesh every
-        quarter-point of a graded edge landed on one, giving 156 duplicated nodes with nothing
-        constraining them together.
+        Only minting draws a label; looking up a known identity -- the common case, since most new
+        nodes are shared by several children -- consumes none.
         """
         key = (componentId, identity)
-        label = self._byIdentity.get(key)
+        label = self._labelOfIdentity.get(key)
         if label is None:
             label = self._mint()
-            self._byIdentity[key] = label
+            self._labelOfIdentity[key] = label
             self.coordinates[label] = np.array(coord, dtype=float)
             self.componentOf[label] = componentId
-            # Keep the coordinate index populated so seeding still sees these nodes; it is never
-            # consulted to identify a node that has a topological identity.
-            self._byKey.setdefault(self._key(coord, componentId), label)
         return label
 
     def _mint(self) -> int:
@@ -170,9 +121,8 @@ class NodeRegistry:
         else:
             (label,) = self._reserveLabels(1)
             if label <= self._maxLabel:
-                # The allocator is monotonic and was told about every label the registry knows (see
-                # reserve_labels_up_to), so this cannot happen -- unless the two were wired up to
-                # different models, which would silently alias two nodes onto one label.
+                # the allocator is monotonic and was told about every label the registry knows, so
+                # this means registry and model were wired to different models
                 raise ValueError(
                     "the node allocator handed out label {:d}, which the refinement registry "
                     "already uses; registry and model are out of sync".format(label)
@@ -180,76 +130,105 @@ class NodeRegistry:
         self._maxLabel = label
         return label
 
-    def connectivity(self, coords, componentId: int = 0) -> list:
-        """Map a list/array of node coordinates of one body to their labels (registering as needed)."""
-        return [self.label(c, componentId) for c in coords]
+
+class HangingNode(NamedTuple):
+    """A hanging node: its value is ``sum(weights[i] * value(masters[i]))``, the trace of the master
+    element on the edge or face (``kind``) the node lies on."""
+
+    slave: int
+    kind: str
+    masters: list
+    weights: np.ndarray
 
 
-def _box_of(coords):
-    coords = np.asarray(coords, dtype=float)
-    return coords.min(axis=0), coords.max(axis=0)
+class InternalPlane(NamedTuple):
+    """A lattice plane inside a root element: reference coordinate ``axis`` equals ``value``."""
+
+    rootEid: int
+    axis: int
+    value: int
+
+
+class Rectangle(NamedTuple):
+    """An axis-aligned rectangle ``[uMin, uMax] x [vMin, vMax]`` of lattice coordinates on a face."""
+
+    uMin: int
+    uMax: int
+    vMin: int
+    vMax: int
+
+    def overlaps(self, other: "Rectangle") -> bool:
+        """True if the two rectangles overlap with positive area (touching edges do not count)."""
+        return min(self.uMax, other.uMax) > max(self.uMin, other.uMin) and min(self.vMax, other.vMax) > max(
+            self.vMin, other.vMin
+        )
+
+
+class FaceOnEntity(NamedTuple):
+    """An element face: the entity it lies on (a :class:`~edelweissfe.adaptivity.rootentities.RootFace`
+    or an :class:`InternalPlane`) and the rectangle it covers there."""
+
+    entity: object
+    rectangle: Rectangle
 
 
 class AdaptiveMesh:
     """Octree hierarchy of HEX20 elements: refinement, 2:1 balancing and hanging-node classification.
 
     Every decision about how elements and nodes relate -- which nodes coincide, which node lies on
-    which face or edge, which elements share a face, which nodes hang and with which weights -- is
-    taken topologically and in exact arithmetic, never from physical coordinates: each element knows
-    its root and its exact box in the root's reference cube, and the root mesh's vertices, edges and
-    faces are named by their corner labels (:class:`~edelweissfe.adaptivity.rootentities.RootEntityTable`).
-    This holds on curved, warped and arbitrarily oriented unstructured meshes alike; the only
-    requirement is a conforming root mesh. :meth:`check_hanging_completeness` verifies the result
-    after every adaptation.
+    which face or edge, which elements share a face, which nodes hang and with which weights, which new
+    nodes join a node set -- is taken topologically and in exact integer arithmetic, never from physical
+    coordinates: each element knows its root and its exact reference box, and the root mesh's
+    vertices, edges and faces are named by their corner labels
+    (:class:`~edelweissfe.adaptivity.rootentities.RootEntityTable`). This holds on curved, warped and
+    arbitrarily oriented unstructured meshes alike. The only requirement is a conforming root mesh
+    without collapsed elements. :meth:`check_conformity` verifies the result after every adaptation.
+
+    Parameters
+    ----------
+    splitFactor
+        ``n``: a refined element is split into ``n`` parts per axis, i.e. ``n**3`` children.
+    topology
+        The element :class:`~edelweissfe.adaptivity.topologybase.TopologyBase` (default: HEX20).
+    reserve_labels
+        The model's node-label allocator, see :class:`NodeRegistry`.
     """
 
-    def __init__(self, decimals: int = 8, splitFactor: int = 2, topology=None, reserve_labels=None):
+    def __init__(self, splitFactor: int = 2, topology=None, reserve_labels=None):
         if topology is None:
             from edelweissfe.adaptivity.hex20topology import Hex20Topology
 
             topology = Hex20Topology()
         self.topology = topology
-        self.registry = NodeRegistry(decimals, reserve_labels=reserve_labels)
-        self.splitFactor = splitFactor  # n: each refined element is split into n**3 children per axis
-        self.elements = {}  # eid -> dict(conn, coords, box, extent, level, active, parent, children)
-        # The active cells, kept alongside elements[eid]["active"] so that active() does not scan
-        # the whole hierarchy on every call. Insertion-ordered: a child's eid exceeds every existing
-        # one, so appending children after removing their parent keeps the ascending-eid order the
-        # scan produced -- which balance_2to1 relies on for the order it refines in.
+        self.registry = NodeRegistry(reserve_labels=reserve_labels)
+        self.splitFactor = splitFactor
+        #: M: reference coordinate xi of a root is the lattice integer (xi + 1) * M
+        self.latticeUnits = splitFactor**MAXIMUM_REFINEMENT_DEPTH
+        #: eid -> dict(conn, coords, level, active, parent, children, componentId, rootEid,
+        #: referenceBoxOrigin, referenceBoxEdgeLength, nodeKeys)
+        self.elements = {}
+        # The active elements, kept alongside elements[eid]["active"] so that active() does not scan
+        # the whole hierarchy. Insertion-ordered: a child's eid exceeds every existing one, so the order
+        # stays ascending -- which balance_2to1 relies on for the order it refines in.
         self._active = {}  # eid -> None
         self.elementSets = {}  # name -> set(eid)      (children inherit membership on refine)
         self.nodeSets = {}  # name -> set(node label)
         self.surfaces = {}  # name -> set((eid, faceID))  (element-based, Marmot faceID convention)
         self._next = 1
-        # The subdivision lattice, resolved once: it depends only on the topology and splitFactor.
+        n = splitFactor
+        lattice = self.topology.reference_node_lattice  # own nodes, 0..2 per axis
+        #: per child (in subdivision order ix * n * n + iy * n + iz): its nodes on the parent's lattice
+        #: with 2n units per edge -- the child at position i along an axis covers [2i, 2i + 2] there
         self._childLattice = [
-            _latticeOf(param, splitFactor) for param in self.topology.subdivision_children_param(splitFactor)
+            [tuple(2 * i + int(p[k]) for k, i in enumerate(position)) for p in lattice]
+            for position in product(range(n), repeat=3)
         ]
-        ownLattice = _latticeOf(self.topology.reference_node_param(), splitFactor)
-        #: lattice position -> local slot of the parent's own nodes, so a child node landing on one
-        #: reuses the parent's node instead of minting a second node at the same point
-        self._ownNodeAt = {tuple(row): slot for slot, row in enumerate(ownLattice)}
-        # The corners are the nodes sitting at an extreme of every axis; the rest are midside nodes,
-        # which span no sub-entity of their own and so never appear in an identity.
-        isCorner = np.all((ownLattice == 0) | (ownLattice == 2 * splitFactor), axis=1)
-        self._cornerSlots = np.flatnonzero(isCorner)
-        self._cornerLattice = ownLattice[isCorner]
-        #: every face and edge of an element, as a tuple of node slots, with the lattice coordinates
-        #: that are fixed on it (axis, value): a node lies on the entity iff it shares all of them
-        self._fixedLatticeOfEntity = {}
-        for entity in list(self.topology.faces) + list(self.topology.edges):
-            rows = ownLattice[list(entity)]
-            fixed = tuple((k, int(rows[0, k])) for k in range(rows.shape[1]) if np.all(rows[:, k] == rows[0, k]))
-            self._fixedLatticeOfEntity[tuple(entity)] = fixed
-        self._parentEntities = list(self._fixedLatticeOfEntity)
-        #: the root mesh's vertices, edges and faces, named by root corner labels (see rootentities)
-        self.rootEntities = RootEntityTable(self.topology)
-        #: result of _foreignBoundaryNodes for the current active mesh; reset by every refinement
-        self._foreignBoundaryNodesCache = None
-        #: the reference coordinates of an element's own nodes, as exact fractions in [-1, 1]
-        self._nodeReference = [
-            tuple(Fraction(int(v)) for v in p) for p in np.rint(self.topology.reference_node_param()).astype(int)
-        ]
+        #: the parent's own nodes on the same lattice, so a child node landing on one reuses it
+        self._ownNodeAt = {tuple(int(v) * n for v in p): slot for slot, p in enumerate(lattice)}
+        self._cornerSlots = self.topology.corner_slots
+        self.rootEntities = RootEntityTable(self.topology, self.latticeUnits)
+        #: result of _nodesOnElementBoundaries for the current active mesh; reset by every change
+        self._boundaryNodesCache = None
 
     # ---- topological containers ----
     def define_element_set(self, name, eids):
@@ -262,261 +241,112 @@ class AdaptiveMesh:
         """pairs: iterable of (eid, faceID) with Marmot faceID (1-6)."""
         self.surfaces[name] = set(pairs)
 
-    def _childConnectivity(self, parentConn, childIndex, coords, componentId):
-        """The 20 node labels of one child, decided topologically rather than geometrically.
+    # ---- building the hierarchy ----
+    def add_root(self, coords, labels, componentId: int = 0) -> int:
+        """Add a root (level-0) element: its 20 node coordinates and node labels, in C3D20 order.
 
-        Each child node is either one of the parent's own nodes -- recognised by an exact lattice
-        match, and reused -- or a new node spanned by some of the parent's corners. In the latter
-        case its identity is the set of spanning corner *labels* paired with exact integer weights.
-        A neighbouring element that shares that face or edge names the same corners with the same
-        weights, so both arrive at one label for one point.
+        The labels are the model's own, and each must have been registered with
+        :meth:`NodeRegistry.seed`. ``componentId`` is the connected body the element belongs to: node
+        identities are kept per body, so two bodies sharing a flush interface are never welded together.
+
+        Raises
+        ------
+        ValueError
+            For an unregistered label, a collapsed root element, or a non-manifold root mesh.
         """
-        extent = 2 * self.splitFactor
-        conn = []
-        for slot, lattice in enumerate(self._childLattice[childIndex]):
-            own = self._ownNodeAt.get(tuple(lattice))
-            if own is not None:
-                conn.append(parentConn[own])
-                continue
-            spanning = []
-            for cornerSlot, cornerLattice in zip(self._cornerSlots, self._cornerLattice):
-                weight = 1
-                for axis in range(len(lattice)):
-                    weight *= int(lattice[axis]) if cornerLattice[axis] == extent else extent - int(lattice[axis])
-                if weight:
-                    spanning.append((parentConn[cornerSlot], weight))
-            spanning.sort()
-            conn.append(self.registry.label_for_identity(tuple(spanning), coords[slot], componentId))
-        return conn
+        labels = [int(label) for label in labels]
+        unknown = [label for label in labels if label not in self.registry.coordinates]
+        if unknown:
+            raise ValueError(f"root element node(s) {unknown} were not seeded into the refinement registry")
+        eid = self._add(coords, labels, level=0, parent=None, componentId=componentId)
+        self.rootEntities.add_root(eid, labels, componentId)
+        return eid
 
-    def _add(self, coords, level, parent, componentId: int = 0, parentConn=None, childIndex=None, labels=None):
-        coords = np.asarray(coords, dtype=float)
+    def _add(self, coords, conn, level, parent, componentId, childPosition=None) -> int:
         eid = self._next
         self._next += 1
-        # A cell's coordinates never change after this, so its bounding box and largest extent are
-        # computed here, once. Before, box() recomputed them on every call, and the balancing and
-        # hanging-node passes call it several times per active cell on every adaptation -- a cost
-        # that scales with the whole mesh rather than with what the adaptation changed.
-        box = _box_of(coords)
         if parent is None:
-            rootEid, referenceLow, referenceSize = eid, (Fraction(-1),) * 3, Fraction(2)
+            rootEid, origin, edgeLength = eid, (0, 0, 0), 2 * self.latticeUnits
         else:
-            # the child's exact box in its root's reference cube: children are ordered
-            # ix * n * n + iy * n + iz (see subdivision_children_param)
-            parentElement = self.elements[parent]
-            n = self.splitFactor
-            position = (childIndex // (n * n), (childIndex // n) % n, childIndex % n)
-            rootEid = parentElement["rootEid"]
-            referenceSize = parentElement["referenceSize"] / n
-            referenceLow = tuple(parentElement["referenceLow"][k] + position[k] * referenceSize for k in range(3))
+            # the child's box in its root's lattice: the parent's box, split n ways per axis
+            p = self.elements[parent]
+            rootEid = p["rootEid"]
+            edgeLength = p["referenceBoxEdgeLength"] // self.splitFactor
+            origin = tuple(p["referenceBoxOrigin"][k] + childPosition[k] * edgeLength for k in range(3))
         self.elements[eid] = dict(
-            conn=(
-                self._childConnectivity(parentConn, childIndex, coords, componentId)
-                if parentConn is not None
-                else (
-                    self.registry.connectivity(coords, componentId)
-                    if labels is None
-                    else self._rootConnectivity(labels)
-                )
-            ),
-            coords=coords,
-            box=box,
-            extent=float((box[1] - box[0]).max()),
+            conn=conn,
+            coords=np.asarray(coords, dtype=float),
             level=level,
             active=True,
             parent=parent,
             children=[],
             componentId=componentId,
             rootEid=rootEid,
-            referenceLow=referenceLow,
-            referenceSize=referenceSize,
+            referenceBoxOrigin=origin,
+            referenceBoxEdgeLength=edgeLength,
+            nodeKeys=None,
         )
-        if parent is None:
-            self.rootEntities.add_root(eid, self.elements[eid]["conn"], componentId)
         self._active[eid] = None
-        self._foreignBoundaryNodesCache = None
+        self._boundaryNodesCache = None
         return eid
 
-    def add_root(self, coords, componentId: int = 0, labels=None) -> int:
-        """Add a level-0 element from its 20 node coordinates (C3D20 order).
+    def _childConnectivity(self, parentConn, childIndex, coords, componentId) -> list:
+        """The node labels of one child, decided topologically.
 
-        ``componentId`` identifies the connected body (mesh component) the element belongs to. Node
-        labels are namespaced per body, and hanging nodes are only ever classified within one body,
-        so two bodies sharing a flush interface are never welded together by refinement.
-
-        ``labels`` are the element's node labels in the model (same order). A model-backed mesh must
-        pass them: the root mesh's connectivity is then the model's own, exactly. Without them (a
-        standalone octree) the labels are looked up, or minted, by rounded coordinate.
+        Each child node is either one of the parent's own nodes -- an exact lattice match, reused -- or
+        a new node spanned by some of the parent's corners. Its identity is then the set of spanning
+        corner *labels* with exact integer (multilinear) weights; a neighbour sharing that face or edge
+        names the same corners with the same weights, so both arrive at one label for one point.
         """
-        return self._add(coords, level=0, parent=None, componentId=componentId, labels=labels)
-
-    def _rootConnectivity(self, labels) -> list:
-        """A root element's node labels as given by the model; every one must have been seeded."""
-        labels = [int(label) for label in labels]
-        unknown = [label for label in labels if label not in self.registry.coordinates]
-        if unknown:
-            raise ValueError(f"root element node(s) {unknown} were not seeded into the refinement registry")
-        return labels
-
-    def active(self) -> list:
-        """The active (leaf) cells, in ascending eid order."""
-        return list(self._active)
-
-    def node_reference_points(self, eid) -> list:
-        """The exact reference points, in the element's root, of the element's own nodes (slot order)."""
-        e = self.elements[eid]
-        low, size = e["referenceLow"], e["referenceSize"]
-        return [tuple(low[k] + size * (p[k] + 1) / 2 for k in range(3)) for p in self._nodeReference]
-
-    def node_keys(self, eid) -> list:
-        """The topological keys (see :class:`~edelweissfe.adaptivity.rootentities.RootEntityTable`) of
-        the element's own nodes, in slot order. Cached: an element's box never changes."""
-        e = self.elements[eid]
-        if "nodeKeys" not in e:
-            e["nodeKeys"] = [self.rootEntities.key(e["rootEid"], xi) for xi in self.node_reference_points(eid)]
-        return e["nodeKeys"]
-
-    def _foreignBoundaryNodes(self) -> list:
-        """Every node that lies on the boundary of an active element without being one of its nodes,
-        as ``(eid, label, zeta)`` with ``zeta`` the node's exact reference coordinates in that element.
-
-        Exact and exhaustive by construction: every node position is an exact point of its root, and
-        the root mesh's vertices, edges and faces are named by their corner labels, so a node on an
-        element's boundary is found whichever element -- or neighbouring root -- it belongs to. Also
-        verifies that no point carries two nodes and no node two points.
-
-        Only a refined root, or a root sharing a vertex with one, can hold such a node (anywhere else
-        the mesh is the conforming root mesh itself), so only their active elements are examined.
-        Cached until the mesh is next refined.
-        """
-        if self._foreignBoundaryNodesCache is not None:
-            return self._foreignBoundaryNodesCache
-        act = self.active()
-        refinedRoots = {self.elements[eid]["rootEid"] for eid in act if self.elements[eid]["level"] > 0}
-        relevantRoots = set()
-        for root in refinedRoots:
-            relevantRoots |= self.rootEntities.roots_touching(root)
-        relevant = [eid for eid in act if self.elements[eid]["rootEid"] in relevantRoots]
-        labelOfKey, keyOfLabel = {}, {}
-        for eid in relevant:
-            for label, key in zip(self.elements[eid]["conn"], self.node_keys(eid)):
-                if labelOfKey.setdefault(key, label) != label or keyOfLabel.setdefault(label, key) != key:
-                    raise TopologyError(
-                        f"AMR conformity: node {label} and node {labelOfKey[key]} occupy one point {key} "
-                        f"(or node {label} sits at two points); refinement split or merged a node"
-                    )
-
-        closure = {root: [] for root in relevantRoots}  # root -> [(label, exact point in that root)]
-        for key, label in labelOfKey.items():
-            for root in self.rootEntities.roots_sharing(key):
-                if root in closure:
-                    closure[root].append((label, self.rootEntities.local_point(root, key)))
-
-        # For each node, descend its root's octree to the active elements whose closed box contains
-        # it: O(nodes x depth), not O(elements x nodes) per root.
-        foreign = []
-        for root, nodes in closure.items():
-            for label, xi in nodes:
-                for eid in self._activeElementsContaining(root, xi):
-                    e = self.elements[eid]
-                    if label in e["conn"]:
-                        continue
-                    low, size = e["referenceLow"], e["referenceSize"]
-                    zeta = tuple(2 * (xi[k] - low[k]) / size - 1 for k in range(3))
-                    if any(abs(z) == 1 for z in zeta):
-                        foreign.append((eid, label, zeta))
-        self._foreignBoundaryNodesCache = foreign
-        return foreign
-
-    def _activeElementsContaining(self, rootEid, xi) -> list:
-        """The active elements of root ``rootEid`` whose closed reference box contains the exact point
-        ``xi``, found by descending the octree: at each level the child along each axis follows exactly
-        from the point's position, and a point on a split plane belongs to both children there."""
-        n = self.splitFactor
-        found, stack = [], [rootEid]
-        while stack:
-            eid = stack.pop()
-            e = self.elements[eid]
-            if e["active"]:
-                found.append(eid)
+        extent = 2 * self.splitFactor
+        lattice = self.topology.reference_node_lattice
+        conn = []
+        for slot, point in enumerate(self._childLattice[childIndex]):
+            own = self._ownNodeAt.get(point)
+            if own is not None:
+                conn.append(parentConn[own])
                 continue
-            low, size = e["referenceLow"], e["referenceSize"]
-            candidates = []
-            for k in range(3):
-                t = (xi[k] - low[k]) * n / size
-                if t.denominator == 1:
-                    candidates.append([i for i in (int(t) - 1, int(t)) if 0 <= i < n])
-                else:
-                    candidates.append([floor(t)])
-            for ix, iy, iz in product(*candidates):
-                stack.append(e["children"][ix * n * n + iy * n + iz])
-        return found
+            spanning = []
+            for cornerSlot in self._cornerSlots:
+                weight = 1
+                for k in range(3):
+                    weight *= point[k] if lattice[cornerSlot][k] == 2 else extent - point[k]
+                if weight:
+                    spanning.append((parentConn[cornerSlot], weight))
+            spanning.sort()
+            conn.append(self.registry.label_of_new_node(tuple(spanning), coords[slot], componentId))
+        return conn
 
-    def check_hanging_completeness(self, slaveLabels):
-        """Raise unless the active mesh is conforming up to the given hanging-node slaves.
+    def refine(self, eid) -> list:
+        """Split an active element into ``splitFactor**3`` children; deactivate it and keep element sets,
+        surfaces and node sets consistent.
 
-        Exact and independent of any geometric classification: every node position is known as an
-        exact point of its root element, and every root vertex, edge and face by its corner labels.
-        Two conditions are checked.
-
-        * One node per point: a topological key maps to one label, and a label to one key. A split
-          point would be two unconnected nodes; a merged one would weld distinct points.
-        * Every node that lies on a face of an active element is one of that element's own nodes or
-          a hanging-node slave. Anything else is a free node on the element's boundary -- the
-          interface is not conforming there.
-
-        Parameters
-        ----------
-        slaveLabels
-            The labels of all hanging-node slaves (e.g. the keys of :meth:`hanging_mpc_records`).
+        Children are returned in subdivision order, ``ix * n * n + iy * n + iz``
+        (see :meth:`~edelweissfe.adaptivity.topologybase.TopologyBase.subdivision_children_param`).
 
         Raises
         ------
         TopologyError
-            Naming the offending nodes and elements.
-        """
-        slaveLabels = set(slaveLabels)
-        unconstrained = [(label, eid) for eid, label, _ in self._foreignBoundaryNodes() if label not in slaveLabels]
-        if unconstrained:
-            nodes = sorted({label for label, _ in unconstrained})
-            raise TopologyError(
-                f"AMR conformity: {len(nodes)} node(s) lie on the boundary of an active element without "
-                f"being one of its nodes or a hanging-node slave -- the coarse-fine interface is not "
-                f"conforming there. First (node, element) pairs: {sorted(unconstrained)[:10]}"
-            )
-
-    def box(self, eid):
-        """The axis-aligned bounding box ``(min, max)`` of a cell; cached at creation, see :meth:`_add`."""
-        return self.elements[eid]["box"]
-
-    def find_by_center(self, center, tol=1e-6):
-        """Return the active element whose bounding-box center matches (utility for scripting)."""
-        center = np.asarray(center, dtype=float)
-        for eid in self.active():
-            bMin, bMax = self.box(eid)
-            if np.linalg.norm((bMin + bMax) / 2 - center) < tol:
-                return eid
-        return None
-
-    def refine(self, eid) -> list:
-        """Subdivide an active element into 8 children; deactivate the parent and keep all
-        topological containers (element sets, surfaces, node sets) consistent.
-
-        Children are returned in octant_children_param order, so kids[j] is octant j.
+            Beyond :data:`MAXIMUM_REFINEMENT_DEPTH`.
         """
         e = self.elements[eid]
         if not e["active"]:
             return e["children"]
-        parent_conn = e["conn"]
-        kids = [
+        if e["level"] >= MAXIMUM_REFINEMENT_DEPTH:
+            raise TopologyError(f"AMR: element {eid} is at the maximum refinement depth {MAXIMUM_REFINEMENT_DEPTH}")
+        n = self.splitFactor
+        parentConn = e["conn"]
+        kids = []
+        for childIndex, (childCoords, position) in enumerate(
+            zip(self.topology.subdivide(e["coords"], n), product(range(n), repeat=3))
+        ):
             # children stay in the parent's body, and take their node identities from it
-            self._add(ch, e["level"] + 1, eid, e["componentId"], parent_conn, childIndex)
-            for childIndex, ch in enumerate(self.topology.subdivide(e["coords"], self.splitFactor))
-        ]
+            conn = self._childConnectivity(parentConn, childIndex, childCoords, e["componentId"])
+            kids.append(self._add(childCoords, conn, e["level"] + 1, eid, e["componentId"], position))
         e["active"] = False
         del self._active[eid]
         e["children"] = kids
-        self._foreignBoundaryNodesCache = None
+        self._boundaryNodesCache = None
 
         # element sets + section assignment: children inherit every membership of the parent
         for members in self.elementSets.values():
@@ -531,202 +361,298 @@ class AdaptiveMesh:
                 for j in self.topology.face_child_indices(self.topology.faceid_to_face[fid], self.splitFactor):
                     pairs.add((kids[j], fid))
 
-        # node sets: a new node joins a set if it lies on a parent face or edge whose nodes are all in
-        # the set. Decided exactly from the node's lattice position in the parent (see _entitiesOf).
-        onEntities = {}  # new node label -> parent faces and edges (as node-slot tuples) it lies on
-        for childIndex, kid in enumerate(kids):
-            for label, lattice in zip(self.elements[kid]["conn"], self._childLattice[childIndex]):
-                if label not in onEntities and self._ownNodeAt.get(tuple(lattice)) is None:
-                    onEntities[label] = self._entitiesOf(lattice)
-        for S in self.nodeSets.values():
-            inSet = [entity for entity in self._parentEntities if all(parent_conn[i] in S for i in entity)]
-            if not inSet:
-                continue
-            for label, entities in onEntities.items():
-                if any(entity in entities for entity in inSet):
-                    S.add(label)
+        self._inheritNodeSetMembership(parentConn, kids)
         return kids
 
-    def _entitiesOf(self, lattice) -> set:
-        """The parent faces and edges (node-slot tuples) that a node at the given lattice position of
-        the parent lies on: exactly those whose fixed reference coordinates it shares."""
-        return {
-            entity for entity, fixed in self._fixedLatticeOfEntity.items() if all(lattice[k] == v for k, v in fixed)
-        }
+    def _inheritNodeSetMembership(self, parentConn, kids):
+        """A new node joins a node set iff it lies on a parent face or edge whose nodes are all in the set
+        -- decided from the node's exact lattice position in the parent.
 
-    def _faceDescriptors(self, eid) -> list:
-        """The six faces of an active element as ``(entity, rectangle)``: exact and topological.
+        A node set is thus inherited *through faces and edges*: a set holding all nodes of a face gains
+        the new nodes on that face (even if it was meant as the face's perimeter only), and a set never
+        gains new nodes inside the parent. Where that is not the intended membership, define the set
+        through an element set or a surface instead.
+        """
+        extent = 2 * self.splitFactor
+        onEntities = {}  # new node label -> parent faces and edges it lies on
+        for childIndex, kid in enumerate(kids):
+            for label, point in zip(self.elements[kid]["conn"], self._childLattice[childIndex]):
+                if label not in onEntities and point not in self._ownNodeAt:
+                    onEntities[label] = set(self.topology.entities_containing(point, extent))
+        entities = [tuple(f) for f in self.topology.faces] + [tuple(ed) for ed in self.topology.edges]
+        for S in self.nodeSets.values():
+            inSet = [entity for entity in entities if all(parentConn[i] in S for i in entity)]
+            if not inSet:
+                continue
+            for label, containing in onEntities.items():
+                if any(entity in containing for entity in inSet):
+                    S.add(label)
+
+    # ---- queries ----
+    def active(self) -> list:
+        """The active (leaf) elements, in ascending eid order."""
+        return list(self._active)
+
+    def node_lattice_points(self, eid) -> list:
+        """The lattice points, in the element's root, of the element's own nodes (slot order)."""
+        e = self.elements[eid]
+        origin, half = e["referenceBoxOrigin"], e["referenceBoxEdgeLength"] // 2
+        return [tuple(origin[k] + int(p[k]) * half for k in range(3)) for p in self.topology.reference_node_lattice]
+
+    def node_keys(self, eid) -> list:
+        """The :class:`~edelweissfe.adaptivity.rootentities.NodeKey` of each of the element's own nodes,
+        in slot order. Computed once: an element's reference box never changes."""
+        e = self.elements[eid]
+        if e["nodeKeys"] is None:
+            e["nodeKeys"] = [self.rootEntities.key(e["rootEid"], point) for point in self.node_lattice_points(eid)]
+        return e["nodeKeys"]
+
+    def _nodesOnElementBoundaries(self) -> list:
+        """Every node on the boundary of an active element that is not one of its own nodes, as
+        ``(eid, label, pointInElement)``: the node's lattice point relative to that element's box
+        origin, the element spanning ``[0, edge length]`` per axis.
+
+        Exact and exhaustive by construction: every node sits at an exact point of its root, and the root
+        mesh's entities are named by their corner labels, so a node on an element's boundary is found
+        whichever element -- or neighbouring root -- it belongs to. Also verifies that no point carries
+        two nodes and no node sits at two points. Only a refined root, or a root sharing a vertex with
+        one, can hold such a node (elsewhere the mesh is the conforming root mesh itself), so only their
+        elements are examined. Cached until the mesh next changes.
+        """
+        if self._boundaryNodesCache is not None:
+            return self._boundaryNodesCache
+        act = self.active()
+        refinedRoots = {self.elements[eid]["rootEid"] for eid in act if self.elements[eid]["level"] > 0}
+        relevantRoots = set()
+        for root in refinedRoots:
+            relevantRoots |= self.rootEntities.roots_touching(root)
+        labelOfKey, keyOfLabel = {}, {}
+        for eid in act:
+            if self.elements[eid]["rootEid"] not in relevantRoots:
+                continue
+            for label, key in zip(self.elements[eid]["conn"], self.node_keys(eid)):
+                if labelOfKey.setdefault(key, label) != label or keyOfLabel.setdefault(label, key) != key:
+                    raise TopologyError(
+                        f"AMR conformity: node {label} and node {labelOfKey[key]} occupy one point {key} "
+                        f"(or node {label} sits at two points); refinement split or merged a node"
+                    )
+
+        nodesOfRoot = {root: [] for root in relevantRoots}  # root -> [(label, lattice point in that root)]
+        for key, label in labelOfKey.items():
+            for root in self.rootEntities.roots_sharing(key):
+                if root in nodesOfRoot:
+                    nodesOfRoot[root].append((label, self.rootEntities.local_point(root, key)))
+
+        # per node, descend its root's octree to the active elements whose closed box contains it:
+        # O(nodes x depth), not O(elements x nodes) per root
+        found = []
+        for root, nodes in nodesOfRoot.items():
+            for label, point in nodes:
+                for eid in self._activeElementsContaining(root, point):
+                    e = self.elements[eid]
+                    if label in e["conn"]:
+                        continue
+                    edgeLength = e["referenceBoxEdgeLength"]
+                    pointInElement = tuple(point[k] - e["referenceBoxOrigin"][k] for k in range(3))
+                    if any(v == 0 or v == edgeLength for v in pointInElement):
+                        found.append((eid, label, pointInElement))
+        self._boundaryNodesCache = found
+        return found
+
+    def _activeElementsContaining(self, rootEid, point) -> list:
+        """The active elements of root ``rootEid`` whose closed box contains a lattice point, found by
+        descending the octree: the child along each axis follows from the point's position, and a point
+        on a split plane belongs to the children on both sides."""
+        n = self.splitFactor
+        found, stack = [], [rootEid]
+        while stack:
+            eid = stack.pop()
+            e = self.elements[eid]
+            if e["active"]:
+                found.append(eid)
+                continue
+            childEdgeLength = e["referenceBoxEdgeLength"] // n
+            candidates = []
+            for k in range(3):
+                i, remainder = divmod(point[k] - e["referenceBoxOrigin"][k], childEdgeLength)
+                candidates.append([c for c in (i - 1, i) if 0 <= c < n] if remainder == 0 else [i])
+            for ix, iy, iz in product(*candidates):
+                stack.append(e["children"][ix * n * n + iy * n + iz])
+        return found
+
+    # ---- conformity ----
+    def check_conformity(self, slaveLabels):
+        """Raise unless the active mesh is conforming up to the given hanging-node slaves.
+
+        Exact, and independent of how the hanging nodes were found. Two conditions:
+
+        * One node per point: a :class:`~edelweissfe.adaptivity.rootentities.NodeKey` maps to one label,
+          and a label to one key. A split point would be two unconnected nodes; a merged one would weld
+          distinct points.
+        * Every node on the boundary of an active element is one of its own nodes or a hanging-node
+          slave. Anything else is a free node on the element's boundary: the interface is not conforming.
+
+        Parameters
+        ----------
+        slaveLabels
+            The labels of all hanging-node slaves (e.g. the keys of :meth:`hanging_mpc_records`).
+
+        Raises
+        ------
+        TopologyError
+            Naming the offending nodes and elements.
+        """
+        slaveLabels = set(slaveLabels)
+        unconstrained = [(label, eid) for eid, label, _ in self._nodesOnElementBoundaries() if label not in slaveLabels]
+        if unconstrained:
+            nodes = sorted({label for label, _ in unconstrained})
+            raise TopologyError(
+                f"AMR conformity: {len(nodes)} node(s) lie on the boundary of an active element without "
+                f"being one of its nodes or a hanging-node slave -- the coarse-fine interface is not "
+                f"conforming there. First (node, element) pairs: {sorted(unconstrained)[:10]}"
+            )
+
+    # ---- 2:1 balancing ----
+    def _facesOnEntities(self, eid) -> list:
+        """The six faces of an element as :class:`FaceOnEntity`, exact and topological.
 
         A face on the boundary of the element's root lies on a root face, named by its corner labels,
-        and its rectangle is measured in that face's canonical frame, so a neighbouring root derives
-        the identical entity and coordinates. A face inside the root lies on an internal plane of that
-        root, ``(rootEid, axis, value)``, with the rectangle in the other two reference coordinates.
-        Two elements share a face iff they have faces on the same entity whose rectangles overlap with
-        positive area.
+        and its rectangle is measured in that face's canonical frame, so a neighbouring root derives the
+        identical entity and rectangle. A face inside the root lies on an :class:`InternalPlane`, with
+        the rectangle in the other two lattice coordinates. Two elements share a face iff they have faces
+        on one entity whose rectangles overlap with positive area.
         """
         e = self.elements[eid]
-        rootEid, low, size = e["rootEid"], e["referenceLow"], e["referenceSize"]
+        rootEid, origin, length = e["rootEid"], e["referenceBoxOrigin"], e["referenceBoxEdgeLength"]
+        rootExtent = 2 * self.latticeUnits
+        lattice = self.topology.reference_node_lattice
         faces = []
-        for axis in range(3):
-            others = [k for k in range(3) if k != axis]
-            for value in (low[axis], low[axis] + size):
-                if abs(value) == 1:
-                    corners = []
-                    for a, b in ((low[others[0]], low[others[1]]), (low[others[0]] + size, low[others[1]] + size)):
-                        xi = [None] * 3
-                        xi[axis], xi[others[0]], xi[others[1]] = value, a, b
-                        entity, uv = self.rootEntities.root_face_coordinates(rootEid, axis, value, tuple(xi))
-                        corners.append(uv)
-                    (u0, v0), (u1, v1) = corners
-                    rectangle = (min(u0, u1), max(u0, u1), min(v0, v1), max(v0, v1))
-                    faces.append((("root face",) + entity, rectangle))
-                else:
-                    rectangle = (low[others[0]], low[others[0]] + size, low[others[1]], low[others[1]] + size)
-                    faces.append((("plane", rootEid, axis, value), rectangle))
+        for faceIndex, face in enumerate(self.topology.faces):
+            rows = lattice[list(face)]
+            axis = next(k for k in range(3) if np.all(rows[:, k] == rows[0, k]))
+            value = origin[axis] + int(rows[0, axis]) * length // 2
+            u, v = (k for k in range(3) if k != axis)
+            if value in (0, rootExtent):
+                corners = []
+                for du, dv in ((0, 0), (length, length)):
+                    point = [0, 0, 0]
+                    point[axis], point[u], point[v] = value, origin[u] + du, origin[v] + dv
+                    entity, position = self.rootEntities.root_face_position(rootEid, faceIndex, tuple(point))
+                    corners.append(position)
+                (u0, v0), (u1, v1) = corners
+                faces.append(FaceOnEntity(entity, Rectangle(min(u0, u1), max(u0, u1), min(v0, v1), max(v0, v1))))
+            else:
+                rectangle = Rectangle(origin[u], origin[u] + length, origin[v], origin[v] + length)
+                faces.append(FaceOnEntity(InternalPlane(rootEid, axis, value), rectangle))
         return faces
 
     def balance_2to1(self) -> int:
         """Refine coarser elements until no face-adjacent active pair differs by more than one level.
 
-        Face adjacency is exact and topological (see :meth:`_faceDescriptors`), so balancing holds on
+        Face adjacency is exact and topological (see :meth:`_facesOnEntities`), so balancing holds on
         curved and warped meshes as on flat ones. Returns the number of extra elements refined.
 
         Only *face* neighbours are balanced. Elements touching only along an edge or at a vertex may
         differ by two or more levels; the interface stays conforming (the finer edge nodes hang on the
-        coarsest element's edge, through exactly resolved constraint chains), so this is a grading,
-        not a correctness, limitation. Edge/vertex balancing is deliberately not implemented: it would
-        refine additional elements and change the results of multi-level runs.
+        coarsest element's edge, through exactly resolved constraint chains), so this is a grading, not a
+        correctness, limitation. Edge/vertex balancing is deliberately not implemented: it would refine
+        additional elements and change the results of multi-level runs.
         """
         nExtra = 0
         while True:
             act = self.active()
-            lev = {eid: self.elements[eid]["level"] for eid in act}
-            # Only a pair whose levels differ by two or more can violate the 2:1 rule: a mesh whose
-            # active levels span less -- every mesh refined by a single level -- is balanced.
-            minLevel, maxLevel = min(lev.values()), max(lev.values())
+            level = {eid: self.elements[eid]["level"] for eid in act}
+            # only a pair whose levels differ by two or more can violate the rule: a mesh whose active
+            # levels span less -- every mesh refined by a single level -- is balanced
+            minLevel, maxLevel = min(level.values()), max(level.values())
             if maxLevel - minLevel < 2:
                 break
-            # the finer partners (at least two levels above the coarsest), indexed by face entity
-            finerOnEntity = defaultdict(list)  # entity -> [(level, rectangle)]
+            finerFacesOn = defaultdict(list)  # entity -> [(level, rectangle)] of the finer candidates
             for eid in act:
-                if lev[eid] >= minLevel + 2:
-                    for entity, rectangle in self._faceDescriptors(eid):
-                        finerOnEntity[entity].append((lev[eid], rectangle))
-            to_refine = set()
+                if level[eid] >= minLevel + 2:
+                    for face in self._facesOnEntities(eid):
+                        finerFacesOn[face.entity].append((level[eid], face.rectangle))
+            toRefine = set()
             for a in act:
-                if lev[a] + 2 > maxLevel:
+                if level[a] + 2 > maxLevel:
                     continue
-                for entity, (u0, u1, v0, v1) in self._faceDescriptors(a):
+                for face in self._facesOnEntities(a):
                     if any(
-                        level >= lev[a] + 2 and min(u1, b1) > max(u0, b0) and min(v1, c1) > max(v0, c0)
-                        for level, (b0, b1, c0, c1) in finerOnEntity.get(entity, ())
+                        finerLevel >= level[a] + 2 and face.rectangle.overlaps(rectangle)
+                        for finerLevel, rectangle in finerFacesOn.get(face.entity, ())
                     ):
-                        to_refine.add(a)
+                        toRefine.add(a)
                         break
-            if not to_refine:
+            if not toRefine:
                 break
-            for eid in to_refine:
+            for eid in toRefine:
                 self.refine(eid)
                 nExtra += 1
         return nExtra
 
+    # ---- hanging nodes ----
     def classify_hanging(self) -> list:
-        """All hanging nodes of the active mesh, with their masters and exact weights.
+        """All hanging nodes of the active mesh, as :class:`HangingNode`, sorted by slave label.
 
-        A hanging node is a node on the boundary of an active element that is not one of its own
-        nodes (see :meth:`_foreignBoundaryNodes` -- exact, exhaustive, no geometry). Its master
-        entity is the element's edge it lies on (two reference coordinates at +-1) or else its face
-        (one at +-1); its weights are the element's own shape functions at the node's exact reference
-        point, which on that edge or face are non-zero only for the entity's nodes -- the exact coarse
-        trace, on curved and warped elements alike. A node hanging on several elements keeps the
-        lowest-dimensional entity and, among equals, the coarsest element, which guarantees global
-        continuity with the coarsest trace.
-
-        Returns
-        -------
-        list of dict
-            ``{"slave", "kind", "masters", "weights"}``, sorted by slave label.
+        A hanging node is a node on the boundary of an active element that is not one of its own nodes
+        (:meth:`_nodesOnElementBoundaries`: exact, exhaustive, no geometry). Its master entity is the
+        lowest-dimensional one of that element containing it -- an edge or a face -- and, among several
+        such elements, the coarsest, which guarantees continuity with the coarsest trace. Its weights are
+        the master element's own shape functions at the node's exact reference point, which on that edge
+        or face are non-zero only for the entity's nodes: the exact coarse trace, on curved and warped
+        elements alike. They are verified in exact arithmetic before use.
         """
-        reference = np.rint(self.topology.reference_node_param()).astype(int)
-        # 1) the master of every hanging node: the lowest-dimensional entity, then the coarsest element
-        best = {}  # slave -> (dim, level, eid, zeta, kind, entity)
-        for eid, label, zeta in self._foreignBoundaryNodes():
-            onBoundary = [k for k in range(3) if abs(zeta[k]) == 1]
-            if len(onBoundary) == 2:
-                kind, dim = "edge", 1
-                entity = next(
-                    ed for ed in self.topology.edges if all(reference[i][k] == zeta[k] for i in ed for k in onBoundary)
-                )
-            elif len(onBoundary) == 1:
-                kind, dim = "face", 2
-                axis = onBoundary[0]
-                entity = next(f for f in self.topology.faces if all(reference[i][axis] == zeta[axis] for i in f))
-            else:
+        best = {}  # slave -> (dimension, level, eid, pointInElement, kind, entity)
+        for eid, label, pointInElement in self._nodesOnElementBoundaries():
+            e = self.elements[eid]
+            kind, entity = self.topology.lowest_entity_containing(pointInElement, e["referenceBoxEdgeLength"])
+            if kind not in ("edge", "face"):
                 raise TopologyError(f"AMR: node {label} lies on a corner of element {eid} without being its node")
-            candidate = (dim, self.elements[eid]["level"], eid, zeta, kind, entity)
+            candidate = (1 if kind == "edge" else 2, e["level"], eid, pointInElement, kind, entity)
             current = best.get(label)
             if current is None or candidate[:2] < current[:2]:
                 best[label] = candidate
 
-        # 2) its weights: the master element's own shape functions at the exact point, which on the
-        # entity are non-zero only for the entity's nodes -- the exact trace, verified before use
         hanging = []
-        for label, (dim, level, eid, zeta, kind, entity) in sorted(best.items()):
-            exactWeights = self.topology.shape_functions_exact(*zeta)
-            self._verifyTraceWeights(label, eid, zeta, entity, exactWeights, reference)
-            conn = self.elements[eid]["conn"]
+        for label, (_, _, eid, pointInElement, kind, entity) in sorted(best.items()):
+            e = self.elements[eid]
+            xi = tuple(Fraction(2 * v, e["referenceBoxEdgeLength"]) - 1 for v in pointInElement)
+            exactWeights = self.topology.shape_functions_exact(*xi)
+            self._verifyTraceWeights(label, eid, xi, entity, exactWeights)
             weights = np.array([float(exactWeights[i]) for i in entity])
-            hanging.append({"slave": label, "kind": kind, "masters": [conn[i] for i in entity], "weights": weights})
+            hanging.append(HangingNode(label, kind, [e["conn"][i] for i in entity], weights))
         return hanging
 
-    @staticmethod
-    def _verifyTraceWeights(label, eid, zeta, entity, exactWeights, reference):
-        """Raise unless the weights of a hanging node on ``entity`` are its exact trace weights.
+    def _verifyTraceWeights(self, label, eid, xi, entity, exactWeights):
+        """Raise unless ``exactWeights`` are the exact trace weights of a node at ``xi`` on ``entity``.
 
-        Checked in exact rational arithmetic, so no tolerance: the weights of every node off the
-        entity vanish, and the entity's weights reproduce the constant, the node's own reference
-        coordinates and every quadratic monomial of them -- which catches a wrong entity, a wrong
-        master order or a wrong orientation, not just a wrong formula.
+        Checked in exact rational arithmetic, so without any tolerance: the weight of every node off the
+        entity vanishes, and the entity's weights reproduce the constant, the three reference coordinates
+        and the six quadratic monomials :math:`\\xi_a \\xi_b` at the node -- which catches a wrong entity
+        or orientation, not just a wrong formula.
         """
+        reference = [tuple(int(v) - 1 for v in p) for p in self.topology.reference_node_lattice]
+        exponents = [(0, 0, 0)] + [tuple(int(k == a) for k in range(3)) for a in range(3)]
+        exponents += [tuple(int(k == a) + int(k == b) for k in range(3)) for a in range(3) for b in range(a, 3)]
+
+        def monomial(point, exponent):
+            return point[0] ** exponent[0] * point[1] ** exponent[1] * point[2] ** exponent[2]
+
         onEntity = set(entity)
-        offEntity = [w for i, w in enumerate(exactWeights) if i not in onEntity]
-        monomials = [lambda x: 1] + [lambda x, a=a: x[a] for a in range(3)]
-        monomials += [lambda x, a=a, b=b: x[a] * x[b] for a in range(3) for b in range(a, 3)]
-        reproduced = all(sum(exactWeights[i] * m(reference[i]) for i in entity) == m(zeta) for m in monomials)
-        if any(offEntity) or not reproduced:
+        offEntityWeightVanishes = all(w == 0 for i, w in enumerate(exactWeights) if i not in onEntity)
+        reproduces = all(
+            sum(exactWeights[i] * monomial(reference[i], exponent) for i in entity) == monomial(xi, exponent)
+            for exponent in exponents
+        )
+        if not (offEntityWeightVanishes and reproduces):
             raise TopologyError(
-                f"AMR: the hanging-node weights of node {label} on element {eid} (reference point {zeta}) "
+                f"AMR: the hanging-node weights of node {label} on element {eid} (reference point {xi}) "
                 "are not the exact trace of that element's shape functions"
             )
 
     def hanging_mpc_records(self) -> dict:
-        """Flattened master-slave records for DOF-elimination MPCs.
-
-        Returns {slaveLabel: [(masterLabel, weight), ...]} where every master is an INDEPENDENT
-        (non-hanging) node. Multi-level chains (a master that is itself a slave) are resolved here by
-        recursive substitution with weight composition; kept as a cheap pre-flattening even though
-        :class:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation` now also
-        flattens chains generally (including across other MPCs, e.g. a tie facet referencing a
-        hanging slave). Weights are field-independent (equal-order).
-        """
-        raw = {}  # slaveLabel -> [(masterLabel, weight)]
-        for h in self.classify_hanging():
-            raw[h["slave"]] = list(zip(h["masters"], h["weights"]))
-
-        slaves = set(raw)
-        memo = {}
-
-        def resolve(s):
-            if s in memo:
-                return memo[s]
-            acc = defaultdict(float)
-            for m, w in raw[s]:
-                if m in slaves:  # chained: substitute the master's own (resolved) masters
-                    for mm, ww in resolve(m).items():
-                        acc[mm] += w * ww
-                else:
-                    acc[m] += w
-            memo[s] = dict(acc)
-            return memo[s]
-
-        return {s: sorted(resolve(s).items()) for s in raw}
+        """The hanging-node constraints as ``{slave: [(master, weight), ...]}``, every master an
+        independent node: a chain -- a master that is itself hanging -- is substituted through, with the
+        same flattening the multi-point-constraint transformation applies across all constraints."""
+        raw = [(h.slave, list(zip(h.masters, h.weights))) for h in self.classify_hanging()]
+        return {slave: sorted(masters) for slave, masters in _flattenChainedRecords(raw)}

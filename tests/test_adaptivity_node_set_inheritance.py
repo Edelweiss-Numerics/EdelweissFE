@@ -31,10 +31,10 @@ No coordinates are compared, so a curved or warped boundary face behaves like a 
 
 import numpy as np
 import pytest
+from _adaptivemeshbuilder import AdaptiveMeshBuilder
 
 from edelweissfe.adaptivity.hex20shapefunctions import hex20_box_coords
 from edelweissfe.adaptivity.hex20topology import Hex20Topology
-from edelweissfe.adaptivity.refinement import AdaptiveMesh
 
 TOPOLOGY = Hex20Topology()
 
@@ -43,9 +43,9 @@ def _singleRoot(splitFactor, warp=False):
     X = hex20_box_coords(0.0, 1.0, 0.0, 1.0, 0.0, 1.0)
     if warp:  # bulge and twist the face x = 1: must not matter
         X[np.isclose(X[:, 0], 1.0), 0] += 0.07 * X[np.isclose(X[:, 0], 1.0), 1]
-    mesh = AdaptiveMesh(splitFactor=splitFactor, topology=Hex20Topology())
-    root = mesh.add_root(X, 0)
-    return mesh, root, X
+    builder = AdaptiveMeshBuilder(splitFactor)
+    root = builder.addRoot(X)
+    return builder.mesh, root, X
 
 
 def _nodesOnRootEntity(mesh, labels):
@@ -53,7 +53,7 @@ def _nodesOnRootEntity(mesh, labels):
     found = set()
     for eid in mesh.active():
         for label, key in zip(mesh.elements[eid]["conn"], mesh.node_keys(eid)):
-            spanned = {key[2]} if key[0] == "vertex" else set(key[2]) if key[0] in ("edge", "face") else None
+            spanned = {key.entity} if key.kind == "vertex" else set(key.entity) if key.kind != "interior" else None
             if spanned is not None and spanned <= labels:
                 found.add(label)
     return found

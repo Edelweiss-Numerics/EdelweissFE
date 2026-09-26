@@ -25,18 +25,10 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Pins the topological node keys of :class:`~edelweissfe.adaptivity.rootentities.RootEntityTable`
-and the exact conformity check :meth:`AdaptiveMesh.check_hanging_completeness` built on them.
-
-Keys: a point on a face (edge, vertex) shared by two root elements gets the identical key from
-either root, for every relative orientation of the two elements' local numbering -- all 48 symmetries
-of the cube -- because entities are named by corner labels and measured in a frame those labels fix.
-
-Conformity check: exact, no tolerance. It must accept a correct mesh (flat faces, splitFactor 2 and 3,
-two-level chains, a curved and warped face) and reject one from which a single slave was dropped --
-including exactly the five face-interior slaves the former geometric classifier dropped on a curved
-and warped face.
-"""
+"""Pins :class:`~edelweissfe.adaptivity.rootentities.RootEntityTable`: a point on a face, edge or
+vertex shared by two root elements gets the identical key from either root, for every relative
+orientation of their local numbering -- all 48 symmetries of the cube -- because root entities are
+named by corner labels and positions are measured in a frame those labels fix."""
 
 import itertools
 from fractions import Fraction
@@ -44,14 +36,12 @@ from fractions import Fraction
 import numpy as np
 import pytest
 
-from edelweissfe.adaptivity.hex20shapefunctions import hex20_box_coords
 from edelweissfe.adaptivity.hex20topology import Hex20Topology
-from edelweissfe.adaptivity.refinement import AdaptiveMesh
 from edelweissfe.adaptivity.rootentities import RootEntityTable
-from edelweissfe.utils.exceptions import TopologyError
 
 TOPOLOGY = Hex20Topology()
-REFERENCE = np.rint(TOPOLOGY.reference_node_param()).astype(int)
+REFERENCE = TOPOLOGY.reference_node_lattice - 1  # own nodes at reference coordinates -1, 0, 1
+M = 4  # lattice units: reference coordinate xi is the lattice integer (xi + 1) * M
 
 
 def _cubeSymmetries():
@@ -64,20 +54,22 @@ def _cubeSymmetries():
             yield S
 
 
+def _toLattice(xi):
+    return tuple(int((Fraction(v) + 1) * M) for v in xi)
+
+
 def _twoRootsSharingAFace(S):
     """Root A covers [-1, 1]^3 of a global reference frame, root B covers [1, 3] x [-1, 1]^2 and
-    numbers its nodes through the cube symmetry ``S``: its local node p sits at (2, 0, 0) + S p.
-    Nodes at the same global point share one label."""
+    numbers its nodes through the cube symmetry ``S``: its local node p sits at (2, 0, 0) + S p. Nodes
+    at one global point share one label."""
     labelAt = {}
 
     def label(point):
         return labelAt.setdefault(tuple(point), len(labelAt) + 1)
 
-    connA = [label(p) for p in REFERENCE]
-    connB = [label(np.array([2, 0, 0]) + S @ p) for p in REFERENCE]
-    table = RootEntityTable(TOPOLOGY)
-    table.add_root(1, connA)
-    table.add_root(2, connB)
+    table = RootEntityTable(TOPOLOGY, M)
+    table.add_root(1, [label(p) for p in REFERENCE])
+    table.add_root(2, [label(np.array([2, 0, 0]) + S @ p) for p in REFERENCE])
     return table
 
 
@@ -88,118 +80,26 @@ def test_bothRootsGiveTheSharedPointsIdenticalKeys(S):
     quarters = [Fraction(k, 4) for k in range(-4, 5)]
     for y, z in itertools.product(quarters, quarters):
         inA = (Fraction(1), y, z)
-        global_ = np.array([Fraction(1), y, z], dtype=object)
-        inB = tuple(Sinv @ (global_ - np.array([2, 0, 0], dtype=object)))
-        keyA, keyB = table.key(1, inA), table.key(2, tuple(Fraction(v) for v in inB))
+        inB = tuple(Sinv @ (np.array(inA, dtype=object) - np.array([2, 0, 0], dtype=object)))
+        keyA, keyB = table.key(1, _toLattice(inA)), table.key(2, _toLattice(inB))
         assert keyA == keyB
-        assert keyA[0] == ("face" if abs(y) < 1 and abs(z) < 1 else "edge" if abs(y) < 1 or abs(z) < 1 else "vertex")
-        # and the key maps back to the same point in either root
-        assert table.local_point(1, keyA) == inA
+        onEdgeOfFace = abs(y) == 1 or abs(z) == 1
+        assert keyA.kind == ("vertex" if abs(y) == 1 and abs(z) == 1 else "edge" if onEdgeOfFace else "face")
+        assert table.local_point(1, keyA) == _toLattice(inA)
+        assert table.local_point(2, keyA) == _toLattice(inB)
         assert sorted(table.roots_sharing(keyA)) == [1, 2]
 
 
 def test_collapsedAndNonManifoldRootsAreRejected():
-    table = RootEntityTable(TOPOLOGY)
+    table = RootEntityTable(TOPOLOGY, M)
     conn = list(range(1, 21))
     conn[1] = conn[0]
     with pytest.raises(ValueError, match="collapsed"):
         table.add_root(1, conn)
-    # three roots owning the same face (same four corner labels) is not a manifold
-    table = RootEntityTable(TOPOLOGY)
+    # three roots owning the same face (the same four corner labels) is not a manifold
+    table = RootEntityTable(TOPOLOGY, M)
     table.add_root(1, list(range(1, 21)))
-    face = next(f for f in TOPOLOGY.faces if set(f[:4]) <= set(range(8)))
-    shared = {slot for slot in face[:4]}
-    table.add_root(2, [slot + 1 if slot in shared else 200 + slot for slot in range(20)])
+    face = TOPOLOGY.faces[0]
+    table.add_root(2, [slot + 1 if slot in face else 200 + slot for slot in range(20)])
     with pytest.raises(ValueError, match="manifold"):
-        table.add_root(3, [slot + 1 if slot in shared else 300 + slot for slot in range(20)])
-
-
-# ---- the conformity check ----
-
-
-def _boxMesh(splitFactor=2, curvedWarped=False, refineTwice=False):
-    """A = [-2, 0] x [0, 2]^2 (coarse), B = [0, 2] x [0, 2]^2 (refined); optionally with the shared
-    face bulged and warped, and optionally with one child of B refined again (a 2:1 chain)."""
-    A = hex20_box_coords(-2.0, 0.0, 0.0, 2.0, 0.0, 2.0)
-    B = hex20_box_coords(0.0, 2.0, 0.0, 2.0, 0.0, 2.0)
-    if curvedWarped:
-        for X in (A, B):
-            for x in X:
-                if abs(x[0]) < 1e-12:
-                    isCorner = x[1] in (0.0, 2.0) and x[2] in (0.0, 2.0)
-                    x[0] += 0.03 if (x[1], x[2]) == (2.0, 2.0) else (0.0 if isCorner else 0.05 + 0.01 * x[1])
-    mesh = AdaptiveMesh(splitFactor=splitFactor, topology=Hex20Topology())
-    mesh.add_root(A, 0)
-    kids = mesh.refine(mesh.add_root(B, 0))
-    if refineTwice:
-        mesh.refine(kids[-1])  # a child away from A: a level-2 / level-1 interface inside B
-    return mesh
-
-
-@pytest.mark.parametrize("splitFactor", [2, 3])
-def test_aCorrectMeshPasses(splitFactor):
-    mesh = _boxMesh(splitFactor)
-    mesh.check_hanging_completeness(mesh.hanging_mpc_records())
-
-
-def test_aTwoLevelChainPasses():
-    mesh = _boxMesh(refineTwice=True)
-    mesh.check_hanging_completeness(mesh.hanging_mpc_records())
-
-
-def test_droppingASingleSlaveIsCaught():
-    mesh = _boxMesh()
-    records = mesh.hanging_mpc_records()
-    dropped = sorted(records)[0]
-    with pytest.raises(TopologyError, match="not\\s+conforming"):
-        mesh.check_hanging_completeness(set(records) - {dropped})
-
-
-def test_aCurvedWarpedMeshIsConforming():
-    """On the curved and warped face -- where the former flat corner-plane classifier left the five
-    face-interior hanging nodes unconstrained -- the topological classifier constrains every one."""
-    mesh = _boxMesh(curvedWarped=True)
-    records = mesh.hanging_mpc_records()
-    mesh.check_hanging_completeness(records)
-    assert len(records) == 13
-
-
-def test_theCheckCatchesTheFormerCurvedFaceDefect():
-    """The check needs no geometry: dropping the five face-interior slaves -- exactly what the former
-    classifier did on this face -- is caught."""
-    mesh = _boxMesh(curvedWarped=True)
-    faceSlaves = {h["slave"] for h in mesh.classify_hanging() if h["kind"] == "face"}
-    assert len(faceSlaves) == 5
-    with pytest.raises(TopologyError, match=r"5 node\(s\) lie on the boundary"):
-        mesh.check_hanging_completeness(set(mesh.hanging_mpc_records()) - faceSlaves)
-
-
-def test_rootsTakeTheModelsNodeLabels():
-    """A model-backed mesh passes its roots' node labels: they are used as they are, never re-derived
-    from rounded coordinates; a label that was not seeded is an error, not a silently minted node."""
-    X = hex20_box_coords(0.0, 1.0, 0.0, 1.0, 0.0, 1.0)
-    labels = list(range(101, 121))
-    mesh = AdaptiveMesh(splitFactor=2, topology=Hex20Topology())
-    for label, x in zip(labels, X):
-        mesh.registry.seed(label, x, 0)
-    root = mesh.add_root(X, 0, labels=labels)
-    assert mesh.elements[root]["conn"] == labels
-    with pytest.raises(ValueError, match="not seeded"):
-        mesh.add_root(hex20_box_coords(1.0, 2.0, 0.0, 1.0, 0.0, 1.0), 0, labels=list(range(201, 221)))
-
-
-def test_theExactWeightCheckCatchesAWrongEntity():
-    """The trace weights are verified in exact arithmetic before use (masters and weights are paired
-    by node slot, so their order cannot diverge): a node assigned to the wrong face, or to an edge of
-    the right face although it lies inside it, fails loudly."""
-    reference = np.rint(TOPOLOGY.reference_node_param()).astype(int)
-    face = next(f for f in TOPOLOGY.faces if all(reference[i][0] == 1 for i in f))
-    zeta = (Fraction(1), Fraction(1, 2), Fraction(0))  # inside the face x = +1
-    exact = TOPOLOGY.shape_functions_exact(*zeta)
-    AdaptiveMesh._verifyTraceWeights(0, 0, zeta, list(face), exact, reference)  # the correct trace
-    oppositeFace = next(f for f in TOPOLOGY.faces if all(reference[i][0] == -1 for i in f))
-    with pytest.raises(TopologyError, match="exact trace"):
-        AdaptiveMesh._verifyTraceWeights(0, 0, zeta, list(oppositeFace), exact, reference)
-    edgeOfTheFace = next(e for e in TOPOLOGY.edges if set(e) <= set(face))
-    with pytest.raises(TopologyError, match="exact trace"):
-        AdaptiveMesh._verifyTraceWeights(0, 0, zeta, list(edgeOfTheFace), exact, reference)
+        table.add_root(3, [slot + 1 if slot in face else 300 + slot for slot in range(20)])

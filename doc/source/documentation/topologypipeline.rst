@@ -220,7 +220,7 @@ phase 1. Outside it, creating or deleting an element or a node raises
 change the topology" an enforced property rather than a convention.
 
 There is exactly one allocator per model, and everything that mints draws from it: the mesh
-generators (which run in a setup-time window opened around model setup), and the coordinate-keyed
+generators (which run in a setup-time window opened around model setup), and the
 node registry of adaptive refinement. That registry lives in the model-agnostic octree layer, so it
 is handed :meth:`~edelweissfe.models.femodel.FEModel.reserveNodeNumbers` as a plain ``count -> range``
 callable rather than a model. Without one it falls back to minting ``max + 1`` itself, which keeps
