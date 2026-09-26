@@ -133,6 +133,17 @@ class RootEntityTable:
             root for label in self._rootCorners[rootEid].values() for root in self._rootsOfCorner[(component, label)]
         }
 
+    def root_face_coordinates(self, rootEid: int, axis: int, value, xi) -> tuple:
+        """The root face of ``rootEid`` on which reference coordinate ``axis`` equals ``value`` (+-1),
+        named by its sorted corner labels, and the exact coordinates of ``xi`` (a point on it,
+        possibly on its boundary) in that face's canonical frame -- identical from either root
+        sharing the face."""
+        corners = self._rootCorners[rootEid]
+        faceCorners = next(fc for fc in self._faceCorners if all(self._cornerReference[s][axis] == value for s in fc))
+        origin, first, second = self._canonicalFaceFrame(faceCorners, corners)
+        labels = (self._rootComponent[rootEid], tuple(sorted(corners[s] for s in faceCorners)))
+        return labels, self._faceCoordinates(xi, origin, first, second)
+
     def local_point(self, rootEid: int, key) -> tuple:
         """The exact reference point, in root element ``rootEid``, of a key whose entity lies in that
         root's closure (see :meth:`roots_sharing`)."""
