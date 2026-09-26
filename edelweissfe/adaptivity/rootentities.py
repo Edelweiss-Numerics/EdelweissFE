@@ -69,6 +69,7 @@ class RootEntityTable:
         self._rootComponent = {}  # rootEid -> componentId
         self._facesOfRoots = {}  # (componentId, sorted face corner labels) -> [rootEid, ...]
         self._rootsOfCorner = {}  # (componentId, corner label) -> [rootEid, ...]
+        self._keyOfPoint = {}  # (rootEid, exact reference point) -> key; a node is shared by many elements
 
     def add_root(self, rootEid: int, connectivity, componentId: int = 0):
         """Register a root element by its node labels (in the topology's local node order)."""
@@ -94,6 +95,12 @@ class RootEntityTable:
     def key(self, rootEid: int, xi) -> tuple:
         """The unique key of the exact reference point ``xi`` (three :class:`~fractions.Fraction` in
         [-1, 1]) of root element ``rootEid``: the root entity it lies on and its position there."""
+        cached = self._keyOfPoint.get((rootEid, xi))
+        if cached is None:
+            cached = self._keyOfPoint[(rootEid, xi)] = self._computeKey(rootEid, xi)
+        return cached
+
+    def _computeKey(self, rootEid: int, xi) -> tuple:
         corners = self._rootCorners[rootEid]
         component = self._rootComponent[rootEid]
         onBoundary = [axis for axis in range(3) if abs(xi[axis]) == 1]

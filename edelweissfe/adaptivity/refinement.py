@@ -37,6 +37,8 @@ set + serendipity weights for the exact hanging-node MPC.
 
 from collections import defaultdict
 from fractions import Fraction
+from itertools import product
+from math import floor
 
 import numpy as np
 
@@ -410,19 +412,45 @@ class AdaptiveMesh:
                 if root in closure:
                     closure[root].append((label, self.rootEntities.local_point(root, key)))
 
+        # For each node, descend its root's octree to the active elements whose closed box contains
+        # it: O(nodes x depth), not O(elements x nodes) per root.
         foreign = []
-        for eid in relevant:
-            e = self.elements[eid]
-            own = set(e["conn"])
-            low, size = e["referenceLow"], e["referenceSize"]
-            for label, xi in closure[e["rootEid"]]:
-                if label in own:
-                    continue
-                zeta = tuple(2 * (xi[k] - low[k]) / size - 1 for k in range(3))
-                if all(abs(z) <= 1 for z in zeta) and any(abs(z) == 1 for z in zeta):
-                    foreign.append((eid, label, zeta))
+        for root, nodes in closure.items():
+            for label, xi in nodes:
+                for eid in self._activeElementsContaining(root, xi):
+                    e = self.elements[eid]
+                    if label in e["conn"]:
+                        continue
+                    low, size = e["referenceLow"], e["referenceSize"]
+                    zeta = tuple(2 * (xi[k] - low[k]) / size - 1 for k in range(3))
+                    if any(abs(z) == 1 for z in zeta):
+                        foreign.append((eid, label, zeta))
         self._foreignBoundaryNodesCache = foreign
         return foreign
+
+    def _activeElementsContaining(self, rootEid, xi) -> list:
+        """The active elements of root ``rootEid`` whose closed reference box contains the exact point
+        ``xi``, found by descending the octree: at each level the child along each axis follows exactly
+        from the point's position, and a point on a split plane belongs to both children there."""
+        n = self.splitFactor
+        found, stack = [], [rootEid]
+        while stack:
+            eid = stack.pop()
+            e = self.elements[eid]
+            if e["active"]:
+                found.append(eid)
+                continue
+            low, size = e["referenceLow"], e["referenceSize"]
+            candidates = []
+            for k in range(3):
+                t = (xi[k] - low[k]) * n / size
+                if t.denominator == 1:
+                    candidates.append([i for i in (int(t) - 1, int(t)) if 0 <= i < n])
+                else:
+                    candidates.append([floor(t)])
+            for ix, iy, iz in product(*candidates):
+                stack.append(e["children"][ix * n * n + iy * n + iz])
+        return found
 
     def check_hanging_completeness(self, slaveLabels):
         """Raise unless the active mesh is conforming up to the given hanging-node slaves.
@@ -620,32 +648,36 @@ class AdaptiveMesh:
             ``{"slave", "kind", "masters", "weights"}``, sorted by slave label.
         """
         reference = np.rint(self.topology.reference_node_param()).astype(int)
-        best = {}  # slave -> (dim, level, kind, masters, weights)
+        # 1) the master of every hanging node: the lowest-dimensional entity, then the coarsest element
+        best = {}  # slave -> (dim, level, eid, zeta, kind, entity)
         for eid, label, zeta in self._foreignBoundaryNodes():
-            E = self.elements[eid]
             onBoundary = [k for k in range(3) if abs(zeta[k]) == 1]
             if len(onBoundary) == 2:
                 kind, dim = "edge", 1
-                edge = next(
+                entity = next(
                     ed for ed in self.topology.edges if all(reference[i][k] == zeta[k] for i in ed for k in onBoundary)
                 )
-                entity = edge
             elif len(onBoundary) == 1:
                 kind, dim = "face", 2
                 axis = onBoundary[0]
                 entity = next(f for f in self.topology.faces if all(reference[i][axis] == zeta[axis] for i in f))
             else:
                 raise TopologyError(f"AMR: node {label} lies on a corner of element {eid} without being its node")
-            # the element's own shape functions at the exact point: on the entity only its nodes are
-            # non-zero, so these are the exact trace weights -- verified, exactly, before use
-            exactWeights = self.topology.shape_functions_exact(*zeta)
-            weights = [exactWeights[i] for i in entity]
-            self._verifyTraceWeights(label, eid, zeta, entity, exactWeights, reference)
-            key = (dim, E["level"])
+            candidate = (dim, self.elements[eid]["level"], eid, zeta, kind, entity)
             current = best.get(label)
-            if current is None or key < current[:2]:
-                best[label] = (dim, E["level"], kind, [E["conn"][i] for i in entity], np.array(weights, dtype=float))
-        return [{"slave": s, "kind": v[2], "masters": v[3], "weights": v[4]} for s, v in sorted(best.items())]
+            if current is None or candidate[:2] < current[:2]:
+                best[label] = candidate
+
+        # 2) its weights: the master element's own shape functions at the exact point, which on the
+        # entity are non-zero only for the entity's nodes -- the exact trace, verified before use
+        hanging = []
+        for label, (dim, level, eid, zeta, kind, entity) in sorted(best.items()):
+            exactWeights = self.topology.shape_functions_exact(*zeta)
+            self._verifyTraceWeights(label, eid, zeta, entity, exactWeights, reference)
+            conn = self.elements[eid]["conn"]
+            weights = np.array([float(exactWeights[i]) for i in entity])
+            hanging.append({"slave": label, "kind": kind, "masters": [conn[i] for i in entity], "weights": weights})
+        return hanging
 
     @staticmethod
     def _verifyTraceWeights(label, eid, zeta, entity, exactWeights, reference):
