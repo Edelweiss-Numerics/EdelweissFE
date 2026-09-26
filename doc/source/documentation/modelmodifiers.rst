@@ -211,6 +211,30 @@ selectable with the ``stateTransfer`` argument (default ``nearestQp``):
 * ``projection`` -- :class:`~edelweissfe.adaptivity.statetransfer.projection.PolynomialProjection`:
   a tensor-product polynomial is fitted to the parent quadrature-point values by least squares and
   resampled at the children. Smooth across octants, but may produce an inadmissible internal state.
+* ``limitedProjection`` -- :class:`~edelweissfe.adaptivity.statetransfer.limitedprojection.LimitedPolynomialProjection`:
+  ``projection`` with a Barth-Jespersen-type limiter per child element: the child mean is kept and the
+  deviations are scaled so that no child value leaves the parent's value range. No new extrema
+  (non-negative variables stay non-negative) while the parent integral is preserved -- the
+  preferred way to project a steep history variable such as a hardening variable.
+* ``reconstructStressFromStrain`` -- :class:`~edelweissfe.adaptivity.statetransfer.reconstructstress.ReconstructStressFromStrain`:
+  gives every child quadrature point whose transferred *material* state is still virgin the strain of
+  the parent's displacement field at its location (the field the children's nodes are warm-started
+  with) and the stress :math:`\mathbb{C}:\boldsymbol{\varepsilon}`, instead of a copied or projected
+  stress. For a hypoelastic material a transferred stress is kept for good, and the part the refined
+  mesh cannot equilibrate stays locked in as a residual stress alternating between siblings; the
+  rebuilt stress has none. All other points and columns follow a fallback -- ``nearestQp`` plus any
+  ``stateTransferOverrides`` -- and the number of rebuilt and fallback points is written to the
+  journal. It writes stress and strain together, so it is valid only as ``stateTransfer``, never as
+  an override, and it needs ``elasticModulusForStressReconstruction`` and
+  ``poissonRatioForStressReconstruction`` (a stopgap until the material exposes its elastic
+  stiffness). A scalar damage variable that grows without plastic flow -- e.g. GCDP's ``omega``,
+  driven by the nonlocal damage field ahead of the process zone -- would otherwise make most points
+  near a crack fall back: name it with ``damageStateVarForStressReconstruction`` and such points are
+  rebuilt as :math:`(1-\omega)\,\mathbb{C}:\boldsymbol{\varepsilon}`, keeping their transferred damage.
+  Example: ``stateTransfer=reconstructStressFromStrain``,
+  ``stateTransferOverrides='alphaP:limitedProjection'``,
+  ``elasticModulusForStressReconstruction=30600``, ``poissonRatioForStressReconstruction=0.2``,
+  ``damageStateVarForStressReconstruction=omega``.
 * ``virgin`` -- :class:`~edelweissfe.adaptivity.statetransfer.virgin.VirginState`: children keep
   their freshly-initialised state; history is discarded (sound only when refining ahead of the
   process zone).

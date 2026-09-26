@@ -52,7 +52,7 @@ class PerStateVarStateTransfer(StateTransferStrategy):
         self._default = default
         self._overrides = overrides  # {stateVarName: StateTransferStrategy}
 
-    def transferState(self, parent, children, topology):
+    def transferState(self, parent, children, topology, parentNodalDisplacement):
         parentBlock = perQuadraturePointBlockSize(parent)
         parentValues = parent.getStateVars().reshape(parent.getNumberOfQuadraturePoints(), parentBlock)
         parentNodeCoords = np.array([n.coordinates for n in parent.nodes], dtype=float)
