@@ -113,6 +113,16 @@ No tolerance enters any of these decisions, so curved, warped and arbitrarily or
 meshes (e.g. from Cubit) behave exactly like axis-aligned ones. The only requirement is a *conforming*
 root mesh; collapsed or non-manifold root elements are rejected.
 
+**2:1 balancing is face-based.** After each refinement, any element with a *face* neighbour two or more
+levels finer is refined too, until every face-adjacent pair differs by at most one level. Elements that
+touch only along an **edge** or at a **vertex** are *not* balanced: next to a level-0 element, an
+element that shares only an edge with it may be at level 2 or deeper. Such an interface stays exactly
+conforming -- the finer nodes on that edge hang on the coarsest element's edge, through constraint
+chains that are resolved exactly and verified -- so this affects mesh grading and local accuracy (an
+abrupt size jump along the edge), not correctness. With ``maxLevel=1`` (the default) no two-level jump
+can occur at all. Edge or vertex balancing (as p4est's edge/full balance) is not implemented; it would
+refine additional elements and change the results of multi-level runs.
+
 **Invariants, checked after every adaptation.** A violation raises an error naming the offending nodes
 instead of producing a silently non-conforming mesh:
 

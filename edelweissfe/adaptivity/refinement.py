@@ -562,6 +562,12 @@ class AdaptiveMesh:
 
         Face adjacency is exact and topological (see :meth:`_faceDescriptors`), so balancing holds on
         curved and warped meshes as on flat ones. Returns the number of extra elements refined.
+
+        Only *face* neighbours are balanced. Elements touching only along an edge or at a vertex may
+        differ by two or more levels; the interface stays conforming (the finer edge nodes hang on the
+        coarsest element's edge, through exactly resolved constraint chains), so this is a grading,
+        not a correctness, limitation. Edge/vertex balancing is deliberately not implemented: it would
+        refine additional elements and change the results of multi-level runs.
         """
         nExtra = 0
         while True:
