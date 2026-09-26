@@ -623,22 +623,43 @@ class AdaptiveMesh:
                 edge = next(
                     ed for ed in self.topology.edges if all(reference[i][k] == zeta[k] for i in ed for k in onBoundary)
                 )
-                axis = next(k for k in range(3) if k not in onBoundary)
-                t = float(zeta[axis] * reference[edge[2]][axis])  # -1 at the edge's first node, +1 at its last
-                weights = np.array([0.5 * t * (t - 1.0), 1.0 - t**2, 0.5 * t * (t + 1.0)])
                 entity = edge
             elif len(onBoundary) == 1:
                 kind, dim = "face", 2
                 axis = onBoundary[0]
                 entity = next(f for f in self.topology.faces if all(reference[i][axis] == zeta[axis] for i in f))
-                weights = self.topology.shape_functions(*(float(z) for z in zeta))[list(entity)]
             else:
                 raise TopologyError(f"AMR: node {label} lies on a corner of element {eid} without being its node")
+            # the element's own shape functions at the exact point: on the entity only its nodes are
+            # non-zero, so these are the exact trace weights -- verified, exactly, before use
+            exactWeights = self.topology.shape_functions_exact(*zeta)
+            weights = [exactWeights[i] for i in entity]
+            self._verifyTraceWeights(label, eid, zeta, entity, exactWeights, reference)
             key = (dim, E["level"])
             current = best.get(label)
             if current is None or key < current[:2]:
-                best[label] = (dim, E["level"], kind, [E["conn"][i] for i in entity], weights)
+                best[label] = (dim, E["level"], kind, [E["conn"][i] for i in entity], np.array(weights, dtype=float))
         return [{"slave": s, "kind": v[2], "masters": v[3], "weights": v[4]} for s, v in sorted(best.items())]
+
+    @staticmethod
+    def _verifyTraceWeights(label, eid, zeta, entity, exactWeights, reference):
+        """Raise unless the weights of a hanging node on ``entity`` are its exact trace weights.
+
+        Checked in exact rational arithmetic, so no tolerance: the weights of every node off the
+        entity vanish, and the entity's weights reproduce the constant, the node's own reference
+        coordinates and every quadratic monomial of them -- which catches a wrong entity, a wrong
+        master order or a wrong orientation, not just a wrong formula.
+        """
+        onEntity = set(entity)
+        offEntity = [w for i, w in enumerate(exactWeights) if i not in onEntity]
+        monomials = [lambda x: 1] + [lambda x, a=a: x[a] for a in range(3)]
+        monomials += [lambda x, a=a, b=b: x[a] * x[b] for a in range(3) for b in range(a, 3)]
+        reproduced = all(sum(exactWeights[i] * m(reference[i]) for i in entity) == m(zeta) for m in monomials)
+        if any(offEntity) or not reproduced:
+            raise TopologyError(
+                f"AMR: the hanging-node weights of node {label} on element {eid} (reference point {zeta}) "
+                "are not the exact trace of that element's shape functions"
+            )
 
     def hanging_mpc_records(self) -> dict:
         """Flattened master-slave records for DOF-elimination MPCs.

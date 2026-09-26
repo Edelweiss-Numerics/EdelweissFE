@@ -80,6 +80,10 @@ class TopologyBase(ABC):
         """Evaluate shape functions at parametric coordinates."""
 
     @abstractmethod
+    def shape_functions_exact(self, *params) -> list:
+        """The shape functions at an exact rational reference point, as exact fractions."""
+
+    @abstractmethod
     def shape_functions_and_grad(self, *params) -> tuple:
         """Evaluate shape functions and their analytic gradient w.r.t. parametric coordinates."""
 

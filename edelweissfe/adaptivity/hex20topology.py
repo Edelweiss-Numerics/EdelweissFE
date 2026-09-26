@@ -45,6 +45,7 @@ from edelweissfe.adaptivity.hex20shapefunctions import (
     face_child_octants,
     hex20_box_coords,
     hex20_shape,
+    hex20_shape_exact,
     hex20_shape_grad,
     subdivision_children_param,
 )
@@ -77,6 +78,9 @@ class Hex20Topology(TopologyBase):
 
     def shape_functions(self, *params) -> np.ndarray:
         return hex20_shape(*params)
+
+    def shape_functions_exact(self, *params) -> list:
+        return hex20_shape_exact(*params)
 
     def shape_functions_and_grad(self, *params) -> tuple:
         return hex20_shape_grad(*params)

@@ -28,10 +28,13 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
+from edelweissfe.utils.exceptions import TopologyError
 
 
 class _FakeConstraint:
     """A multi-point constraint that hands back the records it was constructed with."""
+
+    mayYieldSlaveToEarlierClaim = True
 
     def __init__(self, records):
         self._records = records
@@ -95,7 +98,9 @@ class TestSlaveClaimArbitration(unittest.TestCase):
 
         Swapping registration swaps who keeps the contested DOF. That is why hAdaptivity registers
         its hanging-node constraint first (see TestHangingNodePrecedence) -- the precedence lives in
-        model construction, not in a per-constraint flag. What must NOT depend on order is the order
+        model construction; a constraint that must never yield (``mayYieldSlaveToEarlierClaim``)
+        only turns a violation of that order into an error, see
+        test_a_constraint_that_may_not_yield_raises_instead_of_being_dropped. What must NOT depend on order is the order
         constraints are *refreshed* in, which is the defect this module guards; that is structural
         now, since no constraint inspects a peer at all.
         """
@@ -110,6 +115,22 @@ class TestSlaveClaimArbitration(unittest.TestCase):
 
         self.assertEqual(contestedOwner(True), [(1, 1.0)])
         self.assertEqual(contestedOwner(False), [(9, 1.0)])
+
+    def test_a_constraint_that_may_not_yield_raises_instead_of_being_dropped(self):
+        """A hanging node has no stand-in: if anything claims its slave first, the model is wrong."""
+
+        class _Unyielding(_FakeConstraint):
+            mayYieldSlaveToEarlierClaim = False
+
+        with self.assertRaises(TopologyError):
+            _ArbiterHost().collect(
+                _model(("tie", _FakeConstraint([(3, [(9, 1.0)])])), ("hanging", _Unyielding([(3, [(1, 1.0)])])))
+            )
+        # first in model order, it simply wins as before
+        records = _ArbiterHost().collect(
+            _model(("hanging", _Unyielding([(3, [(1, 1.0)])])), ("tie", _FakeConstraint([(3, [(9, 1.0)])])))
+        )
+        self.assertEqual(dict(records)[3], [(1, 1.0)])
 
     def test_dropped_records_are_reported(self):
         host = _ArbiterHost()

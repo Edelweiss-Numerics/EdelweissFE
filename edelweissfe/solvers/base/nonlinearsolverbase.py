@@ -42,7 +42,7 @@ from edelweissfe.numerics.mpctransformation import (
 )
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.exceptions import DivergingSolution
+from edelweissfe.utils.exceptions import DivergingSolution, TopologyError
 from edelweissfe.utils.schema import OptionSchemaProvider, fieldSchemaMeta
 
 
@@ -720,6 +720,12 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         for name, mpc in model.multiPointConstraints.items():
             for record in mpc.getMultiPointConstraints(self.theDofManager):
                 if record[0] in claimed:
+                    if not mpc.mayYieldSlaveToEarlierClaim:
+                        raise TopologyError(
+                            f"multi-point constraint '{name}' must keep every slave it declares, but DOF "
+                            f"{record[0]} is already claimed by a constraint earlier in model order; it "
+                            "has to come first (hAdaptivity registers its hanging-node constraint at the front)"
+                        )
                     dropped[name] = dropped.get(name, 0) + 1
                     continue
                 claimed.add(record[0])

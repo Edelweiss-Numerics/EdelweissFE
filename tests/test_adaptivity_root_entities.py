@@ -186,3 +186,20 @@ def test_rootsTakeTheModelsNodeLabels():
     assert mesh.elements[root]["conn"] == labels
     with pytest.raises(ValueError, match="not seeded"):
         mesh.add_root(hex20_box_coords(1.0, 2.0, 0.0, 1.0, 0.0, 1.0), 0, labels=list(range(201, 221)))
+
+
+def test_theExactWeightCheckCatchesAWrongEntity():
+    """The trace weights are verified in exact arithmetic before use (masters and weights are paired
+    by node slot, so their order cannot diverge): a node assigned to the wrong face, or to an edge of
+    the right face although it lies inside it, fails loudly."""
+    reference = np.rint(TOPOLOGY.reference_node_param()).astype(int)
+    face = next(f for f in TOPOLOGY.faces if all(reference[i][0] == 1 for i in f))
+    zeta = (Fraction(1), Fraction(1, 2), Fraction(0))  # inside the face x = +1
+    exact = TOPOLOGY.shape_functions_exact(*zeta)
+    AdaptiveMesh._verifyTraceWeights(0, 0, zeta, list(face), exact, reference)  # the correct trace
+    oppositeFace = next(f for f in TOPOLOGY.faces if all(reference[i][0] == -1 for i in f))
+    with pytest.raises(TopologyError, match="exact trace"):
+        AdaptiveMesh._verifyTraceWeights(0, 0, zeta, list(oppositeFace), exact, reference)
+    edgeOfTheFace = next(e for e in TOPOLOGY.edges if set(e) <= set(face))
+    with pytest.raises(TopologyError, match="exact trace"):
+        AdaptiveMesh._verifyTraceWeights(0, 0, zeta, list(edgeOfTheFace), exact, reference)
