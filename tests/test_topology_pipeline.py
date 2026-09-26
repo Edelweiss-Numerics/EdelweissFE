@@ -734,7 +734,7 @@ def test_a_standalone_registry_still_mints_on_its_own():
     registry = NodeRegistry()
     registry.seed(7, [0.0, 0.0, 0.0])
 
-    assert registry.label([1.0, 0.0, 0.0]) == 8
+    assert registry.label_of_new_node(("a new node",), [1.0, 0.0, 0.0]) == 8
 
 
 def test_a_registry_label_cannot_collide_with_one_the_model_hands_out():
@@ -747,9 +747,9 @@ def test_a_registry_label_cannot_collide_with_one_the_model_hands_out():
         registry.seed(node.label, node.coordinates)
 
     with model.topologyChanges():
-        minted = [registry.label([0.0, float(i), 0.0]) for i in range(3)]
+        minted = [registry.label_of_new_node(("first", i), [0.0, float(i), 0.0]) for i in range(3)]
         fromModel = list(model.reserveNodeNumbers(3))
-        mintedAfterwards = [registry.label([0.0, 0.0, float(i) + 1.0]) for i in range(3)]
+        mintedAfterwards = [registry.label_of_new_node(("later", i), [0.0, 0.0, i + 1.0]) for i in range(3)]
 
     assert not set(minted) & set(model.nodes)
     assert not set(minted) & set(fromModel)
@@ -757,19 +757,20 @@ def test_a_registry_label_cannot_collide_with_one_the_model_hands_out():
     assert sorted(minted + fromModel + mintedAfterwards) == list(range(4, 13))
 
 
-def test_an_already_known_coordinate_consumes_no_label():
-    """Most label() calls are lookups of a node shared by several elements; only the minting branch
-    may draw a number, or refinement would burn labels at a wild rate."""
+def test_an_already_known_identity_consumes_no_label():
+    """Most lookups are of a node shared by several children; only the minting branch may draw a
+    number, or refinement would burn labels at a wild rate."""
 
     model = _modelWithSetupNodes(1)
     registry = NodeRegistry(reserve_labels=model.reserveNodeNumbers)
     registry.seed(1, [0.0, 0.0, 0.0])
 
     with model.topologyChanges():
-        assert registry.label([0.0, 0.0, 0.0]) == 1
+        first = registry.label_of_new_node(("a new node",), [0.5, 0.0, 0.0])
+        assert registry.label_of_new_node(("a new node",), [0.5, 0.0, 0.0]) == first
         (afterwards,) = model.reserveNodeNumbers(1)
 
-    assert afterwards == 2
+    assert (first, afterwards) == (2, 3)
 
 
 def test_minting_outside_a_topology_change_raises():
@@ -780,4 +781,4 @@ def test_minting_outside_a_topology_change_raises():
     registry = NodeRegistry(reserve_labels=model.reserveNodeNumbers)
 
     with pytest.raises(TopologyError, match="topology change"):
-        registry.label([5.0, 0.0, 0.0])
+        registry.label_of_new_node(("a new node",), [5.0, 0.0, 0.0])

@@ -91,6 +91,9 @@ class Constraint(MultiPointConstraintBase):
     #: Option schema for this constraint, per OptionSchemaProvider.
     schema = HangingNodeSchema
 
+    # nothing else keeps a hanging node on the coarse face, so no other constraint may take it over
+    mayYieldSlaveToEarlierClaim = False
+
     def __init__(self, name: str, model: FEModel, *, configuration: HangingNodeSchema = HangingNodeSchema()):
         self._name = name
         self._model = model

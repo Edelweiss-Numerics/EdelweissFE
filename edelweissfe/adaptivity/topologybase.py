@@ -36,12 +36,74 @@ itself. :class:`~edelweissfe.adaptivity.hex20topology.Hex20Topology` is the refe
 """
 
 from abc import ABC, abstractmethod
+from functools import cached_property
 
 import numpy as np
 
 
 class TopologyBase(ABC):
-    """Abstract base class for element topologies in adaptive refinement."""
+    """Abstract base class for element topologies in adaptive refinement.
+
+    Besides the abstract element data, it provides the exact, integer-based queries that adaptive
+    refinement decides everything with: where an element's own nodes sit on the reference lattice,
+    which of them are corners, and which faces and edges of the element contain a given lattice point.
+    """
+
+    @cached_property
+    def reference_node_lattice(self) -> np.ndarray:
+        """The element's own nodes on the reference lattice with two units per edge: reference
+        coordinate :math:`\\xi \\in \\{-1, 0, 1\\}` becomes the integer :math:`\\xi + 1 \\in \\{0, 1, 2\\}`."""
+        return np.rint(np.asarray(self.reference_node_param(), dtype=float)).astype(int) + 1
+
+    @cached_property
+    def corner_slots(self) -> list:
+        """The local slots of the corner nodes: every lattice coordinate at 0 or 2."""
+        return [slot for slot, p in enumerate(self.reference_node_lattice) if all(v != 1 for v in p)]
+
+    @cached_property
+    def _fixedCoordinatesOfEntities(self) -> list:
+        """Every face and edge as ``(kind, node slots, ((axis, value), ...))``: the lattice coordinates
+        that are the same for all of its nodes. A point lies on the entity iff it shares all of them."""
+        entities = []
+        for kind, collection in (("face", self.faces), ("edge", self.edges)):
+            for entity in collection:
+                rows = self.reference_node_lattice[list(entity)]
+                fixed = tuple((k, int(rows[0, k])) for k in range(rows.shape[1]) if np.all(rows[:, k] == rows[0, k]))
+                entities.append((kind, tuple(entity), fixed))
+        return entities
+
+    def entities_containing(self, point, extent: int) -> list:
+        """The faces and edges (as node-slot tuples) of an element that contain a lattice point.
+
+        Parameters
+        ----------
+        point
+            Integer coordinates of the point, with the element spanning ``[0, extent]`` per axis.
+        extent
+            The element's edge length on that lattice (even).
+        """
+        return [
+            entity
+            for _, entity, fixed in self._fixedCoordinatesOfEntities
+            if all(point[k] * 2 == value * extent for k, value in fixed)
+        ]
+
+    def lowest_entity_containing(self, point, extent: int) -> tuple:
+        """The lowest-dimensional entity of an element containing a lattice point, as
+        ``(kind, entity)``: ``("vertex", corner slot)``, ``("edge", node slots)``, ``("face", node
+        slots)`` or ``("interior", None)``. See :meth:`entities_containing` for the arguments."""
+        onBoundary = sum(1 for v in point if v == 0 or v == extent)
+        if onBoundary == 3:
+            doubled = tuple(2 * v // extent for v in point)
+            return "vertex", next(s for s in self.corner_slots if tuple(self.reference_node_lattice[s]) == doubled)
+        if onBoundary == 0:
+            return "interior", None
+        wanted = "edge" if onBoundary == 2 else "face"
+        return wanted, next(
+            entity
+            for kind, entity, fixed in self._fixedCoordinatesOfEntities
+            if kind == wanted and all(point[k] * 2 == value * extent for k, value in fixed)
+        )
 
     @property
     @abstractmethod
@@ -80,6 +142,21 @@ class TopologyBase(ABC):
         """Evaluate shape functions at parametric coordinates."""
 
     @abstractmethod
+    def shape_functions_exact(self, *params) -> list:
+        """The shape functions at an exact rational reference point.
+
+        Parameters
+        ----------
+        params
+            The reference coordinates, as :class:`~fractions.Fraction` (or integers).
+
+        Returns
+        -------
+        list
+            One :class:`~fractions.Fraction` per node, in local node order.
+        """
+
+    @abstractmethod
     def shape_functions_and_grad(self, *params) -> tuple:
         """Evaluate shape functions and their analytic gradient w.r.t. parametric coordinates."""
 
@@ -90,26 +167,3 @@ class TopologyBase(ABC):
     @abstractmethod
     def subdivide(self, parent_coords: np.ndarray, n: int) -> list:
         """Subdivide one parent element into children."""
-
-    @abstractmethod
-    def element_face_corners(self, coords: np.ndarray) -> list:
-        """The 4 corner coordinates of each face of the element."""
-
-    @abstractmethod
-    def hanging_weights(self, master_coords, slave_coord, kind: str) -> np.ndarray:
-        """Exact coarse-trace weights of a slave on its master entity.
-
-        Parameters
-        ----------
-        master_coords
-            Physical coordinates of the master entity's own nodes.
-        slave_coord
-            Physical coordinate of the hanging (slave) node.
-        kind
-            The master entity kind, as classified by :meth:`classify_hanging_on_element`
-            (e.g. ``"edge"`` or ``"face"``).
-        """
-
-    @abstractmethod
-    def classify_hanging_on_element(self, coarse_conn, registry, candidate_labels, tol=1e-8) -> list:
-        """Classify which candidate nodes hang on a coarse element's faces/edges."""
