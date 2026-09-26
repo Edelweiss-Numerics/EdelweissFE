@@ -134,7 +134,6 @@ def test_weightsReproduceTheSlavesOnTheCurvedCoarseTrace():
         np.testing.assert_allclose(sum(w * u[labelIndex[m]] for m, w in masters), hex20_shape(*xi) @ u, atol=1e-14)
 
 
-@pytest.mark.xfail(strict=True, reason="node-set inheritance is still geometric (step 5 of the topological AMR plan)")
 def test_newNodesOnACurvedWarpedFaceJoinItsNodeSet():
     mesh, coarse, _, A = _refinedNeighbourMesh()
     onFace = _newNodesOnSharedFace(mesh, coarse, A)

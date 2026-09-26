@@ -42,10 +42,7 @@ from math import floor
 
 import numpy as np
 
-from edelweissfe.adaptivity.geometry import (
-    point_in_convex_quad,
-    quadratic_edge_parameter,
-)
+from edelweissfe.adaptivity.geometry import point_in_convex_quad
 from edelweissfe.adaptivity.rootentities import RootEntityTable
 from edelweissfe.utils.exceptions import TopologyError
 
@@ -284,6 +281,14 @@ class AdaptiveMesh:
         isCorner = np.all((ownLattice == 0) | (ownLattice == 2 * splitFactor), axis=1)
         self._cornerSlots = np.flatnonzero(isCorner)
         self._cornerLattice = ownLattice[isCorner]
+        #: every face and edge of an element, as a tuple of node slots, with the lattice coordinates
+        #: that are fixed on it (axis, value): a node lies on the entity iff it shares all of them
+        self._fixedLatticeOfEntity = {}
+        for entity in list(self.topology.faces) + list(self.topology.edges):
+            rows = ownLattice[list(entity)]
+            fixed = tuple((k, int(rows[0, k])) for k in range(rows.shape[1]) if np.all(rows[:, k] == rows[0, k]))
+            self._fixedLatticeOfEntity[tuple(entity)] = fixed
+        self._parentEntities = list(self._fixedLatticeOfEntity)
         #: the root mesh's vertices, edges and faces, named by root corner labels (see rootentities)
         self.rootEntities = RootEntityTable(self.topology)
         #: result of _foreignBoundaryNodes for the current active mesh; reset by every refinement
@@ -531,24 +536,28 @@ class AdaptiveMesh:
                 for j in self.topology.face_child_indices(self.topology.faceid_to_face[fid], self.splitFactor):
                     pairs.add((kids[j], fid))
 
-        # node sets: a new node joins a set if it lies on a parent face/edge fully contained in the set
-        new_nodes = {lab for k in kids for lab in self.elements[k]["conn"]} - set(parent_conn)
-        coords = self.registry.coordinates
+        # node sets: a new node joins a set if it lies on a parent face or edge whose nodes are all in
+        # the set. Decided exactly from the node's lattice position in the parent (see _entitiesOf).
+        onEntities = {}  # new node label -> parent faces and edges (as node-slot tuples) it lies on
+        for childIndex, kid in enumerate(kids):
+            for label, lattice in zip(self.elements[kid]["conn"], self._childLattice[childIndex]):
+                if label not in onEntities and self._ownNodeAt.get(tuple(lattice)) is None:
+                    onEntities[label] = self._entitiesOf(lattice)
         for S in self.nodeSets.values():
-            for f in self.topology.faces:
-                if all(parent_conn[i] in S for i in f):
-                    fcorners = np.array([coords[parent_conn[i]] for i in f[:4]])
-                    for nl in new_nodes:
-                        if point_in_convex_quad(coords[nl], fcorners):
-                            S.add(nl)
-            for ed in self.topology.edges:
-                if all(parent_conn[i] in S for i in ed):
-                    a, m, b = coords[parent_conn[ed[0]]], coords[parent_conn[ed[1]]], coords[parent_conn[ed[2]]]
-                    for nl in new_nodes:
-                        _, dist = quadratic_edge_parameter(coords[nl], a, m, b)
-                        if dist < 1e-8:
-                            S.add(nl)
+            inSet = [entity for entity in self._parentEntities if all(parent_conn[i] in S for i in entity)]
+            if not inSet:
+                continue
+            for label, entities in onEntities.items():
+                if any(entity in entities for entity in inSet):
+                    S.add(label)
         return kids
+
+    def _entitiesOf(self, lattice) -> set:
+        """The parent faces and edges (node-slot tuples) that a node at the given lattice position of
+        the parent lies on: exactly those whose fixed reference coordinates it shares."""
+        return {
+            entity for entity, fixed in self._fixedLatticeOfEntity.items() if all(lattice[k] == v for k, v in fixed)
+        }
 
     def _cellSize(self, act):
         """A spatial-hash cell size: the smallest active element's largest extent, so a fine element
