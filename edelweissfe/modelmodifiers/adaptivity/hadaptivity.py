@@ -581,6 +581,11 @@ class ModelModifier(ModelModifierBase):
         with timeit("hanging nodes"):
             records = self._mesh.hanging_mpc_records()  # computed once (expensive), reused below
 
+        with timeit("conformity check"):
+            # Exact and topological: raises if any node on an active element's boundary is neither one
+            # of its nodes nor a hanging-node slave, i.e. if the refined interface is not conforming.
+            self._mesh.check_hanging_completeness(records)
+
         with timeit("materialize"):
             change = self._materialize(model, records)
 

@@ -36,6 +36,7 @@ set + serendipity weights for the exact hanging-node MPC.
 """
 
 from collections import defaultdict
+from fractions import Fraction
 from itertools import product
 from math import floor
 
@@ -45,6 +46,8 @@ from edelweissfe.adaptivity.geometry import (
     point_in_convex_quad,
     quadratic_edge_parameter,
 )
+from edelweissfe.adaptivity.rootentities import RootEntityTable
+from edelweissfe.utils.exceptions import TopologyError
 from edelweissfe.utils.performancetiming import timeit
 
 
@@ -282,6 +285,12 @@ class AdaptiveMesh:
         isCorner = np.all((ownLattice == 0) | (ownLattice == 2 * splitFactor), axis=1)
         self._cornerSlots = np.flatnonzero(isCorner)
         self._cornerLattice = ownLattice[isCorner]
+        #: the root mesh's vertices, edges and faces, named by root corner labels (see rootentities)
+        self.rootEntities = RootEntityTable(self.topology)
+        #: the reference coordinates of an element's own nodes, as exact fractions in [-1, 1]
+        self._nodeReference = [
+            tuple(Fraction(int(v)) for v in p) for p in np.rint(self.topology.reference_node_param()).astype(int)
+        ]
 
     # ---- topological containers ----
     def define_element_set(self, name, eids):
@@ -330,6 +339,17 @@ class AdaptiveMesh:
         # hanging-node passes call it several times per active cell on every adaptation -- a cost
         # that scales with the whole mesh rather than with what the adaptation changed.
         box = _box_of(coords)
+        if parent is None:
+            rootEid, referenceLow, referenceSize = eid, (Fraction(-1),) * 3, Fraction(2)
+        else:
+            # the child's exact box in its root's reference cube: children are ordered
+            # ix * n * n + iy * n + iz (see subdivision_children_param)
+            parentElement = self.elements[parent]
+            n = self.splitFactor
+            position = (childIndex // (n * n), (childIndex // n) % n, childIndex % n)
+            rootEid = parentElement["rootEid"]
+            referenceSize = parentElement["referenceSize"] / n
+            referenceLow = tuple(parentElement["referenceLow"][k] + position[k] * referenceSize for k in range(3))
         self.elements[eid] = dict(
             conn=(
                 self.registry.connectivity(coords, componentId)
@@ -344,7 +364,12 @@ class AdaptiveMesh:
             parent=parent,
             children=[],
             componentId=componentId,
+            rootEid=rootEid,
+            referenceLow=referenceLow,
+            referenceSize=referenceSize,
         )
+        if parent is None:
+            self.rootEntities.add_root(eid, self.elements[eid]["conn"], componentId)
         self._active[eid] = None
         return eid
 
@@ -360,6 +385,88 @@ class AdaptiveMesh:
     def active(self) -> list:
         """The active (leaf) cells, in ascending eid order."""
         return list(self._active)
+
+    def node_reference_points(self, eid) -> list:
+        """The exact reference points, in the element's root, of the element's own nodes (slot order)."""
+        e = self.elements[eid]
+        low, size = e["referenceLow"], e["referenceSize"]
+        return [tuple(low[k] + size * (p[k] + 1) / 2 for k in range(3)) for p in self._nodeReference]
+
+    def node_keys(self, eid) -> list:
+        """The topological keys (see :class:`~edelweissfe.adaptivity.rootentities.RootEntityTable`) of
+        the element's own nodes, in slot order."""
+        rootEid = self.elements[eid]["rootEid"]
+        return [self.rootEntities.key(rootEid, xi) for xi in self.node_reference_points(eid)]
+
+    def check_hanging_completeness(self, slaveLabels):
+        """Raise unless the active mesh is conforming up to the given hanging-node slaves.
+
+        Exact and independent of any geometric classification: every node position is known as an
+        exact point of its root element, and every root vertex, edge and face by its corner labels.
+        Two conditions are checked.
+
+        * One node per point: a topological key maps to one label, and a label to one key. A split
+          point would be two unconnected nodes; a merged one would weld distinct points.
+        * Every node that lies on a face of an active element is one of that element's own nodes or
+          a hanging-node slave. Anything else is a free node on the element's boundary -- the
+          interface is not conforming there.
+
+        Parameters
+        ----------
+        slaveLabels
+            The labels of all hanging-node slaves (e.g. the keys of :meth:`hanging_mpc_records`).
+
+        Raises
+        ------
+        TopologyError
+            Naming the offending nodes and elements.
+        """
+        slaveLabels = set(slaveLabels)
+        act = self.active()
+        labelOfKey, keyOfLabel = {}, {}
+        for eid in act:
+            for label, key in zip(self.elements[eid]["conn"], self.node_keys(eid)):
+                if labelOfKey.setdefault(key, label) != label or keyOfLabel.setdefault(label, key) != key:
+                    raise TopologyError(
+                        f"AMR conformity: node {label} and node {labelOfKey[key]} occupy one point {key} "
+                        f"(or node {label} sits at two points); refinement split or merged a node"
+                    )
+
+        # Only a refined root, or a root sharing a vertex, edge or face with one, can carry a node on
+        # an element face that is not the element's own; conforming unrefined regions are skipped.
+        refinedRoots = {self.elements[eid]["rootEid"] for eid in act if self.elements[eid]["level"] > 0}
+        relevantRoots = set(refinedRoots)
+        for key in labelOfKey:
+            roots = self.rootEntities.roots_sharing(key)
+            if refinedRoots.intersection(roots):
+                relevantRoots.update(roots)
+        closure = {root: [] for root in relevantRoots}  # root -> [(label, exact point in that root)]
+        for key, label in labelOfKey.items():
+            for root in self.rootEntities.roots_sharing(key):
+                if root in closure:
+                    closure[root].append((label, self.rootEntities.local_point(root, key)))
+
+        unconstrained = []
+        for eid in act:
+            e = self.elements[eid]
+            if e["rootEid"] not in closure:
+                continue
+            own = set(e["conn"])
+            low, size = e["referenceLow"], e["referenceSize"]
+            for label, xi in closure[e["rootEid"]]:
+                if label in own or label in slaveLabels:
+                    continue
+                inBox = all(low[k] <= xi[k] <= low[k] + size for k in range(3))
+                onBoundary = any(xi[k] == low[k] or xi[k] == low[k] + size for k in range(3))
+                if inBox and onBoundary:
+                    unconstrained.append((label, eid))
+        if unconstrained:
+            nodes = sorted({label for label, _ in unconstrained})
+            raise TopologyError(
+                f"AMR conformity: {len(nodes)} node(s) lie on the boundary of an active element without "
+                f"being one of its nodes or a hanging-node slave -- the coarse-fine interface is not "
+                f"conforming there. First (node, element) pairs: {sorted(unconstrained)[:10]}"
+            )
 
     def box(self, eid):
         """The axis-aligned bounding box ``(min, max)`` of a cell; cached at creation, see :meth:`_add`."""
