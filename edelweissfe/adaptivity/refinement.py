@@ -37,12 +37,9 @@ set + serendipity weights for the exact hanging-node MPC.
 
 from collections import defaultdict
 from fractions import Fraction
-from itertools import product
-from math import floor
 
 import numpy as np
 
-from edelweissfe.adaptivity.geometry import point_in_convex_quad
 from edelweissfe.adaptivity.rootentities import RootEntityTable
 from edelweissfe.utils.exceptions import TopologyError
 
@@ -191,63 +188,17 @@ def _box_of(coords):
     return coords.min(axis=0), coords.max(axis=0)
 
 
-def _grid_key(coord, h):
-    # math.floor, not np.floor: same IEEE double division and the same floor, so the same integer
-    # key, but without a numpy ufunc dispatch per component -- this runs once per node and, via
-    # _grid_cells_for_box, several times per active cell on every adaptation.
-    return (floor(coord[0] / h), floor(coord[1] / h), floor(coord[2] / h))
-
-
-def _grid_cells_for_box(bMin, bMax, h, pad=1):
-    """Yield the grid-cell keys overlapping an axis-aligned box (padded), for a uniform-hash broad
-    phase that makes hanging classification and 2:1 balancing local (O(n) instead of O(n^2))."""
-    lo = [floor(bMin[i] / h) - pad for i in range(3)]
-    hi = [floor(bMax[i] / h) + pad for i in range(3)]
-    # itertools.product, not three nested Python loops: the same keys in the same order (first axis
-    # outermost), as a one-shot iterator exactly like the generator it replaces -- callers that
-    # iterate the result twice see the same consumption semantics as before.
-    return product(range(lo[0], hi[0] + 1), range(lo[1], hi[1] + 1), range(lo[2], hi[2] + 1))
-
-
-def _boxes_overlap(boxA, boxB, tol=1e-8):
-    """Axis-aligned bounding-box overlap test -- a cheap necessary condition (broad phase) used to
-    prune the exact face-adjacency test. Correct for any orientation: face-adjacent elements always
-    have touching/overlapping AABBs."""
-    (aMin, aMax), (bMin, bMax) = boxA, boxB
-    return all(aMin[ax] - tol <= bMax[ax] and bMin[ax] - tol <= aMax[ax] for ax in range(3))
-
-
-def _elements_share_face(coordsA, coordsB, topology, tol=1e-7):
-    """Topological/geometric shared-face neighbour test: do the two hexes have a pair of coplanar,
-    overlapping faces? Coordinate-system agnostic (works for arbitrarily oriented, non-parallelogram
-    faces) and handles coarse/fine (a fine face nested in a coarse one) via centroid containment."""
-    if not _boxes_overlap(_box_of(coordsA), _box_of(coordsB), tol):
-        return False
-    facesA = topology.element_face_corners(coordsA)
-    facesB = topology.element_face_corners(coordsB)
-    for fa in facesA:
-        ca = fa.mean(axis=0)
-        na = np.cross(fa[1] - fa[0], fa[3] - fa[0])
-        na = na / np.linalg.norm(na)
-        for fb in facesB:
-            nb = np.cross(fb[1] - fb[0], fb[3] - fb[0])
-            nb = nb / np.linalg.norm(nb)
-            if abs(abs(na @ nb) - 1.0) > 1e-6:  # planes not parallel
-                continue
-            cb = fb.mean(axis=0)
-            if abs((cb - ca) @ na) > tol:  # planes not coincident
-                continue
-            if point_in_convex_quad(cb, fa, tol) or point_in_convex_quad(ca, fb, tol):
-                return True
-    return False
-
-
 class AdaptiveMesh:
     """Octree hierarchy of HEX20 elements: refinement, 2:1 balancing and hanging-node classification.
 
-    Adjacency is computed from axis-aligned bounding boxes, which is exact for a structured
-    (axis-aligned) base mesh -- the standard AMR setting. A curved / unstructured base mesh would
-    require topological (shared-face) adjacency instead; that is future work.
+    Every decision about how elements and nodes relate -- which nodes coincide, which node lies on
+    which face or edge, which elements share a face, which nodes hang and with which weights -- is
+    taken topologically and in exact arithmetic, never from physical coordinates: each element knows
+    its root and its exact box in the root's reference cube, and the root mesh's vertices, edges and
+    faces are named by their corner labels (:class:`~edelweissfe.adaptivity.rootentities.RootEntityTable`).
+    This holds on curved, warped and arbitrarily oriented unstructured meshes alike; the only
+    requirement is a conforming root mesh. :meth:`check_hanging_completeness` verifies the result
+    after every adaptation.
     """
 
     def __init__(self, decimals: int = 8, splitFactor: int = 2, topology=None, reserve_labels=None):
@@ -574,12 +525,6 @@ class AdaptiveMesh:
         return {
             entity for entity, fixed in self._fixedLatticeOfEntity.items() if all(lattice[k] == v for k, v in fixed)
         }
-
-    def _cellSize(self, act):
-        """A spatial-hash cell size: the smallest active element's largest extent, so a fine element
-        spans ~one cell and a one-level-coarser neighbour a few."""
-        elements = self.elements
-        return max(min(elements[eid]["extent"] for eid in act), 1e-12) if act else 1.0
 
     def _faceDescriptors(self, eid) -> list:
         """The six faces of an active element as ``(entity, rectangle)``: exact and topological.

@@ -90,7 +90,3 @@ class TopologyBase(ABC):
     @abstractmethod
     def subdivide(self, parent_coords: np.ndarray, n: int) -> list:
         """Subdivide one parent element into children."""
-
-    @abstractmethod
-    def element_face_corners(self, coords: np.ndarray) -> list:
-        """The 4 corner coordinates of each face of the element."""

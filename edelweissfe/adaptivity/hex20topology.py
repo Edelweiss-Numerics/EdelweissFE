@@ -107,7 +107,3 @@ class Hex20Topology(TopologyBase):
             phys = np.array([self.shape_functions(*p) @ parent_coords for p in child_param])
             children.append(phys)
         return children
-
-    def element_face_corners(self, coords: np.ndarray) -> list:
-        coords = np.asarray(coords, dtype=float)
-        return [coords[[f[0], f[1], f[2], f[3]]] for f in self.faces]
