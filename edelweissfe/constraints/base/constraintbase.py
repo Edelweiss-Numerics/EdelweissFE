@@ -148,6 +148,24 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
 
         return False
 
+    def resumeConnectivity(self, model: FEModel) -> bool:
+        """Replace :meth:`updateConnectivity` in the first update of an explicit step resumed from a
+        checkpoint. A constraint with a frozen contact search adopts the checkpointed one, see
+        :mod:`~edelweissfe.constraints.base.frozencontactsearch`; the default searches.
+
+        Parameters
+        ----------
+        model
+            The current model.
+
+        Returns
+        -------
+        bool
+            As :meth:`updateConnectivity`.
+        """
+
+        return self.updateConnectivity(model)
+
     def acceptLastState(self):
         """Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` when an increment
         is accepted, so a stateful constraint (e.g. frictional contact) can promote the state of

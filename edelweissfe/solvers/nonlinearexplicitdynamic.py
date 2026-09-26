@@ -266,6 +266,25 @@ class NEDSchema:
 
 
 @dataclass
+class TopologyAndConnectivityUpdate:
+    """What :meth:`NED.updateTopologyAndConnectivity` changed.
+
+    Parameters
+    ----------
+    meshChanged
+        A model modifier took a topology decision.
+    meshDependentsRefreshed
+        A mesh-dependent consumer refreshed itself (on resume also for the replayed topology).
+    connectivityChanged
+        A constraint's DOF footprint changed.
+    """
+
+    meshChanged: bool
+    meshDependentsRefreshed: bool
+    connectivityChanged: bool
+
+
+@dataclass
 class ExplicitSystem:
     """Everything an explicit increment operates on that is sized by the current equation system.
 
@@ -553,16 +572,25 @@ class NED(NonlinearSolverBase):
         # system exists is what makes it both cheap and safe: the mesh is final before the lumped
         # mass, the multi-point-constraint condensation and the critical time step are derived from
         # it, and no velocity state exists yet that would have to be carried onto new nodes.
-        self.updateTopologyAndConnectivity(model, step)
+        #
+        # A resumed step continues with the checkpointed contact search, unless the checkpoint was
+        # written on a topology check increment: output (and checkpoint) come before the check, which
+        # searches afresh and, after a mesh change, zeroes the net force. The resumed step repeats both.
+        restoredIncrement = step.timeStepper.restoredIncrementNumber()
+        resumedOnTopologyCheck = restoredIncrement is not None and self._isTopologyCheckIncrement(restoredIncrement)
+        startOfStepUpdate = self.updateTopologyAndConnectivity(
+            model, step, resumed=restoredIncrement is not None and not resumedOnTopologyCheck
+        )
 
         theSystem = self.buildEquationSystem(model, step)
+        if restoredIncrement is not None and startOfStepUpdate.meshChanged:
+            theSystem.P[:] = 0.0
 
         Minv = theSystem.Minv
         U, dU, V, P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
         criticalTimeStep = theSystem.criticalTimeStep
 
         contactUpdateFrequency = self.options["contact-update-frequency"]
-        topologyCheckFrequency = self.options["topology-check-frequency"]
         UAtLastConnectivitySearch = np.array(U)
 
         # The central-difference velocity update reads 0.5 * (dT + dT_prev). Leaving this None
@@ -610,12 +638,7 @@ class NED(NonlinearSolverBase):
                 # whatever this one found. Deferring to it costs one increment of staleness -- the
                 # same staleness the configured frequency already accepts, and orders of magnitude
                 # below a facet dimension at an explicit time step.
-                topologyCheckDueThisIncrement = bool(
-                    self._liveTopologyModifiers
-                    and topologyCheckFrequency
-                    and timeStep.number > 0
-                    and timeStep.number % topologyCheckFrequency == 0
-                )
+                topologyCheckDueThisIncrement = self._isTopologyCheckIncrement(timeStep.number)
 
                 if (
                     self._dynamicConnectivityConstraints
@@ -737,19 +760,25 @@ class NED(NonlinearSolverBase):
                     # increment first, before it has even taken up the enforced time increment, and
                     # nothing has been solved at that point -- a live marker evaluated there would
                     # refine on the initial condition, and revising the time increment there raises.
-                    if (
-                        self._liveTopologyModifiers
-                        and topologyCheckFrequency
-                        and timeStep.number > 0
-                        and timeStep.number % topologyCheckFrequency == 0
-                    ):
+                    if self._isTopologyCheckIncrement(timeStep.number):
                         lumpedTotalsBefore = self._perFieldLumpedTotals()
                         momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, V, model)
                         kineticBefore = 0.5 * float(
                             np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
                         )
 
-                        if self.updateTopologyAndConnectivity(model, step):
+                        update = self.updateTopologyAndConnectivity(model, step)
+                        meshChanged = update.meshChanged or update.meshDependentsRefreshed
+
+                        if update.connectivityChanged and not meshChanged:
+                            # As after a periodic contact search: solution, velocity and force carry over.
+                            theSystem = self.buildEquationSystem(model, step, previous=theSystem)
+
+                            Minv = theSystem.Minv
+                            U, dU, V, P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
+                            UAtLastConnectivitySearch = np.array(U)
+
+                        elif meshChanged:
                             theSystem = self.buildEquationSystem(model, step)
 
                             Minv = theSystem.Minv
@@ -1358,7 +1387,9 @@ class NED(NonlinearSolverBase):
                 )
 
     @performancetiming.timeit("topology update")
-    def updateTopologyAndConnectivity(self, model: FEModel, step) -> bool:
+    def updateTopologyAndConnectivity(
+        self, model: FEModel, step, resumed: bool = False
+    ) -> TopologyAndConnectivityUpdate:
         """Run the topology update, then let every mesh-dependent consumer catch up on it.
 
         The same two-phase sequence the implicit solver runs at the start of each of its increments
@@ -1374,21 +1405,40 @@ class NED(NonlinearSolverBase):
             The model tree.
         step
             The step being solved.
+        resumed
+            First update of a resumed step: constraints call
+            :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.resumeConnectivity`.
 
         Returns
         -------
-        bool
-            Whether anything changed, i.e. whether the equation system has to be built afresh. The
-            only caller today builds it unconditionally right afterwards; the return value is what
-            makes this reusable from inside an increment loop.
+        TopologyAndConnectivityUpdate
+            What changed.
         """
 
         modelHasChanged = model.updateTopology(step, model.time)
 
         refreshed = model.refreshMeshDependents()
-        ticked = any([constraint.updateConnectivity(model) for constraint in model.constraints.values()])
+        ticked = any(
+            [
+                c.resumeConnectivity(model) if resumed else c.updateConnectivity(model)
+                for c in model.constraints.values()
+            ]
+        )
 
-        return modelHasChanged or refreshed or ticked
+        return TopologyAndConnectivityUpdate(
+            meshChanged=modelHasChanged, meshDependentsRefreshed=refreshed, connectivityChanged=ticked
+        )
+
+    def _isTopologyCheckIncrement(self, incrementNumber: int) -> bool:
+        """Whether the periodic topology check runs at the end of this increment."""
+
+        topologyCheckFrequency = self.options["topology-check-frequency"]
+        return bool(
+            self._liveTopologyModifiers
+            and topologyCheckFrequency
+            and incrementNumber > 0
+            and incrementNumber % topologyCheckFrequency == 0
+        )
 
     @performancetiming.timeit("constraint connectivity")
     def updateConstraintConnectivity(self, model: FEModel) -> bool:

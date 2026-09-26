@@ -1,0 +1,52 @@
+** Explicit restart with contact-update-frequency=10, part 2 of 2: resumes from
+** NEDSurfaceContactRestart1Write's checkpoint; see there.
+
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+1.8e4, 0.3, 1.0
+*job, name=job, domain=3d
+*solver, solver=NEDParallel, name=theSolver
+courant-number=0.8
+output-frequency=10
+contact-update-frequency=10
+*modelGenerator, generator=boxGen, name=lower
+nX=2
+nY=2
+nZ=1
+x0=0
+y0=0
+z0=0
+lX=2
+lY=2
+lZ=1
+elProvider=edelweiss
+elType=C3D8
+*modelGenerator, generator=boxGen, name=upper
+nX=2
+nY=2
+nZ=2
+x0=0.3
+y0=1.1
+z0=1.05
+lX=0.6
+lY=0.6
+lZ=1
+elProvider=edelweiss
+elType=C3D8
+*modelGenerator, generator=surfaceElementGenerator, name=gen1
+surface=upper_back
+name=slaveSurf
+*modelGenerator, generator=surfaceElementGenerator, name=gen2
+surface=lower_front
+name=masterSurf
+*section, name=section1, material=linearelastic, type=solid
+lower_all
+upper_all
+*constraint, name=contact, type=surfaceToDeformableSurfacePenalty
+slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=5e4, type=linear, searchDistance=2.0
+*restart, readFrom=../NEDSurfaceContactRestart1Write/restart_0.h5
+*step, type=adaptiveForExplicitSimulations, solver=theSolver
+maxInc=1, minInc=1e-12, maxNumInc=2000, maxIter=25, stepLength=0.5
+>>dirichlet, name=fixLower, nSet=lower_back, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=pushDown, nSet=upper_front, field=displacement, 3=-0.2
+>>dirichlet, name=pinUpperXY, nSet=upper_bottomLeftBack, field=displacement, 1=0.0, 2=0.0
+>>dirichlet, name=pinUpperRotZ, nSet=upper_bottomRightBack, field=displacement, 2=0.0

@@ -168,6 +168,11 @@ class TimeStepperBase(ABC):
 
         return None
 
+    def restoredIncrementNumber(self) -> int | None:
+        """The increment the restart checkpoint was written in, or None on a cold start."""
+
+        return None
+
     @abstractmethod
     def writeRestart(self, restartFile):
         """Write this time stepper's bookkeeping (current time, increment size, progress within

@@ -34,6 +34,13 @@ from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.constraints.base.forcesonlyexplicitevaluation import (
     ForcesOnlyExplicitEvaluation,
 )
+from edelweissfe.constraints.base.frozencontactsearch import (
+    FrozenContactSearch,
+    packAssignment,
+    packPerPointArrays,
+    unpackAssignment,
+    unpackPerPointArrays,
+)
 from edelweissfe.constraints.base.penaltylaw import (
     normalPenaltyForce,
     validatedContactType,
@@ -223,7 +230,7 @@ class DeformableSurfaceContactStiffnessView:
             self.K_fp.append(fp)
 
 
-class Constraint(ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
+class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
     """
     Penalty based unilateral contact between the tributary-area-weighted nodes of a deformable
     slave surface and a deformable master surface, both represented by flat (Tria3/Line2) contact
@@ -565,6 +572,11 @@ class Constraint(ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
                 closest = int(np.argmin(distances))
                 if self.searchDistance is None or distances[closest] <= self.searchDistance:
                     newAssignment[s] = closest
+
+        return self._declareFootprint(newAssignment)
+
+    def _declareFootprint(self, newAssignment: list) -> bool:
+        """Adopt a facet assignment (searched or restored) and redeclare the DOF footprint."""
 
         hasChanged = newAssignment != self._assignedFacetIdx
         self._assignedFacetIdx = newAssignment
@@ -983,21 +995,40 @@ class Constraint(ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
 
                 self._lambdaN[s] = min(0.0, self._lambdaN[s] + penaltyForcePart)
 
-    def getRestartData(self) -> dict[str, np.ndarray]:
-        """Return the converged frictional-force and augmented-Lagrange-multiplier history.
-
-        ``_assignedFacetIdx``, ``_gapCurrent``, ``_frozenWeights``/``_frozenNormals`` are excluded:
-        they are recomputed from scratch every increment by :meth:`updateConnectivity` /
-        :meth:`applyConstraint` from the (already-restored) node positions, before they are read,
-        so they carry no cross-increment history of their own."""
-
+    def _searchLayout(self) -> dict[str, np.ndarray]:
         return {
+            "slaveNodes": np.array([node.label for node in self.slaveNodes], dtype=np.int64),
+            "masterFacets": np.array([facet.elNumber for facet in self.facetElements], dtype=np.int64),
+        }
+
+    def _frozenProjection(self) -> dict[str, np.ndarray]:
+        weightCounts, weights = packPerPointArrays(self._frozenWeights)
+        normalCounts, normals = packPerPointArrays(self._frozenNormals)
+        return {
+            "assignedFacetIdx": packAssignment(self._assignedFacetIdx),
+            "weightCounts": weightCounts,
+            "weights": weights,
+            "normalCounts": normalCounts,
+            "normals": normals,
+        }
+
+    def _adoptFrozenProjection(self, projection: dict[str, np.ndarray]) -> bool:
+        # The frictional history was already rotated into this tangent plane by the search that froze it.
+        self._frozenWeights = unpackPerPointArrays(projection["weightCounts"], projection["weights"])
+        self._frozenNormals = unpackPerPointArrays(projection["normalCounts"], projection["normals"])
+        return self._declareFootprint(unpackAssignment(projection["assignedFacetIdx"]))
+
+    def getRestartData(self) -> dict[str, np.ndarray]:
+        """Return the frozen projection and the frictional and augmented-Lagrange history."""
+
+        return super().getRestartData() | {
             "tangentialForceConverged": self._tangentialForceConverged,
             "lambdaN": self._lambdaN,
         }
 
     def setRestartData(self, data: dict[str, np.ndarray]):
-        """Restore the converged frictional-force and augmented-Lagrange-multiplier history."""
+        """Restore the frozen projection and the frictional and augmented-Lagrange history."""
 
+        super().setRestartData(data)
         self._tangentialForceConverged[:] = data["tangentialForceConverged"]
         self._lambdaN[:] = data["lambdaN"]
