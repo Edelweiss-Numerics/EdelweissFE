@@ -93,6 +93,7 @@ cdef class MarmotElementWrapper:
         self._ensightType = self.marmotElement.getElementShape().decode("utf-8")
 
         self._hasMaterial = False
+        self._integratesStateInPlace = False
 
     def __cinit__(self, elementType, elNumber):
         """This C-level method is responsible for actually creating the MarmotElement.
@@ -225,6 +226,7 @@ cdef class MarmotElementWrapper:
 
         self._stateVars = np.zeros(self.nStateVars)
         self._stateVarsTemp = np.zeros(self.nStateVars)
+        self._integratesStateInPlace = False
 
         self.marmotElement.assignStateVars(&self._stateVarsTemp[0], self.nStateVars)
 
@@ -283,7 +285,8 @@ cdef class MarmotElementWrapper:
 
         try:
             with nogil:
-                self._initializeStateVarsTemp()
+                if not self._integratesStateInPlace:
+                    self._initializeStateVarsTemp()
 
                 self.marmotElement.computeKernelsExplicit(&U[0],
                                                           &dU[0],
@@ -362,9 +365,53 @@ cdef class MarmotElementWrapper:
         return internalEnergy
 
     def acceptLastState(self, ):
-        """Accept the computed state (in nonlinear iteration schemes)."""
+        """Accept the computed state (in nonlinear iteration schemes).
 
-        self._stateVars[:] = self._stateVarsTemp
+        Nothing to copy if the state is integrated in place: then the accepted and the
+        trial buffer are one and the same array."""
+
+        if not self._integratesStateInPlace:
+            self._stateVars[:] = self._stateVarsTemp
+
+    @property
+    def integratesStateInPlace(self):
+        """Whether the MarmotElement integrates directly into the accepted state buffer."""
+        return self._integratesStateInPlace
+
+    def requestStateIntegrationInPlace(self, bint enable):
+        """Switch between a separate trial buffer (the default, needed if increments can be
+        rejected) and integration in place (for solvers that never cut back, i.e. explicit
+        dynamics). In place, the accepted buffer becomes an alias of the trial buffer, which
+        the MarmotElement already writes into. This saves one full state copy before every
+        kernel evaluation and one in every acceptance.
+
+        Parameters
+        ----------
+        enable
+            True for integration in place, False for a separate trial buffer.
+
+        Returns
+        -------
+        bool
+            Whether the element now integrates in place: the request, unless the element has no
+            material and therefore no state yet.
+        """
+
+        if not self._hasMaterial:
+            return False
+
+        if enable == self._integratesStateInPlace:
+            return enable
+
+        if enable:
+            # the MarmotElement keeps writing into the trial buffer; seed it with the accepted state
+            self._stateVarsTemp[:] = self._stateVars
+            self._stateVars = self._stateVarsTemp
+        else:
+            self._stateVars = np.array(self._stateVarsTemp)
+
+        self._integratesStateInPlace = enable
+        return enable
 
     def getStateVars(self):
         """Return a copy of the converged quadrature-point state-variable buffer."""

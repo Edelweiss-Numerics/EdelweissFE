@@ -421,6 +421,31 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
     ):
         """Accept the computed state (in nonlinear iteration schemes)."""
 
+    @property
+    def integratesStateInPlace(self) -> bool:
+        """Whether the element integrates its state directly into the accepted buffer, so that
+        :meth:`acceptLastState` has nothing to do. Off by default; see
+        :meth:`requestStateIntegrationInPlace`."""
+        return False
+
+    def requestStateIntegrationInPlace(self, enable: bool) -> bool:
+        """Ask the element to integrate its state in place, i.e. without a separate trial buffer.
+
+        Only valid for solvers that never reject an increment (explicit dynamics). An element that
+        does not support it keeps its trial buffer and must still be accepted every increment.
+
+        Parameters
+        ----------
+        enable
+            True to integrate in place, False to return to a separate trial buffer.
+
+        Returns
+        -------
+        bool
+            Whether the element now integrates in place. The default element does not support it.
+        """
+        return False
+
     @abstractmethod
     def resetToLastValidState(
         self,

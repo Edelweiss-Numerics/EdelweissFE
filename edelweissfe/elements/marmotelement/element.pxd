@@ -196,6 +196,7 @@ cdef class MarmotElementWrapper:
     cdef public double[::1] _stateVars, nodeCoordinates
     cdef public double[::1] _elementProperties, _stateVarsTemp , _materialProperties
     cdef int nStateVars
+    cdef bint _integratesStateInPlace
 
     cdef double[::1] getStateView(self, string stateName, int gaussPt)
 

@@ -71,6 +71,8 @@ class FEModel:
         self.time = 0.0  #: Current time of the model.
         self.nodes = {}  #: Nodes in the model.
         self.elements = {}  #: Elements in the model.
+        #: Elements whose state still needs an explicit acceptance; None means all of them.
+        self._elementsWithTrialState = None
         self.nodeSets = {}  #: NodeSets in the model.
         self.nodeFields = {}  #: NodeFields in the model.
         self.elementSets = {}  #: ElementSets in the model.
@@ -970,6 +972,26 @@ class FEModel:
         for mpc in self.multiPointConstraints.values():
             mpc.acceptLastState()
 
+    def integrateElementStatesInPlace(self, enable: bool):
+        """Ask every element to integrate its state in place (or to stop doing so).
+
+        For solvers that never reject an increment. The elements that agree have nothing left to do
+        on acceptance and are skipped by :meth:`advanceToTime`. Must be called again whenever the
+        set of elements changes (topology updates).
+
+        Parameters
+        ----------
+        enable
+            True to integrate in place, False to return to separate trial buffers everywhere.
+        """
+
+        withTrialState = {
+            label: element
+            for label, element in self.elements.items()
+            if not element.requestStateIntegrationInPlace(enable)
+        }
+        self._elementsWithTrialState = withTrialState if enable else None
+
     def _acceptElementStates(self):
         """Let every element accept its computed state, across the available threads.
 
@@ -985,7 +1007,7 @@ class FEModel:
         every millisecond of it was serial Python holding 31 of 32 threads idle.
         """
 
-        elements = self.elements
+        elements = self.elements if self._elementsWithTrialState is None else self._elementsWithTrialState
         numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
 
         if numThreads == 1 or len(elements) < numThreads:
