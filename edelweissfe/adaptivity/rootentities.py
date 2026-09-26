@@ -125,6 +125,14 @@ class RootEntityTable:
         withBoth = set(self._rootsOfCorner[(key[1], a)]) & set(self._rootsOfCorner[(key[1], b)])
         return sorted(root for root in withBoth if self._isEdgeOf(root, key[2]))
 
+    def roots_touching(self, rootEid: int) -> set:
+        """The root elements sharing at least one vertex (hence possibly an edge or a face) with
+        ``rootEid``, including itself."""
+        component = self._rootComponent[rootEid]
+        return {
+            root for label in self._rootCorners[rootEid].values() for root in self._rootsOfCorner[(component, label)]
+        }
+
     def local_point(self, rootEid: int, key) -> tuple:
         """The exact reference point, in root element ``rootEid``, of a key whose entity lies in that
         root's closure (see :meth:`roots_sharing`)."""

@@ -286,6 +286,8 @@ class AdaptiveMesh:
         self._cornerLattice = ownLattice[isCorner]
         #: the root mesh's vertices, edges and faces, named by root corner labels (see rootentities)
         self.rootEntities = RootEntityTable(self.topology)
+        #: result of _foreignBoundaryNodes for the current active mesh; reset by every refinement
+        self._foreignBoundaryNodesCache = None
         #: the reference coordinates of an element's own nodes, as exact fractions in [-1, 1]
         self._nodeReference = [
             tuple(Fraction(int(v)) for v in p) for p in np.rint(self.topology.reference_node_param()).astype(int)
@@ -370,6 +372,7 @@ class AdaptiveMesh:
         if parent is None:
             self.rootEntities.add_root(eid, self.elements[eid]["conn"], componentId)
         self._active[eid] = None
+        self._foreignBoundaryNodesCache = None
         return eid
 
     def add_root(self, coords, componentId: int = 0) -> int:
@@ -407,10 +410,21 @@ class AdaptiveMesh:
         the root mesh's vertices, edges and faces are named by their corner labels, so a node on an
         element's boundary is found whichever element -- or neighbouring root -- it belongs to. Also
         verifies that no point carries two nodes and no node two points.
+
+        Only a refined root, or a root sharing a vertex with one, can hold such a node (anywhere else
+        the mesh is the conforming root mesh itself), so only their active elements are examined.
+        Cached until the mesh is next refined.
         """
+        if self._foreignBoundaryNodesCache is not None:
+            return self._foreignBoundaryNodesCache
         act = self.active()
+        refinedRoots = {self.elements[eid]["rootEid"] for eid in act if self.elements[eid]["level"] > 0}
+        relevantRoots = set()
+        for root in refinedRoots:
+            relevantRoots |= self.rootEntities.roots_touching(root)
+        relevant = [eid for eid in act if self.elements[eid]["rootEid"] in relevantRoots]
         labelOfKey, keyOfLabel = {}, {}
-        for eid in act:
+        for eid in relevant:
             for label, key in zip(self.elements[eid]["conn"], self.node_keys(eid)):
                 if labelOfKey.setdefault(key, label) != label or keyOfLabel.setdefault(label, key) != key:
                     raise TopologyError(
@@ -418,14 +432,6 @@ class AdaptiveMesh:
                         f"(or node {label} sits at two points); refinement split or merged a node"
                     )
 
-        # Only a refined root, or a root sharing a vertex, edge or face with one, can carry a node on
-        # an element's boundary that is not the element's own; conforming unrefined regions are skipped.
-        refinedRoots = {self.elements[eid]["rootEid"] for eid in act if self.elements[eid]["level"] > 0}
-        relevantRoots = set(refinedRoots)
-        for key in labelOfKey:
-            roots = self.rootEntities.roots_sharing(key)
-            if refinedRoots.intersection(roots):
-                relevantRoots.update(roots)
         closure = {root: [] for root in relevantRoots}  # root -> [(label, exact point in that root)]
         for key, label in labelOfKey.items():
             for root in self.rootEntities.roots_sharing(key):
@@ -433,10 +439,8 @@ class AdaptiveMesh:
                     closure[root].append((label, self.rootEntities.local_point(root, key)))
 
         foreign = []
-        for eid in act:
+        for eid in relevant:
             e = self.elements[eid]
-            if e["rootEid"] not in closure:
-                continue
             own = set(e["conn"])
             low, size = e["referenceLow"], e["referenceSize"]
             for label, xi in closure[e["rootEid"]]:
@@ -445,6 +449,7 @@ class AdaptiveMesh:
                 zeta = tuple(2 * (xi[k] - low[k]) / size - 1 for k in range(3))
                 if all(abs(z) <= 1 for z in zeta) and any(abs(z) == 1 for z in zeta):
                     foreign.append((eid, label, zeta))
+        self._foreignBoundaryNodesCache = foreign
         return foreign
 
     def check_hanging_completeness(self, slaveLabels):
@@ -511,6 +516,7 @@ class AdaptiveMesh:
         e["active"] = False
         del self._active[eid]
         e["children"] = kids
+        self._foreignBoundaryNodesCache = None
 
         # element sets + section assignment: children inherit every membership of the parent
         for members in self.elementSets.values():
