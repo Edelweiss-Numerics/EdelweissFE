@@ -1,0 +1,82 @@
+** The C3D8 contact patch test under type=surfaceToDeformableSurfacePenalty: the regression that
+** proves the integrated formulation is a drop-in for LINEAR faces, where the node-based
+** constraint was already exact and must not be regressed.
+**
+** Identical model to NodeToDeformableSurfaceContactPatch (two blocks, matching 2x2 interface,
+** nu = 0, exact contact pressure 360). Both constraints reproduce it to machine precision:
+**
+**                                    RFNormal            Uzspread     pNspread
+**   nodeToDeformableSurfacePenalty   359.89203239028274   1.4e-17      0.0
+**   surfaceToDeformableSurfacePenalty 359.89203239028313  2.57e-16     2.78e-11
+**
+** For a linear face the parent-face basis IS the facet basis, so there is nothing for the
+** integrated formulation to correct here -- which is exactly what makes this a useful guard: any
+** future change to the parent-face machinery that broke the linear case would show up as a
+** deviation from the 13-digit agreement above.
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+1.8e4, 0.0
+
+*job, name=patchjob, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=boxGen, name=lower
+nX      =2
+nY      =2
+nZ      =1
+x0      =0
+y0      =0
+z0      =0
+lX      =1
+lY      =1
+lZ      =1
+elProvider =edelweiss
+elType  =C3D8
+
+*modelGenerator, generator=boxGen, name=upper
+nX      =2
+nY      =2
+nZ      =2
+x0      =0
+y0      =0
+z0      =1.02
+lX      =1
+lY      =1
+lZ      =1
+elProvider =edelweiss
+elType  =C3D8
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen1
+surface = upper_back
+name    = slaveSurf
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen2
+surface = lower_front
+name    = masterSurf
+
+*section, name=section1, material=linearelastic, type=solid
+lower_all
+upper_all
+
+*constraint, name=contact, type=surfaceToDeformableSurfacePenalty
+slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=3e7, type=linear,
+searchDistance=1.0, sliding=small
+
+*fieldOutput
+>>perNode, elSet=lower_all, field=displacement, result=U, name=dispLower
+>>perNode, elSet=upper_all, field=displacement, result=U, name=dispUpper
+>>perNode, name=RFNormal, nSet=lower_back, field=displacement, result=P, f(x)='sum(x[:,2])', saveHistory=True
+>>perNode, name=Uzspread, nSet=slaveSurf_nodes, field=displacement, result=U, f(x)='np.max(x[:,2])-np.min(x[:,2])', saveHistory=True
+>>fromExpression, name=pNmean, elSet=slaveSurf_facets, expression='model.constraints["contact"].getNormalPressures()', f(x)='np.mean(x)', saveHistory=True
+>>fromExpression, name=pNspread, elSet=slaveSurf_facets, expression='model.constraints["contact"].getNormalPressures()', f(x)='(np.max(x)-np.min(x))/np.mean(x)', saveHistory=True
+
+*output, type=monitor, name=monitor
+fieldOutput=RFNormal
+fieldOutput=Uzspread
+fieldOutput=pNmean
+fieldOutput=pNspread
+
+*step, solver=theSolver
+maxInc=0.25, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=fixLower, nSet=lower_back, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=pushUpper, nSet=upper_front, field=displacement, 1=0.0, 2=0.0, 3=-0.06

@@ -1,0 +1,31 @@
+*material, name=linearelastic, id=steel, provider=edelweiss
+30000.0, 0.15
+
+*section, name=section1, thickness=0.5, material=steel, type=plane
+all
+
+*elementproperty, elset=all, propertyname=thickness
+2.0
+
+*job, name=cpe4job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
+
+*modelGenerator, generator=planeRectQuad, name=gen
+x0=0, l=100
+y0=0, h=10
+elType=CPE4
+elProvider=edelweiss
+nX=10
+nY=2
+
+*output, type=ensight, name=esExport
+>>configuration, overwrite=yes
+>>perNode,    fieldOutput=displacement
+
+*step, solver=theSolver
+maxInc=1e-0, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100
+>>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0, 2=0
+>>nodeforces, name=tipLoad, nSet=gen_rightTop, components='0,-1000', field=displacement

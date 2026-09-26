@@ -27,14 +27,18 @@
 #  ---------------------------------------------------------------------
 
 
+from dataclasses import dataclass
+
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
+from edelweissfe.utils.fieldoutput import FieldOutputController
+from edelweissfe.utils.performancetiming import (
+    extractIncrementTimeRows,
+    makeIncrementTimesPrettyTable,
 )
-from edelweissfe.utils.performancetiming import extractIncrementTimes
+from edelweissfe.utils.plotter import Plotter
+from edelweissfe.utils.schema import schemaField
 
 """
 Prints the compute times per increment to the screen and writes them into a file (optional).
@@ -44,54 +48,78 @@ Prints the compute times per increment to the screen and writes them into a file
 
     *output, type=computetimemonitor, name=mycomputetimes
         export=myComputeTimes
+
+The exported file holds one whitespace-separated row per increment *and* timed category, so that
+the dynamic, hierarchical set of categories the timing tree discovers at run time needs no fixed
+columns and the file stays loadable as a plain table:
+
+.. code-block:: console
+
+    #
+    # simulation step 1
+    #
+    #  increment  simulation time  inc compute time  level  function       time         calls
+       1          1.00000e-01      2.31038e+00       0      elements       1.10214e+00  32
+       1          1.00000e-01      2.31038e+00       0      linear solve   8.02311e-01  16
+       1          1.00000e-01      2.31038e+00       1      pardiso ...    7.71204e-01  16
+
+``inc compute time`` is the sum of the increment's level-0 categories, repeated on every row of
+that increment so each row stands on its own.
 """
 
-module = Module(
-    "computetimemonitor", "A simple monitor to observe results (fieldOutputs) in the console during analysis."
-)
 
-inputLanguage = InputLanguage()
+@dataclass(frozen=True)
+class ComputeTimeMonitorSchema:
+    """The options this output manager accepts, owned by this module and never mutated from
+    outside it.
+    """
 
-keyword = "output"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addOptionalArg("export", "Provide a filename to export the results.", str, None)
-
-documentation = [module]
-
-required = [kw.name for kw in module.requiredArgs]
-required += [kw.name for kw in module.requiredKeywords]
-
-optional = [kw.name for kw in module.optionalArgs]
-optional += [kw.name for kw in module.optionalKeywords]
-
-
-@caseInsensitiveKwargsChecker(required, optional)
-@castKwargsValuesAndAddDefaults(module)
-def outputManagerFactory(name, FEModel, fieldOutputController, moduleOptions, journal, plotter, **kwargs):
-    kwargs = CaseInsensitiveDict(kwargs)
-
-    filename = kwargs["export"]
-
-    return OutputManager(name, FEModel, fieldOutputController, journal, plotter, filename)
+    export: str | None = schemaField(description="Provide a filename to export the results.", dtype=str, default=None)
 
 
 class OutputManager(OutputManagerBase):
     identification = "ComputeTimeMonitor"
 
-    def __init__(self, name, model, fieldOutputController, journal, plotter, filename):
+    #: Option schema for this output manager, per OptionSchemaProvider.
+    schema = ComputeTimeMonitorSchema
+
+    def __init__(
+        self,
+        name: str,
+        model: FEModel,
+        fieldOutputController: FieldOutputController,
+        journal: Journal,
+        plotter: Plotter,
+        *,
+        configuration: ComputeTimeMonitorSchema = ComputeTimeMonitorSchema(),
+    ):
+        """Constructible standalone, with no parser involvement. Options arrive as an
+        already-validated, already-typed schema instance.
+
+        Parameters
+        ----------
+        name
+            The name of this output manager.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controller instance.
+        journal
+            The journal instance for logging.
+        plotter
+            The plotter instance.
+        configuration
+            The options this output manager accepts; defaults to all-defaults.
+        """
+        self.name = name
         self.journal = journal
         self.stepcounter = 0
 
-        self.exportFile = filename
+        self.exportFile = configuration.export
 
         if self.exportFile:
             with open(self.exportFile, "w+") as f:
                 f.write("# \n# EdelweissFE: computing times per increment\n#\n")
-
-    def updateDefinition(self, **kwargs: dict):
-        pass
 
     def initializeJob(self):
         pass
@@ -99,11 +127,83 @@ class OutputManager(OutputManagerBase):
     def initializeStep(self, step):
         self.stepcounter += 1
 
-    def finalizeIncrement(self, **kwargs):
-        self.journal.printPrettyTable(extractIncrementTimes(), self.identification)
+        if self.exportFile:
+            self._writeStepHeaderToFile()
 
-    def finalizeFailedIncrement(self, **kwargs):
-        self.journal.printPrettyTable(extractIncrementTimes(), self.identification)
+    def finalizeIncrement(self, statusInfoDict: dict = {}, **kwargs):
+        self._reportIncrementTimes(statusInfoDict)
+
+    def finalizeFailedIncrement(self, statusInfoDict: dict = {}, **kwargs):
+        self._reportIncrementTimes(statusInfoDict)
+
+    def _reportIncrementTimes(self, statusInfoDict: dict):
+        """Print this increment's times, and append them to the export file if one was requested.
+
+        Parameters
+        ----------
+        statusInfoDict
+            The solver's status information, supplying the increment number and simulation time the
+            times belong to. May be empty or ``None`` -- not every solver provides one (the explicit
+            dynamic solver passes ``None``), and the times are still worth reporting without it, so
+            those two columns are then written as ``-`` rather than refusing to write anything.
+        """
+
+        # Extracted once, not once per consumer: extractIncrementTimeRows advances the snapshot the
+        # next delta is measured against, so a second call within the same increment would report
+        # zeros -- which is how writing to the file went missing-in-effect rather than just missing.
+        rows = extractIncrementTimeRows()
+
+        self.journal.printPrettyTable(makeIncrementTimesPrettyTable(rows), self.identification)
+
+        if self.exportFile:
+            self._writeIncrementTimesToFile(rows, statusInfoDict)
+
+    def _writeStepHeaderToFile(self):
+        """Append the column header of a new step's block to the export file."""
+
+        with open(self.exportFile, "a") as f:
+            f.write("#\n# simulation step {:}\n#\n".format(self.stepcounter))
+            f.write(
+                "# {:<11} {:<20} {:<20} {:<6} {:<50} {:<20} {:<10}\n".format(
+                    "increment", "simulation time", "inc compute time", "level", "function", "time", "calls"
+                )
+            )
+
+    def _writeIncrementTimesToFile(self, rows: list[tuple[int, str, float, int]], statusInfoDict: dict):
+        """Append one row per timed category of the current increment to the export file.
+
+        Parameters
+        ----------
+        rows
+            The ``(level, function, time, calls)`` rows of this increment.
+        statusInfoDict
+            The solver's status information; see :meth:`_reportIncrementTimes`.
+        """
+
+        d = statusInfoDict if statusInfoDict else {}
+        increment = d.get("inc")
+        simulationTime = d.get("time end")
+
+        incrementColumn = "{:<11}".format(int(increment) if increment is not None else "-")
+        simulationTimeColumn = (
+            "{:<20.5e}".format(simulationTime) if simulationTime is not None else "{:<20}".format("-")
+        )
+        # the sum over the top level of the tree: the nested levels are already part of their parents
+        incrementComputeTime = sum(time for level, _, time, _ in rows if level == 0)
+
+        with open(self.exportFile, "a") as f:
+            for level, function, time, calls in rows:
+                f.write(
+                    "  {:} {:} {:<20.5e} {:<6} {:<50} {:<20.5e} {:<10}\n".format(
+                        incrementColumn,
+                        simulationTimeColumn,
+                        incrementComputeTime,
+                        level,
+                        function,
+                        time,
+                        calls,
+                    )
+                )
 
     def finalizeStep(
         self,

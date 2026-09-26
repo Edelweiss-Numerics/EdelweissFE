@@ -44,6 +44,11 @@ One of the following element types needs to be included in the definition (``typ
 - **C3D8**    - hexahedron 3D element with 8 nodes.
 - **C3D20**    - hexahedron 3D element with 20 nodes.
 
+.. note::
+    ``C3D8``/``C3D20`` (and their ``TL`` counterparts) use the standard Abaqus node ordering
+    (corner ring 1-4 at :math:`\zeta=-1`, ring 5-8 at :math:`\zeta=+1`), matching the ``marmot``
+    provider's elements -- there is only one node-ordering convention across the framework.
+
 **additional Parameters**
 
 The following optional Parameters are also included in the element type definition:
@@ -110,6 +115,32 @@ Relevant module: ``edelweissfe.elements.displacementtlelement.element``
 
     For other materials, this element works with the Kirchhoff stress :math:`\tau` and the tangent
     :math:`\frac{d\tau}{d\mathbf{F}}`, where :math:`\mathbf{F}` stands for the deformation gradient!
+
+Contact facet elements
+----------------------
+
+Relevant module: ``edelweissfe.elements.contactsurfaceelement``
+
+Thin, material-less, volume-less elements (``Tria3ContactFacet``/``Line2ContactFacet``) sharing the
+ordinary displacement DOFs of a deformable body's boundary nodes, used as the master side of
+:doc:`node-to-deformable-surface contact <constraints>`. Not user-constructed directly -- see the
+:doc:`surfaceElementGenerator <generators>` generator.
+
+Because a facet has neither a material nor a state, its kernels, its internal energy and its state
+acceptance are all no-ops, and it reports ``hasKernels = False``. Solvers that would otherwise call
+into every entry of the element container on every increment -- the explicit dynamic solver does --
+use that to leave the facets out of the element loop rather than calling into them for nothing.
+An element of your own needs to do nothing here: :class:`~edelweissfe.elements.base.baseelement.BaseElement`
+reports ``True``, which is right for any element that carries a material.
+
+.. automodule:: edelweissfe.elements.contactsurfaceelement
+    :members: __doc__
+
+.. autoclass:: edelweissfe.elements.contactsurfaceelement.Tria3ContactFacet
+   :members:
+
+.. autoclass:: edelweissfe.elements.contactsurfaceelement.Line2ContactFacet
+   :members:
 
 Implementing your own elements
 ------------------------------

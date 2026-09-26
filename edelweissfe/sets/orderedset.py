@@ -60,6 +60,8 @@ class OrderedSet(UserDict):
         # label is deprecated; use name instead!!
         self.label = name
 
+        self._version = 0  #: bumped on every in-place mutation (replaceMembers); stable identity for AMR
+
         self.add(item_s)
 
     def checkObjectType(self, obj):
@@ -79,7 +81,26 @@ class OrderedSet(UserDict):
 
         # add items
         for item in self.forceIter(item_s):
+            if not self.checkObjectType(item):
+                raise TypeError(f"You tried to add an item with wrong type: {item} of type {type(item)}")
             self.data.setdefault(item)
+
+    def replaceMembers(self, item_s):
+        """Replace all members in-place, preserving this object's identity.
+
+        Any reference held by a consumer (e.g. ``self.nSet = model.nodeSets["mySet"]``) stays
+        valid after this call -- it sees the new members without re-fetching from the model.
+        Bumps :attr:`_version` so a cached derived array (e.g. a pre-sized load vector) can detect
+        the change lazily.
+
+        Parameters
+        ----------
+        item_s
+            The new item or iterable of items replacing the current members.
+        """
+        self.data.clear()
+        self.add(item_s)
+        self._version += 1
 
     def __setitem__(self, item, value):
         if self.checkObjectType(item):

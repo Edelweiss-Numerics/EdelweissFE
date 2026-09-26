@@ -29,69 +29,69 @@
 "Müller, S., Schüler, L., Zech, A., and Heße, F.: GSTools v1.3: a toolbox for geostatistical modelling in Python, Geosci. Model Dev., 15, 3161–3182, https://doi.org/10.5194/gmd-15-3161-2022, 2022."
 """
 
-import gstools
+from dataclasses import dataclass
+
 import numpy as np
 
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-    strCaseCmp,
-)
-
-module = Module("randomScalar", "Define a random field using the GSTools library.")
-
-inputLanguage = InputLanguage()
-
-keyword = "analyticalField"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addOptionalArg("model", "Covariance Model of the spatial random field", str, "Gaussian")
-module.addOptionalArg("mean", "Mean of the spatial random field", float, 0.0)
-module.addOptionalArg("variance", "Variance of the model", float, 1.0)
-module.addOptionalArg("lengthScale", "Length scale of the model", float, 10.0)
-module.addOptionalArg("nu", "Smoothness parameter for Matern covariance function", float, 1.0)
-module.addOptionalArg("seed", "Seed of the random number generator", int, 0)
-
-documentation = [module]
+from edelweissfe.utils.misc import strCaseCmp
+from edelweissfe.utils.schema import schemaField
 
 
-@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-@castKwargsValuesAndAddDefaults(module)
-def analyticalFieldFactory(name, FEModel, **kwargs):
-    kwargs = CaseInsensitiveDict(kwargs)
+@dataclass(frozen=True)
+class RandomScalarSchema:
+    """The options this analytical field accepts, owned by this module and never mutated from
+    outside it.
+    """
 
-    modelType = kwargs["model"]
-    mean = kwargs["mean"]
-    variance = kwargs["variance"]
-    lengthScale = kwargs["lengthScale"]
-    nu = kwargs["nu"]
-    seed = kwargs["seed"]
-
-    return AnalyticalField(name, FEModel, modelType, mean, variance, lengthScale, nu, seed)
+    model: str = schemaField(description="Covariance Model of the spatial random field", dtype=str, default="Gaussian")
+    mean: float = schemaField(description="Mean of the spatial random field", dtype=float, default=0.0)
+    variance: float = schemaField(description="Variance of the model", dtype=float, default=1.0)
+    lengthScale: float = schemaField(description="Length scale of the model", dtype=float, default=10.0)
+    nu: float = schemaField(description="Smoothness parameter for Matern covariance function", dtype=float, default=1.0)
+    seed: int = schemaField(description="Seed of the random number generator", dtype=int, default=0)
 
 
 class AnalyticalField(AnalyticalFieldBase):
-    def __init__(
-        self,
-        name: str,
-        FEModel,
-        modelType=module["model"].default,
-        mean: float = module["mean"].default,
-        variance: float = module["variance"].default,
-        lengthScale: float = module["lengthScale"].default,
-        nu: float = module["nu"].default,
-        seed: int = module["seed"].default,
-    ):
+    """Define a random field using the GSTools library."""
+
+    #: Option schema for this analytical field, per OptionSchemaProvider.
+    schema = RandomScalarSchema
+
+    def __init__(self, name: str, FEModel, *, configuration: RandomScalarSchema = RandomScalarSchema()):
+        """Constructible standalone, with no parser involvement.
+
+        Parameters
+        ----------
+        name
+            The name of this analytical field.
+        FEModel
+            The model tree.
+        configuration
+            The options this analytical field accepts; defaults to all-defaults.
+        """
+        # gstools is imported lazily: its Cython extension does not declare
+        # free-threading support, so importing it re-enables the GIL process-wide
+        # and would disable thread-parallel computations for ALL simulations,
+        # even those not using random fields.
+        try:
+            import gstools
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                "the 'randomScalar' analytical field requires the 'gstools' package "
+                "(install via 'pip install gstools' or 'mamba install -c conda-forge gstools')"
+            ) from e
+
         self.name = name
         self.type = "randomScalar"
 
         self.domainSize = FEModel.domainSize
+
+        modelType = configuration.model
+        variance = configuration.variance
+        lengthScale = configuration.lengthScale
 
         if strCaseCmp(modelType, "Gaussian"):
             # modelMethod = getattr(gstools, modelType)
@@ -106,12 +106,12 @@ class AnalyticalField(AnalyticalFieldBase):
                 dim=self.domainSize,
                 var=variance,
                 len_scale=lengthScale,
-                nu=nu,
+                nu=configuration.nu,
             )
         else:
             raise NotImplementedError(f"Model type {modelType} not implemented.")
 
-        self.srf = gstools.SRF(model, seed=seed, mean=mean)
+        self.srf = gstools.SRF(model, seed=configuration.seed, mean=configuration.mean)
 
         return
 

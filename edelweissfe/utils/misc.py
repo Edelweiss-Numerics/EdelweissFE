@@ -134,6 +134,43 @@ def convertAssignmentsToStringDictionary(assignments: list) -> dict:
     return resultDict
 
 
+def parseDatalinesToArgsAndKwargs(datalines: list | str) -> tuple[list, "CaseInsensitiveDict"]:
+    """Split a keyword's plain (non-``>>``) datalines into positional args and ``key=value`` kwargs.
+
+    Every ``key=value``-shaped, comma-split token becomes a kwarg; every other token is a plain
+    positional arg (e.g. an element set name in a ``*section``'s datalines). This is a free
+    function, not a method on any resolved grammar object: the split it performs consults no
+    declared grammar at all, so there was never a reason to route it through one.
+
+    Parameters
+    ----------
+    datalines
+        One dataline string, or a list of them.
+
+    Returns
+    -------
+    tuple[list, CaseInsensitiveDict]
+        The positional args (in order) and the ``key=value`` kwargs.
+    """
+    if not isinstance(datalines, list):
+        datalines = [datalines]
+
+    args = []
+    kwargs = CaseInsensitiveDict()
+
+    datalineOptions = []
+    for line in datalines:
+        datalineOptions += splitLineAtCommas(line)
+
+    for option in datalineOptions:
+        if "=" in option:
+            kwargs.update(convertAssignmentsToStringDictionary([option]))
+        else:
+            args.append(option)
+
+    return args, kwargs
+
+
 def convertAssignmentsToCaseInsensitiveStringDictionary(assignments: list) -> dict:
     """Create a case insensitive dictionary from a list of assignments in
     the form a=b.
@@ -313,6 +350,26 @@ def strtobool(val: str) -> bool:
         raise ValueError("invalid truth value %r" % (val,))
 
 
+def asBool(val: bool | str) -> bool:
+    """Coerce a value that may already be a real ``bool`` (e.g. passed by a programmatic caller
+    such as EdelweissMeshfree) or a string representation of truth (as produced by the input file
+    parser) into a ``bool``.
+
+    Parameters
+    ----------
+    val
+        Either a real ``bool``, or a string representation of truth understood by :func:`strtobool`.
+
+    Returns
+    -------
+    bool
+        The truth value.
+    """
+    if isinstance(val, bool):
+        return val
+    return strtobool(val)
+
+
 def typeString(dtype: type or str) -> str:
     """.
 
@@ -404,21 +461,91 @@ def caseInsensitiveKwargsChecker(kwargsRequired: list[str], kwargsOptional: list
     return wrapper
 
 
-def castKwargsValuesAndAddDefaults(module):
+def caseInsensitiveRequiredArgsChecker(kwargsRequired: list[str]):
+    """Like :func:`caseInsensitiveKwargsChecker`, but enforces only the required keyword arguments
+    and imposes no restriction at all on which other keys may additionally be present.
+
+    Used for a keyword whose full set of acceptable option names cannot be known statically at
+    parse time because it depends on runtime information the parser does not have -- e.g.
+    ``>>options, name=X, ...``, whose accepted options depend on what ``name`` resolves to (see
+    ``edelweissfe.stepactions.options``). Any key beyond the required ones is passed through
+    unvalidated and uncoerced, for a later stage to validate against the actually-relevant target.
+
+    Parameters
+    ----------
+    kwargsRequired
+        The names that must be present, compared case-insensitively.
+    """
+    casefoldedKwargsRequired = [kw.casefold() for kw in kwargsRequired]
+
     def wrapper(fun, *args, **kwargs):
         def wrapped(*args, **kwargs):
-            kwargs = CaseInsensitiveDict(kwargs)
-            for arg in module.requiredArgs:
-                if arg.name in kwargs:
-                    kwargs[arg.name] = arg.getValueFromKwargs(kwargs)
-            for arg in module.optionalArgs:
-                if arg.name in kwargs:
-                    kwargs[arg.name] = arg.getValueFromKwargs(kwargs)
-                else:
-                    kwargs[arg.name] = arg.default
+            casefoldedKwargs = {key.casefold(): val for key, val in kwargs.items()}
 
-            return fun(*args, **kwargs)
+            missingKwargs = [kwarg for kwarg in casefoldedKwargsRequired if kwarg not in casefoldedKwargs]
+            nMissing = len(missingKwargs)
+            if nMissing:
+                raise ValueError(
+                    f"Function call to {fun} missing {nMissing} required keyword argument{'s'[:nMissing ^ 1]}: "
+                    + ", ".join(missingKwargs)
+                )
+
+            return fun(*args, **casefoldedKwargs)
 
         return wrapped
 
     return wrapper
+
+
+#: Keys the ``.inp`` parser injects into the option dict of every module-level (``>>``) keyword as
+#: its own bookkeeping, rather than because the user wrote them: the originating file name
+#: (``inputFile``, added unconditionally), the user-vs-default discriminator for the shared
+#: ``options`` keyword (``explicitlySetArgs``), and the dataline accumulator for keywords that take
+#: datalines. See ``inputfileparser.parseModuleKeywordLine``.
+#:
+#: Compared case-folded, since the parser stores these options in a ``CaseInsensitiveDict``.
+_parserBookkeepingKeys = frozenset({"inputfile", "explicitlysetargs", "datalines"})
+
+
+def withoutParserBookkeepingKeys(block) -> dict:
+    """Strip the parser's own bookkeeping keys from a single option mapping.
+
+    Parameters
+    ----------
+    block
+        One option mapping, as produced by the parser.
+
+    Returns
+    -------
+    dict
+        The same mapping, as a plain dict, without the bookkeeping keys.
+    """
+    return {key: value for key, value in block.items() if key.casefold() not in _parserBookkeepingKeys}
+
+
+def withoutParserBookkeeping(blocks: list) -> list:
+    """Strip the parser's own bookkeeping keys from each block of a module-level (``>>``) keyword.
+
+    An option schema declares what a *user* may write, so it must not have to declare the parser's
+    internals as options: without this, validating any ``>>``-carrying keyword against its schema
+    fails on the injected ``inputFile`` key. The enclosing top-level keyword's dict gets the
+    equivalent treatment via explicit ``pop()`` calls in
+    :mod:`edelweissfe.helpers.inputfilehelpers`.
+
+    Lives here, in a leaf utility module, rather than next to its caller: ``inputfilehelpers`` cannot
+    currently be imported after :mod:`edelweissfe.outputmanagers.ensight` in the same interpreter
+    (an import-side-effect collision on the shared ``options`` keyword), which would make this
+    helper untestable in isolation. It is also needed by every other ``>>``-carrying keyword.
+
+    Parameters
+    ----------
+    blocks
+        The list of option mappings for the blocks of one sub-keyword kind, as produced by the
+        parser in ``moduleOptions``.
+
+    Returns
+    -------
+    list
+        The same blocks, as plain dicts, without the bookkeeping keys.
+    """
+    return [withoutParserBookkeepingKeys(block) for block in blocks]

@@ -134,12 +134,23 @@ def dTensorExp_dA(A, n):
     np.ndarray
         The 4D derivative of the tensor exponential at A."""
 
+    # matrix_power(A, k) only takes n distinct values of k across the loops below,
+    # but is otherwise recomputed O(n^2) times; memoize it instead.
+    powers = {}
+
+    def matrixPower(k):
+        p = powers.get(k)
+        if p is None:
+            p = lin.matrix_power(A, k)
+            powers[k] = p
+        return p
+
     dExpX = np.zeros([3, 3, 3, 3])
     for i in range(1, n + 1):
         nF = np.prod(np.arange(1, i + 1))
         for m in range(1, i + 1):
-            Xm1 = lin.matrix_power(A, m - 1)
-            Xnm = lin.matrix_power(A, i - m)
+            Xm1 = matrixPower(m - 1)
+            Xnm = matrixPower(i - m)
             dExpX += 1 / nF * np.einsum("ik,lj->jilk", Xm1, Xnm)
     return dExpX
 
