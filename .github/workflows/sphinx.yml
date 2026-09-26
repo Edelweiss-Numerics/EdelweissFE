@@ -21,17 +21,17 @@ jobs:
           activate-environment: anaconda-client-env
 
       - name: Install conda packages
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           mamba install --file conda_requirements.txt
 
       - name: Install pip packages
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           pip install -r pip_requirements.txt
 
       - name: Install Eigen
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           git clone --branch 3.4.0 https://gitlab.com/libeigen/eigen.git
           cd eigen
@@ -42,7 +42,7 @@ jobs:
           cd ../..
 
       - name: Install Autodiff
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           git clone --branch v1.1.0 https://github.com/autodiff/autodiff.git
           cd autodiff
@@ -58,7 +58,7 @@ jobs:
           cd ../..
 
       - name: Install Fastor
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           git clone https://github.com/romeric/Fastor.git
           cd Fastor
@@ -67,7 +67,7 @@ jobs:
           cd ..
 
       - name: Install Marmot
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           # Use github.base_ref (target of PR).
           # If not a PR (like a push to master), fall back to github.ref_name.
@@ -93,12 +93,12 @@ jobs:
           cd ../../
 
       - name: Build EdelweissFE
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           pip install -v .
 
       - name: Building EdelweissFE documentation
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           sphinx-build ./doc/source/ ./docs -b html
 
