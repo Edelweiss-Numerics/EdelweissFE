@@ -92,6 +92,45 @@ The same field-independent weights apply to every field on the node (equal-order
 single record per hanging node covers displacement and nonlocal damage alike. The constraint itself
 (``*constraint, type=hangingnode``) is documented under :doc:`constraints`.
 
+**Topology is decided exactly, never from coordinates.** Which nodes coincide, which node lies on which
+face or edge of an element, which elements share a face (2:1 balancing), which nodes hang -- and with
+which weights -- and which new nodes join a node set, are all decided topologically and in exact
+rational arithmetic, the way established AMR libraries do it (deal.II, p4est, MFEM):
+
+* every element knows its root element and its exact box in the root's reference cube (from the
+  subdivision order), so every node sits at an exact rational point of its root;
+* the root mesh's vertices, edges and faces are named by the labels of their corner nodes, and a point
+  on them is measured in a frame those labels fix -- two roots sharing a face therefore derive the
+  identical name and coordinates for it in any relative orientation
+  (:class:`~edelweissfe.adaptivity.rootentities.RootEntityTable`);
+* a hanging node is a node on the boundary of an active element that is not one of its own nodes; its
+  master entity (edge or face) follows from its exact reference coordinates in that element, and its
+  weights are the element's own shape functions there, the exact coarse trace;
+* a new node joins a node set iff it lies, by its exact lattice position, on a parent face or edge
+  whose nodes are all in the set.
+
+No tolerance enters any of these decisions, so curved, warped and arbitrarily oriented unstructured
+meshes (e.g. from Cubit) behave exactly like axis-aligned ones. The only requirement is a *conforming*
+root mesh; collapsed or non-manifold root elements are rejected.
+
+**Invariants, checked after every adaptation.** A violation raises an error naming the offending nodes
+instead of producing a silently non-conforming mesh:
+
+* one node per point and one point per node (no split or merged nodes);
+* every node on the boundary of an active element is one of its nodes or a hanging-node slave
+  (:meth:`~edelweissfe.adaptivity.refinement.AdaptiveMesh.check_hanging_completeness`);
+* every hanging node's weights are verified in exact arithmetic: they vanish off the chosen edge or
+  face and reproduce the constant, the node's reference coordinates and every quadratic monomial;
+* the hanging-node constraint can never be overruled by another multi-point constraint claiming the
+  same slave (it is registered first in model order; a dropped hanging-node record is an error).
+
+.. autoclass:: edelweissfe.adaptivity.rootentities.RootEntityTable
+    :members: add_root, key, roots_sharing, roots_touching, root_face_coordinates, local_point
+
+.. autoclass:: edelweissfe.adaptivity.refinement.AdaptiveMesh
+    :members: refine, balance_2to1, classify_hanging, hanging_mpc_records, check_hanging_completeness,
+        node_keys, node_reference_points
+
 **Refinement markers.** Which elements are refined each increment is decided by one or more
 ``>>marker`` sub-keywords; the modifier refines the *union* of their marked sets. The available
 types are ``elementSet`` / ``nodeSet`` / ``surface`` (geometric, typically ``initialOnly`` for a
