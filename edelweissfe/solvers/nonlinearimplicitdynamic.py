@@ -272,11 +272,15 @@ class _NewmarkSystem:
         The degrees of freedom integrated in time -- those of the fields carrying a mass.
     dynamicFields
         The names of those fields, in the model's field order.
-    Mvij, Cvij
-        The consistent mass and the (diagonal) damping as VIJ value vectors, in the stiffness'
-        layout, ready to be scaled and added onto the tangent.
+    Mvij
+        The consistent mass as a VIJ value vector, in the stiffness' layout, ready to be scaled
+        and added onto the tangent.
+    dampingVIJIndices, dampingVIJValues
+        The diagonal damping, only where it is nonzero: each element's lumped damping at its own
+        diagonal slots of the VIJ layout. Diagonal by construction, so a full VIJ value vector for
+        it would be all zeros but for a few entries per element.
     M, C
-        The same operators as CSR matrices, for the residual's matrix-vector products.
+        The mass and the damping as CSR matrices, for the residual's matrix-vector products.
     V, A
         The velocity and acceleration at the last converged increment.
     """
@@ -285,7 +289,8 @@ class _NewmarkSystem:
     dynamicDofs: np.ndarray
     dynamicFields: list
     Mvij: VIJSystemMatrix
-    Cvij: VIJSystemMatrix
+    dampingVIJIndices: np.ndarray
+    dampingVIJValues: np.ndarray
     M: csr_matrix
     C: csr_matrix
     V: DofVector
@@ -645,7 +650,7 @@ class NonlinearImplicitDynamic(NIST):
         # Formed in place: one VIJ-length vector instead of three alive at once, which at a few
         # hundred million entries is gigabytes.
         dynamicStiffness = np.multiply(np.asarray(system.Mvij), 1.0 / (beta * dT * dT))
-        dynamicStiffness += np.multiply(np.asarray(system.Cvij), gamma / (beta * dT))
+        dynamicStiffness[system.dampingVIJIndices] += (gamma / (beta * dT)) * system.dampingVIJValues
 
         self._currentIncrement = _NewmarkIncrement(
             system=system,
@@ -876,16 +881,17 @@ class NonlinearImplicitDynamic(NIST):
             reusedMassAndDamping = self._reuseMassAndDamping(system, model)
 
         if reusedMassAndDamping is not None:
-            Mvij, Cvij, M, C = reusedMassAndDamping
+            Mvij, damping, M, C = reusedMassAndDamping
         else:
-            Mvij, Cvij, M, C = self._assembleMassAndDamping(model, dynamicDofs, dynamicFields)
+            Mvij, damping, M, C = self._assembleMassAndDamping(model, dynamicDofs, dynamicFields)
 
         self._newmarkSystem = _NewmarkSystem(
             dofManager=self.theDofManager,
             dynamicDofs=dynamicDofs,
             dynamicFields=dynamicFields,
             Mvij=Mvij,
-            Cvij=Cvij,
+            dampingVIJIndices=damping[0],
+            dampingVIJValues=damping[1],
             M=M,
             C=C,
             V=V,
@@ -913,7 +919,7 @@ class NonlinearImplicitDynamic(NIST):
     @performancetiming.timeit("reuse mass and damping")
     def _reuseMassAndDamping(
         self, system: _NewmarkSystem, model: FEModel
-    ) -> tuple[VIJSystemMatrix, VIJSystemMatrix, csr_matrix, csr_matrix] | None:
+    ) -> tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix] | None:
         """The mass and the damping of ``system``, moved into the layout of the current
         :class:`~edelweissfe.numerics.dofmanager.DofManager` without reassembling them -- or None if
         that manager differs from the old one in anything the operators depend on.
@@ -940,9 +946,10 @@ class NonlinearImplicitDynamic(NIST):
 
         Returns
         -------
-        tuple[VIJSystemMatrix, VIJSystemMatrix, csr_matrix, csr_matrix] | None
-            The mass and the damping as VIJ value vectors of the current manager and as CSR
-            matrices, or None if they have to be reassembled.
+        tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix] | None
+            The mass as a VIJ value vector of the current manager, the damping's VIJ indices and
+            values (all in the unchanged element slots), and both as CSR matrices -- or None if they
+            have to be reassembled.
         """
 
         old = system.dofManager
@@ -968,15 +975,12 @@ class NonlinearImplicitDynamic(NIST):
 
         # Behind the elements' slots lie only constraints', which carry no mass and no damping; a
         # nonzero there means the prefix assumption is wrong, not that the operators may be moved.
-        if np.any(np.asarray(system.Mvij)[nElementVIJ:]) or np.any(np.asarray(system.Cvij)[nElementVIJ:]):
+        if np.any(np.asarray(system.Mvij)[nElementVIJ:]) or np.any(system.dampingVIJIndices >= nElementVIJ):
             return None
 
         Mvij = new.constructVIJSystemMatrix()
-        Cvij = new.constructVIJSystemMatrix()
         Mvij[:] = 0.0
-        Cvij[:] = 0.0
         Mvij[:nElementVIJ] = system.Mvij[:nElementVIJ]
-        Cvij[:nElementVIJ] = system.Cvij[:nElementVIJ]
 
         self.journal.message(
             "constraint connectivity changed only: mass and damping reused, not reassembled",
@@ -984,7 +988,7 @@ class NonlinearImplicitDynamic(NIST):
             2,
         )
 
-        return Mvij, Cvij, system.M, system.C
+        return Mvij, (system.dampingVIJIndices, system.dampingVIJValues), system.M, system.C
 
     def _conservedQuantities(self, system: _NewmarkSystem, model: FEModel) -> _ConservedQuantities:
         """Total mass, linear momentum and kinetic energy of one Newmark system.
@@ -1131,7 +1135,7 @@ class NonlinearImplicitDynamic(NIST):
     @performancetiming.timeit("assemble mass and damping")
     def _assembleMassAndDamping(
         self, model: FEModel, dynamicDofs: np.ndarray, dynamicFields: list
-    ) -> tuple[VIJSystemMatrix, VIJSystemMatrix, csr_matrix, csr_matrix]:
+    ) -> tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix]:
         """Assemble the consistent mass and the diagonal damping, in the stiffness' VIJ layout and
         as CSR matrices.
 
@@ -1151,8 +1155,10 @@ class NonlinearImplicitDynamic(NIST):
 
         Returns
         -------
-        tuple[VIJSystemMatrix, VIJSystemMatrix, csr_matrix, csr_matrix]
-            The mass and the damping as VIJ value vectors, and the same two as CSR matrices.
+        tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix]
+            The mass as a VIJ value vector, the damping as the VIJ indices and values of its
+            nonzero diagonal entries (see :meth:`_collectLumpedDamping`), and the same two as CSR
+            matrices.
 
         Raises
         ------
@@ -1162,7 +1168,6 @@ class NonlinearImplicitDynamic(NIST):
         """
 
         Mvij = self.theDofManager.constructVIJSystemMatrix()
-        Cvij = self.theDofManager.constructVIJSystemMatrix()
 
         for el in model.elements.values():
             if not el.hasKernels:
@@ -1179,12 +1184,6 @@ class NonlinearImplicitDynamic(NIST):
                     )
                 ) from error
 
-            Ce = np.zeros(el.nDof)
-            el.computeLumpedDamping(Ce)
-            if np.any(Ce):
-                CeView = Cvij[el]
-                CeView += np.diagflat(Ce).reshape(CeView.shape)
-
         nDof = self.theDofManager.nDof
         I = self.theDofManager.I  # noqa: E741
         J = self.theDofManager.J
@@ -1192,12 +1191,15 @@ class NonlinearImplicitDynamic(NIST):
         isDynamic = np.zeros(nDof, dtype=bool)
         isDynamic[dynamicDofs] = True
         couplesDynamicOnly = isDynamic[I] & isDynamic[J]
-        self._warnAboutDiscardedInertia(Mvij, Cvij, couplesDynamicOnly)
+        dampingVIJIndices, dampingVIJValues = self._collectLumpedDamping(model)
+        self._warnAboutDiscardedInertia(Mvij, dampingVIJIndices, couplesDynamicOnly)
         Mvij[~couplesDynamicOnly] = 0.0
-        Cvij[~couplesDynamicOnly] = 0.0
+        keptDamping = couplesDynamicOnly[dampingVIJIndices]
+        dampingVIJIndices = dampingVIJIndices[keptDamping]
+        dampingVIJValues = dampingVIJValues[keptDamping]
 
         M = coo_matrix((np.asarray(Mvij), (I, J)), shape=(nDof, nDof)).tocsr()
-        C = coo_matrix((np.asarray(Cvij), (I, J)), shape=(nDof, nDof)).tocsr()
+        C = coo_matrix((dampingVIJValues, (I[dampingVIJIndices], J[dampingVIJIndices])), shape=(nDof, nDof)).tocsr()
 
         # Checked on the summed CSR values, not on the VIJ vectors they were summed from: a
         # non-finite entry survives the summation, and the CSR arrays are the shorter ones. The
@@ -1231,23 +1233,63 @@ class NonlinearImplicitDynamic(NIST):
                 2,
             )
 
-        return Mvij, Cvij, M, C
+        return Mvij, (dampingVIJIndices, dampingVIJValues), M, C
 
-    def _warnAboutDiscardedInertia(self, Mvij: VIJSystemMatrix, Cvij: VIJSystemMatrix, couplesDynamicOnly: np.ndarray):
+    def _collectLumpedDamping(self, model: FEModel) -> tuple[np.ndarray, np.ndarray]:
+        """The lumped damping every element reports, as the VIJ indices of the element's own
+        diagonal slots and the values there -- only the nonzero ones.
+
+        An element's block occupies ``nDof * nDof`` consecutive VIJ entries, row-major, so its
+        ``k``-th diagonal entry is at ``start + k * (nDof + 1)``. Each slot belongs to one element,
+        so the indices are unique.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            The VIJ indices and the damping values there.
+        """
+
+        indices, values = [], []
+        for el in model.elements.values():
+            if not el.hasKernels:
+                continue
+            Ce = np.zeros(el.nDof)
+            el.computeLumpedDamping(Ce)
+            nonzero = np.flatnonzero(Ce)
+            if nonzero.size:
+                start = self.theDofManager.idcsOfHigherOrderEntitiesInVIJ[el]
+                indices.append(start + nonzero * (el.nDof + 1))
+                values.append(Ce[nonzero])
+
+        if not indices:
+            return np.zeros(0, dtype=np.int64), np.zeros(0)
+        return np.concatenate(indices).astype(np.int64), np.concatenate(values)
+
+    def _warnAboutDiscardedInertia(
+        self, Mvij: VIJSystemMatrix, dampingVIJIndices: np.ndarray, couplesDynamicOnly: np.ndarray
+    ):
         """Warn, once per field, when an element reported a nonzero inertia or damping on a field
         this solver keeps quasi-static -- a rotational inertia, or a gradient-enhanced element's
         micro-inertia -- which is about to be discarded.
 
         Parameters
         ----------
-        Mvij, Cvij
-            The assembled mass and damping, before the entries are zeroed.
+        Mvij
+            The assembled mass, before the entries are zeroed.
+        dampingVIJIndices
+            The VIJ indices of the nonzero damping, before those are dropped.
         couplesDynamicOnly
             Per VIJ entry, whether it couples two time-integrated degrees of freedom.
         """
 
-        discarded = ~couplesDynamicOnly & ((np.asarray(Mvij) != 0.0) | (np.asarray(Cvij) != 0.0))
-        if not np.any(discarded):
+        discarded = np.flatnonzero(~couplesDynamicOnly & (np.asarray(Mvij) != 0.0))
+        discarded = np.concatenate([discarded, dampingVIJIndices[~couplesDynamicOnly[dampingVIJIndices]]])
+        if not discarded.size:
             return
 
         I = self.theDofManager.I  # noqa: E741

@@ -142,10 +142,9 @@ def test_a_reduced_integration_element_starts_under_load(tmp_path):
     assert uReduced < 10.0 * uFull, (uReduced, uFull)
 
 
-def _corruptTheAssembledOperator(monkeypatch, which: int, value: float):
-    """Replace the first nonzero value of the ``which``-th operator (0: mass, 1: damping) handed to
-    the COO-to-CSR conversion of the mass assembly -- the elements' own output is out of reach of a
-    test, the Marmot elements being compiled."""
+def _corruptTheAssembledMass(monkeypatch, value: float):
+    """Replace the first nonzero value of the mass handed to the COO-to-CSR conversion -- the
+    elements' own output is out of reach of a test, the Marmot elements being compiled."""
 
     from edelweissfe.solvers import nonlinearimplicitdynamic
 
@@ -154,26 +153,42 @@ def _corruptTheAssembledOperator(monkeypatch, which: int, value: float):
 
     def corruptingCooMatrix(arguments, **kwargs):
         values, indices = arguments
-        if len(calls) == which:
+        if not calls:
             values = np.array(values)
-            I, J = indices  # noqa: E741
-            target = np.flatnonzero((values != 0.0) | (I == J))[0]
-            values[target] = value
+            values[np.flatnonzero(values)[0]] = value
         calls.append(None)
         return trueCooMatrix((values, indices), **kwargs)
 
     monkeypatch.setattr(nonlinearimplicitdynamic, "coo_matrix", corruptingCooMatrix)
 
 
-@pytest.mark.parametrize("which", [0, 1], ids=["mass", "damping"])
-def test_refuses_a_non_finite_mass_or_damping(tmp_path, monkeypatch, which):
-    _corruptTheAssembledOperator(monkeypatch, which, np.nan)
+def _reportADamping(monkeypatch, value: float):
+    """Let the first element report ``value`` as the damping of its first (dynamic) dof."""
+
+    from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
+
+    def collectLumpedDamping(self, model):
+        firstElement = next(iter(model.elements.values()))
+        start = self.theDofManager.idcsOfHigherOrderEntitiesInVIJ[firstElement]
+        return np.array([start], dtype=np.int64), np.array([value])
+
+    monkeypatch.setattr(NonlinearImplicitDynamic, "_collectLumpedDamping", collectLumpedDamping)
+
+
+def test_refuses_a_non_finite_mass(tmp_path, monkeypatch):
+    _corruptTheAssembledMass(monkeypatch, np.nan)
     with pytest.raises(ValueError, match="non-finite entries"):
-        _run(tmp_path, "nid_non_finite", _deck(0.02, maxNumInc=1))
+        _run(tmp_path, "nid_non_finite_mass", _deck(0.02, maxNumInc=1))
+
+
+def test_refuses_a_non_finite_damping(tmp_path, monkeypatch):
+    _reportADamping(monkeypatch, np.inf)
+    with pytest.raises(ValueError, match="non-finite entries"):
+        _run(tmp_path, "nid_non_finite_damping", _deck(0.02, maxNumInc=1))
 
 
 def test_refuses_a_negative_damping(tmp_path, monkeypatch):
-    _corruptTheAssembledOperator(monkeypatch, 1, -1.0)
+    _reportADamping(monkeypatch, -1.0)
     with pytest.raises(ValueError, match="negative entries"):
         _run(tmp_path, "nid_negative_damping", _deck(0.02, maxNumInc=1))
 
