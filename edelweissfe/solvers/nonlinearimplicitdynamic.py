@@ -89,9 +89,11 @@ sparsity pattern the stiffness uses -- both are scattered through the same VIJ l
 :class:`~edelweissfe.numerics.dofmanager.DofManager`, so adding :math:`\\boldsymbol{M}/(\\beta \\Delta t^2)`
 to the tangent is an entry-wise addition of two value vectors, before the parent's in-place CSR
 update, its multi-point-constraint condensation and its Dirichlet row replacement, all of which
-therefore act on the effective matrix without knowing it is one. The damping :math:`\\boldsymbol{C}`
-is the diagonal each element reports through ``computeLumpedDamping``, placed on the diagonal of
-the same layout. Both are assembled when the equation system is (re)built -- at a step's start and
+therefore act on the effective matrix without knowing it is one. For the same reason the mass is
+summed into CSR form by the stiffness' own CSR generator. The damping :math:`\\boldsymbol{C}` is the
+diagonal each element reports through ``computeLumpedDamping``; being diagonal, it is kept only as
+its nonzero entries and their positions in the same layout, not as a full value vector. Both are
+assembled when the equation system is (re)built -- at a step's start and
 after a topology change -- not per Newton iteration. A rebuild caused only by a constraint changing
 its connectivity (a contact candidate list, which can change on every increment) leaves every
 element, and with it every element's slot in the layout, where it was: the operators are then
@@ -99,6 +101,13 @@ reused in the new layout rather than reassembled -- see
 :meth:`NonlinearImplicitDynamic._reuseMassAndDamping`. The one exception is a step that changes a
 material property mid-step (``>>changematerialproperty``), which invalidates the density and makes
 them reassemble every increment.
+
+**Checks on the mass.** The assembled mass and damping are checked at runtime for non-finite
+entries, the damping for negative entries, and every time-integrated degree of freedom for a
+nonzero mass; the total mass of each field is reported. The *symmetry* of the mass is not checked
+at runtime -- on the assembled matrix that costs a transposed copy of it, gigabytes on a large
+model -- but pinned once per element type in ``tests/test_nid_element_mass.py``, together with the
+total mass :math:`\\rho V`. It does matter: a non-symmetric mass still converges, to a wrong response.
 
 **Which fields.** Only the fields whose inertia is a mass
 (:func:`~edelweissfe.config.phenomena.carriesLinearMomentum`, i.e. the displacement) are integrated
@@ -1192,6 +1201,7 @@ class NonlinearImplicitDynamic(NIST):
         couplesDynamicOnly = isDynamic[I] & isDynamic[J]
         dampingVIJIndices, dampingVIJValues = self._collectLumpedDamping(model)
         self._warnAboutDiscardedInertia(Mvij, dampingVIJIndices, couplesDynamicOnly)
+        # Mass and damping on the quasi-static fields are discarded, see the warning above.
         Mvij[~couplesDynamicOnly] = 0.0
         keptDamping = couplesDynamicOnly[dampingVIJIndices]
         dampingVIJIndices = dampingVIJIndices[keptDamping]
@@ -1202,16 +1212,13 @@ class NonlinearImplicitDynamic(NIST):
         M = self.csrGenerator.updateCSR(np.asarray(Mvij))
         C = coo_matrix((dampingVIJValues, (I[dampingVIJIndices], J[dampingVIJIndices])), shape=(nDof, nDof)).tocsr()
 
-        # Checked on the summed CSR values, not on the VIJ vectors they were summed from: a
-        # non-finite entry survives the summation, and the CSR arrays are the shorter ones. The
-        # symmetry of the element masses is not checked here -- on the assembled matrix that costs a
-        # transposed copy of it, gigabytes on a large model -- but once per element type, in
-        # tests/test_nid_element_mass.py. It matters: a non-symmetric mass still converges, to a
-        # wrong response.
+        # Checked on the summed CSR values: a non-finite entry survives the summation, and the CSR
+        # arrays are the shorter ones. Symmetry is not checked here but per element type in the
+        # tests -- see the module documentation, "Checks on the mass".
         if not np.all(np.isfinite(M.data)) or not np.all(np.isfinite(C.data)):
             raise ValueError("The assembled consistent mass or damping contains non-finite entries.")
 
-        if np.any(np.asarray(C.data) < 0.0):
+        if np.any(C.data < 0.0):
             raise ValueError("The assembled damping has negative entries; a damping must dissipate.")
 
         # A dynamic degree of freedom no element gave any mass -- a zero density, or a node carried
