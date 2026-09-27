@@ -16,8 +16,6 @@ dependencies:
   - gstools
   - vtk
   - pyvista
-  - mkl
-  - mkl-include
   - suitesparse
   - compilers
   - cmake
