@@ -1,0 +1,49 @@
+# conda_requirements.txt adapted for osx-arm64 (Apple Silicon).
+#
+# Two deviations from conda_requirements.txt, both forced by packages that do not exist for
+# this platform. Everything else is identical, so the two files stay easy to diff.
+#
+# 1. Intel MKL, the MKL headers and Intel OpenMP have no osx-arm64 build at all, so leaving
+#    them in makes environment creation fail before anything is installed:
+#
+#        PackagesNotFoundError: The following packages are not available from
+#        current channels:
+#          - intel-openmp
+#
+#    The only capability lost is PARDISO, which is part of MKL and therefore unavailable on
+#    this platform regardless. getDefaultLinSolver() already falls back to SciPy's superlu
+#    when the PARDISO extension is absent.
+#
+#anaconda::mkl
+#anaconda::mkl-include
+#anaconda::intel-openmp
+#
+# 2. python-freethreading is dropped, so this resolves to the regular cp314 interpreter.
+#    VTK publishes free-threaded wheels for Linux only: vtk 9.7.0 ships
+#    cp314-cp314t-manylinux_2_28_aarch64 and cp314-cp314t-manylinux2014_x86_64, but there is
+#    no cp314t macOS wheel of any architecture, and conda-forge's vtk likewise requires
+#    python_abi *_cp314. Keeping python-freethreading here would therefore make
+#    `pip install -r pip_requirements.txt` fail on vtk, and take pyvista with it.
+#
+#    So on macOS the choice is between free-threading and pyvista/VTK, and this file picks
+#    pyvista, so that the test suite runs complete. Note that free-threading currently buys
+#    nothing here in any case: the Cython extensions do not declare free-threading support,
+#    so CPython re-enables the GIL as soon as they are imported.
+#
+boost-cpp
+cmake
+compilers
+cython
+gstools
+make
+numpy
+numpydoc
+python=3.14
+#python-freethreading
+pytest
+prettytable
+scipy
+suitesparse
+sphinx
+sphinx_rtd_theme>=3.1.0
+sympy

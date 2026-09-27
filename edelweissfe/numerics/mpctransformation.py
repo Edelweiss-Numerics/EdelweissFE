@@ -262,6 +262,7 @@ class MultiPointConstraintTransformation:
         KT = self._T.T @ K
         Kt = KT @ self._T
         Kt = (Kt + self._C).tocsr()
+        Kt.setdiag(Kt.diagonal())
         Kt.sort_indices()
         return Kt
 
