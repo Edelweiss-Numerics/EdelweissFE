@@ -1198,7 +1198,9 @@ class NonlinearImplicitDynamic(NIST):
         dampingVIJIndices = dampingVIJIndices[keptDamping]
         dampingVIJValues = dampingVIJValues[keptDamping]
 
-        M = coo_matrix((np.asarray(Mvij), (I, J)), shape=(nDof, nDof)).tocsr()
+        # The mass matrix has the stiffness' VIJ layout, so the solver's own CSR generator for K
+        # (built for this DofManager) sums it into K's sparsity pattern -- no COO sort of its own.
+        M = self.csrGenerator.updateCSR(np.asarray(Mvij))
         C = coo_matrix((dampingVIJValues, (I[dampingVIJIndices], J[dampingVIJIndices])), shape=(nDof, nDof)).tocsr()
 
         # Checked on the summed CSR values, not on the VIJ vectors they were summed from: a

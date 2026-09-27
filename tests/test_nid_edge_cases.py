@@ -143,23 +143,20 @@ def test_a_reduced_integration_element_starts_under_load(tmp_path):
 
 
 def _corruptTheAssembledMass(monkeypatch, value: float):
-    """Replace the first nonzero value of the mass handed to the COO-to-CSR conversion -- the
-    elements' own output is out of reach of a test, the Marmot elements being compiled."""
+    """Replace the first nonzero entry of the assembled mass matrix (still in VIJ form) by
+    ``value`` -- the elements' own output is out of reach of a test, the Marmot elements being
+    compiled. The discarded-inertia warning is the hook: it is handed the mass right before the
+    CSR conversion and the checks."""
 
-    from edelweissfe.solvers import nonlinearimplicitdynamic
+    from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 
-    trueCooMatrix = nonlinearimplicitdynamic.coo_matrix
-    calls = []
+    trueWarn = NonlinearImplicitDynamic._warnAboutDiscardedInertia
 
-    def corruptingCooMatrix(arguments, **kwargs):
-        values, indices = arguments
-        if not calls:
-            values = np.array(values)
-            values[np.flatnonzero(values)[0]] = value
-        calls.append(None)
-        return trueCooMatrix((values, indices), **kwargs)
+    def corruptingWarn(self, Mvij, dampingVIJIndices, couplesDynamicOnly):
+        trueWarn(self, Mvij, dampingVIJIndices, couplesDynamicOnly)
+        Mvij[np.flatnonzero(np.asarray(Mvij))[0]] = value
 
-    monkeypatch.setattr(nonlinearimplicitdynamic, "coo_matrix", corruptingCooMatrix)
+    monkeypatch.setattr(NonlinearImplicitDynamic, "_warnAboutDiscardedInertia", corruptingWarn)
 
 
 def _reportADamping(monkeypatch, value: float):
