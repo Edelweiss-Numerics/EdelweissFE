@@ -26,89 +26,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Mambaforge
+      - name: Set up conda environment
         uses: conda-incubator/setup-miniconda@v3
         with:
-          use-mamba: true
-          miniforge-variant: Miniforge3
           miniforge-version: latest
-          activate-environment: anaconda-client-env
-
-      # NOTE: the osx-arm64 requirements file, not conda_requirements.txt. The latter pins
-      # anaconda::mkl, anaconda::mkl-include and anaconda::intel-openmp, none of which has an
-      # osx-arm64 build, so it fails to solve before installing anything.
-      - name: Install conda packages
-        shell: bash -leo pipefail {0}
-        run: |
-          mamba install --file conda_requirements_osx-arm64.txt
-
-      - name: Install pip packages
-        shell: bash -leo pipefail {0}
-        run: |
-          pip install -r pip_requirements.txt
-
-      - name: Install Eigen
-        shell: bash -leo pipefail {0}
-        run: |
-          cd ..
-          git clone --branch 3.4.0 https://gitlab.com/libeigen/eigen.git
-          cd eigen
-          mkdir build
-          cd build
-          cmake -DBUILD_TESTING=OFF -DINCLUDE_INSTALL_DIR=$CONDA_PREFIX/include -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-          make install
-          cd ../..
-
-      # NOTE: the build directory is deliberately not called `build` here. autodiff ships a
-      # Bazel `BUILD` file in its repository root, and the macOS filesystem is case-insensitive,
-      # so `mkdir build` fails with "File exists" and `cd build` with "Not a directory". On Linux
-      # the two names are distinct, which is why the ubuntu jobs are unaffected.
-      - name: Install Autodiff
-        shell: bash -leo pipefail {0}
-        run: |
-          cd ..
-          git clone --branch v1.1.0 https://github.com/autodiff/autodiff.git
-          cd autodiff
-          mkdir build-cmake
-          cd build-cmake
-          cmake -DAUTODIFF_BUILD_TESTS=OFF \
-            -DAUTODIFF_BUILD_PYTHON=OFF \
-            -DAUTODIFF_BUILD_EXAMPLES=OFF \
-            -DAUTODIFF_BUILD_DOCS=OFF \
-            -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \
-            ..
-          make install
-          cd ../..
-
-      # NOTE: upstream Fastor does not compile on arm64 - it reaches x86 `cpuid` and `rdtsc`
-      # inline assembly on every non-Windows platform, and its scalar fallback backend has
-      # further defects that only surface off x86. This fork is upstream `master` plus the
-      # minimal patch fixing exactly that, and nothing else. The fixes are offered upstream in
-      # romeric/Fastor#182 and #183; switch this step back once either is merged. Marmot's own
-      # build_macos.yml uses the same fork for the same reason.
-      - name: Install Fastor (arm64-compatible fork)
-        shell: bash -leo pipefail {0}
-        run: |
-          cd ..
-          git clone --branch arm64/apple-silicon-master https://github.com/BOKU-CMP-MEC-MAT/Fastor.git
-          cd Fastor
-          mkdir build
-          cd build
-          cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-          make install
-          cd ../..
-
-      - name: Install AMGCL
-        shell: bash -leo pipefail {0}
-        run: |
-          cd ..
-          git clone --branch 1.4.7 --depth 1 https://github.com/ddemidov/amgcl.git
-          cd amgcl
-          mkdir build
-          cd build
-          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-          make install
-          cd ../..
+          environment-file: environment.yml
+          activate-environment: edelweissfe
+          conda-remove-defaults: true
+          # The environment does not solve under strict channel priority; see README.md.
+          channel-priority: flexible
 
       - name: Install Marmot
         shell: bash -leo pipefail {0}
@@ -138,14 +64,14 @@ jobs:
 
           mkdir build
           cd build
-          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
+          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX ..
           make install
           cd ../../
 
       - name: Build EdelweissFE
         shell: bash -leo pipefail {0}
         run: |
-          pip install -v .
+          pip install -v --no-deps --no-build-isolation .
 
       - name: Run tests
         shell: bash -leo pipefail {0}

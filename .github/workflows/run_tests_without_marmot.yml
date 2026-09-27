@@ -9,28 +9,25 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Setup Mambaforge
+      - name: Set up conda environment
         uses: conda-incubator/setup-miniconda@v3
         with:
-          use-mamba: true
-          miniforge-variant: Miniforge3
           miniforge-version: latest
-          activate-environment: anaconda-client-env
+          environment-file: environment.yml
+          activate-environment: edelweissfe
+          conda-remove-defaults: true
+          # The environment does not solve under strict channel priority; see README.md.
+          channel-priority: flexible
 
-      - name: Install conda packages
+      - name: Install MKL (enables the PARDISO linear solver)
         shell: bash -leo pipefail {0}
         run: |
-          mamba install --file conda_requirements.txt
-
-      - name: Install pip packages
-        shell: bash -leo pipefail {0}
-        run: |
-          pip install -r pip_requirements.txt
+          conda install -y mkl mkl-include
 
       - name: Build EdelweissFE
         shell: bash -leo pipefail {0}
         run: |
-          pip install .
+          pip install --no-deps --no-build-isolation .
 
       - name: Run tests without Marmot
         shell: bash -leo pipefail {0}

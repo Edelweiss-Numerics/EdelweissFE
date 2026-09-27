@@ -1,17 +1,16 @@
 Prerequisites
 #############
 
-It is recommended to use a recent version of `Anaconda <https://anaconda.org/>`_ to compile and run EdelweissFE on a Linux system.
-Then EdelweissFE requires the packages
+EdelweissFE requires a conda installation, e.g. `Miniforge <https://conda-forge.org/download/>`_.
+All required packages, including the free-threaded Python interpreter, are defined in ``environment.yml`` in the
+repository root:
 
-.. include:: ../../requirements.txt
-   :literal:
+.. literalinclude:: ../../environment.yml
+   :language: yaml
 
-Anaconda provides free access to Intel MKL binaries (via package ``mkl``, usually installed by default) and header files (via package ``mkl-include``, available via ``conda install mkl-include``), so no standalaone installation of the Intel MKL is required.
+Optionally,
 
-In addition
+* `Marmot <https://github.com/MAteRialMOdelingToolbox/Marmot/>`_ provides additional elements and constitutive models,
+* Intel MKL (conda packages ``mkl`` and ``mkl-include``, Linux only) enables the PARDISO direct solver.
 
-* `Marmot <https://github.com/MAteRialMOdelingToolbox/Marmot/>`_
-* `Eigen <http://eigen.tuxfamily.org/index.php?title=Main_Page>`_ library for linear algebra
-
-are usually required.
+See :doc:`installation` for the installation steps.

@@ -12,59 +12,20 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Setup Mambaforge
-        uses: conda-incubator/setup-miniconda@v2
+      - name: Set up conda environment
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          use-mamba: true
-          miniforge-variant: Miniforge3
           miniforge-version: latest
-          activate-environment: anaconda-client-env
+          environment-file: environment.yml
+          activate-environment: edelweissfe
+          conda-remove-defaults: true
+          # The environment does not solve under strict channel priority; see README.md.
+          channel-priority: flexible
 
-      - name: Install conda packages
+      - name: Install MKL (enables the PARDISO linear solver)
         shell: bash -leo pipefail {0}
         run: |
-          mamba install --file conda_requirements.txt
-
-      - name: Install pip packages
-        shell: bash -leo pipefail {0}
-        run: |
-          pip install -r pip_requirements.txt
-
-      - name: Install Eigen
-        shell: bash -leo pipefail {0}
-        run: |
-          git clone --branch 3.4.0 https://gitlab.com/libeigen/eigen.git
-          cd eigen
-          mkdir build
-          cd build
-          cmake -DBUILD_TESTING=OFF  -DINCLUDE_INSTALL_DIR=$CONDA_PREFIX/include -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-          make install
-          cd ../..
-
-      - name: Install Autodiff
-        shell: bash -leo pipefail {0}
-        run: |
-          git clone --branch v1.1.0 https://github.com/autodiff/autodiff.git
-          cd autodiff
-          mkdir build
-          cd build
-          cmake -DAUTODIFF_BUILD_TESTS=OFF \
-            -DAUTODIFF_BUILD_PYTHON=OFF \
-            -DAUTODIFF_BUILD_EXAMPLES=OFF \
-            -DAUTODIFF_BUILD_DOCS=OFF \
-            -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \
-            ..
-          make install
-          cd ../..
-
-      - name: Install Fastor
-        shell: bash -leo pipefail {0}
-        run: |
-          git clone https://github.com/romeric/Fastor.git
-          cd Fastor
-          cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX .
-          make install
-          cd ..
+          conda install -y mkl mkl-include
 
       - name: Install Marmot
         shell: bash -leo pipefail {0}
@@ -88,14 +49,14 @@ jobs:
 
           mkdir build
           cd build
-          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
+          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX ..
           make install
           cd ../../
 
       - name: Build EdelweissFE
         shell: bash -leo pipefail {0}
         run: |
-          pip install -v .
+          pip install -v --no-deps --no-build-isolation .
 
       - name: Building EdelweissFE documentation
         shell: bash -leo pipefail {0}

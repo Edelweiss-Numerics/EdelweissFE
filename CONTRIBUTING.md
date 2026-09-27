@@ -22,17 +22,21 @@ By participating in this project, you agree to uphold a respectful, inclusive en
 
 EdelweissFE requires **Python >= 3.14** and targets the free-threaded ("nogil") CPython build (`python-freethreading`).
 
+All dependencies come from conda (`environment.yml`); pip only installs EdelweissFE itself.
+See the [installation documentation](doc/source/installation.rst) for details.
+
 ### 1. Standalone / Without Marmot (Pure Python/Cython only)
 ```bash
-mamba install --file conda_requirements.txt
-pip install -r pip_requirements.txt
-pip install .
+mamba env create -f environment.yml && mamba activate edelweissfe
+mamba install mkl mkl-include   # Linux only, optional: PARDISO
+pip install --no-deps --no-build-isolation .
 ```
 
 ### 2. With Marmot (Native C++ Element & Material Formulations)
-Requires Eigen, autodiff, Fastor, AMGCL, and [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) installed into `$CONDA_PREFIX`:
+Build [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) (branch `next_v26.11`) into `$CONDA_PREFIX` first;
+its dependencies (Eigen, autodiff, Fastor) and AMGCL are already in the environment:
 ```bash
-pip install -v .
+pip install -v --no-deps --no-build-isolation .
 ```
 
 ### Build Environment Overrides
