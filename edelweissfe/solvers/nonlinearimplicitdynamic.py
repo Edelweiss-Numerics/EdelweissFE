@@ -199,11 +199,6 @@ from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
 
-#: Relative asymmetry above which an element's consistent mass is rejected. An element mass
-#: :math:`\int \rho N^T N` is symmetric by construction, so any asymmetry beyond round-off means the
-#: element wrote something that is not a mass matrix into its slot.
-_MASS_SYMMETRY_TOLERANCE = 1e-10
-
 #: An increment shorter than this fraction of the time elapsed in the step is the round-off
 #: remainder of the time stepper's progress accumulation, not an increment, and is skipped with the
 #: state kept -- see :meth:`NonlinearImplicitDynamic.solveIncrement`. Far below any increment a deck
@@ -1162,8 +1157,8 @@ class NonlinearImplicitDynamic(NIST):
         Raises
         ------
         ValueError
-            If an element's mass is not symmetric, the assembled mass or damping is not finite,
-            the damping is negative, or the mass leaves a dynamic degree of freedom without any mass.
+            If the assembled mass or damping is not finite, the damping is negative, or the mass
+            leaves a dynamic degree of freedom without any mass.
         """
 
         Mvij = self.theDofManager.constructVIJSystemMatrix()
@@ -1183,17 +1178,6 @@ class NonlinearImplicitDynamic(NIST):
                         self.identification, el.elNumber, type(el).__name__
                     )
                 ) from error
-
-            # Checked per element, on the element's own block: a non-symmetric mass converges and
-            # gives a wrong response silently. Checked on the assembled matrix instead, it would
-            # cost a transposed copy of the whole mass -- gigabytes on a large model.
-            Me = np.asarray(Mvij[el]).reshape(el.nDof, el.nDof)
-            massScale = np.max(np.abs(Me))
-            if massScale > 0.0 and np.max(np.abs(Me - Me.T)) > _MASS_SYMMETRY_TOLERANCE * massScale:
-                raise ValueError(
-                    "The consistent mass of element {:} ({:}) is not symmetric; it wrote something that is "
-                    "not a mass matrix.".format(el.elNumber, type(el).__name__)
-                )
 
             Ce = np.zeros(el.nDof)
             el.computeLumpedDamping(Ce)
@@ -1216,7 +1200,11 @@ class NonlinearImplicitDynamic(NIST):
         C = coo_matrix((np.asarray(Cvij), (I, J)), shape=(nDof, nDof)).tocsr()
 
         # Checked on the summed CSR values, not on the VIJ vectors they were summed from: a
-        # non-finite entry survives the summation, and the CSR arrays are the shorter ones.
+        # non-finite entry survives the summation, and the CSR arrays are the shorter ones. The
+        # symmetry of the element masses is not checked here -- on the assembled matrix that costs a
+        # transposed copy of it, gigabytes on a large model -- but once per element type, in
+        # tests/test_nid_element_mass.py. It matters: a non-symmetric mass still converges, to a
+        # wrong response.
         if not np.all(np.isfinite(M.data)) or not np.all(np.isfinite(C.data)):
             raise ValueError("The assembled consistent mass or damping contains non-finite entries.")
 

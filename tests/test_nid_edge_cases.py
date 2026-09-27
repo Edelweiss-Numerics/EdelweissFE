@@ -140,3 +140,58 @@ def test_a_reduced_integration_element_starts_under_load(tmp_path):
     # same mass, softer stiffness: comparable response, nothing of the 1e14 of a singular a0
     assert aReduced < 10.0 * aFull, (aReduced, aFull)
     assert uReduced < 10.0 * uFull, (uReduced, uFull)
+
+
+def _corruptTheAssembledOperator(monkeypatch, which: int, value: float):
+    """Replace the first nonzero value of the ``which``-th operator (0: mass, 1: damping) handed to
+    the COO-to-CSR conversion of the mass assembly -- the elements' own output is out of reach of a
+    test, the Marmot elements being compiled."""
+
+    from edelweissfe.solvers import nonlinearimplicitdynamic
+
+    trueCooMatrix = nonlinearimplicitdynamic.coo_matrix
+    calls = []
+
+    def corruptingCooMatrix(arguments, **kwargs):
+        values, indices = arguments
+        if len(calls) == which:
+            values = np.array(values)
+            I, J = indices  # noqa: E741
+            target = np.flatnonzero((values != 0.0) | (I == J))[0]
+            values[target] = value
+        calls.append(None)
+        return trueCooMatrix((values, indices), **kwargs)
+
+    monkeypatch.setattr(nonlinearimplicitdynamic, "coo_matrix", corruptingCooMatrix)
+
+
+@pytest.mark.parametrize("which", [0, 1], ids=["mass", "damping"])
+def test_refuses_a_non_finite_mass_or_damping(tmp_path, monkeypatch, which):
+    _corruptTheAssembledOperator(monkeypatch, which, np.nan)
+    with pytest.raises(ValueError, match="non-finite entries"):
+        _run(tmp_path, "nid_non_finite", _deck(0.02, maxNumInc=1))
+
+
+def test_refuses_a_negative_damping(tmp_path, monkeypatch):
+    _corruptTheAssembledOperator(monkeypatch, 1, -1.0)
+    with pytest.raises(ValueError, match="negative entries"):
+        _run(tmp_path, "nid_negative_damping", _deck(0.02, maxNumInc=1))
+
+
+def test_reports_the_assembled_total_mass(tmp_path, monkeypatch):
+    from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
+
+    reported = []
+    trueTotalMassByField = NonlinearImplicitDynamic._totalMassByField
+
+    def recordingTotalMassByField(*args):
+        totals = trueTotalMassByField(*args)
+        reported.append(totals)
+        return totals
+
+    monkeypatch.setattr(NonlinearImplicitDynamic, "_totalMassByField", staticmethod(recordingTotalMassByField))
+    _run(tmp_path, "nid_mass_report", _deck(0.02, maxNumInc=1))
+
+    assert reported and set(reported[0]) == {"displacement"}
+    # the whole unit bar: rho * volume
+    np.testing.assert_allclose(reported[0]["displacement"], RHO, rtol=1e-12)
