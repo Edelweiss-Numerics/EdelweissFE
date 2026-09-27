@@ -310,8 +310,10 @@ class _NewmarkIncrement:
         The time increment.
     beta, gamma
         The Newmark parameters.
-    dynamicStiffness
-        :math:`M / (\\beta \\Delta t^2) + \\gamma C / (\\beta \\Delta t)` as a VIJ value vector.
+    massFactor, dampingFactor
+        :math:`1 / (\\beta \\Delta t^2)` and :math:`\\gamma / (\\beta \\Delta t)`: the derivatives of the
+        trial acceleration and velocity with respect to the displacement increment, i.e. the factors
+        the mass matrix and the damping enter the effective tangent with.
     V_np, A_np
         The trial velocity and acceleration of the current iteration.
     """
@@ -320,7 +322,8 @@ class _NewmarkIncrement:
     dT: float
     beta: float
     gamma: float
-    dynamicStiffness: np.ndarray
+    massFactor: float
+    dampingFactor: float
     V_np: DofVector
     A_np: DofVector
 
@@ -644,20 +647,13 @@ class NonlinearImplicitDynamic(NIST):
         beta = self.options["newmarkBeta"]
         gamma = self.options["newmarkGamma"]
         dT = timeStep.timeIncrement
-        # d(A_np)/d(dU) and d(V_np)/d(dU), the factors the mass and the damping enter the tangent
-        # with. dT is fixed within the increment, so these two terms are too: formed once here
-        # rather than scaled and added as two full-length value vectors on every Newton iteration.
-        # Formed in place: one VIJ-length vector instead of three alive at once, which at a few
-        # hundred million entries is gigabytes.
-        dynamicStiffness = np.multiply(np.asarray(system.Mvij), 1.0 / (beta * dT * dT))
-        dynamicStiffness[system.dampingVIJIndices] += (gamma / (beta * dT)) * system.dampingVIJValues
-
         self._currentIncrement = _NewmarkIncrement(
             system=system,
             dT=dT,
             beta=beta,
             gamma=gamma,
-            dynamicStiffness=dynamicStiffness,
+            massFactor=1.0 / (beta * dT * dT),
+            dampingFactor=gamma / (beta * dT),
             V_np=self.theDofManager.constructDofVector(),
             A_np=self.theDofManager.constructDofVector(),
         )
@@ -712,9 +708,12 @@ class NonlinearImplicitDynamic(NIST):
         F += np.abs(PInertia)
         F += np.abs(PDamping)
 
-        # Same VIJ layout as K, so the effective tangent is an entry-wise sum, before the parent's
-        # CSR conversion, MPC condensation and Dirichlet row replacement.
-        K += increment.dynamicStiffness
+        # The effective tangent K + M / (beta dT^2) + gamma C / (beta dT). Same VIJ layout as K, so
+        # it is an entry-wise sum, before the parent's CSR conversion, MPC condensation and
+        # Dirichlet row replacement. Recomputed every iteration instead of stored per increment:
+        # a stored copy would be one more VIJ-length vector, gigabytes on a large model.
+        K += increment.massFactor * np.asarray(system.Mvij)
+        K[system.dampingVIJIndices] += increment.dampingFactor * system.dampingVIJValues
 
     def finalizeIncrement(self, model: FEModel):
         """The converged trial kinematics become the state; see the parent's hook. Only an accepted
