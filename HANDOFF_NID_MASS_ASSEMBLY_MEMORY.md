@@ -161,3 +161,50 @@ RSS peak 32.0 GiB at 3460 s (22 increments incl. cutbacks), against 56 GB on LEO
 1. The RSS growth per refinement above; not diagnosed.
 2. The consistent initial-acceleration spike after refinement (max|A| x100); compare against a no-AMR, pre-refined control.
 3. Incremental M reuse after refinement: not attempted. Mass assembly is now 7 s against 15 s for the initial acceleration and ~12 s per linear solve, so it is low priority.
+
+## Phase 4 (2026-09-27): the RSS growth per equation-system rebuild. Diagnosed partly, no fix.
+
+### c1_100 run result (Phase 3 run, `~/nidmem/ph_c100/phases.txt`)
+- It finished at my `maxNumInc=24` cap: 4116 s, t = 0.0975.
+- **It did not reach a 4th live refinement.** The cap counts cutback attempts, and the marker was still deferring (9 marked < 10).
+- So the step LEO4 died on has NOT been reproduced.
+
+| stage | steady RSS |
+|---|---|
+| before any live refinement | 18.8 GiB |
+| after the 1st | 21.0 GiB |
+| after the next rebuild (reuse path) | 23.1 GiB |
+| after the 2nd refinement | 25.3 GiB |
+| after the 3rd | 29.7 GiB |
+| after a reuse-path rebuild | 32.0 GiB |
+| end | 34.1 GiB (peak 34.12) |
+
+### Where the growth happens (from the per-call RSS log)
+- Every step up comes at the **first linear solve after a new DofManager**, whichever way it was rebuilt.
+- Live refinement: the solve at t = 1286 s adds +2.1 to 3 GiB.
+- Reuse path (constraint connectivity only, no element touched): t = 1454 s adds +2.1 GiB, t = 3325 s adds +2.1 GiB.
+- The mass assembly and the initial-acceleration solve do not step it up.
+- Answer to question 4: reuse-path rebuilds grow memory on their own, by the same ~2 GiB.
+
+### What was ruled out
+1. **Python-level owners.**
+   - Method: weakrefs on every DofManager, CSR generator (via its `csrMatrix`; the Cython object is not weak-referenceable), `_NewmarkSystem` and `Mvij`, checked after `gc.collect()` at each rebuild.
+   - Fixtures: NIDLiveAMR (refinement) and `tests/test_nid_contact.py` (4 reuse rebuilds). Scripts: `~/nidmem/leakprobe.py`, `reuseprobe.py`.
+   - Result: the old system lives exactly one call longer, held by `_currentIncrement.system` until the next increment's `_NewmarkIncrement` replaces it. Everything is then collected; at the end only the current set is alive.
+   - This transient overlap adds to the peak, not to the steady state.
+2. **Allocator fragmentation, and growth on c1_50.**
+   - Method: glibc `mallinfo2` after each increment, on c1_50 forced to refine every increment (nodeSet marker on `front_support`, maxLevel = 4; nDof 193k -> 200k -> 221k -> 289k -> 539k).
+   - Controls: plain at OMP = 6 and 16, `MALLOC_ARENA_MAX=2`, and `malloc_trim(0)` after every increment. Runs in `~/nidmem/lk_*`, script `memprobe.py`.
+   - Result: RSS stays proportional to nDof, 31-33 KB/dof throughout (6.4 GiB at 193k, 16.3 GiB at 539k).
+   - Free memory inside the arenas stays at 0.3-0.5 GiB. Neither arena capping nor trimming changes anything beyond 0.3 GiB.
+   - So c1_50 shows **no leak and no fragmentation**, and **does not reproduce** the c1_100 behaviour.
+   - tracemalloc was tried first, but on c1_50 it slowed the run over 10x (still setting up after 9 min), so the snapshot-diff-by-traceback analysis was not done.
+3. **blockamg Python caches** are cleared in `setModel`. The AMGCL C++ objects are held by `unique_ptr` and freed in `__dealloc__`. Both were checked by reading the code only.
+
+### Remaining suspects (c1_100-specific)
+- Native memory allocated in the first blockamg solve on a new pattern, when that solve does not converge. Every refinement on c1_100 was followed by "GMRES itself did not converge within outerMaxiter x outerRestart"; c1_50 had no such warning.
+- The dump-on-degradation machinery. The deque has maxlen 0 and no dumps were written, so this is unlikely.
+- Next experiment: the c1_100 deck with `mallinfo2` probing (`memprobe.py`), starting from the first live refinement (restart files would help). Plus one run with blockamg swapped for direct pardiso across a single rebuild, to split solver-native memory from the rest.
+
+### No fix committed
+Nothing was proven, so nothing was changed. A weakref test would pass today: old systems are collected.
