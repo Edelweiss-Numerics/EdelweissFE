@@ -82,3 +82,82 @@ identical** (`~/nidmem/bit_base` vs `bit_fix`). The 5fa1808d ops were verified o
 - py-spy flame graphs: ptrace_scope=1 blocks attach. I used method-level wall/RSS instrumentation instead.
 - blockamg-internal copies.
 - A live-refinement increment itself (expected equal to the step-start cost above).
+
+## Phase 3 (2026-09-27): fixes 1-3, initial-acceleration A/B, c1_100 through live refinements
+
+### Commits (each checked with pre-commit and `git show`)
+- **8b2a86dd** perf: the mass matrix is summed into CSR form by the solver's own `csrGenerator` (K's pattern).
+  - Scipy's COO->CSR step drops from 3.55 s to 0.29 s.
+  - **Not bitwise, by design**: duplicates are summed in a different order.
+  - Measured differences:
+    - max |dM| = 1.4e-17 on c1_50.
+    - NID and NIDParallel U: identical.
+    - NIDLiveAMR: max |dU| = 1.8e-18, against |U| up to 1e-2.
+    - c1_50 at OMP=1, 3 increments: RF max |d| = 1.6e-13 (rel. 2e-15), U max |d| = 1.6e-19, maxDamage identical.
+  - All testfiles pass against their committed U.ref; none regenerated.
+- **2d0cd3e3** perf: the stored `dynamicStiffness` VIJ vector is gone.
+  - Each iteration does `K += massFactor * Mvij`, then adds `dampingFactor * damping` at its diagonal slots.
+  - Saves 0.53 GiB (c1_50) or about 1.5 GiB (c1_100) of retained memory. The scaled mass is a transient temporary.
+  - Bitwise identical on the NID testfiles.
+  - The order of the two additions differs only on damping slots, and no current element has any undiscarded damping there.
+- **0825f313** docs: new "Checks on the mass" section in the module docs (Sphinx automodule); the storage of M and C is documented; assembly comments tidied.
+  - No option or default changed.
+
+### Initial acceleration after a live refinement: A/B (not landed; default unchanged)
+Fixture: c1_50 at OMP=6, 13 increments. The first live refinement comes at increment 11 (195,206 dof). The three variants
+are identical before it. Harness: `~/nidmem/abvariant.py`; runs in `~/nidmem/ab_*`.
+
+| variant | cost after refinement | KE, inc 11 / 12 | max\|A\|, inc 11 | RF at t = 0.055 / 0.060 | Newton iterations, incs 11-13 |
+|---|---|---|---|---|---|
+| consistent solve (current) | 14.3 s | 1.014 / 1.562 | 7170 | 1565.6 / 1807.3 | 6, 11, 10 |
+| (a) keep interpolated | 0 s | 1.106 / 1.518 | 147 | 1474.9 (-5.8 %) / 1771.0 (-2.0 %) | 9, 10, 8 |
+| (b) lumped (HRZ) solve | 1.3 s | 2.704 / 2.083 | 5.0e5 | 907 (-42 %) / 1505 (-17 %) | 10, 8, … |
+
+NIDLiveAMR (C3D20R bar, 10 increments):
+- (a) tracks the consistent solve to about 1e-7 in KE, but carries a constant acceleration offset (max|A| off by 0.07 of 1.8).
+- (b) triples max|A| immediately and drifts KE by 0.5 %.
+
+Verdict: neither variant is clearly equivalent.
+- Lumped is wrong for the 20-node serendipity mass, because the HRZ diagonal is a poor inverse.
+- Interpolated moves RF by 2-6 % in the first increments after a refinement, and there is no reference that says which is closer.
+- So `computeInitialAcceleration=True` stays the default and nothing is landed.
+- The consistent solve does produce a local max|A| spike (69 -> 7170), which is worth a look (see Open 2).
+
+### c1_100 with the fixed branch
+Setup: OMP=16, MKL_CBWR=AUTO,STRICT, ensight/restart off. Code snapshot `~/nidmem/fe_c100` = 2d0cd3e3; run in `~/nidmem/ph_c100`.
+
+Model after the initial refinement: 455k dof, VIJ about 200 M.
+
+Per refinement (identical for each of the initial and live refinements measured):
+
+| phase | wall | RSS above entry |
+|---|---|---|
+| AMR apply | 2.5 s | +0.06 GiB |
+| mass assembly | 7.2 s | +3.4 GiB |
+| initial acceleration | 15 s | +3.4 GiB |
+| linear solve (~12 s each, ~7 per increment) | - | +4.6 GiB |
+
+**Survival and headroom.** It survives the reassembly after three live refinements, including the equivalent of the
+step LEO4 died in. The LEO4 failing allocation was the removed M - M.T array.
+RSS peak 32.0 GiB at 3460 s (22 increments incl. cutbacks), against 56 GB on LEO4 (at 28 threads; xeon ran 16). The run was still going at hand-off: `~/nidmem/ph_c100/phases.txt` (rewritten after every call > 0.5 s).
+
+**NEW FINDING (open): RSS grows at every live refinement and never comes back down.**
+
+| stage | steady RSS between increments |
+|---|---|
+| before any live refinement | 18.8 GiB |
+| after the 1st | 23.1 GiB |
+| after the 2nd | 25.3 GiB |
+| after the 3rd | 29.7 GiB |
+| later, no further refinement (constraint-connectivity rebuilds?) | 32.0 GiB |
+
+- That is +2 to +4.4 GiB per refinement, far more than the ~100 new elements account for.
+- Something from the old equation system survives each rebuild. Candidates, all unverified: the old DofManager/CSRGenerator (int32 gather map plus I/J, about 2.4 GiB at c1_100), blockamg's old hierarchy, or glibc arena fragmentation under free-threading.
+- Extrapolated: 28 GB (x9) or 42 GB (LEO4, after 4 live refinements), consistent with LEO4's 41.6 GB maxvmem.
+- **This, not the mass assembly, sets the headroom**: at about 3.5 GiB per refinement, 56 GB is reached after about 8 live refinements, whatever the solver.
+- Next step: `gc.get_referrers` / tracemalloc snapshot diff across one refinement on c1_50, with MALLOC_ARENA_MAX=2 as a control.
+
+### Open
+1. The RSS growth per refinement above; not diagnosed.
+2. The consistent initial-acceleration spike after refinement (max|A| x100); compare against a no-AMR, pre-refined control.
+3. Incremental M reuse after refinement: not attempted. Mass assembly is now 7 s against 15 s for the initial acceleration and ~12 s per linear solve, so it is low priority.
