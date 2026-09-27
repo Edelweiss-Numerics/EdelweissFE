@@ -56,8 +56,8 @@ Removed from runtime, both the global and the per-element version.
    - So Cvij and C were 1 GiB of zeros that were multiplied every iteration.
    - Effect: mass assembly 9.9 -> 5.9 s, RSS peak -1.3 GiB.
 
-c1_50 at OMP=1, 3 increments, base vs fix: runs in `~/nidmem/bit_base` / `bit_fix` were still going at hand-off.
-Compare `RF_loading.csv`, `U_loading.csv`, `maxDamage.csv` once each has a `DONE` file.
+c1_50 at OMP=1, 3 increments (4 Newton iterations), e5ffdd72 vs 3becd500: RF_loading, U_loading, maxDamage **bitwise
+identical** (`~/nidmem/bit_base` vs `bit_fix`). The 5fa1808d ops were verified on the NID testfiles only.
 
 ## Ranked open fixes (measured or strongly supported)
 1. **Assemble M through the solver's existing `csrGenerator` instead of scipy COO->CSR**:
