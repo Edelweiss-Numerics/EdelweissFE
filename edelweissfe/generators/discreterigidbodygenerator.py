@@ -349,7 +349,9 @@ def _readGenericSurfaceMesh(filename: str, translation: np.ndarray = None):
     """
     mesh = pv.read(filename)
     if isinstance(mesh, pv.MultiBlock):
-        mesh = mesh.combine()
+        # Exodus files come back as nested MultiBlocks that include empty side/node-set blocks, which
+        # pyvista>=0.49 refuses to combine (VTKExecutionError), so merge only the non-empty blocks.
+        mesh = pv.merge([block for block in mesh.recursive_iterator() if block is not None and block.n_points > 0])
 
     surf = mesh.extract_surface(algorithm="dataset_surface")
     surf.compute_normals(cell_normals=True, point_normals=False, inplace=True)
