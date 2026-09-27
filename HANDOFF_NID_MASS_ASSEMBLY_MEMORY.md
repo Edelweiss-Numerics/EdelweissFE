@@ -1,56 +1,84 @@
-# NID mass/damping assembly memory (2026-09-26, xeon, 1 h budget)
+# NID performance: mass/damping assembly and per-increment cost (xeon, 2026-09-26/27)
 
-Branch `fix/nid-mass-assembly-memory` (EdelweissFE, off origin/next_v26.11 f38b05de), pushed to `mn`.
-Scratch data on xeon: `~/nidmem/` (prof.py instrumentation, base50/base50b/fix50 runs, tf_* NID refs, asym.py).
-Caveat: xeon's libMarmot is a Sep-15 build of Marmot `feat/elements-bulk-viscosity` (eea4c784), NOT origin/next_v26.11
-(c591c8dc); the Marmot checkout has staged WIP, so it was not switched/rebuilt. All comparisons are relative (same lib).
+Branch `fix/nid-mass-assembly-memory` (EdelweissFE, off origin/next_v26.11 f38b05de), pushed to `mn`, no PR.
+Scratch on xeon: `~/nidmem/` (`phases.py` = per-phase wall/RSS instrumentation, `cootime.py`, `asym.py`, run dirs).
 
-## Measured (c1_50 s2s deck, 3 increments, OMP=16, MKL_CBWR=AUTO,STRICT)
-Sizes after initial AMR: nDof 193,486; VIJ length 71.09 M (int32 I/J); nnz(M) = nnz(C) = 40.9 M; C has 0 nonzeros
-(GCDP damping sits on the non-local field, which NID zeroes). One float64 VIJ vector = 0.53 GiB, CSR(M) = 0.46 GiB.
+## Library
+Phase 2 ran against a separate Marmot worktree `~/nidmem/marmot-src` = origin/next_v26.11 **20dc4ad5**, installed in
+`~/nidmem/marmot-prefix`. The private modules came from the main xeon checkout, which has no nested repos:
+GCDP and CDP copied in; GosfordSandstone/GMNeoHooke/GMDamagedShearNeoHooke dropped for missing deps.
+The Cython `.so` files RPATH conda's `lib` ahead of `LD_LIBRARY_PATH`, so I patchelf'ed the three Marmot-linking
+worktree `.so` files to `marmot-prefix/lib` first. patchelf was installed into env next_v2611 for this.
+`/proc/self/maps` shows `~/nidmem/marmot-prefix/lib/libMarmot.so.1.0.0` loaded. The WIP Marmot checkout was not touched.
+Phase-1 numbers ("baseline" below) used the old Sep-15 lib (bulk-viscosity branch).
 
-| stage | baseline | fix |
-|---|---|---|
-| `_assembleMassAndDamping` wall | 10.2 s | 9.4 s |
-| its RSS peak above entry | +3.19 GiB | +2.77 GiB |
-| its tracemalloc peak | +4.09 GiB | +2.75 GiB (-1.34 GiB = M.T/M-M.T + VIJ isfinite temporaries) |
-| retained after (Mvij, Cvij, M, C) | 2.65 GiB | 2.65 GiB |
-| `initializeIncrement` 1st (incl. initial-acceleration solve) | 23.8 s, +4.77 GiB RSS | 24.4 s, +4.77 GiB |
-| `initializeIncrement` later (dynamicStiffness) | +1.06 GiB peak, +0.53 retained | same (2 VIJ vectors alive at once: result + scaled Cvij temp) |
+## c1_50 s2s deck: 193,486 dof, VIJ 71.1 M, nnz(M) 40.9 M, 18.5k elements after the initial AMR
+Setup: 6 increments, OMP=16, MKL_CBWR=AUTO,STRICT, ensight output off. The live-refinement threshold was lowered to
+1e-3, but no live refinement fired in 6 increments. So the per-refinement cost is the step-start one:
+after a live refinement exactly `_assembleMassAndDamping` + `_computeInitialAcceleration` run again
+(the reuse path is for constraint-connectivity-only rebuilds).
 
-Scaled to c1_100 (failed allocation 199.8 M float64 = the M-M.T data array): the removed global symmetry check was
-~ 3x that array transient (M.T view is free, M-M.T data+indices, abs temp) i.e. ~4 GiB at the crash point.
+| phase | NIST | NID before | NID after (3becd500) |
+|---|---|---|---|
+| total wall (7 increments incl. inc 0) | 284 s | 206 s | 192 s |
+| RSS peak | 7.17 GiB | 10.37 GiB | 9.09 GiB |
+| Newton iterations / linear solves | 34 | 27 | 27 |
+| linear solve (blockamg setup+GMRES) | 207 s (6.1 s/solve) | 121 s (4.5 s/solve) | 119 s |
+| mass assembly (per refinement) | - | 9.9 s, +2.77 GiB | 5.9 s, +1.45 GiB |
+| initial acceleration (per refinement; blockamg solve on M) | - | 3.06 s, +1.58 GiB | 2.92 s |
+| dynamicStiffness forming (initializeIncrement minus the two above), per increment | - | 0.43 s | 0.16 s |
+| residual inertia/damping + K += dynamicStiffness (assembleAdditionalTerms), per iteration | 0 | 0.25 s | 0.15 s |
+| Newmark predictor/corrector (_newmarkVelocityAndAcceleration), per iteration | - | 4 ms | 4 ms |
+| reuse path | - | not triggered | not triggered |
+| elements / constraints / CSR / Dirichlet | 7.1 / 11.1 / 3.9 / 3.3 s | 5.8 / 7.1 / 2.8 / 2.5 s | same |
 
-Not measured (budget): c1_100 deck on xeon to its first refinement; NIST comparison; blockamg's own copies;
-per-array breakdown beyond the above; reuse-path frequency on c1_100 (reuse path is only taken for
-constraint-connectivity-only rebuilds; every AMR refinement does a full reassembly by design).
+The "after" run shared xeon with two OMP=1 bitwise runs, so its wall times are an upper bound.
+
+**What NID adds over NIST:**
+- Wall: about 13 s per refinement (mass 9.9 -> 5.9 s, initial acceleration 3 s), plus ~0.2 s per increment and ~0.15 s per iteration.
+- Memory: +3.2 GiB RSS peak before the fixes, +1.9 GiB after. Retained per system before: Mvij 0.53, Cvij 0.53, M 0.46, C 0.46, dynamicStiffness 0.53 GiB.
+- Net, on this deck NID is *faster* than NIST: its linear solves are cheaper (4.5 vs 6.1 s) and it needs fewer iterations (27 vs 34). The mass regularizes the tangent.
+- Scaling to c1_100 (VIJ ~200 M, ~2.8x) gives about 36 s per refinement and 5.3 GiB extra RSS before the fixes. The c1_100 deck (on xeon under `~/nidmem/c1_100`) was NOT run.
 
 ## Symmetry check verdict
-Claim 1 is half right. No solver relies on symmetry (blockamg `symmetric` is the GS sweep direction; K_eff is
-non-symmetric anyway). But a non-symmetric mass is NOT harmless: injecting +/-5% antisymmetric off-diagonal mass
-into NIDParallel (asym.py) converges (2 -> 8 Newton iterations) and silently gives a wrong answer
-(tipU at end -1.1e-4 vs 1.36e-6). So the check is kept, moved to the element loop on each element's own
-nDof x nDof block: same failure detected, zero global memory. (Per-element firing not yet verified by injection:
-Marmot elements are cdef, needs a fake element in tests/test_nid_*.py -- OPEN.)
+Removed from runtime, both the global and the per-element version.
+- It is not harmless to skip entirely: an injected ±5 % antisymmetric mass still converges and silently gives a wrong
+  tip displacement (-1.1e-4 vs 1.36e-6; `asym.py`).
+- So it is now pinned per element type in `tests/test_nid_element_mass.py`. Types covered: C3D8, C3D20, C3D20R, GC3D8, GC3D20R.
+- Checked per type: symmetry, PSD, total mass rho*V per displacement component, no cross-component/field coupling, and the textbook C3D8 matrix.
 
-## Implemented (commit on branch)
-1. Global `M - M.T` check -> per-element block check.
-2. `isfinite` on summed CSR data instead of the two VIJ vectors.
-3. `dynamicStiffness` formed with in-place multiply/add (bitwise identical ops).
-Retained: finite, damping >= 0, massless-dynamic-dof, per-field total-mass journal.
+## Implemented (bitwise identical on NID, NIDParallel, NIDLiveAMR testfiles, MKL_CBWR=AUTO,STRICT, both libs)
+1. 5fa1808d perf: in-place dynamicStiffness; finite-value check on the CSR data, not the VIJ vectors; per-element symmetry check.
+2. e5ffdd72 refactor: removes the runtime symmetry check and adds the element mass tests. Also adds tests that the retained
+   checks fire (non-finite mass, non-finite damping, negative damping, total-mass report; the massless-dof test already existed).
+3. 3becd500 perf: damping kept as its nonzero VIJ diagonal entries (`dampingVIJIndices/Values`, `_collectLumpedDamping`).
+   - Finding: every current Marmot element reports damping only on non-mechanical fields, which NID discards.
+   - So Cvij and C were 1 GiB of zeros that were multiplied every iteration.
+   - Effect: mass assembly 9.9 -> 5.9 s, RSS peak -1.3 GiB.
 
-## Ranked open fixes (expected savings at c1_50 sizes; x~2.8 for c1_100)
-1. Damping as a dof-vector (diagonal by construction): drop Cvij (0.53 GiB) + C CSR (0.46 GiB, all explicit zeros here)
-   + the dynamicStiffness temp (0.53 GiB transient). Put per-element Ce on its VIJ diagonal slots (few M entries).
-   Touches `_NewmarkSystem`, `_reuseMassAndDamping`, `_warnAboutDiscardedInertia` (+ test_nid_gradient_enhanced).
-2. `_computeInitialAcceleration` (+4.77 GiB, re-armed after every refinement): builds a full K VIJ + CSR MEff only
-   to throw K away -- investigate.
-3. Bool temporaries (isDynamic[I] & isDynamic[J], ~couplesDynamicOnly twice, discarded mask): ~5 x 71 MB, minor.
+c1_50 at OMP=1, 3 increments, base vs fix: runs in `~/nidmem/bit_base` / `bit_fix` were still going at hand-off.
+Compare `RF_loading.csv`, `U_loading.csv`, `maxDamage.csv` once each has a `DONE` file.
 
-## Bitwise
-- testfiles/marmot NID, NIDParallel, NIDLiveAMR: fix == baseline U bitwise (OMP=4, MKL_CBWR=AUTO,STRICT).
-- c1_50, 3 increments: fix differs from baseline at 4e-14 rel in RF, BUT two baseline runs differ from each
-  other equally (base50 vs base50b) -> the deck is not run-to-run reproducible at OMP=16 (threaded assembly /
-  blockamg); no bitwise verdict possible there. U_loading, maxDamage identical.
-- tests/test_nid_*.py: 28 pass, 1 fail (test_a_reduced_integration_element_starts_under_load) -- fails identically on
-  baseline (stale libMarmot, likely needs #174's Marmot side).
+## Ranked open fixes (measured or strongly supported)
+1. **Assemble M through the solver's existing `csrGenerator` instead of scipy COO->CSR**:
+   - Measured 3.55 s -> 0.29 s on c1_50, same nnz; the rest of the assembly is the element loop plus masks (~2.4 s).
+   - NOT bitwise: max |dM| = 1.4e-17 from a different summation order. It changes numbers at round-off, so it is flagged rather than landed.
+   - Also makes M share K's pattern, so `K += dynamicStiffness` is already aligned.
+2. **Initial acceleration after refinement** (2.9 s, +1.6 GiB, a full blockamg setup on M):
+   - Option a: keep the interpolated acceleration (`computeInitialAcceleration=False` exists already).
+   - Option b: a lumped-M solve (diagonal, ~0 s).
+   - Either changes the numbers, so it needs an accuracy A/B (energy/momentum report right after a refinement). Not measured.
+3. **dynamicStiffness VIJ vector** (0.53 GiB retained, per increment):
+   - Could be dropped by adding `a*Mvij` into K in place each iteration (one fused multiply-add, no storage).
+   - Or kept as CSR once 1. lands.
+4. **M·a with a CSR copy**: M is already CSR and there is no copy per product; nothing to gain.
+5. **Incremental M update after refinement**:
+   - Only the refined elements' blocks change, but the VIJ layout is rebuilt.
+   - The reuse path would need a slot map, old element to new element. Worth it only after 1.; the loop costs ~2.4 s of 5.9 s.
+6. **Remaining Python full-array temporaries**: `isDynamic[I] & isDynamic[J]` (3 bool temporaries of 71 MB), `~couplesDynamicOnly`, the discarded mask. Minor.
+
+## Not measured
+- The c1_100 deck.
+- py-spy flame graphs: ptrace_scope=1 blocks attach. I used method-level wall/RSS instrumentation instead.
+- blockamg-internal copies.
+- A live-refinement increment itself (expected equal to the step-start cost above).
