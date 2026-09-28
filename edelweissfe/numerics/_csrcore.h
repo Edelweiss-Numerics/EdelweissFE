@@ -319,7 +319,7 @@ public:
     if ( nnz == 0 )
       return;
 
-#pragma omp      parallel for schedule( static )
+#pragma omp parallel for schedule( static )
     for ( int i = 0; i < nnz; ++i ) {
       int32_t start = assembly_ptr[i];
       int32_t end   = assembly_ptr[i + 1];
@@ -327,7 +327,11 @@ public:
       double sum = 0.0;
 // The compiler will autovectorize this reduction effectively
 // because gather_sources is contiguous in memory now.
-#pragma omp simd reduction( + : sum )
+// MSVC accepts `omp simd` only with /openmp:experimental (not with /openmp:llvm); there the loop runs as a
+// plain sequential sum.
+#ifndef _MSC_VER
+#  pragma omp simd reduction( + : sum )
+#endif
       for ( int32_t k = start; k < end; ++k ) {
         sum += V_data[gather_sources[k]];
       }
