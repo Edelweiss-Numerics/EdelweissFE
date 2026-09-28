@@ -1,0 +1,60 @@
+[workspace]
+name = "edelweissfe"
+description = "EdelweissFE development environment: free-threaded Python, everything from conda."
+# conda-forge, plus matthiasneuner/edelweiss for what conda-forge lacks: vtk built for free-threaded
+# Python (cp314t), autodiff with Eigen 5 support, fastor and amgcl.
+# Recipes: https://github.com/matthiasneuner/edelweiss-conda-channel
+channels = ["https://repo.prefix.dev/matthiasneuner/edelweiss", "conda-forge"]
+platforms = ["linux-64", "osx-arm64", "osx-64"]
+
+# conda-forge's qt6-main (a vtk dependency) needs moltenvk, which requires macOS >= 14.0.
+[system-requirements]
+macos = "14.0"
+
+[dependencies]
+python = "3.14.*"
+python-freethreading = "3.14.*"
+pip = "*"
+setuptools = "*"
+cython = "*"
+numpy = "*"
+scipy = "*"
+sympy = "*"
+matplotlib = "*"
+prettytable = "*"
+gstools = "*"
+vtk = "*"
+pyvista = "*"
+suitesparse = "*"
+compilers = "*"
+cmake = "*"
+make = "*"
+libboost-devel = "*"
+amgcl = "*"
+# Build dependencies of Marmot.
+eigen = "*"
+autodiff = "1.1.2.*"
+fastor = "*"
+# Tests and documentation.
+pytest = "*"
+pytest-cov = "*"
+sphinx = "*"
+sphinx_rtd_theme = ">=3.1.0"
+numpydoc = "*"
+docutils = "*"
+
+# Intel MKL enables the PARDISO direct solver; it does not exist for macOS, where PARDISO is simply not
+# built and the default linear solver falls back to SciPy's SuperLU.
+[target.linux-64.dependencies]
+mkl = "*"
+mkl-include = "*"
+
+[tasks]
+# Builds against the environment's Cython/NumPy/setuptools (no build isolation) and installs nothing else.
+install = "pip install -v --no-deps --no-build-isolation ."
+# Builds Marmot from a checkout (default: ../Marmot) into the environment, before `pixi run install`.
+build-marmot = { cmd = "cmake -S {{ marmot_dir }} -B {{ marmot_dir }}/build -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF && cmake --build {{ marmot_dir }}/build -j && cmake --install {{ marmot_dir }}/build", args = [{ arg = "marmot_dir", default = "../Marmot" }] }
+test = { cmd = "run_tests_edelweissfe ./testfiles/edelweiss-only/", env = { PYTHON_GIL = "0" } }
+test-marmot = { cmd = "run_tests_edelweissfe ./testfiles/marmot/", env = { PYTHON_GIL = "0" } }
+pytest = { cmd = "pytest tests", env = { PYTHON_GIL = "0" } }
+docs = "sphinx-build -b html doc/source doc/build/html"

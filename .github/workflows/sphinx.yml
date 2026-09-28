@@ -12,23 +12,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Set up conda environment
-        uses: conda-incubator/setup-miniconda@v3
+      - uses: prefix-dev/setup-pixi@v0.9.1
         with:
-          miniforge-version: latest
-          environment-file: environment.yml
-          activate-environment: edelweissfe
-          conda-remove-defaults: true
-          # The environment does not solve under strict channel priority; see README.md.
-          channel-priority: flexible
-
-      - name: Install MKL (enables the PARDISO linear solver)
-        shell: bash -leo pipefail {0}
-        run: |
-          conda install -y mkl mkl-include
+          # Install exactly what pixi.lock pins; fails if pixi.lock is out of date with pixi.toml.
+          locked: true
+          cache: true
 
       - name: Install Marmot
-        shell: bash -leo pipefail {0}
+        shell: pixi run bash -eo pipefail {0}
         run: |
           # Use github.base_ref (target of PR).
           # If not a PR (like a push to master), fall back to github.ref_name.
@@ -54,12 +45,12 @@ jobs:
           cd ../../
 
       - name: Build EdelweissFE
-        shell: bash -leo pipefail {0}
+        shell: pixi run bash -eo pipefail {0}
         run: |
           pip install -v --no-deps --no-build-isolation .
 
       - name: Building EdelweissFE documentation
-        shell: bash -leo pipefail {0}
+        shell: pixi run bash -eo pipefail {0}
         run: |
           sphinx-build ./doc/source/ ./docs -b html
 

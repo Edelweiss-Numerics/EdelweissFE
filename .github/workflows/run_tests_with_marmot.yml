@@ -9,23 +9,14 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Set up conda environment
-        uses: conda-incubator/setup-miniconda@v3
+      - uses: prefix-dev/setup-pixi@v0.9.1
         with:
-          miniforge-version: latest
-          environment-file: environment.yml
-          activate-environment: edelweissfe
-          conda-remove-defaults: true
-          # The environment does not solve under strict channel priority; see README.md.
-          channel-priority: flexible
-
-      - name: Install MKL (enables the PARDISO linear solver)
-        shell: bash -leo pipefail {0}
-        run: |
-          conda install -y mkl mkl-include
+          # Install exactly what pixi.lock pins; fails if pixi.lock is out of date with pixi.toml.
+          locked: true
+          cache: true
 
       - name: Install Marmot
-        shell: bash -leo pipefail {0}
+        shell: pixi run bash -eo pipefail {0}
         run: |
           # Try, in order: the branch actually under test (github.head_ref, set for a pull_request
           # event), the PR's base branch (github.base_ref), then next_v26.11, the shared
@@ -65,12 +56,12 @@ jobs:
           cd ../../
 
       - name: Build EdelweissFE
-        shell: bash -leo pipefail {0}
+        shell: pixi run bash -eo pipefail {0}
         run: |
           pip install -v --no-deps --no-build-isolation .
 
       - name: Run tests
-        shell: bash -leo pipefail {0}
+        shell: pixi run bash -eo pipefail {0}
         run: |
           # Invoke the installed console-script files directly (not `python -m ...`), which would
           # unconditionally prepend the repo root to sys.path and let the local, uncompiled

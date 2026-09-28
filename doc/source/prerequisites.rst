@@ -1,16 +1,13 @@
 Prerequisites
 #############
 
-EdelweissFE requires a conda installation, e.g. `Miniforge <https://conda-forge.org/download/>`_.
-All required packages, including the free-threaded Python interpreter, are defined in ``environment.yml`` in the
-repository root:
+EdelweissFE requires `pixi <https://pixi.sh>`_, which creates the complete environment, including the free-threaded
+Python interpreter, from ``pixi.toml`` in the repository root, pinned by ``pixi.lock``:
 
-.. literalinclude:: ../../environment.yml
-   :language: yaml
+.. literalinclude:: ../../pixi.toml
+   :language: toml
 
-Optionally,
-
-* `Marmot <https://github.com/MAteRialMOdelingToolbox/Marmot/>`_ provides additional elements and constitutive models,
-* Intel MKL (conda packages ``mkl`` and ``mkl-include``, Linux only) enables the PARDISO direct solver.
+Optionally, `Marmot <https://github.com/MAteRialMOdelingToolbox/Marmot/>`_ provides additional elements and
+constitutive models.
 
 See :doc:`installation` for the installation steps.

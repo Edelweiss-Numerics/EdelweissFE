@@ -26,18 +26,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up conda environment
-        uses: conda-incubator/setup-miniconda@v3
+      - uses: prefix-dev/setup-pixi@v0.9.1
         with:
-          miniforge-version: latest
-          environment-file: environment.yml
-          activate-environment: edelweissfe
-          conda-remove-defaults: true
-          # The environment does not solve under strict channel priority; see README.md.
-          channel-priority: flexible
+          # Install exactly what pixi.lock pins; fails if pixi.lock is out of date with pixi.toml.
+          locked: true
+          cache: true
 
       - name: Install Marmot
-        shell: bash -leo pipefail {0}
+        shell: pixi run bash -eo pipefail {0}
         run: |
           # Branch selection is identical to run_tests_with_marmot.yml; see the comment there.
           CANDIDATE_BRANCHES=("${{ github.head_ref }}" "${{ github.base_ref }}" "next_v26.11")
@@ -69,12 +65,12 @@ jobs:
           cd ../../
 
       - name: Build EdelweissFE
-        shell: bash -leo pipefail {0}
+        shell: pixi run bash -eo pipefail {0}
         run: |
           pip install -v --no-deps --no-build-isolation .
 
       - name: Run tests
-        shell: bash -leo pipefail {0}
+        shell: pixi run bash -eo pipefail {0}
         run: |
           run_tests_edelweissfe ./testfiles/marmot/
           run_tests_edelweissfe ./testfiles/edelweiss-only/
