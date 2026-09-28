@@ -25,16 +25,17 @@ EdelweissFE makes use of the [Marmot](https://github.com/MAteRialMOdelingToolbox
 
 ## Installation
 
-EdelweissFE is developed in a conda environment, declared in `environment.yml` and pinned exactly for every platform
-by the lockfile `conda-lock.yml`. Everything, including the free-threaded Python interpreter, comes from conda
-packages: from [conda-forge](https://conda-forge.org/), plus the
+EdelweissFE is developed in a dedicated conda environment. It is pinned exactly for every platform (`conda-lock.yml`)
+and published as the conda package `edelweissfe-dev`, versioned by date. Everything, including the free-threaded
+Python interpreter, comes from conda packages: from [conda-forge](https://conda-forge.org/), plus the
 [`matthiasneuner/edelweiss`](https://prefix.dev/channels/edelweiss) channel for the few packages conda-forge lacks.
-Linux and macOS 14+ are supported. Requires conda (e.g. Miniforge) and `conda-lock` (`mamba install -n base conda-lock`).
+Linux and macOS 14+ are supported.
+
 Use a dedicated environment for EdelweissFE, never `base` or one shared with other projects: it runs on the free-threaded
-Python build, its versions are pinned by the lockfile, and it can be deleted and recreated from the lockfile at any time.
+Python build, its versions are pinned, and it can be deleted and recreated identically at any time.
 
 ```console
-conda-lock install -n edelweissfe conda-lock.yml
+conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.09.28
 conda activate edelweissfe
 pip install --no-build-isolation -e .
 PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/

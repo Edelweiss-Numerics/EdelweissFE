@@ -22,13 +22,15 @@ By participating in this project, you agree to uphold a respectful, inclusive en
 
 EdelweissFE requires **Python >= 3.14** and targets the free-threaded ("nogil") CPython build (`python-freethreading`).
 
-The environment is declared in `environment.yml` and pinned for every platform by the lockfile `conda-lock.yml`.
-Install it from the lockfile; when changing dependencies, re-lock and commit both files together. See the
+The environment is declared in `environment.yml`, pinned for every platform by the lockfile `conda-lock.yml`, and
+published as the conda package `edelweissfe-dev` (version in `conda/edelweissfe-dev/VERSION`). When changing
+dependencies, re-lock, set a new version, and commit everything together. See the
 [installation documentation](doc/source/installation.rst) for details.
 
 ### 1. Standalone / Without Marmot (Pure Python/Cython only)
 ```bash
-conda-lock install -n edelweissfe conda-lock.yml && conda activate edelweissfe
+conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.09.28
+conda activate edelweissfe
 pip install --no-build-isolation -e .
 PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 ```

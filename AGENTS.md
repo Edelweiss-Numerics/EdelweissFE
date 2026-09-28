@@ -11,7 +11,7 @@ application, linear solver interfaces). It optionally links against the sister C
 [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) for element/material formulations, but also
 ships pure-Python/Cython element and material implementations that work standalone.
 
-Requires Python >= 3.14. The conda environment (`environment.yml`, pinned by `conda-lock.yml`) targets the free-threaded ("nogil") CPython build (`python-freethreading`); see the
+Requires Python >= 3.14. The conda environment (`environment.yml`, pinned by `conda-lock.yml`, published as `edelweissfe-dev`) targets the free-threaded ("nogil") CPython build (`python-freethreading`); see the
 `freethreading_compatible` Cython directive in `setup.py` — importing a non-freethreading-safe extension
 would silently re-enable the GIL process-wide and disable the thread-parallel element loops.
 
@@ -20,7 +20,8 @@ would silently re-enable the GIL process-wide and disable the thread-parallel el
 Cython extensions are compiled at install time via `setup.py` (`cythonize`, `-O3 -march=native`, with optional extensions skipped if native libraries are missing — see `edelweissfe/built_extensions.log`).
 
 ```console
-conda-lock install -n edelweissfe conda-lock.yml && conda activate edelweissfe   # pinned, conda only
+conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.09.28   # pinned
+conda activate edelweissfe
 
 # Standalone (pure Python/Cython elements & materials only)
 pip install --no-build-isolation -e .

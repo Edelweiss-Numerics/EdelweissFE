@@ -1,11 +1,12 @@
 Installation
 ============
 
-EdelweissFE is developed in a conda environment. ``environment.yml`` declares it, and the committed lockfile
+EdelweissFE is developed in a dedicated conda environment. ``environment.yml`` declares it, and the committed lockfile
 ``conda-lock.yml`` pins it exactly: every package, with version, build and checksum, for every supported platform.
-Installing from the lockfile gives the identical environment on every machine and in CI, and nothing changes until
-the lockfile is deliberately updated. Everything, including the free-threaded (``cp314t``) Python interpreter, comes
-from conda packages; ``pip`` only builds and installs EdelweissFE itself.
+The same pinned environment is published as the conda package ``edelweissfe-dev``, versioned by date (the current
+version is in ``conda/edelweissfe-dev/VERSION``), so it installs with a single ``conda create``, identically on every
+machine and in CI. Nothing changes until a new version is published. Everything, including the free-threaded
+(``cp314t``) Python interpreter, comes from conda packages; ``pip`` only builds and installs EdelweissFE itself.
 
 The packages come from `conda-forge <https://conda-forge.org/>`_, except for the few conda-forge does not provide
 yet, which come from the `matthiasneuner/edelweiss <https://prefix.dev/channels/edelweiss>`_ channel on prefix.dev:
@@ -21,14 +22,12 @@ Supported platforms are Linux (x86-64) and macOS 14 or newer (arm64 and x86-64).
 Prerequisites
 *************
 
-A conda installation, e.g. `Miniforge <https://conda-forge.org/download/>`_, and
-`conda-lock <https://conda.github.io/conda-lock/>`_:
+A conda installation, e.g. `Miniforge <https://conda-forge.org/download/>`_:
 
 .. code-block:: console
 
     curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
     bash Miniforge3-$(uname)-$(uname -m).sh
-    mamba install -n base conda-lock
 
 Create a dedicated environment
 ******************************
@@ -46,17 +45,21 @@ projects:
 * **Marmot is built into it.** ``cmake --install`` writes Marmot's libraries and headers into the environment, where
   they must not mix with other projects' builds.
 
-From the EdelweissFE repository root, install the environment **from the lockfile**:
+Create it with the pinned environment package:
 
 .. code-block:: console
 
-    conda-lock install -n edelweissfe conda-lock.yml
+    conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.09.28
     conda activate edelweissfe
+
+This installs exactly the environment of ``conda-lock.yml`` for your platform. Equivalently, from the repository root
+and with `conda-lock <https://conda.github.io/conda-lock/>`_ installed: ``conda-lock install -n edelweissfe
+conda-lock.yml``.
 
 .. note::
 
-    Do not create the environment from ``environment.yml`` directly (``mamba env create -f environment.yml``):
-    that re-solves it against whatever packages are newest today, which is exactly what the lockfile avoids.
+    Do not create the environment from ``environment.yml`` directly (``conda env create -f environment.yml``): that
+    re-solves it against whatever packages are newest today, which is exactly what the pinned environment avoids.
 
 On Linux the environment includes Intel MKL, which enables the PARDISO direct solver. MKL does not exist for macOS;
 there the PARDISO extension is simply not built and the default linear solver falls back to SciPy's SuperLU.
@@ -114,19 +117,25 @@ second checkout or git worktree, use a separate environment, or it silently runs
 Changing dependencies
 *********************
 
-Edit ``environment.yml``, then re-lock and update your environment:
+With `conda-lock <https://conda.github.io/conda-lock/>`_ installed (``conda install -n base conda-lock``), edit
+``environment.yml``, re-lock, and update your environment from the lockfile:
 
 .. code-block:: console
 
     conda-lock lock -f environment.yml --virtual-package-spec virtual-packages.yml
     conda-lock install -n edelweissfe conda-lock.yml
 
-Commit ``environment.yml`` and ``conda-lock.yml`` together; CI fails if the lockfile is out of date with
-``environment.yml``. ``virtual-packages.yml`` tells conda-lock which system properties (e.g. the minimum macOS
-version) to assume for each platform. Platform-specific dependencies use selectors, e.g. ``- mkl  # [linux64]``.
+Then set a new version, today's date, in ``conda/edelweissfe-dev/VERSION`` (append ``.1``, ``.2``, ... for further
+changes on the same day) and in the ``conda create`` commands of this page, the README, CONTRIBUTING.md and AGENTS.md. Commit everything together;
+CI fails if the lockfile is out of date with ``environment.yml``, if it changed without a new version, or if the
+documented commands do not show the current version. Once merged into ``next_v26.11``, CI publishes the new
+``edelweissfe-dev``.
 
-A weekly CI job re-locks against the newest packages and opens a pull request, whose CI tests the updated stack
-before it is merged.
+``virtual-packages.yml`` tells conda-lock which system properties (e.g. the minimum macOS version) to assume for each
+platform. Platform-specific dependencies use selectors, e.g. ``- mkl  # [linux64]``.
+
+A weekly CI job re-locks against the newest packages and opens a pull request with a new version, whose CI tests the
+updated environment before it is merged.
 
 Running with free-threading
 ***************************
@@ -140,9 +149,9 @@ Disable the GIL and set the number of threads explicitly:
 Troubleshooting
 ***************
 
-* **The environment does not solve, or behaves differently than on other machines.** Make sure it was installed with
-  ``conda-lock install`` from ``conda-lock.yml``, not created from ``environment.yml``. With mamba, keep the default
-  (flexible) channel priority: this environment does not solve with ``--strict-channel-priority`` in mamba.
+* **The environment behaves differently than on other machines.** Make sure it was created from ``edelweissfe-dev``
+  (or with ``conda-lock install``), not from ``environment.yml``, and that ``conda list edelweissfe-dev`` shows the
+  version documented above.
 * **CMake finds an unexpected Eigen or other package.** CMake also searches its user package registry
   (``~/.cmake/packages``), to which some projects register their *build* trees. If a package from the environment is
   rejected (e.g. by a version check), CMake silently falls back to such an entry. Configure with
