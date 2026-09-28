@@ -1,6 +1,6 @@
 """Generate the recipe of the ``edelweissfe-dev`` meta-package for one platform from ``conda-lock.yml``.
 
-``edelweissfe-dev`` contains no files. It only depends on every package of the locked EdelweissFE development
+``edelweissfe-dev`` contains only two activation scripts (see activate.sh). It depends on every package of the locked EdelweissFE development
 environment, each pinned to its exact version and build, so that
 
     conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=<VERSION>
@@ -12,6 +12,7 @@ Usage: python generate_recipe.py <platform> <output directory>
 """
 
 import pathlib
+import shutil
 import sys
 import urllib.parse
 
@@ -53,7 +54,15 @@ def pin(package):
 
 recipe = {
     "package": {"name": "edelweissfe-dev", "version": version},
-    "build": {"number": 0},
+    "build": {
+        "number": 0,
+        # The only files: activation scripts that make a plain `pip install -e .` build against this environment
+        # (PIP_NO_BUILD_ISOLATION=0), see activate.sh.
+        "script": [
+            "install -D -m 644 $RECIPE_DIR/activate.sh $PREFIX/etc/conda/activate.d/edelweissfe-dev.sh",
+            "install -D -m 644 $RECIPE_DIR/deactivate.sh $PREFIX/etc/conda/deactivate.d/edelweissfe-dev.sh",
+        ],
+    },
     "requirements": {
         "run": [pin(package) for package in packages],
     },
@@ -65,5 +74,7 @@ recipe = {
 }
 
 output.mkdir(parents=True, exist_ok=True)
+for script in ("activate.sh", "deactivate.sh"):
+    shutil.copy(root / "conda" / "edelweissfe-dev" / script, output / script)
 (output / "recipe.yaml").write_text(yaml.safe_dump(recipe, sort_keys=False, width=200))
 print(f"edelweissfe-dev {version} for {platform}: {len(packages)} pinned packages")

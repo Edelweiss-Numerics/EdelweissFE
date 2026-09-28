@@ -69,13 +69,17 @@ Installation without Marmot
 
 .. code-block:: console
 
-    pip install --no-build-isolation -e .
+    pip install -e .
     PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 
-pip only builds and installs EdelweissFE itself; all dependencies are already in the environment. Keep
-``--no-build-isolation``: without it, pip fetches its own setuptools, Cython and NumPy from PyPI and compiles the
-Cython extensions against those, which can mismatch the environment's NumPy at runtime. ``-e`` (editable) makes
-changes to Python files take effect immediately; rerun the command after changing Cython or C++ sources.
+pip only builds and installs EdelweissFE itself; all dependencies are already in the environment. ``-e`` (editable)
+makes changes to Python files take effect immediately; rerun the command after changing Cython or C++ sources.
+
+pip builds against the environment's own setuptools, Cython and NumPy: activating the environment sets
+``PIP_NO_BUILD_ISOLATION=0`` (pip reads it inverted; ``0`` disables build isolation). Without that, pip would fetch
+its own copies from PyPI into a temporary build environment and compile the Cython extensions against those, which
+can mismatch the environment's NumPy at runtime. In an environment created with ``conda-lock install`` instead, set it
+once with ``conda env config vars set -n edelweissfe PIP_NO_BUILD_ISOLATION=0``, or pass ``--no-build-isolation``.
 
 This installation is sufficient for the EdelweissFE-only elements, materials and tests.
 
@@ -98,7 +102,7 @@ Then build EdelweissFE, which picks up Marmot automatically, and validate the in
 
 .. code-block:: console
 
-    pip install -v --no-build-isolation -e .
+    pip install -v -e .
     PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/marmot/
     PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 
@@ -108,7 +112,7 @@ Developing
 **********
 
 Python changes take effect immediately (editable install). After changing Cython sources, or after rebuilding and
-installing Marmot, rerun ``pip install --no-build-isolation -e .``. The editable install belongs to one checkout: in a
+installing Marmot, rerun ``pip install -e .``. The editable install belongs to one checkout: in a
 second checkout or git worktree, use a separate environment, or it silently runs the first checkout's code. Further:
 
 * ``PYTHON_GIL=0 pytest tests``: the pytest suite,

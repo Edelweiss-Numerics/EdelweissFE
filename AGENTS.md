@@ -24,10 +24,10 @@ conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss 
 conda activate edelweissfe
 
 # Standalone (pure Python/Cython elements & materials only)
-pip install --no-build-isolation -e .
+pip install -e .
 
 # With Marmot (native C++ element/material formulations), after building Marmot into $CONDA_PREFIX:
-pip install -v --no-build-isolation -e .
+pip install -v -e .
 ```
 
 See [doc/source/installation.rst](doc/source/installation.rst) for the full procedure (incl. building Marmot) and build overrides (`MARMOT_INSTALL_DIR`, `MKL_INCLUDE_DIR`, `EIGEN_INCLUDE_DIR`, `EDELWEISSFE_ARCH_FLAGS`).

@@ -31,7 +31,7 @@ dependencies, re-lock, set a new version, and commit everything together. See th
 ```bash
 conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.09.28
 conda activate edelweissfe
-pip install --no-build-isolation -e .
+pip install -e .
 PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 ```
 
@@ -39,7 +39,7 @@ PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 Build [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) (branch `next_v26.11`) into `$CONDA_PREFIX` first;
 its dependencies (Eigen, autodiff, Fastor) and AMGCL are already in the environment:
 ```bash
-pip install -v --no-build-isolation -e .
+pip install -v -e .
 ```
 
 ### Build Environment Overrides
@@ -141,7 +141,7 @@ We follow the GitHub flow: **fork → branch → PR → review → merge**.
    git checkout -b feat/<short-scope>-<concise-topic> origin/next_v26.11
    ```
 2. **Develop & Format**: Make your changes and verify that `pre-commit run --all-files` passes locally.
-3. **Build & Test**: Ensure the package builds cleanly (`pip install -v --no-build-isolation -e .`) and all relevant tests pass (`run_tests_edelweissfe`).
+3. **Build & Test**: Ensure the package builds cleanly (`pip install -v -e .`) and all relevant tests pass (`run_tests_edelweissfe`).
 4. **Open a PR**: Target the correct branch (`master` for bug fixes, `next_v<YY>.<MM>` for features/enhancements), provide a clear title following Conventional Commits, and link relevant issues.
 
 ### Synchronizing with Marmot
@@ -151,7 +151,7 @@ If your changes depend on features or fixes in [Marmot](https://github.com/MAteR
 - [ ] PR targets the correct branch (`master` for bugfixes, `next_v<YY>.<MM>` for features/enhancements).
 - [ ] PR title follows Conventional Commits format.
 - [ ] `pre-commit run --all-files` passes cleanly.
-- [ ] Project builds cleanly via `pip install --no-build-isolation -e .` (`-v` to see the Marmot extensions being built).
+- [ ] Project builds cleanly via `pip install -e .` (`-v` to see the Marmot extensions being built).
 - [ ] All tests pass locally via `run_tests_edelweissfe ./testfiles/edelweiss-only/` (and `./testfiles/marmot/`).
 - [ ] New features, keywords, or options are documented in `doc/source/documentation/`.
 - [ ] New features or bug fixes include a regression test deck (`test.inp` + `U.ref`).

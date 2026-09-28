@@ -37,7 +37,7 @@ Python build, its versions are pinned, and it can be deleted and recreated ident
 ```console
 conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.09.28
 conda activate edelweissfe
-pip install --no-build-isolation -e .
+pip install -e .
 PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 ```
 
@@ -48,7 +48,7 @@ into the same environment first (all its dependencies are already in it):
 git clone --recurse-submodules --branch next_v26.11 https://github.com/MAteRialMOdelingToolbox/Marmot/ ../Marmot
 cmake -S ../Marmot -B ../Marmot/build -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
 cmake --build ../Marmot/build -j && cmake --install ../Marmot/build
-pip install -v --no-build-isolation -e .
+pip install -v -e .
 PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/marmot/
 ```
 

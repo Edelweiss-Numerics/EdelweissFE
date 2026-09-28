@@ -94,6 +94,8 @@ jobs:
           # because conda run does not pass stdin through.
           conda run -n base python compare.py
           conda run -n edelweissfe python -c "import sys, vtk; print(sys.version); assert not sys._is_gil_enabled()"
+          # Its activation script makes a plain `pip install -e .` build without isolation (see activate.sh).
+          conda run -n edelweissfe bash -c 'test "$PIP_NO_BUILD_ISOLATION" = 0'
 
   publish:
     needs: test
