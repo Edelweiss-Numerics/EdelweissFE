@@ -391,12 +391,12 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/wslink-2.5.7-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/yarl-1.24.5-pyh7db6752_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.0-pyhcf101f3_0.conda
-      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/linux-64/autodiff-1.1.2-hb0f4dca_2.conda
-      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/linux-64/fastor-0.6.4.post6-hb0f4dca_2.conda
+      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/linux-64/amgcl-1.4.7-hb0f4dca_2.conda
+      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/linux-64/autodiff-1.1.2-hb0f4dca_3.conda
+      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/linux-64/fastor-0.6.4.post6-hb0f4dca_3.conda
       - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/linux-64/vtk-9.7.0-py314hd092298_1.conda
       - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/linux-64/vtk-base-9.7.0-py314h976ed1d_1.conda
       - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/linux-64/vtk-io-ffmpeg-9.7.0-py314h2ea07a8_1.conda
-      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/noarch/amgcl-1.4.7-h4616a5c_0.conda
       osx-64-macos-14-0:
       - conda: https://conda.anaconda.org/conda-forge/noarch/aiohappyeyeballs-2.7.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/aiohttp-3.14.3-pyhf64b827_0.conda
@@ -705,9 +705,9 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zfp-1.0.1-h6393e1a_6.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zlib-ng-2.3.3-h646e873_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zstd-1.5.7-hbc1a06c_7.conda
-      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/noarch/amgcl-1.4.7-h4616a5c_0.conda
-      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-64/autodiff-1.1.2-h0dc7051_2.conda
-      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-64/fastor-0.6.4.post6-h0dc7051_2.conda
+      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-64/amgcl-1.4.7-h0dc7051_2.conda
+      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-64/autodiff-1.1.2-h0dc7051_3.conda
+      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-64/fastor-0.6.4.post6-h0dc7051_3.conda
       - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-64/vtk-9.7.0-py314ha64a474_1.conda
       - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-64/vtk-base-9.7.0-py314hd10432f_1.conda
       - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-64/vtk-io-ffmpeg-9.7.0-py314h4e2e021_1.conda
@@ -1033,9 +1033,9 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zfp-1.0.1-hd8dcbb1_6.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-h31dac16_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
-      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/noarch/amgcl-1.4.7-h4616a5c_0.conda
-      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-arm64/autodiff-1.1.2-h60d57d3_2.conda
-      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-arm64/fastor-0.6.4.post6-h60d57d3_2.conda
+      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-arm64/amgcl-1.4.7-h60d57d3_2.conda
+      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-arm64/autodiff-1.1.2-h60d57d3_3.conda
+      - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-arm64/fastor-0.6.4.post6-h60d57d3_3.conda
       - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-arm64/vtk-9.7.0-py314hcb21c78_1.conda
       - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-arm64/vtk-base-9.7.0-py314hac8170f_1.conda
       - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-arm64/vtk-io-ffmpeg-9.7.0-py314h60b11f3_1.conda
@@ -12762,27 +12762,31 @@ packages:
     - zstd >=1.5.7,<1.6.0a0
   size: 433687
   timestamp: 1786599629846
-- conda: https://repo.prefix.dev/matthiasneuner/edelweiss/linux-64/autodiff-1.1.2-hb0f4dca_2.conda
-  sha256: 47a45f148efc653c8cab6782e0fb0ff56a8e9a49c4e56a012f0470134b7234a8
-  md5: 4f487009ffe7c71907734ae09a673eb0
+- conda: https://repo.prefix.dev/matthiasneuner/edelweiss/linux-64/amgcl-1.4.7-hb0f4dca_2.conda
+  sha256: bb0b457aabea17072ca2901480c502974ed785ded18c4e977810e48f6c00f6e9
+  md5: 283a5400e04c5442725b313704f15c53
+  depends:
+  - libboost-devel
+  license: MIT
+  run_exports: {}
+  size: 161844
+  timestamp: 1790566207611
+- conda: https://repo.prefix.dev/matthiasneuner/edelweiss/linux-64/autodiff-1.1.2-hb0f4dca_3.conda
+  sha256: 96b59610cabef1ff5dfc78218c541698733b75a25c9ee40a0d65291e575b5816
+  md5: 6ad04adb4b97209f9caec6fae74339d4
   depends:
   - eigen
-  - libstdcxx >=16
-  - libgcc >=16
   license: MIT
   run_exports: {}
-  size: 44549
-  timestamp: 1790544149149
-- conda: https://repo.prefix.dev/matthiasneuner/edelweiss/linux-64/fastor-0.6.4.post6-hb0f4dca_2.conda
-  sha256: e6123b2bcf8505a06aa08daa0381ed75a37ee885caf6c0bb22147353b022d094
-  md5: a4ad6e73832900160c455a7b5e833b29
-  depends:
-  - libstdcxx >=16
-  - libgcc >=16
+  size: 44608
+  timestamp: 1790566203362
+- conda: https://repo.prefix.dev/matthiasneuner/edelweiss/linux-64/fastor-0.6.4.post6-hb0f4dca_3.conda
+  sha256: 80f0c9f3e7dc5102adec732085979479467bf49a41995003d3d820aaf67f68a9
+  md5: 00704807120a1ed8060e4bd5fcd3d084
   license: MIT
   run_exports: {}
-  size: 184842
-  timestamp: 1790544145130
+  size: 185193
+  timestamp: 1790566198609
 - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/linux-64/vtk-9.7.0-py314hd092298_1.conda
   sha256: a25e7518ab47f2dcf706034746dad8bfdec7ca2f2ff624ea3862cbe4e1a47b6c
   md5: ee4807272dc4fec3a1d4cc500a884bd1
@@ -12873,32 +12877,31 @@ packages:
     - vtk-io-ffmpeg >=9.7.0,<9.7.1.0a0
   size: 115634
   timestamp: 1790544158137
-- conda: https://repo.prefix.dev/matthiasneuner/edelweiss/noarch/amgcl-1.4.7-h4616a5c_0.conda
-  sha256: ed2ecadc2886f46d055228932ca2f209797663192f3d3546761ae66ec3cd57bb
-  md5: 8e4e4726e353acef04e731684ca58a72
+- conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-64/amgcl-1.4.7-h0dc7051_2.conda
+  sha256: c1586d121addcc8e1c62171d333de38f2c3bbad01373cf0aa33faf133402a6db
+  md5: b8821feb5e82f76a2c1f3d8bf50725d4
   depends:
   - libboost-devel
   license: MIT
   run_exports: {}
-  size: 161320
-  timestamp: 1790494357313
-- conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-64/autodiff-1.1.2-h0dc7051_2.conda
-  sha256: e04022b07d2bd350401f52390eaac1b685f57d02609064d2f607a38fbfa41665
-  md5: 72fc89f71294426babb7ab3b8a74f8df
+  size: 162953
+  timestamp: 1790566268943
+- conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-64/autodiff-1.1.2-h0dc7051_3.conda
+  sha256: ea5a3f77150c1f57e2adabeed57130f79cc47eb684785f4ab91935bec6f8d504
+  md5: fb577f4544650dcbf952c378370adedc
   depends:
   - eigen
-  - libcxx >=23
   license: MIT
-  size: 45669
-  timestamp: 1790544200915
-- conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-64/fastor-0.6.4.post6-h0dc7051_2.conda
-  sha256: 6e400b171cf5f1c0b84ba4b2698a4bc6fb9152b18ec8a1deb9963be9522d792a
-  md5: b2c1e6189f6bca24da7e3f85e07ae16d
-  depends:
-  - libcxx >=23
+  run_exports: {}
+  size: 45796
+  timestamp: 1790566249278
+- conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-64/fastor-0.6.4.post6-h0dc7051_3.conda
+  sha256: ee55861c92de0f733e1bd300d8a4e036477b16798f05c8dc7bd11c3737ec73fa
+  md5: e99d6aa68edb6e80b488abc5cf13d5d9
   license: MIT
-  size: 185905
-  timestamp: 1790544159165
+  run_exports: {}
+  size: 185971
+  timestamp: 1790566205396
 - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-64/vtk-9.7.0-py314ha64a474_1.conda
   sha256: 9a38d77407abb7d02ccb1349752019bc6611b62dd7c6587d7380f1e4438e7934
   md5: 3ab81f6a9fa962f6b580d8f69964f921
@@ -12969,23 +12972,31 @@ packages:
   license: BSD-3-Clause
   size: 96247
   timestamp: 1790544286314
-- conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-arm64/autodiff-1.1.2-h60d57d3_2.conda
-  sha256: ea432dca4e14e046881001994d0782845f709107618d5ff4ed016e42a58fb30e
-  md5: 8708769642bbefd6e61595bba55214b1
+- conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-arm64/amgcl-1.4.7-h60d57d3_2.conda
+  sha256: 53d906172ee66a43442c318187099150a4edabf1009fd85c000b8ede2f382dce
+  md5: 5189c28b151b4e2c2d45cbd2fcd01bb5
+  depends:
+  - libboost-devel
+  license: MIT
+  run_exports: {}
+  size: 162983
+  timestamp: 1790566224666
+- conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-arm64/autodiff-1.1.2-h60d57d3_3.conda
+  sha256: f67197a43977c4686eb1202bbbdb32c052ef3f36ba43d34cb658bcd12d7d5bc1
+  md5: aa2369afda95b21f42f91bb41ead1c10
   depends:
   - eigen
-  - libcxx >=23
   license: MIT
-  size: 45688
-  timestamp: 1790544159117
-- conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-arm64/fastor-0.6.4.post6-h60d57d3_2.conda
-  sha256: 6d15ec697a108ff987a4662e033a015b7cda388157ab5f7bc2b3d86647408fc4
-  md5: 9b09b8627bd15216860b4caf8068b989
-  depends:
-  - libcxx >=23
+  run_exports: {}
+  size: 45793
+  timestamp: 1790566220630
+- conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-arm64/fastor-0.6.4.post6-h60d57d3_3.conda
+  sha256: cf7761afd6340042783176b7144156a26cf3b75fc1620fe4ae7746151ef80c0d
+  md5: 016830a8459afb2404252f4637167cec
   license: MIT
-  size: 185953
-  timestamp: 1790544149450
+  run_exports: {}
+  size: 185972
+  timestamp: 1790566204934
 - conda: https://repo.prefix.dev/matthiasneuner/edelweiss/osx-arm64/vtk-9.7.0-py314hcb21c78_1.conda
   sha256: afbc5937e07b933d68505ad898fbddea58e5e46792660b98de8f5278efb54cfa
   md5: 69ec824b6ea8fe8432fc95c1c8142b71
