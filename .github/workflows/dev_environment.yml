@@ -75,7 +75,7 @@ jobs:
         run: |
           conda install -y -n base pyyaml
           conda list -n edelweissfe --json > installed.json
-          python - <<'PY'
+          cat > compare.py <<'PY'
           import json, yaml
           platform = "${{ matrix.platform }}"
           # The CPU-level marker is deliberately left unpinned (see generate_recipe.py), so it may differ.
@@ -90,6 +90,9 @@ jobs:
               print("extra:", sorted(installed - locked))
               raise SystemExit("the environment differs from conda-lock.yml")
           PY
+          # conda's own Python (not whichever python is first on PATH, Homebrew's on macOS runners); a file,
+          # because conda run does not pass stdin through.
+          conda run -n base python compare.py
           conda run -n edelweissfe python -c "import sys, vtk; print(sys.version); assert not sys._is_gil_enabled()"
 
   publish:
