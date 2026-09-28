@@ -106,14 +106,16 @@ print("*" * 80)
 def compile_flags(*, optimize=True, cxx20=False, openmp=False, arch=(), gcc_only=()):
     """Return the compile flags for the platform's compiler: MSVC on Windows, GCC/Clang elsewhere.
 
-    ``gcc_only`` flags (e.g. warning switches) are dropped for MSVC. OpenMP uses MSVC's LLVM runtime
-    (/openmp:llvm), since the default /openmp only implements OpenMP 2.0.
+    ``gcc_only`` flags (e.g. warning switches) are dropped for MSVC. MSVC uses its classic OpenMP runtime
+    (/openmp, vcomp140.dll): /openmp:llvm links Microsoft's copy of the LLVM runtime (libomp140), which aborts the
+    process ("OMP: Error #15") next to conda's own LLVM runtime (libomp.dll) that other packages load. vcomp
+    implements OpenMP 2.0, which covers the constructs used here (`omp simd` is excluded under MSVC).
     """
     if is_windows:
         return [
             *(["/O2"] if optimize else []),
             *(["/std:c++20"] if cxx20 else []),
-            *(["/openmp:llvm"] if openmp else []),
+            *(["/openmp"] if openmp else []),
             *arch,
         ]
     return [

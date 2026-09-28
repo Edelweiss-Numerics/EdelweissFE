@@ -327,7 +327,7 @@ public:
       double sum = 0.0;
 // The compiler will autovectorize this reduction effectively
 // because gather_sources is contiguous in memory now.
-// MSVC accepts `omp simd` only with /openmp:experimental (not with /openmp:llvm); there the loop runs as a
+// MSVC's OpenMP 2.0 (/openmp) has no `omp simd` (only /openmp:experimental does); there the loop runs as a
 // plain sequential sum.
 #ifndef _MSC_VER
 #  pragma omp simd reduction( + : sum )
