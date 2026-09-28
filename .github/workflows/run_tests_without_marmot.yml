@@ -9,28 +9,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Setup Mambaforge
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          use-mamba: true
-          miniforge-variant: Miniforge3
-          miniforge-version: latest
-          activate-environment: anaconda-client-env
-
-      - name: Install conda packages
-        shell: bash -leo pipefail {0}
-        run: |
-          mamba install --file conda_requirements.txt
-
-      - name: Install pip packages
-        shell: bash -leo pipefail {0}
-        run: |
-          pip install -r pip_requirements.txt
+      # Installs exactly what conda-lock.yml pins (conda packages, no solving).
+      - uses: ./.github/actions/setup-locked-env
 
       - name: Build EdelweissFE
         shell: bash -leo pipefail {0}
         run: |
-          pip install .
+          pip install --no-deps --no-build-isolation .
 
       - name: Run tests without Marmot
         shell: bash -leo pipefail {0}

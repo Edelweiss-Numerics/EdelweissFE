@@ -1,0 +1,47 @@
+# EdelweissFE development environment: free-threaded Python, everything from conda packages.
+# This file declares it; conda-lock.yml pins it exactly for every platform. After changing this file,
+# re-lock (see doc/source/installation.rst) and commit both files together.
+name: edelweissfe
+channels:
+  # Only for what conda-forge lacks: vtk built for free-threaded Python (cp314t), autodiff with Eigen 5
+  # support, fastor and amgcl. Recipes: https://github.com/matthiasneuner/edelweiss-conda-channel
+  - https://repo.prefix.dev/matthiasneuner/edelweiss
+  - conda-forge
+platforms:
+  - linux-64
+  - osx-arm64
+  - osx-64
+dependencies:
+  - python=3.14
+  - python-freethreading=3.14
+  - pip
+  - setuptools
+  - cython
+  - numpy
+  - scipy
+  - sympy
+  - matplotlib
+  - prettytable
+  - gstools
+  - vtk
+  - pyvista
+  - suitesparse
+  - compilers
+  - cmake
+  - make
+  - libboost-devel
+  - amgcl
+  # Build dependencies of Marmot.
+  - eigen
+  - autodiff=1.1.2
+  - fastor
+  # Tests and documentation.
+  - pytest
+  - pytest-cov
+  - sphinx
+  - sphinx_rtd_theme>=3.1.0
+  - numpydoc
+  - docutils
+  # Intel MKL enables the PARDISO solver; it does not exist for macOS, where PARDISO is not built.
+  - mkl  # [linux64]
+  - mkl-include  # [linux64]

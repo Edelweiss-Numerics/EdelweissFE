@@ -1,0 +1,141 @@
+name: Lockfile
+
+# conda-lock.yml pins the environment declared by environment.yml; conda/edelweissfe-dev/VERSION versions it (the
+# edelweissfe-dev meta-package users install, see dev_environment.yml).
+# - On every push/pull request: fail if the README's conda create command does not show the current VERSION, or if
+#   conda-lock.yml changed without a new VERSION; if the environment definition changed, also fail if conda-lock.yml
+#   is out of date with environment.yml (someone changed environment.yml without re-locking).
+# - Weekly: re-lock against the newest packages and open a pull request, whose CI then tests the
+#   updated stack before it is merged, so upstream changes surface there instead of in someone's
+#   unrelated pull request.
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+jobs:
+  check:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Cheap, on every push/PR: the documented install command shows the current version. Only the README spells
+      # it out; the installation docs read it from VERSION (doc/source/conf.py).
+      - name: The README shows the current VERSION
+        run: |
+          version=$(cat conda/edelweissfe-dev/VERSION)
+          if ! grep -q "edelweissfe-dev=$version" README.md; then
+            echo "::error file=README.md::README.md must show the install command with edelweissfe-dev=$version (conda/edelweissfe-dev/VERSION)."
+            exit 1
+          fi
+
+      # What this push/PR changed: against the PR base, or against the commit before the push (for a new branch,
+      # against next_v26.11).
+      - name: Changed environment files
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            base=origin/${{ github.base_ref }}
+          elif [ -n "${{ github.event.before }}" ] && ! [[ "${{ github.event.before }}" =~ ^0+$ ]]; then
+            base=${{ github.event.before }}
+          else
+            base=$(git merge-base origin/next_v26.11 HEAD)
+          fi
+          changed=$(git diff --name-only "$base"...HEAD)
+          echo "Changed since $base:"; echo "$changed"
+          lock=false; env=false
+          grep -qx conda-lock.yml <<< "$changed" && lock=true
+          grep -qxE "environment.yml|conda-lock.yml|virtual-packages.yml" <<< "$changed" && env=true
+          echo "lock=$lock" >> "$GITHUB_OUTPUT"
+          echo "env=$env" >> "$GITHUB_OUTPUT"
+          if $lock && ! grep -qx conda/edelweissfe-dev/VERSION <<< "$changed"; then
+            echo "::error::conda-lock.yml changed, so the environment changed: set a new date in conda/edelweissfe-dev/VERSION (and in the README's conda create command)."
+            exit 1
+          fi
+
+      # Expensive (a real solve), only if the environment definition changed.
+      - uses: mamba-org/setup-micromamba@v2
+        if: steps.changes.outputs.env == 'true'
+        with:
+          environment-name: conda-lock
+          create-args: conda-lock
+          init-shell: bash
+
+      - name: conda-lock.yml matches environment.yml
+        if: steps.changes.outputs.env == 'true'
+        shell: bash -leo pipefail {0}
+        run: |
+          # --check-input-hash re-locks only if the inputs changed since conda-lock.yml was written.
+          conda-lock lock --micromamba --check-input-hash -f environment.yml --virtual-package-spec virtual-packages.yml
+          if ! git diff --quiet conda-lock.yml; then
+            echo "::error::conda-lock.yml is out of date with environment.yml. Re-lock (see doc/source/installation.rst) and commit it."
+            exit 1
+          fi
+
+  update:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: next_v26.11
+
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: conda-lock
+          create-args: conda-lock
+          init-shell: bash
+
+      - name: Re-lock
+        shell: bash -leo pipefail {0}
+        run: |
+          cp conda-lock.yml conda-lock.old.yml
+          conda-lock lock --micromamba -f environment.yml --virtual-package-spec virtual-packages.yml
+          {
+            echo "Weekly re-lock of \`conda-lock.yml\` against the newest packages. Changed packages:"
+            echo
+            echo '```'
+            python - <<'PY'
+          import yaml
+          def pkgs(path):
+              return {(p["platform"], p["name"]): p["version"] for p in yaml.safe_load(open(path))["package"]}
+          old, new = pkgs("conda-lock.old.yml"), pkgs("conda-lock.yml")
+          for key in sorted(old.keys() | new.keys()):
+              if old.get(key) != new.get(key):
+                  print(f"{key[0]:10} {key[1]:32} {old.get(key, '-'):>16} -> {new.get(key, '-')}")
+          PY
+            echo '```'
+          } > body.md
+          rm conda-lock.old.yml
+          # A changed environment gets a new edelweissfe-dev version: today's date, also in the documented commands.
+          if ! git diff --quiet conda-lock.yml; then
+            old=$(cat conda/edelweissfe-dev/VERSION)
+            new=$(date -u +%Y.%m.%d)
+            echo "$new" > conda/edelweissfe-dev/VERSION
+            sed -i "s/edelweissfe-dev=$old/edelweissfe-dev=$new/g" README.md
+          fi
+
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          # Pull requests opened with the default GITHUB_TOKEN do not trigger other workflows, so
+          # their CI would never run. LOCKFILE_UPDATE_TOKEN (a fine-grained token with contents and
+          # pull-requests write access) makes CI run; without it the PR is still opened.
+          token: ${{ secrets.LOCKFILE_UPDATE_TOKEN || secrets.GITHUB_TOKEN }}
+          base: next_v26.11
+          branch: chore/update-conda-lock
+          commit-message: "chore: update the locked environment"
+          title: "chore: update the locked environment (conda-lock.yml, edelweissfe-dev)"
+          body-path: body.md
+          add-paths: |
+            conda-lock.yml
+            conda/edelweissfe-dev/VERSION
+            README.md
+          delete-branch: true

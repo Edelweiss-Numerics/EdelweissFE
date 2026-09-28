@@ -349,7 +349,14 @@ def _readGenericSurfaceMesh(filename: str, translation: np.ndarray = None):
     """
     mesh = pv.read(filename)
     if isinstance(mesh, pv.MultiBlock):
-        mesh = mesh.combine()
+        # Exodus files come back as nested MultiBlocks that include empty side/node-set blocks, which
+        # pyvista>=0.49 refuses to combine (VTKExecutionError), so merge only the non-empty blocks.
+        # merge_points=False, as combine() did: pv.merge() would otherwise weld coincident but logically
+        # distinct points of different blocks, silently changing the surface topology.
+        blocks = list(mesh.recursive_iterator(skip_none=True, skip_empty=True))
+        if not blocks:
+            raise ValueError(f"The discrete rigid body surface file '{filename}' contains no points.")
+        mesh = pv.merge(blocks, merge_points=False)
 
     surf = mesh.extract_surface(algorithm="dataset_surface")
     surf.compute_normals(cell_normals=True, point_normals=False, inplace=True)

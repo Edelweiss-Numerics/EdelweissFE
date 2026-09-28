@@ -1,330 +1,176 @@
 Installation
 ============
 
-The currently maintained installation recipes reflect the supported installation paths for EdelweissFE.
-They assume that you are in the EdelweissFE repository root and that a conda environment is active,
-so that ``$CONDA_PREFIX`` points to the installation prefix used by the build steps.
+EdelweissFE is developed in a dedicated conda environment. ``environment.yml`` declares it, and the committed lockfile
+``conda-lock.yml`` pins it exactly: every package, with version, build and checksum, for every supported platform.
+The same pinned environment is published as the conda package ``edelweissfe-dev``, versioned by date (the current
+version is in ``conda/edelweissfe-dev/VERSION``), so it installs with a single ``conda create``, identically on every
+machine and in CI. Nothing changes until a new version is published. Everything, including the free-threaded
+(``cp314t``) Python interpreter, comes from conda packages; ``pip`` only builds and installs EdelweissFE itself.
 
-Common base setup
-*****************
+The packages come from `conda-forge <https://conda-forge.org/>`_, except for the few conda-forge does not provide
+yet, which come from the `matthiasneuner/edelweiss <https://prefix.dev/channels/edelweiss>`_ channel on prefix.dev:
 
-Both supported installation paths start with the same package installation steps:
+* ``vtk`` built for free-threaded Python (conda-forge only builds it for the regular interpreter),
+* ``autodiff`` 1.1.2 with Eigen 5 support, ``fastor`` and ``amgcl`` (header-only C++ libraries).
 
-.. code-block:: console
+The recipes of that channel are maintained at
+`matthiasneuner/edelweiss-conda-channel <https://github.com/matthiasneuner/edelweiss-conda-channel>`_.
 
-    mamba install --file conda_requirements.txt
-    pip install -r pip_requirements.txt
+Supported platforms are Linux (x86-64) and macOS 14 or newer (arm64 and x86-64).
 
-Working installation without Marmot
-***********************************
+Get conda
+*********
 
-Build a working EdelweissFE installation without Marmot support as follows:
-
-.. code-block:: console
-
-    mamba install --file conda_requirements.txt
-    pip install -r pip_requirements.txt
-    pip install .
-
-Validate that installation with the same command used in CI:
+A conda installation, e.g. `Miniforge <https://conda-forge.org/download/>`_:
 
 .. code-block:: console
 
-    run_tests_edelweissfe ./testfiles/edelweiss-only/
+    curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
+    bash Miniforge3-$(uname)-$(uname -m).sh
 
-This installation path is sufficient for the EdelweissFE-only examples and tests. Marmot-backed elements and material models
-require the additional dependencies described below.
+Create a dedicated environment
+******************************
 
-Working installation with Marmot
-********************************
+Install EdelweissFE into an environment of its own, never into conda's ``base`` environment or one shared with other
+projects:
 
-Extend the base setup with the external libraries needed for Marmot-enabled builds.
+* **It needs a special interpreter.** EdelweissFE runs on the free-threaded (``cp314t``) Python build, and many
+  packages built for the regular interpreter cannot be installed alongside it.
+* **Its package versions are pinned.** The environment is installed exactly as ``conda-lock.yml`` specifies. Installing
+  other packages into it changes those versions, and a single package that is not free-threading safe (e.g.
+  ``pyamg``) silently re-enables the GIL for the whole process, disabling the thread-parallel element loops.
+* **It can be rebuilt at any time.** A dedicated environment can simply be deleted and recreated from the lockfile,
+  which reliably fixes a broken installation; ``base`` cannot be recreated that way.
+* **Marmot is built into it.** ``cmake --install`` writes Marmot's libraries and headers into the environment, where
+  they must not mix with other projects' builds.
 
-Install Eigen:
+Create it with the pinned environment package:
 
-.. code-block:: console
+.. parsed-literal::
 
-    cd ..
-    git clone --branch 3.4.0 https://gitlab.com/libeigen/eigen.git
-    cd eigen
-    mkdir build
-    cd build
-    cmake -DBUILD_TESTING=OFF -DINCLUDE_INSTALL_DIR=$CONDA_PREFIX/include -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-    make install
-    cd ../..
+    conda create -n edelweissfe -c https\://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=\ |edelweissfe_dev_version|
+    conda activate edelweissfe
 
-Install autodiff:
+This installs exactly the environment of ``conda-lock.yml`` for your platform.
 
-.. code-block:: console
-
-    git clone --branch v1.1.0 https://github.com/autodiff/autodiff.git
-    cd autodiff
-    mkdir build
-    cd build
-    cmake -DAUTODIFF_BUILD_TESTS=OFF \
-      -DAUTODIFF_BUILD_PYTHON=OFF \
-      -DAUTODIFF_BUILD_EXAMPLES=OFF \
-      -DAUTODIFF_BUILD_DOCS=OFF \
-      -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \
-      ..
-    make install
-    cd ../..
-
-Install Fastor:
+**Alternatively, from the lockfile.** The same environment can be installed from ``conda-lock.yml`` in the
+repository root with `conda-lock <https://conda.github.io/conda-lock/>`_, which itself gets a small environment of its
+own (not ``base``). This route does not include ``edelweissfe-dev``'s activation script, so set
+``PIP_NO_BUILD_ISOLATION`` yourself (last line; see below):
 
 .. code-block:: console
 
-    git clone https://github.com/romeric/Fastor.git
-    cd Fastor
-    mkdir build
-    cd build
-    cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-    make install
-    cd ../..
+    conda create -n conda-lock -c conda-forge conda-lock
+    conda run -n conda-lock conda-lock install -n edelweissfe conda-lock.yml
+    conda env config vars set -n edelweissfe PIP_NO_BUILD_ISOLATION=0
+    conda activate edelweissfe
 
-Build Boost from source:
+.. note::
 
-``boost-cpp``'s only available conda-forge build (1.85.0) pins ``icu<76``, which
-conflicts with the ``icu>=78.3`` that the only free-threaded-Python-compatible
-``matplotlib`` build needs, so it can't be installed into the same environment
-as the rest of ``conda_requirements.txt``. Build the specific Boost libraries
-AMGCL needs (``program_options``, ``serialization``, ``test``) from source
-instead, into the same conda prefix as everything else:
+    Do not create the environment from ``environment.yml`` directly (``conda env create -f environment.yml``): that
+    re-solves it against whatever packages are newest today, which is exactly what the pinned environment avoids.
 
-.. code-block:: console
+On Linux the environment includes Intel MKL, which enables the PARDISO direct solver. MKL does not exist for macOS;
+there the PARDISO extension is simply not built and the default linear solver falls back to SciPy's SuperLU.
 
-    curl -L -o boost_1_85_0.tar.gz https://archives.boost.io/release/1.85.0/source/boost_1_85_0.tar.gz
-    tar xzf boost_1_85_0.tar.gz
-    cd boost_1_85_0
-    ./bootstrap.sh --prefix=$CONDA_PREFIX --with-libraries=program_options,serialization,test
-    ./b2 install
-    cd ..
-
-Install AMGCL:
-
-Even installed into the same prefix, AMGCL's ``cmake`` won't reliably find
-Boost without an explicit hint (a plain, unhinted ``cmake ..`` here can
-silently pick up an unrelated Boost from elsewhere on the system instead —
-verified, not hypothetical), so point it there explicitly:
+Installation without Marmot
+***************************
 
 .. code-block:: console
 
-    git clone --branch 1.4.7 --depth 1 https://github.com/ddemidov/amgcl.git
-    cd amgcl
-    mkdir build
-    cd build
-    cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DBOOST_ROOT=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX ..
-    make install
-    cd ../..
+    pip install -e .
+    PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 
-Install Marmot:
+pip only builds and installs EdelweissFE itself; all dependencies are already in the environment. ``-e`` (editable)
+makes changes to Python files take effect immediately; rerun the command after changing Cython or C++ sources.
 
-.. code-block:: console
+pip builds against the environment's own setuptools, Cython and NumPy: activating the environment sets
+``PIP_NO_BUILD_ISOLATION=0`` (pip reads it inverted; ``0`` disables build isolation). Without that, pip would fetch
+its own copies from PyPI into a temporary build environment and compile the Cython extensions against those, which
+can mismatch the environment's NumPy at runtime. An environment installed from the lockfile needs the
+``conda env config vars set`` step shown above, or ``pip install --no-build-isolation -e .``.
 
-    git clone --branch master --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/
-    cd Marmot
+This installation is sufficient for the EdelweissFE-only elements, materials and tests.
 
-Then build and install Marmot:
+Installation with Marmot
+************************
 
-.. code-block:: console
-
-    mkdir build
-    cd build
-    cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-    make install
-    cd ../../EdelweissFE
-
-Build EdelweissFE with Marmot available:
+`Marmot <https://github.com/MAteRialMOdelingToolbox/Marmot/>`_ provides the Marmot-backed elements and constitutive
+models. All of its dependencies (Eigen, autodiff, Fastor) are already in the environment, so only Marmot itself is
+built from source, into the environment:
 
 .. code-block:: console
 
-    pip install -v .
+    git clone --recurse-submodules --branch next_v26.11 https://github.com/MAteRialMOdelingToolbox/Marmot/ ../Marmot
+    cmake -S ../Marmot -B ../Marmot/build -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
+          -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF
+    cmake --build ../Marmot/build -j
+    cmake --install ../Marmot/build
 
-Validate that installation with the same CI commands:
-
-.. code-block:: console
-
-    run_tests_edelweissfe ./testfiles/marmot/
-    run_tests_edelweissfe ./testfiles/edelweiss-only/
-
-TLDR
-****
-
-Assuming that you are in an empty directory,
-you can quickly get a working version of EdelweissFE in a Linux based
-environment:
-
-Installation steps without Marmot
-_________________________________
-
-If necessary, get `Anaconda <https://www.anaconda.com/>`_
-
-The example below uses the Linux ``aarch64`` Miniforge installer. If you are on a different platform,
-choose the matching installer from the Miniforge releases page.
-
-.. code-block:: console
-   :caption: Step 1
-
-    curl -L -O \
-        https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-aarch64.sh
-    bash Miniforge3-Linux-aarch64.sh -b -p ./miniforge3
-
-Add mamba to your environment:
-
-.. code-block:: console
-   :caption: Step 2
-
-    export EWROOT=$PWD
-    export PATH=$EWROOT/miniforge3/bin:$PATH
-    conda init --all
-    exit
-
-Restart shell and activate mamba
-
-.. code-block:: console
-   :caption: Step 3
-
-    export EWROOT=$PWD
-    conda activate
-
-Get EdelweissFE:
-
-.. code-block:: console
-   :caption: Step 4
-
-    git clone https://github.com/EdelweissFE/EdelweissFE.git
-
-Install the required conda packages:
-
-.. code-block:: console
-   :caption: Step 5
-
-    mamba install --file EdelweissFE/conda_requirements.txt
-
-Install the additional pip packages:
-
-.. code-block:: console
-   :caption: Step 6
-
-    pip install -r EdelweissFE/pip_requirements.txt
-
-Build and test EdelweissFE without Marmot:
-
-.. code-block:: console
-   :caption: Step 7
-
-    cd $EWROOT/EdelweissFE
-    pip install .
-    run_tests_edelweissfe ./testfiles/edelweiss-only/
-
-Installation steps with Marmot
-______________________________
-
-Install Eigen:
-
-.. code-block:: console
-   :caption: Step 8
-
-    cd $EWROOT
-    git clone --branch 3.4.0 https://gitlab.com/libeigen/eigen.git
-    cd eigen
-    mkdir build
-    cd build
-    cmake \
-        -DBUILD_TESTING=OFF \
-        -DINCLUDE_INSTALL_DIR=$CONDA_PREFIX/include \
-        -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \
-        ..
-    make install
-
-Install autodiff:
-
-.. code-block:: console
-   :caption: Step 9
-
-    cd $EWROOT
-    git clone --branch v1.1.0 https://github.com/autodiff/autodiff.git
-    cd autodiff
-    mkdir build
-    cd build
-    cmake \
-        -DAUTODIFF_BUILD_TESTS=OFF \
-        -DAUTODIFF_BUILD_PYTHON=OFF \
-        -DAUTODIFF_BUILD_EXAMPLES=OFF \
-        -DAUTODIFF_BUILD_DOCS=OFF \
-        -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \
-        ..
-    make install
-
-Install Fastor:
-
-.. code-block:: console
-   :caption: Step 10
-
-    cd $EWROOT
-    git clone https://github.com/romeric/Fastor.git
-    cd Fastor
-    mkdir build
-    cd build
-    cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-    make install
-
-Build Boost from source (``boost-cpp``'s only conda-forge build conflicts
-with the free-threaded-Python-compatible ``matplotlib`` build — see above):
-
-.. code-block:: console
-   :caption: Step 11
-
-    cd $EWROOT
-    curl -L -o boost_1_85_0.tar.gz https://archives.boost.io/release/1.85.0/source/boost_1_85_0.tar.gz
-    tar xzf boost_1_85_0.tar.gz
-    cd boost_1_85_0
-    ./bootstrap.sh --prefix=$CONDA_PREFIX --with-libraries=program_options,serialization,test
-    ./b2 install
-
-Install AMGCL (pointing its ``cmake`` explicitly at the Boost just built —
-a plain, unhinted ``cmake ..`` here can silently pick up an unrelated Boost
-from elsewhere on the system instead):
-
-.. code-block:: console
-   :caption: Step 12
-
-    cd $EWROOT
-    git clone --branch 1.4.7 --depth 1 https://github.com/ddemidov/amgcl.git
-    cd amgcl
-    mkdir build
-    cd build
-    cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DBOOST_ROOT=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX ..
-    make install
-
-Install Marmot from the master branch:
-
-.. code-block:: console
-   :caption: Step 13
-
-    cd $EWROOT
-    git clone --branch master --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/
-    cd Marmot
-    mkdir build
-    cd build
-    cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-    make install
-
-Build and test EdelweissFE with Marmot:
-
-.. code-block:: console
-   :caption: Step 14
-
-    cd $EWROOT/EdelweissFE
-    pip install -v .
-    run_tests_edelweissfe ./testfiles/marmot/
-    run_tests_edelweissfe ./testfiles/edelweiss-only/
-
-Build the documentation
-***********************
-
-The documentation workflow builds the HTML output with:
+Then build EdelweissFE, which picks up Marmot automatically, and validate the installation:
 
 .. code-block:: console
 
-    sphinx-build ./doc/source/ ./docs -b html
+    pip install -v -e .
+    PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/marmot/
+    PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
+
+Marmot is found in ``$CONDA_PREFIX`` by default; set ``MARMOT_INSTALL_DIR`` if it is installed elsewhere.
+
+Developing
+**********
+
+Python changes take effect immediately (editable install). After changing Cython sources, or after rebuilding and
+installing Marmot, rerun ``pip install -e .``. The editable install belongs to one checkout: in a
+second checkout or git worktree, use a separate environment, or it silently runs the first checkout's code. Further:
+
+* ``PYTHON_GIL=0 pytest tests``: the pytest suite,
+* ``sphinx-build -b html doc/source doc/build/html``: this documentation.
+
+Changing dependencies
+*********************
+
+With conda-lock in its own environment (``conda create -n conda-lock -c conda-forge conda-lock``), edit
+``environment.yml``, re-lock, and update your environment from the lockfile:
+
+.. code-block:: console
+
+    conda run -n conda-lock conda-lock lock -f environment.yml --virtual-package-spec virtual-packages.yml
+    conda run -n conda-lock conda-lock install -n edelweissfe conda-lock.yml
+
+Then set a new version, today's date, in ``conda/edelweissfe-dev/VERSION`` (append ``.1``, ``.2``, ... for further
+changes on the same day) and in the ``conda create`` command of the README (this page reads it from ``VERSION``). Commit everything together;
+CI fails if the lockfile is out of date with ``environment.yml``, if it changed without a new version, or if the
+documented commands do not show the current version. Once merged into ``next_v26.11``, CI publishes the new
+``edelweissfe-dev``.
+
+``virtual-packages.yml`` tells conda-lock which system properties (e.g. the minimum macOS version) to assume for each
+platform. Platform-specific dependencies use selectors, e.g. ``- mkl  # [linux64]``.
+
+A weekly CI job re-locks against the newest packages and opens a pull request with a new version, whose CI tests the
+updated environment before it is merged.
+
+Running with free-threading
+***************************
+
+Disable the GIL and set the number of threads explicitly:
+
+.. code-block:: console
+
+    PYTHON_GIL=0 OMP_NUM_THREADS=8 edelweissfe input.inp
+
+Troubleshooting
+***************
+
+* **The environment behaves differently than on other machines.** Make sure it was created from ``edelweissfe-dev``
+  (or with ``conda-lock install``), not from ``environment.yml``, and that ``conda list edelweissfe-dev`` shows the
+  version documented above.
+* **CMake finds an unexpected Eigen or other package.** CMake also searches its user package registry
+  (``~/.cmake/packages``), to which some projects register their *build* trees. If a package from the environment is
+  rejected (e.g. by a version check), CMake silently falls back to such an entry. Configure with
+  ``-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF`` (as above); the configure output prints the Eigen version and location
+  that was found.
+* **The GIL is re-enabled at runtime.** Importing any extension module that does not declare free-threading support
+  re-enables the GIL for the whole process, with a ``RuntimeWarning``. Do not add such packages (e.g. ``pyamg``) to the
+  environment.

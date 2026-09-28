@@ -1,0 +1,68 @@
+name: Build Marmot
+description: >
+  Build and install Marmot for the EdelweissFE build, cached per Marmot commit, lockfile and OS, and export
+  MARMOT_INSTALL_DIR. Requires the environment from setup-locked-env.
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve the Marmot branch and commit
+      id: resolve
+      # Not a login shell (-l): this step needs no environment, and a login shell's exit runs ~/.bash_logout,
+      # whose failing clear_console (no terminal) turns `exit 0` into a failure under -e.
+      shell: bash -eo pipefail {0}
+      run: |
+        # Try, in order: the branch actually under test (github.head_ref, set for a pull_request
+        # event), the PR's base branch (github.base_ref), then next_v26.11, the shared
+        # development branch - NOT github.ref_name, since the EdelweissFE branch name essentially
+        # never matches a Marmot branch name, and falling through to Marmot's default branch
+        # ("master") silently builds against a stale, possibly API-incompatible Marmot revision.
+        #
+        # head_ref must be tried before base_ref: for a PR whose head branch itself has a
+        # same-named Marmot branch (e.g. a "next_v26.11 -> master" promotion PR), the code under
+        # test depends on that head branch's Marmot revision, not the base branch's -- using
+        # base_ref there would silently build against the wrong (older/incompatible) Marmot.
+        CANDIDATE_BRANCHES=("${{ github.head_ref }}" "${{ github.base_ref }}" "next_v26.11")
+        branch=""
+        for candidate in "${CANDIDATE_BRANCHES[@]}"; do
+          [ -n "$candidate" ] || continue
+          sha=$(git ls-remote https://github.com/MAteRialMOdelingToolbox/Marmot.git "refs/heads/$candidate" | cut -f1)
+          if [ -n "$sha" ]; then
+            branch=$candidate
+            break
+          fi
+        done
+        if [ -z "$branch" ]; then
+          echo "::error::None of the candidate branches (${CANDIDATE_BRANCHES[*]}) exist in Marmot, and there is no safe default to fall back to."
+          false
+        fi
+        echo "Using Marmot branch $branch at $sha"
+        echo "branch=$branch" >> "$GITHUB_OUTPUT"
+        echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+    # Marmot is installed into a prefix of its own (not the environment), so that it can be cached and
+    # restored independently of the environment's cache.
+    - uses: actions/cache@v4
+      id: cache
+      with:
+        path: ${{ runner.temp }}/marmot
+        key: marmot-${{ runner.os }}-${{ runner.arch }}-${{ steps.resolve.outputs.sha }}-${{ hashFiles('conda-lock.yml') }}
+
+    - name: Build and install Marmot
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash -leo pipefail {0}
+      run: |
+        # Clone into the parent directory, never into the checkout: Marmot ships a committed symlink
+        # _codeql_detected_source_root -> ., which `pip install .` otherwise follows into itself while
+        # collecting the wheel's files.
+        cd ..
+        git clone --recurse-submodules --branch "${{ steps.resolve.outputs.branch }}" https://github.com/MAteRialMOdelingToolbox/Marmot/
+        git -C Marmot checkout --detach "${{ steps.resolve.outputs.sha }}"
+        cmake -S Marmot -B Marmot/build -DCMAKE_INSTALL_PREFIX="${{ runner.temp }}/marmot" \
+          -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF
+        cmake --build Marmot/build -j 4
+        cmake --install Marmot/build
+
+    - name: Export MARMOT_INSTALL_DIR
+      shell: bash
+      run: echo "MARMOT_INSTALL_DIR=${{ runner.temp }}/marmot" >> "$GITHUB_ENV"
