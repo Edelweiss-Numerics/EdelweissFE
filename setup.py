@@ -51,7 +51,6 @@ directives = {
     "freethreading_compatible": True,
 }
 
-default_install_prefix = sys.prefix
 # On Windows, conda installs C/C++ headers and libraries under <prefix>\Library, not <prefix>.
 is_windows = sys.platform == "win32"
 native_prefix = join(sys.prefix, "Library") if is_windows else sys.prefix
@@ -60,7 +59,7 @@ print("EdelweissFE setup")
 print("System prefix: " + sys.prefix)
 print("*" * 80)
 
-marmot_dir = expanduser(os.environ.get("MARMOT_INSTALL_DIR", default_install_prefix))
+marmot_dir = expanduser(os.environ.get("MARMOT_INSTALL_DIR", native_prefix))
 mkl_include = expanduser(os.environ.get("MKL_INCLUDE_DIR", join(native_prefix, "include")))
 eigen_include = expanduser(os.environ.get("EIGEN_INCLUDE_DIR", join(native_prefix, "include", "eigen3")))
 # MSVC has no -march=native equivalent, so no architecture flags by default on Windows.

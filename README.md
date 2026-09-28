@@ -25,31 +25,86 @@ EdelweissFE makes use of the [Marmot](https://github.com/MAteRialMOdelingToolbox
 
 ## Installation
 
-EdelweissFE is developed in a dedicated conda environment. It is pinned exactly for every platform (`conda-lock.yml`)
-and published as the conda package `edelweissfe-dev`, versioned by date. Everything, including the free-threaded
-Python interpreter, comes from conda packages: from [conda-forge](https://conda-forge.org/), plus the
-[`matthiasneuner/edelweiss`](https://prefix.dev/channels/edelweiss) channel for the few packages conda-forge lacks.
-Linux, macOS 14+ and Windows (without Marmot; needs the Visual Studio C++ Build Tools) are supported.
+EdelweissFE runs on Linux, macOS (version 14 or newer) and Windows. Installing it takes four steps and about
+15 minutes, most of it waiting for downloads.
 
-Use a dedicated environment for EdelweissFE, never `base` or one shared with other projects: it runs on the free-threaded
-Python build, its versions are pinned, and it can be deleted and recreated identically at any time.
+### 1. Install conda
+
+EdelweissFE and everything it needs (Python, numerical libraries, compilers) are installed with **conda**, a
+package manager. If you do not have conda yet, install **Miniforge**, a free distribution of conda:
+
+- **Linux or macOS:** open a terminal and run
+  ```console
+  curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
+  bash Miniforge3-$(uname)-$(uname -m).sh
+  ```
+  then close and reopen the terminal.
+- **Windows:** download and run the installer from [conda-forge.org/download](https://conda-forge.org/download/).
+  Windows also needs Microsoft's C++ compiler, which conda cannot install: install the free
+  [Visual Studio 2022 Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) and select
+  *Desktop development with C++*. Afterwards, run all commands below in the **Miniforge Prompt** (find it in the
+  Start menu).
+
+### 2. Create the EdelweissFE environment
+
+An *environment* is a separate folder that contains everything EdelweissFE needs, in exactly the versions it is
+tested with, without touching anything else on your computer. Create it with:
 
 ```console
 conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.09.28.2
-conda activate edelweissfe
-pip install -e .
-PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 ```
 
-To use the Marmot-backed elements and materials, build [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/)
-into the same environment first (all its dependencies are already in it):
+Always use this separate environment for EdelweissFE. If it ever breaks, delete it
+(`conda env remove -n edelweissfe`) and run the command again.
+
+### 3. Download and install EdelweissFE
 
 ```console
+conda activate edelweissfe
+git clone --branch next_v26.11 https://github.com/Edelweiss-Numerics/EdelweissFE.git
+cd EdelweissFE
+pip install -e .
+```
+
+`conda activate edelweissfe` switches to the environment. You need it again in every new terminal before using
+EdelweissFE.
+
+### 4. Check that it works
+
+Run the test suite (it takes a few minutes and should end with `Tests failed: 0`):
+
+- **Linux or macOS:**
+  ```console
+  PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
+  ```
+- **Windows:**
+  ```console
+  set PYTHON_GIL=0
+  run_tests_edelweissfe .\testfiles\edelweiss-only\
+  ```
+
+`PYTHON_GIL=0` lets EdelweissFE compute in parallel on several processor cores.
+
+### Running a simulation
+
+```console
+conda activate edelweissfe
+edelweissfe my_simulation.inp
+```
+
+### Optional: Marmot
+
+[Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) adds further elements and material models (Linux and
+macOS only). Build it into the same environment, then reinstall EdelweissFE:
+
+```console
+conda activate edelweissfe
 git clone --recurse-submodules --branch next_v26.11 https://github.com/MAteRialMOdelingToolbox/Marmot/ ../Marmot
 cmake -S ../Marmot -B ../Marmot/build -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
 cmake --build ../Marmot/build -j && cmake --install ../Marmot/build
-pip install -v -e .
+pip install -e .
 PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/marmot/
 ```
 
-See the [installation documentation](doc/source/installation.rst) for details, changing dependencies and troubleshooting.
+More details, including how the environment is pinned, how to change dependencies and troubleshooting, are in the
+[installation documentation](doc/source/installation.rst).

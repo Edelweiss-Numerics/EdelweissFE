@@ -30,9 +30,18 @@ A conda installation, e.g. `Miniforge <https://conda-forge.org/download/>`_. On 
     bash Miniforge3-$(uname)-$(uname -m).sh
 
 On Windows, use the Miniforge installer (``Miniforge3-Windows-x86_64.exe``) and run the commands below in the
-*Miniforge Prompt*. Windows additionally needs the Microsoft C++ compiler: install the free
-`Build Tools for Visual Studio <https://visualstudio.microsoft.com/visual-cpp-build-tools/>`_ with the workload
-*Desktop development with C++*. The environment's ``compilers`` package only activates it; it cannot install it.
+*Miniforge Prompt*. Windows additionally needs the Microsoft C++ compiler: the free
+`Visual Studio 2022 Build Tools <https://visualstudio.microsoft.com/visual-cpp-build-tools/>`_ (MSVC v143 toolset)
+with the workload *Desktop development with C++*. The environment's ``compilers`` package only activates it; it cannot
+install it. Both can also be installed from a terminal:
+
+.. code-block:: console
+
+    winget install CondaForge.Miniforge3
+    winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+
+Activating the environment on Windows prints a long list of Visual Studio setup commands; that is the compiler
+activation and normal.
 
 Create a dedicated environment
 ******************************
@@ -100,6 +109,11 @@ can mismatch the environment's NumPy at runtime. An environment installed from t
 ``conda env config vars set`` step shown above, or ``pip install --no-build-isolation -e .``.
 
 This installation is sufficient for the EdelweissFE-only elements, materials and tests.
+
+Without Marmot, the build output (``pip install -v``) shows a warning that Marmot was not found, followed by compiler
+errors (e.g. ``fatal error C1083`` on Windows) and ``[FAIL]`` lines for the three Marmot extensions
+(``marmotelement.element``, ``marmothypoelastic``, ``marmotgradientenhancedhypoelastic``). That is expected: these
+extensions are optional and skipped. ``edelweissfe/built_extensions.log`` lists the extensions that were built.
 
 Installation with Marmot
 ************************
