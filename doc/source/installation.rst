@@ -52,9 +52,19 @@ Create it with the pinned environment package:
     conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.09.28.2
     conda activate edelweissfe
 
-This installs exactly the environment of ``conda-lock.yml`` for your platform. Equivalently, from the repository root
-and with `conda-lock <https://conda.github.io/conda-lock/>`_ installed: ``conda-lock install -n edelweissfe
-conda-lock.yml``.
+This installs exactly the environment of ``conda-lock.yml`` for your platform.
+
+**Alternatively, from the lockfile.** The same environment can be installed from ``conda-lock.yml`` in the
+repository root with `conda-lock <https://conda.github.io/conda-lock/>`_, which itself gets a small environment of its
+own (not ``base``). This route does not include ``edelweissfe-dev``'s activation script, so set
+``PIP_NO_BUILD_ISOLATION`` yourself (last line; see below):
+
+.. code-block:: console
+
+    conda create -n conda-lock -c conda-forge conda-lock
+    conda run -n conda-lock conda-lock install -n edelweissfe conda-lock.yml
+    conda env config vars set -n edelweissfe PIP_NO_BUILD_ISOLATION=0
+    conda activate edelweissfe
 
 .. note::
 
@@ -78,8 +88,8 @@ makes changes to Python files take effect immediately; rerun the command after c
 pip builds against the environment's own setuptools, Cython and NumPy: activating the environment sets
 ``PIP_NO_BUILD_ISOLATION=0`` (pip reads it inverted; ``0`` disables build isolation). Without that, pip would fetch
 its own copies from PyPI into a temporary build environment and compile the Cython extensions against those, which
-can mismatch the environment's NumPy at runtime. In an environment created with ``conda-lock install`` instead, set it
-once with ``conda env config vars set -n edelweissfe PIP_NO_BUILD_ISOLATION=0``, or pass ``--no-build-isolation``.
+can mismatch the environment's NumPy at runtime. An environment installed from the lockfile needs the
+``conda env config vars set`` step shown above, or ``pip install --no-build-isolation -e .``.
 
 This installation is sufficient for the EdelweissFE-only elements, materials and tests.
 
@@ -121,13 +131,13 @@ second checkout or git worktree, use a separate environment, or it silently runs
 Changing dependencies
 *********************
 
-With `conda-lock <https://conda.github.io/conda-lock/>`_ installed (``conda install -n base conda-lock``), edit
+With conda-lock in its own environment (``conda create -n conda-lock -c conda-forge conda-lock``), edit
 ``environment.yml``, re-lock, and update your environment from the lockfile:
 
 .. code-block:: console
 
-    conda-lock lock -f environment.yml --virtual-package-spec virtual-packages.yml
-    conda-lock install -n edelweissfe conda-lock.yml
+    conda run -n conda-lock conda-lock lock -f environment.yml --virtual-package-spec virtual-packages.yml
+    conda run -n conda-lock conda-lock install -n edelweissfe conda-lock.yml
 
 Then set a new version, today's date, in ``conda/edelweissfe-dev/VERSION`` (append ``.1``, ``.2``, ... for further
 changes on the same day) and in the ``conda create`` commands of this page, the README, CONTRIBUTING.md and AGENTS.md. Commit everything together;
