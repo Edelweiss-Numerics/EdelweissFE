@@ -54,7 +54,8 @@ class _RecordingJournal:
 def _pinTo(monkeypatch, nCpus: int):
     """Make the process look as though it were allowed on ``nCpus`` CPUs."""
 
-    monkeypatch.setattr(os, "sched_getaffinity", lambda pid: set(range(nCpus)))
+    # raising=False: the function only exists on Linux (not on macOS or Windows).
+    monkeypatch.setattr(os, "sched_getaffinity", lambda pid: set(range(nCpus)), raising=False)
 
 
 def test_the_thread_count_is_always_reported(monkeypatch):

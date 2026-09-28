@@ -2,7 +2,7 @@
 #
 # Mirrors run_tests_without_marmot.yml. Its purpose is to keep Windows support from regressing: it exercises
 # the win-64 environment from conda-lock.yml, the MSVC build of the Cython extensions (setup.py's compile_flags)
-# and both test suites, none of which the Linux/macOS jobs cover.
+# and the EdelweissFE-only test suite, none of which the Linux/macOS jobs cover.
 name: Run tests without Marmot (Windows)
 
 on: [push, pull_request]
@@ -43,6 +43,5 @@ jobs:
         run: |
           # Invoke the installed console scripts directly, not `python -m ...`, so that the repository's
           # uncompiled edelweissfe/ source tree does not shadow the installed package (see run_tests_with_marmot.yml).
+          # Like run_tests_without_marmot.yml: no pytest, since parts of that suite require Marmot.
           "$(command -v run_tests_edelweissfe)" ./testfiles/edelweiss-only/
-          "$(command -v pytest)" tests \
-            --deselect tests/test_stepoptions.py::test_the_dynamic_options_branch_is_declared_in_exactly_one_place
