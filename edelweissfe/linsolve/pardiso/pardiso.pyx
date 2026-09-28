@@ -93,7 +93,9 @@ cdef class PardisoSolver:
     (``OMP_NUM_THREADS`` / ``MKL_NUM_THREADS``).
     """
 
-    cdef long pt[64]      # internal solver memory pointer
+    # PARDISO's handle: 64 pointer-sized entries (MKL's _MKL_DSS_HANDLE_t). Not `long`, which is only 32 bits on
+    # Windows, where PARDISO would write past the array.
+    cdef void* pt[64]
     cdef int iparm[64]    # parameters for pardiso
     cdef int mtype        # real and unsymmetric matrix
     cdef int maxfct
@@ -132,7 +134,7 @@ cdef class PardisoSolver:
 
         # PARDISO requires pt to be all zeros before the first call
         for i in range(64):
-            self.pt[i] = 0
+            self.pt[i] = NULL
             self.iparm[i] = 0
 
     def __dealloc__(self):
