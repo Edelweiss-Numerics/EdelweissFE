@@ -58,9 +58,14 @@ recipe = {
         "number": 0,
         # The only files: activation scripts that make a plain `pip install -e .` build against this environment
         # (PIP_NO_BUILD_ISOLATION=0), see activate.sh.
+        # (Built on Linux for every platform; Windows additionally gets cmd.exe and PowerShell variants.)
         "script": [
-            "install -D -m 644 $RECIPE_DIR/activate.sh $PREFIX/etc/conda/activate.d/edelweissfe-dev.sh",
-            "install -D -m 644 $RECIPE_DIR/deactivate.sh $PREFIX/etc/conda/deactivate.d/edelweissfe-dev.sh",
+            f"install -D -m 644 $RECIPE_DIR/{script} $PREFIX/etc/conda/{phase}.d/edelweissfe-dev{suffix}"
+            for phase in ("activate", "deactivate")
+            for script, suffix in (
+                [(f"{phase}.sh", ".sh")]
+                + ([(f"{phase}.bat", ".bat"), (f"{phase}.ps1", ".ps1")] if platform.startswith("win-") else [])
+            )
         ],
     },
     "requirements": {
@@ -74,7 +79,7 @@ recipe = {
 }
 
 output.mkdir(parents=True, exist_ok=True)
-for script in ("activate.sh", "deactivate.sh"):
+for script in ("activate.sh", "deactivate.sh", "activate.bat", "deactivate.bat", "activate.ps1", "deactivate.ps1"):
     shutil.copy(root / "conda" / "edelweissfe-dev" / script, output / script)
 (output / "recipe.yaml").write_text(yaml.safe_dump(recipe, sort_keys=False, width=200))
 print(f"edelweissfe-dev {version} for {platform}: {len(packages)} pinned packages")

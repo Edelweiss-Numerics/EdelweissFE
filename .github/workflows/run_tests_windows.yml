@@ -1,0 +1,44 @@
+# Run the EdelweissFE-only test suites on Windows (x64, MSVC), without Marmot.
+#
+# Mirrors run_tests_without_marmot.yml. Its purpose is to keep Windows support from regressing: it exercises
+# the win-64 environment from conda-lock.yml, the MSVC build of the Cython extensions (setup.py's compile_flags)
+# and the EdelweissFE-only test suite, none of which the Linux/macOS jobs cover.
+name: Run tests without Marmot (Windows)
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    # A hung install step (e.g. a package's post-link script) must fail fast, not block CI for hours.
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Installs exactly what conda-lock.yml pins for win-64.
+      - uses: ./.github/actions/setup-locked-env
+        with:
+          init-shell: cmd.exe bash
+
+      # cmd.exe, because only its activation runs the environment's MSVC setup (vs2022_compiler_vars.bat).
+      - name: Build EdelweissFE
+        shell: cmd /C CALL {0}
+        run: |
+          pip install -v --no-build-isolation .
+
+      - name: Built extensions
+        shell: bash -leo pipefail {0}
+        run: |
+          # Extension build failures are tolerated by setup.py (optional_build_ext); list what was built.
+          python -c "import edelweissfe, pathlib; print((pathlib.Path(edelweissfe.__file__).parent / 'built_extensions.log').read_text())"
+
+      - name: Run tests without Marmot
+        shell: bash -leo pipefail {0}
+        env:
+          PYTHON_GIL: "0"
+        run: |
+          # Invoke the installed console scripts directly, not `python -m ...`, so that the repository's
+          # uncompiled edelweissfe/ source tree does not shadow the installed package (see run_tests_with_marmot.yml).
+          # Like run_tests_without_marmot.yml: no pytest, since parts of that suite require Marmot.
+          "$(command -v run_tests_edelweissfe)" ./testfiles/edelweiss-only/
