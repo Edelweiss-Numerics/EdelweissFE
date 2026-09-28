@@ -32,6 +32,10 @@ jobs:
           # base_ref there would silently build against the wrong (older/incompatible) Marmot.
           CANDIDATE_BRANCHES=("${{ github.head_ref }}" "${{ github.base_ref }}" "next_v26.11")
 
+          # Clone into the parent directory, never into the checkout: Marmot ships a committed symlink
+          # _codeql_detected_source_root -> ., which `pip install .` otherwise follows into itself while
+          # collecting the wheel's files (see run_tests_with_marmot_macos.yml).
+          cd ..
           git clone --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/
           cd Marmot
 
