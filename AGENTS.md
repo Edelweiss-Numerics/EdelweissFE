@@ -20,7 +20,7 @@ would silently re-enable the GIL process-wide and disable the thread-parallel el
 Cython extensions are compiled at install time via `setup.py` (`cythonize`, `-O3 -march=native`, with optional extensions skipped if native libraries are missing — see `edelweissfe/built_extensions.log`).
 
 ```console
-conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.09.28   # pinned
+# Create the environment with the `conda create` command in README.md (pinned edelweissfe-dev version), then:
 conda activate edelweissfe
 
 # Standalone (pure Python/Cython elements & materials only)

@@ -27,44 +27,10 @@ jobs:
       - uses: actions/checkout@v4
 
       # Installs exactly what conda-lock.yml pins (conda packages, no solving).
-      - uses: mamba-org/setup-micromamba@v2
-        with:
-          environment-file: conda-lock.yml
-          environment-name: edelweissfe
-          cache-environment: true
-          init-shell: bash
+      - uses: ./.github/actions/setup-locked-env
 
-      - name: Install Marmot
-        shell: bash -leo pipefail {0}
-        run: |
-          # Branch selection is identical to run_tests_with_marmot.yml; see the comment there.
-          CANDIDATE_BRANCHES=("${{ github.head_ref }}" "${{ github.base_ref }}" "next_v26.11")
-
-          cd ..
-          git clone --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/
-          cd Marmot
-
-          TARGET_BRANCH=""
-          for candidate in "${CANDIDATE_BRANCHES[@]}"; do
-            if [ -n "$candidate" ] && git show-ref --verify --quiet "refs/remotes/origin/$candidate"; then
-              TARGET_BRANCH="$candidate"
-              break
-            fi
-          done
-
-          if [ -z "$TARGET_BRANCH" ]; then
-            echo "::error::None of the candidate branches (${CANDIDATE_BRANCHES[*]}) exist in Marmot, and there is no safe default to fall back to."
-            exit 1
-          fi
-
-          echo "Using Marmot branch: $TARGET_BRANCH"
-          git checkout --detach "origin/$TARGET_BRANCH"
-
-          mkdir build
-          cd build
-          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX ..
-          make install
-          cd ../../
+      # Branch selection, caching and MARMOT_INSTALL_DIR: see .github/actions/build-marmot.
+      - uses: ./.github/actions/build-marmot
 
       - name: Build EdelweissFE
         shell: bash -leo pipefail {0}

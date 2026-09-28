@@ -19,8 +19,8 @@ The recipes of that channel are maintained at
 
 Supported platforms are Linux (x86-64) and macOS 14 or newer (arm64 and x86-64).
 
-Prerequisites
-*************
+Get conda
+*********
 
 A conda installation, e.g. `Miniforge <https://conda-forge.org/download/>`_:
 
@@ -47,9 +47,9 @@ projects:
 
 Create it with the pinned environment package:
 
-.. code-block:: console
+.. parsed-literal::
 
-    conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.09.28
+    conda create -n edelweissfe -c https\://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=\ |edelweissfe_dev_version|
     conda activate edelweissfe
 
 This installs exactly the environment of ``conda-lock.yml`` for your platform.
@@ -140,7 +140,7 @@ With conda-lock in its own environment (``conda create -n conda-lock -c conda-fo
     conda run -n conda-lock conda-lock install -n edelweissfe conda-lock.yml
 
 Then set a new version, today's date, in ``conda/edelweissfe-dev/VERSION`` (append ``.1``, ``.2``, ... for further
-changes on the same day) and in the ``conda create`` commands of this page, the README, CONTRIBUTING.md and AGENTS.md. Commit everything together;
+changes on the same day) and in the ``conda create`` command of the README (this page reads it from ``VERSION``). Commit everything together;
 CI fails if the lockfile is out of date with ``environment.yml``, if it changed without a new version, or if the
 documented commands do not show the current version. Once merged into ``next_v26.11``, CI publishes the new
 ``edelweissfe-dev``.
