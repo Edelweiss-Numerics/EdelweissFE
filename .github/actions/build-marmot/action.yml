@@ -8,7 +8,9 @@ runs:
   steps:
     - name: Resolve the Marmot branch and commit
       id: resolve
-      shell: bash -leo pipefail {0}
+      # Not a login shell (-l): this step needs no environment, and a login shell's exit runs ~/.bash_logout,
+      # whose failing clear_console (no terminal) turns `exit 0` into a failure under -e.
+      shell: bash -eo pipefail {0}
       run: |
         # Try, in order: the branch actually under test (github.head_ref, set for a pull_request
         # event), the PR's base branch (github.base_ref), then next_v26.11, the shared
@@ -21,18 +23,22 @@ runs:
         # test depends on that head branch's Marmot revision, not the base branch's -- using
         # base_ref there would silently build against the wrong (older/incompatible) Marmot.
         CANDIDATE_BRANCHES=("${{ github.head_ref }}" "${{ github.base_ref }}" "next_v26.11")
+        branch=""
         for candidate in "${CANDIDATE_BRANCHES[@]}"; do
           [ -n "$candidate" ] || continue
           sha=$(git ls-remote https://github.com/MAteRialMOdelingToolbox/Marmot.git "refs/heads/$candidate" | cut -f1)
           if [ -n "$sha" ]; then
-            echo "Using Marmot branch $candidate at $sha"
-            echo "branch=$candidate" >> "$GITHUB_OUTPUT"
-            echo "sha=$sha" >> "$GITHUB_OUTPUT"
-            exit 0
+            branch=$candidate
+            break
           fi
         done
-        echo "::error::None of the candidate branches (${CANDIDATE_BRANCHES[*]}) exist in Marmot, and there is no safe default to fall back to."
-        exit 1
+        if [ -z "$branch" ]; then
+          echo "::error::None of the candidate branches (${CANDIDATE_BRANCHES[*]}) exist in Marmot, and there is no safe default to fall back to."
+          false
+        fi
+        echo "Using Marmot branch $branch at $sha"
+        echo "branch=$branch" >> "$GITHUB_OUTPUT"
+        echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
     # Marmot is installed into a prefix of its own (not the environment), so that it can be cached and
     # restored independently of the environment's cache.
