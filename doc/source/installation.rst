@@ -17,17 +17,22 @@ yet, which come from the `matthiasneuner/edelweiss <https://prefix.dev/channels/
 The recipes of that channel are maintained at
 `matthiasneuner/edelweiss-conda-channel <https://github.com/matthiasneuner/edelweiss-conda-channel>`_.
 
-Supported platforms are Linux (x86-64) and macOS 14 or newer (arm64 and x86-64).
+Supported platforms are Linux (x86-64), macOS 14 or newer (arm64 and x86-64), and Windows (x64, without Marmot).
 
 Prerequisites
 *************
 
-A conda installation, e.g. `Miniforge <https://conda-forge.org/download/>`_:
+A conda installation, e.g. `Miniforge <https://conda-forge.org/download/>`_. On Linux and macOS:
 
 .. code-block:: console
 
     curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
     bash Miniforge3-$(uname)-$(uname -m).sh
+
+On Windows, use the Miniforge installer (``Miniforge3-Windows-x86_64.exe``) and run the commands below in the
+*Miniforge Prompt*. Windows additionally needs the Microsoft C++ compiler: install the free
+`Build Tools for Visual Studio <https://visualstudio.microsoft.com/visual-cpp-build-tools/>`_ with the workload
+*Desktop development with C++*. The environment's ``compilers`` package only activates it; it cannot install it.
 
 Create a dedicated environment
 ******************************
@@ -71,8 +76,11 @@ own (not ``base``). This route does not include ``edelweissfe-dev``'s activation
     Do not create the environment from ``environment.yml`` directly (``conda env create -f environment.yml``): that
     re-solves it against whatever packages are newest today, which is exactly what the pinned environment avoids.
 
-On Linux the environment includes Intel MKL, which enables the PARDISO direct solver. MKL does not exist for macOS;
-there the PARDISO extension is simply not built and the default linear solver falls back to SciPy's SuperLU.
+On Linux and Windows the environment includes Intel MKL, which enables the PARDISO direct solver. MKL does not exist for
+macOS; there the PARDISO extension is simply not built and the default linear solver falls back to SciPy's SuperLU.
+
+The commands on this page use Linux/macOS shell syntax. On Windows, set environment variables separately in the
+Miniforge Prompt (cmd.exe), e.g. ``set PYTHON_GIL=0`` before ``run_tests_edelweissfe .\testfiles\edelweiss-only\``.
 
 Installation without Marmot
 ***************************
@@ -95,6 +103,8 @@ This installation is sufficient for the EdelweissFE-only elements, materials and
 
 Installation with Marmot
 ************************
+
+Not yet supported on Windows.
 
 `Marmot <https://github.com/MAteRialMOdelingToolbox/Marmot/>`_ provides the Marmot-backed elements and constitutive
 models. All of its dependencies (Eigen, autodiff, Fastor) are already in the environment, so only Marmot itself is

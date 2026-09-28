@@ -29,7 +29,7 @@ EdelweissFE is developed in a dedicated conda environment. It is pinned exactly 
 and published as the conda package `edelweissfe-dev`, versioned by date. Everything, including the free-threaded
 Python interpreter, comes from conda packages: from [conda-forge](https://conda-forge.org/), plus the
 [`matthiasneuner/edelweiss`](https://prefix.dev/channels/edelweiss) channel for the few packages conda-forge lacks.
-Linux and macOS 14+ are supported.
+Linux, macOS 14+ and Windows (without Marmot; needs the Visual Studio C++ Build Tools) are supported.
 
 Use a dedicated environment for EdelweissFE, never `base` or one shared with other projects: it runs on the free-threaded
 Python build, its versions are pinned, and it can be deleted and recreated identically at any time.
