@@ -28,8 +28,8 @@ dependencies, re-lock, set a new version, and commit everything together. See th
 [installation documentation](doc/source/installation.rst) for details.
 
 ### 1. Standalone / Without Marmot (Pure Python/Cython only)
+Create the environment with the `conda create` command in the [README](README.md#installation), then:
 ```bash
-conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.09.28.2
 conda activate edelweissfe
 pip install -e .
 PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/

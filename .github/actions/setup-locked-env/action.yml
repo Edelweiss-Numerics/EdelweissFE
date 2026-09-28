@@ -1,0 +1,17 @@
+name: Set up the locked environment
+description: Install exactly what conda-lock.yml pins for this platform (conda packages, no solving) as `edelweissfe`.
+
+inputs:
+  init-shell:
+    description: Shells to initialise for `micromamba activate` (space separated), e.g. "bash" or "cmd.exe bash".
+    default: bash
+
+runs:
+  using: composite
+  steps:
+    - uses: mamba-org/setup-micromamba@v2
+      with:
+        environment-file: conda-lock.yml
+        environment-name: edelweissfe
+        cache-environment: true
+        init-shell: ${{ inputs.init-shell }}

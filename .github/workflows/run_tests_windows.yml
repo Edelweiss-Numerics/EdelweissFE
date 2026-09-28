@@ -17,11 +17,8 @@ jobs:
       - uses: actions/checkout@v4
 
       # Installs exactly what conda-lock.yml pins for win-64.
-      - uses: mamba-org/setup-micromamba@v2
+      - uses: ./.github/actions/setup-locked-env
         with:
-          environment-file: conda-lock.yml
-          environment-name: edelweissfe
-          cache-environment: true
           init-shell: cmd.exe bash
 
       # cmd.exe, because only its activation runs the environment's MSVC setup (vs2022_compiler_vars.bat).
