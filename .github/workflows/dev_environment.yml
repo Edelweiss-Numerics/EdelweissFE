@@ -68,7 +68,9 @@ jobs:
       - name: conda create ... edelweissfe-dev=<VERSION>
         shell: bash -leo pipefail {0}
         run: |
-          conda create -y -n edelweissfe -c "file://$PWD/output" -c "$CHANNEL_URL" -c conda-forge \
+          # A file:// URL conda accepts on Windows too (Git Bash's $PWD is /d/a/..., conda needs D:/a/...).
+          dir="$PWD/output"; if command -v cygpath > /dev/null; then dir=$(cygpath -m "$dir"); fi
+          conda create -y -n edelweissfe -c "file:///${dir#/}" -c "$CHANNEL_URL" -c conda-forge \
             "edelweissfe-dev=$(cat conda/edelweissfe-dev/VERSION)"
 
       - name: The environment is the locked one

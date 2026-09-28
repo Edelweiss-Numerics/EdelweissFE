@@ -24,7 +24,9 @@ dependencies:
   - matplotlib
   - prettytable
   - gstools
-  - vtk
+  # vtk-base, not vtk: the vtk meta-package adds vtk-io-ffmpeg (VTK's video writer, unused here), which pulls in
+  # ffmpeg -> librsvg -> gdk-pixbuf, whose post-install step hangs on Windows. pyvista itself needs vtk-base only.
+  - vtk-base
   - pyvista
   - suitesparse
   - compilers

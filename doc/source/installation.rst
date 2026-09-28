@@ -49,7 +49,7 @@ Create it with the pinned environment package:
 
 .. code-block:: console
 
-    conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.09.28.1
+    conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.09.28.2
     conda activate edelweissfe
 
 This installs exactly the environment of ``conda-lock.yml`` for your platform. Equivalently, from the repository root
