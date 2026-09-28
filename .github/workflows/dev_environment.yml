@@ -30,7 +30,7 @@ jobs:
       - name: Build edelweissfe-dev for every platform
         shell: bash -leo pipefail {0}
         run: |
-          for platform in linux-64 osx-arm64 osx-64; do
+          for platform in linux-64 osx-arm64 osx-64 win-64; do
             python conda/edelweissfe-dev/generate_recipe.py "$platform" "recipe-$platform"
             rattler-build build --recipe "recipe-$platform" --target-platform "$platform" --output-dir output
           done
@@ -50,6 +50,7 @@ jobs:
         include:
           - { platform: linux-64, os: ubuntu-latest }
           - { platform: osx-arm64, os: macos-15 }
+          - { platform: win-64, os: windows-latest }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

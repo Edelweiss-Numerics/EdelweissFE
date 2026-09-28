@@ -11,6 +11,7 @@ platforms:
   - linux-64
   - osx-arm64
   - osx-64
+  - win-64
 dependencies:
   - python=3.14
   - python-freethreading=3.14
@@ -42,6 +43,8 @@ dependencies:
   - sphinx_rtd_theme>=3.1.0
   - numpydoc
   - docutils
-  # Intel MKL enables the PARDISO solver; it does not exist for macOS, where PARDISO is not built.
+  # Intel MKL enables the PARDISO solver (Linux, Windows); it does not exist for macOS, where PARDISO is not built.
   - mkl  # [linux64]
   - mkl-include  # [linux64]
+  # On Windows, linking against MKL also needs its import libraries (.lib), which mkl-devel provides.
+  - mkl-devel  # [win64]

@@ -52,15 +52,19 @@ directives = {
 }
 
 default_install_prefix = sys.prefix
+# On Windows, conda installs C/C++ headers and libraries under <prefix>\Library, not <prefix>.
+is_windows = sys.platform == "win32"
+native_prefix = join(sys.prefix, "Library") if is_windows else sys.prefix
 print("*" * 80)
 print("EdelweissFE setup")
 print("System prefix: " + sys.prefix)
 print("*" * 80)
 
 marmot_dir = expanduser(os.environ.get("MARMOT_INSTALL_DIR", default_install_prefix))
-mkl_include = expanduser(os.environ.get("MKL_INCLUDE_DIR", join(default_install_prefix, "include")))
-eigen_include = expanduser(os.environ.get("EIGEN_INCLUDE_DIR", join(default_install_prefix, "include/eigen3")))
-arch_flags = os.environ.get("EDELWEISSFE_ARCH_FLAGS", "-march=native").split()
+mkl_include = expanduser(os.environ.get("MKL_INCLUDE_DIR", join(native_prefix, "include")))
+eigen_include = expanduser(os.environ.get("EIGEN_INCLUDE_DIR", join(native_prefix, "include", "eigen3")))
+# MSVC has no -march=native equivalent, so no architecture flags by default on Windows.
+arch_flags = os.environ.get("EDELWEISSFE_ARCH_FLAGS", "" if is_windows else "-march=native").split()
 # AMGCL specifically defaults to no arch flags (see the comment at its Extension below) but
 # still honors an explicit EDELWEISSFE_ARCH_FLAGS override, consistent with every other
 # extension above -- only the *default* differs, not the override mechanism.
@@ -98,6 +102,39 @@ for description, header, searchPath, variable in [
 
 print("*" * 80)
 
+
+def compile_flags(*, optimize=True, cxx20=False, openmp=False, arch=(), gcc_only=()):
+    """Return the compile flags for the platform's compiler: MSVC on Windows, GCC/Clang elsewhere.
+
+    ``gcc_only`` flags (e.g. warning switches) are dropped for MSVC. OpenMP uses MSVC's LLVM runtime
+    (/openmp:llvm), since the default /openmp only implements OpenMP 2.0.
+    """
+    if is_windows:
+        return [
+            *(["/O2"] if optimize else []),
+            *(["/std:c++20"] if cxx20 else []),
+            *(["/openmp:llvm"] if openmp else []),
+            *arch,
+        ]
+    return [
+        *(["-O3"] if optimize else []),
+        *(["-std=c++20"] if cxx20 else []),
+        *(["-fopenmp"] if openmp else []),
+        *arch,
+        *gcc_only,
+    ]
+
+
+def link_flags(*, openmp=False):
+    """Return the link flags for OpenMP: MSVC links its OpenMP runtime implicitly."""
+    return ["-fopenmp"] if openmp and not is_windows else []
+
+
+def runtime_library_dirs(*dirs):
+    """Return a runtime library search path; MSVC cannot embed one (Windows finds DLLs on PATH)."""
+    return [] if is_windows else list(dirs)
+
+
 print("Gather the extension for the MarmotElement base element, linked to the Marmot library")
 extensions = [
     Extension(
@@ -106,9 +143,9 @@ extensions = [
         include_dirs=[join(marmot_dir, "include"), numpy.get_include()],
         libraries=["Marmot"],
         library_dirs=[join(marmot_dir, "lib")],
-        runtime_library_dirs=[join(marmot_dir, "lib")],
+        runtime_library_dirs=runtime_library_dirs(join(marmot_dir, "lib")),
         language="c++",
-        extra_compile_args=["-O3", *arch_flags],
+        extra_compile_args=compile_flags(arch=arch_flags),
     )
 ]
 
@@ -131,9 +168,9 @@ for marmot_material_source in [
             ],
             libraries=["Marmot"],
             library_dirs=[join(marmot_dir, "lib")],
-            runtime_library_dirs=[join(marmot_dir, "lib")],
+            runtime_library_dirs=runtime_library_dirs(join(marmot_dir, "lib")),
             language="c++",
-            extra_compile_args=["-O3", "-std=c++20"],
+            extra_compile_args=compile_flags(cxx20=True),
         )
     ]
 
@@ -144,7 +181,7 @@ extensions += [
         ["edelweissfe/utils/elementresultcollector.pyx"],
         include_dirs=[numpy.get_include()],
         language="c++",
-        extra_compile_args=["-O3", *arch_flags],
+        extra_compile_args=compile_flags(arch=arch_flags),
     )
 ]
 
@@ -165,8 +202,8 @@ extensions += [
         ["edelweissfe/numerics/csrgeneratorv2.pyx"],
         include_dirs=[numpy.get_include()],
         language="c++",
-        extra_compile_args=["-O3", "-std=c++20", *arch_flags, "-fopenmp"],
-        extra_link_args=["-fopenmp"],
+        extra_compile_args=compile_flags(cxx20=True, openmp=True, arch=arch_flags),
+        extra_link_args=link_flags(openmp=True),
     )
 ]
 
@@ -177,13 +214,8 @@ extensions += [
         sources=["edelweissfe/solvers/base/dirichlet.pyx"],
         include_dirs=[numpy.get_include()],
         language="c++",
-        extra_compile_args=[
-            "-O3",
-            *arch_flags,
-            "-fopenmp",
-            "-Wno-maybe-uninitialized",
-        ],
-        extra_link_args=["-fopenmp"],
+        extra_compile_args=compile_flags(openmp=True, arch=arch_flags, gcc_only=["-Wno-maybe-uninitialized"]),
+        extra_link_args=link_flags(openmp=True),
     )
 ]
 
@@ -198,13 +230,19 @@ extensions += [
             numpy.get_include(),
             mkl_include,
         ],
-        libraries=[
-            "mkl_gnu_thread",
-            "mkl_core",
-            "mkl_rt",
-            "mkl_gf_lp64",
-            "iomp5",
-        ],
+        # On Windows, MKL's single dynamic library (mkl_rt) selects threading and interface at runtime.
+        libraries=(
+            ["mkl_rt"]
+            if is_windows
+            else [
+                "mkl_gnu_thread",
+                "mkl_core",
+                "mkl_rt",
+                "mkl_gf_lp64",
+                "iomp5",
+            ]
+        ),
+        library_dirs=[join(native_prefix, "lib")],
         language="c++",
     )
 ]
@@ -228,6 +266,8 @@ extensions += [
         optional=True,
     )
 ]
+if is_windows:  # Panua PARDISO's link line is GCC/Linux-specific
+    extensions.pop()
 
 print("Gather the AMGCL interface")
 # No arch flags by default: -march=native measured ~40% SLOWER here on Skylake-SP, where AMGCL's
@@ -237,10 +277,11 @@ extensions += [
     Extension(
         "*",
         sources=["edelweissfe/linsolve/amgcl/amgcl.pyx"],
-        include_dirs=[numpy.get_include(), join(default_install_prefix, "include"), "."],
+        include_dirs=[numpy.get_include(), join(native_prefix, "include"), "."],
         language="c++",
-        extra_compile_args=["-std=c++11", "-fopenmp", "-O3", *amgcl_arch_flags],
-        extra_link_args=["-fopenmp"],
+        # MSVC's default language standard (C++14) already covers AMGCL's C++11 requirement.
+        extra_compile_args=([] if is_windows else ["-std=c++11"]) + compile_flags(openmp=True, arch=amgcl_arch_flags),
+        extra_link_args=link_flags(openmp=True),
     )
 ]
 
@@ -254,6 +295,8 @@ extensions += [
         ],
         include_dirs=[
             numpy.get_include(),
+            join(native_prefix, "include"),
+            join(native_prefix, "include", "suitesparse"),
         ],
         libraries=[
             "klu",
@@ -264,15 +307,13 @@ extensions += [
             "cholmod",
             "camd",
             "ccolamd",
-            "iomp5",
+            *([] if is_windows else ["iomp5"]),
             "suitesparseconfig",
         ],
+        library_dirs=[join(native_prefix, "lib")],
         language="c",
-        extra_compile_args=[
-            "-fopenmp",
-            "-Wno-maybe-uninitialized",
-        ],
-        extra_link_args=["-fopenmp"],
+        extra_compile_args=compile_flags(optimize=False, openmp=True, gcc_only=["-Wno-maybe-uninitialized"]),
+        extra_link_args=link_flags(openmp=True),
     )
 ]
 

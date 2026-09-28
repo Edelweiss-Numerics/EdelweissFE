@@ -29,7 +29,7 @@ dependencies, re-lock, set a new version, and commit everything together. See th
 
 ### 1. Standalone / Without Marmot (Pure Python/Cython only)
 ```bash
-conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.09.28
+conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.09.28.1
 conda activate edelweissfe
 pip install -e .
 PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
