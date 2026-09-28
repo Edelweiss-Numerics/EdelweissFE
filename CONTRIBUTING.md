@@ -22,24 +22,22 @@ By participating in this project, you agree to uphold a respectful, inclusive en
 
 EdelweissFE requires **Python >= 3.14** and targets the free-threaded ("nogil") CPython build (`python-freethreading`).
 
-The environment is managed by [pixi](https://pixi.sh): `pixi.toml` declares it, `pixi.lock` pins it for every
-platform. Commit both together when changing dependencies. See the
+The environment is declared in `environment.yml` and pinned for every platform by the lockfile `conda-lock.yml`.
+Install it from the lockfile; when changing dependencies, re-lock and commit both files together. See the
 [installation documentation](doc/source/installation.rst) for details.
 
 ### 1. Standalone / Without Marmot (Pure Python/Cython only)
 ```bash
-pixi install
-pixi run install      # pip install --no-deps --no-build-isolation .
-pixi run test
+conda-lock install -n edelweissfe conda-lock.yml && conda activate edelweissfe
+pip install --no-deps --no-build-isolation .
+PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 ```
 
 ### 2. With Marmot (Native C++ Element & Material Formulations)
-Clone [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) (branch `next_v26.11`) to `../Marmot`; its
-dependencies (Eigen, autodiff, Fastor) and AMGCL are already in the environment:
+Build [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) (branch `next_v26.11`) into `$CONDA_PREFIX` first;
+its dependencies (Eigen, autodiff, Fastor) and AMGCL are already in the environment:
 ```bash
-pixi run build-marmot
-pixi run install
-pixi run test-marmot
+pip install -v --no-deps --no-build-isolation .
 ```
 
 ### Build Environment Overrides

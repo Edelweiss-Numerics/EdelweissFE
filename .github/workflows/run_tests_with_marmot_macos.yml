@@ -26,14 +26,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: prefix-dev/setup-pixi@v0.9.1
+      # Installs exactly what conda-lock.yml pins (conda packages, no solving).
+      - uses: mamba-org/setup-micromamba@v2
         with:
-          # Install exactly what pixi.lock pins; fails if pixi.lock is out of date with pixi.toml.
-          locked: true
-          cache: true
+          environment-file: conda-lock.yml
+          environment-name: edelweissfe
+          cache-environment: true
+          init-shell: bash
 
       - name: Install Marmot
-        shell: pixi run bash -eo pipefail {0}
+        shell: bash -leo pipefail {0}
         run: |
           # Branch selection is identical to run_tests_with_marmot.yml; see the comment there.
           CANDIDATE_BRANCHES=("${{ github.head_ref }}" "${{ github.base_ref }}" "next_v26.11")
@@ -65,12 +67,12 @@ jobs:
           cd ../../
 
       - name: Build EdelweissFE
-        shell: pixi run bash -eo pipefail {0}
+        shell: bash -leo pipefail {0}
         run: |
           pip install -v --no-deps --no-build-isolation .
 
       - name: Run tests
-        shell: pixi run bash -eo pipefail {0}
+        shell: bash -leo pipefail {0}
         run: |
           run_tests_edelweissfe ./testfiles/marmot/
           run_tests_edelweissfe ./testfiles/edelweiss-only/

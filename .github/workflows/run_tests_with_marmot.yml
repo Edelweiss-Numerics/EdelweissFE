@@ -9,14 +9,16 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - uses: prefix-dev/setup-pixi@v0.9.1
+      # Installs exactly what conda-lock.yml pins (conda packages, no solving).
+      - uses: mamba-org/setup-micromamba@v2
         with:
-          # Install exactly what pixi.lock pins; fails if pixi.lock is out of date with pixi.toml.
-          locked: true
-          cache: true
+          environment-file: conda-lock.yml
+          environment-name: edelweissfe
+          cache-environment: true
+          init-shell: bash
 
       - name: Install Marmot
-        shell: pixi run bash -eo pipefail {0}
+        shell: bash -leo pipefail {0}
         run: |
           # Try, in order: the branch actually under test (github.head_ref, set for a pull_request
           # event), the PR's base branch (github.base_ref), then next_v26.11, the shared
@@ -56,12 +58,12 @@ jobs:
           cd ../../
 
       - name: Build EdelweissFE
-        shell: pixi run bash -eo pipefail {0}
+        shell: bash -leo pipefail {0}
         run: |
           pip install -v --no-deps --no-build-isolation .
 
       - name: Run tests
-        shell: pixi run bash -eo pipefail {0}
+        shell: bash -leo pipefail {0}
         run: |
           # Invoke the installed console-script files directly (not `python -m ...`), which would
           # unconditionally prepend the repo root to sys.path and let the local, uncompiled

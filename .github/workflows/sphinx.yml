@@ -12,14 +12,16 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: prefix-dev/setup-pixi@v0.9.1
+      # Installs exactly what conda-lock.yml pins (conda packages, no solving).
+      - uses: mamba-org/setup-micromamba@v2
         with:
-          # Install exactly what pixi.lock pins; fails if pixi.lock is out of date with pixi.toml.
-          locked: true
-          cache: true
+          environment-file: conda-lock.yml
+          environment-name: edelweissfe
+          cache-environment: true
+          init-shell: bash
 
       - name: Install Marmot
-        shell: pixi run bash -eo pipefail {0}
+        shell: bash -leo pipefail {0}
         run: |
           # Use github.base_ref (target of PR).
           # If not a PR (like a push to master), fall back to github.ref_name.
@@ -45,12 +47,12 @@ jobs:
           cd ../../
 
       - name: Build EdelweissFE
-        shell: pixi run bash -eo pipefail {0}
+        shell: bash -leo pipefail {0}
         run: |
           pip install -v --no-deps --no-build-isolation .
 
       - name: Building EdelweissFE documentation
-        shell: pixi run bash -eo pipefail {0}
+        shell: bash -leo pipefail {0}
         run: |
           sphinx-build ./doc/source/ ./docs -b html
 

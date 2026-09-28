@@ -1,9 +1,11 @@
 Installation
 ============
 
-EdelweissFE's development environment is defined by ``pixi.toml`` and pinned exactly, for every supported platform,
-by the committed lockfile ``pixi.lock``. Everything, including the free-threaded (``cp314t``) Python interpreter,
-comes from conda packages; nothing is installed with ``pip`` except EdelweissFE itself.
+EdelweissFE is developed in a conda environment. ``environment.yml`` declares it, and the committed lockfile
+``conda-lock.yml`` pins it exactly: every package, with version, build and checksum, for every supported platform.
+Installing from the lockfile gives the identical environment on every machine and in CI, and nothing changes until
+the lockfile is deliberately updated. Everything, including the free-threaded (``cp314t``) Python interpreter, comes
+from conda packages; nothing is installed with ``pip`` except EdelweissFE itself.
 
 The packages come from `conda-forge <https://conda-forge.org/>`_, except for the few conda-forge does not provide
 yet, which come from the `matthiasneuner/edelweiss <https://prefix.dev/channels/edelweiss>`_ channel on prefix.dev:
@@ -16,26 +18,32 @@ The recipes of that channel are maintained at
 
 Supported platforms are Linux (x86-64) and macOS 14 or newer (arm64 and x86-64).
 
-Get pixi
-********
+Prerequisites
+*************
 
-`pixi <https://pixi.sh>`_ is a package manager for conda packages that works per project, with lockfiles:
+A conda installation, e.g. `Miniforge <https://conda-forge.org/download/>`_, and
+`conda-lock <https://conda.github.io/conda-lock/>`_:
 
 .. code-block:: console
 
-    curl -fsSL https://pixi.sh/install.sh | sh
+    curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
+    bash Miniforge3-$(uname)-$(uname -m).sh
+    mamba install -n base conda-lock
 
 Create the environment
 **********************
 
-From the EdelweissFE repository root:
+From the EdelweissFE repository root, install the environment **from the lockfile**:
 
 .. code-block:: console
 
-    pixi install
+    conda-lock install -n edelweissfe conda-lock.yml
+    conda activate edelweissfe
 
-This creates the environment in ``.pixi/`` exactly as pinned by ``pixi.lock``. Run commands in it with
-``pixi run <command>``, or open a shell in it with ``pixi shell``.
+.. note::
+
+    Do not create the environment from ``environment.yml`` directly (``mamba env create -f environment.yml``):
+    that re-solves it against whatever packages are newest today, which is exactly what the lockfile avoids.
 
 On Linux the environment includes Intel MKL, which enables the PARDISO direct solver. MKL does not exist for macOS;
 there the PARDISO extension is simply not built and the default linear solver falls back to SciPy's SuperLU.
@@ -45,11 +53,11 @@ Installation without Marmot
 
 .. code-block:: console
 
-    pixi run install
-    pixi run test
+    pip install --no-deps --no-build-isolation .
+    PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 
-``pixi run install`` runs ``pip install --no-deps --no-build-isolation .``: it builds against the environment's
-Cython, NumPy and setuptools instead of letting pip fetch them from PyPI, and installs nothing else.
+``--no-build-isolation`` builds against the environment's Cython, NumPy and setuptools instead of letting pip fetch
+them from PyPI, and ``--no-deps`` keeps pip from installing anything else.
 
 This installation is sufficient for the EdelweissFE-only elements, materials and tests.
 
@@ -63,30 +71,46 @@ built from source, into the environment:
 .. code-block:: console
 
     git clone --recurse-submodules --branch next_v26.11 https://github.com/MAteRialMOdelingToolbox/Marmot/ ../Marmot
-    pixi run build-marmot            # or: pixi run build-marmot /path/to/Marmot
+    cmake -S ../Marmot -B ../Marmot/build -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
+          -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF
+    cmake --build ../Marmot/build -j
+    cmake --install ../Marmot/build
 
 Then build EdelweissFE, which picks up Marmot automatically, and validate the installation:
 
 .. code-block:: console
 
-    pixi run install
-    pixi run test-marmot
-    pixi run test
+    pip install -v --no-deps --no-build-isolation .
+    PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/marmot/
+    PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 
-Marmot is found in the environment's prefix by default; set ``MARMOT_INSTALL_DIR`` if it is installed elsewhere.
+Marmot is found in ``$CONDA_PREFIX`` by default; set ``MARMOT_INSTALL_DIR`` if it is installed elsewhere.
 
 Developing
 **********
 
-The environment is meant for development: edit the sources of EdelweissFE (or Marmot), then rebuild with
-``pixi run install`` (after ``pixi run build-marmot`` for Marmot changes). Further tasks:
+Edit the sources of EdelweissFE (or Marmot), then rebuild with ``pip install --no-deps --no-build-isolation .``
+(after rebuilding and installing Marmot for Marmot changes). Further:
 
-* ``pixi run pytest``: the pytest suite,
-* ``pixi run docs``: this documentation, into ``doc/build/html``.
+* ``PYTHON_GIL=0 pytest tests``: the pytest suite,
+* ``sphinx-build -b html doc/source doc/build/html``: this documentation.
 
-To change a dependency, edit ``pixi.toml``; pixi updates ``pixi.lock`` on the next ``pixi install`` or ``pixi run``.
-Commit both files together. A weekly CI job re-solves ``pixi.lock`` against the newest packages and opens a pull
-request, whose CI tests the updated stack before it is merged.
+Changing dependencies
+*********************
+
+Edit ``environment.yml``, then re-lock and update your environment:
+
+.. code-block:: console
+
+    conda-lock lock -f environment.yml --virtual-package-spec virtual-packages.yml
+    conda-lock install -n edelweissfe conda-lock.yml
+
+Commit ``environment.yml`` and ``conda-lock.yml`` together; CI fails if the lockfile is out of date with
+``environment.yml``. ``virtual-packages.yml`` tells conda-lock which system properties (e.g. the minimum macOS
+version) to assume for each platform. Platform-specific dependencies use selectors, e.g. ``- mkl  # [linux64]``.
+
+A weekly CI job re-locks against the newest packages and opens a pull request, whose CI tests the updated stack
+before it is merged.
 
 Running with free-threading
 ***************************
@@ -95,31 +119,19 @@ Disable the GIL and set the number of threads explicitly:
 
 .. code-block:: console
 
-    PYTHON_GIL=0 OMP_NUM_THREADS=8 pixi run edelweissfe input.inp
-
-The ``test`` tasks already set ``PYTHON_GIL=0``.
-
-Using conda or mamba instead of pixi
-************************************
-
-pixi can export the environment for conda/mamba, per platform:
-
-.. code-block:: console
-
-    pixi workspace export conda-environment --platform linux-64 environment.yml
-    mamba env create -f environment.yml
-
-The exported file is not pinned like ``pixi.lock``. With mamba, keep the default (flexible) channel priority: the
-environment does not solve with ``--strict-channel-priority`` in mamba.
+    PYTHON_GIL=0 OMP_NUM_THREADS=8 edelweissfe input.inp
 
 Troubleshooting
 ***************
 
+* **The environment does not solve, or behaves differently than on other machines.** Make sure it was installed with
+  ``conda-lock install`` from ``conda-lock.yml``, not created from ``environment.yml``. With mamba, keep the default
+  (flexible) channel priority: this environment does not solve with ``--strict-channel-priority`` in mamba.
 * **CMake finds an unexpected Eigen or other package.** CMake also searches its user package registry
   (``~/.cmake/packages``), to which some projects register their *build* trees. If a package from the environment is
-  rejected (e.g. by a version check), CMake silently falls back to such an entry. ``pixi run build-marmot``
-  therefore configures with ``-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF``; the configure output prints the Eigen version and
-  location that was found.
+  rejected (e.g. by a version check), CMake silently falls back to such an entry. Configure with
+  ``-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF`` (as above); the configure output prints the Eigen version and location
+  that was found.
 * **The GIL is re-enabled at runtime.** Importing any extension module that does not declare free-threading support
   re-enables the GIL for the whole process, with a ``RuntimeWarning``. Do not add such packages (e.g. ``pyamg``) to the
   environment.

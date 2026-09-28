@@ -1,0 +1,15 @@
+# System properties conda-lock assumes per platform when solving (it cannot inspect the target machine).
+# macOS >= 14.0: conda-forge's qt6-main, a vtk dependency, needs moltenvk, which requires it.
+subdirs:
+  linux-64:
+    packages:
+      __glibc: "2.28"
+      __unix: "0"
+  osx-arm64:
+    packages:
+      __osx: "14.0"
+      __unix: "0"
+  osx-64:
+    packages:
+      __osx: "14.0"
+      __unix: "0"

@@ -1,2 +1,2 @@
-# GitHub syntax highlighting and diff collapsing for the generated lockfile; never try to merge it.
-pixi.lock merge=binary linguist-language=YAML linguist-generated=true
+# Generated lockfile: collapse it in GitHub diffs and never try to merge it.
+conda-lock.yml merge=binary linguist-generated=true

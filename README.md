@@ -25,15 +25,17 @@ EdelweissFE makes use of the [Marmot](https://github.com/MAteRialMOdelingToolbox
 
 ## Installation
 
-The environment is managed by [pixi](https://pixi.sh) (`pixi.toml`, pinned for every platform by `pixi.lock`).
-Everything, including the free-threaded Python interpreter, comes from conda packages: from
-[conda-forge](https://conda-forge.org/), plus the [`matthiasneuner/edelweiss`](https://prefix.dev/channels/edelweiss)
-channel for the few packages conda-forge lacks. Linux and macOS are supported.
+EdelweissFE is developed in a conda environment, declared in `environment.yml` and pinned exactly for every platform
+by the lockfile `conda-lock.yml`. Everything, including the free-threaded Python interpreter, comes from conda
+packages: from [conda-forge](https://conda-forge.org/), plus the
+[`matthiasneuner/edelweiss`](https://prefix.dev/channels/edelweiss) channel for the few packages conda-forge lacks.
+Linux and macOS 14+ are supported. Requires conda (e.g. Miniforge) and `conda-lock` (`mamba install -n base conda-lock`).
 
 ```console
-pixi install
-pixi run install
-pixi run test
+conda-lock install -n edelweissfe conda-lock.yml
+conda activate edelweissfe
+pip install --no-deps --no-build-isolation .
+PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 ```
 
 To use the Marmot-backed elements and materials, build [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/)
@@ -41,9 +43,10 @@ into the same environment first (all its dependencies are already in it):
 
 ```console
 git clone --recurse-submodules --branch next_v26.11 https://github.com/MAteRialMOdelingToolbox/Marmot/ ../Marmot
-pixi run build-marmot
-pixi run install
-pixi run test-marmot
+cmake -S ../Marmot -B ../Marmot/build -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
+cmake --build ../Marmot/build -j && cmake --install ../Marmot/build
+pip install -v --no-deps --no-build-isolation .
+PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/marmot/
 ```
 
-See the [installation documentation](doc/source/installation.rst) for details, conda/mamba usage and troubleshooting.
+See the [installation documentation](doc/source/installation.rst) for details, changing dependencies and troubleshooting.

@@ -11,7 +11,7 @@ application, linear solver interfaces). It optionally links against the sister C
 [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) for element/material formulations, but also
 ships pure-Python/Cython element and material implementations that work standalone.
 
-Requires Python >= 3.14. The pixi environment (`pixi.toml`, pinned by `pixi.lock`) targets the free-threaded ("nogil") CPython build (`python-freethreading`); see the
+Requires Python >= 3.14. The conda environment (`environment.yml`, pinned by `conda-lock.yml`) targets the free-threaded ("nogil") CPython build (`python-freethreading`); see the
 `freethreading_compatible` Cython directive in `setup.py` — importing a non-freethreading-safe extension
 would silently re-enable the GIL process-wide and disable the thread-parallel element loops.
 
@@ -20,13 +20,13 @@ would silently re-enable the GIL process-wide and disable the thread-parallel el
 Cython extensions are compiled at install time via `setup.py` (`cythonize`, `-O3 -march=native`, with optional extensions skipped if native libraries are missing — see `edelweissfe/built_extensions.log`).
 
 ```console
-pixi install                 # all dependencies, conda only, pinned by pixi.lock
+conda-lock install -n edelweissfe conda-lock.yml && conda activate edelweissfe   # pinned, conda only
 
 # Standalone (pure Python/Cython elements & materials only)
-pixi run install             # pip install --no-deps --no-build-isolation .
+pip install --no-deps --no-build-isolation .
 
-# With Marmot (native C++ element/material formulations), Marmot checkout in ../Marmot:
-pixi run build-marmot && pixi run install
+# With Marmot (native C++ element/material formulations), after building Marmot into $CONDA_PREFIX:
+pip install -v --no-deps --no-build-isolation .
 ```
 
 See [doc/source/installation.rst](doc/source/installation.rst) for the full procedure (incl. building Marmot) and build overrides (`MARMOT_INSTALL_DIR`, `MKL_INCLUDE_DIR`, `EIGEN_INCLUDE_DIR`, `EDELWEISSFE_ARCH_FLAGS`).
