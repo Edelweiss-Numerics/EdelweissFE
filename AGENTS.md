@@ -23,10 +23,10 @@ Cython extensions are compiled at install time via `setup.py` (`cythonize`, `-O3
 conda-lock install -n edelweissfe conda-lock.yml && conda activate edelweissfe   # pinned, conda only
 
 # Standalone (pure Python/Cython elements & materials only)
-pip install --no-deps --no-build-isolation .
+pip install --no-build-isolation -e .
 
 # With Marmot (native C++ element/material formulations), after building Marmot into $CONDA_PREFIX:
-pip install -v --no-deps --no-build-isolation .
+pip install -v --no-build-isolation -e .
 ```
 
 See [doc/source/installation.rst](doc/source/installation.rst) for the full procedure (incl. building Marmot) and build overrides (`MARMOT_INSTALL_DIR`, `MKL_INCLUDE_DIR`, `EIGEN_INCLUDE_DIR`, `EDELWEISSFE_ARCH_FLAGS`).

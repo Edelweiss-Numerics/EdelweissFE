@@ -30,11 +30,13 @@ by the lockfile `conda-lock.yml`. Everything, including the free-threaded Python
 packages: from [conda-forge](https://conda-forge.org/), plus the
 [`matthiasneuner/edelweiss`](https://prefix.dev/channels/edelweiss) channel for the few packages conda-forge lacks.
 Linux and macOS 14+ are supported. Requires conda (e.g. Miniforge) and `conda-lock` (`mamba install -n base conda-lock`).
+Use a dedicated environment for EdelweissFE, never `base` or one shared with other projects: it runs on the free-threaded
+Python build, its versions are pinned by the lockfile, and it can be deleted and recreated from the lockfile at any time.
 
 ```console
 conda-lock install -n edelweissfe conda-lock.yml
 conda activate edelweissfe
-pip install --no-deps --no-build-isolation .
+pip install --no-build-isolation -e .
 PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 ```
 
@@ -45,7 +47,7 @@ into the same environment first (all its dependencies are already in it):
 git clone --recurse-submodules --branch next_v26.11 https://github.com/MAteRialMOdelingToolbox/Marmot/ ../Marmot
 cmake -S ../Marmot -B ../Marmot/build -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
 cmake --build ../Marmot/build -j && cmake --install ../Marmot/build
-pip install -v --no-deps --no-build-isolation .
+pip install -v --no-build-isolation -e .
 PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/marmot/
 ```
 
