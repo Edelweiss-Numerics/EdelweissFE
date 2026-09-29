@@ -238,10 +238,24 @@ class StepAction(DistributedLoadBase):
         :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`: only whatever keys are actually
         present are validated, which is what makes ``configuration.delta`` safe to read regardless
         of which of the two the parser matched -- a full re-declaration never carries it, so it
-        stays ``None`` and the ``magnitude`` branch wins."""
+        stays ``None`` and the ``magnitude`` branch wins.
+
+        The ``surface`` a full re-declaration restates is not a schema option, so it is taken out
+        before validation, and it must name the surface the load was created on."""
 
         definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
         definition.pop("name", None)
+
+        # A full re-declaration restates ``surface``. It is structural, not an option of the schema,
+        # and the load stays on the surface it was created on, so a re-declaration may only name
+        # that same surface.
+        surfaceName = definition.pop("surface", None)
+        if surfaceName is not None and model.surfaces[surfaceName] is not self._surface:
+            raise ValueError(
+                "Distributed load {:}: a re-declaration cannot move the load to surface {:}; "
+                "declare a new distributed load instead.".format(self._name, surfaceName)
+            )
+
         configuration = dataclasses.replace(self.schema(), **coercePresentOptions(self.schema, definition))
 
         magnitude = None
