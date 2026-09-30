@@ -306,55 +306,6 @@ class ExplicitSystem:
 
 
 @dataclass
-class _VelocityUpdateCoefficients:
-    r"""Per-DOF coefficients of the velocity update, for one time increment.
-
-    Every degree of freedom is updated by the same formula,
-
-    .. math:: v \leftarrow \frac{a\, v + (M^{-1} P)\, c}{b},
-
-    whose coefficients say which time integration scheme the DOF follows:
-
-    ========================  ===================  ===================  ===================
-    DOF                       :math:`a`            :math:`c`            :math:`b`
-    ========================  ===================  ===================  ===================
-    second order              :math:`1 - h`        :math:`\Delta t`     :math:`1 + h`
-    first order               :math:`0`            :math:`1`            :math:`1`
-    neither                   :math:`1`            :math:`0`            :math:`1`
-    ========================  ===================  ===================  ===================
-
-    with :math:`h = \alpha \Delta t / 2` for the mass-proportional damping rate :math:`\alpha`.
-    Each row reproduces its scheme's own update operation by operation, so the result is the same
-    to the bit as updating each set of DOFs separately. One formula for all DOFs means whole-vector
-    operations instead of about ten fancy-indexed temporaries of the size of the system per
-    increment.
-
-    The coefficients depend only on the time increment and on the equation system (the damping rate
-    and the partition into first- and second-order DOFs), so they are formed once per time
-    increment and system and not per increment.
-
-    Parameters
-    ----------
-    timeIncrement
-        The averaged time increment :math:`\Delta t` the coefficients were formed for.
-    retention
-        :math:`a`, the factor on the old velocity.
-    forceScale
-        :math:`c`, the factor on :math:`M^{-1} P`.
-    divisor
-        :math:`b`, what the sum is divided by.
-    scratch
-        A work array of the same size, for :math:`M^{-1} P`.
-    """
-
-    timeIncrement: float
-    retention: np.ndarray
-    forceScale: np.ndarray
-    divisor: np.ndarray
-    scratch: np.ndarray
-
-
-@dataclass
 class _ReusableExplicitOperators:
     """The lumped operators of an explicit system, and the model they were assembled from.
 
@@ -442,10 +393,10 @@ class NED(NonlinearSolverBase):
         #: reported no damping, which is what makes the one damped update rule below reduce
         #: exactly to the undamped central difference there.
         self._dampingRate = None
-        #: The coefficients of the velocity update for the current equation system and time
-        #: increment; see :class:`_VelocityUpdateCoefficients`. None until the first increment, and
-        #: reset whenever the equation system is (re)built.
-        self._velocityUpdateCoefficients = None
+        #: Half the damping rate on second-order DOFs, zero elsewhere; see solveIncrement.
+        self._halfDampingRate = None
+        #: 1.0 on second-order DOFs, 0.0 elsewhere; see solveIncrement.
+        self._secondOrderMask = None
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
         #: The per-topology-change conservation check of every field's lumped total, and the
@@ -851,7 +802,6 @@ class NED(NonlinearSolverBase):
             self.applyStepActionsAtStepEnd(model, step.actions)
 
         finally:
-            model.integrateElementStatesInPlace(False)
             prettyTable = performancetiming.makePrettyTable(wallTime=perf_counter() - stepWallClockTic)
             self.journal.printPrettyTable(prettyTable, self.identification)
             performancetiming.reset()
@@ -955,26 +905,26 @@ class NED(NonlinearSolverBase):
                 V[dirichlet.constrainedDofIndices] = prescribedVelocity
                 prescribedVelocities.append((dirichlet.constrainedDofIndices, prescribedVelocity))
 
-            # First-order DOFs: V = Minv * P (forward Euler). Second-order DOFs: central difference
-            # with mass-proportional damping, V = ((1 - h) V + Minv P dt) / (1 + h), h = alpha dt / 2:
-            # the rate alpha = C/M enters as one factor on each side rather than as an extra force
-            # evaluation, so a damped degree of freedom costs what an undamped one does. At alpha = 0
-            # it is bit-identical to the undamped update, which is why there is no branch -- and why
-            # mechanical Rayleigh damping would need no code here. The damping is not optional for a
-            # hyperbolic non-local field: undamped, the transients minted at the start of the step
-            # and at every refinement never decay, and the damage variable follows every overshoot
-            # instead of the mean. Both updates are one formula with per-DOF coefficients; see
-            # _VelocityUpdateCoefficients.
+            # Second-order DOFs: central difference with mass-proportional damping,
+            # V = ((1 - h) V + Minv P dt) / (1 + h), h = alpha dt / 2: the rate alpha = C/M enters
+            # as one factor on each side rather than as an extra force evaluation, so a damped
+            # degree of freedom costs what an undamped one does. At alpha = 0 it is bit-identical to
+            # the undamped update, which is why there is no branch -- and why mechanical Rayleigh
+            # damping would need no code here. The damping is not optional for a hyperbolic
+            # non-local field: undamped, the transients minted at the start of the step and at every
+            # refinement never decay, and the damage variable follows every overshoot instead of the
+            # mean. Written on whole vectors: h and the mask are zero off the second-order DOFs,
+            # which leaves those velocities unchanged. First-order DOFs: V = Minv P (forward Euler).
             dtAverage = 0.5 * (timeStep.timeIncrement + prevTimeStep.timeIncrement)
-            coefficients = self._velocityUpdateCoefficientsFor(dtAverage)
+            halfRateStep = self._halfDampingRate * dtAverage
+            forceOverMass = Minv.asPlainArray() * P.asPlainArray()
 
             velocity = V.asPlainArray()
-            forceOverMass = coefficients.scratch
-            np.multiply(Minv.asPlainArray(), P.asPlainArray(), out=forceOverMass)
-            np.multiply(forceOverMass, coefficients.forceScale, out=forceOverMass)
-            np.multiply(velocity, coefficients.retention, out=velocity)
-            np.add(velocity, forceOverMass, out=velocity)
-            np.divide(velocity, coefficients.divisor, out=velocity)
+            velocity *= 1.0 - halfRateStep
+            velocity += forceOverMass * (self._secondOrderMask * dtAverage)
+            velocity /= 1.0 + halfRateStep
+            if self.ids_1st is not None:
+                velocity[self.ids_1st] = forceOverMass[self.ids_1st]
 
             # A prescribed velocity is a boundary condition, not a solution, and both updates above
             # overwrote it: the damped one scales it by (1 - alpha dt/2)/(1 + alpha dt/2), the
@@ -1138,52 +1088,6 @@ class NED(NonlinearSolverBase):
 
         return U_n, V, P
 
-    def _velocityUpdateCoefficientsFor(self, timeIncrement: float) -> _VelocityUpdateCoefficients:
-        """The coefficients of the velocity update for the current equation system.
-
-        Formed when first asked for after the equation system was (re)built, and again whenever the
-        averaged time increment changes; see :class:`_VelocityUpdateCoefficients`.
-
-        Parameters
-        ----------
-        timeIncrement
-            The averaged time increment of the velocity update.
-
-        Returns
-        -------
-        _VelocityUpdateCoefficients
-            The coefficients.
-        """
-
-        coefficients = self._velocityUpdateCoefficients
-        if coefficients is not None and coefficients.timeIncrement == timeIncrement:
-            return coefficients
-
-        nDof = self._dampingRate.shape[0]
-        retention = np.ones(nDof)
-        forceScale = np.zeros(nDof)
-        divisor = np.ones(nDof)
-
-        if self.ids_1st is not None:
-            retention[self.ids_1st] = 0.0
-            forceScale[self.ids_1st] = 1.0
-
-        if self.ids_2nd is not None:
-            halfRateStep = 0.5 * self._dampingRate[self.ids_2nd] * timeIncrement
-            retention[self.ids_2nd] = 1.0 - halfRateStep
-            forceScale[self.ids_2nd] = timeIncrement
-            divisor[self.ids_2nd] = 1.0 + halfRateStep
-
-        self._velocityUpdateCoefficients = _VelocityUpdateCoefficients(
-            timeIncrement=timeIncrement,
-            retention=retention,
-            forceScale=forceScale,
-            divisor=divisor,
-            scratch=np.empty(nDof),
-        )
-        return self._velocityUpdateCoefficients
-
-    @performancetiming.timeit("distributed loads")
     def computeDistributedLoads(
         self,
         distributedLoads: list[StepActionBase],
@@ -1486,10 +1390,6 @@ class NED(NonlinearSolverBase):
         """
 
         modelHasChanged = model.updateTopology(step, model.time)
-
-        # Explicit dynamics never rejects an increment, so no element needs a trial state buffer.
-        # Asked again after every topology update, because refinement creates new elements.
-        model.integrateElementStatesInPlace(True)
 
         refreshed = model.refreshMeshDependents()
         ticked = any([constraint.updateConnectivity(model) for constraint in model.constraints.values()])
@@ -1857,9 +1757,6 @@ class NED(NonlinearSolverBase):
         # of freedom silently.
         self._constraintForcePlans = {}
 
-        # Formed from the damping rate and the DOF partition assembled below, on first use.
-        self._velocityUpdateCoefficients = None
-
         if reuseOperators:
             M, Minv = self._restoreLumpedOperators()
         else:
@@ -1875,6 +1772,12 @@ class NED(NonlinearSolverBase):
                 dampingRate=np.array(self._dampingRate),
                 mpcTransformation=self.mpcTransformation,
             )
+
+        # Per-DOF factors of the velocity update, so that it runs on whole vectors.
+        self._secondOrderMask = np.zeros(self._dampingRate.shape[0])
+        if self.ids_2nd is not None:
+            self._secondOrderMask[self.ids_2nd] = 1.0
+        self._halfDampingRate = 0.5 * np.asarray(self._dampingRate) * self._secondOrderMask
 
         U = self.theDofManager.constructDofVector()  # initialize displacement vector
         dU = self.theDofManager.constructDofVector()  # initialize displacement vector

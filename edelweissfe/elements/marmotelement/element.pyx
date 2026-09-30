@@ -233,7 +233,32 @@ cdef class MarmotElementWrapper:
         self._hasMaterial = True
 
     cpdef void _initializeStateVarsTemp(self, ) noexcept nogil:
-        self._stateVarsTemp[:] = self._stateVars
+        if not self._integratesStateInPlace:
+            self._stateVarsTemp[:] = self._stateVars
+
+    cdef void _setStateIntegrationInPlace(self, bint inPlace):
+        """Switch between a separate trial state (needed if an increment can be rejected) and
+        integration in place, where the accepted state is an alias of the trial buffer the
+        MarmotElement writes into. In place saves one full state copy before every kernel
+        evaluation and one on every acceptance.
+
+        Parameters
+        ----------
+        inPlace
+            True for integration in place, False for a separate trial state.
+        """
+
+        if inPlace == self._integratesStateInPlace:
+            return
+
+        if inPlace:
+            # the MarmotElement keeps writing into the trial buffer; seed it with the accepted state
+            self._stateVarsTemp[:] = self._stateVars
+            self._stateVars = self._stateVarsTemp
+        else:
+            self._stateVars = np.array(self._stateVarsTemp)
+
+        self._integratesStateInPlace = inPlace
 
     def setInitialCondition(self,
                             stateType,
@@ -259,6 +284,9 @@ cdef class MarmotElementWrapper:
         if not self._hasMaterial:
             raise Exception("Element {:} has no material assigned!".format(self._elNumber))
 
+        # an implicit increment may be rejected, so it needs a separate trial state
+        self._setStateIntegrationInPlace(False)
+
         try:
             with nogil:
                 self._initializeStateVarsTemp()
@@ -283,11 +311,11 @@ cdef class MarmotElementWrapper:
         if not self._hasMaterial:
             raise Exception("Element {:} has no material assigned!".format(self._elNumber))
 
+        # explicit dynamics never rejects an increment, so the state is integrated in place
+        self._setStateIntegrationInPlace(True)
+
         try:
             with nogil:
-                if not self._integratesStateInPlace:
-                    self._initializeStateVarsTemp()
-
                 self.marmotElement.computeKernelsExplicit(&U[0],
                                                           &dU[0],
                                                           &Pe[0],
@@ -367,51 +395,11 @@ cdef class MarmotElementWrapper:
     def acceptLastState(self, ):
         """Accept the computed state (in nonlinear iteration schemes).
 
-        Nothing to copy if the state is integrated in place: then the accepted and the
-        trial buffer are one and the same array."""
+        Nothing to copy if the state is integrated in place (explicit dynamics): then the accepted
+        and the trial state are one and the same array."""
 
         if not self._integratesStateInPlace:
             self._stateVars[:] = self._stateVarsTemp
-
-    @property
-    def integratesStateInPlace(self):
-        """Whether the MarmotElement integrates directly into the accepted state buffer."""
-        return self._integratesStateInPlace
-
-    def requestStateIntegrationInPlace(self, bint enable):
-        """Switch between a separate trial buffer (the default, needed if increments can be
-        rejected) and integration in place (for solvers that never cut back, i.e. explicit
-        dynamics). In place, the accepted buffer becomes an alias of the trial buffer, which
-        the MarmotElement already writes into. This saves one full state copy before every
-        kernel evaluation and one in every acceptance.
-
-        Parameters
-        ----------
-        enable
-            True for integration in place, False for a separate trial buffer.
-
-        Returns
-        -------
-        bool
-            Whether the element now integrates in place: the request, unless the element has no
-            material and therefore no state yet.
-        """
-
-        if not self._hasMaterial:
-            return False
-
-        if enable == self._integratesStateInPlace:
-            return enable
-
-        if enable:
-            # the MarmotElement keeps writing into the trial buffer; seed it with the accepted state
-            self._stateVarsTemp[:] = self._stateVars
-            self._stateVars = self._stateVarsTemp
-        else:
-            self._stateVars = np.array(self._stateVarsTemp)
-
-        self._integratesStateInPlace = enable
-        return enable
 
     def getStateVars(self):
         """Return a copy of the converged quadrature-point state-variable buffer."""

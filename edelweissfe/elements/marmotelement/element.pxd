@@ -204,6 +204,8 @@ cdef class MarmotElementWrapper:
 
     cpdef void _initializeStateVarsTemp(self, ) noexcept  nogil
 
+    cdef void _setStateIntegrationInPlace(self, bint inPlace)
+
     cpdef void computeKernels(self,
                               double[::1] Ke,
                               double[::1] Pe,
