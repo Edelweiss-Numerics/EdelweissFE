@@ -96,8 +96,7 @@ displacement and reports the kinetic energy as a fraction of that external work.
 
 **On this example that ratio ends at ~1.2 %** (kinetic energy against external work, as the
 solver reports it at the last output), and the explicit final reaction lies within 1 % of the
-implicit one. The figure in `figures/` predates the production settings (bulk viscosity, von Mises
-steel, penalty 1e4) and still shows the undamped ringing of the earlier setup. If you need a smooth
+implicit one; its remaining oscillation about the implicit curve is visible in the figure above. If you need a smooth
 reaction history rather than a correct mean, reduce the mass scaling and lengthen the ramp, at a
 proportional cost in increments. That trade-off, not the fact that the run completed, is what says
 whether an explicit result is usable as a static one.

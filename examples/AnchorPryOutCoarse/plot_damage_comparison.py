@@ -108,7 +108,7 @@ def quasiStaticity(runDir):
     if not kinetic:
         return None
     _, u, rf, _ = history(runDir)
-    work = abs(np.trapezoid(rf, u)) if hasattr(np, "trapezoid") else abs(np.trapz(rf, u))
+    work = abs(np.trapezoid(rf, u))
     return max(kinetic) / work if work > 0 else None
 
 
