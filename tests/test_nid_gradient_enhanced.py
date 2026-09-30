@@ -134,9 +134,9 @@ def test_the_discarded_nonlocal_inertia_is_warned_about_once(tmp_path, monkeypat
     trueWarn = NonlinearImplicitDynamic._warnAboutDiscardedInertia
     warned = []
 
-    def recordingWarn(self, Mvij, Cvij, couplesDynamicOnly):
+    def recordingWarn(self, Mvij, dampingVIJIndices, couplesDynamicOnly):
         before = set(self._fieldsWarnedAboutDiscardedInertia)
-        trueWarn(self, Mvij, Cvij, couplesDynamicOnly)
+        trueWarn(self, Mvij, dampingVIJIndices, couplesDynamicOnly)
         warned.extend(self._fieldsWarnedAboutDiscardedInertia - before)
 
     monkeypatch.setattr(NonlinearImplicitDynamic, "_warnAboutDiscardedInertia", recordingWarn)
