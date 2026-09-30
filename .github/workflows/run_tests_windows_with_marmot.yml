@@ -39,6 +39,8 @@ jobs:
         run: |
           # Extension build failures are tolerated by setup.py (optional_build_ext); list what was built.
           python -c "import edelweissfe, pathlib; print((pathlib.Path(edelweissfe.__file__).parent / 'built_extensions.log').read_text())"
+          # The Marmot installation baked in at build time, whose bin/ edelweissfe adds to the DLL search path.
+          python -c "import edelweissfe, pathlib; print((pathlib.Path(edelweissfe.__file__).parent / 'marmot_install_dir.txt').read_text())"
           # A failed Marmot extension would not fail the build, and its test cases would merely be skipped: import it.
           python -c "import edelweissfe.elements.marmotelement.element"
 

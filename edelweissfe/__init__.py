@@ -28,12 +28,15 @@
 #  ---------------------------------------------------------------------
 
 import os
+import pathlib
 import sys
 
 if sys.platform == "win32":
     # Since Python 3.8, Windows resolves the DLLs that extension modules depend on without looking at PATH. Make
-    # Marmot.dll, which the Marmot-backed extensions link against, findable: in MARMOT_INSTALL_DIR if set (as for
-    # the build, see setup.py), otherwise in the environment's Library prefix, where conda installs it.
-    _marmotDllDir = os.path.join(os.environ.get("MARMOT_INSTALL_DIR", os.path.join(sys.prefix, "Library")), "bin")
-    if os.path.isdir(_marmotDllDir):
-        os.add_dll_directory(_marmotDllDir)
+    # Marmot.dll findable for the Marmot-backed extensions: from the Marmot installation they were built against,
+    # recorded by setup.py -- not from the runtime environment, which may hold a different Marmot build.
+    _marmotInstallDirFile = pathlib.Path(__file__).parent / "marmot_install_dir.txt"
+    if _marmotInstallDirFile.is_file():
+        _marmotDllDir = pathlib.Path(_marmotInstallDirFile.read_text(encoding="utf-8").strip()) / "bin"
+        if _marmotDllDir.is_dir():
+            os.add_dll_directory(str(_marmotDllDir))
