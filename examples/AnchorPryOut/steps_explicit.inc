@@ -2,8 +2,12 @@
 ** SOLVER AND STEPS
 **=================================================================================================
 *solver, solver=NEDParallel, name=theSolver
-second-order-fields="displacement"
-first-order-fields="nonlocal damage"
+** The time-integration scheme of every field is DERIVED from the assembled inertia and damping
+** (#134); the two lines below only ASSERT the expected outcome and abort the step if it differs.
+** The pre-#134 controls second-order-fields/first-order-fields were removed and now fail with
+** "Invalid option".
+expect-second-order-fields=displacement
+expect-first-order-fields=nonlocal damage
 ** COURANT NUMBER: 0.1, and this is the expensive decision in this file -- READ THIS BEFORE RAISING IT.
 **
 ** The solver's critical time step is l / c, which is a LINEAR-element formula: it is the stable
