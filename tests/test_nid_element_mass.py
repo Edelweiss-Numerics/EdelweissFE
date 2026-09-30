@@ -55,7 +55,9 @@ _HEXA20 = _HEXA8 + [
     (0, 0, 0.5), (1, 0, 0.5), (1, 1, 0.5), (0, 1, 0.5),
 ]  # fmt: skip
 
-#: (element type, reference nodes, material, material properties with the density).
+#: (element type, reference nodes, material, material properties with the density). This list is
+#: the whole guard: an element type not in it has its mass checked nowhere, so add a type here
+#: before using it with ``NID``.
 ELEMENTS = [
     ("C3D8", _HEXA8, "LINEARELASTIC", [100.0, 0.2, DENSITY]),
     ("C3D20", _HEXA20, "LINEARELASTIC", [100.0, 0.2, DENSITY]),

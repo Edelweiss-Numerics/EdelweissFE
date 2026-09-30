@@ -87,14 +87,14 @@ of the family) is refused, because the formulation above divides by it.
 :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeConsistentInertia` into the very
 sparsity pattern the stiffness uses -- both are scattered through the same VIJ layout of the
 :class:`~edelweissfe.numerics.dofmanager.DofManager`, so adding :math:`\\boldsymbol{M}/(\\beta \\Delta t^2)`
-to the tangent is an entry-wise addition of two value vectors, before the parent's in-place CSR
-update, its multi-point-constraint condensation and its Dirichlet row replacement, all of which
-therefore act on the effective matrix without knowing it is one. For the same reason the mass is
-summed into CSR form by the stiffness' own CSR generator. The damping :math:`\\boldsymbol{C}` is the
-diagonal each element reports through ``computeLumpedDamping``; being diagonal, it is kept only as
-its nonzero entries and their positions in the same layout, not as a full value vector. Both are
-assembled when the equation system is (re)built -- at a step's start and
-after a topology change -- not per Newton iteration. A rebuild caused only by a constraint changing
+to the tangent is an entry-wise scaled addition of two value vectors, before the parent's in-place CSR update, its
+multi-point-constraint condensation and its Dirichlet row replacement, all of which therefore act
+on the effective matrix without knowing it is one. For the same reason the mass is summed into
+CSR form by the stiffness' own CSR generator. The damping :math:`\\boldsymbol{C}` is the diagonal
+each element reports through ``computeLumpedDamping``; being diagonal, it is kept only as its
+nonzero entries and their positions in the same layout, not as a full value vector. Both are
+assembled in one loop over the elements when the equation system is (re)built -- at a step's start
+and after a topology change -- not per Newton iteration. A rebuild caused only by a constraint changing
 its connectivity (a contact candidate list, which can change on every increment) leaves every
 element, and with it every element's slot in the layout, where it was: the operators are then
 reused in the new layout rather than reassembled -- see
@@ -108,6 +108,10 @@ nonzero mass; the total mass of each field is reported. The *symmetry* of the ma
 at runtime -- on the assembled matrix that costs a transposed copy of it, gigabytes on a large
 model -- but pinned once per element type in ``tests/test_nid_element_mass.py``, together with the
 total mass :math:`\\rho V`. It does matter: a non-symmetric mass still converges, to a wrong response.
+That test covers only the element types it lists -- the Marmot hexahedra ``C3D8``, ``C3D20``,
+``C3D20R`` and the gradient-enhanced ``GC3D8``, ``GC3D20R``; any other element type (the plane
+elements, for one) is *not* guarded anywhere, so add it to that list before using it with this
+solver.
 
 **Which fields.** Only the fields whose inertia is a mass
 (:func:`~edelweissfe.config.phenomena.carriesLinearMomentum`, i.e. the displacement) are integrated
@@ -719,8 +723,9 @@ class NonlinearImplicitDynamic(NIST):
 
         # The effective tangent K + M / (beta dT^2) + gamma C / (beta dT). Same VIJ layout as K, so
         # it is an entry-wise sum, before the parent's CSR conversion, MPC condensation and
-        # Dirichlet row replacement. Recomputed every iteration instead of stored per increment:
-        # a stored copy would be one more VIJ-length vector, gigabytes on a large model.
+        # Dirichlet row replacement. Note that `a * M` forms a temporary VIJ-length vector for the
+        # duration of this line; it is not kept. The damping is diagonal and touches only its few
+        # nonzero slots.
         K += increment.massFactor * np.asarray(system.Mvij)
         K[system.dampingVIJIndices] += increment.dampingFactor * system.dampingVIJValues
 
@@ -1165,7 +1170,7 @@ class NonlinearImplicitDynamic(NIST):
         -------
         tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix]
             The mass as a VIJ value vector, the damping as the VIJ indices and values of its
-            nonzero diagonal entries (see :meth:`_collectLumpedDamping`), and the same two as CSR
+            nonzero diagonal entries (see :meth:`_lumpedDampingOfElement`), and the same two as CSR
             matrices.
 
         Raises
@@ -1176,6 +1181,10 @@ class NonlinearImplicitDynamic(NIST):
         """
 
         Mvij = self.theDofManager.constructVIJSystemMatrix()
+        # Seeded with empty arrays, so that a model without any damping still concatenates to
+        # empty arrays of the right dtype below.
+        dampingVIJIndices = [np.zeros(0, dtype=np.int64)]
+        dampingVIJValues = [np.zeros(0)]
 
         for el in model.elements.values():
             if not el.hasKernels:
@@ -1192,6 +1201,13 @@ class NonlinearImplicitDynamic(NIST):
                     )
                 ) from error
 
+            indices, values = self._lumpedDampingOfElement(el)
+            dampingVIJIndices.append(indices)
+            dampingVIJValues.append(values)
+
+        dampingVIJIndices = np.concatenate(dampingVIJIndices)
+        dampingVIJValues = np.concatenate(dampingVIJValues)
+
         nDof = self.theDofManager.nDof
         I = self.theDofManager.I  # noqa: E741
         J = self.theDofManager.J
@@ -1199,7 +1215,6 @@ class NonlinearImplicitDynamic(NIST):
         isDynamic = np.zeros(nDof, dtype=bool)
         isDynamic[dynamicDofs] = True
         couplesDynamicOnly = isDynamic[I] & isDynamic[J]
-        dampingVIJIndices, dampingVIJValues = self._collectLumpedDamping(model)
         self._warnAboutDiscardedInertia(Mvij, dampingVIJIndices, couplesDynamicOnly)
         # Mass and damping on the quasi-static fields are discarded, see the warning above.
         Mvij[~couplesDynamicOnly] = 0.0
@@ -1243,40 +1258,31 @@ class NonlinearImplicitDynamic(NIST):
 
         return Mvij, (dampingVIJIndices, dampingVIJValues), M, C
 
-    def _collectLumpedDamping(self, model: FEModel) -> tuple[np.ndarray, np.ndarray]:
-        """The lumped damping every element reports, as the VIJ indices of the element's own
-        diagonal slots and the values there -- only the nonzero ones.
+    def _lumpedDampingOfElement(self, el) -> tuple[np.ndarray, np.ndarray]:
+        """The lumped (diagonal) damping one element reports, placed on the diagonal of its own
+        block in the VIJ layout -- only the nonzero entries, as their VIJ indices and values.
 
-        An element's block occupies ``nDof * nDof`` consecutive VIJ entries, row-major, so its
-        ``k``-th diagonal entry is at ``start + k * (nDof + 1)``. Each slot belongs to one element,
-        so the indices are unique.
+        An element's block occupies ``nDof * nDof`` consecutive VIJ entries in row-major order, so
+        its ``k``-th diagonal entry is at ``start + k * (nDof + 1)``. Each slot belongs to one
+        element, so indices collected over all elements are unique.
 
         Parameters
         ----------
-        model
-            The model tree.
+        el
+            The element.
 
         Returns
         -------
         tuple[np.ndarray, np.ndarray]
-            The VIJ indices and the damping values there.
+            The VIJ indices of the element's nonzero damping entries, and the damping values there.
         """
 
-        indices, values = [], []
-        for el in model.elements.values():
-            if not el.hasKernels:
-                continue
-            Ce = np.zeros(el.nDof)
-            el.computeLumpedDamping(Ce)
-            nonzero = np.flatnonzero(Ce)
-            if nonzero.size:
-                start = self.theDofManager.idcsOfHigherOrderEntitiesInVIJ[el]
-                indices.append(start + nonzero * (el.nDof + 1))
-                values.append(Ce[nonzero])
+        Ce = np.zeros(el.nDof)
+        el.computeLumpedDamping(Ce)
+        nonzero = np.flatnonzero(Ce)
 
-        if not indices:
-            return np.zeros(0, dtype=np.int64), np.zeros(0)
-        return np.concatenate(indices).astype(np.int64), np.concatenate(values)
+        start = self.theDofManager.idcsOfHigherOrderEntitiesInVIJ[el]
+        return (start + nonzero * (el.nDof + 1)).astype(np.int64), Ce[nonzero]
 
     def _warnAboutDiscardedInertia(
         self, Mvij: VIJSystemMatrix, dampingVIJIndices: np.ndarray, couplesDynamicOnly: np.ndarray
