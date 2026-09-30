@@ -1,7 +1,7 @@
 **=================================================================================================
 ** CONTACT -- GPTS, Gauss-point-to-segment (integrated)
 **=================================================================================================
-** The same two interfaces, same penalty, same small-sliding kinematics as contact_nts.inc -- only
+** The same two interfaces, same penalty (1e4, see contact_nts.inc), same small-sliding kinematics as contact_nts.inc -- only
 ** the constraint type and nQuadraturePoints differ, which is the whole point of having both: swap
 ** this include for the other and nothing else about the model changes.
 **
@@ -20,7 +20,7 @@
 ** assembly is substantially heavier than NTS. On this model that is a small share of the total.
 
 *constraint, name=contactPlateConcrete, type=surfaceToDeformableSurfacePenalty
-slaveSurface=plate_bottom_facets, masterSurface=concrete_top_facets, penalty=1e5, sliding=small, type=quadratic, nQuadraturePoints=3
+slaveSurface=plate_bottom_facets, masterSurface=concrete_top_facets, penalty=1e4, sliding=small, type=quadratic, nQuadraturePoints=3
 
 *constraint, name=contactShaftHole, type=surfaceToDeformableSurfacePenalty
-slaveSurface=anchor_to_plate_facets, masterSurface=plate_to_anchor_facets, penalty=1e5, sliding=small, type=quadratic, nQuadraturePoints=3
+slaveSurface=anchor_to_plate_facets, masterSurface=plate_to_anchor_facets, penalty=1e4, sliding=small, type=quadratic, nQuadraturePoints=3

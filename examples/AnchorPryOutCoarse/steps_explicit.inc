@@ -19,8 +19,12 @@
 ** visible on a material with no damping -- GC3D20R with gcdp sat above the stability limit for 800
 ** increments looking healthy, because the nonlocal viscosity absorbed it.
 *solver, solver=NEDParallel, name=theSolver
-second-order-fields="displacement"
-first-order-fields="nonlocal damage"
+** The time-integration scheme of every field is DERIVED from the assembled inertia and damping
+** (#134); this line only ASSERTS the expected outcome and aborts the step if it differs. Both fields
+** are second order: GCDP's micro-inertia m_k (property 21, materials_explicit.inc) gives the nonlocal
+** damage field an inertia, so it is integrated by central difference. The assertion catches a deck
+** that loses m_k -- the property is optional and silently defaults to zero.
+expect-second-order-fields="displacement, nonlocal damage"
 courant-number=0.1
 output-frequency=1000
 ** How often the contact constraints re-run their closest-point search. Throttling is what makes
