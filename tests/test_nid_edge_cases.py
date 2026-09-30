@@ -160,16 +160,16 @@ def _corruptTheAssembledMass(monkeypatch, value: float):
 
 
 def _reportADamping(monkeypatch, value: float):
-    """Let the first element report ``value`` as the damping of its first (dynamic) dof."""
+    """Let every element report ``value`` as the damping of its first (dynamic) dof -- the
+    elements' own output is out of reach of a test, the Marmot elements being compiled."""
 
     from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 
-    def collectLumpedDamping(self, model):
-        firstElement = next(iter(model.elements.values()))
-        start = self.theDofManager.idcsOfHigherOrderEntitiesInVIJ[firstElement]
+    def lumpedDampingOfElement(self, el):
+        start = self.theDofManager.idcsOfHigherOrderEntitiesInVIJ[el]
         return np.array([start], dtype=np.int64), np.array([value])
 
-    monkeypatch.setattr(NonlinearImplicitDynamic, "_collectLumpedDamping", collectLumpedDamping)
+    monkeypatch.setattr(NonlinearImplicitDynamic, "_lumpedDampingOfElement", lumpedDampingOfElement)
 
 
 def test_refuses_a_non_finite_mass(tmp_path, monkeypatch):
