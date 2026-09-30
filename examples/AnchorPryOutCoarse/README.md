@@ -17,16 +17,19 @@ edelweissfe pryout_implicit_nts.inp        # see the table below for timings
 python plot_damage_comparison.py           # once all four have run
 ```
 
-Measured on 16 threads, two variants at a time, on a 36-core machine:
+Measured on 16 threads, one variant at a time, on a 64-core Threadripper (2026-09-30):
 
-| variant | wall time | refinement occasions | final concrete elements | final U |
-|---|---|---|---|---|
-| `implicit_nts` | ~26 min | 47 | 2201 | 1.500 mm |
-| `implicit_gpts` | ~33 min | 51 | 2215 | 1.500 mm |
-| `explicit_nts` | ~40 min | 12 | 2208 | 1.464 mm |
-| `explicit_gpts` | ~30 min | 12 | 2215 | 1.464 mm |
+| variant | wall time | increments | refinement occasions | final concrete elements | final U | final reaction |
+|---|---|---|---|---|---|---|
+| `implicit_nts` | ~9 min | 100 + 1, no cutback | 40 | 2033 | 1.500 mm | 43.7 kN |
+| `implicit_gpts` | ~10 min | 100 + 1, no cutback | 40 | 2033 | 1.500 mm | 43.9 kN |
+| `explicit_nts` | ~13 min | ~69 900 | 12 | 2005 | 1.464 mm | 44.0 kN |
+| `explicit_gpts` | ~9 min | ~69 900 | 12 | 2005 | 1.464 mm | 44.1 kN |
 
-All four reach the same refined mesh size by different routes. The explicit runs stop at 1.464 mm
+With the production settings (von Mises steel, penalty 1e4) the reaction is still rising at 1.5 mm:
+the ramp stops before the breakout peak.
+
+Each solver family reaches the same refined mesh in all its variants. The explicit runs stop at 1.464 mm
 rather than 1.500 because the last *recorded* output tick falls just short of the final increment —
 the ramp itself completes.
 
@@ -83,18 +86,21 @@ differences are consequences rather than choices. Each is argued where it is set
 | densities | omitted | required, **×100 mass scaling** | a static solve builds no mass matrix; the explicit stable increment goes with 1/√ρ, and the scaling is what makes the run reach 1.5 mm in comparable time |
 | Duvaut-Lions viscosity | `1e-6` | **`0`** | it is a relaxation time. At dT ≈ 3.4e-7 s nothing relaxes per increment, and a non-zero value makes the concrete respond nearly elastically — a run that completes, looks plausible, and shows no softening |
 | AMR marker | damage | damage | deliberately the same, so the comparison is not confounded. A stress marker is defensible implicitly but ratchets towards refining everything under explicit integration |
+| bulk viscosity | — | **b1 = 0.06, b2 = 1.2** on every element set, linear term degraded with damage (exponent 2.0) on the concrete | central difference dissipates nothing; undegraded, the linear term resists crack opening forever and inflates the fracture energy |
+| nonlocal field | — (static) | **hyperbolic**: `eta = 3e-4`, `m_k = eta^2/4 = 2.25e-8` | `m_k > 0` integrates the nonlocal damage by central difference, whose stable increment scales with h, not h² |
 | courant number | — | **0.1**, not the 0.8 default | `l/c` is a linear-element formula; a quadratic element's highest eigenfrequency is several times what it predicts. At 0.8 this model returns a reaction 26× too small **and does not fail** |
 
 The mass scaling is the one to watch. It buys speed by making the structure heavier, which works
 *against* quasi-staticity, so `plot_damage_comparison.py` integrates the reaction against the
 displacement and reports the kinetic energy as a fraction of that external work.
 
-**On this example that ratio is ~2.2 %**, and the load-displacement panel shows what that looks like:
-the explicit reaction *rings* around the implicit curves by roughly ±30 % once damage and contact are
-both active, while tracking their mean. The damage fields still agree closely, which is the useful
-part — but if you need a smooth reaction history rather than a correct mean, reduce the mass scaling
-and lengthen the ramp, at a proportional cost in increments. That trade-off, not the fact that the
-run completed, is what says whether an explicit result is usable as a static one.
+**On this example that ratio ends at ~1.2 %** (kinetic energy against external work, as the
+solver reports it at the last output), and the explicit final reaction lies within 1 % of the
+implicit one. The figure in `figures/` predates the production settings (bulk viscosity, von Mises
+steel, penalty 1e4) and still shows the undamped ringing of the earlier setup. If you need a smooth
+reaction history rather than a correct mean, reduce the mass scaling and lengthen the ramp, at a
+proportional cost in increments. That trade-off, not the fact that the run completed, is what says
+whether an explicit result is usable as a static one.
 
 ## The mesh is coarse on purpose
 

@@ -11,10 +11,10 @@
 **
 ** maxLevel=1 with splitFactor=2: each marked element splits once, into eight children. The marker
 ** still fires REPEATEDLY, because as the damage zone spreads it marks elements it had not marked
-** before. Measured on the four variants of this example: 47 and 51 occasions implicitly, 12 in each
-** explicit run (which checks only every topology-check-frequency increments), all four arriving at
-** 2201-2215 concrete elements from the same starting 1634 -- the same refined mesh by different
-** routes, which is what makes the four comparable.
+** before. Measured on the four variants of this example (2026-09-30): 40 occasions in each implicit
+** run, 12 in each explicit run (which checks only every topology-check-frequency increments),
+** arriving at 2033 and 2005 concrete elements from the same starting 1634 -- the same refined mesh by
+** different routes, which is what makes the four comparable.
 **
 ** A refinement introduces a hanging-node transition into an already-damaged stress field, so damage
 ** near a transition cannot be cleanly separated from the transition itself. That is the price of
