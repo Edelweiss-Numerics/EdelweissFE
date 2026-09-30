@@ -36,6 +36,8 @@ jobs:
 
       - name: Built extensions
         shell: bash -leo pipefail {0}
+        # Outside the checkout, whose uncompiled edelweissfe/ source tree would shadow the installed package.
+        working-directory: ${{ runner.temp }}
         run: |
           # Extension build failures are tolerated by setup.py (optional_build_ext); list what was built.
           python -c "import edelweissfe, pathlib; print((pathlib.Path(edelweissfe.__file__).parent / 'built_extensions.log').read_text())"
