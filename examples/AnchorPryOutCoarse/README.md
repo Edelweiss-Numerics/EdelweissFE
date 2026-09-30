@@ -103,9 +103,8 @@ is itself not converged. The damage field is under-resolved by construction: thi
 be **runnable in half an hour**, not to predict a breakout cone. Treat the contours as a
 demonstration of the machinery.
 
-To make it finer, regenerate the mesh with a smaller `PRYOUT_COARSEN` — see the header of
-`model.inc` for the command and for `check_mesh.py`, which verifies a regenerated mesh before you
-build on it.
+The mesh generator is not part of this repository (see the header of `model.inc`); for a finer
+model, start from `examples/AnchorPryOut`.
 
 ## Where to take it next
 
