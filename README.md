@@ -94,8 +94,8 @@ edelweissfe my_simulation.inp
 
 ### Optional: Marmot
 
-[Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) adds further elements and material models (Linux and
-macOS only). Build it into the same environment, then reinstall EdelweissFE:
+[Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) adds further elements and material models. Build it into the same environment, then reinstall
+EdelweissFE (on Windows, see the [installation documentation](doc/source/installation.rst) for the commands):
 
 ```console
 conda activate edelweissfe

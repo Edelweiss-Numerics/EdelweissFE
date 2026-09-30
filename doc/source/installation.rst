@@ -17,7 +17,7 @@ yet, which come from the `matthiasneuner/edelweiss <https://prefix.dev/channels/
 The recipes of that channel are maintained at
 `matthiasneuner/edelweiss-conda-channel <https://github.com/matthiasneuner/edelweiss-conda-channel>`_.
 
-Supported platforms are Linux (x86-64), macOS 14 or newer (arm64 and x86-64), and Windows (x64, without Marmot).
+Supported platforms are Linux (x86-64), macOS 14 or newer (arm64 and x86-64), and Windows (x64).
 
 Get conda
 *********
@@ -118,8 +118,6 @@ extensions are optional and skipped. ``edelweissfe/built_extensions.log`` lists 
 Installation with Marmot
 ************************
 
-Not yet supported on Windows.
-
 `Marmot <https://github.com/MAteRialMOdelingToolbox/Marmot/>`_ provides the Marmot-backed elements and constitutive
 models. All of its dependencies (Eigen, autodiff, Fastor) are already in the environment, so only Marmot itself is
 built from source, into the environment:
@@ -132,6 +130,17 @@ built from source, into the environment:
     cmake --build ../Marmot/build -j
     cmake --install ../Marmot/build
 
+On Windows, in the *Miniforge Prompt*, conda's headers and libraries are under ``%CONDA_PREFIX%\Library``, and
+Marmot is built in the ``Release`` configuration:
+
+.. code-block:: console
+
+    git clone --recurse-submodules --branch next_v26.11 https://github.com/MAteRialMOdelingToolbox/Marmot/ ..\Marmot
+    cmake -S ..\Marmot -B ..\Marmot\build -DCMAKE_INSTALL_PREFIX=%CONDA_PREFIX%\Library ^
+          -DCMAKE_PREFIX_PATH=%CONDA_PREFIX%\Library -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF
+    cmake --build ..\Marmot\build --config Release --parallel
+    cmake --install ..\Marmot\build --config Release
+
 Then build EdelweissFE, which picks up Marmot automatically, and validate the installation:
 
 .. code-block:: console
@@ -140,7 +149,12 @@ Then build EdelweissFE, which picks up Marmot automatically, and validate the in
     PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/marmot/
     PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 
-Marmot is found in ``$CONDA_PREFIX`` by default; set ``MARMOT_INSTALL_DIR`` if it is installed elsewhere.
+Marmot is found in ``$CONDA_PREFIX`` (Windows: ``%CONDA_PREFIX%\Library``) by default; set ``MARMOT_INSTALL_DIR``
+if it is installed elsewhere. The build records the Marmot installation it used (``edelweissfe/marmot_install_dir.txt``):
+on Linux and macOS, the Marmot extensions find the library there through their embedded library path; on Windows,
+``import edelweissfe`` adds its ``bin`` directory to the DLL search path. So the extensions always load the Marmot they
+were built against, whatever the runtime environment. Rebuild EdelweissFE after moving or reinstalling Marmot
+elsewhere.
 
 Developing
 **********
