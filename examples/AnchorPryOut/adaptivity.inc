@@ -34,7 +34,7 @@
 **
 ** VERIFY ON EVERY RUN: the first topology update should report
 **
-**   AMR ModelModifier: marked 110, refined -> active elements 11176 -> 11946, 574 hanging nodes
+**   AMR ModelModifier: marked 110, refined -> active elements 11176 -> 11946, 1124 hanging nodes
 **
 ** that being marker 1 acting alone (alphaP is still 0 everywhere at t = 0). A marker whose named
 ** input is missing does NOT fail -- it marks nothing, and the run completes looking entirely normal

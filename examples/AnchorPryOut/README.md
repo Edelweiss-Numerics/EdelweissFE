@@ -53,7 +53,7 @@ At the first topology update both variants report the same thing, which is the q
 your run is set up correctly:
 
 ```
-AMR ModelModifier: marked 110, refined -> active elements 11176 -> 11946, 574 hanging nodes
+AMR ModelModifier: marked 110, refined -> active elements 11176 -> 11946, 1124 hanging nodes
 eliminating 8804 slave DOF(s) via multi-point constraints
 ```
 
