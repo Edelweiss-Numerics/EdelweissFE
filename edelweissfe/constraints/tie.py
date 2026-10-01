@@ -249,6 +249,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         self.tiedRecords, self.untiedSlaveNodes = self._buildTiedRecords(
             slaveFacetElements, masterFacetElements, adjust=configuration.adjust
         )
+        self._reassignNodesOfElementsWithSnappedNodes(model)
         self._publishTiedUntiedNodeSets(model)
 
         # Registration is what gets a tie refreshed at all: multi-point constraints live in
@@ -330,6 +331,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
 
         tiedRecords = []
         untiedSlaveNodes = []
+        self._snappedNodes = []
 
         for slaveNode in slaveNodes:
             bestWeights = None
@@ -359,10 +361,46 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
             withinAdjustTolerance = self._adjustTolerance is None or bestDistance <= self._adjustTolerance
             if adjust and withinAdjustTolerance and bestDistance > 0.0:
                 slaveNode.coordinates[:] = bestWeights @ masterFacetCoords[bestFacetIdx]
+                self._snappedNodes.append(slaveNode)
 
             tiedRecords.append((slaveNode, masterFacetElements[bestFacetIdx].nodes, bestWeights))
 
         return tiedRecords, untiedSlaveNodes
+
+    def _reassignNodesOfElementsWithSnappedNodes(self, model: FEModel):
+        """Let every element with a snapped node take up the node's new position.
+
+        An element copies the coordinates of its nodes when they are assigned -- a Marmot element
+        into the buffer its C++ element reads, a displacement element into its coordinate matrix --
+        and never reads the nodes again. Snapping moves the nodes after that, so without this the
+        elements kept the gap the snap was meant to remove: the nodes, the output and any element a
+        refinement creates later saw the snapped position, the original elements did not (on the
+        c1_150 edge breakout, 525 elements, by up to 0.5 mm). Re-assigning the nodes is enough
+        because a tie is constructed before the elements are initialized (``prepareYourself``).
+
+        A contact facet copies its coordinates when it is initialized, which its generator does at
+        once; a facet of another constraint's contact surface therefore keeps the unsnapped position
+        -- see the ``adjust`` option.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        """
+
+        if not self._snappedNodes:
+            return
+
+        snapped = set(self._snappedNodes)
+        for element in model.elements.values():
+            if not snapped.isdisjoint(element.nodes):
+                element.setNodes(element.nodes)
+
+        self._journal.message(
+            "snapped {:} slave node(s) onto the master surface".format(len(self._snappedNodes)),
+            self.name,
+            1,
+        )
 
     def _publishTiedUntiedNodeSets(self, model: FEModel):
         """Expose the tied/untied slave nodes as ordinary node sets -- e.g. via *fieldOutput, or for
