@@ -73,6 +73,11 @@ interpolation) and quadrature-point history (via a pluggable state-transfer stra
 non-conforming interface with an exact hanging-node multi-point constraint. Element/node sets, sections and element-based surfaces are propagated to
 the children so material assignment and surface loads stay consistent.
 
+A child is assigned its section exactly like an element of the initial mesh: parameters set by
+``>>materialParameterFromField`` (e.g. a random strength field) are evaluated at the child's own
+center. The analytical field is a function of position only, so a refined region samples the same
+field realization more finely -- just as a mesh that was refined from the start would.
+
 The octree mirror only ever tracks the refineable 20-node elements: a model that also contains
 elements of a different kind (e.g. lower-order contact-facet elements bonded to the mesh) is left
 untouched by construction, since anything without exactly 20 nodes is skipped automatically. To
