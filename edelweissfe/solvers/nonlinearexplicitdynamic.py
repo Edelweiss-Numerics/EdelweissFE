@@ -738,13 +738,21 @@ class NED(NonlinearSolverBase):
                             np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
                         )
 
-                        if self.updateTopologyAndConnectivity(model, step):
-                            theSystem = self.buildEquationSystem(model, step)
+                        meshChanged, connectivityChanged = self.updateTopologyAndConnectivity(model, step)
+
+                        if meshChanged or connectivityChanged:
+                            # Only a mesh change needs a system built afresh. A change of the contact
+                            # connectivity alone carries solution, velocity and force over, as after a
+                            # periodic contact search.
+                            theSystem = self.buildEquationSystem(
+                                model, step, previous=None if meshChanged else theSystem
+                            )
 
                             Minv = theSystem.Minv
                             U, dU, V, P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
                             UAtLastConnectivitySearch = np.array(U)
 
+                        if meshChanged:
                             # The net force is deliberately NOT re-evaluated on the new mesh. It
                             # could be, with one extra element pass -- but that would run the
                             # constitutive law off-cycle, with a zero strain increment, purely to
@@ -1385,7 +1393,7 @@ class NED(NonlinearSolverBase):
             variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
 
     @performancetiming.timeit("topology update")
-    def updateTopologyAndConnectivity(self, model: FEModel, step, resumed: bool = False) -> bool:
+    def updateTopologyAndConnectivity(self, model: FEModel, step, resumed: bool = False) -> tuple[bool, bool]:
         """Run the topology update, then let every mesh-dependent consumer catch up on it.
 
         The same two-phase sequence the implicit solver runs at the start of each of its increments
@@ -1407,10 +1415,9 @@ class NED(NonlinearSolverBase):
 
         Returns
         -------
-        bool
-            Whether anything changed, i.e. whether the equation system has to be built afresh. The
-            only caller today builds it unconditionally right afterwards; the return value is what
-            makes this reusable from inside an increment loop.
+        tuple[bool, bool]
+            Whether the mesh changed (a topology decision or a refreshed mesh-dependent consumer),
+            and whether a constraint's DOF footprint changed.
         """
 
         modelHasChanged = model.updateTopology(step, model.time)
@@ -1423,7 +1430,7 @@ class NED(NonlinearSolverBase):
             ]
         )
 
-        return modelHasChanged or refreshed or ticked
+        return modelHasChanged or refreshed, ticked
 
     @performancetiming.timeit("constraint connectivity")
     def updateConstraintConnectivity(self, model: FEModel) -> bool:
