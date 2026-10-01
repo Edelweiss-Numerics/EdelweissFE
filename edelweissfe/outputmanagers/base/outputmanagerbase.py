@@ -66,6 +66,11 @@ class OutputManagerBase(OptionSchemaProvider, ABC):
 
     identification = "OutputManagerBase"
 
+    #: Whether this output manager writes restart checkpoints. A solver that changes the model at
+    #: the end of an increment (e.g. a topology check) finalizes such a manager after that change,
+    #: so that the checkpoint holds the state the next increment starts from.
+    writesRestartCheckpoints: bool = False
+
     @abstractmethod
     def __init__(
         self,

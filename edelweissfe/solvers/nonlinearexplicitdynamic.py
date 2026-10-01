@@ -553,7 +553,9 @@ class NED(NonlinearSolverBase):
         # system exists is what makes it both cheap and safe: the mesh is final before the lumped
         # mass, the multi-point-constraint condensation and the critical time step are derived from
         # it, and no velocity state exists yet that would have to be carried onto new nodes.
-        self.updateTopologyAndConnectivity(model, step)
+        #
+        # A resumed step continues with the checkpointed contact search.
+        self.updateTopologyAndConnectivity(model, step, resumed=step.restoredTimeIncrement() is not None)
 
         theSystem = self.buildEquationSystem(model, step)
 
@@ -691,20 +693,7 @@ class NED(NonlinearSolverBase):
                     if timeStep.timeIncrement > 0.0:
                         prevTimeStep = timeStep
 
-                    with performancetiming.timeit("publish node fields"):
-                        for fieldName, field in model.nodeFields.items():
-                            self.theDofManager.writeDofVectorToNodeField(U, field, "U")
-                            self.theDofManager.writeDofVectorToNodeField(P, field, "P")
-
-                            # Published every increment, not only on output increments, for two
-                            # reasons: an h-adaptivity event can fall on any increment and its
-                            # interpolation reads this entry, and a restart checkpoint written from a
-                            # node field is the only way an explicit run can resume with its kinetic
-                            # state intact. It is an O(nDof) copy.
-                            self.theDofManager.writeDofVectorToNodeField(V, field, "V")
-
-                        for variable in model.scalarVariables.values():
-                            variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+                    self.publishNodeFields(model, U, V, P)
 
                     self.updateRigidBodies(model, timeStep)
 
@@ -716,13 +705,13 @@ class NED(NonlinearSolverBase):
                     with performancetiming.timeit("accept state"):
                         model.advanceToTime(timeStep.totalTime)
 
-                    if timeStep.number % self.options["output-frequency"] == 0:
+                    isOutputIncrement = timeStep.number % self.options["output-frequency"] == 0
+                    if isOutputIncrement:
                         with performancetiming.timeit("finalize output"):
                             fieldOutputController.finalizeIncrement()
                             for man in outputmanagers:
-                                man.finalizeIncrement(
-                                    statusInfoDict=None,
-                                )
+                                if not man.writesRestartCheckpoints:
+                                    man.finalizeIncrement(statusInfoDict=None)
 
                     # --- h-adaptivity, mid-run ------------------------------------------------
                     # Placed exactly here for three independent reasons. The marker refines on the
@@ -765,6 +754,7 @@ class NED(NonlinearSolverBase):
                             # event, after which it is computed normally. A bounded known error is
                             # preferable to an unbounded unknown one.
                             P[:] = 0.0
+                            self.publishNodeFields(model, U, V, P)
 
                             self.reportTopologyChangeConservation(
                                 lumpedTotalsBefore, momentumBefore, kineticBefore, V, model
@@ -782,6 +772,14 @@ class NED(NonlinearSolverBase):
                                 )
                                 criticalTimeStep = theSystem.criticalTimeStep
                                 step.enforceTimeIncrement(criticalTimeStep)
+
+                    # Written after the topology check, so that a checkpoint holds the state the next
+                    # increment starts from: the mesh, the contact search and the force of the check.
+                    if isOutputIncrement:
+                        with performancetiming.timeit("finalize output"):
+                            for man in outputmanagers:
+                                if man.writesRestartCheckpoints:
+                                    man.finalizeIncrement(statusInfoDict=None)
 
         except ReachedMaxIncrements:
             self.applyStepActionsAtStepEnd(model, step.actions)
@@ -1357,8 +1355,37 @@ class NED(NonlinearSolverBase):
                     "(penalty formulations) are supported here."
                 )
 
+    @performancetiming.timeit("publish node fields")
+    def publishNodeFields(self, model: FEModel, U, V, P):
+        """Write the solution, velocity and force to the node fields and the scalar variables.
+
+        Published every increment, not only on output increments, for two reasons: an h-adaptivity
+        event can fall on any increment and its interpolation reads these entries, and a restart
+        checkpoint written from the node fields is the only way an explicit run can resume with its
+        kinetic state intact. It is an O(nDof) copy.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        U
+            The solution vector.
+        V
+            The velocity vector.
+        P
+            The net force vector.
+        """
+
+        for field in model.nodeFields.values():
+            self.theDofManager.writeDofVectorToNodeField(U, field, "U")
+            self.theDofManager.writeDofVectorToNodeField(P, field, "P")
+            self.theDofManager.writeDofVectorToNodeField(V, field, "V")
+
+        for variable in model.scalarVariables.values():
+            variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+
     @performancetiming.timeit("topology update")
-    def updateTopologyAndConnectivity(self, model: FEModel, step) -> bool:
+    def updateTopologyAndConnectivity(self, model: FEModel, step, resumed: bool = False) -> bool:
         """Run the topology update, then let every mesh-dependent consumer catch up on it.
 
         The same two-phase sequence the implicit solver runs at the start of each of its increments
@@ -1374,6 +1401,9 @@ class NED(NonlinearSolverBase):
             The model tree.
         step
             The step being solved.
+        resumed
+            First update of a resumed step: constraints call
+            :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.resumeConnectivity`.
 
         Returns
         -------
@@ -1386,7 +1416,12 @@ class NED(NonlinearSolverBase):
         modelHasChanged = model.updateTopology(step, model.time)
 
         refreshed = model.refreshMeshDependents()
-        ticked = any([constraint.updateConnectivity(model) for constraint in model.constraints.values()])
+        ticked = any(
+            [
+                c.resumeConnectivity(model) if resumed else c.updateConnectivity(model)
+                for c in model.constraints.values()
+            ]
+        )
 
         return modelHasChanged or refreshed or ticked
 

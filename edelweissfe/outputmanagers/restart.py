@@ -122,6 +122,8 @@ class OutputManager(OutputManagerBase):
 
     identification = "Restart"
 
+    writesRestartCheckpoints = True
+
     #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
     schema = RestartOutputManagerSchema
 
