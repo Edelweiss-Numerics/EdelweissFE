@@ -1,13 +1,16 @@
 ** 2D (plane strain, quad8) tie patch test: two patches with matching interface meshes bonded by
 ** the DOF-elimination tie (Line2 facets, midside split), covering the 2D branch of the tie's
-** closest-point projection and both displacement components. The upper patch starts with a 0.02
-** gap that the tie's adjust (default) closes. On matching meshes the tie is exactly equivalent
-** to merging the interface nodes, so the tied column reproduces a monolithic planeRectQuad
-** (nX=2, nY=4, h=2) mesh to machine precision in BOTH steps (verified: RFShear agrees to 14
-** digits). Step 1: uniform compression with nu = 0 -- exact homogeneous solution
-** sigma = E * 0.06 / 2 = 540, RFBottom = 540, planar interface (UySpread ~1e-18). Step 2:
-** horizontal drag of the clamped-bottom column (bending/shear mix, monolithic reference
-** RFShear = -71.4166025396057) -- exercises the x-component tying and moment transfer.
+** closest-point projection and both displacement components. The upper patch, 0.98 tall, starts
+** with a 0.02 gap that the tie's adjust (default) closes by moving its bottom nodes onto the lower
+** patch -- and its elements with them -- so the snapped column is exactly 2 tall. Step 1: uniform
+** compression with nu = 0 -- exact homogeneous solution sigma = E * 0.06 / 2 = 540, RFBottom =
+** 540, planar interface (UySpread ~1e-18); the isoparametric elements reproduce it although the
+** snap leaves the upper bottom row 0.51 tall with its side midside nodes off-centre. Step 2:
+** horizontal drag of the clamped-bottom column (bending/shear mix) -- exercises the x-component
+** tying and moment transfer. RFShear = -71.40705 here; a merged planeRectQuad (nX=2, nY=4, h=2)
+** column gives -71.41660, the difference being that distorted snapped row. (Before 2026-10-02 the
+** elements kept their pre-snap geometry while the nodes moved, which made the tied 1+1 column
+** coincide with the merged mesh; see the tie's adjust option.)
 *material, name=LinearElastic, id=linearelastic, provider=edelweiss
 1.8e4, 0.0
 
@@ -30,7 +33,7 @@ nY      =2
 x0      =0
 y0      =1.02
 l       =1
-h       =1
+h       =0.98
 elType  =CPE8
 elProvider =edelweiss
 
