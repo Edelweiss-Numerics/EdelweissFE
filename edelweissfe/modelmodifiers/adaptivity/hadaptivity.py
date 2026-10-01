@@ -34,6 +34,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.adaptivity.hex20topology import Hex20Topology
+from edelweissfe.adaptivity.marking import RefineableElements
 from edelweissfe.adaptivity.refinement import AdaptiveMesh
 from edelweissfe.adaptivity.statetransfer.perstatevar import PerStateVarStateTransfer
 from edelweissfe.config.elementlibrary import getElementClass
@@ -383,6 +384,9 @@ class ModelModifier(ModelModifierBase):
             coords = np.array([n.coordinates for n in el.nodes])
             eid = self._mesh.add_root(coords, [n.label for n in el.nodes], componentId)
             self._eidToEl[eid] = el
+        # what the markers see: a live view of the active elements, whose node adjacency (for a
+        # marker's halo) is kept across planning passes until _materialize changes the mesh
+        self._refineableElements = RefineableElements(self._eidToEl.values())
         # nodes outside the refineable mesh are not seeded, but their labels are taken:
         # keep the registry's high-water mark above them so new nodes never collide with them
         self._mesh.registry.reserve_labels_up_to(max(model.nodes.keys(), default=0))
@@ -489,7 +493,7 @@ class ModelModifier(ModelModifierBase):
         if self._isFirstCall:
             initial_markers = [m for m in self.markers if m.initialOnly]
             for m in initial_markers:
-                elements = m.mark(model, self._eidToEl.values(), self._mesh)
+                elements = m.mark(model, self._refineableElements, self._mesh)
                 marked_elements.update(elements)
 
         # dynamic markers (not initialOnly) evaluate the converged solution, so they need at least
@@ -501,7 +505,7 @@ class ModelModifier(ModelModifierBase):
         if not self._isFirstCall:
             dynamic_markers = [m for m in self.markers if not m.initialOnly]
             for m in dynamic_markers:
-                marked_elements.update(m.mark(model, self._eidToEl.values(), self._mesh))
+                marked_elements.update(m.mark(model, self._refineableElements, self._mesh))
 
         self._isFirstCall = False
 
@@ -612,6 +616,9 @@ class ModelModifier(ModelModifierBase):
     def _materialize(self, model: FEModel, records: dict):
         mesh = self._mesh
         reg = mesh.registry
+
+        # the active elements are about to change; so does the adjacency a marker's halo grows over
+        self._refineableElements.invalidateNodeAdjacency()
 
         # Element numbers come from the model's single monotonic allocator
         # (FEModel.reserveElementNumbers). This modifier deliberately keeps no counter of its own:

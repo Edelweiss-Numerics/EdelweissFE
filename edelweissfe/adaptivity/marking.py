@@ -38,7 +38,7 @@ marker only applies the refinement decision (a threshold) on top of it.
 
 import operator
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Collection, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -98,6 +98,60 @@ class MarkerOptionsBase:
     )
 
 
+class RefineableElements:
+    """The elements a marker may mark, together with the node adjacency a refinement halo grows over.
+
+    A live view of the refineable mesh: iterating it walks the wrapped collection (typically the
+    adaptivity mechanism's ``dict.values()`` of its active elements) in that collection's own order,
+    so a marker sees exactly the elements, in exactly the order, it would see without this wrapper.
+
+    What it adds is :meth:`elementsAtNode`, the map from a node label to the refineable elements
+    touching that node. Building it walks every node of every element, which on a large mesh costs
+    far more than the marking itself, yet it only changes when the mesh does. It is therefore built
+    on first use and kept until the owner of the collection reports a change of the mesh via
+    :meth:`invalidateNodeAdjacency` -- a refinement, live or replayed on a restart, both of which
+    run through the same mesh mutation.
+
+    Parameters
+    ----------
+    elements
+        The refineable elements; read again on every iteration and on every rebuild of the
+        adjacency, so a live view stays current.
+    """
+
+    def __init__(self, elements: Collection):
+        self._elements = elements
+        self._elementsAtNode = None
+
+    def __iter__(self) -> Iterator:
+        return iter(self._elements)
+
+    def __len__(self) -> int:
+        return len(self._elements)
+
+    def elementsAtNode(self) -> dict:
+        """The refineable elements touching each node, built once per mesh.
+
+        Returns
+        -------
+        dict
+            Node label -> list of the refineable elements having that node, each list in the order
+            of iteration. Shared with every later caller until :meth:`invalidateNodeAdjacency`, so
+            it must not be modified.
+        """
+        if self._elementsAtNode is None:
+            elementsAtNode = defaultdict(list)
+            for element in self._elements:
+                for node in element.nodes:
+                    elementsAtNode[node.label].append(element)
+            self._elementsAtNode = dict(elementsAtNode)
+        return self._elementsAtNode
+
+    def invalidateNodeAdjacency(self):
+        """Discard the node adjacency, because the mesh changed; the next query rebuilds it."""
+        self._elementsAtNode = None
+
+
 class MarkerBase(OptionSchemaProvider):
     """Base class for AMR refinement markers.
 
@@ -116,7 +170,23 @@ class MarkerBase(OptionSchemaProvider):
     def __init__(self, initialOnly=False):
         self.initialOnly = initialOnly
 
-    def mark(self, model, refineElements, mesh):
+    def mark(self, model, refineElements: RefineableElements, mesh):
+        """Decide which elements to refine.
+
+        Parameters
+        ----------
+        model
+            The FEModel, for the sets, surfaces, fields and fieldOutputs a marker reads.
+        refineElements
+            The elements eligible for refinement, with their node adjacency.
+        mesh
+            The adaptivity mechanism's mesh mirror.
+
+        Returns
+        -------
+        set
+            The elements to refine.
+        """
         raise NotImplementedError()
 
     @classmethod
@@ -273,10 +343,11 @@ class FieldOutputMarker(MarkerBase):
 
     def mark(self, model, refineElements, mesh):
         elements, values = _perElementFieldOutputResult(model, self.fieldOutputName)
-        marked = set()
-        for element, row in zip(elements, values):
-            if bool(np.any(self._compare(np.asarray(row), self.threshold))):
-                marked.add(element)
+        if not elements:
+            return set()
+        # one comparison over all entries at once; an element is marked if any entry of its row holds
+        entryHolds = self._compare(values.reshape(len(elements), -1), self.threshold)
+        marked = {elements[i] for i in np.flatnonzero(entryHolds.any(axis=1))}
         if self.halo > 0 and marked:
             marked = _growByNeighbors(marked, refineElements, self.halo)
         return marked
@@ -548,28 +619,26 @@ def _recoveryIndicators(coordsAll, valuesAll, connectivity, nGlobalNodes, recove
     return np.sqrt(errorSq), gradEnergy
 
 
-def _growByNeighbors(seed, candidatePool, layers):
+def _growByNeighbors(seed, candidatePool: RefineableElements, layers):
     """Dilate ``seed`` by ``layers`` rings of node-adjacent elements drawn from ``candidatePool``.
 
     Two elements are neighbours if they share at least one node (a node-adjacency, so it also picks up
     edge/corner touches, not only shared faces -- the coarser stencil is what a refinement halo wants).
     Returns a new ``set`` containing ``seed`` plus the grown ring; ``candidatePool`` bounds the growth
-    so the halo can never leak onto non-refineable elements.
+    so the halo can never leak onto non-refineable elements. Its node adjacency is reused from earlier
+    calls on the same mesh (see :class:`RefineableElements`).
     """
     if layers <= 0:
         return set(seed)
-    # node label -> elements of the pool touching it, built once
-    elementsAtNode = defaultdict(list)
-    for element in candidatePool:
-        for node in element.nodes:
-            elementsAtNode[node.label].append(element)
+    elementsAtNode = candidatePool.elementsAtNode()
+    noElements = ()
     grown = set(seed)
     frontier = set(seed)
     for _ in range(layers):
         nextFrontier = set()
         for element in frontier:
             for node in element.nodes:
-                for neighbor in elementsAtNode[node.label]:
+                for neighbor in elementsAtNode.get(node.label, noElements):
                     if neighbor not in grown:
                         grown.add(neighbor)
                         nextFrontier.add(neighbor)
