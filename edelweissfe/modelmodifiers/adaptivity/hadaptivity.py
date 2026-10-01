@@ -689,7 +689,7 @@ class ModelModifier(ModelModifierBase):
                     parentEl = self._eidToEl[parentEid]
                     child = self._makeElement(self._elementType or parentEl.elType, elNumber)
                     child.setNodes([model.nodes[label] for label in e["conn"]])
-                    self._sectionOf[parentEl].assignSectionPropertiesToElement(child)
+                    self._sectionOf[parentEl].assignSectionToElement(child, model)
                     for elementProperty in self._elementPropertiesOf.get(parentEl, ()):
                         child.assignProperty(elementProperty.propertyName, elementProperty.values)
                     # Runs on replay too, identically: apply() is one code path, and element state
