@@ -45,6 +45,8 @@ Do not hand-edit these formulas without re-verifying them the same way; this kin
 normalize/rotate second-derivative algebra is very easy to get subtly wrong.
 """
 
+import itertools
+
 import numpy as np
 from scipy.spatial import cKDTree
 
@@ -196,62 +198,149 @@ def line2GapGradientHessian(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> t
     return g, w, H
 
 
+def rowDot(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Row-wise dot product over the last axis, accumulated left to right onto +0.0 -- the order in
+    which ``np.dot`` of two short vectors sums, so a row of the result is bit-identical to it, down to
+    the sign of a zero (a sum of negative zeros is +0.0 there)."""
+
+    dot = 0.0 + a[..., 0] * b[..., 0]
+    for k in range(1, a.shape[-1]):
+        dot = dot + a[..., k] * b[..., k]
+    return dot
+
+
 def tria3ClosestPoint(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray, x3: np.ndarray) -> tuple[np.ndarray, float]:
     """Closest point on the (closed) triangle (x1, x2, x3) to xs, clamped to the triangle's
     interior/edge/vertex regions (Ericson's real-time-collision-detection region test), as
-    barycentric weights (w1, w2, w3) with all w >= 0 and sum(w) == 1, plus the distance."""
+    barycentric weights (w1, w2, w3) with all w >= 0 and sum(w) == 1, plus the distance.
+
+    The single-pair form of :func:`tria3ClosestPoints`, which it calls, so that the two can never
+    disagree."""
+
+    weights, distances = tria3ClosestPoints(xs[None], x1[None], x2[None], x3[None])
+    return weights[0], float(distances[0])
+
+
+def tria3ClosestPoints(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray, x3: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Closest points of many (point, triangle) pairs at once, see :func:`tria3ClosestPoint`.
+
+    Ericson's region test, evaluated for all pairs with array operations instead of one Python call
+    per pair. Every quantity is formed by the same operations, in the same order, as the
+    branch-by-branch scalar test would, and each pair is assigned the region the scalar test's first
+    satisfied condition selects (a NaN, which satisfies no condition, falls through to the interior,
+    as it does there). The weights and distances are therefore bit-identical to a pairwise
+    evaluation, not merely equal within rounding.
+
+    Parameters
+    ----------
+    xs
+        The points, shape ``(nPairs, 3)``.
+    x1, x2, x3
+        The nodes of each pair's triangle, in its local order, each of shape ``(nPairs, 3)``.
+
+    Returns
+    -------
+    tuple[numpy.ndarray, numpy.ndarray]
+        The barycentric weights of the closest points, shape ``(nPairs, 3)``, and the distances,
+        shape ``(nPairs,)``.
+    """
 
     e1 = x2 - x1
     e2 = x3 - x1
     r1 = xs - x1
+    r2 = xs - x2
+    r3 = xs - x3
 
-    d1 = e1.dot(r1)
-    d2 = e2.dot(r1)
-    if d1 <= 0.0 and d2 <= 0.0:
-        weights = np.array([1.0, 0.0, 0.0])  # vertex x1
-    else:
-        r2 = xs - x2
-        d3 = e1.dot(r2)
-        d4 = e2.dot(r2)
-        if d3 >= 0.0 and d4 <= d3:
-            weights = np.array([0.0, 1.0, 0.0])  # vertex x2
-        else:
-            r3 = xs - x3
-            d5 = e1.dot(r3)
-            d6 = e2.dot(r3)
-            vc = d1 * d4 - d3 * d2
-            va = d3 * d6 - d5 * d4
-            vb = d5 * d2 - d1 * d6
-            if d6 >= 0.0 and d5 <= d6:
-                weights = np.array([0.0, 0.0, 1.0])  # vertex x3
-            elif vc <= 0.0 and d1 >= 0.0 and d3 <= 0.0:
-                t = d1 / (d1 - d3)  # edge x1-x2
-                weights = np.array([1.0 - t, t, 0.0])
-            elif vb <= 0.0 and d2 >= 0.0 and d6 <= 0.0:
-                t = d2 / (d2 - d6)  # edge x1-x3
-                weights = np.array([1.0 - t, 0.0, t])
-            elif va <= 0.0 and (d4 - d3) >= 0.0 and (d5 - d6) >= 0.0:
-                t = (d4 - d3) / ((d4 - d3) + (d5 - d6))  # edge x2-x3
-                weights = np.array([0.0, 1.0 - t, t])
-            else:
-                denom = 1.0 / (va + vb + vc)  # interior
-                beta = vb * denom
-                gamma = vc * denom
-                weights = np.array([1.0 - beta - gamma, beta, gamma])
+    d1 = rowDot(e1, r1)
+    d2 = rowDot(e2, r1)
+    d3 = rowDot(e1, r2)
+    d4 = rowDot(e2, r2)
+    d5 = rowDot(e1, r3)
+    d6 = rowDot(e2, r3)
+    vc = d1 * d4 - d3 * d2
+    va = d3 * d6 - d5 * d4
+    vb = d5 * d2 - d1 * d6
 
-    closestPoint = weights[0] * x1 + weights[1] * x2 + weights[2] * x3
-    return weights, float(np.linalg.norm(xs - closestPoint))
+    weights = np.zeros((len(d1), 3))
+    unassigned = np.ones(len(d1), dtype=bool)
+
+    def claim(condition: np.ndarray) -> np.ndarray:
+        """The still unassigned pairs that satisfy ``condition``, which are assigned hereby."""
+        claimed = unassigned & condition
+        unassigned[claimed] = False
+        return claimed
+
+    # The regions in the order the scalar test checks them: a pair belongs to the first it satisfies.
+    weights[claim((d1 <= 0.0) & (d2 <= 0.0)), 0] = 1.0  # vertex x1
+    weights[claim((d3 >= 0.0) & (d4 <= d3)), 1] = 1.0  # vertex x2
+    weights[claim((d6 >= 0.0) & (d5 <= d6)), 2] = 1.0  # vertex x3
+
+    # A degenerate triangle divides by zero; as in a pairwise evaluation, the result is inf or NaN.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        edge = claim((vc <= 0.0) & (d1 >= 0.0) & (d3 <= 0.0))  # edge x1-x2
+        t = d1[edge] / (d1[edge] - d3[edge])
+        weights[edge, 0] = 1.0 - t
+        weights[edge, 1] = t
+
+        edge = claim((vb <= 0.0) & (d2 >= 0.0) & (d6 <= 0.0))  # edge x1-x3
+        t = d2[edge] / (d2[edge] - d6[edge])
+        weights[edge, 0] = 1.0 - t
+        weights[edge, 2] = t
+
+        d4MinusD3 = d4 - d3
+        d5MinusD6 = d5 - d6
+        edge = claim((va <= 0.0) & (d4MinusD3 >= 0.0) & (d5MinusD6 >= 0.0))  # edge x2-x3
+        t = d4MinusD3[edge] / (d4MinusD3[edge] + d5MinusD6[edge])
+        weights[edge, 1] = 1.0 - t
+        weights[edge, 2] = t
+
+        interior = unassigned
+        denom = 1.0 / (va[interior] + vb[interior] + vc[interior])
+        beta = vb[interior] * denom
+        gamma = vc[interior] * denom
+        weights[interior, 0] = 1.0 - beta - gamma
+        weights[interior, 1] = beta
+        weights[interior, 2] = gamma
+
+    closestPoints = weights[:, 0:1] * x1 + weights[:, 1:2] * x2 + weights[:, 2:3] * x3
+    toClosestPoints = xs - closestPoints
+    return weights, np.sqrt(rowDot(toClosestPoints, toClosestPoints))
 
 
 def line2ClosestPoint(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> tuple[np.ndarray, float]:
     """Closest point on the (closed) segment (x1, x2) to xs, as parametric weights (1-t, t) with
-    t clamped to [0, 1], plus the distance."""
+    t clamped to [0, 1], plus the distance.
+
+    The single-pair form of :func:`line2ClosestPoints`, which it calls, so that the two can never
+    disagree."""
+
+    weights, distances = line2ClosestPoints(xs[None], x1[None], x2[None])
+    return weights[0], float(distances[0])
+
+
+def line2ClosestPoints(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Closest points of many (point, segment) pairs at once, see :func:`line2ClosestPoint`.
+
+    Parameters
+    ----------
+    xs
+        The points, shape ``(nPairs, 2)``.
+    x1, x2
+        The nodes of each pair's segment, in its local order, each of shape ``(nPairs, 2)``.
+
+    Returns
+    -------
+    tuple[numpy.ndarray, numpy.ndarray]
+        The weights of the closest points, shape ``(nPairs, 2)``, and the distances, shape
+        ``(nPairs,)``.
+    """
 
     e = x2 - x1
-    t = np.clip((xs - x1).dot(e) / e.dot(e), 0.0, 1.0)
-    weights = np.array([1.0 - t, t])
-    closestPoint = weights[0] * x1 + weights[1] * x2
-    return weights, float(np.linalg.norm(xs - closestPoint))
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t = np.clip(rowDot(xs - x1, e) / rowDot(e, e), 0.0, 1.0)
+    weights = np.stack([1.0 - t, t], axis=1)
+    toClosestPoints = xs - (weights[:, 0:1] * x1 + weights[:, 1:2] * x2)
+    return weights, np.sqrt(rowDot(toClosestPoints, toClosestPoints))
 
 
 def tria3Projection(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray, x3: np.ndarray) -> tuple[float, float, bool]:
@@ -410,12 +499,122 @@ def closestFacetCandidates(queryPoints: np.ndarray, facetCoords: list, searchDis
     # radius above does: a tie sits precisely on the boundary.
     tolerance = 1.0 + 8.0 * np.finfo(float).eps
 
-    candidates = []
-    for p, ballCandidate in enumerate(ballCandidates):
-        indices = np.fromiter(ballCandidate, dtype=np.intp, count=len(ballCandidate))
-        centroidDistance = np.linalg.norm(centroids[indices] - queryPoints[p], axis=1)
-        surviving = indices[centroidDistance - radii[indices] <= nearestCentroidDistance[p] * tolerance]
-        surviving.sort()
-        candidates.append(surviving.tolist())
+    # Evaluated for all (point, ball candidate) pairs at once, with the same arithmetic per pair as
+    # one point at a time.
+    queryPoints = np.asarray(queryPoints)
+    pointIndices, facetIndices = candidatePairs(ballCandidates)
+    centroidDistances = np.linalg.norm(centroids[facetIndices] - queryPoints[pointIndices], axis=1)
+    surviving = centroidDistances - radii[facetIndices] <= nearestCentroidDistance[pointIndices] * tolerance
+    pointIndices, facetIndices = pointIndices[surviving], facetIndices[surviving]
 
-    return candidates
+    # Ascending facet index per point; the pairs stay grouped by point.
+    order = np.lexsort((facetIndices, pointIndices))
+    survivingFacets = facetIndices[order].tolist()
+    ends = np.cumsum(np.bincount(pointIndices, minlength=len(queryPoints))).tolist()
+    return [survivingFacets[first:end] for first, end in zip([0] + ends[:-1], ends)]
+
+
+def candidatePairs(candidatesPerPoint: list) -> tuple[np.ndarray, np.ndarray]:
+    """Flatten per-point candidate lists into (point, facet) index pairs.
+
+    Parameters
+    ----------
+    candidatesPerPoint
+        One list of candidate facet indices per point, as :func:`closestFacetCandidates` returns.
+
+    Returns
+    -------
+    tuple[numpy.ndarray, numpy.ndarray]
+        The point and the facet index of every pair, ordered by point and, per point, in the order
+        of its candidate list.
+    """
+
+    counts = np.fromiter(map(len, candidatesPerPoint), dtype=np.intp, count=len(candidatesPerPoint))
+    pointIndices = np.repeat(np.arange(len(candidatesPerPoint)), counts)
+    facetIndices = np.fromiter(
+        itertools.chain.from_iterable(candidatesPerPoint), dtype=np.intp, count=int(counts.sum())
+    )
+    return pointIndices, facetIndices
+
+
+def facetClosestPoints(points: np.ndarray, facetCoords: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Closest points of many (point, flat facet) pairs at once: :func:`tria3ClosestPoints` for
+    Tria3 facets in 3D, :func:`line2ClosestPoints` for Line2 facets in 2D.
+
+    Parameters
+    ----------
+    points
+        The points, shape ``(nPairs, nDim)``.
+    facetCoords
+        The node coordinates of each pair's facet, shape ``(nPairs, nNodesPerFacet, nDim)``.
+
+    Returns
+    -------
+    tuple[numpy.ndarray, numpy.ndarray]
+        The weights of the closest points, shape ``(nPairs, nNodesPerFacet)``, and the distances,
+        shape ``(nPairs,)``.
+    """
+
+    if facetCoords.shape[1:] == (3, 3):
+        return tria3ClosestPoints(points, facetCoords[:, 0], facetCoords[:, 1], facetCoords[:, 2])
+    if facetCoords.shape[1:] == (2, 2):
+        return line2ClosestPoints(points, facetCoords[:, 0], facetCoords[:, 1])
+    raise ValueError(f"facetClosestPoints: unsupported facet shape {facetCoords.shape[1:]}.")
+
+
+def closestFacets(
+    queryPoints: np.ndarray, facetCoords: list, candidatesPerPoint: list
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """For each query point, the closest of its candidate facets, the clamped closest point's
+    weights in it, and the distance.
+
+    The selection is exactly that of scanning each point's candidates in their order and keeping a
+    facet whenever its distance is strictly below the best so far, starting from infinity: the
+    first candidate at the minimal distance wins, and a point whose candidates are all at an
+    infinite or NaN distance (or that has none) gets no facet. All (point, candidate) pairs are
+    evaluated at once, see :func:`facetClosestPoints`, so the weights and distances are
+    bit-identical to those of the scan.
+
+    Parameters
+    ----------
+    queryPoints
+        The points, shape ``(nPoints, nDim)``.
+    facetCoords
+        Current coordinates of each facet's nodes, all of the same shape.
+    candidatesPerPoint
+        One list of candidate facet indices per point, see :func:`closestFacetCandidates`.
+
+    Returns
+    -------
+    tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]
+        Per point the closest facet's index, -1 if none; its weights, shape
+        ``(nPoints, nNodesPerFacet)``, zero if none; and the distance, infinite if none.
+    """
+
+    queryPoints = np.asarray(queryPoints, dtype=float)
+    nPoints = len(queryPoints)
+    closestFacet = np.full(nPoints, -1, dtype=np.intp)
+    closestDistance = np.full(nPoints, np.inf)
+    if not facetCoords:
+        return closestFacet, np.zeros((nPoints, 0)), closestDistance
+
+    stacked = np.asarray(facetCoords, dtype=float)  # (nFacets, nNodesPerFacet, nDim)
+    closestWeights = np.zeros((nPoints, stacked.shape[1]))
+
+    pointIndices, facetIndices = candidatePairs(candidatesPerPoint)
+    weights, distances = facetClosestPoints(queryPoints[pointIndices], stacked[facetIndices])
+
+    # The scan's strict "<" against a best that starts at infinity never accepts an infinite or a
+    # NaN distance, and among equal distances keeps the first.
+    acceptable = distances < np.inf
+    pairs = np.flatnonzero(acceptable)
+    if len(pairs) == 0:
+        return closestFacet, closestWeights, closestDistance
+    np.minimum.at(closestDistance, pointIndices[pairs], distances[pairs])
+    pairs = pairs[distances[pairs] == closestDistance[pointIndices[pairs]]]
+    # Pairs are ordered by point, and per point in candidate order: keep each point's first.
+    pairs = pairs[np.r_[True, pointIndices[pairs[1:]] != pointIndices[pairs[:-1]]]]
+
+    closestFacet[pointIndices[pairs]] = facetIndices[pairs]
+    closestWeights[pointIndices[pairs]] = weights[pairs]
+    return closestFacet, closestWeights, closestDistance

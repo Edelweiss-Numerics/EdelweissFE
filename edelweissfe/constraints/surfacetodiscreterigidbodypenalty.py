@@ -57,8 +57,10 @@ from edelweissfe.rigidbodies.discreterigidbody import DiscreteRigidBody
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.facetcontactgeometry import (
+    candidatePairs,
     closestFacetCandidates,
-    tria3ClosestPoint,
+    facetClosestPoints,
+    rowDot,
 )
 from edelweissfe.utils.rotations import skewMatrix
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
@@ -369,35 +371,59 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         allVertices = self._rigidTriangles.reshape(-1, 3)
         equalDistanceTolerance = 1e-6 * np.linalg.norm(allVertices.max(axis=0) - allVertices.min(axis=0))
 
+        # All (point, candidate) pairs are evaluated at once; only the selection below, which depends
+        # on the best candidate so far, is a scan -- over the candidate ranks, for all points at once.
+        # Every quantity is formed as in a pair-by-pair evaluation, and the scan visits each point's
+        # candidates in their order, so the choice is bit-identical to a pair-by-pair scan.
+        pointIndices, triangleIndices = candidatePairs(candidatesPerPoint)
+        pairPoints = bodyFramePoints[pointIndices]
+        pairTriangles = self._rigidTriangles[triangleIndices]
+        signedDistancesToPlane = rowDot(self._rigidTriangleNormals[triangleIndices], pairPoints - pairTriangles[:, 0])
+        if self.searchDistance is not None:
+            inRange = ~(signedDistancesToPlane < -self.searchDistance)
+            pointIndices, triangleIndices = pointIndices[inRange], triangleIndices[inRange]
+            pairPoints, pairTriangles = pairPoints[inRange], pairTriangles[inRange]
+            signedDistancesToPlane = signedDistancesToPlane[inRange]
+        _, distances = facetClosestPoints(pairPoints, pairTriangles)
+
+        nPoints = len(bodyFramePoints)
+        closestTriangle = np.full(nPoints, -1, dtype=np.intp)
+        closestDistance = np.full(nPoints, np.inf)
+        closestSignedDistanceToPlane = np.full(nPoints, -np.inf)
+
+        # The rank of each pair among its point's candidates; pairs are ordered by point, then rank.
+        pairsPerPoint = np.bincount(pointIndices, minlength=nPoints)
+        firstPairOfPoint = np.cumsum(pairsPerPoint) - pairsPerPoint
+        ranks = np.arange(len(pointIndices)) - firstPairOfPoint[pointIndices]
+        pairsByRank = np.argsort(ranks, kind="stable")
+        rankBoundaries = np.searchsorted(ranks[pairsByRank], np.arange(ranks.max(initial=-1) + 2))
+
+        for first, end in zip(rankBoundaries[:-1], rankBoundaries[1:]):
+            pairs = pairsByRank[first:end]  # at most one per point
+            p = pointIndices[pairs]
+            distance = distances[pairs]
+            signedDistanceToPlane = signedDistancesToPlane[pairs]
+            isCloser = distance < closestDistance[p] - equalDistanceTolerance
+            isEquallyCloseButInFront = (distance <= closestDistance[p] + equalDistanceTolerance) & (
+                signedDistanceToPlane > closestSignedDistanceToPlane[p]
+            )
+            accepted = isCloser | isEquallyCloseButInFront
+            p, pairs = p[accepted], pairs[accepted]
+            closestTriangle[p] = triangleIndices[pairs]
+            closestDistance[p] = distances[pairs]
+            closestSignedDistanceToPlane[p] = signedDistancesToPlane[pairs]
+
+        inContactRange = closestTriangle >= 0
+        if self.searchDistance is not None:
+            inContactRange &= ~(closestDistance > self.searchDistance)
+
         self._frozenBodyNormals[:] = 0.0
         self._frozenPlaneOffsets[:] = 0.0
-        for p, candidates in enumerate(candidatesPerPoint):
-            closestTriangle = None
-            closestDistance = np.inf
-            closestSignedDistanceToPlane = -np.inf
-            for t in candidates:
-                triangle = self._rigidTriangles[t]
-                signedDistanceToPlane = self._rigidTriangleNormals[t] @ (bodyFramePoints[p] - triangle[0])
-                if self.searchDistance is not None and signedDistanceToPlane < -self.searchDistance:
-                    continue
-                _, distance = tria3ClosestPoint(bodyFramePoints[p], *triangle)
-                isCloser = distance < closestDistance - equalDistanceTolerance
-                isEquallyCloseButInFront = (
-                    distance <= closestDistance + equalDistanceTolerance
-                    and signedDistanceToPlane > closestSignedDistanceToPlane
-                )
-                if isCloser or isEquallyCloseButInFront:
-                    closestTriangle, closestDistance = t, distance
-                    closestSignedDistanceToPlane = signedDistanceToPlane
-
-            if closestTriangle is None:
-                continue
-            if self.searchDistance is not None and closestDistance > self.searchDistance:
-                continue
-
-            normal = self._rigidTriangleNormals[closestTriangle]
-            self._frozenBodyNormals[p] = normal
-            self._frozenPlaneOffsets[p] = normal @ (self._rigidTriangles[closestTriangle][0] - rpReferencePosition)
+        normals = self._rigidTriangleNormals[closestTriangle[inContactRange]]
+        self._frozenBodyNormals[inContactRange] = normals
+        self._frozenPlaneOffsets[inContactRange] = rowDot(
+            normals, self._rigidTriangles[closestTriangle[inContactRange], 0] - rpReferencePosition
+        )
 
     def _searchLayout(self) -> dict[str, np.ndarray]:
         # The rigid body's triangles are fixed by its geometry file, so their number identifies them.

@@ -52,11 +52,10 @@ from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.facetcontactgeometry import (
     closestFacetCandidates,
+    closestFacets,
     facetNormalAndMeasure,
-    line2ClosestPoint,
     line2GapGradientHessian,
     line2Projection,
-    tria3ClosestPoint,
     tria3GapGradientHessian,
     tria3Projection,
 )
@@ -498,19 +497,13 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             # (interior/edges/vertices) is truly closest -- no dead zone at facet seams, and the
             # clamped weights are non-negative by construction. Facet, weights, and normal are
             # frozen for the whole increment, making the gap linear in the displacement DOFs.
-            closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
             nSlavesWithDiscardedHistory = 0
             candidatesPerSlave = closestFacetCandidates(slaveCoords, facetCoords, self.searchDistance)
+            closestFacet, closestWeights, closestDistance = closestFacets(slaveCoords, facetCoords, candidatesPerSlave)
             for s in range(self.nSlaves):
-                bestDistance = np.inf
-                bestFacet = None
-                bestWeights = None
-                for i in candidatesPerSlave[s]:
-                    weights, distance = closestPointFunction(slaveCoords[s], *facetCoords[i])
-                    if distance < bestDistance:
-                        bestDistance, bestFacet, bestWeights = distance, i, weights
+                bestFacet, bestWeights, bestDistance = int(closestFacet[s]), closestWeights[s], closestDistance[s]
 
-                if bestFacet is not None and (self.searchDistance is None or bestDistance <= self.searchDistance):
+                if bestFacet >= 0 and (self.searchDistance is None or bestDistance <= self.searchDistance):
                     newAssignment[s] = bestFacet
                     # The search and its clamping run on the true barycentric weights; only what is
                     # *stored* -- hence what distributes the force and enters the gap gradient -- is

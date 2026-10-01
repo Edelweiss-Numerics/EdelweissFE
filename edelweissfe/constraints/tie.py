@@ -39,7 +39,7 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.facetcontactgeometry import line2ClosestPoint, tria3ClosestPoint
+from edelweissfe.utils.facetcontactgeometry import closestFacets, facetClosestPoints
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
@@ -303,7 +303,6 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
 
         slaveNodes = list(dict.fromkeys(node for el in slaveFacetElements for node in el.nodes))
 
-        closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
         masterFacetCoords = [np.array([n.coordinates for n in el.nodes]) for el in masterFacetElements]
 
         # Frozen at construction (see __init__) -- NOT recomputed from the current (possibly
@@ -329,29 +328,31 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
                 float(np.linalg.norm(coords - coords.mean(axis=0), axis=1).max()) for coords in masterFacetCoords
             )
 
+        # All slave nodes are projected at once. Snapping below moves only the node it ties, after its
+        # projection, so projecting first is the same as projecting each node right before it is tied.
+        slaveCoords = np.array([slaveNode.coordinates for slaveNode in slaveNodes], dtype=float).reshape(-1, self.nDim)
+        if masterFacetCoords and slaveNodes:
+            _, seedIndices = facetTree.query(slaveCoords, k=1)
+            _, seedDistances = facetClosestPoints(slaveCoords, np.asarray(masterFacetCoords)[seedIndices])
+            ballCandidates = facetTree.query_ball_point(slaveCoords, seedDistances + maxFacetRadius)
+            candidatesPerSlave = [
+                sorted(set(ballCandidate) | {int(seedIdx)})
+                for ballCandidate, seedIdx in zip(ballCandidates, seedIndices)
+            ]
+        else:
+            candidatesPerSlave = [[] for _ in slaveNodes]
+        closestFacet, closestWeights, closestDistance = closestFacets(
+            slaveCoords, masterFacetCoords, candidatesPerSlave
+        )
+
         tiedRecords = []
         untiedSlaveNodes = []
         self._snappedNodes = []
 
-        for slaveNode in slaveNodes:
-            bestWeights = None
-            bestFacetIdx = None
-            bestDistance = np.inf
+        for s, slaveNode in enumerate(slaveNodes):
+            bestFacetIdx, bestWeights, bestDistance = int(closestFacet[s]), closestWeights[s], closestDistance[s]
 
-            if masterFacetCoords:
-                xs = slaveNode.coordinates
-                _, seedIdx = facetTree.query(xs, k=1)
-                _, seedDistance = closestPointFunction(xs, *masterFacetCoords[int(seedIdx)])
-                candidates = set(facetTree.query_ball_point(xs, seedDistance + maxFacetRadius))
-                candidates.add(int(seedIdx))
-                for facetIdx in sorted(candidates):
-                    weights, distance = closestPointFunction(xs, *masterFacetCoords[facetIdx])
-                    if distance < bestDistance:
-                        bestDistance = distance
-                        bestWeights = weights
-                        bestFacetIdx = facetIdx
-
-            if bestFacetIdx is None or bestDistance > membershipTolerance:
+            if bestFacetIdx < 0 or bestDistance > membershipTolerance:
                 untiedSlaveNodes.append(slaveNode)
                 continue
 
