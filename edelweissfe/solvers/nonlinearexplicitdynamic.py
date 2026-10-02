@@ -128,7 +128,7 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.phenomena import carriesKineticEnergy, carriesLinearMomentum
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
+from edelweissfe.numerics.dofmanager import DofManager, DofVector
 from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.conservationchecks import (
@@ -138,7 +138,6 @@ from edelweissfe.solvers.base.conservationchecks import (
     linearMomentum,
 )
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
-from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
@@ -537,7 +536,7 @@ class NED(NonlinearSolverBase):
         # it, and no velocity state exists yet that would have to be carried onto new nodes.
         #
         # A resumed step continues with the checkpointed contact search.
-        self.updateTopologyAndConnectivity(model, step, resumed=step.restoredTimeIncrement() is not None)
+        self.updateTopologyAndConnectivity(model, step, model.time, resumed=step.restoredTimeIncrement() is not None)
 
         theSystem = self.buildEquationSystem(model, step)
 
@@ -720,7 +719,9 @@ class NED(NonlinearSolverBase):
                             np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
                         )
 
-                        meshChanged, connectivityChanged = self.updateTopologyAndConnectivity(model, step)
+                        topologyUpdate = self.updateTopologyAndConnectivity(model, step, model.time)
+                        meshChanged = topologyUpdate.topologyChanged or topologyUpdate.meshDependentsRefreshed
+                        connectivityChanged = topologyUpdate.constraintConnectivityChanged
 
                         if meshChanged or connectivityChanged:
                             # Only a mesh change needs a system built afresh. A change of the contact
@@ -936,7 +937,7 @@ class NED(NonlinearSolverBase):
         P[:] = 0.0
         P, psi = self.computeElements(elements, U_n, dU, P, timeStep)
         P[:] = -P[:]
-        P = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_n, P, timeStep)
+        P, _ = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_n, P, None, timeStep)
         P = self.assembleConstraintForces(model.constraints, U_n, dU, P, timeStep)
 
         # fold the forces acting on slave DOFs onto their masters (action-reaction through the
@@ -1072,91 +1073,6 @@ class NED(NonlinearSolverBase):
 
         return U_n, V, P
 
-    def computeDistributedLoads(
-        self,
-        distributedLoads: list[StepActionBase],
-        U_np: DofVector,
-        PExt: DofVector,
-        timeStep: TimeStep,
-    ) -> DofVector:
-        """Loop over all distributed loads acting on elements, and evaluate them.
-        Assembles into the global external load vector.
-
-        Parameters
-        ----------
-        distributedLoads
-            The list of distributed loads.
-        U_np
-            The current solution vector.
-        PExt
-            The external load vector to be augmented.
-        timeStep
-            The current time step.
-
-        Returns
-        -------
-        DofVector
-            The augmented load vector.
-        """
-
-        time = timeStep.totalTime
-        dT = timeStep.timeIncrement
-
-        for dLoad in distributedLoads:
-            load = dLoad.getCurrentLoad(timeStep)
-            for faceID, elementSet in dLoad.surface.items():
-                for el in elementSet:
-                    Pe = np.zeros(el.nDof)
-                    Ke = np.zeros((el.nDof, el.nDof)).ravel()
-                    el.computeDistributedLoad(dLoad.loadType, Pe, Ke, faceID, load, U_np[el], time, dT)
-
-                    PExt[el] += Pe
-
-        return PExt
-
-    @performancetiming.timeit("body forces")
-    def computeBodyForces(
-        self,
-        bodyForces: list[StepActionBase],
-        U_np: DofVector,
-        PExt: DofVector,
-        timeStep: TimeStep,
-    ) -> DofVector:
-        """Loop over all body forces loads acting on elements, and evaluate them.
-        Assembles into the global external load vector and the system matrix.
-
-        Parameters
-        ----------
-        distributedLoads
-            The list of distributed loads.
-        U_np
-            The current solution vector.
-        PExt
-            The external load vector to be augmented.
-        increment
-            The increment.
-
-        Returns
-        -------
-        tuple[DofVector,VIJSystemMatrix]
-            The augmented load vector and system matrix.
-        """
-
-        time = timeStep.totalTime
-        dT = timeStep.timeIncrement
-
-        for bForce in bodyForces:
-            force = bForce.getCurrentLoad(timeStep)
-            for el in bForce.elementSet:
-                Pe = np.zeros(el.nDof)
-                Ke = np.zeros((el.nDof, el.nDof)).ravel()
-
-                el.computeBodyForce(Pe, Ke, force, U_np[el], time, dT)
-
-                PExt[el] += Pe
-
-        return PExt
-
     @performancetiming.timeit("elements")
     def computeElements(
         self,
@@ -1201,48 +1117,6 @@ class NED(NonlinearSolverBase):
             P[el] += Pe
 
         return P, psi
-
-    @performancetiming.timeit("assemble loads")
-    def assembleLoads(
-        self,
-        nodeForces: list[StepActionBase],
-        distributedLoads: list[StepActionBase],
-        bodyForces: list[StepActionBase],
-        U_np: DofVector,
-        PExt: DofVector,
-        timeStep: TimeStep,
-    ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Assemble all loads into a right hand side vector.
-
-        Parameters
-        ----------
-        nodeForces
-            The list of concentrated (nodal) loads.
-        distributedLoads
-            The list of distributed (surface) loads.
-        bodyForces
-            The list of body (volumetric) loads.
-        U_np
-            The current solution vector.
-        PExt
-            The external load vector.
-        timeStep
-            The current time step.
-
-        Returns
-        -------
-        tuple[DofVector,VIJSystemMatrix]
-            - The augmented external load vector.
-            - The augmented system matrix.
-        """
-        for cLoad in nodeForces:
-            PExt[
-                self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[cLoad.field][cLoad.nodeSet]
-            ] += cLoad.getCurrentLoad(timeStep).flatten()
-        PExt = self.computeDistributedLoads(distributedLoads, U_np, PExt, timeStep)
-        PExt = self.computeBodyForces(bodyForces, U_np, PExt, timeStep)
-
-        return PExt
 
     def validateModelCapabilities(self, model: FEModel):
         """Refuse the model features this solver cannot integrate, on top of the base checks.
@@ -1375,46 +1249,6 @@ class NED(NonlinearSolverBase):
 
         for variable in model.scalarVariables.values():
             variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
-
-    @performancetiming.timeit("topology update")
-    def updateTopologyAndConnectivity(self, model: FEModel, step, resumed: bool = False) -> tuple[bool, bool]:
-        """Run the topology update, then let every mesh-dependent consumer catch up on it.
-
-        The same two-phase sequence the implicit solver runs at the start of each of its increments
-        (see :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveStep`): the modifiers plan
-        and apply to a fixed point inside one topology window, then the pure readers of a settled
-        model -- surface facets, tie and contact connectivity -- catch up, once, on the net change.
-        Both sweeps are materialised rather than short-circuited: neither may be skipped because the
-        other already reported a change.
-
-        Parameters
-        ----------
-        model
-            The model tree.
-        step
-            The step being solved.
-        resumed
-            First update of a resumed step: constraints call
-            :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.resumeConnectivity`.
-
-        Returns
-        -------
-        tuple[bool, bool]
-            Whether the mesh changed (a topology decision or a refreshed mesh-dependent consumer),
-            and whether a constraint's DOF footprint changed.
-        """
-
-        modelHasChanged = model.updateTopology(step, model.time)
-
-        refreshed = model.refreshMeshDependents()
-        ticked = any(
-            [
-                c.resumeConnectivity(model) if resumed else c.updateConnectivity(model)
-                for c in model.constraints.values()
-            ]
-        )
-
-        return modelHasChanged or refreshed, ticked
 
     @performancetiming.timeit("constraint connectivity")
     def updateConstraintConnectivity(self, model: FEModel) -> bool:

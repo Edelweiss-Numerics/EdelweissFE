@@ -272,23 +272,11 @@ class NIST(NonlinearSolverBase):
 
         try:
             for timeStep in step.getTimeStep():
-                # NOTE: materialize the list before any() -- a generator would short-circuit at
-                # the first modifier/constraint reporting a change.
-                # Phase 1: model modifiers, run to a fixed point inside a topology window.
-                modelHasChanged = model.updateTopology(step, timeStep)
-
-                # Phase 2: mesh-dependent consumers catch up, once, on the net change. Order is
-                # irrelevant here -- they are pure readers of a settled model.
-                #
-                # NO topology window here. Since facet regeneration moved into its own model
-                # modifier, nothing in this phase may create or delete an element -- and the closed
-                # window enforces that rather than asking for it. A consumer that tries now raises
-                # instead of quietly mutating behind the pipeline's back.
-                #
-                # materialise both: neither sweep may be short-circuited by the other
-                refreshed = model.refreshMeshDependents()
-                ticked = any([constraint.updateConnectivity(model) for constraint in model.constraints.values()])
-                connectivityHasChanged = refreshed or ticked
+                topologyUpdate = self.updateTopologyAndConnectivity(model, step, timeStep)
+                modelHasChanged = topologyUpdate.topologyChanged
+                connectivityHasChanged = (
+                    topologyUpdate.meshDependentsRefreshed or topologyUpdate.constraintConnectivityChanged
+                )
 
                 # One separator, marking the start of this increment's block. Everything about this
                 # increment -- an equation-system rebuild if one is needed, the MPC/Dirichlet
@@ -800,99 +788,6 @@ class NIST(NonlinearSolverBase):
             The model tree.
         """
 
-    @performancetiming.timeit("distributed loads")
-    def computeDistributedLoads(
-        self,
-        distributedLoads: list[StepActionBase],
-        U_np: DofVector,
-        PExt: DofVector,
-        K: VIJSystemMatrix,
-        timeStep: TimeStep,
-    ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Loop over all distributed loads acting on elements, and evaluate them.
-        Assembles into the global external load vector and the system matrix.
-
-        Parameters
-        ----------
-        distributedLoads
-            The list of distributed loads.
-        U_np
-            The current solution vector.
-        PExt
-            The external load vector to be augmented.
-        K
-            The system matrix to be augmented.
-        timeStep
-            The current time step.
-
-        Returns
-        -------
-        tuple[DofVector,VIJSystemMatrix]
-            The augmented load vector and system matrix.
-        """
-
-        time = timeStep.totalTime
-        dT = timeStep.timeIncrement
-
-        for dLoad in distributedLoads:
-            load = dLoad.getCurrentLoad(timeStep)
-            for faceID, elementSet in dLoad.surface.items():
-                for el in elementSet:
-                    Ke = K[el]
-                    Pe = np.zeros(el.nDof)
-
-                    el.computeDistributedLoad(dLoad.loadType, Pe, Ke, faceID, load, U_np[el], time, dT)
-
-                    PExt[el] += Pe
-
-        return PExt, K
-
-    @performancetiming.timeit("body forces")
-    def computeBodyForces(
-        self,
-        bodyForces: list[StepActionBase],
-        U_np: DofVector,
-        PExt: DofVector,
-        K: VIJSystemMatrix,
-        timeStep: TimeStep,
-    ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Loop over all body forces loads acting on elements, and evaluate them.
-        Assembles into the global external load vector and the system matrix.
-
-        Parameters
-        ----------
-        distributedLoads
-            The list of distributed loads.
-        U_np
-            The current solution vector.
-        PExt
-            The external load vector to be augmented.
-        K
-            The system matrix to be augmented.
-        increment
-            The increment.
-
-        Returns
-        -------
-        tuple[DofVector,VIJSystemMatrix]
-            The augmented load vector and system matrix.
-        """
-
-        time = timeStep.totalTime
-        dT = timeStep.timeIncrement
-
-        for bForce in bodyForces:
-            force = bForce.getCurrentLoad(timeStep)
-            for el in bForce.elementSet:
-                Pe = np.zeros(el.nDof)
-                Ke = K[el]
-
-                el.computeBodyForce(Pe, Ke, force, U_np[el], time, dT)
-
-                PExt[el] += Pe
-
-        return PExt, K
-
     @performancetiming.timeit("dirichlet K on CSR")
     def applyDirichletToStiffness(self, K: csr_matrix, dirichlets: list[StepActionBase], rhs=None) -> csr_matrix:
         """Impose the Dirichlet BCs on the system matrix -- and, given the right-hand side(s) ``rhs``
@@ -1032,50 +927,5 @@ class NIST(NonlinearSolverBase):
 
             # instead of PExt[constraint] += Pe, np.add.at allows for repeated indices
             np.add.at(PExt, PExt.entitiesInDofVector[constraint], Pc)
-
-        return PExt, K
-
-    @performancetiming.timeit("assemble loads")
-    def assembleLoads(
-        self,
-        nodeForces: list[StepActionBase],
-        distributedLoads: list[StepActionBase],
-        bodyForces: list[StepActionBase],
-        U_np: DofVector,
-        PExt: DofVector,
-        K: VIJSystemMatrix,
-        timeStep: TimeStep,
-    ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Assemble all loads into a right hand side vector.
-
-        Parameters
-        ----------
-        nodeForces
-            The list of concentrated (nodal) loads.
-        distributedLoads
-            The list of distributed (surface) loads.
-        bodyForces
-            The list of body (volumetric) loads.
-        U_np
-            The current solution vector.
-        PExt
-            The external load vector.
-        K
-            The system matrix.
-        timeStep
-            The current time step.
-
-        Returns
-        -------
-        tuple[DofVector,VIJSystemMatrix]
-            - The augmented external load vector.
-            - The augmented system matrix.
-        """
-        for cLoad in nodeForces:
-            PExt[
-                self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[cLoad.field][cLoad.nodeSet]
-            ] += cLoad.getCurrentLoad(timeStep).flatten()
-        PExt, K = self.computeDistributedLoads(distributedLoads, U_np, PExt, K, timeStep)
-        PExt, K = self.computeBodyForces(bodyForces, U_np, PExt, K, timeStep)
 
         return PExt, K
