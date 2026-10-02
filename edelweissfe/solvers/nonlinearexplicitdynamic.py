@@ -393,6 +393,10 @@ class NED(NonlinearSolverBase):
         #: reported no damping, which is what makes the one damped update rule below reduce
         #: exactly to the undamped central difference there.
         self._dampingRate = None
+        #: Half the damping rate on second-order DOFs, zero elsewhere; see solveIncrement.
+        self._halfDampingRate = None
+        #: 1.0 on second-order DOFs, 0.0 elsewhere; see solveIncrement.
+        self._secondOrderMask = None
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
         #: The per-topology-change conservation check of every field's lumped total, and the
@@ -907,23 +911,26 @@ class NED(NonlinearSolverBase):
                 V[dirichlet.constrainedDofIndices] = prescribedVelocity
                 prescribedVelocities.append((dirichlet.constrainedDofIndices, prescribedVelocity))
 
-            if self.ids_1st is not None:
-                V[self.ids_1st] = Minv[self.ids_1st] * P[self.ids_1st]
-            if self.ids_2nd is not None:
-                dtAverage = 0.5 * (timeStep.timeIncrement + prevTimeStep.timeIncrement)
+            # Second-order DOFs: central difference with mass-proportional damping,
+            # V = ((1 - h) V + Minv P dt) / (1 + h), h = alpha dt / 2: the rate alpha = C/M enters
+            # as one factor on each side rather than as an extra force evaluation, so a damped
+            # degree of freedom costs what an undamped one does. At alpha = 0 it is bit-identical to
+            # the undamped update, which is why there is no branch -- and why mechanical Rayleigh
+            # damping would need no code here. The damping is not optional for a hyperbolic
+            # non-local field: undamped, the transients minted at the start of the step and at every
+            # refinement never decay, and the damage variable follows every overshoot instead of the
+            # mean. Written on whole vectors: h and the mask are zero off the second-order DOFs,
+            # which leaves those velocities unchanged. First-order DOFs: V = Minv P (forward Euler).
+            dtAverage = 0.5 * (timeStep.timeIncrement + prevTimeStep.timeIncrement)
+            halfRateStep = self._halfDampingRate * dtAverage
+            forceOverMass = Minv.asPlainArray() * P.asPlainArray()
 
-                # Central difference with mass-proportional damping: the rate alpha = C/M enters
-                # as one factor on each side rather than as an extra force evaluation, so a damped
-                # degree of freedom costs what an undamped one does. At alpha = 0 it is
-                # bit-identical to the undamped update, which is why there is no branch -- and why
-                # mechanical Rayleigh damping would need no code here. The damping is not optional
-                # for a hyperbolic non-local field: undamped, the transients minted at the start of
-                # the step and at every refinement never decay, and the damage variable follows
-                # every overshoot instead of the mean.
-                halfRateStep = 0.5 * self._dampingRate[self.ids_2nd] * dtAverage
-                V[self.ids_2nd] = (
-                    (1.0 - halfRateStep) * V[self.ids_2nd] + Minv[self.ids_2nd] * P[self.ids_2nd] * dtAverage
-                ) / (1.0 + halfRateStep)
+            velocity = V.asPlainArray()
+            velocity *= 1.0 - halfRateStep
+            velocity += forceOverMass * (self._secondOrderMask * dtAverage)
+            velocity /= 1.0 + halfRateStep
+            if self.ids_1st is not None:
+                velocity[self.ids_1st] = forceOverMass[self.ids_1st]
 
             # A prescribed velocity is a boundary condition, not a solution, and both updates above
             # overwrote it: the damped one scales it by (1 - alpha dt/2)/(1 + alpha dt/2), the
@@ -1087,7 +1094,6 @@ class NED(NonlinearSolverBase):
 
         return U_n, V, P
 
-    @performancetiming.timeit("distributed loads")
     def computeDistributedLoads(
         self,
         distributedLoads: list[StepActionBase],
@@ -1808,6 +1814,12 @@ class NED(NonlinearSolverBase):
                 dampingRate=np.array(self._dampingRate),
                 mpcTransformation=self.mpcTransformation,
             )
+
+        # Per-DOF factors of the velocity update, so that it runs on whole vectors.
+        self._secondOrderMask = np.zeros(self._dampingRate.shape[0])
+        if self.ids_2nd is not None:
+            self._secondOrderMask[self.ids_2nd] = 1.0
+        self._halfDampingRate = 0.5 * np.asarray(self._dampingRate) * self._secondOrderMask
 
         U = self.theDofManager.constructDofVector()  # initialize displacement vector
         dU = self.theDofManager.constructDofVector()  # initialize displacement vector
