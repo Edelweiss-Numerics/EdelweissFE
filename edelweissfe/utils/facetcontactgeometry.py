@@ -199,9 +199,12 @@ def line2GapGradientHessian(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> t
 
 
 def rowDot(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Row-wise dot product over the last axis, accumulated left to right onto +0.0 -- the order in
-    which ``np.dot`` of two short vectors sums, so a row of the result is bit-identical to it, down to
-    the sign of a zero (a sum of negative zeros is +0.0 there)."""
+    """Row-wise dot product over the last axis, accumulated left to right onto +0.0, with a separate
+    multiply and add per term (so a sum of negative zeros is +0.0).
+
+    This fixes the rounding independently of the machine. ``np.dot`` does not: it calls the BLAS,
+    whose kernel is chosen for the CPU at run time, and on AVX-512 machines OpenBLAS sums even a
+    3-vector as a chain of fused multiply-adds. On other CPUs the two agree bit for bit."""
 
     dot = 0.0 + a[..., 0] * b[..., 0]
     for k in range(1, a.shape[-1]):
@@ -229,7 +232,8 @@ def tria3ClosestPoints(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray, x3: np.nd
     branch-by-branch scalar test would, and each pair is assigned the region the scalar test's first
     satisfied condition selects (a NaN, which satisfies no condition, falls through to the interior,
     as it does there). The weights and distances are therefore bit-identical to a pairwise
-    evaluation, not merely equal within rounding.
+    evaluation that forms its dot products the same way (see :func:`rowDot`), not merely equal
+    within rounding.
 
     Parameters
     ----------

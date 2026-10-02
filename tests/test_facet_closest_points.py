@@ -62,6 +62,20 @@ _stlFile = os.path.join(
 )
 
 
+def _dot(a, b):
+    """The dot product of two short vectors, summed left to right onto +0.0 with a separate multiply
+    and add per term -- the order the batched functions define (``rowDot``).
+
+    Not ``a.dot(b)``: NumPy hands that to the BLAS, whose kernel is chosen for the CPU at run time,
+    and on AVX-512 machines OpenBLAS sums it as a chain of fused multiply-adds, which rounds
+    differently. A reference built on it would make "bit-identical" depend on the machine."""
+
+    dot = 0.0 + a[0] * b[0]
+    for k in range(1, len(a)):
+        dot = dot + a[k] * b[k]
+    return dot
+
+
 def _tria3ClosestPointScalar(xs, x1, x2, x3):
     """The pair-by-pair region test, as it was before it was batched."""
 
@@ -69,20 +83,20 @@ def _tria3ClosestPointScalar(xs, x1, x2, x3):
     e2 = x3 - x1
     r1 = xs - x1
 
-    d1 = e1.dot(r1)
-    d2 = e2.dot(r1)
+    d1 = _dot(e1, r1)
+    d2 = _dot(e2, r1)
     if d1 <= 0.0 and d2 <= 0.0:
         weights = np.array([1.0, 0.0, 0.0])
     else:
         r2 = xs - x2
-        d3 = e1.dot(r2)
-        d4 = e2.dot(r2)
+        d3 = _dot(e1, r2)
+        d4 = _dot(e2, r2)
         if d3 >= 0.0 and d4 <= d3:
             weights = np.array([0.0, 1.0, 0.0])
         else:
             r3 = xs - x3
-            d5 = e1.dot(r3)
-            d6 = e2.dot(r3)
+            d5 = _dot(e1, r3)
+            d6 = _dot(e2, r3)
             vc = d1 * d4 - d3 * d2
             va = d3 * d6 - d5 * d4
             vb = d5 * d2 - d1 * d6
@@ -104,17 +118,19 @@ def _tria3ClosestPointScalar(xs, x1, x2, x3):
                 weights = np.array([1.0 - beta - gamma, beta, gamma])
 
     closestPoint = weights[0] * x1 + weights[1] * x2 + weights[2] * x3
-    return weights, float(np.linalg.norm(xs - closestPoint))
+    toClosestPoint = xs - closestPoint
+    return weights, float(np.sqrt(_dot(toClosestPoint, toClosestPoint)))
 
 
 def _line2ClosestPointScalar(xs, x1, x2):
     """The pair-by-pair segment projection, as it was before it was batched."""
 
     e = x2 - x1
-    t = np.clip((xs - x1).dot(e) / e.dot(e), 0.0, 1.0)
+    t = np.clip(_dot(xs - x1, e) / _dot(e, e), 0.0, 1.0)
     weights = np.array([1.0 - t, t])
     closestPoint = weights[0] * x1 + weights[1] * x2
-    return weights, float(np.linalg.norm(xs - closestPoint))
+    toClosestPoint = xs - closestPoint
+    return weights, float(np.sqrt(_dot(toClosestPoint, toClosestPoint)))
 
 
 def _closestFacetCandidatesScalar(queryPoints, facetCoords, searchDistance):
