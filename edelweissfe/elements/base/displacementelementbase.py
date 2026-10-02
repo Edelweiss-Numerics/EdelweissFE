@@ -66,8 +66,8 @@ class DisplacementElementBase(BaseElement):
         # Guard against being handed an element type belonging to a *different* formulation, e.g.
         # `DisplacementElement("CPE4TL", 1)`: `elLibrary` supplies quadrature data for both
         # formulations, so nothing else here would notice. The type -> class mapping is looked up
-        # in the `element` category of the registry.
-        if registry.lookup("element", elementType)[0] is not type(self):
+        # in the `element` category of the registry; a subclass of that class is accepted too.
+        if not isinstance(self, registry.lookup("element", elementType)[0]):
             raise Exception("Something went wrong with the element initialization!")
         self._elNumber = elNumber
         self._nNodes = properties["nNodes"]
@@ -383,11 +383,11 @@ class DisplacementElementBase(BaseElement):
         Returns
         -------
         np.ndarray
-            The element's qp coordinates.
+            The coordinates, one row per quadrature point: shape ``(nInt, nSpatialDimensions)``.
         """
 
         N = computeNOperator(self._xi, self._eta, self._zeta, self._nInt, self.nNodes, self.nSpatialDimensions)
-        return self._nodesCoordinates @ N
+        return N @ self._nodesCoordinates.T
 
     def setMaterial(self, material: type):
         """Assign a material.
