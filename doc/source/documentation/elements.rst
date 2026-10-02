@@ -58,6 +58,18 @@ The following optional Parameters are also included in the element type definiti
 - **N**     - (optional) regular integration, at the end of elementType.
 - **TL**    - use the total Lagrangian element, before integration type.
 
+Common base
+~~~~~~~~~~~
+
+Both elements below share everything that does not depend on the kinematics -- geometry and quadrature,
+material and quadrature-point state, loads, mass and result access -- in a common base class. Each
+element adds only how strain and stress follow from the nodal displacements.
+
+Relevant module: ``edelweissfe.elements.base.displacementelementbase``
+
+.. autoclass:: edelweissfe.elements.base.displacementelementbase.DisplacementElementBase
+   :members:
+
 Geometrically linear element
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
