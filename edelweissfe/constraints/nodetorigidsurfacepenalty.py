@@ -35,7 +35,10 @@ import numpy as np
 
 from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
-from edelweissfe.constraints.base.penaltylaw import validatedContactType
+from edelweissfe.constraints.base.penaltylaw import (
+    normalPenaltyForce,
+    validatedContactType,
+)
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
@@ -215,12 +218,10 @@ class Constraint(ConstraintBase, MeshDependent):
         active_indices = self.indices_component[active_mask]
         active_gaps = gap[active_mask]
 
-        if self.type == "linear":
-            force_magnitude = self.penalty * active_gaps
-            stiffness = self.penalty
-        elif self.type == "quadratic":
-            force_magnitude = 0.5 * self.penalty * active_gaps**2
-            stiffness = self.penalty * active_gaps
+        # active_gaps is the penetration, positive in contact; normalPenaltyForce takes the gap,
+        # negative in contact, and returns the (negative) normal force
+        normalForce, stiffness = normalPenaltyForce(self.type, self.penalty, -active_gaps)
+        force_magnitude = -normalForce
 
         PExt[active_indices] -= force_magnitude * self.direction
         K[active_indices, active_indices] += stiffness
