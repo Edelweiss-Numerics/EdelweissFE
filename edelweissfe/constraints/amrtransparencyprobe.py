@@ -70,7 +70,7 @@ class AmrTransparencyProbeSchema:
 class Constraint(ConstraintBase):
     """A zero-DOF constraint that caches a node set reference at construction time and checks,
     lazily at its own :meth:`updateConnectivity` tick, that the reference already reflects any
-    mesh refinement the model reports via :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyVersion`
+    mesh refinement the model reports via :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.version`
     -- without ever re-fetching the set from the model or registering as an observer.
 
     Parameters
@@ -100,7 +100,7 @@ class Constraint(ConstraintBase):
         self.name = name
         self._nodes = nSet
         self._initialNodeCount = len(self._nodes)
-        self._lastSeenTopologyVersion = model.topologyVersion
+        self._lastSeenTopologyVersion = model.topology.version
 
     @classmethod
     def fromConstraintDefinition(
@@ -126,15 +126,15 @@ class Constraint(ConstraintBase):
 
     def updateConnectivity(self, model: FEModel) -> bool:
         """Called once per increment, before the equation system is (re)built -- exactly the tick
-        at which a freshly refined mesh's ``topologyVersion`` has already advanced. Raises if the
+        at which a freshly refined mesh's ``model.topology.version`` has already advanced. Raises if the
         cached node set has not grown accordingly, i.e. if it is still the pre-refinement object
         (a stale reference) rather than the same, in-place-mutated one."""
-        if model.topologyVersion != self._lastSeenTopologyVersion:
-            self._lastSeenTopologyVersion = model.topologyVersion
+        if model.topology.version != self._lastSeenTopologyVersion:
+            self._lastSeenTopologyVersion = model.topology.version
             if len(self._nodes) <= self._initialNodeCount:
                 raise RuntimeError(
                     "AMR transparency probe failed: constraint '{:}' still sees {:} nodes (the "
-                    "construction-time count) after the model topologyVersion advanced -- the "
+                    "construction-time count) after the model topology version advanced -- the "
                     "cached NodeSet reference went stale.".format(self.name, self._initialNodeCount)
                 )
         return False

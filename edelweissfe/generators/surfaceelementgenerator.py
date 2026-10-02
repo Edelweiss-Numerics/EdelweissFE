@@ -442,7 +442,7 @@ def buildContactFacets(
     # old expression read the maximum *after* the stale facets above were deleted, so a rebuild
     # handed the dead facets' numbers straight back out -- making element numbering a function of
     # the deletion history, which a restart replay cannot reproduce. See
-    # FEModel.reserveElementNumbers.
+    # TopologyPipeline.reserveElementNumbers.
     newElements = {}
 
     for faceNumber, elementSet in surfaceDef.items():
@@ -481,7 +481,7 @@ def buildContactFacets(
                         f"{len(localIndices)} for element type '{sourceElement.ensightType}'."
                     )
 
-                (elNumber,) = model.reserveElementNumbers(1)
+                (elNumber,) = model.topology.reserveElementNumbers(1)
                 facetElement = facetClass(facetElementType, elNumber)
                 facetElement.setNodes(facetNodes)
                 facetElement.initializeElement()

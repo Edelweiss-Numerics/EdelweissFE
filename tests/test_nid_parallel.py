@@ -71,7 +71,7 @@ def test_parallel_reproduces_serial_under_live_refinement(tmp_path):
     parallelModel, _ = _run(tmp_path, "parallel", deck.replace("solver=NID,", "solver=NIDParallel,"))
 
     assert _hangingSlaveNodes(parallelModel) > 0, "no hanging node; the MPC path was not exercised"
-    assert len(parallelModel.topologyHistory) == len(serialModel.topologyHistory) == 2
+    assert len(parallelModel.topology.history) == len(serialModel.topology.history) == 2
     assert parallelModel.time == serialModel.time
 
     for serial, parallel, name in zip(_finalState(serialModel), _finalState(parallelModel), "UVA"):

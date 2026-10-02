@@ -87,7 +87,7 @@ class DiscreteRigidBody(RigidBody):
 
             # Element numbers come from the model allocator (topology pipeline), which removes the
             # label-collision risk the old max()+1 counter carried.
-            (el_num,) = model.reserveElementNumbers(1)
+            (el_num,) = model.topology.reserveElementNumbers(1)
             self.pointMassElement = PointMass(el_num, [self.rpNode], model, self.mass, self.inertia)
             model.createElement(self.pointMassElement)
 

@@ -344,8 +344,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
         self.name = name
         self.journal = journal
-        self._lastSeenTopologyVersion = model.topologyVersion
-        model.registerMeshDependent(self)
+        self._lastSeenTopologyVersion = model.topology.version
+        model.topology.registerMeshDependent(self)
 
         self._slaveSurfaceSetName = slaveSurface.name
         self._masterSurfaceSetName = masterSurface.name
@@ -482,7 +482,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         source solid elements) first, at this natural per-increment tick -- see
         :class:`~edelweissfe.models.meshdependent.MeshDependent`."""
 
-        # refreshed by FEModel.refreshMeshDependents; nothing extra to do at this tick
+        # refreshed by TopologyPipeline.refreshMeshDependents; nothing extra to do at this tick
 
         slaveCoords = currentNodeCoordinates(self.slaveNodes, model, self._referenceCoordsSlaves)
         facetCoords = [

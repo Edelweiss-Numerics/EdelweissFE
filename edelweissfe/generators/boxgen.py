@@ -158,7 +158,7 @@ class Generator(GeneratorBase):
             # grid (it is sliced into node sets further below) but never become model nodes.
             return testEl.nNodes == 8 or testEl.nNodes == 20 and sum(np.mod([ix, iy, iz], 2)) < 2
 
-        # Node labels come from the model's monotonic allocator (FEModel.reserveNodeNumbers), not
+        # Node labels come from the model's monotonic allocator (TopologyPipeline.reserveNodeNumbers), not
         # from max(model.nodes). Only the positions that carry an element node consume a label, so
         # the batch is sized by that count and the labels are exactly the ones handed out before.
         nElementNodes = sum(
@@ -170,7 +170,7 @@ class Generator(GeneratorBase):
         )
 
         nodes = []
-        currentNodeLabel = model.reserveNodeNumbers(nElementNodes).start
+        currentNodeLabel = model.topology.reserveNodeNumbers(nElementNodes).start
         for ix in range(nNodesX):
             for iy in range(nNodesY):
                 for iz in range(nNodesZ):
@@ -202,7 +202,7 @@ class Generator(GeneratorBase):
         # fmt: off
 
         elements = []
-        # Element numbers come from the model's monotonic allocator (FEModel.reserveElementNumbers),
+        # Element numbers come from the model's monotonic allocator (TopologyPipeline.reserveElementNumbers),
         # not from max(model.elements). Reserved one at a time so the count need not be predicted;
         # nothing else mints during this loop, so the numbers are consecutive exactly as before.
         for ix in range(nX):
@@ -343,7 +343,7 @@ class Generator(GeneratorBase):
                     # plotNodeList( nodeList )
 
                     # newEl = elType(options["elType"], nodeList, currentElementLabel)
-                    (currentElementLabel,) = model.reserveElementNumbers(1)
+                    (currentElementLabel,) = model.topology.reserveElementNumbers(1)
                     newEl = elType(configuration.elType, currentElementLabel)
                     newEl.setNodes(nodeList)
 

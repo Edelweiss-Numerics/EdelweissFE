@@ -29,10 +29,10 @@
 """The structured changeset describing *what* changed in a model mutation, as opposed to the bare
 :class:`~edelweissfe.models.modelchangeobserver.ModelChangeType` marker. A modifier (e.g. AMR)
 populates one from the delta it already computes; :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.notifyModelChanged`
-records it (bumping ``model.topologyVersion``) and passes it to any registered push observers.
+records it (bumping ``model.topology.version``) and passes it to any registered push observers.
 
-A pull-based consumer instead compares its own last-seen version against ``model.topologyVersion``
-at its own next tick and, on a mismatch, reconciles from ``model.changesSince(lastSeenVersion)`` --
+A pull-based consumer instead compares its own last-seen version against ``model.topology.version``
+at its own next tick and, on a mismatch, reconciles from ``model.topology.changesSince(lastSeenVersion)`` --
 a single :class:`ModelChange`, coalesced across every mutation it missed. Cheap ``touches...()``
 queries let it early-out when the change doesn't concern it, and ``parentToChildren``/``faceMap``
 let it patch only what changed instead of rebuilding from scratch.
@@ -47,7 +47,7 @@ from edelweissfe.models.modelchangeobserver import ModelChangeType
 @dataclass
 class TopologyRecord:
     """One applied model-modifier decision, as recorded in
-    :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyHistory`.
+    :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.history`.
 
     This is the authoritative record of how the model's topology came to be what it is -- not a
     debugging aid kept alongside one. A restart replays these through the modifier's own
@@ -59,7 +59,7 @@ class TopologyRecord:
     roundNumber: int  #: which round of the topology update it was applied in
     time: float  #: model time at which it was applied
     plan: dict  #: the decision, encoded by the modifier (see ModelModifierBase.encodePlan)
-    fingerprint: str = ""  #: model.topologyFingerprint() immediately after applying it
+    fingerprint: str = ""  #: model.topology.fingerprint() immediately after applying it
     #: summary fields, for the log and for forensics only -- never used to reconstruct anything
     nElementsAdded: int = 0
     nElementsRemoved: int = 0

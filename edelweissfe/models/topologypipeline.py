@@ -48,16 +48,16 @@ class TopologyPipeline:
 
     The model itself is the mesh and its data. This class is the machinery around changing it:
 
-    - the **topology window** (:meth:`topologyChanges`), the only scope in which elements and nodes
+    - the **topology window** (:meth:`changes`), the only scope in which elements and nodes
       may be created or removed;
     - the **number allocators** (:meth:`reserveElementNumbers`, :meth:`reserveNodeNumbers`), which
       make numbering a pure function of the creation order;
-    - the **fixed-point rounds** (:meth:`updateTopology`), in which every model modifier (e.g. AMR)
+    - the **fixed-point rounds** (:meth:`update`), in which every model modifier (e.g. AMR)
       plans and applies until none has anything left to do;
-    - the **change log** (:attr:`topologyVersion`, :meth:`changesSince`) and the registry of
+    - the **change log** (:attr:`version`, :meth:`changesSince`) and the registry of
       **mesh dependents** (:meth:`refreshMeshDependents`), from which ties and contact catch up;
     - the **history** of every applied decision, its **fingerprint**, and the **replay** of that
-      history on restart (:meth:`replayTopologyHistory`).
+      history on restart (:meth:`replayHistory`).
 
     Parameters
     ----------
@@ -72,30 +72,30 @@ class TopologyPipeline:
         #: Consumers that cache mesh-derived state; see :meth:`refreshMeshDependents`.
         self.meshDependents = []
         #: Bumped on every structural mutation; drives pull-based reconcile.
-        self.topologyVersion = 0
+        self.version = 0
         #: Recorded :class:`ModelChange` per mutation, newest last.
         self._changeLog = []
         #: High-water mark of the element number allocator; see :meth:`reserveElementNumbers`.
         self._nextElementNumber = 1
         #: High-water mark of the node number allocator; see :meth:`reserveNodeNumbers`.
         self._nextNodeNumber = 1
-        #: True only inside :meth:`topologyChanges`; see there.
+        #: True only inside :meth:`changes`; see there.
         self.isOpen = False
         #: Guard against a model modifier that keeps planning in response to its own output.
-        self.maxTopologyRounds = 16
-        #: Ordered record of every applied model-modifier decision; see :meth:`updateTopology`. This
+        self.maxRounds = 16
+        #: Ordered record of every applied model-modifier decision; see :meth:`update`. This
         #: IS the restart history -- a resumed run replays it rather than re-deciding.
-        self.topologyHistory = []
+        self.history = []
         #: Compare the replayed topology's fingerprint against the recorded one, once, after the whole
         #: history has been replayed. On by default: it is the difference between "the resumed run
-        #: diverged" and "it did not". See :meth:`replayTopologyHistory`.
-        self.verifyTopologyFingerprints = True
+        #: diverged" and "it did not". See :meth:`replayHistory`.
+        self.verifyFingerprints = True
         #: Additionally compute and compare a fingerprint after *every* replayed record, which turns
         #: "the resumed run diverged" into "it diverged HERE". Off by default: it costs one whole-mesh
         #: walk per record, so a long history replays in O(records x mesh) rather than O(mesh).
         #: Switch it on to locate a divergence the final check reported.
-        self.verifyTopologyFingerprintsPerRecord = False
-        #: True inside a :meth:`topologyChanges` window that defers the node-field bookkeeping.
+        self.verifyFingerprintsPerRecord = False
+        #: True inside a :meth:`changes` window that defers the node-field bookkeeping.
         self.isDeferringFieldBookkeeping = False
         self._deferredNodeFieldResizeJournal = None
         self._deferredFieldVariableLinkNodes = None
@@ -127,7 +127,7 @@ class TopologyPipeline:
         self._deferredFieldVariableLinkNodes = nodes
 
     @contextmanager
-    def topologyChanges(self, deferFieldBookkeeping: bool = False):
+    def changes(self, deferFieldBookkeeping: bool = False):
         """The only scope in which elements may be created or deleted.
 
         Opened once around model setup, and once per increment around the model modifiers. Outside
@@ -146,9 +146,9 @@ class TopologyPipeline:
             :meth:`~edelweissfe.models.femodel.FEModel._resizeNodeFieldsForNodes` and :meth:`~edelweissfe.models.femodel.FEModel._linkFieldVariableObjects` until this
             window closes, and run it exactly once then. Both are idempotent recomputations from the
             model's *current* nodes and elements -- neither one touches numbering, connectivity or
-            anything the :meth:`topologyFingerprint` covers -- so the state after one flush at the
+            anything the :meth:`fingerprint` covers -- so the state after one flush at the
             end equals the state after a flush per mutation; only the intermediate, immediately
-            overwritten field layouts are skipped. That is what :meth:`replayTopologyHistory` wants:
+            overwritten field layouts are skipped. That is what :meth:`replayHistory` wants:
             no increment is solved between two replayed records, so nothing consumes those layouts,
             and a flush per record makes a long replay O(records x mesh) instead of O(mesh). The
             live per-increment window does *not* defer -- the solver runs on the fields right after
@@ -173,7 +173,7 @@ class TopologyPipeline:
                 self._deferredFieldVariableLinkNodes = None
 
     def _flushDeferredFieldBookkeeping(self):
-        """Run the node-field bookkeeping postponed inside a deferring :meth:`topologyChanges`
+        """Run the node-field bookkeeping postponed inside a deferring :meth:`changes`
         window, in the order a mutator issues it: resize first, then relink -- relinking against a
         NodeField that does not yet hold every node's field variable raises."""
 
@@ -217,7 +217,7 @@ class TopologyPipeline:
 
         if not self.isOpen:
             raise TopologyError(
-                "element numbers may only be reserved during a topology change -- see FEModel.topologyChanges()"
+                "element numbers may only be reserved during a topology change -- see model.topology.changes()"
             )
         if count < 1:
             raise ValueError("cannot reserve {:} element numbers".format(count))
@@ -258,7 +258,7 @@ class TopologyPipeline:
 
         if not self.isOpen:
             raise TopologyError(
-                "node labels may only be reserved during a topology change -- see FEModel.topologyChanges()"
+                "node labels may only be reserved during a topology change -- see model.topology.changes()"
             )
         if count < 1:
             raise ValueError("cannot reserve {:} node labels".format(count))
@@ -323,7 +323,7 @@ class TopologyPipeline:
                         )
                     )
 
-    def updateTopology(self, step=None, timeStep: float = None) -> bool:
+    def update(self, step=None, timeStep: float = None) -> bool:
         """Run every model modifier to a fixed point, inside one topology window.
 
         Modifiers depend on each other -- refinement invalidates a tied surface's facets, a
@@ -344,18 +344,18 @@ class TopologyPipeline:
         Raises
         ------
         TopologyError
-            If the rounds do not settle within :attr:`maxTopologyRounds`, which means some modifier
+            If the rounds do not settle within :attr:`maxRounds`, which means some modifier
             keeps planning in response to its own output. The message names the offenders.
         """
 
         changed = False
-        with self.topologyChanges():
+        with self.changes():
             # Seeded with the version at the START of this update, not None: a modifier must see
             # what earlier modifiers did in the SAME round. Seeding with None meant a purely
             # reactive modifier (one that only acts on someone else's change) was handed None in
             # round 1 -- after the change it needed to see had already happened -- and then had its
             # version stamped, so round 2 showed nothing new either. It never reacted at all.
-            lastPlannedVersion = {name: self.topologyVersion for name in self._model.modelModifiers}
+            lastPlannedVersion = {name: self.version for name in self._model.modelModifiers}
             # Which modifier touched which element, over the WHOLE update rather than one round.
             # Two modifiers mutating one element is a conflict even when their declared domains are
             # disjoint -- e.g. one deleting what the other just created -- and the result depends on
@@ -369,14 +369,14 @@ class TopologyPipeline:
                 plannedThisRound = []
                 for name, modifier in self._model.modelModifiers.items():
                     change = self.changesSince(lastPlannedVersion[name])
-                    lastPlannedVersion[name] = self.topologyVersion
+                    lastPlannedVersion[name] = self.version
                     plan = modifier.plan(self._model, change, step, timeStep)
                     if plan is None:
                         continue
                     modelChange = modifier.apply(self._model, plan)
                     # A modifier may plan and then find nothing left to do. Recording that would
                     # rebuild the equation system for nothing, pay a topology fingerprint for
-                    # nothing, and let the no-op modifier burn through maxTopologyRounds and be
+                    # nothing, and let the no-op modifier burn through maxRounds and be
                     # named as the one that would not settle.
                     if modelChange is not None and modelChange.isEmpty:
                         continue
@@ -392,22 +392,22 @@ class TopologyPipeline:
                                         previousName, previousRound, name, roundNumber, elNumber
                                     )
                                 )
-                    self.recordTopologyChange(roundNumber, name, modifier, plan, modelChange)
+                    self.recordChange(roundNumber, name, modifier, plan, modelChange)
                     plannedThisRound.append(name)
                     changed = True
                 if not plannedThisRound:
                     break
-                if roundNumber >= self.maxTopologyRounds:
+                if roundNumber >= self.maxRounds:
                     raise TopologyError(
                         "model modifiers did not settle within {:} rounds; still planning in the "
                         "last round: {:}. A modifier must return None from plan() once the change "
                         "since its own last plan no longer touches its domain.".format(
-                            self.maxTopologyRounds, ", ".join(plannedThisRound)
+                            self.maxRounds, ", ".join(plannedThisRound)
                         )
                     )
         return changed
 
-    def topologyFingerprint(self) -> str:
+    def fingerprint(self) -> str:
         """A short digest of the model's topology *and its numbering*, for verifying that a restart
         replay reproduced the original run.
 
@@ -424,9 +424,9 @@ class TopologyPipeline:
         into "increment 471, round 2, modifier amr" -- a divergence you can bisect rather than hunt.
 
         Not cheap: it walks the whole mesh, measured at 0.188 s on 64k elements / 69k nodes. A live
-        run pays it once per *applied* modifier decision, in :meth:`recordTopologyChange`. A replay
-        pays it once for the whole history (:meth:`replayTopologyHistory` carries the recorded
-        digests forward and checks the final one), unless ``verifyTopologyFingerprintsPerRecord``
+        run pays it once per *applied* modifier decision, in :meth:`recordChange`. A replay
+        pays it once for the whole history (:meth:`replayHistory` carries the recorded
+        digests forward and checks the final one), unless ``verifyFingerprintsPerRecord``
         asks for the per-record walk to locate a divergence.
 
         Uses blake2b rather than :func:`hash`, whose string hashing is randomised per process and
@@ -453,14 +453,14 @@ class TopologyPipeline:
             digest.update(np.asarray(referenceCoordinates, dtype=float).tobytes())
         return digest.hexdigest()
 
-    def recordTopologyChange(
+    def recordChange(
         self, roundNumber: int, name: str, modifier, plan, modelChange, time: float = None, fingerprint: str = None
     ) -> TopologyRecord:
         """Register everything an applied decision produced: the replay record and the changeset.
 
         Two things are recorded here, deliberately in one place:
 
-        * an entry in :attr:`topologyHistory`, holding the plan in the modifier's own serializable
+        * an entry in :attr:`history`, holding the plan in the modifier's own serializable
           form plus the resulting topology fingerprint -- which is what lets a resumed run be
           checked round by round instead of only at the end;
         * the ``modelChange`` itself, via :meth:`notifyModelChanged`, so :meth:`changesSince` and
@@ -472,13 +472,13 @@ class TopologyPipeline:
         not call :meth:`notifyModelChanged` itself -- there is no second channel to keep in sync,
         and so no way to update one and forget the other.
 
-        Both callers of ``apply`` (the live :meth:`updateTopology` loop and
-        :meth:`replayTopologyHistory`) route through here, so a replayed run records the same
+        Both callers of ``apply`` (the live :meth:`update` loop and
+        :meth:`replayHistory`) route through here, so a replayed run records the same
         changesets in the same order as the run it replays.
 
-        Cost is one :meth:`topologyFingerprint` per *applied* decision -- not per iteration, but not
+        Cost is one :meth:`fingerprint` per *applied* decision -- not per iteration, but not
         free either: 0.188 s measured on 64k elements / 69k nodes -- unless the caller supplies the
-        fingerprint, which a replay does (see :meth:`replayTopologyHistory`).
+        fingerprint, which a replay does (see :meth:`replayHistory`).
 
         Parameters
         ----------
@@ -487,7 +487,7 @@ class TopologyPipeline:
             passes the recorded time instead, so a resumed run's history carries the times the
             decisions were originally made rather than the time it was resumed at.
         fingerprint
-            The digest to record. Defaults to :meth:`topologyFingerprint` of the model as it is
+            The digest to record. Defaults to :meth:`fingerprint` of the model as it is
             now, which is what a live run wants. A replay passes the digest the original run
             recorded, so the replayed history carries the digests that were verified rather than
             fresh ones that would launder a divergence into the next checkpoint.
@@ -501,15 +501,15 @@ class TopologyPipeline:
             roundNumber=roundNumber,
             time=float(self._model.time if time is None else time),
             plan=modifier.encodePlan(plan),
-            fingerprint=self.topologyFingerprint() if fingerprint is None else fingerprint,
+            fingerprint=self.fingerprint() if fingerprint is None else fingerprint,
             nElementsAdded=len(modelChange.addedElements) if modelChange is not None else 0,
             nElementsRemoved=len(modelChange.removedElements) if modelChange is not None else 0,
             nNodesAdded=len(modelChange.addedNodes) if modelChange is not None else 0,
         )
-        self.topologyHistory.append(record)
+        self.history.append(record)
         return record
 
-    def replayTopologyHistory(self, records, journal: Journal = None):
+    def replayHistory(self, records, journal: Journal = None):
         """Reconstruct the topology by re-applying recorded decisions, in order.
 
         This is the whole point of the plan/apply split: the modifier's :meth:`apply` runs here
@@ -518,9 +518,9 @@ class TopologyPipeline:
         had, and why a resumed run silently renumbered its elements.
 
         What a replay does *not* repeat per record is the whole-mesh work around ``apply`` whose
-        result is a pure function of the final mesh: the :meth:`topologyFingerprint` walk (the
+        result is a pure function of the final mesh: the :meth:`fingerprint` walk (the
         recorded digests are carried forward and the final one is checked) and the node-field
-        bookkeeping (deferred to the end of the window, see :meth:`topologyChanges`). A history of
+        bookkeeping (deferred to the end of the window, see :meth:`changes`). A history of
         a few hundred refinements on a mesh of tens of thousands of elements replayed in minutes
         otherwise, all of it spent re-deriving state that the next record, or :meth:`~edelweissfe.models.femodel.FEModel.readRestart`,
         overwrote right away.
@@ -536,14 +536,14 @@ class TopologyPipeline:
         ------
         TopologyError
             If the replayed topology's fingerprint differs from the one recorded with the last
-            record (when :attr:`verifyTopologyFingerprints`). With
-            :attr:`verifyTopologyFingerprintsPerRecord` every record is checked as it is replayed
+            record (when :attr:`verifyFingerprints`). With
+            :attr:`verifyFingerprintsPerRecord` every record is checked as it is replayed
             and the error names the first diverging one -- so a divergence is located rather than
             merely detected.
         """
 
-        perRecord = self.verifyTopologyFingerprints and self.verifyTopologyFingerprintsPerRecord
-        with self.topologyChanges(deferFieldBookkeeping=True):
+        perRecord = self.verifyFingerprints and self.verifyFingerprintsPerRecord
+        with self.changes(deferFieldBookkeeping=True):
             for index, record in enumerate(records):
                 modifier = self._model.modelModifiers.get(record.modifier)
                 if modifier is None:
@@ -556,7 +556,7 @@ class TopologyPipeline:
                 modelChange = modifier.apply(self._model, plan)
                 # Carry the recorded digest forward instead of recomputing it: a record without one
                 # (an older checkpoint) is the only case that still pays the walk.
-                replayed = self.recordTopologyChange(
+                replayed = self.recordChange(
                     record.roundNumber,
                     record.modifier,
                     modifier,
@@ -573,14 +573,14 @@ class TopologyPipeline:
                             index, len(records), record.modifier, record.roundNumber, record.time
                         )
                     )
-        if self.verifyTopologyFingerprints and not perRecord and records and records[-1].fingerprint:
-            if self.topologyFingerprint() != records[-1].fingerprint:
+        if self.verifyFingerprints and not perRecord and records and records[-1].fingerprint:
+            if self.fingerprint() != records[-1].fingerprint:
                 last = records[-1]
                 raise TopologyError(
                     "restart replay diverged: after replaying all {:} record(s) the topology does not "
                     "match the fingerprint recorded with the last one (modifier {!r}, round {:}, time "
                     "{:}). Some modifier's apply() is not a pure function of (model, plan); set "
-                    "verifyTopologyFingerprintsPerRecord=True to locate the first diverging "
+                    "model.topology.verifyFingerprintsPerRecord=True to locate the first diverging "
                     "record.".format(len(records), last.modifier, last.roundNumber, last.time)
                 )
         for name, modifier in self._model.modelModifiers.items():
@@ -611,7 +611,7 @@ class TopologyPipeline:
     def refreshMeshDependents(self) -> bool:
         """Let every registered mesh-dependent consumer catch up, once, after the topology update.
 
-        Phase 2 of the increment (see :meth:`updateTopology` for phase 1). Consumers are pure
+        Phase 2 of the increment (see :meth:`update` for phase 1). Consumers are pure
         readers here -- the topology window is closed -- so **their order does not matter** and no
         fixed-point iteration is needed: none of them can invalidate another's work.
 
@@ -630,11 +630,11 @@ class TopologyPipeline:
         return any([consumer.refreshIfMeshChanged(self._model) for consumer in self.meshDependents])
 
     def notifyModelChanged(self, changeType, change: ModelChange = None):
-        """Record a model mutation: bump :attr:`topologyVersion` and append the changeset, so that
+        """Record a model mutation: bump :attr:`version` and append the changeset, so that
         every :class:`~edelweissfe.models.meshdependent.MeshDependent` can catch up from
         :meth:`changesSince` at the end of the topology update.
 
-        **Model modifiers must not call this.** :meth:`recordTopologyChange` calls it for them, from
+        **Model modifiers must not call this.** :meth:`recordChange` calls it for them, from
         the :class:`~edelweissfe.models.modelchange.ModelChange` their ``apply`` returns; see there.
         It remains available for code that mutates the model outside the modifier pipeline.
 
@@ -650,17 +650,17 @@ class TopologyPipeline:
             (bare ``changeType`` marker only, e.g. for a modifier that hasn't adopted the changeset
             yet) is recorded instead.
         """
-        self.topologyVersion += 1
+        self.version += 1
         if change is None:
             change = ModelChange(kind=changeType)
-        change.version = self.topologyVersion
+        change.version = self.version
         self._changeLog.append(change)
 
     def changesSince(self, version: int) -> ModelChange:
         """The :class:`ModelChange` coalesced across every mutation recorded after ``version``, or
         ``None`` if the model hasn't changed since. A pull-based consumer compares its own
-        last-seen version against :attr:`topologyVersion` and, on a mismatch, reconciles from this,
-        then adopts the new :attr:`topologyVersion` as its own last-seen version."""
-        if version >= self.topologyVersion:
+        last-seen version against :attr:`version` and, on a mismatch, reconciles from this,
+        then adopts the new :attr:`version` as its own last-seen version."""
+        if version >= self.version:
             return None
         return coalesce([c for c in self._changeLog if c.version > version])

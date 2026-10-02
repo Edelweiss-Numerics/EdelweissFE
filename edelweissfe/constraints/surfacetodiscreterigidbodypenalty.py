@@ -222,8 +222,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self.rigidBody = rigidBody
         self.rpNode = rigidBody.rpNode
         self._slaveSurfaceSetName = slaveSurface.name
-        self._lastSeenTopologyVersion = model.topologyVersion
-        model.registerMeshDependent(self)
+        self._lastSeenTopologyVersion = model.topology.version
+        model.topology.registerMeshDependent(self)
 
         self.nDim = 3
         self.rpDofCount = 6

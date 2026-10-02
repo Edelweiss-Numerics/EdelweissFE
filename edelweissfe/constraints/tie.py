@@ -255,9 +255,9 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         # Registration is what gets a tie refreshed at all: multi-point constraints live in
         # model.multiPointConstraints, which no per-increment sweep iterates, and
         # getMultiPointConstraints() is called from inside the DofManager/VIJSystemMatrix rebuild --
-        # too late to safely swap in newly regenerated facet elements. FEModel.refreshMeshDependents
+        # too late to safely swap in newly regenerated facet elements. TopologyPipeline.refreshMeshDependents
         # runs after the model modifiers have settled and strictly before that rebuild decision.
-        model.registerMeshDependent(self)
+        model.topology.registerMeshDependent(self)
 
     @classmethod
     def fromConstraintDefinition(cls, name: str, definition: dict, model: FEModel, journal: Journal) -> "Constraint":
@@ -451,7 +451,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
             return False
 
         # The facets themselves were already regenerated, in the topology-update phase, by the
-        # implicit surfaceFacets modifier (see FEModel.ensureSurfaceFacetModifier). This constraint
+        # implicit surfaceFacets modifier (see TopologyPipeline.ensureSurfaceFacetModifier). This constraint
         # is a pure reader: it re-projects onto whatever now tiles the surface.
         slaveFacetElements = list(model.elementSets[self._slaveSurfaceSetName])
         masterFacetElements = list(model.elementSets[self._masterSurfaceSetName])

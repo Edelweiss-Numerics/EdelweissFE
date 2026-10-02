@@ -78,7 +78,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     supportsMPC = False
 
     #: Whether this solver runs the topology update (e.g. h-adaptivity) at all. Subclasses that
-    #: call model.updateTopology(...) anywhere in solveStep must set this to True; without it, a
+    #: call model.topology.update(...) anywhere in solveStep must set this to True; without it, a
     #: modifier silently never runs and the model never adapts. Setting it does not promise the
     #: update runs every increment: a solver that runs it once, before its increment loop, sets this
     #: and then refuses the modifiers that would need it later -- see
@@ -162,7 +162,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         """Run the topology update, then let every mesh-dependent consumer catch up on it.
 
         Two phases. First, the model modifiers plan and apply to a fixed point inside one topology
-        window (:meth:`~edelweissfe.models.femodel.FEModel.updateTopology`). Second, the pure
+        window (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`). Second, the pure
         readers of the settled model -- tie and contact surfaces, constraint connectivity -- catch
         up, once, on the net change. They may not create or delete elements: the topology window
         is closed by then, so an attempt raises.
@@ -189,8 +189,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             What changed; the solver decides from it whether to rebuild its equation system.
         """
 
-        topologyChanged = model.updateTopology(step, timeStep)
-        meshDependentsRefreshed = model.refreshMeshDependents()
+        topologyChanged = model.topology.update(step, timeStep)
+        meshDependentsRefreshed = model.topology.refreshMeshDependents()
         constraintConnectivityChanged = any(
             [
                 constraint.resumeConnectivity(model) if resumed else constraint.updateConnectivity(model)

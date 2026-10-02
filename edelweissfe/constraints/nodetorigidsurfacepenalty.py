@@ -142,8 +142,8 @@ class Constraint(ConstraintBase, MeshDependent):
         self.type = validatedContactType(configuration.contactType)
 
         self._nSetName = nSet.name
-        self._lastSeenTopologyVersion = model.topologyVersion
-        model.registerMeshDependent(self)
+        self._lastSeenTopologyVersion = model.topology.version
+        model.topology.registerMeshDependent(self)
         self._nodes = nSet
         self._rebuildFromNodes()
 
@@ -181,7 +181,7 @@ class Constraint(ConstraintBase, MeshDependent):
         return True
 
     def updateConnectivity(self, model: FEModel) -> bool:
-        # refreshed by FEModel.refreshMeshDependents; nothing extra to do at this tick
+        # refreshed by TopologyPipeline.refreshMeshDependents; nothing extra to do at this tick
         return False
 
     @property

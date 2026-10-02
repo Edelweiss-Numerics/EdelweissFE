@@ -72,7 +72,7 @@ class RestartError(Exception):
 
 class TopologyError(Exception):
     """An illegal attempt to change the model topology: creating or deleting an entity outside a
-    :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyChanges` window, or claiming an element
+    :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changes` window, or claiming an element
     number that is already in use."""
 
 

@@ -406,7 +406,7 @@ class NonlinearImplicitDynamic(NIST):
         #: resumed step, and consumed there exactly once -- the same staging the explicit solver
         #: uses for its external work.
         self._resumedFromCheckpoint = False
-        #: Length of ``model.topologyHistory`` when the current equation system was assembled.
+        #: Length of ``model.topology.history`` when the current equation system was assembled.
         #: A change in it is what distinguishes a rebuild caused by the mesh actually changing
         #: from one caused by a constraint re-reporting its connectivity; see
         #: :meth:`_updateNewmarkSystem`.
@@ -834,7 +834,7 @@ class NonlinearImplicitDynamic(NIST):
           manager too, and :meth:`solveStep` has already decided there whether that step starts cold
           (its own ``computeInitialAcceleration``/restart logic) -- re-deciding it here would
           override that decision with a different one, for every existing multi-step deck.
-        * a grown ``model.topologyHistory``: a rebuild triggered by a constraint re-reporting its
+        * a grown ``model.topology.history``: a rebuild triggered by a constraint re-reporting its
           connectivity (a contact candidate list, which can tick on any increment) has moved no
           node and interpolated nothing, so there is no stale acceleration to replace and no
           conservation statement to make. Restarting the acceleration of the whole model on it
@@ -861,7 +861,7 @@ class NonlinearImplicitDynamic(NIST):
 
         # Safe to advance unconditionally here: a topology change always rebuilds the manager, so
         # it can never be missed by an increment that returned above.
-        topologyRecords = len(model.topologyHistory)
+        topologyRecords = len(model.topology.history)
         topologyChanged = topologyRecords != self._topologyRecordsAtLastBuild
         self._topologyRecordsAtLastBuild = topologyRecords
 

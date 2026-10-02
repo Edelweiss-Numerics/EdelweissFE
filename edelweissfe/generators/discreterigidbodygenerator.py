@@ -276,9 +276,9 @@ def generateDiscreteRigidBodyFromMeshFile(
 
     # The surface nodes and the reference point below are labelled consecutively. Unless the
     # caller pins the first label explicitly, the labels come from the model's monotonic allocator
-    # (FEModel.reserveNodeNumbers) rather than from max(model.nodes).
+    # (TopologyPipeline.reserveNodeNumbers) rather than from max(model.nodes).
     rigidNodes = []
-    nodeLabel = start_label if start_label is not None else model.reserveNodeNumbers(len(points) + 1).start
+    nodeLabel = start_label if start_label is not None else model.topology.reserveNodeNumbers(len(points) + 1).start
     for point in points:
         node = Node(nodeLabel, point.copy())
         model.createNode(node)
@@ -301,7 +301,7 @@ def generateDiscreteRigidBodyFromMeshFile(
     if start_label is not None:
         # Caller-pinned labels bypass the allocator, so lift it above them; otherwise a later
         # allocation could hand out a label this body already occupies.
-        model.adoptSetupNodeNumbers()
+        model.topology.adoptSetupNodeNumbers()
 
     rpNodeSetName = f"{name}_rp"
     model.nodeSets[rpNodeSetName] = NodeSet(rpNodeSetName, [referencePoint])

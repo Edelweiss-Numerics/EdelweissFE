@@ -101,7 +101,7 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
             planned within the current topology update, or ``None`` on the first round. **Return
             ``None`` when it does not touch this modifier's domain** -- that is what lets the
             pipeline reach a fixed point instead of looping (see
-            :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.updateTopology`).
+            :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`).
         step
             The current step.
         timeStep
@@ -123,7 +123,7 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
         second implementation to drift apart from this one.
 
         Runs inside an open topology window (see
-        :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyChanges`), so it may create and delete
+        :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changes`), so it may create and delete
         elements -- through :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers` and
         :meth:`~edelweissfe.models.femodel.FEModel.createElement`, never by writing
         ``model.elements`` directly.
@@ -194,7 +194,7 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
         """Optional lifecycle hook called after an increment converges."""
 
     # getRestartData/setRestartData are gone. A modifier no longer serializes its own history, nor
-    # implements its own replay: FEModel records every applied plan in model.topologyHistory and
+    # implements its own replay: FEModel records every applied plan in model.topology.history and
     # replays it through this class's apply(). The previous arrangement had each modifier
     # reimplementing the mutation for the replay path, which is precisely why a resumed run could
     # rebuild a differently-numbered mesh -- two implementations of one mutation always drift.

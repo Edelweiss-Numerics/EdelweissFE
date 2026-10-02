@@ -75,9 +75,9 @@ def _modelWithSetupElements(*labels: int) -> FEModel:
 
 def test_reserved_numbers_are_consecutive_and_monotonic():
     model = _modelWithSetupElements()
-    with model.topologyChanges():
-        first = model.reserveElementNumbers(3)
-        second = model.reserveElementNumbers(2)
+    with model.topology.changes():
+        first = model.topology.reserveElementNumbers(3)
+        second = model.topology.reserveElementNumbers(2)
 
     assert list(first) == [1, 2, 3]
     assert list(second) == [4, 5]
@@ -89,12 +89,12 @@ def test_numbers_are_never_recycled_after_removal():
     have to reproduce that too."""
 
     model = _modelWithSetupElements()
-    with model.topologyChanges():
-        (number,) = model.reserveElementNumbers(1)
+    with model.topology.changes():
+        (number,) = model.topology.reserveElementNumbers(1)
         model.createElement(_StubElement(number))
         model.removeElement(number)
 
-        (afterRemoval,) = model.reserveElementNumbers(1)
+        (afterRemoval,) = model.topology.reserveElementNumbers(1)
 
     assert afterRemoval != number
     assert afterRemoval == number + 1
@@ -105,38 +105,38 @@ def test_allocator_ignores_the_current_maximum():
     not follow it down."""
 
     model = _modelWithSetupElements()
-    with model.topologyChanges():
-        numbers = model.reserveElementNumbers(4)
+    with model.topology.changes():
+        numbers = model.topology.reserveElementNumbers(4)
         for number in numbers:
             model.createElement(_StubElement(number))
         for number in numbers:
             model.removeElement(number)
 
         assert not model.elements  # max(model.elements, default=0) + 1 would restart at 1 here
-        (afterEmptying,) = model.reserveElementNumbers(1)
+        (afterEmptying,) = model.topology.reserveElementNumbers(1)
 
     assert afterEmptying == numbers[-1] + 1
 
 
 def test_adopt_setup_element_numbers_clears_the_base_mesh():
     model = _modelWithSetupElements(1, 2, 17)
-    model.adoptSetupElementNumbers()
+    model.topology.adoptSetupElementNumbers()
 
-    with model.topologyChanges():
-        (number,) = model.reserveElementNumbers(1)
+    with model.topology.changes():
+        (number,) = model.topology.reserveElementNumbers(1)
 
     assert number == 18
 
 
 def test_adopt_setup_element_numbers_never_lowers_the_mark():
     model = _modelWithSetupElements(1, 2)
-    with model.topologyChanges():
-        model.reserveElementNumbers(50)
+    with model.topology.changes():
+        model.topology.reserveElementNumbers(50)
 
-    model.adoptSetupElementNumbers()
+    model.topology.adoptSetupElementNumbers()
 
-    with model.topologyChanges():
-        (number,) = model.reserveElementNumbers(1)
+    with model.topology.changes():
+        (number,) = model.topology.reserveElementNumbers(1)
 
     assert number == 51
 
@@ -144,7 +144,7 @@ def test_adopt_setup_element_numbers_never_lowers_the_mark():
 def test_reserve_outside_a_topology_change_raises():
     model = _modelWithSetupElements()
     with pytest.raises(TopologyError, match="topology change"):
-        model.reserveElementNumbers(1)
+        model.topology.reserveElementNumbers(1)
 
 
 def test_create_outside_a_topology_change_raises():
@@ -161,7 +161,7 @@ def test_remove_outside_a_topology_change_raises():
 
 def test_creating_a_taken_number_raises():
     model = _modelWithSetupElements(1)
-    with model.topologyChanges():
+    with model.topology.changes():
         with pytest.raises(TopologyError, match="already taken"):
             model.createElement(_StubElement(1))
 
@@ -171,23 +171,23 @@ def test_windows_nest_without_closing_early():
     scope must not close the outer one."""
 
     model = _modelWithSetupElements()
-    with model.topologyChanges():
-        with model.topologyChanges():
-            model.reserveElementNumbers(1)
-        model.reserveElementNumbers(1)  # outer window still open
+    with model.topology.changes():
+        with model.topology.changes():
+            model.topology.reserveElementNumbers(1)
+        model.topology.reserveElementNumbers(1)  # outer window still open
 
     with pytest.raises(TopologyError):
-        model.reserveElementNumbers(1)
+        model.topology.reserveElementNumbers(1)
 
 
 def test_window_closes_on_exception():
     model = _modelWithSetupElements()
     with pytest.raises(RuntimeError):
-        with model.topologyChanges():
+        with model.topology.changes():
             raise RuntimeError("modifier blew up")
 
     with pytest.raises(TopologyError):
-        model.reserveElementNumbers(1)
+        model.topology.reserveElementNumbers(1)
 
 
 def test_parsed_element_set_keeps_its_declaration_order():
@@ -265,9 +265,9 @@ class _StubModifier:
 
     def apply(self, model, plan):
         # A modifier reports what it did in exactly one way: by returning the change. Notifying here
-        # as well would record it twice; see FEModel.recordTopologyChange.
+        # as well would record it twice; see TopologyPipeline.recordChange.
         self._log.append(plan["who"])
-        (number,) = model.reserveElementNumbers(1)
+        (number,) = model.topology.reserveElementNumbers(1)
         model.createElement(_StubElement(number))
         change = ModelChange(kind=_MCT.REFINEMENT)
         change.addedElements.add(number)
@@ -286,7 +286,7 @@ def test_a_single_round_suffices_when_nobody_reacts():
         amr=_StubModifier("amr", 1, log),
         printer=_StubModifier("printer", 1, log),
     )
-    assert model.updateTopology(step=None, timeStep=0.0) is True
+    assert model.topology.update(step=None, timeStep=0.0) is True
     # both planned in round 1; in round 2 each sees only the other's change and settles
     assert log == ["amr", "printer"]
 
@@ -297,30 +297,30 @@ def test_modifiers_run_in_declaration_order_every_round():
         amr=_StubModifier("amr", 2, log, reactsToOthers=True),
         facets=_StubModifier("facets", 2, log, reactsToOthers=True),
     )
-    model.updateTopology(step=None, timeStep=0.0)
+    model.topology.update(step=None, timeStep=0.0)
     assert log == ["amr", "facets", "amr", "facets"]
 
 
 def test_no_change_means_no_topology_update():
     log = []
     model = _modelWithModifiers(amr=_StubModifier("amr", 0, log))
-    assert model.updateTopology(step=None, timeStep=0.0) is False
+    assert model.topology.update(step=None, timeStep=0.0) is False
     assert log == []
 
 
 def test_non_convergence_raises_naming_the_offender():
     log = []
     model = _modelWithModifiers(runaway=_StubModifier("runaway", 10**6, log, reactsToOthers=True))
-    model.maxTopologyRounds = 4
+    model.topology.maxRounds = 4
     with pytest.raises(TopologyError, match="did not settle within 4 rounds.*runaway"):
-        model.updateTopology(step=None, timeStep=0.0)
+        model.topology.update(step=None, timeStep=0.0)
 
 
 def test_the_window_is_closed_again_after_the_update():
     model = _modelWithModifiers(amr=_StubModifier("amr", 1, []))
-    model.updateTopology(step=None, timeStep=0.0)
+    model.topology.update(step=None, timeStep=0.0)
     with pytest.raises(TopologyError):
-        model.reserveElementNumbers(1)
+        model.topology.reserveElementNumbers(1)
 
 
 class _StubMeshDependent:
@@ -346,14 +346,14 @@ def test_the_pipeline_records_exactly_the_change_a_modifier_returns():
 
     model = _modelWithModifiers(amr=_OwningModifier("amr", [], owns={1}, touches={99}))
     consumer = _StubMeshDependent()
-    model.registerMeshDependent(consumer)
-    versionBefore = model.topologyVersion
+    model.topology.registerMeshDependent(consumer)
+    versionBefore = model.topology.version
 
-    model.updateTopology(step=None, timeStep=0.0)
+    model.topology.update(step=None, timeStep=0.0)
 
-    assert model.topologyVersion == versionBefore + 1, "one apply, recorded exactly once"
-    assert model.changesSince(versionBefore).addedElements == {99}
-    assert model.refreshMeshDependents() is True
+    assert model.topology.version == versionBefore + 1, "one apply, recorded exactly once"
+    assert model.topology.changesSince(versionBefore).addedElements == {99}
+    assert model.topology.refreshMeshDependents() is True
     assert [change.addedElements for change in consumer.refreshes] == [{99}]
 
 
@@ -367,32 +367,32 @@ def test_consumers_refresh_once_on_the_net_change_of_all_rounds():
         facets=_StubModifier("facets", 2, log, reactsToOthers=True),
     )
     consumer = _StubMeshDependent()
-    model.registerMeshDependent(consumer)
+    model.topology.registerMeshDependent(consumer)
 
-    model.updateTopology(step=None, timeStep=0.0)
+    model.topology.update(step=None, timeStep=0.0)
     assert len(log) == 4, "four mutations across two rounds"
     assert consumer.refreshes == [], "consumers must not be refreshed during the topology update"
 
-    assert model.refreshMeshDependents() is True
+    assert model.topology.refreshMeshDependents() is True
     assert len(consumer.refreshes) == 1, "one refresh, on the net change"
 
 
 def test_refresh_reports_whether_any_consumer_changed_its_footprint():
     model = _modelWithModifiers(amr=_StubModifier("amr", 1, []))
     indifferent = _StubMeshDependent(relevant=False)
-    model.registerMeshDependent(indifferent)
-    model.updateTopology(step=None, timeStep=0.0)
-    assert model.refreshMeshDependents() is False
+    model.topology.registerMeshDependent(indifferent)
+    model.topology.update(step=None, timeStep=0.0)
+    assert model.topology.refreshMeshDependents() is False
     assert len(indifferent.refreshes) == 1
 
 
 def test_registration_is_idempotent_and_a_quiet_model_refreshes_nobody():
     model = FEModel(3)
     consumer = _StubMeshDependent()
-    model.registerMeshDependent(consumer)
-    model.registerMeshDependent(consumer)
-    assert len(model.meshDependents) == 1
-    assert model.refreshMeshDependents() is False
+    model.topology.registerMeshDependent(consumer)
+    model.topology.registerMeshDependent(consumer)
+    assert len(model.topology.meshDependents) == 1
+    assert model.topology.refreshMeshDependents() is False
     assert consumer.refreshes == []
 
 
@@ -436,7 +436,7 @@ def test_fingerprint_is_stable_across_processes():
         "e = getElementClass('CPE4', 'edelweiss')('CPE4', 1)\n"
         "e.setNodes([m.nodes[i] for i in (1, 2, 3, 4)])\n"
         "m.elements[1] = e\n"
-        "print(m.topologyFingerprint())\n"
+        "print(m.topology.fingerprint())\n"
     )
     digests = set()
     for seed in ("0", "1", "random"):
@@ -460,23 +460,23 @@ def test_fingerprint_is_stable_across_processes():
 def test_fingerprint_detects_renumbering():
     """The failure this whole plan exists to catch: same mesh, different element numbers."""
 
-    assert _tinyMeshModel(elementNumbers=(1, 2)).topologyFingerprint() != (
-        _tinyMeshModel(elementNumbers=(7, 8)).topologyFingerprint()
+    assert _tinyMeshModel(elementNumbers=(1, 2)).topology.fingerprint() != (
+        _tinyMeshModel(elementNumbers=(7, 8)).topology.fingerprint()
     )
 
 
 def test_fingerprint_detects_moved_nodes():
-    assert _tinyMeshModel().topologyFingerprint() != _tinyMeshModel(shiftCoordinate=1e-12).topologyFingerprint()
+    assert _tinyMeshModel().topology.fingerprint() != _tinyMeshModel(shiftCoordinate=1e-12).topology.fingerprint()
 
 
 def test_fingerprint_ignores_solution_state():
     """A mismatch must mean the mesh diverged, not that the solver took a different path."""
 
     model = _tinyMeshModel()
-    before = model.topologyFingerprint()
+    before = model.topology.fingerprint()
     model.time = 17.0
     model.scalarVariables["lambda"] = object()
-    assert model.topologyFingerprint() == before
+    assert model.topology.fingerprint() == before
 
 
 def test_fingerprint_is_insensitive_to_dict_insertion_order():
@@ -487,7 +487,7 @@ def test_fingerprint_is_insensitive_to_dict_insertion_order():
     backward = _tinyMeshModel(elementNumbers=(1, 2))
     backward.elements = dict(reversed(list(backward.elements.items())))
     backward.nodes = dict(reversed(list(backward.nodes.items())))
-    assert forward.topologyFingerprint() == backward.topologyFingerprint()
+    assert forward.topology.fingerprint() == backward.topology.fingerprint()
 
 
 class _OwningModifier(_StubModifier):
@@ -517,7 +517,7 @@ def test_overlapping_modifier_domains_are_refused_at_setup():
         amr_right=_OwningModifier("amr_right", [], owns={3, 4}),
     )
     with pytest.raises(TopologyError, match=r"both claim 1 of the same element\(s\).*3"):
-        model.checkModelModifierDomains()
+        model.topology.checkModelModifierDomains()
 
 
 def test_disjoint_modifier_domains_are_accepted():
@@ -525,7 +525,7 @@ def test_disjoint_modifier_domains_are_accepted():
         amr_left=_OwningModifier("amr_left", [], owns={1, 2}),
         amr_right=_OwningModifier("amr_right", [], owns={3, 4}),
     )
-    model.checkModelModifierDomains()  # must not raise
+    model.topology.checkModelModifierDomains()  # must not raise
 
 
 def test_two_modifiers_changing_one_element_in_a_round_is_refused():
@@ -540,7 +540,7 @@ def test_two_modifiers_changing_one_element_in_a_round_is_refused():
         second=_OwningModifier("second", log, owns={2}, touches={99}, reactsToOthers=True),
     )
     with pytest.raises(TopologyError, match=r"'first' \(round 1\) and 'second' \(round 1\).*element 99"):
-        model.updateTopology(step=None, timeStep=0.0)
+        model.topology.update(step=None, timeStep=0.0)
 
 
 class _LateModifier(_OwningModifier):
@@ -570,7 +570,7 @@ def test_two_modifiers_changing_one_element_in_different_rounds_is_refused():
         second=_LateModifier("second", log, owns={2}, touches={99}, fromRound=2),
     )
     with pytest.raises(TopologyError, match=r"'first' \(round 1\) and 'second' \(round 2\).*element 99"):
-        model.updateTopology(step=None, timeStep=0.0)
+        model.topology.update(step=None, timeStep=0.0)
 
 
 def test_the_same_modifier_may_touch_an_element_in_successive_rounds():
@@ -578,7 +578,7 @@ def test_the_same_modifier_may_touch_an_element_in_successive_rounds():
 
     log = []
     model = _modelWithModifiers(solo=_OwningModifier("solo", log, owns={1}, touches={99}))
-    model.updateTopology(step=None, timeStep=0.0)
+    model.topology.update(step=None, timeStep=0.0)
     assert log == ["solo"]
 
 
@@ -594,10 +594,10 @@ def test_an_empty_changeset_is_not_a_change():
 
     log = []
     model = _modelWithModifiers(noop=_NoOpModifier("noop", plansLeft=1, log=log))
-    assert model.updateTopology(step=None, timeStep=0.0) is False
+    assert model.topology.update(step=None, timeStep=0.0) is False
     assert log == ["noop"], "it did plan and apply -- what must not follow is being counted"
-    assert model.topologyHistory == []
-    assert model.topologyVersion == 0
+    assert model.topology.history == []
+    assert model.topology.version == 0
 
 
 @pytest.mark.parametrize(
@@ -631,18 +631,18 @@ def test_a_consumer_cannot_mutate_the_topology():
 
     class _MutatingConsumer(_StubMeshDependent):
         def refresh(self, model, change):
-            (number,) = model.reserveElementNumbers(1)  # must raise: window is closed
+            (number,) = model.topology.reserveElementNumbers(1)  # must raise: window is closed
             model.createElement(_StubElement(number))
             return True
 
     log = []
     model = _modelWithModifiers(amr=_StubModifier("amr", 1, log))
     consumer = _MutatingConsumer()
-    model.registerMeshDependent(consumer)
+    model.topology.registerMeshDependent(consumer)
 
-    model.updateTopology(step=None, timeStep=0.0)
+    model.topology.update(step=None, timeStep=0.0)
     with pytest.raises(TopologyError, match="only be reserved during a topology change"):
-        model.refreshMeshDependents()
+        model.topology.refreshMeshDependents()
 
 
 def test_a_purely_reactive_modifier_sees_the_first_round_change():
@@ -666,7 +666,7 @@ def test_a_purely_reactive_modifier_sees_the_first_round_change():
         acts=_OwningModifier("acts", log, owns={1}, touches={7}),
         reacts=_Reactive("reacts", plansLeft=0, log=log),
     )
-    model.updateTopology(step=None, timeStep=0.0)
+    model.topology.update(step=None, timeStep=0.0)
 
     assert seen, "the reactive modifier was never asked to plan"
     assert seen[0] is not None, "round 1 handed it None despite an earlier modifier having changed the model"
@@ -724,7 +724,7 @@ def _modelWithSetupNodes(*labels: int) -> FEModel:
     model = FEModel(3)
     for label in labels:
         model.nodes[label] = _StubNode(label, [float(label), 0.0, 0.0])
-    model.adoptSetupNodeNumbers()
+    model.topology.adoptSetupNodeNumbers()
     return model
 
 
@@ -742,13 +742,13 @@ def test_a_registry_label_cannot_collide_with_one_the_model_hands_out():
     second, independent source of node labels, free to drift into the model's."""
 
     model = _modelWithSetupNodes(1, 2, 3)
-    registry = NodeRegistry(reserve_labels=model.reserveNodeNumbers)
+    registry = NodeRegistry(reserve_labels=model.topology.reserveNodeNumbers)
     for node in model.nodes.values():
         registry.seed(node.label, node.coordinates)
 
-    with model.topologyChanges():
+    with model.topology.changes():
         minted = [registry.label_of_new_node(("first", i), [0.0, float(i), 0.0]) for i in range(3)]
-        fromModel = list(model.reserveNodeNumbers(3))
+        fromModel = list(model.topology.reserveNodeNumbers(3))
         mintedAfterwards = [registry.label_of_new_node(("later", i), [0.0, 0.0, i + 1.0]) for i in range(3)]
 
     assert not set(minted) & set(model.nodes)
@@ -762,13 +762,13 @@ def test_an_already_known_identity_consumes_no_label():
     number, or refinement would burn labels at a wild rate."""
 
     model = _modelWithSetupNodes(1)
-    registry = NodeRegistry(reserve_labels=model.reserveNodeNumbers)
+    registry = NodeRegistry(reserve_labels=model.topology.reserveNodeNumbers)
     registry.seed(1, [0.0, 0.0, 0.0])
 
-    with model.topologyChanges():
+    with model.topology.changes():
         first = registry.label_of_new_node(("a new node",), [0.5, 0.0, 0.0])
         assert registry.label_of_new_node(("a new node",), [0.5, 0.0, 0.0]) == first
-        (afterwards,) = model.reserveNodeNumbers(1)
+        (afterwards,) = model.topology.reserveNodeNumbers(1)
 
     assert (first, afterwards) == (2, 3)
 
@@ -778,7 +778,7 @@ def test_minting_outside_a_topology_change_raises():
     the pipeline can see them."""
 
     model = _modelWithSetupNodes(1)
-    registry = NodeRegistry(reserve_labels=model.reserveNodeNumbers)
+    registry = NodeRegistry(reserve_labels=model.topology.reserveNodeNumbers)
 
     with pytest.raises(TopologyError, match="topology change"):
         registry.label_of_new_node(("a new node",), [5.0, 0.0, 0.0])
@@ -796,9 +796,9 @@ def test_a_shallow_copy_of_a_model_gets_a_pipeline_acting_on_the_copy():
     reduced.elements = {number: el for number, el in model.elements.items() if number == 1}
 
     assert reduced.topology is not model.topology
-    assert reduced.topologyFingerprint() == _tinyMeshModel(elementNumbers=(1,)).topologyFingerprint()
-    assert model.topologyFingerprint() == _tinyMeshModel().topologyFingerprint()
+    assert reduced.topology.fingerprint() == _tinyMeshModel(elementNumbers=(1,)).topology.fingerprint()
+    assert model.topology.fingerprint() == _tinyMeshModel().topology.fingerprint()
 
-    with reduced.topologyChanges():
+    with reduced.topology.changes():
         assert reduced.topology.isOpen
         assert not model.topology.isOpen
