@@ -70,7 +70,7 @@ class AmrTransparencyProbeSchema:
 class Constraint(ConstraintBase):
     """A zero-DOF constraint that caches a node set reference at construction time and checks,
     lazily at its own :meth:`updateConnectivity` tick, that the reference already reflects any
-    mesh refinement the model reports via :attr:`~edelweissfe.models.femodel.FEModel.topologyVersion`
+    mesh refinement the model reports via :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyVersion`
     -- without ever re-fetching the set from the model or registering as an observer.
 
     Parameters

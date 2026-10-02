@@ -344,7 +344,7 @@ def buildContactFacets(
     ``model.contactFacetRecipes`` keyed by the generated facet element set name, so a
     :class:`~edelweissfe.models.meshdependent.MeshDependent` consumer of these facets can find its
     way back to the source surface it needs to watch via
-    :meth:`~edelweissfe.models.femodel.FEModel.changesSince`.
+    :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changesSince`.
 
     Parameters
     ----------
