@@ -196,15 +196,12 @@ cdef class MarmotElementWrapper:
     cdef public double[::1] _stateVars, nodeCoordinates
     cdef public double[::1] _elementProperties, _stateVarsTemp , _materialProperties
     cdef int nStateVars
-    cdef bint _integratesStateInPlace
 
     cdef double[::1] getStateView(self, string stateName, int gaussPt)
 
     # nogil methods are already declared here:
 
     cpdef void _initializeStateVarsTemp(self, ) noexcept  nogil
-
-    cdef void _setStateIntegrationInPlace(self, bint inPlace)
 
     cpdef void computeKernels(self,
                               double[::1] Ke,

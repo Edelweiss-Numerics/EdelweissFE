@@ -148,19 +148,10 @@ path at all: it builds the system from scratch.
 Work per increment outside the elements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-An explicit increment is cheap, so the work around the element loop counts. Two things keep it
-small:
-
-- **One velocity update for all degrees of freedom.** Second-order degrees of freedom are updated
-  by the central difference with mass-proportional damping, first-order ones by forward Euler. The
-  damping rate and a second-order mask are formed once per equation system, so the update runs on
-  whole vectors instead of indexed subsets, and gives the same result to the bit.
-- **Element states integrated in place.** An implicit solver keeps a trial copy of every element
-  state, because it may reject an increment and restart from the accepted state. An explicit
-  solver never rejects an increment, so a Marmot element evaluated by the explicit kernel
-  integrates directly into its accepted state, and its acceptance has nothing left to copy. This
-  saves two copies of the whole state per element and increment. The element switches back to a
-  separate trial state on its next implicit evaluation.
+An explicit increment is cheap, so the work around the element loop counts. Second-order degrees
+of freedom are updated by the central difference with mass-proportional damping, first-order ones
+by forward Euler. The damping rate and a second-order mask are formed once per equation system, so
+the update runs on whole vectors instead of indexed subsets, and gives the same result to the bit.
 
 ``NEDParallel`` - Nonlinear Explicit Dynamic (parallel)
 --------------------------------------------------------

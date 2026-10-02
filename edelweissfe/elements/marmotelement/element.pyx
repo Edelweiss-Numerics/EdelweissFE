@@ -93,7 +93,6 @@ cdef class MarmotElementWrapper:
         self._ensightType = self.marmotElement.getElementShape().decode("utf-8")
 
         self._hasMaterial = False
-        self._integratesStateInPlace = False
 
     def __cinit__(self, elementType, elNumber):
         """This C-level method is responsible for actually creating the MarmotElement.
@@ -226,39 +225,13 @@ cdef class MarmotElementWrapper:
 
         self._stateVars = np.zeros(self.nStateVars)
         self._stateVarsTemp = np.zeros(self.nStateVars)
-        self._integratesStateInPlace = False
 
         self.marmotElement.assignStateVars(&self._stateVarsTemp[0], self.nStateVars)
 
         self._hasMaterial = True
 
     cpdef void _initializeStateVarsTemp(self, ) noexcept nogil:
-        if not self._integratesStateInPlace:
-            self._stateVarsTemp[:] = self._stateVars
-
-    cdef void _setStateIntegrationInPlace(self, bint inPlace):
-        """Switch between a separate trial state (needed if an increment can be rejected) and
-        integration in place, where the accepted state is an alias of the trial buffer the
-        MarmotElement writes into. In place saves one full state copy before every kernel
-        evaluation and one on every acceptance.
-
-        Parameters
-        ----------
-        inPlace
-            True for integration in place, False for a separate trial state.
-        """
-
-        if inPlace == self._integratesStateInPlace:
-            return
-
-        if inPlace:
-            # the MarmotElement keeps writing into the trial buffer; seed it with the accepted state
-            self._stateVarsTemp[:] = self._stateVars
-            self._stateVars = self._stateVarsTemp
-        else:
-            self._stateVars = np.array(self._stateVarsTemp)
-
-        self._integratesStateInPlace = inPlace
+        self._stateVarsTemp[:] = self._stateVars
 
     def setInitialCondition(self,
                             stateType,
@@ -284,9 +257,6 @@ cdef class MarmotElementWrapper:
         if not self._hasMaterial:
             raise Exception("Element {:} has no material assigned!".format(self._elNumber))
 
-        # an implicit increment may be rejected, so it needs a separate trial state
-        self._setStateIntegrationInPlace(False)
-
         try:
             with nogil:
                 self._initializeStateVarsTemp()
@@ -311,11 +281,10 @@ cdef class MarmotElementWrapper:
         if not self._hasMaterial:
             raise Exception("Element {:} has no material assigned!".format(self._elNumber))
 
-        # explicit dynamics never rejects an increment, so the state is integrated in place
-        self._setStateIntegrationInPlace(True)
-
         try:
             with nogil:
+                self._initializeStateVarsTemp()
+
                 self.marmotElement.computeKernelsExplicit(&U[0],
                                                           &dU[0],
                                                           &Pe[0],
@@ -393,13 +362,9 @@ cdef class MarmotElementWrapper:
         return internalEnergy
 
     def acceptLastState(self, ):
-        """Accept the computed state (in nonlinear iteration schemes).
+        """Accept the computed state (in nonlinear iteration schemes)."""
 
-        Nothing to copy if the state is integrated in place (explicit dynamics): then the accepted
-        and the trial state are one and the same array."""
-
-        if not self._integratesStateInPlace:
-            self._stateVars[:] = self._stateVarsTemp
+        self._stateVars[:] = self._stateVarsTemp
 
     def getStateVars(self):
         """Return a copy of the converged quadrature-point state-variable buffer."""
