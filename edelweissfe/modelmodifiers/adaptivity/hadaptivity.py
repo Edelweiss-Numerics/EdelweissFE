@@ -614,27 +614,83 @@ class ModelModifier(ModelModifierBase):
         return self._elementClasses[elementType](elementType, elNumber)
 
     def _materialize(self, model: FEModel, records: dict):
-        mesh = self._mesh
-        reg = mesh.registry
+        """Turn the refined octree into model elements, nodes, sets and fields.
 
+        The steps, in order:
+
+        1. snapshot the converged nodal values, for the warm start;
+        2. create the new nodes;
+        3. create the child elements, level by level, with state transfer and interpolated nodal
+           values;
+        4. remove the refined parents, and check that octree and model agree;
+        5. update the surfaces and the node and element sets;
+        6. resize the node fields and write the warm-start values.
+
+        Everything here runs identically live and on restart replay: ``apply()`` is one code path.
+        Element numbers come from the model's single allocator (:meth:`FEModel.reserveElementNumbers`);
+        this modifier keeps no counter of its own, so labels claimed by other consumers in between
+        can never collide with it.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        records
+            The hanging-node constraint records, by slave node label.
+
+        Returns
+        -------
+        ModelChange
+            The net change of this refinement.
+        """
+
+        mesh = self._mesh
         # the active elements are about to change; so does the adjacency a marker's halo grows over
         self._refineableElements.invalidateNodeAdjacency()
+        oldValues = self._snapshotNodalValues(model)
+        newNodes = self._createNewNodes(model)
 
-        # Element numbers come from the model's single monotonic allocator
-        # (FEModel.reserveElementNumbers). This modifier deliberately keeps no counter of its own:
-        # the one it used to keep had to be resynced against max(model.elements) on every call,
-        # because a tied surface's facets -- rebuilt via the observer/MeshDependent escape hatches
-        # fired at the end of THIS very call -- claim labels in between, and a private counter would
-        # collide with (and silently overwrite) them, after which they were deleted as "stale",
-        # orphaning the solid elements that had taken their labels.
+        active = set(mesh.active())
+        newValues = {key: {} for key in oldValues}  # interpolated values for new nodes, per (field, entry)
+        levelChanges, newChildEids = self._createChildElements(model, active, newNodes, oldValues, newValues)
 
-        # snapshot the converged nodal values BEFORE the mesh mutates, for the warm start
+        # The new nodes and the removals ride on the LAST level's changeset: nothing created there
+        # is transient (only intermediates are, and they always have a level below them), so the
+        # coalesce below cannot drop them.
+        change = levelChanges[-1] if levelChanges else ModelChange(kind=ModelChangeType.REFINEMENT)
+        change.addedNodes |= set(newNodes.keys())
+        self._removeRefinedParents(model, active, change)
+        if len(levelChanges) > 1:
+            change = coalesce(levelChanges)
+        self._checkOctreeMatchesModel(active)
+
+        self._updateSurfaces(model, newChildEids, change)
+        with timeit("sets & fields sync"):
+            self._updateSets(model, records, newNodes, newChildEids, change)
+
+        with timeit("fields resize & restore"):
+            self._resizeNodeFieldsAndWarmStart(model, oldValues, newValues)
+
+        # Separately timed: this relinks EVERY node's field variables, so its cost scales with the
+        # whole mesh rather than with what this refinement actually changed.
+        with timeit("relink field variables"):
+            model._linkFieldVariableObjects(model.nodeSets["all"])
+        return change
+
+    def _snapshotNodalValues(self, model: FEModel) -> dict:
+        """Copy the converged values of every warm-started node field entry, before the mesh changes.
+
+        On the replay path this is dead work -- readRestart overwrites every node field right
+        afterwards -- but a "skip this on replay" branch is exactly the kind of live/replay
+        divergence that made a resumed run rebuild a different mesh.
+
+        Returns
+        -------
+        dict
+            ``{(fieldName, entryName): {node: value}}``.
+        """
+
         oldValues = {}
-        # Runs on the replay path too. It is dead work there -- readRestart overwrites every node
-        # field right afterwards -- but apply() is ONE code path, and a "skip this on replay" branch
-        # is exactly the kind of live/replay divergence that made a resumed run rebuild a different
-        # mesh. If this ever costs measurably, the flag belongs in the recorded plan, not in an
-        # ambient replay mode.
         for fieldName, nodeField in model.nodeFields.items():
             for entryName in WARM_STARTED_NODE_FIELD_ENTRIES:
                 if entryName in nodeField:
@@ -642,37 +698,76 @@ class ModelModifier(ModelModifierBase):
                     oldValues[(fieldName, entryName)] = {
                         node: entryValues[nodeField._indicesOfNodesInArray[node]].copy() for node in nodeField.nodes
                     }
+        return oldValues
 
-        # new nodes
+    def _createNewNodes(self, model: FEModel) -> dict:
+        """Create a model node for every octree node the model does not have yet.
+
+        Returns
+        -------
+        dict
+            The new nodes, by label.
+        """
+
         newNodes = {}
-        for label, coord in reg.coordinates.items():
+        for label, coord in self._mesh.registry.coordinates.items():
             if label not in model.nodes:
                 node = Node(label, np.asarray(coord, dtype=float))
                 model.createNode(node)
                 newNodes[label] = node
+        return newNodes
 
-        active = set(mesh.active())
-        newValues = {key: {} for key in oldValues}  # interpolated values for new nodes, per (field, entry)
+    def _cellsToCreate(self, active: set) -> set:
+        """Every octree cell that must become a model element but is not one yet.
 
-        # Every octree cell that must become a model element but is not one yet. Usually that is
-        # exactly the children of the cells refined in this call. It is not always: 2:1 balancing
-        # refines until the mesh is graded, and can therefore split a cell it created earlier in
-        # the same call, leaving an active leaf whose parent is itself brand new. Walking each such
-        # leaf up to its nearest materialised ancestor collects those intermediate cells as well;
-        # they are created below and removed again with the other refined parents, so however many
-        # levels a cascade went, every one of them is handled by the same "split a materialised
-        # parent into its children" code.
+        Usually that is exactly the children of the cells refined in this call. It is not always:
+        2:1 balancing can split a cell it created earlier in the same call, leaving an active leaf
+        whose parent is itself brand new. Walking each such leaf up to its nearest materialized
+        ancestor collects those intermediate cells as well; they are created and removed again with
+        the other refined parents, so however many levels a cascade went, every one of them is
+        handled by the same "split a materialized parent into its children" code.
+        """
+
+        mesh = self._mesh
         pending = set()
         for eid in active - set(self._eidToEl):
             ancestor = eid
             while ancestor is not None and ancestor not in self._eidToEl and ancestor not in pending:
                 pending.add(ancestor)
                 ancestor = mesh.elements[ancestor]["parent"]
+        return pending
 
-        # One changeset per materialised level, coalesced at the end: the merge is what resolves an
-        # intermediate's create-then-remove into the direct parent -> grandchild relation a consumer
-        # needs, rather than leaving a phantom element in both the added and the removed set (see
-        # ModelChange.mergedWith).
+    def _createChildElements(
+        self, model: FEModel, active: set, newNodes: dict, oldValues: dict, newValues: dict
+    ) -> tuple[list, set]:
+        """Create the child elements of every refined parent, one octree level at a time.
+
+        One changeset per level, coalesced by the caller: the merge is what resolves an
+        intermediate's create-then-remove into the direct parent -> grandchild relation a consumer
+        needs, rather than leaving a phantom element in both the added and the removed set (see
+        :meth:`ModelChange.mergedWith`).
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        active
+            The active octree cells.
+        newNodes
+            The nodes created in this refinement, by label.
+        oldValues
+            The snapshot of the converged nodal values, see :meth:`_snapshotNodalValues`.
+        newValues
+            Filled with the values interpolated at the new nodes, keyed like ``oldValues``.
+
+        Returns
+        -------
+        tuple[list, set]
+            The changeset of every level, and the octree ids of all cells created.
+        """
+
+        mesh = self._mesh
+        pending = self._cellsToCreate(active)
         levelChanges = []
         newChildEids = set()
         while pending:
@@ -691,79 +786,95 @@ class ModelModifier(ModelModifierBase):
             childNumbers = model.reserveElementNumbers(len(levelEids))
             with timeit("elements & state transfer"):
                 for eid, elNumber in zip(levelEids, childNumbers):
-                    e = mesh.elements[eid]
-                    parentEid = e["parent"]
-                    parentEl = self._eidToEl[parentEid]
-                    child = self._makeElement(self._elementType or parentEl.elType, elNumber)
-                    child.setNodes([model.nodes[label] for label in e["conn"]])
-                    self._sectionOf[parentEl].assignSectionToElement(child, model)
-                    for elementProperty in self._elementPropertiesOf.get(parentEl, ()):
-                        child.assignProperty(elementProperty.propertyName, elementProperty.values)
-                    # Runs on replay too, identically: apply() is one code path, and element state
-                    # is restored by number afterwards either way.
-                    self._stateTransfer.transferState(parentEl, [child], self._topology)
-
-                    # warm start: interpolate each NEW node's field values from the parent via the
-                    # HEX20 isoparametric map, so the increment restarts from a consistent state,
-                    # not zero
-                    octant = mesh.elements[parentEid]["children"].index(eid)
-                    childParams = self._octantParams[octant]
-                    for i, label in enumerate(e["conn"]):
-                        node = model.nodes[label]
-                        if label in newNodes and any(node not in newValues[f] for f in oldValues):
-                            N = self._topology.shape_functions(*childParams[i])
-                            for key, vals in oldValues.items():
-                                # An intermediate parent's own nodes are new, so they are not in the
-                                # pre-mutation snapshot -- the level above interpolated them, and the
-                                # next level down interpolates from that in turn.
-                                interpolated = newValues[key]
-                                parentVals = [vals[pn] if pn in vals else interpolated.get(pn) for pn in parentEl.nodes]
-                                if all(v is not None for v in parentVals):
-                                    newValues[key][node] = N @ np.array(parentVals)
-
-                    model.createElement(child)
-                    self._eidToEl[eid] = child
-                    self._sectionOf[child] = self._sectionOf[parentEl]
-                    if parentEl in self._elementPropertiesOf:
-                        self._elementPropertiesOf[child] = self._elementPropertiesOf[parentEl]
-
-                    change.addedElements.add(child.elNumber)
-                    change.parentToChildren.setdefault(parentEl.elNumber, []).append(child.elNumber)
-
-            # per-face parent -> child tiling (the faceMap), while parents are still materialized
-            for parentEid in {mesh.elements[eid]["parent"] for eid in levelEids}:
-                parentLabel = self._eidToEl[parentEid].elNumber
-                childEids = mesh.elements[parentEid]["children"]
-                for faceID, faceIndex in self._topology.faceid_to_face.items():
-                    childLabels = [
-                        self._eidToEl[childEids[j]].elNumber
-                        for j in self._topology.face_child_indices(faceIndex, self.splitFactor)
-                    ]
-                    change.faceMap[(parentLabel, faceID)] = [(label, faceID) for label in childLabels]
+                    self._createChildElement(model, eid, elNumber, newNodes, oldValues, newValues, change)
+            self._recordFaceMap(levelEids, change)
 
             levelChanges.append(change)
             newChildEids |= set(levelEids)
             pending -= set(levelEids)
+        return levelChanges, newChildEids
 
-        # The new nodes and the removals ride on the LAST level's changeset: nothing created there
-        # is transient (only intermediates are, and they always have a level below them), so the
-        # coalesce below cannot drop them.
-        change = levelChanges[-1] if levelChanges else ModelChange(kind=ModelChangeType.REFINEMENT)
-        change.addedNodes |= set(newNodes.keys())
+    def _createChildElement(
+        self,
+        model: FEModel,
+        eid: int,
+        elNumber: int,
+        newNodes: dict,
+        oldValues: dict,
+        newValues: dict,
+        change: ModelChange,
+    ):
+        """Create the model element of one octree child cell, inheriting section, properties and
+        state from its parent, and interpolate the nodal values at its new nodes."""
 
-        # remove refined parents, transient intermediates included (sorted, so the changeset is
-        # built in a reproducible order)
+        mesh = self._mesh
+        e = mesh.elements[eid]
+        parentEid = e["parent"]
+        parentEl = self._eidToEl[parentEid]
+        child = self._makeElement(self._elementType or parentEl.elType, elNumber)
+        child.setNodes([model.nodes[label] for label in e["conn"]])
+        self._sectionOf[parentEl].assignSectionToElement(child, model)
+        for elementProperty in self._elementPropertiesOf.get(parentEl, ()):
+            child.assignProperty(elementProperty.propertyName, elementProperty.values)
+        self._stateTransfer.transferState(parentEl, [child], self._topology)
+
+        # warm start: interpolate each NEW node's field values from the parent via the HEX20
+        # isoparametric map, so the increment restarts from a consistent state, not zero
+        octant = mesh.elements[parentEid]["children"].index(eid)
+        childParams = self._octantParams[octant]
+        for i, label in enumerate(e["conn"]):
+            node = model.nodes[label]
+            if label in newNodes and any(node not in newValues[f] for f in oldValues):
+                N = self._topology.shape_functions(*childParams[i])
+                for key, vals in oldValues.items():
+                    # An intermediate parent's own nodes are new, so they are not in the
+                    # pre-mutation snapshot -- the level above interpolated them, and the next
+                    # level down interpolates from that in turn.
+                    interpolated = newValues[key]
+                    parentVals = [vals[pn] if pn in vals else interpolated.get(pn) for pn in parentEl.nodes]
+                    if all(v is not None for v in parentVals):
+                        newValues[key][node] = N @ np.array(parentVals)
+
+        model.createElement(child)
+        self._eidToEl[eid] = child
+        self._sectionOf[child] = self._sectionOf[parentEl]
+        if parentEl in self._elementPropertiesOf:
+            self._elementPropertiesOf[child] = self._elementPropertiesOf[parentEl]
+
+        change.addedElements.add(child.elNumber)
+        change.parentToChildren.setdefault(parentEl.elNumber, []).append(child.elNumber)
+
+    def _recordFaceMap(self, levelEids: list, change: ModelChange):
+        """Record which child faces tile each parent face, while the parents still exist."""
+
+        mesh = self._mesh
+        for parentEid in {mesh.elements[eid]["parent"] for eid in levelEids}:
+            parentLabel = self._eidToEl[parentEid].elNumber
+            childEids = mesh.elements[parentEid]["children"]
+            for faceID, faceIndex in self._topology.faceid_to_face.items():
+                childLabels = [
+                    self._eidToEl[childEids[j]].elNumber
+                    for j in self._topology.face_child_indices(faceIndex, self.splitFactor)
+                ]
+                change.faceMap[(parentLabel, faceID)] = [(label, faceID) for label in childLabels]
+
+    def _removeRefinedParents(self, model: FEModel, active: set, change: ModelChange):
+        """Remove every element whose octree cell is no longer active: the refined parents,
+        transient intermediates included (sorted, so the changeset is built in a reproducible
+        order)."""
+
         for eid in sorted(set(self._eidToEl) - active):
             el = self._eidToEl.pop(eid)
             model.removeElement(el.elNumber)
             change.removedElements.add(el.elNumber)
 
-        if len(levelChanges) > 1:
-            change = coalesce(levelChanges)
+    def _checkOctreeMatchesModel(self, active: set):
+        """Raise unless every active octree cell has exactly one model element, and vice versa.
 
-        # The octree mirror decides which elements exist; if the model no longer agrees, every
-        # consumer downstream is reading a mesh that is not the one being refined. Cheap next to
-        # everything else in here, and it turns a silent desync into a located failure.
+        The octree mirror decides which elements exist; if the model no longer agrees, every
+        consumer downstream is reading a mesh that is not the one being refined.
+        """
+
         if set(self._eidToEl) != active:
             raise TopologyError(
                 "AMR: the octree mirror and the model disagree after materialisation -- {:} active "
@@ -772,8 +883,10 @@ class ModelModifier(ModelModifierBase):
                 )
             )
 
-        # keep model.surfaces in sync: parent (eid,faceID) -> child faces
-        for surfaceName, pairs in mesh.surfaces.items():
+    def _updateSurfaces(self, model: FEModel, newChildEids: set, change: ModelChange):
+        """Replace each refined parent face in ``model.surfaces`` by its child faces."""
+
+        for surfaceName, pairs in self._mesh.surfaces.items():
             if surfaceName in model.surfaces:
                 if any(meid in newChildEids for meid, _ in pairs):
                     change.changedSurfaces.add(surfaceName)
@@ -785,91 +898,73 @@ class ModelModifier(ModelModifierBase):
                         byFace[faceID].append(self._eidToEl[meid])
                 model.surfaces[surfaceName].replaceData({f: els for f, els in byFace.items()})
 
-        with timeit("sets & fields sync"):
-            # Tracked (non-all) node sets that gain nodes are rebuilt with the new members (excluding
-            # hanging slave nodes, whose motion is set by the MPC).
-            slaves = set(records.keys())
-            for setName, labels in mesh.nodeSets.items():
-                present = {n.label for n in model.nodeSets[setName].nodes}
-                if any(label not in present and label not in slaves for label in labels):
-                    members = [model.nodes[label] for label in sorted(labels) if label not in slaves]
-                    model.nodeSets[setName].replaceMembers(members)
-                    change.changedNodeSets.add(setName)
+    def _updateSets(self, model: FEModel, records: dict, newNodes: dict, newChildEids: set, change: ModelChange):
+        """Add the new nodes and elements to the node and element sets they belong to."""
 
-            # sync all element sets (user sets like 'concrete' and all-encompassing sets)
-            allNodes = list(model.nodes.values())
-            if newNodes:
-                for setName in self._allLikeSets | {"all"}:
-                    model.nodeSets[setName].replaceMembers(allNodes)
-                    change.changedNodeSets.add(setName)
-            for setName, eids in mesh.elementSets.items():
-                if setName in model.elementSets:
-                    if eids & newChildEids:
-                        change.changedElementSets.add(setName)
-                    # sorted, for the same reason as the surface sync above: this order becomes the
-                    # element set's member order, which downstream generators number entities by
-                    elements = [self._eidToEl[eid] for eid in sorted(eids) if eid in self._eidToEl]
-                    # carry the non-mirrored members along: the octree only knows refineable elements,
-                    # so a mixed set would silently drop them here. Members deleted from the model in
-                    # the meantime are filtered out by their label
-                    elements += [el for el in self._untrackedOfElementSet[setName] if el.elNumber in model.elements]
-                    model.elementSets[setName].replaceMembers(elements)
-            model.elementSets["all"].replaceMembers(list(model.elements.values()))
-            change.changedElementSets.add("all")
+        mesh = self._mesh
+        # Tracked (non-all) node sets that gain nodes are rebuilt with the new members (excluding
+        # hanging slave nodes, whose motion is set by the MPC).
+        slaves = set(records.keys())
+        for setName, labels in mesh.nodeSets.items():
+            present = {n.label for n in model.nodeSets[setName].nodes}
+            if any(label not in present and label not in slaves for label in labels):
+                members = [model.nodes[label] for label in sorted(labels) if label not in slaves]
+                model.nodeSets[setName].replaceMembers(members)
+                change.changedNodeSets.add(setName)
 
-        with timeit("fields resize & restore"):
-            # resize node fields in place to include the new nodes, then restore the warm start:
-            # converged values on the retained nodes and interpolated values on the new nodes.
-            # Both U (current) and P (previous converged) get the same warm-start value, so the first
-            # Newton iteration after refinement sees a normal residual rather than a spurious dU = U - P
-            # = U - 0 cold-restart spike on every retained/new node (P-field warm-start fix).
-            #
-            # On the replay path the model postpones this resize (and the relink below) to the end of
-            # the replay window -- see FEModel.topologyChanges(deferFieldBookkeeping) -- so the
-            # loops below then run over the pre-mutation field layout: dead work, like the snapshot
-            # above, and overwritten by readRestart. The decision lives in the model, not here:
-            # this method issues the same calls live and replayed.
-            model._resizeNodeFieldsForNodes(self._journal)
-            for fieldName, nodeField in model.nodeFields.items():
-                if "U" not in nodeField:
-                    nodeField.createFieldValueEntry("U")
-                if "P" not in nodeField:
-                    nodeField.createFieldValueEntry("P")
-                U = nodeField["U"]
-                P = nodeField["P"]
-                old = oldValues.get((fieldName, "U"), {})
-                new = newValues.get((fieldName, "U"), {})
+        allNodes = list(model.nodes.values())
+        if newNodes:
+            for setName in self._allLikeSets | {"all"}:
+                model.nodeSets[setName].replaceMembers(allNodes)
+                change.changedNodeSets.add(setName)
+        for setName, eids in mesh.elementSets.items():
+            if setName in model.elementSets:
+                if eids & newChildEids:
+                    change.changedElementSets.add(setName)
+                # sorted, for the same reason as the surface update: this order becomes the
+                # element set's member order, which downstream generators number entities by
+                elements = [self._eidToEl[eid] for eid in sorted(eids) if eid in self._eidToEl]
+                # carry the non-mirrored members along: the octree only knows refineable elements,
+                # so a mixed set would silently drop them here. Members deleted from the model in
+                # the meantime are filtered out by their label
+                elements += [el for el in self._untrackedOfElementSet[setName] if el.elNumber in model.elements]
+                model.elementSets[setName].replaceMembers(elements)
+        model.elementSets["all"].replaceMembers(list(model.elements.values()))
+        change.changedElementSets.add("all")
+
+    def _resizeNodeFieldsAndWarmStart(self, model: FEModel, oldValues: dict, newValues: dict):
+        """Resize the node fields to the new nodes, then write the warm-start values: the
+        converged value on a retained node, the interpolated value on a new one.
+
+        ``U`` is also written to ``P`` (the previous converged solution), so the first Newton
+        iteration after refinement sees a normal residual rather than a spurious ``dU = U - P = U``
+        on every node. The other warm-started entries (``V``, ``A``, present only for the dynamic
+        solvers) get just their own value.
+
+        On the replay path the model postpones the resize to the end of the replay window -- see
+        :meth:`FEModel.topologyChanges` -- so the writes below are then dead work, overwritten by
+        readRestart. The decision lives in the model: this method issues the same calls either way.
+        """
+
+        model._resizeNodeFieldsForNodes(self._journal)
+        for fieldName, nodeField in model.nodeFields.items():
+            if "U" not in nodeField:
+                nodeField.createFieldValueEntry("U")
+            if "P" not in nodeField:
+                nodeField.createFieldValueEntry("P")
+            for entryName in WARM_STARTED_NODE_FIELD_ENTRIES:
+                if entryName not in nodeField:
+                    continue
+                targets = [nodeField["U"], nodeField["P"]] if entryName == "U" else [nodeField[entryName]]
+                old = oldValues.get((fieldName, entryName), {})
+                new = newValues.get((fieldName, entryName), {})
                 for node in nodeField.nodes:
-                    idx = nodeField._indicesOfNodesInArray[node]
-                    if node in old:
-                        U[idx] = old[node]
-                        P[idx] = old[node]
-                    elif node in new:
-                        U[idx] = new[node]
-                        P[idx] = new[node]
-
-                # Every other warm-started entry gets the interpolation and nothing else -- in
-                # particular NOT the "P := U" trick above, which exists only so an implicit solver
-                # sees a sane first residual. An entry that is not present here (the usual case for
-                # "V", which only an explicit solver creates) is simply skipped.
-                for entryName in WARM_STARTED_NODE_FIELD_ENTRIES:
-                    if entryName == "U" or entryName not in nodeField:
+                    value = old[node] if node in old else new.get(node)
+                    if value is None:
                         continue
-                    entryValues = nodeField[entryName]
-                    oldEntry = oldValues.get((fieldName, entryName), {})
-                    newEntry = newValues.get((fieldName, entryName), {})
-                    for node in nodeField.nodes:
-                        idx = nodeField._indicesOfNodesInArray[node]
-                        if node in oldEntry:
-                            entryValues[idx] = oldEntry[node]
-                        elif node in newEntry:
-                            entryValues[idx] = newEntry[node]
-
-        # Separately timed: this relinks EVERY node's field variables, so its cost scales with the
-        # whole mesh rather than with what this refinement actually changed.
-        with timeit("relink field variables"):
-            model._linkFieldVariableObjects(model.nodeSets["all"])
-        return change
+                    idx = nodeField._indicesOfNodesInArray[node]
+                    for target in targets:
+                        target[idx] = value
 
     def encodePlan(self, plan: "RefinementPlan") -> dict:
         """Serialize a :class:`RefinementPlan` -- just the octree eids it names."""
