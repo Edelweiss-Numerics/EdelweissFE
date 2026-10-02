@@ -30,6 +30,7 @@
 See :class:`TopologyPipeline`.
 """
 
+import copy
 import hashlib
 from contextlib import contextmanager
 
@@ -98,6 +99,22 @@ class TopologyPipeline:
         self.isDeferringFieldBookkeeping = False
         self._deferredNodeFieldResizeJournal = None
         self._deferredFieldVariableLinkNodes = None
+
+    def boundTo(self, model) -> "TopologyPipeline":
+        """A shallow copy of this pipeline that acts on ``model``, for a shallow copy of the model.
+
+        As for the model itself, the containers (history, change log, mesh dependents) are shared with
+        this pipeline, and the counters, the version and the window state are the copy's own.
+
+        Parameters
+        ----------
+        model
+            The model the copy acts on.
+        """
+
+        pipeline = copy.copy(self)
+        pipeline._model = model
+        return pipeline
 
     def deferNodeFieldResize(self, journal: Journal):
         """Note a node-field resize requested inside a deferring window; it runs when the window closes."""

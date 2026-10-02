@@ -782,3 +782,23 @@ def test_minting_outside_a_topology_change_raises():
 
     with pytest.raises(TopologyError, match="topology change"):
         registry.label_of_new_node(("a new node",), [5.0, 0.0, 0.0])
+
+
+def test_a_shallow_copy_of_a_model_gets_a_pipeline_acting_on_the_copy():
+    """EdelweissMeshfree builds its active sub-model as copy.copy(model) and swaps in reduced
+    containers. The copy's pipeline must act on the copy: with the original's pipeline, a fingerprint
+    or a topology window of the copy would inspect, or open, the original."""
+
+    import copy
+
+    model = _tinyMeshModel()
+    reduced = copy.copy(model)
+    reduced.elements = {number: el for number, el in model.elements.items() if number == 1}
+
+    assert reduced.topology is not model.topology
+    assert reduced.topologyFingerprint() == _tinyMeshModel(elementNumbers=(1,)).topologyFingerprint()
+    assert model.topologyFingerprint() == _tinyMeshModel().topologyFingerprint()
+
+    with reduced.topologyChanges():
+        assert reduced.topology.isOpen
+        assert not model.topology.isOpen

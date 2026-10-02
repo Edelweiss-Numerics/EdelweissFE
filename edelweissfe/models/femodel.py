@@ -90,6 +90,20 @@ class FEModel:
         #: How the mesh may change during a run; see :class:`~edelweissfe.models.topologypipeline.TopologyPipeline`.
         self.topology = TopologyPipeline(self)
 
+    def __copy__(self):
+        """A shallow copy of the model, with a topology pipeline that acts on the copy.
+
+        A shallow copy shares every attribute with the original, which would include the pipeline --
+        and a pipeline changes the model it was created for. The copy therefore gets its own pipeline
+        bound to it (see :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.boundTo`), which
+        is what a reduced model needs, e.g. EdelweissMeshfree's active sub-model.
+        """
+
+        clone = object.__new__(type(self))
+        clone.__dict__.update(self.__dict__)
+        clone.topology = self.topology.boundTo(clone)
+        return clone
+
     def createNode(self, node):
         """Add a freshly created node to the model.
 
