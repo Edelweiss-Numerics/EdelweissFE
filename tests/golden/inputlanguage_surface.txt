@@ -568,8 +568,11 @@ Dynamic h-adaptivity model modifier for HEX20 hanging-node AMR.
     [splitFactor] Number of equal parts per axis a marked element is split into (2 = octree bisection into 8 children; 3 = 3x3x3 = 27 children, etc.). The hanging-node coupling stays exact for any factor. (<class 'int'>, default = 2)
     [elementType] Element type to instantiate for children (default: like parents). (<class 'str'>, default = None)
     [elementProvider] Element provider. (<class 'str'>, default = marmot)
-    [stateTransfer] Quadrature-point state-transfer strategy for the whole state block: nearestQp|projection|virgin. (<class 'str'>, default = nearestQp)
+    [stateTransfer] Quadrature-point state-transfer strategy for the whole state block: nearestQp|projection|limitedProjection|reconstructStressFromStrain|virgin. (<class 'str'>, default = nearestQp)
     [stateTransferOverrides] Per-state-variable overrides routing named variables to a different strategy, e.g. 'strain:projection, stress:virgin'. Comma-separated 'name:strategy' pairs. (<class 'str'>, default = None)
+    [elasticModulusForStressReconstruction] Young's modulus used by stateTransfer=reconstructStressFromStrain to rebuild an elastic child's stress from its compatible strain. Required by, and only used by, that strategy. (<class 'float'>, default = None)
+    [damageStateVarForStressReconstruction] Name of the material's scalar damage state variable (e.g. omega). Used by stateTransfer=reconstructStressFromStrain: a point whose only non-virgin material state is this damage is still rebuilt, as (1 - damage) C : strain. (<class 'str'>, default = None)
+    [poissonRatioForStressReconstruction] Poisson's ratio used by stateTransfer=reconstructStressFromStrain. Required by, and only used by, that strategy. (<class 'float'>, default = None)
   optional keywords
     < marker > AMR marker definition. At least one is required.
       required arguments

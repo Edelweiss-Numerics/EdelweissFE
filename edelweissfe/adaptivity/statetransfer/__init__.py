@@ -29,21 +29,28 @@
 """Pluggable quadrature-point state-transfer strategies for adaptive mesh refinement."""
 
 from edelweissfe.adaptivity.statetransfer.base import StateTransferStrategy
+from edelweissfe.adaptivity.statetransfer.limitedprojection import (
+    LimitedPolynomialProjection,
+)
 from edelweissfe.adaptivity.statetransfer.nearestquadraturepoint import (
     NearestQuadraturePointCopy,
 )
 from edelweissfe.adaptivity.statetransfer.perstatevar import PerStateVarStateTransfer
 from edelweissfe.adaptivity.statetransfer.projection import PolynomialProjection
+from edelweissfe.adaptivity.statetransfer.reconstructstress import (
+    ReconstructStressFromStrain,
+)
 from edelweissfe.adaptivity.statetransfer.virgin import VirginState
 
 
 def transferStateNearestQp(parent, children, topology=None):
-    """Backward-compatible shortcut for the default nearest-quadrature-point block copy."""
+    """Backward-compatible shortcut for the default nearest-quadrature-point block copy (which does
+    not use the parent's nodal displacement)."""
     if topology is None:
         from edelweissfe.adaptivity.hex20topology import Hex20Topology
 
         topology = Hex20Topology()
-    NearestQuadraturePointCopy().transferState(parent, children, topology)
+    NearestQuadraturePointCopy().transferState(parent, children, topology, None)
 
 
 __all__ = [
@@ -51,6 +58,8 @@ __all__ = [
     "NearestQuadraturePointCopy",
     "VirginState",
     "PolynomialProjection",
+    "LimitedPolynomialProjection",
     "PerStateVarStateTransfer",
+    "ReconstructStressFromStrain",
     "transferStateNearestQp",
 ]
