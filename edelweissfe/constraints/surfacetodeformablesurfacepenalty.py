@@ -59,9 +59,8 @@ from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.facetcontactgeometry import (
     closestFacetCandidates,
+    closestFacets,
     facetNormalAndMeasure,
-    line2ClosestPoint,
-    tria3ClosestPoint,
 )
 from edelweissfe.utils.meshtools import currentNodeCoordinates
 from edelweissfe.utils.parentfacegeometry import parentFaceShapeFunctions
@@ -401,8 +400,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             for i, el in enumerate(self.facetElements)
         ]
 
-        closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
         candidatesPerPoint = closestFacetCandidates(slavePointCoords, facetCoords, self.searchDistance)
+        closestFacet, closestWeights, closestDistance = closestFacets(slavePointCoords, facetCoords, candidatesPerPoint)
 
         # The normal is a property of the facet, not of the point projecting onto it, and there are
         # nQuadraturePoints times more points than facets. Memoised per facet for this update only;
@@ -412,15 +411,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
         newAssignment = [None] * self.nPoints
         for p in range(self.nPoints):
-            bestDistance = np.inf
-            bestFacet = None
-            bestWeights = None
-            for i in candidatesPerPoint[p]:
-                weights, distance = closestPointFunction(slavePointCoords[p], *facetCoords[i])
-                if distance < bestDistance:
-                    bestDistance, bestFacet, bestWeights = distance, i, weights
+            bestFacet, bestWeights, bestDistance = int(closestFacet[p]), closestWeights[p], closestDistance[p]
 
-            if bestFacet is not None and (self.searchDistance is None or bestDistance <= self.searchDistance):
+            if bestFacet >= 0 and (self.searchDistance is None or bestDistance <= self.searchDistance):
                 newAssignment[p] = bestFacet
                 facet = self.facetElements[bestFacet]
                 # The clamped barycentric weights locate the closest point in the flat facet; map
