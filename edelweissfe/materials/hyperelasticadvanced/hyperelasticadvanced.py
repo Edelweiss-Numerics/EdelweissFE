@@ -69,18 +69,6 @@ class HyperelasticAdvancedMaterial(BaseHyperElasticMaterial):
 
         return self._materialProperties
 
-    def getDensity(self) -> float:
-        """Returns the density of the material.
-
-        Returns
-        -------
-        float
-            The density of the material."""
-
-        if not hasattr(self, "_density"):
-            raise Exception("Density is not defined for this material.")
-        return self._density
-
     def getNumberOfRequiredStateVars(self) -> int:
         """Returns number of needed material state Variables per integration point in the material.
 

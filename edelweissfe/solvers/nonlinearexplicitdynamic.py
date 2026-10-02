@@ -164,7 +164,7 @@ class NEDSchema:
     """The options of the ``*solver`` datalines and of an ``>>options`` block routed to this
     solver, owned by this module and never mutated from outside it.
 
-    Mirrors :attr:`NED.NEDOptions` one-for-one; the plain ``self.options`` dict remains the actual
+    Mirrors :attr:`NED.SolverSpecificOptions` one-for-one; the plain ``self.options`` dict remains the actual
     source of truth consulted at runtime (see :class:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema`
     for why). The hyphenated option names are not valid Python identifiers, hence the
     ``optionName`` indirection.
@@ -352,14 +352,14 @@ class NED(NonlinearSolverBase):
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NEDSchema
 
-    NEDOptions = {
+    SolverSpecificOptions = {
         "courant-number": 0.8,
         "output-frequency": 1000,
         "contact-update-frequency": 100,
         "topology-check-frequency": 0,
         "report-performance": False,
         "lumped-quantity-conservation-tolerance": CONSERVATION_TOLERANCE,
-        # Lists, so _updateOptions comma-splits them. Empty means "assert nothing", which is what
+        # Lists, so _updateOptions appends the comma-separated items. Empty means "assert nothing", which is what
         # every deck that does not mention them gets.
         "expect-second-order-fields": [],
         "expect-first-order-fields": [],
@@ -369,8 +369,8 @@ class NED(NonlinearSolverBase):
         self.journal = journal
 
         # Ensure mutable defaults (field lists) are isolated per solver instance.
-        self.options = deepcopy(self.NEDOptions)
-        self._updateOptions(kwargs, journal)
+        self.options = deepcopy(self.SolverSpecificOptions)
+        self._updateOptions(kwargs, journal, strict=True)
         #: Fields integrated first order (forward Euler) and second order (central difference) in
         #: time, and their degrees of freedom. All four are DERIVED from the assembled inertia and
         #: damping in :meth:`_classifyFieldsByScheme`, never declared.
@@ -423,28 +423,6 @@ class NED(NonlinearSolverBase):
         #: The lumped operators of the current equation system, kept across a rebuild that only a
         #: constraint's connectivity asked for; see :class:`_ReusableExplicitOperators`.
         self._reusableOperators = None
-
-    def _updateOptions(self, updatedOptions: dict, journal):
-        """Update options of the solver using a string dict
-
-        Parameters
-        ----------
-        updatedOptions
-            The options dictionary.
-        journal
-            The journal module.
-        """
-
-        for k, v in updatedOptions.items():
-            if k in self.NEDOptions:
-                journal.message("Updating option {:}={:}".format(k, v), self.identification)
-                if isinstance(self.NEDOptions[k], list):
-                    for item in v.split(","):
-                        self.options[k].append(item.strip())
-                else:
-                    self.options[k] = type(self.NEDOptions[k])(updatedOptions[k])
-            else:
-                raise AttributeError("Invalid option {:} for {:}".format(k, self.identification))
 
     def writeRestart(self, restartFile):
         """Persist the accumulated external work.

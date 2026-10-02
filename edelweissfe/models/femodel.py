@@ -1076,7 +1076,7 @@ class FEModel:
             for entryName, entryValues in record.plan.items():
                 recordGroup.create_dataset(entryName, data=entryValues)
 
-    def readRestart(self, restartFile: h5py.File):
+    def readRestart(self, restartFile: h5py.File, journal: Journal = None):
         """Read the state of the model from a restart checkpoint written by :meth:`writeRestart`.
 
         The model must already have been rebuilt from the original ``.inp`` file (same topology)
@@ -1086,6 +1086,8 @@ class FEModel:
         ----------
         restartFile
             An open, readable :class:`h5py.File` (or group) to read the checkpoint from.
+        journal
+            Optional Journal for the progress messages of the topology replay.
         """
 
         f = restartFile
@@ -1109,7 +1111,7 @@ class FEModel:
                     fingerprint=str(recordGroup.attrs["fingerprint"]),
                 )
             )
-        self.replayTopologyHistory(records)
+        self.replayTopologyHistory(records, journal)
 
         for nf in self.nodeFields.values():
             storedField = f["nodeFields"].get(nf.name)

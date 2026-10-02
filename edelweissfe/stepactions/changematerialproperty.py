@@ -336,11 +336,8 @@ class StepAction(StepActionBase):
 
         Notes
         -----
-        The autodiff materials' energy density function needs no carrying over here, even though
-        :mod:`edelweissfe.sections.base.sectionbase` carries it over at the equivalent point:
-        re-running ``__init__`` on a property set that still carries ``psi_e`` installs the same
-        ``_materialEnergy`` function via ``setEnergyFunction``, so the carry-over in ``sectionbase``
-        is a no-op for materials rebuilt this way.
+        The autodiff materials' energy density function needs no carrying over: the property set
+        still carries ``psi_e``, and the material's ``__init__`` installs it from there.
         """
 
         if isinstance(sectionMaterial, dict):  # for marmotmaterial provider

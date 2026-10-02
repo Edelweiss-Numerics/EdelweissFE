@@ -163,8 +163,6 @@ class Section(OptionSchemaProvider, ABC):
             materialType = type(self.material)
             modifiedProperties = self.propertiesFromField(element, self.material, model, False)
             modifiedMaterial = materialType(modifiedProperties)
-            if hasattr(self.material, "_materialEnergy"):  # for autodiff materials
-                modifiedMaterial.setEnergyFunction(self.material._materialEnergy)
 
         return modifiedMaterial
 

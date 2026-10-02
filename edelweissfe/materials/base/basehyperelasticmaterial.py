@@ -54,6 +54,9 @@ class BaseHyperElasticMaterial(ABC):
         int
             Number of needed material state Vars."""
 
+    _density = None
+    """Mass density; materials without one leave it unset."""
+
     def getDensity(self) -> float:
         """Determines the density of the material.
 
@@ -62,7 +65,7 @@ class BaseHyperElasticMaterial(ABC):
         float
             The density of the material."""
 
-        if not hasattr(self, "_density"):
+        if self._density is None:
             raise Exception("Density is not defined for this material.")
         return self._density
 

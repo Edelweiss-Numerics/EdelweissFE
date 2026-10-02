@@ -382,8 +382,7 @@ class NEST(NIST):
 
                 except CutbackRequest as e:
                     self.journal.message(str(e), self.identification, 1)
-                    cutback = getattr(e, "cutbackSize", 0.25)
-                    step.discardAndChangeIncrement(max(cutback, 0.25))
+                    step.discardAndChangeIncrement(max(e.cutbackSize, 0.25))
                     prevTimeStep = None
 
                     statusInfoDict["notes"] = str(e)
