@@ -9,7 +9,7 @@ modifier may change the mesh topology itself during an analysis: adding or remov
 elements, re-partitioning element/node sets and surfaces, and reallocating the solution fields.
 A modifier is declared with the ``*modelModifier`` keyword. At the start of every increment the
 solver runs **all** modifiers to a fixed point via
-:meth:`~edelweissfe.models.femodel.FEModel.updateTopology`, then lets mesh-dependent consumers catch
+:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.updateTopology`, then lets mesh-dependent consumers catch
 up, then solves; when the topology changed, the equation system (DOF manager, sparsity pattern,
 solution vectors and any multi-point-constraint transformation) is rebuilt first. A modifier itself
 is written as two halves -- :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan`,
@@ -42,9 +42,9 @@ the container on its own. Two mechanisms remain, narrowed to exactly these cases
   registration and therefore has no observer lifecycle to leak.
 * **Registered mesh dependent** -- for derived *geometry* that must be regenerated before the next
   equation-system rebuild (facet-based contact and tie; see below), a component registers itself via
-  :meth:`~edelweissfe.models.femodel.FEModel.registerMeshDependent` and implements
+  :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.registerMeshDependent` and implements
   :meth:`~edelweissfe.models.meshdependent.MeshDependent.refresh`. Once per increment, after every
-  modifier has settled, :meth:`~edelweissfe.models.femodel.FEModel.refreshMeshDependents` hands it
+  modifier has settled, :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents` hands it
   the *net* change since it last looked -- added/removed nodes and elements, the parent -> children
   map, the per-face child tiling, and which node/element sets or surfaces were touched (with
   ``touchesSurface``/``touchesNodeSet``/``touchesElementSet`` early-outs so a consumer can skip a
@@ -317,7 +317,7 @@ Refining a solid whose surface feeds a facet-based contact or :mod:`~edelweissfe
 constraint works out of the box: the modifier keeps the relevant ``*surface`` definition in sync
 with the refined child faces, and the constraint -- a :class:`~edelweissfe.models.meshdependent.
 MeshDependent` -- regenerates its facets from it. :mod:`~edelweissfe.constraints.
-nodetodeformablesurfacepenalty` notices via :meth:`~edelweissfe.models.femodel.FEModel.changesSince`
+nodetodeformablesurfacepenalty` notices via :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changesSince`
 at its own next connectivity update (a pull, since that tick already runs before the equation
 system is rebuilt); a tie has no such early tick of its own (its only hook is called *from inside*
 that rebuild, too late to safely swap in new facet elements), so it reconciles via the model's push
@@ -382,7 +382,7 @@ code the live run executed. The marker evaluation that produced a decision is ne
 :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.encodePlan` and
 :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.decodePlan` so that its
 decision survives a checkpoint; :class:`~edelweissfe.models.femodel.FEModel` records every applied
-decision in :attr:`~edelweissfe.models.femodel.FEModel.topologyHistory` and replays it. An earlier
+decision in :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyHistory` and replays it. An earlier
 design had each modifier serializing its own history and implementing its own replay, which is
 precisely how a resumed run came to rebuild a differently-numbered mesh -- two implementations of
 one mutation always drift. See :doc:`topologypipeline`.

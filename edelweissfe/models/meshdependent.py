@@ -30,8 +30,8 @@
 DOF numbering, ...) and must patch it up after the model mutates (e.g. an AMR refinement).
 
 This is the *only* mechanism for learning that the mesh changed. A consumer registers once via
-:meth:`~edelweissfe.models.femodel.FEModel.registerMeshDependent`, and
-:meth:`~edelweissfe.models.femodel.FEModel.refreshMeshDependents` calls it once per increment, after
+:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.registerMeshDependent`, and
+:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents` calls it once per increment, after
 the model modifiers have run to a fixed point -- so it sees the *net* change across every round,
 never a half-finished intermediate state, and it never runs while another component is mid-mutation.
 
@@ -57,7 +57,7 @@ class MeshDependent(ABC):
 
         **Must not create or delete elements or nodes.** Topology is a model modifier's business,
         and the topology window is closed by the time this runs (see
-        :meth:`~edelweissfe.models.femodel.FEModel.topologyChanges`), so an attempt raises.
+        :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyChanges`), so an attempt raises.
 
         Returns
         -------
@@ -68,7 +68,7 @@ class MeshDependent(ABC):
 
     def refreshIfMeshChanged(self, model) -> bool:
         """Pull-by-version entry point, called by
-        :meth:`~edelweissfe.models.femodel.FEModel.refreshMeshDependents`.
+        :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents`.
 
         Returns
         -------

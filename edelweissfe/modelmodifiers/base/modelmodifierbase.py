@@ -101,7 +101,7 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
             planned within the current topology update, or ``None`` on the first round. **Return
             ``None`` when it does not touch this modifier's domain** -- that is what lets the
             pipeline reach a fixed point instead of looping (see
-            :meth:`~edelweissfe.models.femodel.FEModel.updateTopology`).
+            :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.updateTopology`).
         step
             The current step.
         timeStep
@@ -123,8 +123,8 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
         second implementation to drift apart from this one.
 
         Runs inside an open topology window (see
-        :meth:`~edelweissfe.models.femodel.FEModel.topologyChanges`), so it may create and delete
-        elements -- through :meth:`~edelweissfe.models.femodel.FEModel.reserveElementNumbers` and
+        :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyChanges`), so it may create and delete
+        elements -- through :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers` and
         :meth:`~edelweissfe.models.femodel.FEModel.createElement`, never by writing
         ``model.elements`` directly.
 
@@ -163,7 +163,7 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
         holding a stale reference, which later corrupts element-set membership and can surface as a
         node that is simultaneously Dirichlet-prescribed and a multi-point-constraint slave.
 
-        :meth:`~edelweissfe.models.femodel.FEModel.checkModelModifierDomains` compares these
+        :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.checkModelModifierDomains` compares these
         pairwise once, at the end of setup, and refuses the model rather than letting the conflict
         appear deep in the solve loop. The default claims nothing, which is correct for a modifier
         that only ever *adds* entities.

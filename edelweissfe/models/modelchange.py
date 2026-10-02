@@ -28,7 +28,7 @@
 
 """The structured changeset describing *what* changed in a model mutation, as opposed to the bare
 :class:`~edelweissfe.models.modelchangeobserver.ModelChangeType` marker. A modifier (e.g. AMR)
-populates one from the delta it already computes; :meth:`~edelweissfe.models.femodel.FEModel.notifyModelChanged`
+populates one from the delta it already computes; :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.notifyModelChanged`
 records it (bumping ``model.topologyVersion``) and passes it to any registered push observers.
 
 A pull-based consumer instead compares its own last-seen version against ``model.topologyVersion``
@@ -47,7 +47,7 @@ from edelweissfe.models.modelchangeobserver import ModelChangeType
 @dataclass
 class TopologyRecord:
     """One applied model-modifier decision, as recorded in
-    :attr:`~edelweissfe.models.femodel.FEModel.topologyHistory`.
+    :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyHistory`.
 
     This is the authoritative record of how the model's topology came to be what it is -- not a
     debugging aid kept alongside one. A restart replays these through the modifier's own
@@ -68,7 +68,7 @@ class TopologyRecord:
 
 @dataclass
 class ModelChange:
-    """One model mutation (or, from :meth:`~edelweissfe.models.femodel.FEModel.changesSince`,
+    """One model mutation (or, from :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changesSince`,
     several coalesced into one net change)."""
 
     kind: ModelChangeType
