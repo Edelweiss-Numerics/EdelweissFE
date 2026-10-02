@@ -38,6 +38,7 @@ queries let it early-out when the change doesn't concern it, and ``parentToChild
 let it patch only what changed instead of rebuilding from scratch.
 """
 
+from bisect import bisect_right
 from dataclasses import dataclass, field
 
 from edelweissfe.models.modelchangeobserver import ModelChangeType
@@ -126,52 +127,130 @@ class ModelChange:
         net change a consumer that missed both would need. Element/node labels are never reused, so
         a label added by ``self`` and removed again by ``other`` existed only within the window and
         is dropped from both the added and the removed set, rather than surfacing as a phantom
-        create-then-delete."""
-        transientElements = self.addedElements & other.removedElements
-        transientNodes = self.addedNodes & other.removedNodes
+        create-then-delete.
 
-        def substituteChildren(children):
-            resolved = []
-            for label in children:
-                resolved.extend(other.parentToChildren.get(label, [label]))
-            return resolved
+        Every entry of ``self.parentToChildren`` / ``self.faceMap`` is resolved through ``other``'s
+        (a child that ``other`` refined further is replaced by *its* children), and ``other``'s own
+        entries are added for parents ``self`` did not already list. This is :func:`coalesce` of
+        the two; folding a longer history pairwise gives the same result as coalescing it at once,
+        only in quadratic instead of linear time.
+        """
+        return coalesce([self, other])
 
-        parentToChildren = {p: substituteChildren(children) for p, children in self.parentToChildren.items()}
-        for p, children in other.parentToChildren.items():
-            parentToChildren.setdefault(p, list(children))
 
-        def substituteFaces(pairs):
-            resolved = []
-            for elLabel, faceID in pairs:
-                substituted = other.faceMap.get((elLabel, faceID))
-                resolved.extend(substituted if substituted is not None else [(elLabel, faceID)])
-            return resolved
+def _composeSubstitutions(maps: list) -> dict:
+    """Compose a chronological list of substitution maps (``parentToChildren`` or ``faceMap``,
+    one per change) into the single net map.
 
-        faceMap = {key: substituteFaces(pairs) for key, pairs in self.faceMap.items()}
-        for key, pairs in other.faceMap.items():
-            faceMap.setdefault(key, list(pairs))
+    The net map is, by definition, the pairwise fold: map ``k`` is merged into the net map of maps
+    ``0 .. k-1`` by replacing every value item that map ``k`` has as a key with map ``k``'s value
+    for it (an item it doesn't have stays itself), and by then appending map ``k``'s keys that are
+    not keys already, in map ``k``'s order. Folding like that re-walks every list accumulated so far
+    for every new map -- quadratic in the history, 368 s for the 372 changes of a long AMR run.
 
-        return ModelChange(
-            kind=other.kind,
-            version=other.version,
-            addedNodes=(self.addedNodes | other.addedNodes) - transientNodes,
-            removedNodes=(self.removedNodes | other.removedNodes) - transientNodes,
-            addedElements=(self.addedElements | other.addedElements) - transientElements,
-            removedElements=(self.removedElements | other.removedElements) - transientElements,
-            parentToChildren=parentToChildren,
-            faceMap=faceMap,
-            changedNodeSets=self.changedNodeSets | other.changedNodeSets,
-            changedElementSets=self.changedElementSets | other.changedElementSets,
-            changedSurfaces=self.changedSurfaces | other.changedSurfaces,
-        )
+    Here every item is resolved exactly once instead. An item that appears in the value of map
+    ``k`` is only ever substituted by maps ``k+1, k+2, ...``: by the *first* later map that has it
+    as a key, whose value items are in turn resolved by the maps after *that* one. So, walking the
+    maps from the newest to the oldest, the fully resolved value of every key of map ``k`` is the
+    concatenation of the already resolved values its items have at their next occurrence as a key
+    (or the item itself, if no later map has it). The cost is linear in the size of the result.
+
+    Parameters
+    ----------
+    maps
+        The per-change maps, oldest first; each maps a key to a list of items, and an item may be
+        a key of a later map.
+
+    Returns
+    -------
+    dict
+        The net map: every key of any map, in order of first appearance, with its fully resolved
+        value list (a new list, not one of the input lists).
+    """
+    # for every key: the indices of the maps it is a key in, ascending (nearly always just one,
+    # since labels are never reused -- but a key appearing again must still be honored)
+    occurrences = {}
+    for k, substitution in enumerate(maps):
+        for key in substitution:
+            occurrences.setdefault(key, []).append(k)
+
+    # resolved[k][key]: map k's value for key, with every item resolved through maps k+1, ...
+    resolved = [None] * len(maps)
+    for k in range(len(maps) - 1, -1, -1):
+        resolvedHere = {}
+        for key, items in maps[k].items():
+            value = []
+            for item in items:
+                itemOccurrences = occurrences.get(item)
+                nextOccurrence = None
+                if itemOccurrences is not None:
+                    i = bisect_right(itemOccurrences, k)
+                    if i < len(itemOccurrences):
+                        nextOccurrence = itemOccurrences[i]
+                if nextOccurrence is None:
+                    value.append(item)
+                else:
+                    value.extend(resolved[nextOccurrence][item])
+            resolvedHere[key] = value
+        resolved[k] = resolvedHere
+
+    # a key keeps the value of the map it first appears in; a later map listing it again only
+    # substitutes it where it appears as an item, which the resolution above already did
+    net = {}
+    for k, substitution in enumerate(maps):
+        for key in substitution:
+            if key not in net:
+                net[key] = resolved[k][key]
+    return net
 
 
 def coalesce(changes: list) -> ModelChange | None:
     """Fold a chronological list of changes into the single net :class:`ModelChange` a consumer
-    that missed all of them would need. ``None`` for an empty list."""
+    that missed all of them would need (see :meth:`ModelChange.mergedWith`). ``None`` for an empty
+    list, and the change itself for a single one.
+
+    Linear in the total size of the history: a resume coalesces every change recorded since the
+    start of the run, so a pairwise fold, which re-walks the whole accumulated change per change,
+    would be quadratic in it.
+    """
     if not changes:
         return None
-    result = changes[0]
+    if len(changes) == 1:
+        return changes[0]
+
+    first = changes[0]
+    addedNodes, removedNodes = set(first.addedNodes), set(first.removedNodes)
+    addedElements, removedElements = set(first.addedElements), set(first.removedElements)
+    changedNodeSets, changedElementSets = set(first.changedNodeSets), set(first.changedElementSets)
+    changedSurfaces = set(first.changedSurfaces)
     for change in changes[1:]:
-        result = result.mergedWith(change)
-    return result
+        # labels added within the window and removed again existed only within it; "added" means
+        # added by any EARLIER change, hence intersected before this change's additions join in
+        transientNodes = addedNodes & change.removedNodes
+        transientElements = addedElements & change.removedElements
+        addedNodes |= change.addedNodes
+        addedNodes -= transientNodes
+        removedNodes |= change.removedNodes
+        removedNodes -= transientNodes
+        addedElements |= change.addedElements
+        addedElements -= transientElements
+        removedElements |= change.removedElements
+        removedElements -= transientElements
+        changedNodeSets |= change.changedNodeSets
+        changedElementSets |= change.changedElementSets
+        changedSurfaces |= change.changedSurfaces
+
+    last = changes[-1]
+    return ModelChange(
+        kind=last.kind,
+        version=last.version,
+        addedNodes=addedNodes,
+        removedNodes=removedNodes,
+        addedElements=addedElements,
+        removedElements=removedElements,
+        parentToChildren=_composeSubstitutions([change.parentToChildren for change in changes]),
+        faceMap=_composeSubstitutions([change.faceMap for change in changes]),
+        changedNodeSets=changedNodeSets,
+        changedElementSets=changedElementSets,
+        changedSurfaces=changedSurfaces,
+    )
