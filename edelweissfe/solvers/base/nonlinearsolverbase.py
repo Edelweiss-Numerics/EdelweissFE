@@ -140,6 +140,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             if isinstance(defaultValue, bool):
                 # bool("False") is truthy, so parse the string explicitly rather than via bool(...)
                 self.options[canonicalKey] = str(v).strip().lower() in ("true", "1", "yes", "on")
+            elif isinstance(defaultValue, list):
+                self.options[canonicalKey] = self.options[canonicalKey] + [item.strip() for item in str(v).split(",")]
             else:
                 self.options[canonicalKey] = type(defaultValue)(v)
 

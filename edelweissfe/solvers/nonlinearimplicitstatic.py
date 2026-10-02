@@ -495,8 +495,7 @@ class NIST(NonlinearSolverBase):
 
                 except CutbackRequest as e:
                     self.journal.message(str(e), self.identification, 1)
-                    cutback = getattr(e, "cutbackSize", cutbackFactor)
-                    step.discardAndChangeIncrement(max(cutback, cutbackFactor))
+                    step.discardAndChangeIncrement(max(e.cutbackSize, cutbackFactor))
                     prevTimeStep = None
 
                     statusInfoDict["iters"] = np.inf

@@ -162,10 +162,10 @@ def finiteElementSimulation(
     # exist (createFieldValueEntry above) and after advanceToTime's cold-start bookkeeping, which
     # would otherwise clobber model.time back to job['startTime'].
     #
-    # Limitation: resuming skips *solving* every step before the checkpoint's step entirely --
-    # correct for the common case, but a `modelupdate` step action (or any other topology mutation)
-    # in a skipped step's `solve()` never runs, so restart is only supported for analyses whose
-    # topology is static across the resumed run.
+    # Limitation: resuming skips every step before the checkpoint's step entirely. Topology changes
+    # made by model modifiers (e.g. AMR) are not affected -- readRestart replays them from the
+    # checkpoint's topology history -- but the step actions of a skipped step never run, so a
+    # one-off model change such as a `modelupdate` in a skipped step is lost on resume.
     restartDefinitions = inputfile["restart"]
     resumeCheckpoint = None
     resumeStepNumber = None
@@ -173,7 +173,7 @@ def finiteElementSimulation(
         checkpointPath = restartDefinitions[0]["readFrom"]
         resumeCheckpoint = h5py.File(checkpointPath, "r")
         resumeStepNumber = int(resumeCheckpoint.attrs["stepNumber"])
-        model.readRestart(resumeCheckpoint)
+        model.readRestart(resumeCheckpoint, journal)
         journal.message(
             "Resuming from restart checkpoint {:} (step {:}, time {:})".format(
                 checkpointPath, resumeStepNumber, model.time
