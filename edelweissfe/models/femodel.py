@@ -46,6 +46,7 @@ from edelweissfe.numerics.parallelizationutilities import (
     getThreadPool,
     isFreeThreadingSupported,
 )
+from edelweissfe.utils.checkpoint import readRestartDataInto, writeRestartDataOf
 from edelweissfe.utils.exceptions import RestartError, TopologyError
 from edelweissfe.variables.fieldvariable import FieldVariable
 from edelweissfe.variables.scalarvariable import ScalarVariable
@@ -501,14 +502,7 @@ class FEModel:
                 continue
             elementsGroup.create_dataset(str(elNumber), data=stateVars)
 
-        constraintsGroup = f.create_group("constraints")
-        for name, constraint in self.constraints.items():
-            restartData = constraint.getRestartData()
-            if restartData is None:
-                continue
-            constraintGroup = constraintsGroup.create_group(name)
-            for entryName, entryValues in restartData.items():
-                constraintGroup.create_dataset(entryName, data=entryValues)
+        writeRestartDataOf(f.create_group("constraints"), self.constraints)
 
         # The ordered record of every applied model-modifier decision (e.g. AMR refinements). A
         # resumed run replays these through the modifiers' own apply() -- see readRestart and
@@ -578,9 +572,9 @@ class FEModel:
             scalarVariable.value = f["scalarVariables"].attrs[name]
 
         # One uniform loop, by element number, with no skip set and nothing swallowed -- sound only
-        # because the replay above reproduces the original numbering exactly, verified round by
-        # round via each record's own fingerprint. A missing element here means the replayed model
-        # does not match the one checkpointed, which must be reported, not silently skipped.
+        # because the replay above reproduces the original numbering exactly, verified against the
+        # recorded fingerprint. A missing element here means the replayed model does not match the
+        # one checkpointed, which must be reported, not silently skipped.
         for elementKey, stateVars in f["elements"].items():
             elNumber = int(elementKey)
             element = self.elements.get(elNumber)
@@ -591,11 +585,7 @@ class FEModel:
                 )
             element.setStateVars(stateVars[:])
 
-        for name, constraint in self.constraints.items():
-            if name not in f["constraints"]:
-                continue
-            restartData = {entryName: values[:] for entryName, values in f["constraints"][name].items()}
-            constraint.setRestartData(restartData)
+        readRestartDataInto(f["constraints"], self.constraints)
 
 
 def printPrettyModelSummary(model: FEModel, journal: Journal):
