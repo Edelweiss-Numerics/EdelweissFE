@@ -31,7 +31,10 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
-from edelweissfe.constraints.base.penaltylaw import validatedContactType
+from edelweissfe.constraints.base.penaltylaw import (
+    normalPenaltyForce,
+    validatedContactType,
+)
 from edelweissfe.constraints.base.rigidbodycontactstiffness import (
     RigidBodyContactStiffnessView,
     fillRigidBodyContactIndices,
@@ -349,14 +352,10 @@ class Constraint(ConstraintBase, MeshDependent):
         for s in np.where(activeMask)[0]:
             n_s = normals[s]
             r_s = coords[s] - rpCurrent
-            g = -dists[s]
 
-            if self.type == "linear":
-                f_n = self.penalty * g
-                stiffness = self.penalty
-            else:
-                f_n = 0.5 * self.penalty * g**2
-                stiffness = self.penalty * g
+            # dists[s] is the gap, negative in contact; f_n is the magnitude of the compressive force
+            normalForce, stiffness = normalPenaltyForce(self.type, self.penalty, dists[s])
+            f_n = -normalForce
 
             w_p = -n_s
             # dPhysicalSpin_dTheta^T maps the physical moment r_s x n_s onto the generalized force
