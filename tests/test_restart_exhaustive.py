@@ -60,11 +60,15 @@ add a row to ``_SCENARIOS``.
 from functools import cache
 from pathlib import Path
 
+import h5py
 import numpy as np
 import pytest
 
+import edelweissfe.outputmanagers.restart as restartOutputManager
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.timesteppers.adaptivetimestepper import AdaptiveTimeStepper
+from edelweissfe.timesteppers.simpletimestepper import SimpleTimeStepper
+from edelweissfe.utils.exceptions import RestartError
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 #: The explicit solver offers the model modifiers a topology update only every this many increments,
@@ -165,6 +169,63 @@ _PLASTIC_BEAM = """
     "material=linearelastic", "material=vonmises"
 )
 
+#: A penalty constraint (no scalar variables) on a node set that live AMR refines: the top face's
+#: z-displacements are kept equal. The node set grows with every refinement of a top-face element.
+_EQUAL_VALUE_PENALTY = """
+*constraint, type=equalValuePenalty, name=topFaceEqualZ
+nSet=beam_top
+field=displacement
+component=2
+penalty=1e5
+"""
+
+#: Node count of ``beam_top`` before any refinement (6 x 1 C3D20 faces).
+_BEAM_TOP_NODES = 33
+
+#: A small block (``block``) pressed onto and dragged across a deformable base (named ``beam`` so
+#: that every scenario has ``beam_right`` for the exported field output), frictional node-to-surface
+#: penalty contact. The block initially touches the base.
+_DEFORMABLE_CONTACT = """
+*modelGenerator, generator=boxGen, name=beam
+nX      =2
+nY      =2
+nZ      =1
+lX      =2
+lY      =2
+lZ      =1
+elType  =C3D20
+
+*modelGenerator, generator=boxGen, name=block
+nX      =1
+nY      =1
+nZ      =1
+x0      =0.3
+y0      =0.7
+z0      =1.0
+lX      =0.6
+lY      =0.6
+lZ      =0.5
+elType  =C3D20
+
+*modelGenerator, generator=surfaceElementGenerator, name=genSlave
+surface = block_back
+name    = slaveSurf
+triangulation = midside
+
+*modelGenerator, generator=surfaceElementGenerator, name=genMaster
+surface = beam_front
+name    = masterSurf
+triangulation = midside
+
+*section, name=contactSection, material=linearelastic, type=solid
+beam_all
+block_all
+
+*constraint, name=contact, type=nodeToDeformableSurfacePenalty
+slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty={contactPenalty}, type=quadratic,
+searchDistance=2.0, sliding=small, mu=0.3, tangentPenalty={tangentPenalty}
+"""
+
 _JOB = "\n*job, name=exhaustiveRestart, domain=3d\n"
 
 _SOLVERS = {
@@ -205,6 +266,20 @@ _LOADS_BEND_BACK = """
 >>dirichlet, name=bend, nSet=beam_right, field=displacement, 2={amplitude}
 """
 
+#: Press the block into the base and drag it sideways at the same time.
+_LOADS_PRESS_AND_DRAG = """
+>>dirichlet, name=fixBase, nSet=beam_back, field=displacement, 1=0, 2=0, 3=0
+>>dirichlet, name=drag, nSet=block_front, field=displacement, 1={amplitude}, 2=0, 3=-{amplitude}
+"""
+
+#: The step-1 loads of the modelupdate scenario: the bend, and the penalty constraint switched off by
+#: a modelupdate at the start of step 1. Step 2 must still run without it.
+_LOADS_BEND_AND_DEACTIVATE = (
+    _LOADS_BEND
+    + """>>modelupdate, update='model.constraints["topFaceEqualZ"].active=False'
+"""
+)
+
 _LOADS_SLIDE = """
 >>dirichlet, name=clamp, nSet=beam_left, field=displacement, 1=0, 2=0, 3=0
 >>dirichlet, name=slidePlate, nSet=plate_rp, field=displacement, 1=0.0, 2={amplitude}, 3={amplitude}
@@ -237,6 +312,32 @@ def _adaptiveGrowthAndCutback(model, run) -> str:
     return ""
 
 
+def _timeIncrementLowered(model, run) -> str:
+    increments = [dt for dt in run["timeIncrements"] if dt > 0.0]
+    if len(set(increments)) < 2:
+        return "the explicit time increment never changed during the run"
+    if any(later > earlier for earlier, later in zip(increments, increments[1:])):
+        return "the explicit time increment grew"
+    return ""
+
+
+def _isPlastic(model, run) -> str:
+    alphas = [np.max(model.elements[n].getStateVars()) for n in model.elements]
+    return "" if max(alphas) > 0.0 else "no element state is nonzero: the beam never yielded"
+
+
+def _penaltyNodeSetRefined(model, run) -> str:
+    n = len(model.nodeSets["beam_top"])
+    return "" if n > _BEAM_TOP_NODES else "beam_top was never refined ({:} nodes)".format(n)
+
+
+def _frictionalContact(model, run) -> str:
+    data = model.constraints["contact"].getRestartData()
+    if not np.any(np.asarray(data["tangentialForceConverged"]) != 0.0):
+        return "no frictional contact history was built up"
+    return ""
+
+
 def _all(*checks):
     return lambda model, run: "; ".join(message for message in (check(model, run) for check in checks) if message)
 
@@ -252,9 +353,9 @@ _SCENARIOS = {
         check=_refinesRepeatedly,
     ),
     "amrRigidContact": dict(
-        solvers=["implicit", "explicit"],
+        solvers=["implicit", "explicit", "NID"],
         blocks=[_BEAM, _RIGID_PLATE],
-        threshold={"implicit": 6.0, "explicit": 40.0},
+        threshold={"implicit": 6.0, "explicit": 40.0, "NID": 6.0},
         steps=[_LOADS_SLIDE],
         check=_refinesRepeatedly,
     ),
@@ -328,6 +429,53 @@ _SCENARIOS = {
         steps=[_LOADS_BEND, _LOADS_BEND_BACK],
         check=_refinesRepeatedly,
     ),
+    # (k) Explicit dynamics with a von Mises material and live AMR: the stable time increment depends
+    # on the state (refinement lowers it, mid-run, lower-only).
+    "amrPlasticExplicit": dict(
+        solvers=["explicit"],
+        blocks=[_PLASTIC_BEAM, _AMR],
+        threshold={"explicit": 20.0},
+        steps=[_LOADS_BEND],
+        check=_all(_refinesRepeatedly, _isPlastic, _timeIncrementLowered),
+    ),
+    # (l) A penalty constraint on a node set that live AMR refines.
+    "amrEqualValuePenalty": dict(
+        solvers=["implicit"],
+        blocks=[_BEAM, _EQUAL_VALUE_PENALTY],
+        threshold={"implicit": 6.0},
+        steps=[_LOADS_BEND],
+        check=_all(_refinesRepeatedly, _penaltyNodeSetRefined),
+    ),
+    # (m) Checkpoints only every 3rd increment: the restart writer's own counter is state.
+    "amrWriteEvery3": dict(
+        solvers=["implicit", "explicit"],
+        blocks=[_BEAM],
+        threshold={"implicit": 6.0, "explicit": 20.0},
+        writeInterval=3,
+        nCheckpoints={"implicit": 3, "explicit": 7},
+        steps=[_LOADS_BEND],
+        check=_refinesRepeatedly,
+    ),
+    # (n) Frictional node-to-surface contact between two deformable bodies.
+    "deformableFrictionalContact": dict(
+        solvers=["implicit", "explicit"],
+        blocks=[_DEFORMABLE_CONTACT],
+        amplitude={"implicit": 0.05, "explicit": 50.0},
+        steps=[_LOADS_PRESS_AND_DRAG],
+        check=_frictionalContact,
+    ),
+    # (o) DESIRED BEHAVIOUR, not the current one: a modelupdate executed at the start of step 1
+    # changes the model for good (here: switches a penalty constraint off). A checkpoint does not
+    # hold that change, so resuming into step 2 would silently run with the constraint on again. The
+    # desired behaviour is a loud refusal: resuming into step 2 must raise a RestartError. (Resumes
+    # within step 1 must be exact, as always.)
+    "modelUpdateInStep1": dict(
+        solvers=["implicit"],
+        blocks=[_BEAM_GEOMETRY, _EQUAL_VALUE_PENALTY],
+        steps=[_LOADS_BEND_AND_DEACTIVATE, _LOADS_BEND_BACK],
+        refuseResumeIntoLastStep=True,
+        check=lambda model, run: "" if not model.constraints["topFaceEqualZ"].active else "modelupdate did not run",
+    ),
 }
 
 #: Fixed increments per step: implicit runs are costlier per increment; explicit runs need more
@@ -383,6 +531,8 @@ def _deck(directory: Path, scenario: str, solver: str, extra: str = "") -> str:
             maxLevel=_MAX_LEVEL[solver],
             stl=stl,
             amrOptions=spec.get("amrOptions", ""),
+            contactPenalty={"explicit": 5e4}.get(solver, 3e7),
+            tangentPenalty={"explicit": 5e3}.get(solver, 1e6),
         )
         for block in spec["blocks"]
     )
@@ -399,8 +549,26 @@ def _deck(directory: Path, scenario: str, solver: str, extra: str = "") -> str:
         maxNumInc=_N_INCREMENTS[solver],
     )
     amplitude = spec.get("amplitude", _AMPLITUDE[solver])
+    if isinstance(amplitude, dict):
+        amplitude = amplitude[solver]
     steps = "".join(step + loads.format(amplitude=amplitude) for loads in spec["steps"])
-    return _MATERIAL + blocks + extra + _JOB + solverBlock + steps
+    return _MATERIAL + blocks + _export(directory) + extra + _JOB + solverBlock + steps
+
+
+def _export(directory: Path) -> str:
+    """A field output exported to a CSV file, one row per output increment."""
+
+    return """
+*fieldOutput
+>>perNode, nSet=beam_right, field=displacement, result=U, name=exportU, export={:}, f(x)='np.mean(x, axis=0)', saveHistory=True
+""".format(
+        directory / "exportU"
+    )
+
+
+def _csvRows(directory: Path) -> int:
+    path = directory / "exportU.csv"
+    return len(path.read_text().splitlines()) if path.exists() else 0
 
 
 def _run(path: Path, text: str):
@@ -445,9 +613,16 @@ def _checkpoints(directory: Path) -> list:
     return sorted(directory.glob("ckpt_*.h5"), key=lambda p: int(p.stem.split("_")[-1]))
 
 
-def _writer(directory: Path) -> str:
-    return "\n*output, type=restart, name=restart\nwriteInterval=1, baseName={:}, numberOfFilesToKeep=1000\n".format(
-        directory / "ckpt"
+def _checkpointKey(checkpoint: Path) -> tuple:
+    """Where a checkpoint lies in the analysis: (step number, model time)."""
+
+    with h5py.File(checkpoint, "r") as f:
+        return int(f.attrs["stepNumber"]), float(f.attrs["time"])
+
+
+def _writer(directory: Path, writeInterval: int = 1) -> str:
+    return "\n*output, type=restart, name=restart\nwriteInterval={:}, baseName={:}, numberOfFilesToKeep=1000\n".format(
+        writeInterval, directory / "ckpt"
     )
 
 
@@ -462,28 +637,57 @@ def _uninterrupted(scenario: str, solver: str, directory: Path):
 
     directory.mkdir(parents=True, exist_ok=True)
     # Instrument the time stepper to see increment sizes and cutbacks (the feature check only).
-    increments, nCutbacks = [], [0]
+    increments, timeIncrements, nCutbacks = [], [], [0]
     generate, discard = AdaptiveTimeStepper.generateTimeStep, AdaptiveTimeStepper.discardAndChangeIncrement
+    generateSimple = SimpleTimeStepper.generateTimeStep
+    write = restartOutputManager.writeCheckpoint
+    #: The exported CSV rows at the moment each checkpoint was written, by checkpoint key.
+    rowsAtCheckpoint = {}
 
     def recordingGenerate(self, *args, **kwargs):
         for timeStep in generate(self, *args, **kwargs):
             increments.append(timeStep.stepProgressIncrement)
+            timeIncrements.append(timeStep.timeIncrement)
+            yield timeStep
+
+    def recordingGenerateSimple(self, *args, **kwargs):
+        for timeStep in generateSimple(self, *args, **kwargs):
+            timeIncrements.append(timeStep.timeIncrement)
             yield timeStep
 
     def countingDiscard(self, scaleFactor):
         nCutbacks[0] += 1
         return discard(self, scaleFactor)
 
+    def recordingWrite(fileName, model, step, outputManagers):
+        write(fileName, model, step, outputManagers)
+        rowsAtCheckpoint[_checkpointKey(Path(fileName))] = _csvRows(directory)
+
     AdaptiveTimeStepper.generateTimeStep = recordingGenerate
     AdaptiveTimeStepper.discardAndChangeIncrement = countingDiscard
+    SimpleTimeStepper.generateTimeStep = recordingGenerateSimple
+    restartOutputManager.writeCheckpoint = recordingWrite
+    spec = _SCENARIOS[scenario]
     try:
-        model = _run(directory / "uninterrupted.inp", _deck(directory, scenario, solver, _writer(directory)))
+        deck = _deck(directory, scenario, solver, _writer(directory, spec.get("writeInterval", 1)))
+        model = _run(directory / "uninterrupted.inp", deck)
     finally:
         AdaptiveTimeStepper.generateTimeStep, AdaptiveTimeStepper.discardAndChangeIncrement = generate, discard
+        SimpleTimeStepper.generateTimeStep = generateSimple
+        restartOutputManager.writeCheckpoint = write
     checkpoints = _checkpoints(directory)
-    spec = _SCENARIOS[scenario]
-    run = dict(increments=increments, nCutbacks=nCutbacks[0], startInc=spec.get("startInc", 1.0))
-    return _state(model), checkpoints, spec["check"](model, run)
+    run = dict(
+        increments=increments,
+        timeIncrements=timeIncrements,
+        nCutbacks=nCutbacks[0],
+        startInc=spec.get("startInc", 1.0),
+    )
+    output = dict(
+        checkpointKeys=[_checkpointKey(c) for c in checkpoints],
+        rowsAtCheckpoint=rowsAtCheckpoint,
+        rows=_csvRows(directory),
+    )
+    return _state(model), checkpoints, output, spec["check"](model, run)
 
 
 def _isAdaptive(scenario: str) -> bool:
@@ -491,6 +695,8 @@ def _isAdaptive(scenario: str) -> bool:
 
 
 def _nCheckpoints(scenario: str, solver: str) -> int:
+    if "nCheckpoints" in _SCENARIOS[scenario]:
+        return _SCENARIOS[scenario]["nCheckpoints"][solver]
     if _isAdaptive(scenario):
         return _ADAPTIVE_CHECKPOINTS
     return (_N_INCREMENTS[solver] + 1) * len(_SCENARIOS[scenario]["steps"])
@@ -514,27 +720,50 @@ def workDirectory(tmp_path_factory) -> Path:
 
 @pytest.mark.parametrize("scenario, solver, chain", list(_cases()))
 def test_resume_from_every_checkpoint_is_exact(workDirectory, scenario, solver, chain):
-    reference, checkpoints, featureMissing = _uninterrupted(scenario, solver, workDirectory / scenario / solver)
+    spec = _SCENARIOS[scenario]
+    reference, checkpoints, output, featureMissing = _uninterrupted(scenario, solver, workDirectory / scenario / solver)
     assert not featureMissing, featureMissing
-    assert len(checkpoints) == _nCheckpoints(scenario, solver), "expected a checkpoint after every increment"
+    assert len(checkpoints) == _nCheckpoints(scenario, solver), "expected {:} checkpoints, got {:}".format(
+        _nCheckpoints(scenario, solver), len(checkpoints)
+    )
+
+    def writer(directory):
+        return _writer(directory, spec.get("writeInterval", 1))
 
     resumeDirectory = workDirectory / scenario / solver / "resume{:}".format("-".join(map(str, chain)))
     resumeDirectory.mkdir()
     checkpoint = checkpoints[chain[0]]
     for j in chain[1:]:
-        deck = _deck(resumeDirectory, scenario, solver, _reader(checkpoint) + _writer(resumeDirectory))
+        deck = _deck(resumeDirectory, scenario, solver, _reader(checkpoint) + writer(resumeDirectory))
         _run(resumeDirectory / "resumed.inp", deck)
         written = _checkpoints(resumeDirectory)
         assert j < len(written), "the resumed run wrote only {:} checkpoints".format(len(written))
         checkpoint = written[j]
         resumeDirectory = resumeDirectory / "chained"
         resumeDirectory.mkdir()
-    resumed = _state(
-        _run(resumeDirectory / "resumed.inp", _deck(resumeDirectory, scenario, solver, _reader(checkpoint)))
-    )
+
+    resumeKey = _checkpointKey(checkpoint)
+    deck = _deck(resumeDirectory, scenario, solver, _reader(checkpoint) + writer(resumeDirectory))
+    if spec.get("refuseResumeIntoLastStep") and resumeKey[0] == output["checkpointKeys"][-1][0]:
+        # DESIRED behaviour (see the scenario): resuming past a step-start modelupdate is refused.
+        with pytest.raises(RestartError):
+            _run(resumeDirectory / "resumed.inp", deck)
+        return
+    resumed = _state(_run(resumeDirectory / "resumed.inp", deck))
 
     differing = [key for key in reference if key not in resumed or not np.array_equal(resumed[key], reference[key])]
     differing += [key for key in resumed if key not in reference]
+
+    # The resumed run writes the checkpoints the uninterrupted run wrote after the resume point --
+    # the same number, at the same (step, time) -- and gains as many exported CSV rows.
+    expectedKeys = [key for key in output["checkpointKeys"] if key > resumeKey]
+    writtenKeys = [_checkpointKey(c) for c in _checkpoints(resumeDirectory)]
+    if writtenKeys != expectedKeys:
+        differing.append("checkpoints written {:} != expected {:}".format(writtenKeys, expectedKeys))
+    expectedRows = output["rows"] - output["rowsAtCheckpoint"][resumeKey]
+    if _csvRows(resumeDirectory) != expectedRows:
+        differing.append("CSV rows gained {:} != expected {:}".format(_csvRows(resumeDirectory), expectedRows))
+
     assert not differing, "resuming from {:} ends elsewhere: {:}".format(checkpoint, differing[:8])
 
 
@@ -547,5 +776,5 @@ if __name__ == "__main__":
         if len(sys.argv) > 1 and scenario not in sys.argv[1:]:
             continue
         for solver in spec["solvers"]:
-            _, checkpoints, missing = _uninterrupted(scenario, solver, Path(tempfile.mkdtemp()))
+            _, checkpoints, _, missing = _uninterrupted(scenario, solver, Path(tempfile.mkdtemp()))
             print(scenario, solver, "checkpoints:", len(checkpoints), "feature:", missing or "ok", file=sys.stderr)
