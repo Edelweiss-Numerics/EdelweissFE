@@ -323,7 +323,7 @@ class TopologyPipeline:
                         )
                     )
 
-    def update(self, step=None, timeStep: float = None) -> bool:
+    def update(self, step=None) -> bool:
         """Run every model modifier to a fixed point, inside one topology window.
 
         Modifiers depend on each other -- refinement invalidates a tied surface's facets, a
@@ -370,7 +370,7 @@ class TopologyPipeline:
                 for name, modifier in self._model.modelModifiers.items():
                     change = self.changesSince(lastPlannedVersion[name])
                     lastPlannedVersion[name] = self.version
-                    plan = modifier.plan(self._model, change, step, timeStep)
+                    plan = modifier.plan(self._model, change, step)
                     if plan is None:
                         continue
                     modelChange = modifier.apply(self._model, plan)

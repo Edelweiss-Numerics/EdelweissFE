@@ -91,7 +91,7 @@ A modifier implements two halves, and the split is the single most important thi
 
 .. code-block:: python
 
-    def plan(self, model, change, step, timeStep):
+    def plan(self, model, change, step):
         if change is not None and not change.touchesElementSet(self.myElSet):
             return None                      # not my business -- let the pipeline settle
         marked = self.evaluateMarkers(model) # reads solution state: allowed here

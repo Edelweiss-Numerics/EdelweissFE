@@ -106,6 +106,9 @@ class AdaptiveTimeStepper(TimeStepperBase):
     def isFinished(self) -> bool:
         return self.finishedStepProgress >= (1.0 - 1e-15)
 
+    def isAtStepStart(self) -> bool:
+        return self.incrementCounter == 0
+
     def numberOfIncrementsDone(self) -> int:
         return self.incrementCounter
 

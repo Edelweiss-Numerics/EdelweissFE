@@ -103,6 +103,9 @@ class SimpleTimeStepper(TimeStepperBase):
     def isFinished(self) -> bool:
         return self.zeroIncrementDone and self.finishedStepProgress >= (1.0 - 1e-15)
 
+    def isAtStepStart(self) -> bool:
+        return not self.zeroIncrementDone
+
     def numberOfIncrementsDone(self) -> int:
         return self.totalIncrements
 
@@ -164,7 +167,7 @@ class SimpleTimeStepper(TimeStepperBase):
         self.enforcedTimeIncrement = timeIncrement
 
     def changeIncrementSize(self, scaleFactor: float):
-        if self.finishedStepProgress == 0.0:
+        if not self.zeroIncrementDone:
             return
 
         self.increment = min(max(self.increment * scaleFactor, self.minIncrement), self.maxIncrement)

@@ -78,7 +78,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     supportsMPC = False
 
     #: Whether this solver runs the topology update (e.g. h-adaptivity) at all. Subclasses that
-    #: call model.topology.update(...) anywhere in solveStep must set this to True; without it, a
+    #: call model.topology.update(...) anywhere in an increment must set this to True; without it, a
     #: modifier silently never runs and the model never adapts. Setting it does not promise the
     #: update runs every increment: a solver that runs it once, before its increment loop, sets this
     #: and then refuses the modifiers that would need it later -- see
@@ -89,7 +89,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     #: whenever there are no multi-point constraints in the model. Lets
     #: applyDirichletToStiffness tell an MPC-transformed (fresh, disposable) system matrix
     #: apart from the assembler's own persistent, in-place-updated one: both implicit and
-    #: explicit-dynamic solvers build one when needed (see NonlinearExplicitDynamic.solveStep),
+    #: explicit-dynamic solvers build one when needed (see NonlinearExplicitDynamic.prepareIncrement),
     #: the distinction is about which matrix is in play, not about the solver family.
     mpcTransformation = None
 
@@ -158,9 +158,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 self.options[canonicalKey] = type(defaultValue)(v)
 
     @performancetiming.timeit("topology update")
-    def updateTopologyAndConnectivity(
-        self, model: FEModel, step, timeStep, offerModelModifiers: bool = True
-    ) -> TopologyUpdate:
+    def updateTopologyAndConnectivity(self, model: FEModel, step, offerModelModifiers: bool = True) -> TopologyUpdate:
         """Run the topology update, then let every mesh-dependent consumer catch up on it.
 
         Two phases. First, the model modifiers plan and apply to a fixed point inside one topology
@@ -178,8 +176,6 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The model tree.
         step
             The step being solved.
-        timeStep
-            The current time step, handed on to the model modifiers.
         offerModelModifiers
             False when an increment is retried after a cutback. The model modifiers decide once per
             converged state: the retry starts from the state they already decided on.
@@ -190,7 +186,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             What changed; the solver decides from it whether to rebuild its equation system.
         """
 
-        topologyChanged = model.topology.update(step, timeStep) if offerModelModifiers else False
+        topologyChanged = model.topology.update(step) if offerModelModifiers else False
         meshDependentsRefreshed = model.topology.refreshMeshDependents()
         constraintConnectivityChanged = any(
             [constraint.updateConnectivity(model) for constraint in model.constraints.values()]
@@ -390,7 +386,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         result to actually apply them.
 
         ``fieldValues`` is keyed by *schema field name* (e.g. ``rungeKuttaStages``), while
-        ``self.options`` -- read throughout ``solveStep``/``solveIncrement`` -- is keyed by the
+        ``self.options`` -- read throughout a step -- is keyed by the
         option's ``.inp``-facing spelling (e.g. ``"runge-kutta-stages"``), which are not always the
         same (a hyphenated name cannot be a Python identifier). The schema's ``optionName`` metadata
         is the one place that mapping is recorded, so it is consulted here rather than duplicated.
@@ -407,9 +403,114 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             self.journal.message("Updating option {:}={:}".format(optionName, value), self.identification)
             self.options[optionName] = value
 
+    #: The status of the current increment, handed to the output managers (iterations, notes, ...),
+    #: or None.
+    incrementStatus = None
+
     @abstractmethod
-    def solveStep(self, *args):
-        pass
+    def beginStep(self, step, model: FEModel, fieldOutputController, outputmanagers):
+        """Start a step: set up what the step needs, and -- on a cold start only, see
+        :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.isAtStepStart` -- apply
+        the step actions' step-start parts and reset the state carried between increments. A resumed
+        step continues from the state the checkpoint restored.
+
+        The step's increment loop (:meth:`~edelweissfe.steps.base.stepbase.StepBase.solve`) then
+        calls, per increment, :meth:`prepareIncrement`, :meth:`attemptIncrement` and
+        :meth:`acceptIncrement`, and finally :meth:`endStep`.
+
+        Parameters
+        ----------
+        step
+            The step to be solved.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controller.
+        outputmanagers
+            The output managers.
+        """
+
+    @abstractmethod
+    def prepareIncrement(self, step, model: FEModel, isRetry: bool):
+        """Bring the model up to date before an increment is proposed: the topology update, when due,
+        and whatever the solver derives from the mesh. Runs before the time stepper proposes the
+        increment, because it may change what is proposed (an explicit solver lowers its stable time
+        increment after a refinement).
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        isRetry
+            True if the increment is retried after a cutback. The model modifiers decide once per
+            accepted state: the retry starts from the state they already decided on.
+        """
+
+    @abstractmethod
+    def attemptIncrement(self, step, model: FEModel, timeStep: TimeStep):
+        """Solve the increment, without committing anything to the model.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        timeStep
+            The increment proposed by the time stepper.
+
+        Raises
+        ------
+        IncrementFailed
+            If the increment cannot be solved; it is retried smaller.
+        """
+
+    @abstractmethod
+    def acceptIncrement(self, step, model: FEModel, timeStep: TimeStep):
+        """Commit the solved increment to the model, and keep the state the solver carries to the next
+        increment. Called before the time stepper accepts it, so that the solver may still keep the
+        next increment from growing.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        timeStep
+            The solved increment.
+        """
+
+    def isOutputIncrement(self, timeStep: TimeStep) -> bool:
+        """Whether field outputs, output managers and restart checkpoints are written after this
+        increment. By default, after every increment.
+
+        Parameters
+        ----------
+        timeStep
+            The accepted increment.
+
+        Returns
+        -------
+        bool
+            True to write output.
+        """
+
+        return True
+
+    @abstractmethod
+    def endStep(self, step, model: FEModel):
+        """Finish a step, however it ended.
+
+        Parameters
+        ----------
+        step
+            The step that was solved.
+        model
+            The model tree.
+        """
 
     @abstractmethod
     def solveIncrement(self, *args):
@@ -455,7 +556,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     ) -> tuple[bool, dict]:
         """Check the convergence, individually for each field,
         similar to Abaqus based on the current total flux residual and the field correction
-        Is called by solveStep() to decide whether to continue iterating or stop.
+        Is called by solveIncrement() to decide whether to continue iterating or stop.
 
         Parameters
         ----------
@@ -723,8 +824,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         """Apply every step action's step-start part (initial conditions, material initialization,
         prescribed fields, ...).
 
-        Not on a resumed step: the checkpointed run applied them at the step's real start, and the
-        state they set has evolved since -- applying them again would overwrite the restored state.
+        Only at the start of a step: a resumed step was checkpointed after the step's real start,
+        and the state these set has evolved since -- applying them again would overwrite it.
 
         Parameters
         ----------
@@ -734,7 +835,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The step being started.
         """
 
-        if step.isResumed:
+        if not step.timeStepper.isAtStepStart():
             return
         for stepActionType in step.actions.values():
             for action in stepActionType.values():
@@ -750,9 +851,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         (e.g. the fast-path AABB of :meth:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getAABB`)
         sees the current configuration.
 
-        Every nonlinear solver must call this once per converged increment. It lives on the base
-        class so that solvers overriding :meth:`solveStep` (e.g. the parallel and arc-length
-        variants) stay consistent with the serial implementation instead of silently omitting it.
+        Every nonlinear solver must call this once per converged increment, in :meth:`acceptIncrement`.
 
         Parameters
         ----------

@@ -465,7 +465,7 @@ class ModelModifier(ModelModifierBase):
         return all(marker.initialOnly for marker in self.markers)
 
     @timeit("AMR")
-    def plan(self, model: FEModel, change, step, timeStep: float) -> "RefinementPlan | None":
+    def plan(self, model: FEModel, change, step) -> "RefinementPlan | None":
         """Evaluate the markers and decide which octree cells to refine. See
         :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan`.
 

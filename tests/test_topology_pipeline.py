@@ -244,7 +244,7 @@ class _StubModifier:
         self._log = log
         self._reactsToOthers = reactsToOthers
 
-    def plan(self, model, change, step, timeStep):
+    def plan(self, model, change, step):
         # react to another modifier's mutation once, then settle -- the contract that makes the
         # pipeline converge (see ModelModifierBase.plan)
         if change is not None and not self._reactsToOthers:
@@ -286,7 +286,7 @@ def test_a_single_round_suffices_when_nobody_reacts():
         amr=_StubModifier("amr", 1, log),
         printer=_StubModifier("printer", 1, log),
     )
-    assert model.topology.update(step=None, timeStep=0.0) is True
+    assert model.topology.update(step=None) is True
     # both planned in round 1; in round 2 each sees only the other's change and settles
     assert log == ["amr", "printer"]
 
@@ -297,14 +297,14 @@ def test_modifiers_run_in_declaration_order_every_round():
         amr=_StubModifier("amr", 2, log, reactsToOthers=True),
         facets=_StubModifier("facets", 2, log, reactsToOthers=True),
     )
-    model.topology.update(step=None, timeStep=0.0)
+    model.topology.update(step=None)
     assert log == ["amr", "facets", "amr", "facets"]
 
 
 def test_no_change_means_no_topology_update():
     log = []
     model = _modelWithModifiers(amr=_StubModifier("amr", 0, log))
-    assert model.topology.update(step=None, timeStep=0.0) is False
+    assert model.topology.update(step=None) is False
     assert log == []
 
 
@@ -313,12 +313,12 @@ def test_non_convergence_raises_naming_the_offender():
     model = _modelWithModifiers(runaway=_StubModifier("runaway", 10**6, log, reactsToOthers=True))
     model.topology.maxRounds = 4
     with pytest.raises(TopologyError, match="did not settle within 4 rounds.*runaway"):
-        model.topology.update(step=None, timeStep=0.0)
+        model.topology.update(step=None)
 
 
 def test_the_window_is_closed_again_after_the_update():
     model = _modelWithModifiers(amr=_StubModifier("amr", 1, []))
-    model.topology.update(step=None, timeStep=0.0)
+    model.topology.update(step=None)
     with pytest.raises(TopologyError):
         model.topology.reserveElementNumbers(1)
 
@@ -349,7 +349,7 @@ def test_the_pipeline_records_exactly_the_change_a_modifier_returns():
     model.topology.registerMeshDependent(consumer)
     versionBefore = model.topology.version
 
-    model.topology.update(step=None, timeStep=0.0)
+    model.topology.update(step=None)
 
     assert model.topology.version == versionBefore + 1, "one apply, recorded exactly once"
     assert model.topology.changesSince(versionBefore).addedElements == {99}
@@ -369,7 +369,7 @@ def test_consumers_refresh_once_on_the_net_change_of_all_rounds():
     consumer = _StubMeshDependent()
     model.topology.registerMeshDependent(consumer)
 
-    model.topology.update(step=None, timeStep=0.0)
+    model.topology.update(step=None)
     assert len(log) == 4, "four mutations across two rounds"
     assert consumer.refreshes == [], "consumers must not be refreshed during the topology update"
 
@@ -381,7 +381,7 @@ def test_refresh_reports_whether_any_consumer_changed_its_footprint():
     model = _modelWithModifiers(amr=_StubModifier("amr", 1, []))
     indifferent = _StubMeshDependent(relevant=False)
     model.topology.registerMeshDependent(indifferent)
-    model.topology.update(step=None, timeStep=0.0)
+    model.topology.update(step=None)
     assert model.topology.refreshMeshDependents() is False
     assert len(indifferent.refreshes) == 1
 
@@ -540,7 +540,7 @@ def test_two_modifiers_changing_one_element_in_a_round_is_refused():
         second=_OwningModifier("second", log, owns={2}, touches={99}, reactsToOthers=True),
     )
     with pytest.raises(TopologyError, match=r"'first' \(round 1\) and 'second' \(round 1\).*element 99"):
-        model.topology.update(step=None, timeStep=0.0)
+        model.topology.update(step=None)
 
 
 class _LateModifier(_OwningModifier):
@@ -552,11 +552,11 @@ class _LateModifier(_OwningModifier):
         self._fromRound = fromRound
         self._roundsSeen = 0
 
-    def plan(self, model, change, step, timeStep):
+    def plan(self, model, change, step):
         self._roundsSeen += 1
         if self._roundsSeen < self._fromRound:
             return None
-        return super().plan(model, change, step, timeStep)
+        return super().plan(model, change, step)
 
 
 def test_two_modifiers_changing_one_element_in_different_rounds_is_refused():
@@ -570,7 +570,7 @@ def test_two_modifiers_changing_one_element_in_different_rounds_is_refused():
         second=_LateModifier("second", log, owns={2}, touches={99}, fromRound=2),
     )
     with pytest.raises(TopologyError, match=r"'first' \(round 1\) and 'second' \(round 2\).*element 99"):
-        model.topology.update(step=None, timeStep=0.0)
+        model.topology.update(step=None)
 
 
 def test_the_same_modifier_may_touch_an_element_in_successive_rounds():
@@ -578,7 +578,7 @@ def test_the_same_modifier_may_touch_an_element_in_successive_rounds():
 
     log = []
     model = _modelWithModifiers(solo=_OwningModifier("solo", log, owns={1}, touches={99}))
-    model.topology.update(step=None, timeStep=0.0)
+    model.topology.update(step=None)
     assert log == ["solo"]
 
 
@@ -594,7 +594,7 @@ def test_an_empty_changeset_is_not_a_change():
 
     log = []
     model = _modelWithModifiers(noop=_NoOpModifier("noop", plansLeft=1, log=log))
-    assert model.topology.update(step=None, timeStep=0.0) is False
+    assert model.topology.update(step=None) is False
     assert log == ["noop"], "it did plan and apply -- what must not follow is being counted"
     assert model.topology.history == []
     assert model.topology.version == 0
@@ -640,7 +640,7 @@ def test_a_consumer_cannot_mutate_the_topology():
     consumer = _MutatingConsumer()
     model.topology.registerMeshDependent(consumer)
 
-    model.topology.update(step=None, timeStep=0.0)
+    model.topology.update(step=None)
     with pytest.raises(TopologyError, match="only be reserved during a topology change"):
         model.topology.refreshMeshDependents()
 
@@ -657,7 +657,7 @@ def test_a_purely_reactive_modifier_sees_the_first_round_change():
     seen = []
 
     class _Reactive(_StubModifier):
-        def plan(self, model, change, step, timeStep):
+        def plan(self, model, change, step):
             seen.append(change)
             return None
 
@@ -666,7 +666,7 @@ def test_a_purely_reactive_modifier_sees_the_first_round_change():
         acts=_OwningModifier("acts", log, owns={1}, touches={7}),
         reacts=_Reactive("reacts", plansLeft=0, log=log),
     )
-    model.topology.update(step=None, timeStep=0.0)
+    model.topology.update(step=None)
 
     assert seen, "the reactive modifier was never asked to plan"
     assert seen[0] is not None, "round 1 handed it None despite an earlier modifier having changed the model"

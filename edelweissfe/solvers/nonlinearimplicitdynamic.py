@@ -399,7 +399,7 @@ class NonlinearImplicitDynamic(NIST):
         #: first increment of a step has built it. See :class:`_NewmarkSystem`.
         self._newmarkSystem = None
         #: Whether the next increment has to compute the acceleration from equilibrium first.
-        #: Armed by :meth:`solveStep` for a step starting cold, disarmed by the increment that
+        #: Armed by :meth:`beginStep` for a step starting cold, disarmed by the increment that
         #: consumes it.
         self._initialAccelerationPending = False
         #: Length of ``model.topology.history`` when the current equation system was assembled.
@@ -448,14 +448,14 @@ class NonlinearImplicitDynamic(NIST):
                 1,
             )
 
-    def solveStep(
+    def beginStep(
         self,
         step,
         model: FEModel,
         fieldOutputController: FieldOutputController,
         outputmanagers: dict[str, OutputManagerBase],
     ):
-        """Public interface to solve for a step; see the parent.
+        """Start a step; see the parent.
 
         Arms the initial-acceleration computation for a step starting cold and drops the operators
         of the previous step -- the parent rebuilds its equation system at the start of every step,
@@ -483,7 +483,7 @@ class NonlinearImplicitDynamic(NIST):
         # The mesh the step starts on, restored or not: a topology change is a change from this.
         self._topologyRecordsAtLastBuild = len(model.topology.history)
 
-        resumed = step.isResumed
+        resumed = not step.timeStepper.isAtStepStart()
         self._initialAccelerationPending = bool(self.options["computeInitialAcceleration"]) and not resumed
 
         self.journal.message(
@@ -504,7 +504,7 @@ class NonlinearImplicitDynamic(NIST):
             1,
         )
 
-        return super().solveStep(step, model, fieldOutputController, outputmanagers)
+        return super().beginStep(step, model, fieldOutputController, outputmanagers)
 
     def solveIncrement(
         self,

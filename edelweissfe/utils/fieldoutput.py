@@ -348,18 +348,10 @@ class _FieldOutputBase:
     def initializeStep(self, step):
         """Write the current (just-updated) result as the first row of this step.
 
-        Skipped on the step a restart resumes into: the restored state
-        ``initializeJob(resuming=True)`` just sampled is exactly the state the interrupted run
-        already exported as the last row of ``{export}.csv`` -- a checkpoint is always written
-        right after the same completed-increment hook that exports this field output (see
-        ``outputmanagers/restart.py``), so writing it again here would duplicate that row a second
-        time. One copy of it is unavoidable regardless (a cold start has the same duplicate at
-        t=0, from the zero increment every explicit solver run starts with landing on an
-        output-frequency boundary and re-exporting a result that has not advanced) -- skipping
-        here just keeps a resume's seam consistent with that pre-existing cold-start artifact
-        instead of tripling the row.
+        Only at the start of a step: a step resumed from a checkpoint already exported this state,
+        as the last row before the checkpoint was written.
         """
-        if step.isResumed:
+        if not step.timeStepper.isAtStepStart():
             return
 
         if self.export:

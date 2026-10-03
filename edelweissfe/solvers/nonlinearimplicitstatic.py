@@ -48,13 +48,10 @@ from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep, readTimeStep, writeTimeStep
 from edelweissfe.utils.exceptions import (
-    ConditionalStop,
     CutbackRequest,
     DivergingSolution,
-    ReachedMaxIncrements,
+    IncrementFailed,
     ReachedMaxIterations,
-    ReachedMinIncrementSize,
-    StepFailed,
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
@@ -235,36 +232,32 @@ class NIST(NonlinearSolverBase):
         dU = group["dU"][...]
         self.dU = dU if dU.size else None
 
-    def solveStep(
+    def beginStep(
         self,
         step,
         model: FEModel,
         fieldOutputController: FieldOutputController,
         outputmanagers: dict[str, OutputManagerBase],
-    ) -> tuple[bool, FEModel]:
-        """Public interface to solve for a step.
+    ):
+        """Set up the linear solver, and start the step; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`.
 
         Parameters
         ----------
-        stepNumber
-            The step number.
         step
-            The dictionary containing the step definition.
-        stepActions
-            The dictionary containing all step actions.
+            The step to be solved.
         model
-            The  model tree.
+            The model tree.
         fieldOutputController
             The field output controller.
+        outputmanagers
+            The output managers.
         """
 
         # self.options already reflects every >>options, name=<this solver's name>, ... block applied
         # so far: applyOptionsOverride pushes an override the moment such a block is constructed or
         # re-declared (edelweissfe.stepactions.options.StepAction), and an override sticks until
         # changed again -- there is nothing to reset or re-fetch here.
-        extrapolation = self.options["extrapolation"]
-        extrapolateAfterModelChange = self.options["extrapolateAfterModelChange"]
-        equilibrateAfterModelChange = self.options["equilibrateAfterModelChange"]
         linsolverOptions = self.options["linsolverConfigFile"]
         linsolverOptionDict = json.load(open(linsolverOptions, "r")) if linsolverOptions else ""
         self.linSolver = (
@@ -276,348 +269,361 @@ class NIST(NonlinearSolverBase):
         # solvers that do not log), so this is unconditional -- no isinstance check needed.
         self.linSolver.setJournal(self.journal)
 
-        maxIter = step.maxIter
-        criticalIter = step.criticalIter
-        maxGrowingIter = step.maxGrowIter
-        cutbackFactor = step.cutbackFactor
-
         # The equation system (DofManager, VIJ pattern, CSR structure) is (re)built lazily, at the
         # start of whichever increment first needs it -- either the very first one, or any later
-        # one where a constraint's updateConnectivity() reports that its DOF footprint changed
-        # (e.g. a dynamic contact candidate list). This mirrors EdelweissMeshfree's
-        # NonlinearQuasistaticSolver, which already rebuilds its equation system per-increment on
-        # exactly this kind of signal. For every existing constraint (whose updateConnectivity()
-        # inherits ConstraintBase's no-op default), this is unconditionally built exactly once, on
-        # the first increment -- identical to the previous behavior.
+        # one where the topology update reports a change of the mesh or of a constraint's DOF
+        # footprint (e.g. a dynamic contact candidate list).
         self.theDofManager = None
         self.mpcTransformation = None
-        U = dU = P = K = None
+        self._U = self._dU = self._P = self._K = None
 
         # The predictor's state between increments: the last accepted increment and its dU. A cold
         # step starts without; a resumed step continues from the checkpointed ones (readRestart).
-        if not step.isResumed:
+        if step.timeStepper.isAtStepStart():
             self.prevTimeStep = None
             self.dU = None
-        # True while an increment is retried after a cutback: the model modifiers already decided on
-        # the state the retry starts from.
-        incrementIsRetry = False
 
         self.validateModelCapabilities(model)
 
         self.applyStepActionsAtStepStart(model, step)
 
+        self._stepWallClockTic = perf_counter()
+
+    def prepareIncrement(self, step, model: FEModel, isRetry: bool):
+        """The topology update, at the start of every increment; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.prepareIncrement`.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        isRetry
+            True if the increment is retried after a cutback: the model modifiers already decided on
+            the state the retry starts from.
+        """
+
+        topologyUpdate = self.updateTopologyAndConnectivity(model, step, offerModelModifiers=not isRetry)
+        self._modelHasChanged = topologyUpdate.topologyChanged
+        self._connectivityHasChanged = (
+            topologyUpdate.meshDependentsRefreshed or topologyUpdate.constraintConnectivityChanged
+        )
+
+    def attemptIncrement(self, step, model: FEModel, timeStep: TimeStep):
+        """Solve the increment by Newton's method, rebuilding the equation system first if the topology
+        update changed the model, and re-equilibrating a changed model first if so configured; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.attemptIncrement`.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        timeStep
+            The increment.
+
+        Raises
+        ------
+        IncrementFailed
+            If Newton's method does not converge, or a material requests a cutback.
+        """
+
+        extrapolation = self.options["extrapolation"]
+        equilibrateAfterModelChange = self.options["equilibrateAfterModelChange"]
         reportPerformanceFrequency = self.options["report-performance-frequency"]
-        stepWallClockTic = perf_counter()
+        stepWallClockTic = self._stepWallClockTic
+        maxIter = step.maxIter
+        maxGrowingIter = step.maxGrowIter
+        cutbackFactor = step.cutbackFactor
+        modelHasChanged = self._modelHasChanged
+        connectivityHasChanged = self._connectivityHasChanged
+        U, dU, P, K = self._U, self._dU, self._P, self._K
 
-        try:
-            while not step.timeStepper.isFinished():
-                timeStep = step.timeStepper.proposeTimeStep()
-                topologyUpdate = self.updateTopologyAndConnectivity(
-                    model, step, timeStep, offerModelModifiers=not incrementIsRetry
-                )
-                modelHasChanged = topologyUpdate.topologyChanged
-                connectivityHasChanged = (
-                    topologyUpdate.meshDependentsRefreshed or topologyUpdate.constraintConnectivityChanged
-                )
+        # One separator, marking the start of this increment's block. Everything about this
+        # increment -- an equation-system rebuild if one is needed, the MPC/Dirichlet
+        # diagnostics that come with it, the Newton table, all of it -- is printed after this
+        # single header, nested one level deeper (see the messages below), instead of being
+        # sandwiched between a second separator of its own.
+        self.journal.printSeperationLine()
+        self.journal.message(
+            "increment {:}: {:8f}, {:8f}; time {:10f} to {:10f}".format(
+                timeStep.number,
+                timeStep.stepProgressIncrement,
+                timeStep.stepProgress,
+                timeStep.totalTime - timeStep.timeIncrement,
+                timeStep.totalTime,
+            ),
+            self.identification,
+            level=1,
+        )
 
-                # One separator, marking the start of this increment's block. Everything about this
-                # increment -- an equation-system rebuild if one is needed, the MPC/Dirichlet
-                # diagnostics that come with it, the Newton table, all of it -- is printed after this
-                # single header, nested one level deeper (see the messages below), instead of being
-                # sandwiched between a second separator of its own.
-                self.journal.printSeperationLine()
+        if reportPerformanceFrequency and timeStep.number > 0 and timeStep.number % reportPerformanceFrequency == 0:
+            self.journal.printPrettyTable(
+                performancetiming.makePrettyTable(wallTime=perf_counter() - stepWallClockTic),
+                self.identification,
+            )
+
+        if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
+            self.theDofManager = DofManager(
+                model.nodeFields.values(),
+                model.scalarVariables.values(),
+                model.elements.values(),
+                model.constraints.values(),
+                model.nodeSets.values(),
+            )
+            # findDirichletIndices() keys its cache in part on self.theDofManager, so
+            # entries from the discarded manager would otherwise keep it (and everything
+            # it references) alive for the rest of the run.
+            self._dirichletIndicesCache = None
+            self.journal.message(
+                "eq. system rebuilt: {:} dof".format(self.theDofManager.nDof),
+                self.identification,
+                2,
+            )
+
+            # The per-field block extents, not just the total. Fields are laid out
+            # field-major in contiguous slices, so this states the block structure of the
+            # equation system -- which is what a field-split preconditioner needs, and what
+            # tells you at a glance how a coupled model's DOFs are actually distributed.
+            for fieldName, fieldIndices in self.theDofManager.idcsOfFieldsInDofVector.items():
                 self.journal.message(
-                    "increment {:}: {:8f}, {:8f}; time {:10f} to {:10f}".format(
-                        timeStep.number,
-                        timeStep.stepProgressIncrement,
-                        timeStep.stepProgress,
-                        timeStep.totalTime - timeStep.timeIncrement,
-                        timeStep.totalTime,
+                    "field '{:}': {:} dof, [{:}, {:})".format(
+                        fieldName,
+                        fieldIndices.stop - fieldIndices.start,
+                        fieldIndices.start,
+                        fieldIndices.stop,
                     ),
                     self.identification,
-                    level=1,
+                    2,
                 )
 
-                if (
-                    reportPerformanceFrequency
-                    and timeStep.number > 0
-                    and timeStep.number % reportPerformanceFrequency == 0
-                ):
-                    self.journal.printPrettyTable(
-                        performancetiming.makePrettyTable(wallTime=perf_counter() - stepWallClockTic),
-                        self.identification,
-                    )
+            # The one interface point a solver needs beyond the plain (A, b) call: it
+            # derives whatever it wants (field layout, node coordinates, topology) from
+            # these itself. Re-pushed on every (re)build so it tracks the mesh across AMR.
+            self.linSolver.setModel(model, self.theDofManager)
 
-                if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
-                    self.theDofManager = DofManager(
-                        model.nodeFields.values(),
-                        model.scalarVariables.values(),
-                        model.elements.values(),
-                        model.constraints.values(),
-                        model.nodeSets.values(),
-                    )
-                    # findDirichletIndices() keys its cache in part on self.theDofManager, so
-                    # entries from the discarded manager would otherwise keep it (and everything
-                    # it references) alive for the rest of the run.
-                    self._dirichletIndicesCache = None
-                    self.journal.message(
-                        "eq. system rebuilt: {:} dof".format(self.theDofManager.nDof),
-                        self.identification,
-                        2,
-                    )
+            presentVariableNames = list(self.theDofManager.idcsOfFieldsInDofVector.keys())
 
-                    # The per-field block extents, not just the total. Fields are laid out
-                    # field-major in contiguous slices, so this states the block structure of the
-                    # equation system -- which is what a field-split preconditioner needs, and what
-                    # tells you at a glance how a coupled model's DOFs are actually distributed.
-                    for fieldName, fieldIndices in self.theDofManager.idcsOfFieldsInDofVector.items():
-                        self.journal.message(
-                            "field '{:}': {:} dof, [{:}, {:})".format(
-                                fieldName,
-                                fieldIndices.stop - fieldIndices.start,
-                                fieldIndices.start,
-                                fieldIndices.stop,
-                            ),
-                            self.identification,
-                            2,
-                        )
+            if self.theDofManager.idcsOfScalarVariablesInDofVector:
+                presentVariableNames += [
+                    "scalar variables",
+                ]
 
-                    # The one interface point a solver needs beyond the plain (A, b) call: it
-                    # derives whatever it wants (field layout, node coordinates, topology) from
-                    # these itself. Re-pushed on every (re)build so it tracks the mesh across AMR.
-                    self.linSolver.setModel(model, self.theDofManager)
+            # Centers each label over its 12-wide value+marker cell (see checkConvergence's
+            # iterationMessageTemplate).
+            subHeaderCell = "{:^12}{:^12} "
+            self.iterationHeader = ("{:^25}" * len(presentVariableNames)).format(*presentVariableNames)
+            self.iterationHeader2 = subHeaderCell.format("||R||∞", "||ddU||∞") * len(presentVariableNames)
 
-                    presentVariableNames = list(self.theDofManager.idcsOfFieldsInDofVector.keys())
+            if self.linSolver.reportsSolveSummary:
+                # Extra column for the linear solver's diagnostics; checkConvergence appends
+                # the matching row cell. Gap capped at 1 space -- wider wraps the row past the
+                # Journal's 76-char limit for level-2 messages.
+                gap = " "
+                self.iterationHeader += gap + "{:^25}".format("linear solve")
+                self.iterationHeader2 += gap + subHeaderCell.format("iters", "‖r‖")
 
-                    if self.theDofManager.idcsOfScalarVariablesInDofVector:
-                        presentVariableNames += [
-                            "scalar variables",
-                        ]
+            self.iterationMessageTemplate = "{:11.2e}{:1}{:11.2e}{:1} "
 
-                    # Centers each label over its 12-wide value+marker cell (see checkConvergence's
-                    # iterationMessageTemplate).
-                    subHeaderCell = "{:^12}{:^12} "
-                    self.iterationHeader = ("{:^25}" * len(presentVariableNames)).format(*presentVariableNames)
-                    self.iterationHeader2 = subHeaderCell.format("||R||∞", "||ddU||∞") * len(presentVariableNames)
+            K = self.theDofManager.constructVIJSystemMatrix()
+            self.csrGenerator = CSRGenerator(K)
 
-                    if self.linSolver.reportsSolveSummary:
-                        # Extra column for the linear solver's diagnostics; checkConvergence appends
-                        # the matching row cell. Gap capped at 1 space -- wider wraps the row past the
-                        # Journal's 76-char limit for level-2 messages.
-                        gap = " "
-                        self.iterationHeader += gap + "{:^25}".format("linear solve")
-                        self.iterationHeader2 += gap + subHeaderCell.format("iters", "‖r‖")
+            U = self.theDofManager.constructDofVector()
+            P = self.theDofManager.constructDofVector()
+            dU = self.theDofManager.constructDofVector()
 
-                    self.iterationMessageTemplate = "{:11.2e}{:1}{:11.2e}{:1} "
+            for fieldName, field in model.nodeFields.items():
+                U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
 
-                    K = self.theDofManager.constructVIJSystemMatrix()
-                    self.csrGenerator = CSRGenerator(K)
+            for variable in model.scalarVariables.values():
+                U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
 
-                    U = self.theDofManager.constructDofVector()
-                    P = self.theDofManager.constructDofVector()
-                    dU = self.theDofManager.constructDofVector()
+            self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
+            self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
 
-                    for fieldName, field in model.nodeFields.items():
-                        U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
+            # After a change of the mesh or of the constraint connectivity, the last accepted
+            # dU belongs to a different DOF layout, so this one increment is not extrapolated
+            # -- the same fallback as after a failed increment. Otherwise (the first build of a
+            # step) the predictor continues from it.
+            if modelHasChanged or connectivityHasChanged:
+                self.prevTimeStep = None
+            elif self.dU is not None:
+                dU[:] = self.dU
+            self._U, self._dU, self._P, self._K = U, dU, P, K
 
-                    for variable in model.scalarVariables.values():
-                        U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
+        self.incrementStatus = {
+            "step": step.number,
+            "inc": timeStep.number,
+            "iters": None,
+            "converged": False,
+            "time inc": timeStep.timeIncrement,
+            "time end": timeStep.totalTime,
+            "notes": "",
+        }
 
-                    self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
-                    self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
+        self.journal.message(self.iterationHeader, self.identification, level=2)
+        self.journal.message(self.iterationHeader2, self.identification, level=2)
 
-                    # After a change of the mesh or of the constraint connectivity, the last accepted
-                    # dU belongs to a different DOF layout, so this one increment is not extrapolated
-                    # -- the same fallback as after a failed increment. Otherwise (the first build of a
-                    # step) the predictor continues from it.
-                    if modelHasChanged or connectivityHasChanged:
-                        self.prevTimeStep = None
-                    elif self.dU is not None:
-                        dU[:] = self.dU
+        if modelHasChanged and equilibrateAfterModelChange:
+            # Settle the warm-started refined mesh to equilibrium at the LAST converged load
+            # before advancing the load. A synthetic time step with a zero step-progress
+            # increment holds every load at its previous absolute level (getCurrentLoad reads
+            # the absolute stepProgress) and yields a zero Dirichlet increment (getDelta reads
+            # the difference), with a zero time increment -> a pure equilibration solve. The
+            # settled U feeds the real increment below; its dU is reset there (self.prevTimeStep is
+            # None on a rebuild increment, so extrapolation zeroes dU).
+            equilibrationTimeStep = TimeStep(
+                timeStep.number,
+                0.0,
+                timeStep.stepProgress - timeStep.stepProgressIncrement,
+                0.0,
+                timeStep.stepTime - timeStep.timeIncrement,
+                timeStep.totalTime - timeStep.timeIncrement,
+            )
+            self.journal.message(
+                "Model changed: re-equilibrating at constant load before advancing",
+                self.identification,
+                1,
+            )
+            try:
+                U, dU, P, _, _ = self.solveIncrement(
+                    U,
+                    dU,
+                    P,
+                    K,
+                    step.actions,
+                    model,
+                    equilibrationTimeStep,
+                    None,
+                    extrapolation,
+                    maxIter,
+                    maxGrowingIter,
+                )
+            except (CutbackRequest, ReachedMaxIterations, DivergingSolution) as e:
+                self.journal.message(
+                    "Re-equilibration after model change failed ({:}); cutting back".format(str(e)),
+                    self.identification,
+                    1,
+                )
+                self.prevTimeStep = None
+                self.incrementStatus["iters"] = np.inf
+                self.incrementStatus["notes"] = "re-equilibration failed: {:}".format(str(e))
+                raise IncrementFailed(str(e), cutbackFactor) from e
 
-                statusInfoDict = {
-                    "step": step.number,
-                    "inc": timeStep.number,
-                    "iters": None,
-                    "converged": False,
-                    "time inc": timeStep.timeIncrement,
-                    "time end": timeStep.totalTime,
-                    "notes": "",
-                }
+            # Commit the settled state as a genuine converged (constant-load, zero-time)
+            # sub-increment so the real increment builds on the equilibrated state. Elements
+            # integrate strain incrementally from the COMMITTED state (computeKernels resets
+            # the trial buffer each call and forms dE = B*dU), so without this commit the
+            # settling deformation dU would be dropped from the strain/stress state while
+            # remaining in U -- leaving U inconsistent with the internal state and making the
+            # option a physics no-op. No output frame is emitted (it is an internal sub-step).
+            for fieldName, field in model.nodeFields.items():
+                self.theDofManager.writeDofVectorToNodeField(U, field, "U")
+                self.theDofManager.writeDofVectorToNodeField(P, field, "P")
+                self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
+            for variable in model.scalarVariables.values():
+                variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+            model.advanceToTime(equilibrationTimeStep.totalTime)
+            self._U, self._dU, self._P = U, dU, P
 
-                self.journal.message(self.iterationHeader, self.identification, level=2)
-                self.journal.message(self.iterationHeader2, self.identification, level=2)
+        try:
+            U, dU, P, iterationCounter, incrementResidualHistory = self.solveIncrement(
+                U,
+                dU,
+                P,
+                K,
+                step.actions,
+                model,
+                timeStep,
+                self.prevTimeStep,
+                extrapolation,
+                maxIter,
+                maxGrowingIter,
+            )
 
-                if modelHasChanged and equilibrateAfterModelChange:
-                    # Settle the warm-started refined mesh to equilibrium at the LAST converged load
-                    # before advancing the load. A synthetic time step with a zero step-progress
-                    # increment holds every load at its previous absolute level (getCurrentLoad reads
-                    # the absolute stepProgress) and yields a zero Dirichlet increment (getDelta reads
-                    # the difference), with a zero time increment -> a pure equilibration solve. The
-                    # settled U feeds the real increment below; its dU is reset there (self.prevTimeStep is
-                    # None on a rebuild increment, so extrapolation zeroes dU).
-                    equilibrationTimeStep = TimeStep(
-                        timeStep.number,
-                        0.0,
-                        timeStep.stepProgress - timeStep.stepProgressIncrement,
-                        0.0,
-                        timeStep.stepTime - timeStep.timeIncrement,
-                        timeStep.totalTime - timeStep.timeIncrement,
-                    )
-                    self.journal.message(
-                        "Model changed: re-equilibrating at constant load before advancing",
-                        self.identification,
-                        1,
-                    )
-                    try:
-                        U, dU, P, _, _ = self.solveIncrement(
-                            U,
-                            dU,
-                            P,
-                            K,
-                            step.actions,
-                            model,
-                            equilibrationTimeStep,
-                            None,
-                            extrapolation,
-                            maxIter,
-                            maxGrowingIter,
-                        )
-                    except (CutbackRequest, ReachedMaxIterations, DivergingSolution) as e:
-                        self.journal.message(
-                            "Re-equilibration after model change failed ({:}); cutting back".format(str(e)),
-                            self.identification,
-                            1,
-                        )
-                        step.timeStepper.rejectTimeStep(cutbackFactor)
-                        self.prevTimeStep = None
-                        incrementIsRetry = True
-                        statusInfoDict["iters"] = np.inf
-                        statusInfoDict["notes"] = "re-equilibration failed: {:}".format(str(e))
-                        for man in outputmanagers:
-                            man.finalizeFailedIncrement(statusInfoDict=statusInfoDict)
-                        continue
+        except CutbackRequest as e:
+            self.prevTimeStep = None
+            self.incrementStatus["iters"] = np.inf
+            self.incrementStatus["notes"] = str(e)
+            raise IncrementFailed(str(e), max(e.cutbackSize, cutbackFactor)) from e
 
-                    # Commit the settled state as a genuine converged (constant-load, zero-time)
-                    # sub-increment so the real increment builds on the equilibrated state. Elements
-                    # integrate strain incrementally from the COMMITTED state (computeKernels resets
-                    # the trial buffer each call and forms dE = B*dU), so without this commit the
-                    # settling deformation dU would be dropped from the strain/stress state while
-                    # remaining in U -- leaving U inconsistent with the internal state and making the
-                    # option a physics no-op. No output frame is emitted (it is an internal sub-step).
-                    for fieldName, field in model.nodeFields.items():
-                        self.theDofManager.writeDofVectorToNodeField(U, field, "U")
-                        self.theDofManager.writeDofVectorToNodeField(P, field, "P")
-                        self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
-                    for variable in model.scalarVariables.values():
-                        variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
-                    model.advanceToTime(equilibrationTimeStep.totalTime)
+        except (ReachedMaxIterations, DivergingSolution) as e:
+            self.prevTimeStep = None
+            self.incrementStatus["iters"] = np.inf
+            self.incrementStatus["notes"] = str(e)
+            raise IncrementFailed(str(e), cutbackFactor) from e
 
-                try:
-                    U, dU, P, iterationCounter, incrementResidualHistory = self.solveIncrement(
-                        U,
-                        dU,
-                        P,
-                        K,
-                        step.actions,
-                        model,
-                        timeStep,
-                        self.prevTimeStep,
-                        extrapolation,
-                        maxIter,
-                        maxGrowingIter,
-                    )
+        self._U, self._dU, self._P = U, dU, P
+        self._iterationCounter = iterationCounter
 
-                except CutbackRequest as e:
-                    self.journal.message(str(e), self.identification, 1)
-                    step.timeStepper.rejectTimeStep(max(e.cutbackSize, cutbackFactor))
-                    self.prevTimeStep = None
-                    incrementIsRetry = True
+    def acceptIncrement(self, step, model: FEModel, timeStep: TimeStep):
+        """Commit the converged increment to the model, and keep the predictor's state; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.acceptIncrement`.
 
-                    statusInfoDict["iters"] = np.inf
-                    statusInfoDict["notes"] = str(e)
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        timeStep
+            The converged increment.
+        """
 
-                    for man in outputmanagers:
-                        man.finalizeFailedIncrement(
-                            statusInfoDict=statusInfoDict,
-                        )
+        U, dU, P = self._U, self._dU, self._P
+        iterationCounter = self._iterationCounter
 
-                except (ReachedMaxIterations, DivergingSolution) as e:
-                    self.journal.message(str(e), self.identification, 1)
-                    step.timeStepper.rejectTimeStep(cutbackFactor)
-                    self.prevTimeStep = None
-                    incrementIsRetry = True
-
-                    statusInfoDict["iters"] = np.inf
-                    statusInfoDict["notes"] = str(e)
-
-                    for man in outputmanagers:
-                        man.finalizeFailedIncrement(
-                            statusInfoDict=statusInfoDict,
-                        )
-
-                else:
-                    # After an adaptive model change, the just-converged increment's dU conflates the
-                    # load advance with the one-off warm-start/remesh settling transient. Optionally
-                    # suppress extrapolation for the next increment (start it from a zero predictor)
-                    # instead of extrapolating that polluted dU.
-                    if modelHasChanged and not extrapolateAfterModelChange:
-                        self.prevTimeStep = None
-                    else:
-                        self.prevTimeStep = timeStep
-                    self.dU = dU
-                    incrementIsRetry = False
-
-                    if iterationCounter >= criticalIter:
-                        step.timeStepper.preventIncrementIncrease()
-                    step.timeStepper.acceptTimeStep(timeStep)
-
-                    # write results to nodes:
-                    for fieldName, field in model.nodeFields.items():
-                        self.theDofManager.writeDofVectorToNodeField(U, field, "U")
-                        self.theDofManager.writeDofVectorToNodeField(P, field, "P")
-                        self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
-
-                    for variable in model.scalarVariables.values():
-                        variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
-
-                    self.updateRigidBodies(model, timeStep)
-
-                    model.advanceToTime(timeStep.totalTime)
-
-                    self.journal.message(
-                        "Converged in {:} iteration(s)".format(iterationCounter),
-                        self.identification,
-                        1,
-                    )
-
-                    statusInfoDict["iters"] = iterationCounter
-                    statusInfoDict["converged"] = True
-
-                    fieldOutputController.finalizeIncrement()
-                    for man in outputmanagers:
-                        man.finalizeIncrement(
-                            statusInfoDict=statusInfoDict,
-                        )
-
-        except ReachedMaxIncrements:
-            self.applyStepActionsAtStepEnd(model, step.actions)
-
-        except ReachedMinIncrementSize:
-            self.journal.errorMessage("Incrementation failed", self.identification)
-            raise StepFailed()
-
-        except ConditionalStop:
-            self.journal.message("Conditional Stop", self.identification)
-            self.applyStepActionsAtStepEnd(model, step.actions)
-
+        # After an adaptive model change, the just-converged increment's dU conflates the
+        # load advance with the one-off warm-start/remesh settling transient. Optionally
+        # suppress extrapolation for the next increment (start it from a zero predictor)
+        # instead of extrapolating that polluted dU.
+        if self._modelHasChanged and not self.options["extrapolateAfterModelChange"]:
+            self.prevTimeStep = None
         else:
-            self.applyStepActionsAtStepEnd(model, step.actions)
+            self.prevTimeStep = timeStep
+        self.dU = dU
 
-        finally:
-            prettyTable = performancetiming.makePrettyTable(wallTime=perf_counter() - stepWallClockTic)
-            self.journal.printPrettyTable(prettyTable, self.identification)
-            performancetiming.reset()
+        if iterationCounter >= step.criticalIter:
+            step.timeStepper.preventIncrementIncrease()
+
+        # write results to nodes:
+        for fieldName, field in model.nodeFields.items():
+            self.theDofManager.writeDofVectorToNodeField(U, field, "U")
+            self.theDofManager.writeDofVectorToNodeField(P, field, "P")
+            self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
+
+        for variable in model.scalarVariables.values():
+            variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+
+        self.updateRigidBodies(model, timeStep)
+
+        model.advanceToTime(timeStep.totalTime)
+
+        self.journal.message(
+            "Converged in {:} iteration(s)".format(iterationCounter),
+            self.identification,
+            1,
+        )
+
+        self.incrementStatus["iters"] = iterationCounter
+        self.incrementStatus["converged"] = True
+
+    def endStep(self, step, model: FEModel):
+        """Report the step's performance timing.
+
+        Parameters
+        ----------
+        step
+            The step that was solved.
+        model
+            The model tree.
+        """
+
+        prettyTable = performancetiming.makePrettyTable(wallTime=perf_counter() - self._stepWallClockTic)
+        self.journal.printPrettyTable(prettyTable, self.identification)
+        performancetiming.reset()
 
     def solveIncrement(
         self,
@@ -893,7 +899,7 @@ class NIST(NonlinearSolverBase):
         timeStep: TimeStep,
     ) -> tuple[DofVector, VIJSystemMatrix, DofVector]:
         """Loop over all elements, and evalute them.
-        Is is called by solveStep() in each iteration.
+        Is called by solveIncrement() in each iteration.
 
         Parameters
         ----------
@@ -945,7 +951,7 @@ class NIST(NonlinearSolverBase):
         timeStep: TimeStep,
     ) -> tuple[DofVector, VIJSystemMatrix]:
         """Loop over all elements, and evaluate them.
-        Is is called by solveStep() in each iteration.
+        Is called by solveIncrement() in each iteration.
 
         Parameters
         ----------

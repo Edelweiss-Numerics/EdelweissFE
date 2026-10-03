@@ -78,6 +78,17 @@ class TimeStepperBase(ABC):
         """
 
     @abstractmethod
+    def isAtStepStart(self) -> bool:
+        """Whether no increment of the step was accepted yet. A step resumed from a checkpoint never
+        is: a checkpoint is written after an accepted increment.
+
+        Returns
+        -------
+        bool
+            True at the start of a step.
+        """
+
+    @abstractmethod
     def proposeTimeStep(self) -> TimeStep:
         """The next increment, starting from the last accepted one. Changes nothing: proposing twice
         gives the same increment.

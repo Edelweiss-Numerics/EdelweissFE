@@ -18,11 +18,15 @@ restart uses a tolerance. The rule has three consequences, each kept by construc
    is, and read back.** Nothing is re-derived or reconstructed. What is a pure function of the
    restored model needs nothing.
 2. **The step start is not repeated.** Step-start actions (initial conditions, material
-   initialization, prescribed fields), the explicit solver's step-start topology
-   update and the first contact search all happened before the checkpoint was written. A resumed step
-   skips them. ``step.isResumed`` is the one place the code asks whether it was resumed.
-3. **Increment loops decide by increment number.** Topology checks, contact searches, output and
-   checkpoints happen at the same increments whether a run started cold or was resumed.
+   initialization, prescribed fields), the zero increment, the step-start topology update and the
+   first contact search all happened before the checkpoint was written. Whether a step is at its
+   start is part of the time stepper's state
+   (:meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.isAtStepStart`): nothing
+   accepted yet. A restored time stepper never is, so a resumed step skips them -- there is no
+   separate "resumed" flag.
+3. **The increment loop is written once, and decides by increment number.** Topology checks,
+   contact searches, output and checkpoints happen at the same increments whether a run started cold
+   or was resumed.
 
 Whatever cannot keep the rule refuses to resume, with a :class:`~edelweissfe.utils.exceptions.RestartError`:
 a solver that does not checkpoint its state (the default of
@@ -34,19 +38,27 @@ records, so a run is resumed only from checkpoints written in steps before the f
 One increment, and where the checkpoint is written
 --------------------------------------------------
 
+The step's increment loop (:meth:`~edelweissfe.steps.base.stepbase.StepBase.solve`) is the same for
+every solver:
+
 .. code-block:: text
 
-    increment n                                                   (implicit: every increment;
-    ├── topology update     model modifiers (e.g. AMR), then ties   explicit: every
-    │                       and contact catch up                    topology-check-frequency)
-    ├── solve               Newton iterations / explicit update
-    ├── accept              material state, solver state (predictor, external work, ...)
-    └── output              field outputs, then the CHECKPOINT
+    increment n
+    ├── prepare      topology update when due: model modifiers   (implicit: every increment;
+    │                (e.g. AMR), then ties and contact catch up    explicit: at the step start and
+    │                                                               after every topology-check-
+    │                                                               frequency-th increment)
+    ├── propose      the time stepper proposes the increment
+    ├── attempt      Newton iterations / explicit update; if it fails: reject, retry smaller
+    ├── accept       solver: material state, solver state (predictor, external work, ...)
+    │                time stepper: progress, size of the next increment
+    └── output       field outputs, output managers, the CHECKPOINT last
                                                 ▲
     a resumed run starts here ──────────────────┘  with increment n + 1
 
-An implicit increment retried after a cutback starts from the same accepted state, so the model
-modifiers are not asked again: they decide once per accepted state.
+The topology update comes before the proposal, because a refinement may lower the stable time
+increment of an explicit analysis. An increment retried after a cutback starts from the same
+accepted state, so the model modifiers are not asked again: they decide once per accepted state.
 
 Restoring a checkpoint
 ----------------------

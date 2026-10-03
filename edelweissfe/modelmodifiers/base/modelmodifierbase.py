@@ -80,7 +80,7 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
         return self._name
 
     @abstractmethod
-    def plan(self, model: FEModel, change, step, timeStep: float):
+    def plan(self, model: FEModel, change, step):
         """Decide what, if anything, this modifier wants to change about the model -- without
         changing it.
 
@@ -104,8 +104,6 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
             :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`).
         step
             The current step.
-        timeStep
-            The current timeStep.
 
         Returns
         -------

@@ -126,7 +126,7 @@ def test_topology_history_roundtrip_reproduces_the_refinement(tmp_path):
     modelA = _buildModel(tmp_path, "a.inp")
     amrA = modelA.modelModifiers["amr"]
 
-    refined = modelA.topology.update(step=None, timeStep=0.0)
+    refined = modelA.topology.update(step=None)
     assert refined, "the initialOnly marker should have triggered a refinement on the first call"
     assert modelA.topology.history, "an applied decision must be recorded in the topology history"
 
@@ -149,7 +149,7 @@ def test_replay_detects_a_tampered_plan_and_names_it(tmp_path):
     turns "the resumed run diverged" into "it diverged at THIS record"."""
 
     modelA = _buildModel(tmp_path, "a.inp")
-    modelA.topology.update(step=None, timeStep=0.0)
+    modelA.topology.update(step=None)
     assert modelA.topology.history
 
     tampered = [replace(record, fingerprint="0" * 32) for record in modelA.topology.history]
@@ -171,7 +171,7 @@ def test_replay_keeps_the_time_each_decision_was_originally_made_at(tmp_path):
 
     modelA = _buildModel(tmp_path, "a.inp")
     modelA.advanceToTime(3.5)
-    modelA.topology.update(step=None, timeStep=0.0)
+    modelA.topology.update(step=None)
     assert [record.time for record in modelA.topology.history] == [3.5]
 
     modelB = _buildModel(tmp_path, "b.inp")

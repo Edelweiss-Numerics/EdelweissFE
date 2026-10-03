@@ -139,13 +139,7 @@ from edelweissfe.solvers.base.conservationchecks import (
 )
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.timesteppers.timestep import TimeStep, readTimeStep, writeTimeStep
-from edelweissfe.utils.exceptions import (
-    ConditionalStop,
-    CutbackRequest,
-    ReachedMaxIncrements,
-    ReachedMinIncrementSize,
-    StepFailed,
-)
+from edelweissfe.utils.exceptions import CutbackRequest, StepFailed
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
 
@@ -460,27 +454,27 @@ class NED(NonlinearSolverBase):
         self._externalWork = float(group.attrs["externalWork"])
         self.prevTimeStep = readTimeStep(group, "prevTimeStep")
 
-    def solveStep(
+    def beginStep(
         self,
         step,
         model: FEModel,
         fieldOutputController: FieldOutputController,
         outputmanagers: dict[str, OutputManagerBase],
     ):
-        """Public interface to solve for a step.
+        """Start the step; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`. The equation
+        system is built by the first :meth:`prepareIncrement`.
 
         Parameters
         ----------
-        stepNumber
-            The step number.
         step
-            The dictionary containing the step definition.
-        stepActions
-            The dictionary containing all step actions.
+            The step to be solved.
         model
-            The  model tree.
+            The model tree.
         fieldOutputController
             The field output controller.
+        outputmanagers
+            The output managers.
         """
 
         self.validateModelCapabilities(model)
@@ -489,9 +483,9 @@ class NED(NonlinearSolverBase):
         # everything this method does -- the initial topology refinement and the first equation
         # system included, since both are timed categories that would otherwise be subtracted from a
         # window they never ran in and drive the residue negative.
-        stepWallClockTic = perf_counter()
+        self._stepWallClockTic = perf_counter()
 
-        if not step.isResumed:
+        if step.timeStepper.isAtStepStart():
             self._externalWork = 0.0
             self.prevTimeStep = None
         self._conservationCheck.reset()
@@ -517,260 +511,307 @@ class NED(NonlinearSolverBase):
         # Step actions before the equation system, matching NIST: nothing they do depends on it.
         self.applyStepActionsAtStepStart(model, step)
 
-        # The step-start topology update: the modifiers acting at the start of the analysis (e.g.
-        # hAdaptivity's initialOnly markers) and the first contact search. It runs before anything
-        # sized by the equation system exists, so the mesh is final before the lumped mass, the
-        # multi-point-constraint condensation and the critical time step are derived from it; later
-        # updates happen inside the increment loop, at the topology-check increments.
-        #
-        # A resumed step skips it: the checkpoint was written after this update (and after every later
-        # one), so the restored mesh, mesh dependents and contact search are already its result.
-        if not step.isResumed:
-            self.updateTopologyAndConnectivity(model, step, model.time)
+        self._system = None
 
-        theSystem = self.buildEquationSystem(model, step)
+    def prepareIncrement(self, step, model: FEModel, isRetry: bool):
+        """The topology update, when due, and the equation system; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.prepareIncrement`.
 
-        Minv = theSystem.Minv
-        U, dU, V, P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
-        # The time stepper runs on the stable time increment from here on, which it carries (and
-        # checkpoints) itself: a resumed step continues with the one it had.
-        if not step.isResumed:
-            step.timeStepper.enforceTimeIncrement(theSystem.criticalTimeStep)
+        The topology update is due at the start of the step, and after every
+        ``topology-check-frequency``-th increment. At the start of the step it runs before anything
+        sized by the equation system exists, so the mesh is final before the lumped mass, the
+        multi-point-constraint condensation and the critical time step are derived from it. It runs
+        here, before the next increment is proposed, because a refinement may lower the stable time
+        increment that increment has to use.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        isRetry
+            Never True: this solver does not retry increments.
+        """
+
+        if step.timeStepper.isAtStepStart():
+            # The step-start topology update: the modifiers acting at the start of the analysis (e.g.
+            # hAdaptivity's initialOnly markers) and the first contact search.
+            self.updateTopologyAndConnectivity(model, step)
+
+        if self._system is None:
+            self._buildSystem(self.buildEquationSystem(model, step))
+            # The time stepper runs on the stable time increment from here on, which it carries (and
+            # checkpoints) itself: a resumed step continues with the one it had.
+            if step.timeStepper.enforcedTimeIncrement is None:
+                step.timeStepper.enforceTimeIncrement(self._system.criticalTimeStep)
+
+        # --- h-adaptivity, mid-run ----------------------------------------------------------------
+        # After every topology-check-frequency-th increment, so after its output: the marker refines
+        # on the last *finalized* field output, so anywhere earlier it would decide on stale results.
+        # And the pairing of U with the half-step-staggered V is unambiguous only between increments.
+        # The zero increment is never recorded as the last increment, so a live marker is never
+        # evaluated on the initial condition.
+        topologyCheckFrequency = self.options["topology-check-frequency"]
+        if not (
+            self._liveTopologyModifiers
+            and topologyCheckFrequency
+            and self.prevTimeStep is not None
+            and self.prevTimeStep.number % topologyCheckFrequency == 0
+        ):
+            return
+
+        theSystem, V = self._system, self._V
+        lumpedTotalsBefore = self._perFieldLumpedTotals()
+        momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, V, model)
+        kineticBefore = 0.5 * float(
+            np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
+        )
+
+        topologyUpdate = self.updateTopologyAndConnectivity(model, step)
+        meshChanged = topologyUpdate.topologyChanged or topologyUpdate.meshDependentsRefreshed
+        connectivityChanged = topologyUpdate.constraintConnectivityChanged
+
+        if meshChanged or connectivityChanged:
+            # Only a mesh change needs a system built afresh. A change of the contact
+            # connectivity alone carries solution, velocity and force over, as after a
+            # periodic contact search.
+            self._buildSystem(self.buildEquationSystem(model, step, previous=None if meshChanged else theSystem))
+            theSystem = self._system
+
+        U, V, P = self._U, self._V, self._P
+
+        if meshChanged:
+            # The net force is deliberately NOT re-evaluated on the new mesh. It
+            # could be, with one extra element pass -- but that would run the
+            # constitutive law off-cycle, with a zero strain increment, purely to
+            # obtain a force, and the material state is what that call writes into.
+            # Zeroing costs exactly one increment of force contribution to the
+            # velocity update: an O(dT) error confined to the increment following an
+            # event, after which it is computed normally. A bounded known error is
+            # preferable to an unbounded unknown one.
+            P[:] = 0.0
+            self.publishNodeFields(model, U, V, P)
+
+            self.reportTopologyChangeConservation(lumpedTotalsBefore, momentumBefore, kineticBefore, V, model)
+
+            # Lower only. Refinement shrinks the smallest element and tightens the
+            # limit, which must be honoured; softening raises it, and taking that up
+            # mid-step would change the integrator's dispersion for no benefit.
+            if theSystem.criticalTimeStep < step.timeStepper.enforcedTimeIncrement:
+                self.journal.message(
+                    "Refinement lowered the stable time increment from {:e} to "
+                    "{:e}".format(step.timeStepper.enforcedTimeIncrement, theSystem.criticalTimeStep),
+                    self.identification,
+                    1,
+                )
+                step.timeStepper.enforceTimeIncrement(theSystem.criticalTimeStep)
+
+    def _buildSystem(self, theSystem):
+        """Adopt a (re)built equation system, and the vectors the increments work on.
+
+        Parameters
+        ----------
+        theSystem
+            The equation system.
+        """
+
+        self._system = theSystem
+        self._Minv = theSystem.Minv
+        self._U, self._dU, self._V, self._P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
+        self._UAtLastConnectivitySearch = np.array(self._U)
+
+    def isOutputIncrement(self, timeStep: TimeStep) -> bool:
+        """Only every ``output-frequency``-th increment: an explicit run has millions.
+
+        Parameters
+        ----------
+        timeStep
+            The accepted increment.
+
+        Returns
+        -------
+        bool
+            True to write output.
+        """
+
+        return timeStep.number % self.options["output-frequency"] == 0
+
+    def attemptIncrement(self, step, model: FEModel, timeStep: TimeStep):
+        """The periodic contact search, when due, and the central-difference update; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.attemptIncrement`.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        timeStep
+            The increment.
+
+        Raises
+        ------
+        StepFailed
+            If a material requests a cutback: an explicit increment is not retried smaller.
+        """
 
         contactUpdateFrequency = self.options["contact-update-frequency"]
         topologyCheckFrequency = self.options["topology-check-frequency"]
-        UAtLastConnectivitySearch = np.array(U)
+        theSystem, Minv = self._system, self._Minv
+        U, dU, V, P = self._U, self._dU, self._V, self._P
+        UAtLastConnectivitySearch = self._UAtLastConnectivitySearch
 
-        try:
-            while not step.timeStepper.isFinished():
-                timeStep = step.timeStepper.proposeTimeStep()
-                # only print for increments matching the configured output-frequency
-                if timeStep.number % self.options["output-frequency"] == 0:
-                    self.journal.printSeperationLine()
-                    self.journal.message(
-                        "increment {:}: {:8e}, {:8e}; time {:10e} to {:10e}".format(
-                            timeStep.number,
-                            timeStep.stepProgressIncrement,
-                            timeStep.stepProgress,
-                            timeStep.totalTime - timeStep.timeIncrement,
-                            timeStep.totalTime,
-                        ),
-                        self.identification,
-                        level=1,
-                    )
+        # only print for increments matching the configured output-frequency
+        if timeStep.number % self.options["output-frequency"] == 0:
+            self.journal.printSeperationLine()
+            self.journal.message(
+                "increment {:}: {:8e}, {:8e}; time {:10e} to {:10e}".format(
+                    timeStep.number,
+                    timeStep.stepProgressIncrement,
+                    timeStep.stepProgress,
+                    timeStep.totalTime - timeStep.timeIncrement,
+                    timeStep.totalTime,
+                ),
+                self.identification,
+                level=1,
+            )
 
-                    if self.options["report-performance"]:
-                        # The cumulative table, as at the end of the step: an explicit run is
-                        # millions of increments long, and without this the final table is the
-                        # only one anyone would ever see.
-                        self.journal.printPrettyTable(
-                            performancetiming.makePrettyTable(wallTime=perf_counter() - stepWallClockTic),
-                            self.identification,
-                        )
-
-                # The mid-run topology check at the end of this same increment re-runs the
-                # connectivity search on EVERY constraint, these included. Searching here as well
-                # would build and query the same k-d tree twice within one increment: the later
-                # search is the one that has to happen, because a refinement in between invalidates
-                # whatever this one found. Deferring to it costs one increment of staleness -- the
-                # same staleness the configured frequency already accepts, and orders of magnitude
-                # below a facet dimension at an explicit time step.
-                topologyCheckDueThisIncrement = bool(
-                    self._liveTopologyModifiers
-                    and topologyCheckFrequency
-                    and timeStep.number > 0
-                    and timeStep.number % topologyCheckFrequency == 0
+            if self.options["report-performance"]:
+                # The cumulative table, as at the end of the step: an explicit run is
+                # millions of increments long, and without this the final table is the
+                # only one anyone would ever see.
+                self.journal.printPrettyTable(
+                    performancetiming.makePrettyTable(wallTime=perf_counter() - self._stepWallClockTic),
+                    self.identification,
                 )
 
-                if (
-                    self._dynamicConnectivityConstraints
-                    and contactUpdateFrequency
-                    and timeStep.number > 0
-                    and timeStep.number % contactUpdateFrequency == 0
-                    and not topologyCheckDueThisIncrement
-                ):
-                    connectivityChanged = self.updateConstraintConnectivity(model)
-                    motionSinceLastSearch = float(np.max(np.abs(np.asarray(U) - UAtLastConnectivitySearch)))
-                    UAtLastConnectivitySearch = np.array(U)
+        # The mid-run topology check at the end of this same increment re-runs the
+        # connectivity search on EVERY constraint, these included. Searching here as well
+        # would build and query the same k-d tree twice within one increment: the later
+        # search is the one that has to happen, because a refinement in between invalidates
+        # whatever this one found. Deferring to it costs one increment of staleness -- the
+        # same staleness the configured frequency already accepts, and orders of magnitude
+        # below a facet dimension at an explicit time step.
+        topologyCheckDueThisIncrement = bool(
+            self._liveTopologyModifiers
+            and topologyCheckFrequency
+            and timeStep.number > 0
+            and timeStep.number % topologyCheckFrequency == 0
+        )
 
-                    if connectivityChanged:
-                        # The motion is reported rather than assumed: it is the upper bound on how
-                        # far a slave node can have travelled relative to its master surface since
-                        # the previous search, which is what says whether the configured frequency
-                        # is defensible against this model's facet size.
-                        self.journal.message(
-                            "Constraint connectivity changed; largest nodal motion since the "
-                            "previous search: {:e}".format(motionSinceLastSearch),
-                            self.identification,
-                            2,
-                        )
-                        theSystem = self.buildEquationSystem(model, step, previous=theSystem)
+        if (
+            self._dynamicConnectivityConstraints
+            and contactUpdateFrequency
+            and timeStep.number > 0
+            and timeStep.number % contactUpdateFrequency == 0
+            and not topologyCheckDueThisIncrement
+        ):
+            connectivityChanged = self.updateConstraintConnectivity(model)
+            motionSinceLastSearch = float(np.max(np.abs(np.asarray(U) - UAtLastConnectivitySearch)))
+            self._UAtLastConnectivitySearch = np.array(U)
 
-                        Minv = theSystem.Minv
-                        U, dU, V, P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
+            if connectivityChanged:
+                # The motion is reported rather than assumed: it is the upper bound on how
+                # far a slave node can have travelled relative to its master surface since
+                # the previous search, which is what says whether the configured frequency
+                # is defensible against this model's facet size.
+                self.journal.message(
+                    "Constraint connectivity changed; largest nodal motion since the "
+                    "previous search: {:e}".format(motionSinceLastSearch),
+                    self.identification,
+                    2,
+                )
+                self._buildSystem(self.buildEquationSystem(model, step, previous=theSystem))
+                theSystem, Minv = self._system, self._Minv
+                U, dU, V, P = self._U, self._dU, self._V, self._P
 
-                dU[:] = 0.0
-                try:
-                    U, V, P = self.solveIncrement(
-                        U,
-                        dU,
-                        V,
-                        P,
-                        Minv,
-                        step.actions,
-                        model,
-                        timeStep,
-                        self.prevTimeStep,
-                    )
+        dU[:] = 0.0
+        try:
+            U, V, P = self.solveIncrement(
+                U,
+                dU,
+                V,
+                P,
+                Minv,
+                step.actions,
+                model,
+                timeStep,
+                self.prevTimeStep,
+            )
 
-                except CutbackRequest as e:
-                    # A cutback answers a CONVERGENCE failure, and an explicit scheme has no
-                    # convergence to fail: its time step is dictated by stability, courant *
-                    # dt_crit from the mesh and the wave speed. Shrinking it does nothing for a
-                    # material that could not integrate, and doing so was actively destructive --
-                    # discardAndChangeIncrement overwrites enforcedTimeIncrement with the reduced
-                    # value, the generator reuses that value every iteration afterwards, and
-                    # nothing raises it back (the critical step is enforced "lower only", and
-                    # SimpleTimeStepper.preventIncrementIncrease is a no-op). One failed
-                    # quadrature point permanently crippled the analysis: of three production runs
-                    # of the anchor pry-out model, two cut back to minInc and died, and the third
-                    # spent 291000 of 300000 increments at ~1e-14 s, covering 6e-09 s of loading.
-                    #
-                    # So the request is refused and the failure is surfaced where it happened.
-                    for man in outputmanagers:
-                        man.finalizeFailedIncrement(
-                            statusInfoDict=None,
-                        )
-                    raise StepFailed(
-                        "A material requested a cutback in increment {:}: {:}. The explicit time "
-                        "step is set by stability, not by convergence, so it cannot be reduced in "
-                        "response -- either the material cannot integrate at the stable step, or "
-                        "the state reaching it is already wrong. Both need the material or the "
-                        "model looked at, not a smaller step.".format(timeStep.number, e)
-                    ) from e
-                else:
-                    step.timeStepper.acceptTimeStep(timeStep)
+        except CutbackRequest as e:
+            # A cutback answers a CONVERGENCE failure, and an explicit scheme has no
+            # convergence to fail: its time step is dictated by stability, courant *
+            # dt_crit from the mesh and the wave speed. Shrinking it does nothing for a
+            # material that could not integrate, and doing so was actively destructive --
+            # discardAndChangeIncrement overwrites enforcedTimeIncrement with the reduced
+            # value, the generator reuses that value every iteration afterwards, and
+            # nothing raises it back (the critical step is enforced "lower only", and
+            # SimpleTimeStepper.preventIncrementIncrease is a no-op). One failed
+            # quadrature point permanently crippled the analysis: of three production runs
+            # of the anchor pry-out model, two cut back to minInc and died, and the third
+            # spent 291000 of 300000 increments at ~1e-14 s, covering 6e-09 s of loading.
+            #
+            # So the request is refused and the failure is surfaced where it happened.
+            raise StepFailed(
+                "A material requested a cutback in increment {:}: {:}. The explicit time "
+                "step is set by stability, not by convergence, so it cannot be reduced in "
+                "response -- either the material cannot integrate at the stable step, or "
+                "the state reaching it is already wrong. Both need the material or the "
+                "model looked at, not a smaller step.".format(timeStep.number, e)
+            ) from e
 
-                    # The zero increment, before the first real one, is not a completed step: the
-                    # velocity update returns early for it, and the first real increment must be the
-                    # half step that starts the leapfrog.
-                    if timeStep.timeIncrement > 0.0:
-                        self.prevTimeStep = timeStep
+        self._U, self._V, self._P = U, V, P
 
-                    self.publishNodeFields(model, U, V, P)
+    def acceptIncrement(self, step, model: FEModel, timeStep: TimeStep):
+        """Commit the increment to the model; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.acceptIncrement`.
 
-                    self.updateRigidBodies(model, timeStep)
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        timeStep
+            The increment.
+        """
 
-                    # Timed because it is not what it looks like. FEModel.advanceToTime is a generic
-                    # method shared with the implicit solvers, where it runs once per *converged*
-                    # increment and is amortised over a Newton loop; here it runs on every one of
-                    # millions of increments, and it is a serial Python loop over every element,
-                    # constraint and multi-point constraint in the model.
-                    with performancetiming.timeit("accept state"):
-                        model.advanceToTime(timeStep.totalTime)
+        U, V, P = self._U, self._V, self._P
 
-                    isOutputIncrement = timeStep.number % self.options["output-frequency"] == 0
-                    if isOutputIncrement:
-                        with performancetiming.timeit("finalize output"):
-                            fieldOutputController.finalizeIncrement()
-                            for man in outputmanagers:
-                                if not man.writesRestartCheckpoints:
-                                    man.finalizeIncrement(statusInfoDict=None)
+        # The zero increment, before the first real one, is not a completed step: the
+        # velocity update returns early for it, and the first real increment must be the
+        # half step that starts the leapfrog.
+        if timeStep.timeIncrement > 0.0:
+            self.prevTimeStep = timeStep
 
-                    # --- h-adaptivity, mid-run ------------------------------------------------
-                    # Placed exactly here for three independent reasons. The marker refines on the
-                    # last *finalized* field output, so anywhere earlier it would decide on stale
-                    # results. The cutback path restores U/V/P from vectors sized by the old equation
-                    # system, so a topology change interleaved with a cutback would restore the wrong
-                    # length -- ending a successful increment keeps the two paths disjoint. And the
-                    # pairing of U with the half-step-staggered V is unambiguous only between
-                    # increments.
-                    #
-                    # Increment 0 is excluded deliberately. It is the zero-length increment before the
-                    # first real one, and nothing has been solved at that point -- a live marker
-                    # evaluated there would refine on the initial condition.
-                    if (
-                        self._liveTopologyModifiers
-                        and topologyCheckFrequency
-                        and timeStep.number > 0
-                        and timeStep.number % topologyCheckFrequency == 0
-                    ):
-                        lumpedTotalsBefore = self._perFieldLumpedTotals()
-                        momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, V, model)
-                        kineticBefore = 0.5 * float(
-                            np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
-                        )
+        self.publishNodeFields(model, U, V, P)
 
-                        topologyUpdate = self.updateTopologyAndConnectivity(model, step, model.time)
-                        meshChanged = topologyUpdate.topologyChanged or topologyUpdate.meshDependentsRefreshed
-                        connectivityChanged = topologyUpdate.constraintConnectivityChanged
+        self.updateRigidBodies(model, timeStep)
 
-                        if meshChanged or connectivityChanged:
-                            # Only a mesh change needs a system built afresh. A change of the contact
-                            # connectivity alone carries solution, velocity and force over, as after a
-                            # periodic contact search.
-                            theSystem = self.buildEquationSystem(
-                                model, step, previous=None if meshChanged else theSystem
-                            )
+        # Timed because it is not what it looks like. FEModel.advanceToTime is a generic
+        # method shared with the implicit solvers, where it runs once per *converged*
+        # increment and is amortised over a Newton loop; here it runs on every one of
+        # millions of increments, and it is a serial Python loop over every element,
+        # constraint and multi-point constraint in the model.
+        with performancetiming.timeit("accept state"):
+            model.advanceToTime(timeStep.totalTime)
 
-                            Minv = theSystem.Minv
-                            U, dU, V, P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
-                            UAtLastConnectivitySearch = np.array(U)
+    def endStep(self, step, model: FEModel):
+        """Report the step's performance timing.
 
-                        if meshChanged:
-                            # The net force is deliberately NOT re-evaluated on the new mesh. It
-                            # could be, with one extra element pass -- but that would run the
-                            # constitutive law off-cycle, with a zero strain increment, purely to
-                            # obtain a force, and the material state is what that call writes into.
-                            # Zeroing costs exactly one increment of force contribution to the
-                            # velocity update: an O(dT) error confined to the increment following an
-                            # event, after which it is computed normally. A bounded known error is
-                            # preferable to an unbounded unknown one.
-                            P[:] = 0.0
-                            self.publishNodeFields(model, U, V, P)
+        Parameters
+        ----------
+        step
+            The step that was solved.
+        model
+            The model tree.
+        """
 
-                            self.reportTopologyChangeConservation(
-                                lumpedTotalsBefore, momentumBefore, kineticBefore, V, model
-                            )
-
-                            # Lower only. Refinement shrinks the smallest element and tightens the
-                            # limit, which must be honoured; softening raises it, and taking that up
-                            # mid-step would change the integrator's dispersion for no benefit.
-                            if theSystem.criticalTimeStep < step.timeStepper.enforcedTimeIncrement:
-                                self.journal.message(
-                                    "Refinement lowered the stable time increment from {:e} to "
-                                    "{:e}".format(step.timeStepper.enforcedTimeIncrement, theSystem.criticalTimeStep),
-                                    self.identification,
-                                    1,
-                                )
-                                step.timeStepper.enforceTimeIncrement(theSystem.criticalTimeStep)
-
-                    # Written after the topology check, so that a checkpoint holds the state the next
-                    # increment starts from: the mesh, the contact search and the force of the check.
-                    if isOutputIncrement:
-                        with performancetiming.timeit("finalize output"):
-                            for man in outputmanagers:
-                                if man.writesRestartCheckpoints:
-                                    man.finalizeIncrement(statusInfoDict=None)
-
-        except ReachedMaxIncrements:
-            self.applyStepActionsAtStepEnd(model, step.actions)
-
-        except ReachedMinIncrementSize:
-            self.journal.errorMessage("Incrementation failed", self.identification)
-            raise StepFailed()
-
-        except ConditionalStop:
-            self.journal.message("Conditional Stop", self.identification)
-            self.applyStepActionsAtStepEnd(model, step.actions)
-
-        else:
-            self.applyStepActionsAtStepEnd(model, step.actions)
-
-        finally:
-            prettyTable = performancetiming.makePrettyTable(wallTime=perf_counter() - stepWallClockTic)
-            self.journal.printPrettyTable(prettyTable, self.identification)
-            performancetiming.reset()
+        prettyTable = performancetiming.makePrettyTable(wallTime=perf_counter() - self._stepWallClockTic)
+        self.journal.printPrettyTable(prettyTable, self.identification)
+        performancetiming.reset()
 
     @performancetiming.timeit("increment")
     def solveIncrement(
@@ -1064,7 +1105,7 @@ class NED(NonlinearSolverBase):
         timeStep: TimeStep,
     ) -> tuple[DofVector]:
         """Loop over all elements, and evalute them.
-        Is is called by solveStep() in each iteration.
+        Is called by solveIncrement() in each iteration.
 
         Parameters
         ----------

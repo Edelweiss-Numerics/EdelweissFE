@@ -41,13 +41,7 @@ from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatr
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.exceptions import (
-    ConditionalStop,
-    CutbackRequest,
-    ReachedMaxIncrements,
-    ReachedMinIncrementSize,
-    StepFailed,
-)
+from edelweissfe.utils.exceptions import CutbackRequest, IncrementFailed
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
 
@@ -231,27 +225,26 @@ class NEST(NIST):
         # are user typos and must not be swallowed
         self._updateOptions(kwargs, journal, strict=True)
 
-    def solveStep(
+    def beginStep(
         self,
         step,
         model: FEModel,
         fieldOutputController: FieldOutputController,
         outputmanagers: dict[str, OutputManagerBase],
-    ) -> tuple[bool, FEModel]:
-        """Public interface to solve for a step.
+    ):
+        """Build the equation system, once per step, and start the step; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`.
 
         Parameters
         ----------
-        stepNumber
-            The step number.
         step
-            The dictionary containing the step definition.
-        stepActions
-            The dictionary containing all step actions.
+            The step to be solved.
         model
-            The  model tree.
+            The model tree.
         fieldOutputController
             The field output controller.
+        outputmanagers
+            The output managers.
         """
 
         self.validateModelCapabilities(model)
@@ -337,104 +330,121 @@ class NEST(NIST):
         for variable in model.scalarVariables.values():
             U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
 
-        prevTimeStep = None
+        self._U, self._dU, self._P, self._K = U, dU, P, K
+
+        self.prevTimeStep = None
 
         self.applyStepActionsAtStepStart(model, step)
 
+    def prepareIncrement(self, step, model: FEModel, isRetry: bool):
+        """Nothing to prepare: this solver has neither topology updates nor contact."""
+
+    def attemptIncrement(self, step, model: FEModel, timeStep: TimeStep):
+        """Integrate the increment with the embedded Runge-Kutta scheme; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.attemptIncrement`.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        timeStep
+            The increment.
+
+        Raises
+        ------
+        IncrementFailed
+            If the scheme requests a smaller increment.
+        """
+
+        self.incrementStatus = {
+            "step": step.number,
+            "inc": timeStep.number,
+            "iters": None,
+            "converged": False,
+            "time inc": timeStep.timeIncrement,
+            "time end": timeStep.totalTime,
+            "notes": "",
+        }
+
+        self.journal.printSeperationLine()
+        self.journal.message(
+            "increment {:}: {:8f}, {:8f}; time {:10f} to {:10f}".format(
+                timeStep.number,
+                timeStep.stepProgressIncrement,
+                timeStep.stepProgress,
+                timeStep.totalTime - timeStep.timeIncrement,
+                timeStep.totalTime,
+            ),
+            self.identification,
+            level=1,
+        )
         try:
-            while not step.timeStepper.isFinished():
-                timeStep = step.timeStepper.proposeTimeStep()
+            U, dU, P, incScaleFactor = self.solveIncrement(
+                self._U,
+                self._dU,
+                self._P,
+                self._K,
+                step.actions,
+                model,
+                timeStep,
+                self.prevTimeStep,
+            )
+        except CutbackRequest as e:
+            self.prevTimeStep = None
+            self.incrementStatus["notes"] = str(e)
+            raise IncrementFailed(str(e), max(e.cutbackSize, 0.25)) from e
 
-                statusInfoDict = {
-                    "step": step.number,
-                    "inc": timeStep.number,
-                    "iters": None,
-                    "converged": False,
-                    "time inc": timeStep.timeIncrement,
-                    "time end": timeStep.totalTime,
-                    "notes": "",
-                }
+        self._U, self._dU, self._P = U, dU, P
+        self._incScaleFactor = incScaleFactor
 
-                self.journal.printSeperationLine()
-                self.journal.message(
-                    "increment {:}: {:8f}, {:8f}; time {:10f} to {:10f}".format(
-                        timeStep.number,
-                        timeStep.stepProgressIncrement,
-                        timeStep.stepProgress,
-                        timeStep.totalTime - timeStep.timeIncrement,
-                        timeStep.totalTime,
-                    ),
-                    self.identification,
-                    level=1,
-                )
-                try:
-                    U, dU, P, incScaleFactor = self.solveIncrement(
-                        U,
-                        dU,
-                        P,
-                        K,
-                        step.actions,
-                        model,
-                        timeStep,
-                        prevTimeStep,
-                    )
+    def acceptIncrement(self, step, model: FEModel, timeStep: TimeStep):
+        """Commit the increment to the model, and let the error estimate size the next one; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.acceptIncrement`.
 
-                except CutbackRequest as e:
-                    self.journal.message(str(e), self.identification, 1)
-                    step.timeStepper.rejectTimeStep(max(e.cutbackSize, 0.25))
-                    prevTimeStep = None
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        timeStep
+            The solved increment.
+        """
 
-                    statusInfoDict["notes"] = str(e)
+        U, dU, P = self._U, self._dU, self._P
 
-                    for man in outputmanagers:
-                        man.finalizeFailedIncrement(
-                            statusInfoDict=statusInfoDict,
-                            currentComputingTimes=self.computationTimes,
-                        )
+        step.timeStepper.changeIncrementSize(self._incScaleFactor)
+        self.prevTimeStep = timeStep
 
-                else:
-                    step.timeStepper.acceptTimeStep(timeStep)
-                    step.timeStepper.changeIncrementSize(incScaleFactor)
-                    prevTimeStep = timeStep
+        # write results to nodes:
+        for fieldName, field in model.nodeFields.items():
+            self.theDofManager.writeDofVectorToNodeField(U, field, "U")
+            self.theDofManager.writeDofVectorToNodeField(P, field, "P")
+            self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
 
-                    # write results to nodes:
-                    for fieldName, field in model.nodeFields.items():
-                        self.theDofManager.writeDofVectorToNodeField(U, field, "U")
-                        self.theDofManager.writeDofVectorToNodeField(P, field, "P")
-                        self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
+        for variable in model.scalarVariables.values():
+            variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
 
-                    for variable in model.scalarVariables.values():
-                        variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+        self.updateRigidBodies(model, timeStep)
 
-                    self.updateRigidBodies(model, timeStep)
+        model.advanceToTime(timeStep.totalTime)
 
-                    model.advanceToTime(timeStep.totalTime)
+    def endStep(self, step, model: FEModel):
+        """Report the step's performance timing.
 
-                    fieldOutputController.finalizeIncrement()
-                    for man in outputmanagers:
-                        man.finalizeIncrement(
-                            currentComputingTimes=self.computationTimes,
-                            statusInfoDict=statusInfoDict,
-                        )
+        Parameters
+        ----------
+        step
+            The step that was solved.
+        model
+            The model tree.
+        """
 
-        except ReachedMaxIncrements:
-            self.applyStepActionsAtStepEnd(model, step.actions)
-
-        except ReachedMinIncrementSize:
-            self.journal.errorMessage("Incrementation failed", self.identification)
-            raise StepFailed()
-
-        except ConditionalStop:
-            self.journal.message("Conditional Stop", self.identification)
-            self.applyStepActionsAtStepEnd(model, step.actions)
-
-        else:
-            self.applyStepActionsAtStepEnd(model, step.actions)
-
-        finally:
-            prettyTable = performancetiming.makePrettyTable()
-            self.journal.printPrettyTable(prettyTable, self.identification)
-            performancetiming.reset()
+        prettyTable = performancetiming.makePrettyTable()
+        self.journal.printPrettyTable(prettyTable, self.identification)
+        performancetiming.reset()
 
     def solveIncrement(
         self,

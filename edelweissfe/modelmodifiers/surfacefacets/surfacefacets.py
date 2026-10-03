@@ -78,7 +78,7 @@ class ModelModifier(ModelModifierBase):
     def __init__(self, name: str, model: FEModel, journal: Journal, **kwargs):
         super().__init__(name, model, journal, **kwargs)
 
-    def plan(self, model: FEModel, change, step, timeStep: float) -> "FacetPlan | None":
+    def plan(self, model: FEModel, change, step) -> "FacetPlan | None":
         """Retile every recorded recipe whose surface this change touched.
 
         On the first round of an update (``change is None``) there is nothing to react to yet: the

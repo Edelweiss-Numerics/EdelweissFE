@@ -35,6 +35,13 @@ from dataclasses import dataclass
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.base.timestepperbase import TimeStepperBase
+from edelweissfe.utils.exceptions import (
+    ConditionalStop,
+    IncrementFailed,
+    ReachedMaxIncrements,
+    ReachedMinIncrementSize,
+    StepFailed,
+)
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
@@ -119,9 +126,6 @@ class StepBase(ABC):
         options = buildSchemaFromOptions(StepIncrementationSchema, kwargs)
 
         self.number = number  #: The (unique) number of the step.
-        #: Whether this step continues from a restart checkpoint (see :meth:`readRestart`) rather than
-        #: starting cold. The one place a solver asks whether it was resumed.
-        self.isResumed = False
         self.model = model
         self.fieldOutputController = fieldOutputController
         self.journal = journal
@@ -152,13 +156,36 @@ class StepBase(ABC):
         """
 
     def solve(self):
-        """Let this step be solved by its solver, including the surrounding
-        bookkeeping of field outputs and output managers."""
+        """Solve this step, increment by increment.
+
+        The increment loop, the same for every solver:
+
+        .. code-block:: text
+
+            begin the step
+            while the step is not finished:
+                prepare the increment     topology update when due
+                propose an increment      time stepper
+                attempt it                solver; if it fails: reject it, retry smaller
+                accept it                 solver, then time stepper
+                write output              field outputs, output managers, restart checkpoint last
+            end the step
+
+        A restart checkpoint is written after an accepted increment, as the last output, so it holds
+        exactly the state the next increment starts from -- and a resumed step simply continues
+        this loop.
+        """
 
         model = self.model
+        solver = self.solver
+        timeStepper = self.timeStepper
         fieldOutputController = self.fieldOutputController
         journal = self.journal
         outputManagers = self.outputManagers
+        # Restart checkpoints last, so that they hold the bookkeeping of every other output.
+        outputManagers = [m for m in outputManagers if not m.writesRestartCheckpoints] + [
+            m for m in outputManagers if m.writesRestartCheckpoints
+        ]
 
         try:
             # Step-start model updates. A resumed step has none: resuming past one is refused.
@@ -169,7 +196,43 @@ class StepBase(ABC):
             for manager in outputManagers:
                 manager.initializeStep(self)
 
-            self.solver.solveStep(self, model, fieldOutputController, outputManagers)
+            solver.beginStep(self, model, fieldOutputController, outputManagers)
+            try:
+                isRetry = False
+                while not timeStepper.isFinished():
+                    solver.prepareIncrement(self, model, isRetry)
+                    timeStep = timeStepper.proposeTimeStep()
+
+                    try:
+                        solver.attemptIncrement(self, model, timeStep)
+                    except IncrementFailed as e:
+                        journal.message(str(e), solver.identification, 1)
+                        timeStepper.rejectTimeStep(e.cutbackFactor)
+                        for manager in outputManagers:
+                            manager.finalizeFailedIncrement(statusInfoDict=solver.incrementStatus)
+                        isRetry = True
+                        continue
+
+                    solver.acceptIncrement(self, model, timeStep)
+                    timeStepper.acceptTimeStep(timeStep)
+                    isRetry = False
+
+                    if solver.isOutputIncrement(timeStep):
+                        fieldOutputController.finalizeIncrement()
+                        for manager in outputManagers:
+                            manager.finalizeIncrement(statusInfoDict=solver.incrementStatus)
+
+            except ReachedMaxIncrements:
+                pass
+            except ReachedMinIncrementSize:
+                journal.errorMessage("Incrementation failed", solver.identification)
+                raise StepFailed()
+            except ConditionalStop:
+                journal.message("Conditional Stop", solver.identification)
+            finally:
+                solver.endStep(self, model)
+
+            solver.applyStepActionsAtStepEnd(model, self.actions)
 
         finally:
             fieldOutputController.finalizeStep()
@@ -188,4 +251,3 @@ class StepBase(ABC):
 
         self.timeStepper.readRestart(restartFile)
         self.solver.readRestart(restartFile)
-        self.isResumed = True
