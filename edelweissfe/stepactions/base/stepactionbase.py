@@ -256,13 +256,13 @@ class StepActionBase(OptionSchemaProvider, ABC):
             True if ``theSet`` changed since its version was last recorded or checked.
         """
         setVersions = self.__dict__.setdefault("_setVersions", {})
-        if id(theSet) not in setVersions:
+        if theSet.name not in setVersions:
             raise RuntimeError(
                 f"{type(self).__name__}: a set is checked for changes, but the state derived "
                 "from it never recorded its version (call _recordSetVersion where that state is built)."
             )
-        changed = setVersions[id(theSet)] != theSet._version
-        setVersions[id(theSet)] = theSet._version
+        changed = setVersions[theSet.name] != theSet._version
+        setVersions[theSet.name] = theSet._version
         return changed
 
     def _recordSetVersion(self, theSet):
@@ -274,4 +274,4 @@ class StepActionBase(OptionSchemaProvider, ABC):
         theSet
             The set the derived state was built from.
         """
-        self.__dict__.setdefault("_setVersions", {})[id(theSet)] = theSet._version
+        self.__dict__.setdefault("_setVersions", {})[theSet.name] = theSet._version

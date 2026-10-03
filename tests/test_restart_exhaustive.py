@@ -650,36 +650,43 @@ def _reader(checkpoint: Path) -> str:
 _WALL_CLOCK = {"_stepWallClockTic"}
 
 
-def _plainValue(value, depth: int = 0):
+def _plainValue(value, directory: str, depth: int = 0):
     """A canonical, comparable form of a plain value -- the kind of attribute state is made of --
     or None. Containers of plain values count, and so do the plain attributes of a helper object
-    (one level deep, e.g. a solver's conservation check). Floats compare bitwise."""
-    if isinstance(value, (bool, int, str, np.bool_, np.integer)):
+    (one level deep, e.g. a solver's conservation check). Floats compare bitwise; the run's own
+    directory, which differs between two runs by construction, is cut out of strings."""
+    if isinstance(value, str):
+        return value.replace(directory, "<run>")
+    if isinstance(value, (bool, int, np.bool_, np.integer)):
         return value
     if isinstance(value, (float, np.floating)):
         return float(value).hex()
     if isinstance(value, np.ndarray):
         return None if value.dtype == object else (value.dtype.str, value.shape, value.tobytes())
     if isinstance(value, TimeStep):
-        return _plainValue((value.number, value.stepProgressIncrement, value.stepProgress, value.totalTime))
+        return _plainValue((value.number, value.stepProgressIncrement, value.stepProgress, value.totalTime), directory)
     if isinstance(value, (list, tuple, set, frozenset)):
-        entries = [_plainValue(entry, depth) for entry in value]
+        entries = [_plainValue(entry, directory, depth) for entry in value]
         if any(entry is None for entry in entries):
             return None
         return tuple(sorted(entries, key=repr) if isinstance(value, (set, frozenset)) else entries)
     if isinstance(value, dict):
-        entries = [(repr(key), _plainValue(entry, depth)) for key, entry in value.items()]
-        return None if any(entry is None for _, entry in entries) else tuple(sorted(entries))
+        entries = [
+            (_plainValue(key, directory, depth), _plainValue(entry, directory, depth)) for key, entry in value.items()
+        ]
+        if any(key is None or entry is None for key, entry in entries):
+            return None
+        return tuple(sorted(entries, key=repr))
     if depth == 0 and type(value).__module__.startswith("edelweissfe"):
         try:
-            attributes = {name: _plainValue(entry, depth + 1) for name, entry in vars(value).items()}
+            attributes = {name: _plainValue(entry, directory, depth + 1) for name, entry in vars(value).items()}
         except TypeError:  # a compiled object without instance attributes
             return None
         return (type(value).__qualname__, tuple(sorted((n, a) for n, a in attributes.items() if a is not None)))
     return None
 
 
-def _components(model, step, outputManagers) -> dict:
+def _components(model, step, outputManagers, directory: Path) -> dict:
     """Every plain-valued attribute of every component a checkpoint concerns, by component."""
     components = {"solver": step.solver, "timeStepper": step.timeStepper}
     components |= {"constraint " + name: c for name, c in model.constraints.items()}
@@ -690,9 +697,9 @@ def _components(model, step, outputManagers) -> dict:
         components |= {"{:} {:}".format(actionType, name): a for name, a in actions.items()}
     return {
         key: {
-            name: _plainValue(value)
+            name: _plainValue(value, str(directory))
             for name, value in vars(component).items()
-            if name not in _WALL_CLOCK and _plainValue(value) is not None
+            if name not in _WALL_CLOCK and _plainValue(value, str(directory)) is not None
         }
         for key, component in components.items()
     }
@@ -740,7 +747,9 @@ def _uninterrupted(scenario: str, solver: str, directory: Path):
 
     def recordingWrite(fileName, model, step, outputManagers):
         write(fileName, model, step, outputManagers)
-        componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(model, step, outputManagers)
+        componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(
+            model, step, outputManagers, Path(fileName).parent
+        )
 
     AdaptiveTimeStepper.proposeTimeStep = recordingPropose
     AdaptiveTimeStepper.rejectTimeStep = countingReject
@@ -836,7 +845,9 @@ def test_resume_from_every_checkpoint_is_exact(workDirectory, scenario, solver, 
 
     def recordingWrite(fileName, model, step, outputManagers):
         write(fileName, model, step, outputManagers)
-        componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(model, step, outputManagers)
+        componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(
+            model, step, outputManagers, Path(fileName).parent
+        )
 
     restartOutputManager.writeCheckpoint = recordingWrite
     try:
