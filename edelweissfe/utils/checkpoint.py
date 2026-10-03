@@ -151,14 +151,12 @@ class ResumeCheckpoint:
             readRestartDataInto(self._file["outputManagers"], outputManagers)
 
     def restoreStep(self, step):
-        """Restore the time stepper's and the solver's state, when the resumed step begins.
-
-        The solver holds accumulators it cannot recompute from the converged solution, e.g. the
-        explicit solver's external work.
+        """Continue ``step`` from the checkpoint, when the resumed step begins: its time stepper's
+        progress and its solver's state between increments; see
+        :meth:`~edelweissfe.steps.base.stepbase.StepBase.readRestart`.
         """
 
-        step.timeStepper.readRestart(self._file)
-        step.solver.readRestart(self._file)
+        step.readRestart(self._file)
 
     def close(self):
         """Close the file. Nothing reads the checkpoint after :meth:`restoreStep`, and it must not

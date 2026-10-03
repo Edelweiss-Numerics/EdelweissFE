@@ -188,17 +188,17 @@ Every refinement pass forces the solver to rebuild the equation system (DOF mana
 pattern, solution vectors and any multi-point-constraint transformation), which is expensive on a
 large model. Left unchecked, a marker whose criterion is crossed by elements one at a time --
 rather than in a single burst -- triggers that rebuild on every increment a lone element newly
-qualifies. ``minMarkedElements`` (default ``1``, i.e. the previous behaviour: refine as soon as
-anything is marked) raises the bar: newly marked elements accumulate across increments, and the
-modifier defers refining until the accumulated count reaches ``minMarkedElements``, at which point
-all of them are refined together in a single pass. This trades refinement latency (a marked element
-may sit unrefined, still on the coarse mesh, for a few extra increments) for fewer, larger equation-
-system rebuilds.
+qualifies. ``minMarkedElements`` (default ``1``: refine as soon as anything is marked) raises the
+bar: a refinement pass happens only if one evaluation of the markers marks at least
+``minMarkedElements`` eligible elements. Marks are not carried over to later evaluations -- they are
+a function of the current state only, which is what keeps a restarted run identical to an
+uninterrupted one. This trades refinement latency (a marked element may stay on the coarse mesh
+until enough elements qualify at once) for fewer, larger equation-system rebuilds.
 
 .. literalinclude:: ../../../testfiles/marmot/AMR_MinMarkedElements/test.inp
     :language: edelweiss
     :caption: Example (refinement deferred indefinitely because only one of the two elements ever
-              crosses the marker threshold, so the accumulated count never reaches
+              crosses the marker threshold, so no evaluation reaches
               ``minMarkedElements=2``): ``testfiles/marmot/AMR_MinMarkedElements/test.inp``
 
 State-variable transfer strategies

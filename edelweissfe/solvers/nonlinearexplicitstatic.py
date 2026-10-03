@@ -339,7 +339,7 @@ class NEST(NIST):
 
         prevTimeStep = None
 
-        self.applyStepActionsAtStepStart(model, step.actions)
+        self.applyStepActionsAtStepStart(model, step)
 
         try:
             for timeStep in step.getTimeStep():

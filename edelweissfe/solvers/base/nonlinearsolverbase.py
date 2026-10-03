@@ -43,7 +43,7 @@ from edelweissfe.numerics.mpctransformation import (
 )
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.exceptions import DivergingSolution, TopologyError
+from edelweissfe.utils.exceptions import DivergingSolution, RestartError, TopologyError
 from edelweissfe.utils.schema import OptionSchemaProvider, fieldSchemaMeta
 
 
@@ -158,7 +158,9 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 self.options[canonicalKey] = type(defaultValue)(v)
 
     @performancetiming.timeit("topology update")
-    def updateTopologyAndConnectivity(self, model: FEModel, step, timeStep, resumed: bool = False) -> TopologyUpdate:
+    def updateTopologyAndConnectivity(
+        self, model: FEModel, step, timeStep, offerModelModifiers: bool = True
+    ) -> TopologyUpdate:
         """Run the topology update, then let every mesh-dependent consumer catch up on it.
 
         Two phases. First, the model modifiers plan and apply to a fixed point inside one topology
@@ -178,10 +180,9 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The step being solved.
         timeStep
             The current time step, handed on to the model modifiers.
-        resumed
-            First update of a resumed step: constraints call
-            :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.resumeConnectivity`
-            instead of :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity`.
+        offerModelModifiers
+            False when an increment is retried after a cutback. The model modifiers decide once per
+            converged state: the retry starts from the state they already decided on.
 
         Returns
         -------
@@ -189,13 +190,10 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             What changed; the solver decides from it whether to rebuild its equation system.
         """
 
-        topologyChanged = model.topology.update(step, timeStep)
+        topologyChanged = model.topology.update(step, timeStep) if offerModelModifiers else False
         meshDependentsRefreshed = model.topology.refreshMeshDependents()
         constraintConnectivityChanged = any(
-            [
-                constraint.resumeConnectivity(model) if resumed else constraint.updateConnectivity(model)
-                for constraint in model.constraints.values()
-            ]
+            [constraint.updateConnectivity(model) for constraint in model.constraints.values()]
         )
         return TopologyUpdate(topologyChanged, meshDependentsRefreshed, constraintConnectivityChanged)
 
@@ -338,12 +336,11 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         return PExt, K
 
     def writeRestart(self, restartFile):
-        """Write solver state that a resumed run cannot reconstruct from the converged solution.
+        """Write the state this solver carries from one increment to the next, exactly as it is.
 
-        Called once per checkpoint by the restart output manager, alongside the model's and the
-        time stepper's own ``writeRestart``. Most solvers need nothing here: an implicit solver
-        rebuilds everything it uses from the solution it just converged. A no-op by default, so a
-        solver declares such state only when it actually carries some.
+        Called once per checkpoint by the restart output manager, after the increment was accepted,
+        alongside the model's and the time stepper's own ``writeRestart``. A no-op by default; a
+        solver that supports resuming writes its state here and reads it in :meth:`readRestart`.
 
         Parameters
         ----------
@@ -351,18 +348,37 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The open checkpoint to write to.
         """
 
-    def readRestart(self, restartFile):
-        """Restore what :meth:`writeRestart` wrote.
-
-        Must tolerate a checkpoint that carries no state for this solver -- one written by a
-        different solver, or written before this solver carried any. A resumed run then behaves as
-        it did before the state was checkpointed, rather than failing.
+    def checkpointedState(self, restartFile):
+        """The checkpoint's group holding this solver's state, see :meth:`writeRestart`.
 
         Parameters
         ----------
         restartFile
             The open checkpoint to read from.
         """
+
+        if "solver" not in restartFile:
+            raise RestartError(
+                "The checkpoint holds no solver state, so the {:} solver cannot continue exactly where "
+                "the uninterrupted run would have. It was written by an older EdelweissFE; resume it with "
+                "that version, or restart the analysis.".format(self.identification)
+            )
+        return restartFile["solver"]
+
+    def readRestart(self, restartFile):
+        """Restore what :meth:`writeRestart` wrote, so that the resumed step continues exactly where
+        the uninterrupted run would have.
+
+        Refuses by default: a solver supports resuming only once it writes and reads all the state
+        it carries between increments.
+
+        Parameters
+        ----------
+        restartFile
+            The open checkpoint to read from.
+        """
+
+        raise RestartError("The {:} solver does not support resuming from a checkpoint.".format(self.identification))
 
     def applyOptionsOverride(self, fieldValues: dict) -> None:
         """Apply a partial override of this solver's own ``schema`` fields onto ``self.options``.
@@ -703,18 +719,24 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 level=2,
             )
 
-    def applyStepActionsAtStepStart(self, model: FEModel, stepActions: dict[str, StepActionBase]):
-        """Called when all step actions should be appliet at the start a step.
+    def applyStepActionsAtStepStart(self, model: FEModel, step):
+        """Apply every step action's step-start part (initial conditions, material initialization,
+        prescribed fields, ...).
+
+        Not on a resumed step: the checkpointed run applied them at the step's real start, and the
+        state they set has evolved since -- applying them again would overwrite the restored state.
 
         Parameters
         ----------
         model
             The model tree.
-        stepActions
-            The dictionary of active step actions.
+        step
+            The step being started.
         """
 
-        for stepActionType in stepActions.values():
+        if step.isResumed:
+            return
+        for stepActionType in step.actions.values():
             for action in stepActionType.values():
                 action.applyAtStepStart(model)
 

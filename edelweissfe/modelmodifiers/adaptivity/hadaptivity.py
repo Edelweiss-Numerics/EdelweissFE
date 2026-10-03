@@ -117,13 +117,12 @@ class HAdaptivitySchema:
     maxLevel: int = schemaField(description="Maximum refinement level.", dtype=int, default=1)
     minMarkedElements: int = schemaField(
         description=(
-            "Minimum number of eligible elements that must be marked before a refinement pass is "
-            "triggered. Marked elements persist (accumulate) across increments -- across calls where "
-            "fewer than this many are marked, no refinement happens and no equation system rebuild is "
-            "triggered -- until the accumulated count reaches this threshold, at which point all of "
-            "them are refined together in a single pass. Note that individual markers may cap their "
-            "own marks per pass (e.g. 'maxRefinedFraction') or expand them (e.g. 'halo') before "
-            "accumulating here. Default 1 refines as soon as any element is marked (previous behavior)."
+            "Minimum number of eligible elements one evaluation of the markers must mark for a "
+            "refinement pass to happen; with fewer, nothing is refined and no equation system is "
+            "rebuilt. Marks are not carried over to later evaluations: they are a function of the "
+            "current state only. Individual markers may cap their own marks (e.g. "
+            "'maxRefinedFraction') or expand them (e.g. 'halo') before this count is taken. Default 1 "
+            "refines as soon as any element is marked."
         ),
         dtype=int,
         default=1,
@@ -307,7 +306,6 @@ class ModelModifier(ModelModifierBase):
 
         self.maxLevel = options.maxLevel
         self.minMarkedElements = max(1, options.minMarkedElements)
-        self._pendingMarkedElements = set()  # elements marked but not yet refined (below minMarkedElements)
         # Diagnostics only, for the journal and for tests. The authoritative record of what this
         # modifier did -- the one a restart replays -- is model.topology.history.
         self._committedOccasions = []
@@ -437,8 +435,6 @@ class ModelModifier(ModelModifierBase):
         # and eventually by the mesh itself. tests/test_mpc_slave_claim_arbitration.py pins it.
         self._hanging = HangingNodeConstraint(name + "_hanging", model)
         model.multiPointConstraints = {name + "_hanging": self._hanging, **model.multiPointConstraints}
-        self._converged = False  # set True once an increment has converged
-        self._lastRefinedTime = None  # model.time of the last refinement (guards re-refine on cutback)
         self._isFirstCall = True
         # parent-parametric coords of each child's nodes (used for warm-start interpolation)
         self._octantParams = self._topology.subdivision_children_param(self.splitFactor)
@@ -478,13 +474,11 @@ class ModelModifier(ModelModifierBase):
         assigned by the model's allocator in an order that depends on what else minted.
         """
 
-        # Nothing this modifier cares about changed since it last planned in this topology update
-        # -- another modifier's mutation. Returning None here is what lets the pipeline settle.
-        if change is not None and not (change.addedElements or change.removedElements):
-            return None
-
-        # Do not re-refine if the solver is re-trying the exact same time state after a cutback
-        if self._lastRefinedTime is not None and abs(model.time - self._lastRefinedTime) < 1e-12:
+        # The markers are evaluated once per topology update, in its first round (change is None):
+        # they read the solution of the last accepted increment, which a refinement in this update
+        # does not change. Evaluating them again in a later round would only repeat, or cascade,
+        # the decision already taken -- and returning None is what lets the pipeline settle.
+        if change is not None:
             return None
 
         elForEid = {v: k for k, v in self._eidToEl.items()}
@@ -509,39 +503,27 @@ class ModelModifier(ModelModifierBase):
 
         self._isFirstCall = False
 
-        # freshly marked elements accumulate onto any still-pending ones from earlier increments; a
-        # stale pending element that another path already refined/removed is dropped by the
-        # elForEid/maxLevel filter below, same as a freshly marked one would be.
-        self._pendingMarkedElements.update(marked_elements)
-
-        if not self._pendingMarkedElements:
+        if not marked_elements:
             return None
 
         # keep only active elements below maxLevel
         with timeit("marking filter"):
             eligible = [
                 el
-                for el in sorted(self._pendingMarkedElements, key=lambda e: e.elNumber)
+                for el in sorted(marked_elements, key=lambda e: e.elNumber)
                 if el in elForEid and self._mesh.elements[elForEid[el]]["level"] < self.maxLevel
             ]
-        self._pendingMarkedElements = set(eligible)
 
         if len(eligible) < self.minMarkedElements:
             if eligible:
                 self._journal.message(
-                    "AMR ModelModifier: {:} element(s) marked, deferring refinement until {:} accumulate".format(
+                    "AMR ModelModifier: {:} element(s) marked, fewer than minMarkedElements={:}; not refining".format(
                         len(eligible), self.minMarkedElements
                     ),
                     "hadaptivity",
                     1,
                 )
             return None
-
-        self._pendingMarkedElements = set()
-
-        # Stamped here, not in apply(): it guards the *next* planning pass against re-refining after
-        # a cutback, and apply() must not read solution state (model.time included).
-        self._lastRefinedTime = float(model.time)
 
         return RefinementPlan(eids=[elForEid[el] for el in eligible])
 
@@ -979,18 +961,9 @@ class ModelModifier(ModelModifierBase):
     def restoreDecisionState(self, records) -> None:
         """Re-establish what the *next* decision needs, after a restart replay.
 
-        Two things, neither of which touches the mesh:
-
-        - the cutback guard, so the first post-resume call does not re-refine at a time this
-          modifier already refined at;
-        - the initial-marker latch, since a checkpoint only exists after an increment converged, so
-          a resumed run is never truly making its first call.
-
-        Notably absent: the pending marks. Those are re-derived by the next :meth:`plan` from the
-        restored solution state -- which is exactly what the live run would have done -- so they need
-        no checkpointing at all.
+        Only the initial-marker latch: every checkpoint is written after the step-start topology
+        update, so a resumed run never makes this modifier's first call. Everything else
+        :meth:`plan` reads is the restored model and solution state.
         """
 
-        if records:
-            self._lastRefinedTime = float(records[-1].time)
         self._isFirstCall = False

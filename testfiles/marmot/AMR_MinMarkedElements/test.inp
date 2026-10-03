@@ -1,7 +1,7 @@
 ** minMarkedElements regression test -- same cantilever/marker setup as AMR_DynamicRefinement, but
 ** with minMarkedElements=2 while only ONE of the two coarse C3D20 elements ever crosses the
 ** stress threshold (bending concentrates stress at the fixed end only). Refinement must therefore
-** never trigger for the whole run -- the accumulated marked-element count (1) never reaches the
+** never trigger for the whole run -- no evaluation marks more than 1 element, below the
 ** threshold (2) -- pinning the deferred/unrefined solution against U.ref. A regression here (e.g.
 ** the threshold gate silently refining anyway) would change U.ref to the refined solution.
 *material, name=linearelastic, id=mat

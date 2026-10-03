@@ -34,7 +34,7 @@ import numpy as np
 import pytest
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
-from edelweissfe.journal.journal import Journal
+from edelweissfe.utils.exceptions import RestartError
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 
@@ -195,7 +195,6 @@ def test_checkpointed_projection_is_adopted_not_searched(resumedContact):
     restored = {k: v + 0.125 if v.dtype.kind == "f" else v for k, v in _checkpointedConstraintData(checkpoint).items()}
 
     constraint.setRestartData(restored)
-    constraint.resumeConnectivity(model)
     readBack = constraint.getRestartData()
 
     assert readBack.keys() == restored.keys()
@@ -203,25 +202,21 @@ def test_checkpointed_projection_is_adopted_not_searched(resumedContact):
         assert np.array_equal(readBack[key], values), key
 
 
-def test_foreign_or_missing_projection_falls_back_to_a_search(resumedContact, capsys):
+def test_foreign_or_missing_projection_is_refused(resumedContact):
+    """A checkpointed projection is adopted as it is, or the restore stops: searching afresh instead
+    would silently resume somewhere else than the uninterrupted run."""
+
     _, _, model, checkpoint = resumedContact
     constraint = model.constraints["contact"]
-    constraint.journal = Journal()
     written = _checkpointedConstraintData(checkpoint)
-
-    constraint.updateConnectivity(model)
-    searched = constraint.getRestartData()
 
     layoutKey = next(k for k in written if k.startswith("searchLayout_") and written[k].size > 1)
     foreign = written | {layoutKey: written[layoutKey][::-1].copy()}
     legacy = {k: v for k, v in written.items() if not k.startswith("searchLayout_")}
 
     for data in (foreign, legacy):
-        constraint.setRestartData(data)
-        constraint.resumeConnectivity(model)
-        assert "afresh" in capsys.readouterr().out
-        for key, values in constraint.getRestartData().items():
-            assert np.array_equal(values, searched[key]), key
+        with pytest.raises(RestartError):
+            constraint.setRestartData(data)
 
 
 _LIVE_REFINEMENT = """

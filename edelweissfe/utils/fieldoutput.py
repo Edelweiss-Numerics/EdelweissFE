@@ -193,9 +193,6 @@ class _FieldOutputBase:
         self.timeHistory = []
         self.export = export
         self._reshape_to_dimensions = reshape_to_dimensions
-        #: Set transiently by ``initializeJob(resuming=True)``, and consumed (reset to ``False``)
-        #: by the next ``initializeStep`` -- see the docstring there.
-        self._resuming = False
 
     def getLastResult(
         self,
@@ -343,7 +340,6 @@ class _FieldOutputBase:
         """
 
         self.updateResults(self.model)
-        self._resuming = resuming
 
         if self.export:
             f = open(f"{self.export}.csv", "a" if resuming else "w")
@@ -352,7 +348,7 @@ class _FieldOutputBase:
     def initializeStep(self, step):
         """Write the current (just-updated) result as the first row of this step.
 
-        Skipped once, on the step a restart resumes into: the restored state
+        Skipped on the step a restart resumes into: the restored state
         ``initializeJob(resuming=True)`` just sampled is exactly the state the interrupted run
         already exported as the last row of ``{export}.csv`` -- a checkpoint is always written
         right after the same completed-increment hook that exports this field output (see
@@ -363,8 +359,7 @@ class _FieldOutputBase:
         here just keeps a resume's seam consistent with that pre-existing cold-start artifact
         instead of tripling the row.
         """
-        if self._resuming:
-            self._resuming = False
+        if step.isResumed:
             return
 
         if self.export:

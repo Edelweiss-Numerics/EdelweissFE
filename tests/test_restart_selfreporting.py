@@ -15,6 +15,8 @@ import pytest
 from edelweissfe.journal.journal import Journal
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
 from edelweissfe.timesteppers.simpletimestepper import SimpleTimeStepper
+from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.exceptions import RestartError
 
 
 class _RecordingJournal:
@@ -46,9 +48,13 @@ def _stepper(maxNumberIncrements=60000):
     )
 
 
-def test_the_accumulated_external_work_survives_a_checkpoint(tmp_path):
+def test_the_explicit_solver_state_survives_a_checkpoint_exactly(tmp_path):
+    """The accumulated external work and the last completed increment are written as they are and
+    read back as they were -- the state the resumed step continues from."""
+
     solver = _solver()
     solver._externalWork = -1234.5
+    solver.prevTimeStep = TimeStep(7, 0.125, 0.875, 3.5e-7, 2.45e-6, 2.45e-6)
 
     checkpoint = tmp_path / "chk.h5"
     with h5py.File(checkpoint, "w") as f:
@@ -58,24 +64,23 @@ def test_the_accumulated_external_work_survives_a_checkpoint(tmp_path):
     with h5py.File(checkpoint, "r") as f:
         resumed.readRestart(f)
 
-    # Staged rather than applied: solveStep resets the live accumulator and necessarily runs after
-    # readRestart, so a direct assignment here would be wiped before the first increment.
-    assert resumed._resumedExternalWork == pytest.approx(-1234.5)
-    assert resumed._externalWork == 0.0
+    assert resumed._externalWork == -1234.5
+    restored = resumed.prevTimeStep
+    assert (restored.number, restored.stepProgressIncrement, restored.stepProgress) == (7, 0.125, 0.875)
+    assert (restored.timeIncrement, restored.stepTime, restored.totalTime) == (3.5e-7, 2.45e-6, 2.45e-6)
 
 
-def test_a_checkpoint_carrying_no_solver_state_is_tolerated(tmp_path):
-    """Written by a different solver, or before this state was carried at all. A resumed run then
-    has the old, wrong energy balance -- which is strictly better than refusing to start."""
+def test_a_checkpoint_carrying_no_solver_state_is_refused(tmp_path):
+    """Written by an older version, before this state was checkpointed: resuming would continue from
+    a state the uninterrupted run never had, so it stops instead."""
+
     checkpoint = tmp_path / "old.h5"
     with h5py.File(checkpoint, "w") as f:
         f.create_group("timestepper")
 
-    solver = _solver()
     with h5py.File(checkpoint, "r") as f:
-        solver.readRestart(f)
-
-    assert solver._resumedExternalWork == 0.0
+        with pytest.raises(RestartError):
+            _solver().readRestart(f)
 
 
 def test_resuming_at_or_past_the_increment_cap_is_reported():
@@ -95,24 +100,3 @@ def test_resuming_below_the_increment_cap_is_silent():
     journal = _RecordingJournal()
     _stepper().warnIfResumedAtIncrementCap(59999, 60000, journal)
     assert journal.messages == []
-
-
-def test_the_resumed_external_work_is_handed_over_exactly_once(tmp_path):
-    """Per-step semantics: the resumed step continues the checkpoint's accumulator, and any later
-    step in the same job starts from zero rather than inheriting it again."""
-    solver = _solver()
-    solver._externalWork = 42.0
-    checkpoint = tmp_path / "chk.h5"
-    with h5py.File(checkpoint, "w") as f:
-        solver.writeRestart(f)
-
-    resumed = _solver()
-    with h5py.File(checkpoint, "r") as f:
-        resumed.readRestart(f)
-
-    assert resumed._consumeResumedExternalWork() == pytest.approx(42.0)
-    assert resumed._consumeResumedExternalWork() == 0.0, "a later step must not inherit it again"
-
-
-def test_a_cold_start_consumes_nothing():
-    assert _solver()._consumeResumedExternalWork() == 0.0
