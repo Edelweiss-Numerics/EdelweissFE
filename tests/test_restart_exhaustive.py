@@ -43,6 +43,11 @@ run: time, element numbering and connectivity, every node field entry, every sca
 element's quadrature-point state, every constraint's restart data and the times of the topology
 history. No tolerances, no per-case exceptions.
 
+Every CI run resumes from the first, the middle and the last checkpoint of each scenario (and its
+first chain); the other cases are marked ``exhaustive`` and run with ``pytest -m exhaustive`` --
+weekly in CI, and before merging a change to restart, the solvers, the time steppers or the topology
+pipeline.
+
 In addition, ``-chain<k>-<j>`` cases resume from checkpoint k, let that resumed run write checkpoints
 of its own, resume from its j-th one and compare again: a checkpoint written by a resumed run must
 be as good as one written by an uninterrupted run.
@@ -796,14 +801,24 @@ def _nCheckpoints(scenario: str, solver: str) -> int:
 
 
 def _cases():
+    """Every case. Per scenario, the first, the middle and the last checkpoint and the first chain
+    run in every CI run; all others are marked ``exhaustive`` and run on demand
+    (``pytest -m exhaustive``) -- before merging a change to restart, the solvers, the time steppers
+    or the topology pipeline."""
+    exhaustive = pytest.mark.exhaustive
     for scenario, spec in _SCENARIOS.items():
         for solver in spec["solvers"]:
-            for k in range(_nCheckpoints(scenario, solver)):
-                yield pytest.param(scenario, solver, (k,), id="{:}-{:}-resume{:02d}".format(solver, scenario, k))
+            n = _nCheckpoints(scenario, solver)
+            everyRun = {0, n // 2, n - 1}
+            for k in range(n):
+                marks = () if k in everyRun else (exhaustive,)
+                yield pytest.param(
+                    scenario, solver, (k,), id="{:}-{:}-resume{:02d}".format(solver, scenario, k), marks=marks
+                )
             if scenario in _CHAINED_SCENARIOS:
-                for k, j in _CHAINS:
+                for index, (k, j) in enumerate(_CHAINS):
                     caseId = "{:}-{:}-chain{:02d}-{:02d}".format(solver, scenario, k, j)
-                    yield pytest.param(scenario, solver, (k, j), id=caseId)
+                    yield pytest.param(scenario, solver, (k, j), id=caseId, marks=() if index == 0 else (exhaustive,))
 
 
 @pytest.fixture(scope="module")
