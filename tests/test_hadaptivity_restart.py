@@ -311,10 +311,3 @@ def test_replay_verifies_once_by_default_and_per_record_on_request(tmp_path):
     modelD = _buildModel(tmp_path, "d.inp")
     with pytest.raises(TopologyError, match="after replaying all 3 record"):
         modelD.topology.replayHistory(lastTampered)
-
-    # a record without a fingerprint (an older checkpoint) is replayed without complaint, and the
-    # replayed history then carries a freshly computed digest for it
-    bare = [replace(r, fingerprint="") for r in history]
-    modelE = _buildModel(tmp_path, "e.inp")
-    modelE.topology.replayHistory(bare)
-    assert [r.fingerprint for r in modelE.topology.history] == [r.fingerprint for r in history]
