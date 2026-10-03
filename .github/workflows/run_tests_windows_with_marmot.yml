@@ -21,12 +21,7 @@ jobs:
           init-shell: cmd.exe bash
 
       # Branch selection, caching and MARMOT_INSTALL_DIR: see .github/actions/build-marmot.
-      # TEMPORARY: Marmot's Windows support is not yet on next_v26.11 (MAteRialMOdelingToolbox/Marmot#110).
-      # Remove `with:` once that is merged.
       - uses: ./.github/actions/build-marmot
-        with:
-          repository: matthiasneuner/Marmot
-          ref: build/msvc-portability
 
       # cmd.exe, because only its activation runs the environment's MSVC setup (vs2022_compiler_vars.bat).
       - name: Build EdelweissFE
