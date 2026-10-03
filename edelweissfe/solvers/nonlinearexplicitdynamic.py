@@ -361,7 +361,13 @@ class NED(NonlinearSolverBase):
     #: The last completed increment (the central-difference velocity update reads its length) and the
     #: accumulated external work -- an accumulator, summed increment by increment from the reaction
     #: forces at the prescribed degrees of freedom, which nothing in a converged solution reproduces.
-    checkpointedState = {"prevTimeStep": TimeStep, "_externalWork": float}
+    checkpointedState = {
+        "prevTimeStep": TimeStep,
+        "_externalWork": float,
+        # The energy-balance warnings are given once per step, not again after a resume.
+        "_warnedAboutMissingInternalEnergy": bool,
+        "_warnedAboutMissingExternalWork": bool,
+    }
 
     def __init__(self, jobInfo, journal, **kwargs):
         self.journal = journal
