@@ -410,6 +410,9 @@ class NED(NonlinearSolverBase):
         #: starts a leapfrog. A resumed step continues from the checkpointed one instead: the
         #: checkpointed velocity already carries the half-step offset.
         self.prevTimeStep = None
+        #: The time increment enforced on the time stepper: courant-number times the critical time
+        #: step of the mesh at the step start, and afterwards only ever lowered (by refinement).
+        self.criticalTimeStep = None
         #: Per-constraint force buffer and scatter plan, by constraint name; see
         #: :meth:`assembleConstraintForces`. Cleared whenever the DofManager is rebuilt.
         self._constraintForcePlans = {}
@@ -445,10 +448,12 @@ class NED(NonlinearSolverBase):
         """
         group = restartFile.require_group("solver")
         group.attrs["externalWork"] = self._externalWork
+        group.attrs["criticalTimeStep"] = self.criticalTimeStep
         writeTimeStep(group, "prevTimeStep", self.prevTimeStep)
 
     def readRestart(self, restartFile):
-        """Restore the accumulated external work and the last completed increment; see
+        """Restore the accumulated external work, the enforced time increment and the last completed
+        increment; see
         :meth:`writeRestart`.
 
         Parameters
@@ -458,6 +463,7 @@ class NED(NonlinearSolverBase):
         """
         group = self.checkpointedState(restartFile)
         self._externalWork = float(group.attrs["externalWork"])
+        self.criticalTimeStep = float(group.attrs["criticalTimeStep"])
         self.prevTimeStep = readTimeStep(group, "prevTimeStep")
 
     def solveStep(
@@ -532,14 +538,15 @@ class NED(NonlinearSolverBase):
 
         Minv = theSystem.Minv
         U, dU, V, P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
-        criticalTimeStep = theSystem.criticalTimeStep
+        if not step.isResumed:
+            self.criticalTimeStep = theSystem.criticalTimeStep
 
         contactUpdateFrequency = self.options["contact-update-frequency"]
         topologyCheckFrequency = self.options["topology-check-frequency"]
         UAtLastConnectivitySearch = np.array(U)
 
         try:
-            for timeStep in step.getTimeStep(enforcedTimeIncrement=criticalTimeStep):
+            for timeStep in step.getTimeStep(enforcedTimeIncrement=self.criticalTimeStep):
                 # only print for increments matching the configured output-frequency
                 if timeStep.number % self.options["output-frequency"] == 0:
                     self.journal.printSeperationLine()
@@ -732,15 +739,15 @@ class NED(NonlinearSolverBase):
                             # Lower only. Refinement shrinks the smallest element and tightens the
                             # limit, which must be honoured; softening raises it, and taking that up
                             # mid-step would change the integrator's dispersion for no benefit.
-                            if theSystem.criticalTimeStep < criticalTimeStep:
+                            if theSystem.criticalTimeStep < self.criticalTimeStep:
                                 self.journal.message(
                                     "Refinement lowered the stable time increment from {:e} to "
-                                    "{:e}".format(criticalTimeStep, theSystem.criticalTimeStep),
+                                    "{:e}".format(self.criticalTimeStep, theSystem.criticalTimeStep),
                                     self.identification,
                                     1,
                                 )
-                                criticalTimeStep = theSystem.criticalTimeStep
-                                step.enforceTimeIncrement(criticalTimeStep)
+                                self.criticalTimeStep = theSystem.criticalTimeStep
+                                step.enforceTimeIncrement(self.criticalTimeStep)
 
                     # Written after the topology check, so that a checkpoint holds the state the next
                     # increment starts from: the mesh, the contact search and the force of the check.
