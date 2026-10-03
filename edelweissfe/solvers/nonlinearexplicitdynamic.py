@@ -454,9 +454,8 @@ class NED(NonlinearSolverBase):
         # window they never ran in and drive the residue negative.
         self._stepWallClockTic = perf_counter()
 
-        if step.timeStepper.isAtStepStart():
-            self._externalWork = 0.0
-            self.prevTimeStep = None
+        self._externalWork = 0.0
+        self.prevTimeStep = None
         self._conservationCheck.reset()
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False

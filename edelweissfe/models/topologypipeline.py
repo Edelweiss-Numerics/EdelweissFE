@@ -555,8 +555,8 @@ class TopologyPipeline:
                     )
                 plan = modifier.decodePlan(record.plan)
                 modelChange = modifier.apply(self._model, plan)
-                # Carry the recorded digest forward instead of recomputing it: a record without one
-                # (an older checkpoint) is the only case that still pays the walk.
+                # Carry the recorded digest forward instead of recomputing it -- unless every record
+                # is to be verified, which needs the replayed one.
                 replayed = self.recordChange(
                     record.roundNumber,
                     record.modifier,
@@ -564,9 +564,9 @@ class TopologyPipeline:
                     plan,
                     modelChange,
                     time=record.time,
-                    fingerprint=None if perRecord else (record.fingerprint or None),
+                    fingerprint=None if perRecord else record.fingerprint,
                 )
-                if perRecord and record.fingerprint and replayed.fingerprint != record.fingerprint:
+                if perRecord and replayed.fingerprint != record.fingerprint:
                     raise TopologyError(
                         "restart replay diverged at record {:} of {:}: modifier {!r}, round {:}, "
                         "time {:}. The replayed topology does not match the recorded one, so this "
@@ -584,8 +584,6 @@ class TopologyPipeline:
                     "model.topology.verifyFingerprintsPerRecord=True to locate the first diverging "
                     "record.".format(len(records), last.modifier, last.roundNumber, last.time)
                 )
-        for name, modifier in self._model.modelModifiers.items():
-            modifier.restoreDecisionState([r for r in records if r.modifier == name])
         if journal is not None:
             journal.message(
                 "Replayed {:} recorded topology change(s); {:} elements, {:} nodes".format(

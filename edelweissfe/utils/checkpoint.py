@@ -160,24 +160,30 @@ class ResumeCheckpoint:
 
         model.readRestart(self._file, journal)
 
-    def restoreOutputManagers(self, outputManagers: dict):
-        """Restore the sequence bookkeeping of the output managers that stored some.
-
-        Ensight is the motivating case: its transient file numbering is derived from the time
-        values it has already written, and would restart from zero, orphaning the output written
-        before the checkpoint.
+    def restoreTimeStepper(self, step):
+        """Restore the progress of ``step``'s time stepper, before the step begins: it is what tells
+        the step that it is not at its start (see
+        :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.isAtStepStart`).
         """
 
+        readRestartDataInto(self._file, {"timestepper": step.timeStepper})
+
+    def restoreStep(self, step, outputManagers: dict):
+        """Restore everything else ``step`` continues from, after it began as if cold: the solver's
+        state between increments, the state of the step actions -- which the skipped steps before it
+        never brought to their step end -- and the output managers' state (Ensight's file numbering,
+        for instance). An output manager added for the resumed run starts afresh.
+
+        Parameters
+        ----------
+        step
+            The resumed step.
+        outputManagers
+            The output managers, by name.
+        """
+
+        readRestartDataInto(self._file, {"solver": step.solver})
         readRestartDataInto(self._file["outputManagers"], outputManagers, newEntitiesStartAfresh=True)
-
-    def restoreStep(self, step):
-        """Continue ``step`` from the checkpoint, when the resumed step begins: its time stepper's
-        progress, its solver's state between increments, and the state of its step actions -- which
-        the skipped steps before it never brought to their step end. The step's first increment is
-        then the one after the checkpoint.
-        """
-
-        readRestartDataInto(self._file, {"timestepper": step.timeStepper, "solver": step.solver})
         for actionType, actions in step.actions.items():
             if actions:  # the collection creates an empty entry for every type it is asked about
                 readRestartDataInto(self._file["stepActions"][actionType], actions)

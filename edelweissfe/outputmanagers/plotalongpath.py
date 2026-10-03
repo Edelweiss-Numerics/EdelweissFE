@@ -190,9 +190,6 @@ class OutputManager(OutputManagerBase):
         pass
 
     def initializeStep(self, step):
-        # A resumed step continues with the stages still ahead, restored from the checkpoint.
-        if not step.timeStepper.isAtStepStart():
-            return
         for nJob in self.monitorJobs:
             self.plotStages = np.linspace(0, step.length, nJob["nStages"])
 

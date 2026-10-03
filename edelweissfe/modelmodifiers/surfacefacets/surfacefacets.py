@@ -75,6 +75,9 @@ class ModelModifier(ModelModifierBase):
     #: Purely reactive: plan() returns None unless another modifier already changed the mesh.
     initiatesTopologyChanges = False
 
+    #: Carries nothing from one decision to the next.
+    checkpointedState = {}
+
     def __init__(self, name: str, model: FEModel, journal: Journal, **kwargs):
         super().__init__(name, model, journal, **kwargs)
 

@@ -137,9 +137,6 @@ def test_topology_history_roundtrip_reproduces_the_refinement(tmp_path):
 
     assert modelB.topology.fingerprint() == modelA.topology.fingerprint()
     assert _hangingRecordsByLabel(modelB.modelModifiers["amr"]._hanging) == _hangingRecordsByLabel(amrA._hanging)
-    # A checkpoint only exists after an increment converged, so a replayed run is never truly making
-    # its first call -- otherwise initialOnly markers would re-evaluate redundantly on the next one.
-    assert modelB.modelModifiers["amr"]._isFirstCall is False
 
 
 def test_replay_detects_a_tampered_plan_and_names_it(tmp_path):

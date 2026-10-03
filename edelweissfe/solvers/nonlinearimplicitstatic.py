@@ -253,11 +253,10 @@ class NIST(NonlinearSolverBase):
         self.mpcTransformation = None
         self._U = self._dU = self._P = self._K = None
 
-        # The predictor's state between increments: the last accepted increment and its dU. A cold
-        # step starts without; a resumed step continues from the checkpointed ones (readRestart).
-        if step.timeStepper.isAtStepStart():
-            self.prevTimeStep = None
-            self.dU = None
+        # The predictor's state between increments: the last accepted increment and its dU. A step
+        # starts without; a resumed step then takes over the checkpointed ones.
+        self.prevTimeStep = None
+        self.dU = None
 
         self.validateModelCapabilities(model)
 

@@ -332,7 +332,7 @@ def _timeIncrementLowered(model, run) -> str:
 
 
 def _isPlastic(model, run) -> str:
-    alphas = [np.max(model.elements[n].getStateVars()) for n in model.elements]
+    alphas = [np.max(model.elements[n].getStateVars(), initial=0.0) for n in model.elements]
     return "" if max(alphas) > 0.0 else "no element state is nonzero: the beam never yielded"
 
 

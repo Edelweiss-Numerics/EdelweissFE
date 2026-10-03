@@ -260,9 +260,6 @@ class _StubModifier:
     def decodePlan(self, data):
         return {"who": str(data["who"])}
 
-    def restoreDecisionState(self, records):
-        pass
-
     def apply(self, model, plan):
         # A modifier reports what it did in exactly one way: by returning the change. Notifying here
         # as well would record it twice; see TopologyPipeline.recordChange.

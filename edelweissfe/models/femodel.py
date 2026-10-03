@@ -494,13 +494,11 @@ class FEModel:
         for name, scalarVariable in self.scalarVariables.items():
             scalarVariablesGroup.attrs[name] = scalarVariable.value
 
+        writeRestartDataOf(f.create_group("modelModifiers"), self.modelModifiers)
+
         elementsGroup = f.create_group("elements")
         for elNumber, element in self.elements.items():
-            try:
-                stateVars = element.getStateVars()
-            except NotImplementedError:
-                continue
-            elementsGroup.create_dataset(str(elNumber), data=stateVars)
+            elementsGroup.create_dataset(str(elNumber), data=element.getStateVars())
 
         writeRestartDataOf(f.create_group("constraints"), self.constraints)
 
@@ -555,6 +553,7 @@ class FEModel:
                 )
             )
         self.topology.replayHistory(records, journal)
+        readRestartDataInto(f["modelModifiers"], self.modelModifiers)
         # Bring the mesh-dependent consumers (ties, contact surfaces) up to date with the replayed
         # mesh here, as part of restoring the model: the uninterrupted run's consumers had caught up
         # with every change before the checkpoint was written, so a resumed run must start the same.
@@ -563,7 +562,7 @@ class FEModel:
         for nf in self.nodeFields.values():
             storedField = f["nodeFields"].get(nf.name)
             if storedField is None:
-                continue
+                raise RestartError("the checkpoint holds no node field {:}".format(nf.name))
 
             # Iterate the checkpoint's entries, not the model's -- entries created only later by a
             # solver (e.g. the explicit solver's 'V') would otherwise never be restored.

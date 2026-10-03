@@ -155,7 +155,7 @@ class StepBase(ABC):
             The time stepper controlling the incrementation of this step.
         """
 
-    def solve(self):
+    def solve(self, resumeFrom=None):
         """Solve this step, increment by increment.
 
         The increment loop, the same for every solver:
@@ -173,7 +173,14 @@ class StepBase(ABC):
 
         A restart checkpoint is written after an accepted increment, as the last output, so it holds
         exactly the state the next increment starts from -- and a resumed step simply continues
-        this loop.
+        this loop. It begins like any step, and then takes over the checkpointed state, in this one
+        place.
+
+        Parameters
+        ----------
+        resumeFrom
+            The :class:`~edelweissfe.utils.checkpoint.ResumeCheckpoint` this step continues from, or
+            None.
         """
 
         model = self.model
@@ -187,6 +194,9 @@ class StepBase(ABC):
             m for m in outputManagers if m.writesRestartCheckpoints
         ]
 
+        if resumeFrom is not None:
+            resumeFrom.restoreTimeStepper(self)
+
         try:
             # Step-start model updates. A resumed step has none: resuming past one is refused.
             for modelUpdate in self.actions["modelupdate"].values():
@@ -197,6 +207,10 @@ class StepBase(ABC):
                 manager.initializeStep(self)
 
             solver.beginStep(self, model, fieldOutputController, outputManagers)
+            if resumeFrom is not None:
+                resumeFrom.restoreStep(self, model.outputManagers)
+                # Closed here, before the first increment: see ResumeCheckpoint.close.
+                resumeFrom.close()
             try:
                 isRetry = False
                 while not timeStepper.isFinished():

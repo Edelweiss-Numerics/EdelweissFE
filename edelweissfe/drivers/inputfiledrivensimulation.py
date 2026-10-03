@@ -212,9 +212,6 @@ def finiteElementSimulation(
     model.outputManagers = {outputManager.name: outputManager for outputManager in outputManagers}
 
     # The output managers exist only now, well after the model was restored above.
-    if resumeCheckpoint is not None:
-        resumeCheckpoint.restoreOutputManagers(model.outputManagers)
-
     try:
         for step in stepManager.generateSteps(jobInfo, model, fieldOutputController, journal, solvers, outputManagers):
             if resumeStepNumber is not None:
@@ -228,16 +225,13 @@ def finiteElementSimulation(
                     # before the interrupted job wrote this checkpoint, and the state its step
                     # actions carried over is restored with the resumed step.
                     continue
-                if step.number == resumeStepNumber:
-                    resumeCheckpoint.restoreStep(step)
-                    resumeStepNumber = None
-                    # Closed here, not after the step loop: see ResumeCheckpoint.close.
-                    resumeCheckpoint.close()
-                    resumeCheckpoint = None
+            resumeFrom = None
+            if step.number == resumeStepNumber:
+                resumeFrom, resumeStepNumber = resumeCheckpoint, None
 
             tic = getCurrentTime()
             try:
-                step.solve()
+                step.solve(resumeFrom)
             finally:
                 # Record inside finally so a step that raises (e.g. via a deliberate
                 # maxNumInc cap) still counts its elapsed time -- previously this sat after

@@ -196,12 +196,12 @@ is recomputed from the final mesh either way, so the result is the same; only th
 layouts, which no increment ever solves on, are skipped. The live per-increment window does not
 defer, and ``apply`` itself is unaware of the difference: it issues the same calls in both cases.
 
-**What is not checkpointed:** decision-side state, such as a marker's buffer of pending marks. The
-next ``plan`` re-derives it from the restored solution state -- exactly as the live run would have.
-If a modifier genuinely needs something back, it overrides the optional
-:meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.restoreDecisionState`.
-That is deliberately separate from ``apply``: it affects how the *next* decision is made, so getting
-it wrong cannot corrupt the mesh.
+**What a modifier carries between decisions** is declared like every other component's state, in
+:attr:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.checkpointedState` --
+hAdaptivity's flag that its step-start markers were evaluated, for instance -- and restored after the
+replay. Everything else ``plan`` reads is the restored model and solution state. This is deliberately
+separate from ``apply``: it affects how the *next* decision is made, so getting it wrong cannot
+corrupt the mesh.
 
 
 Element and node numbers
@@ -305,6 +305,6 @@ A checklist for a new modifier
 #. Return ``None`` from ``plan`` when the incoming change does not touch your domain.
 #. Reserve element numbers from the model; never write ``model.elements``.
 #. Implement ``encodePlan``/``decodePlan`` so your decision survives a checkpoint.
-#. Override ``restoreDecisionState`` only if ``plan`` needs history back -- not to rebuild the mesh.
+#. Declare ``checkpointedState``: what ``plan`` carries from one decision to the next (often nothing).
 #. Verify with a restart round-trip and compare
    :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint`, not just element counts.
