@@ -224,9 +224,9 @@ def finiteElementSimulation(
                         "the run cannot be resumed after it".format(step.number)
                     )
                 if step.number < resumeStepNumber:
-                    # Constructed (so its StepActions register/accumulate normally, see the comment
-                    # above) but not solved -- it already ran, in full, before the interrupted job
-                    # wrote this checkpoint.
+                    # Constructed, so that its step actions exist, but not solved: it already ran
+                    # before the interrupted job wrote this checkpoint, and the state its step
+                    # actions carried over is restored with the resumed step.
                     continue
                 if step.number == resumeStepNumber:
                     resumeCheckpoint.restoreStep(step)

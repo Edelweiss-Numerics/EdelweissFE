@@ -177,6 +177,9 @@ class StepAction(DistributedLoadBase):
     #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = DistributedLoadSchema
 
+    #: The magnitude accumulated by the steps before, this step's increment, and whether it is idle.
+    checkpointedState = {"_magnitudeAtStepStart": np.ndarray, "delta": np.ndarray, "idle": bool}
+
     def __init__(
         self,
         name,

@@ -38,10 +38,12 @@ import pytest
 import edelweissfe.constraints
 import edelweissfe.outputmanagers
 import edelweissfe.solvers
+import edelweissfe.stepactions
 import edelweissfe.timesteppers
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
+from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.base.timestepperbase import TimeStepperBase
 
 #: Solvers that do not support restart. Writing a checkpoint with one of them refuses.
@@ -69,6 +71,7 @@ _COMPONENTS = [
         (edelweissfe.constraints, ConstraintBase),
         (edelweissfe.outputmanagers, OutputManagerBase),
         (edelweissfe.solvers, NonlinearSolverBase),
+        (edelweissfe.stepactions, StepActionBase),
         (edelweissfe.timesteppers, TimeStepperBase),
     ]
     for cls in _concreteSubclasses(package, base)
@@ -81,7 +84,7 @@ def test_every_component_declares_its_checkpointed_state(cls):
     overrides = any(
         "getRestartData" in vars(klass)
         for klass in cls.__mro__[: cls.__mro__.index(object)]
-        if klass not in (ConstraintBase, OutputManagerBase, NonlinearSolverBase, TimeStepperBase)
+        if klass not in (ConstraintBase, OutputManagerBase, NonlinearSolverBase, StepActionBase, TimeStepperBase)
     )
     if cls.__name__ in _NOT_RESTARTABLE:
         assert not declares and not overrides, "{:} is listed as not restartable".format(cls.__name__)
@@ -94,5 +97,5 @@ def test_every_component_declares_its_checkpointed_state(cls):
 
 def test_every_kind_of_component_was_found():
     """Guards the discovery above: an empty list would pass every check."""
-    for base in (ConstraintBase, OutputManagerBase, NonlinearSolverBase, TimeStepperBase):
+    for base in (ConstraintBase, OutputManagerBase, NonlinearSolverBase, StepActionBase, TimeStepperBase):
         assert any(issubclass(cls, base) for cls in _COMPONENTS), base.__name__

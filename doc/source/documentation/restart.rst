@@ -114,5 +114,13 @@ A component that carries nothing declares an empty mapping. One whose state is n
 declaration fails there, and writing a checkpoint refuses. A solver that is not restartable says so
 by keeping the declaration None.
 
+Step actions declare their state too: a load ramped over several steps accumulates from step to
+step, and most actions switch themselves off at the end of their step. A resumed run skips the
+steps before the checkpoint, so it restores that state rather than re-deriving it.
+
+One exception is known: the history of a field output (``FieldOutput.timeHistory``) is not
+checkpointed. Its exported CSV file is continued, but an output manager integrating over the
+history in memory (the fracture energy integrator) sees only what was computed after the resume.
+
 Then add a scenario to ``tests/test_restart_exhaustive.py``: it resumes from every checkpoint of a
 small run and requires the bitwise-identical end state, the same checkpoints and the same output.

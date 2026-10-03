@@ -32,6 +32,8 @@ A checkpoint is an HDF5 file holding
 - the attribute ``stepNumber``, the step the run was in;
 - the model's state, written by :meth:`~edelweissfe.models.femodel.FEModel.writeRestart`;
 - groups ``timestepper`` and ``solver`` with the time stepper's and the solver's state;
+- a group ``stepActions`` with the state of every step action, by type and name -- including what
+  the steps before carried over, e.g. an accumulated load, and whether an action is still active;
 - a group ``outputManagers`` with the state of every output manager.
 
 Every component other than the model hands over its state as a mapping of arrays, through
@@ -49,7 +51,7 @@ from edelweissfe.utils.exceptions import RestartError
 #: The layout of a checkpoint. Raise it whenever a checkpoint gains or changes state: a run resumes
 #: only from checkpoints of its own layout, so a missing piece of state is refused up front instead
 #: of surfacing as a lookup error deep inside some reader -- or as silently missing state.
-CHECKPOINT_FORMAT_VERSION = 4
+CHECKPOINT_FORMAT_VERSION = 5
 
 
 def writeRestartDataOf(group: h5py.Group, entities: dict):
@@ -112,6 +114,9 @@ def writeCheckpoint(fileName: str, model, step, outputManagers: dict):
         f.attrs["stepNumber"] = step.number
         model.writeRestart(f)
         writeRestartDataOf(f, {"timestepper": step.timeStepper, "solver": step.solver})
+        stepActionsGroup = f.create_group("stepActions")
+        for actionType, actions in step.actions.items():
+            writeRestartDataOf(stepActionsGroup.create_group(actionType), actions)
         writeRestartDataOf(f.create_group("outputManagers"), outputManagers)
 
 
@@ -167,11 +172,15 @@ class ResumeCheckpoint:
 
     def restoreStep(self, step):
         """Continue ``step`` from the checkpoint, when the resumed step begins: its time stepper's
-        progress and its solver's state between increments. The step's first increment is then the
-        one after the checkpoint.
+        progress, its solver's state between increments, and the state of its step actions -- which
+        the skipped steps before it never brought to their step end. The step's first increment is
+        then the one after the checkpoint.
         """
 
         readRestartDataInto(self._file, {"timestepper": step.timeStepper, "solver": step.solver})
+        for actionType, actions in step.actions.items():
+            if actions:  # the collection creates an empty entry for every type it is asked about
+                readRestartDataInto(self._file["stepActions"][actionType], actions)
 
     def close(self):
         """Close the file. Nothing reads the checkpoint after :meth:`restoreStep`, and it must not

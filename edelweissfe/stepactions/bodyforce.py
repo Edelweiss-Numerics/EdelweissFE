@@ -127,6 +127,9 @@ class StepAction(BodyLoadBase):
     #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = BodyForceSchema
 
+    #: The force accumulated by the steps before, this step's increment, and whether it is idle.
+    checkpointedState = {"_forceAtStepStart": np.ndarray, "_delta": np.ndarray, "_idle": bool}
+
     def __init__(
         self,
         name,

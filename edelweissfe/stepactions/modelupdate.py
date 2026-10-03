@@ -81,6 +81,9 @@ class StepAction(StepActionBase):
     #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = ModelUpdateSchema
 
+    #: Whether this action still acts: it switches itself off at the end of its step.
+    checkpointedState = {"active": bool}
+
     def __init__(self, name, updateExpression: str, model, journal):
         self.name = name
 

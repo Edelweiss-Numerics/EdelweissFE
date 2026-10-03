@@ -588,7 +588,6 @@ class NED(NonlinearSolverBase):
         self._system = theSystem
         self._Minv = theSystem.Minv
         self._U, self._dU, self._V, self._P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
-        self._UAtLastConnectivitySearch = np.array(self._U)
 
     def isOutputIncrement(self, timeStep: TimeStep) -> bool:
         """Only every ``output-frequency``-th increment: an explicit run has millions.
@@ -629,7 +628,6 @@ class NED(NonlinearSolverBase):
         topologyCheckFrequency = self.options["topology-check-frequency"]
         theSystem, Minv = self._system, self._Minv
         U, dU, V, P = self._U, self._dU, self._V, self._P
-        UAtLastConnectivitySearch = self._UAtLastConnectivitySearch
 
         # only print for increments matching the configured output-frequency
         if timeStep.number % self.options["output-frequency"] == 0:
@@ -677,20 +675,9 @@ class NED(NonlinearSolverBase):
             and not topologyCheckDueThisIncrement
         ):
             connectivityChanged = self.updateConstraintConnectivity(model)
-            motionSinceLastSearch = float(np.max(np.abs(np.asarray(U) - UAtLastConnectivitySearch)))
-            self._UAtLastConnectivitySearch = np.array(U)
 
             if connectivityChanged:
-                # The motion is reported rather than assumed: it is the upper bound on how
-                # far a slave node can have travelled relative to its master surface since
-                # the previous search, which is what says whether the configured frequency
-                # is defensible against this model's facet size.
-                self.journal.message(
-                    "Constraint connectivity changed; largest nodal motion since the "
-                    "previous search: {:e}".format(motionSinceLastSearch),
-                    self.identification,
-                    2,
-                )
+                self.journal.message("Constraint connectivity changed", self.identification, 2)
                 self._buildSystem(self.buildEquationSystem(model, step, previous=theSystem))
                 theSystem, Minv = self._system, self._Minv
                 U, dU, V, P = self._U, self._dU, self._V, self._P
