@@ -18,7 +18,7 @@ restart uses a tolerance. The rule has three consequences, each kept by construc
    is, and read back.** Nothing is re-derived or reconstructed. What is a pure function of the
    restored model needs nothing.
 2. **The step start is not repeated.** Step-start actions (initial conditions, material
-   initialization, prescribed fields, model updates), the explicit solver's step-start topology
+   initialization, prescribed fields), the explicit solver's step-start topology
    update and the first contact search all happened before the checkpoint was written. A resumed step
    skips them. ``step.isResumed`` is the one place the code asks whether it was resumed.
 3. **Increment loops decide by increment number.** Topology checks, contact searches, output and
@@ -28,8 +28,8 @@ Whatever cannot keep the rule refuses to resume, with a :class:`~edelweissfe.uti
 a solver that does not checkpoint its state (the default of
 :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.readRestart`), and a
 checkpoint of another format version (every checkpoint carries one, and a run reads its own only),
-and a resume that would skip a step with a ``modelupdate`` -- a model update is not recorded in a
-checkpoint, so it is resumed from in or before that step only.
+and a resume past a ``modelupdate`` -- it executes an arbitrary expression whose effect no checkpoint
+records, so a run is resumed only from checkpoints written in steps before the first one.
 
 One increment, and where the checkpoint is written
 --------------------------------------------------

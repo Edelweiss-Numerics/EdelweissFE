@@ -464,16 +464,15 @@ _SCENARIOS = {
         steps=[_LOADS_PRESS_AND_DRAG],
         check=_frictionalContact,
     ),
-    # (o) DESIRED BEHAVIOUR, not the current one: a modelupdate executed at the start of step 1
-    # changes the model for good (here: switches a penalty constraint off). A checkpoint does not
-    # hold that change, so resuming into step 2 would silently run with the constraint on again. The
-    # desired behaviour is a loud refusal: resuming into step 2 must raise a RestartError. (Resumes
-    # within step 1 must be exact, as always.)
+    # (o) A modelupdate executed at the start of step 1 changes the model by an arbitrary expression
+    # (here: switches a penalty constraint off). No checkpoint records its effect, so every resume
+    # after it -- in step 1 or step 2 -- is refused with a RestartError instead of silently running
+    # with the constraint on again.
     "modelUpdateInStep1": dict(
         solvers=["implicit"],
         blocks=[_BEAM_GEOMETRY, _EQUAL_VALUE_PENALTY],
         steps=[_LOADS_BEND_AND_DEACTIVATE, _LOADS_BEND_BACK],
-        refuseResumeIntoLastStep=True,
+        resumeIsRefused=True,
         check=lambda model, run: "" if not model.constraints["topFaceEqualZ"].active else "modelupdate did not run",
     ),
 }
@@ -744,8 +743,7 @@ def test_resume_from_every_checkpoint_is_exact(workDirectory, scenario, solver, 
 
     resumeKey = _checkpointKey(checkpoint)
     deck = _deck(resumeDirectory, scenario, solver, _reader(checkpoint) + writer(resumeDirectory))
-    if spec.get("refuseResumeIntoLastStep") and resumeKey[0] == output["checkpointKeys"][-1][0]:
-        # DESIRED behaviour (see the scenario): resuming past a step-start modelupdate is refused.
+    if spec.get("resumeIsRefused"):
         with pytest.raises(RestartError):
             _run(resumeDirectory / "resumed.inp", deck)
         return

@@ -162,10 +162,9 @@ class StepBase(ABC):
         outputManagers = self.outputManagers
 
         try:
-            # Step-start model updates, not repeated by a resumed step: the checkpointed run made them.
-            if not self.isResumed:
-                for modelUpdate in self.actions["modelupdate"].values():
-                    model = modelUpdate.updateModel(model, fieldOutputController, journal)
+            # Step-start model updates. A resumed step has none: resuming past one is refused.
+            for modelUpdate in self.actions["modelupdate"].values():
+                model = modelUpdate.updateModel(model, fieldOutputController, journal)
 
             fieldOutputController.initializeStep(self)
             for manager in outputManagers:

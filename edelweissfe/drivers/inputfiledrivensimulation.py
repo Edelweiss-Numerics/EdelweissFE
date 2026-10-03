@@ -162,8 +162,9 @@ def finiteElementSimulation(
     # would otherwise clobber model.time back to job['startTime'].
     #
     # Resuming skips every step before the checkpoint's step. Topology changes made by model
-    # modifiers (e.g. AMR) are replayed from the checkpoint's topology history, but the step actions
-    # of a skipped step never run -- so a skipped step with a `modelupdate` refuses to be skipped.
+    # modifiers (e.g. AMR) are replayed from the checkpoint's topology history. A `modelupdate`
+    # executes an arbitrary expression, whose effect no checkpoint records -- so a resume past one,
+    # in a skipped step or at the start of the resumed step, is refused.
     restartDefinitions = inputfile["restart"]
     resumeCheckpoint = None
     resumeStepNumber = None
@@ -217,15 +218,15 @@ def finiteElementSimulation(
     try:
         for step in stepManager.generateSteps(jobInfo, model, fieldOutputController, journal, solvers, outputManagers):
             if resumeStepNumber is not None:
+                if step.actions["modelupdate"]:
+                    raise RestartError(
+                        "step {:} has a modelupdate, whose effect is not recorded in a checkpoint, so "
+                        "the run cannot be resumed after it".format(step.number)
+                    )
                 if step.number < resumeStepNumber:
                     # Constructed (so its StepActions register/accumulate normally, see the comment
                     # above) but not solved -- it already ran, in full, before the interrupted job
                     # wrote this checkpoint.
-                    if step.actions["modelupdate"]:
-                        raise RestartError(
-                            "step {:} has a modelupdate, which is not recorded in a checkpoint; "
-                            "resume from a checkpoint written before it, or in it".format(step.number)
-                        )
                     continue
                 if step.number == resumeStepNumber:
                     resumeCheckpoint.restoreStep(step)
