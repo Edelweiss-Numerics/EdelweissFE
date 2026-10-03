@@ -1,19 +1,17 @@
-"""The zero increment a step is primed with, and what it reports on a resumed run.
+"""The zero increment a step is primed with is done once per step -- a resumed run does not repeat it.
 
-``SimpleTimeStepper`` yields one zero increment before the first real one, so an explicit
-integrator can build its initial state before taking a step. That increment has to report where
-the stepper actually *is*, which on a cold start is the beginning of the step and on a resumed run
-is not.
-
-Reporting the beginning of the step unconditionally had two consequences, because the explicit
-solver calls ``model.advanceToTime(timeStep.totalTime)`` on every increment and writes an output
-whenever ``timeStep.number`` is a multiple of ``output-frequency`` -- which 0 always is. Model time
-was rewound to the start of the step for one increment, and an output frame stamped with that
-rewound time was written into the middle of an otherwise increasing Ensight time set, leaving it
-non-monotonic. That is invalid in the EnSight Gold format, and it makes a reader pair variable
-frames with the wrong geometry: measured on a restarted anchor pry-out run, 70 of 257 frames.
+``SimpleTimeStepper`` proposes one zero increment before the first real one, so an explicit
+integrator can build its initial state before taking a step. Whether it was done is part of the
+stepper's checkpointed state. A resumed run that repeated it did three wrong things: the explicit
+solver writes an output (and restart checkpoint) whenever ``timeStep.number`` is a multiple of
+``output-frequency``, which 0 always is, so a resumed run wrote one more than the uninterrupted one;
+before that was fixed, the increment also reported the step's start and rewound model time,
+leaving the Ensight time set non-monotonic (70 of 257 frames of a restarted anchor pry-out run); and
+accepting it without evaluating anything committed the contact's freshly constructed trial state
+over the restored frictional history.
 """
 
+import h5py
 import pytest
 
 from edelweissfe.journal.journal import Journal
@@ -35,40 +33,45 @@ def _stepper():
     )
 
 
-def test_the_priming_increment_of_a_cold_start_sits_at_the_step_start():
-    first = next(_stepper().generateTimeStep())
+def test_a_cold_step_starts_with_a_zero_increment_at_the_step_start():
+    first = _stepper().proposeTimeStep()
 
-    assert first.number == 0
-    assert first.timeIncrement == 0.0
-    assert first.stepProgressIncrement == 0.0
-    assert first.stepProgress == pytest.approx(0.0)
-    assert first.stepTime == pytest.approx(0.0)
-    assert first.totalTime == pytest.approx(STEP_START)
+    assert (first.number, first.timeIncrement, first.stepProgressIncrement) == (0, 0.0, 0.0)
+    assert first.stepProgress == 0.0
+    assert first.totalTime == STEP_START
 
 
-def test_the_priming_increment_of_a_resumed_run_sits_where_the_checkpoint_left_off():
+def test_the_increments_after_the_zero_increment_are_numbered_from_one():
     stepper = _stepper()
-    # what readRestart restores: half of this step was already solved before the checkpoint
-    stepper.finishedStepProgress = 0.5
-    stepper.totalIncrements = 37
+    stepper.acceptTimeStep(stepper.proposeTimeStep())
+    second = stepper.proposeTimeStep()
 
-    first = next(stepper.generateTimeStep())
-
-    assert first.number == 0
-    assert first.timeIncrement == 0.0, "still a zero increment -- it must not advance the solution"
-    assert first.stepProgress == pytest.approx(0.5)
-    assert first.stepTime == pytest.approx(0.5 * STEP_LENGTH)
-    assert first.totalTime == pytest.approx(STEP_START + 0.5 * STEP_LENGTH), (
-        "the priming increment reported the step's start, so the solver rewound model.time and "
-        "stamped an output frame with it"
-    )
+    assert (second.number, second.timeIncrement) == (1, 0.25 * STEP_LENGTH)
 
 
-def test_the_priming_increment_never_runs_time_backwards():
-    """The property that actually matters downstream: time never decreases across the sequence."""
-    for progress in (0.0, 0.25, 0.5, 0.75):
-        stepper = _stepper()
-        stepper.finishedStepProgress = progress
-        times = [step.totalTime for step in stepper.generateTimeStep()]
-        assert times == sorted(times), "time decreased at progress {:}: {:}".format(progress, times)
-        assert times[0] == pytest.approx(STEP_START + progress * STEP_LENGTH)
+def test_a_resumed_step_does_not_repeat_the_zero_increment(tmp_path):
+    original = _stepper()
+    for _ in range(3):
+        original.acceptTimeStep(original.proposeTimeStep())
+
+    with h5py.File(tmp_path / "chk.h5", "w") as f:
+        original.writeRestart(f)
+    resumed = _stepper()
+    with h5py.File(tmp_path / "chk.h5", "r") as f:
+        resumed.readRestart(f)
+
+    first = resumed.proposeTimeStep()
+    assert first.number == 3
+    assert first.timeIncrement > 0.0
+    assert vars(first) == vars(original.proposeTimeStep())
+
+
+def test_time_never_runs_backwards():
+    stepper = _stepper()
+    times = []
+    while not stepper.isFinished():
+        timeStep = stepper.proposeTimeStep()
+        times.append(timeStep.totalTime)
+        stepper.acceptTimeStep(timeStep)
+    assert times == sorted(times)
+    assert times[-1] == pytest.approx(STEP_START + STEP_LENGTH)

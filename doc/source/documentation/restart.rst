@@ -76,10 +76,11 @@ The model is first rebuilt from the same input file, then restored in this order
    * - output managers' sequence bookkeeping
      - read, including each restart writer's position in its write interval
    * - time stepper
-     - its progress within the step
+     - its state after the last accepted increment, as it is: progress, increment counter, the size
+       of the next increment, the enforced time increment, and whether the zero increment was done
    * - solver
      - its state between increments: the implicit solver's predictor (last accepted increment and
-       its ``dU``), the explicit solver's last increment, its critical time step and accumulated external work
+       its ``dU``), the explicit solver's last increment and accumulated external work
 
 Adding something that carries state between increments
 -------------------------------------------------------

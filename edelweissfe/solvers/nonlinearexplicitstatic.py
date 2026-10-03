@@ -342,7 +342,8 @@ class NEST(NIST):
         self.applyStepActionsAtStepStart(model, step)
 
         try:
-            for timeStep in step.getTimeStep():
+            while not step.timeStepper.isFinished():
+                timeStep = step.timeStepper.proposeTimeStep()
 
                 statusInfoDict = {
                     "step": step.number,
@@ -378,11 +379,9 @@ class NEST(NIST):
                         prevTimeStep,
                     )
 
-                    step.changeIncrementSize(incScaleFactor)
-
                 except CutbackRequest as e:
                     self.journal.message(str(e), self.identification, 1)
-                    step.discardAndChangeIncrement(max(e.cutbackSize, 0.25))
+                    step.timeStepper.rejectTimeStep(max(e.cutbackSize, 0.25))
                     prevTimeStep = None
 
                     statusInfoDict["notes"] = str(e)
@@ -394,6 +393,8 @@ class NEST(NIST):
                         )
 
                 else:
+                    step.timeStepper.acceptTimeStep(timeStep)
+                    step.timeStepper.changeIncrementSize(incScaleFactor)
                     prevTimeStep = timeStep
 
                     # write results to nodes:

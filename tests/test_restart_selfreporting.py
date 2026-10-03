@@ -36,7 +36,7 @@ def _solver():
     return NED({}, Journal(verbose=False))
 
 
-def _stepper(maxNumberIncrements=60000):
+def _stepper(journal, maxNumberIncrements=60000):
     return SimpleTimeStepper(
         currentTime=0.0,
         stepLength=1.0,
@@ -44,17 +44,16 @@ def _stepper(maxNumberIncrements=60000):
         maxIncrement=0.1,
         minIncrement=1e-8,
         maxNumberIncrements=maxNumberIncrements,
-        journal=Journal(verbose=False),
+        journal=journal,
     )
 
 
 def test_the_explicit_solver_state_survives_a_checkpoint_exactly(tmp_path):
-    """The accumulated external work, the critical time step and the last completed increment are written as they are and
+    """The accumulated external work and the last completed increment are written as they are and
     read back as they were -- the state the resumed step continues from."""
 
     solver = _solver()
     solver._externalWork = -1234.5
-    solver.criticalTimeStep = 3.5e-7
     solver.prevTimeStep = TimeStep(7, 0.125, 0.875, 3.5e-7, 2.45e-6, 2.45e-6)
 
     checkpoint = tmp_path / "chk.h5"
@@ -66,7 +65,6 @@ def test_the_explicit_solver_state_survives_a_checkpoint_exactly(tmp_path):
         resumed.readRestart(f)
 
     assert resumed._externalWork == -1234.5
-    assert resumed.criticalTimeStep == 3.5e-7
     restored = resumed.prevTimeStep
     assert (restored.number, restored.stepProgressIncrement, restored.stepProgress) == (7, 0.125, 0.875)
     assert (restored.timeIncrement, restored.stepTime, restored.totalTime) == (3.5e-7, 2.45e-6, 2.45e-6)
@@ -90,7 +88,9 @@ def test_resuming_at_or_past_the_increment_cap_is_reported():
     it far enough ends the step on its first check and the job reports success regardless."""
     for alreadyDone in (60000, 130000):
         journal = _RecordingJournal()
-        _stepper().warnIfResumedAtIncrementCap(alreadyDone, 60000, journal)
+        stepper = _stepper(journal)
+        stepper.totalIncrements = alreadyDone
+        stepper._warnIfResumedAtIncrementCap()
 
         assert len(journal.messages) == 1, "no warning at {:} of 60000".format(alreadyDone)
         reported = journal.messages[0]
@@ -100,5 +100,7 @@ def test_resuming_at_or_past_the_increment_cap_is_reported():
 
 def test_resuming_below_the_increment_cap_is_silent():
     journal = _RecordingJournal()
-    _stepper().warnIfResumedAtIncrementCap(59999, 60000, journal)
+    stepper = _stepper(journal)
+    stepper.totalIncrements = 59999
+    stepper._warnIfResumedAtIncrementCap()
     assert journal.messages == []

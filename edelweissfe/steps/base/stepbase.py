@@ -35,7 +35,6 @@ from dataclasses import dataclass
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.base.timestepperbase import TimeStepperBase
-from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
@@ -176,61 +175,6 @@ class StepBase(ABC):
             fieldOutputController.finalizeStep()
             for manager in outputManagers:
                 manager.finalizeStep()
-
-    def getTimeStep(self, enforcedTimeIncrement: float = None) -> TimeStep:
-        """Generate the sequence of time steps for this step.
-
-        Parameters
-        ----------
-        enforcedTimeIncrement
-            If given, enforce this time increment size (if supported by the time stepper).
-
-        Returns
-        -------
-        TimeStep
-            The generated time steps (generator).
-        """
-
-        return self.timeStepper.generateTimeStep(enforcedTimeIncrement=enforcedTimeIncrement)
-
-    def discardAndChangeIncrement(self, cutbackFactor: float):
-        """Discard the current increment and modify the increment size by a given scale factor.
-
-        Parameters
-        ----------
-        cutbackFactor
-            The factor for scaling based on the discarded increment.
-        """
-
-        return self.timeStepper.discardAndChangeIncrement(cutbackFactor)
-
-    def enforceTimeIncrement(self, timeIncrement: float):
-        """Revise the enforced time increment for the remaining increments of this step. See
-        :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.enforceTimeIncrement`.
-
-        Parameters
-        ----------
-        timeIncrement
-            The new enforced time increment.
-        """
-
-        return self.timeStepper.enforceTimeIncrement(timeIncrement)
-
-    def changeIncrementSize(self, scaleFactor: float):
-        """Modify the size of the next increment by a given scale factor.
-
-        Parameters
-        ----------
-        scaleFactor
-            The factor for scaling based on the current increment.
-        """
-
-        return self.timeStepper.changeIncrementSize(scaleFactor)
-
-    def preventIncrementIncrease(self):
-        """Prevent an automatic increase of the increment size for the next increment."""
-
-        return self.timeStepper.preventIncrementIncrease()
 
     def readRestart(self, restartFile):
         """Continue this step from a restart checkpoint: restore the time stepper, and the solver's

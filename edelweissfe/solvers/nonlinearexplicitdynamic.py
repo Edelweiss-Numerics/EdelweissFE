@@ -410,9 +410,6 @@ class NED(NonlinearSolverBase):
         #: starts a leapfrog. A resumed step continues from the checkpointed one instead: the
         #: checkpointed velocity already carries the half-step offset.
         self.prevTimeStep = None
-        #: The time increment enforced on the time stepper: courant-number times the critical time
-        #: step of the mesh at the step start, and afterwards only ever lowered (by refinement).
-        self.criticalTimeStep = None
         #: Per-constraint force buffer and scatter plan, by constraint name; see
         #: :meth:`assembleConstraintForces`. Cleared whenever the DofManager is rebuilt.
         self._constraintForcePlans = {}
@@ -448,12 +445,10 @@ class NED(NonlinearSolverBase):
         """
         group = restartFile.require_group("solver")
         group.attrs["externalWork"] = self._externalWork
-        group.attrs["criticalTimeStep"] = self.criticalTimeStep
         writeTimeStep(group, "prevTimeStep", self.prevTimeStep)
 
     def readRestart(self, restartFile):
-        """Restore the accumulated external work, the enforced time increment and the last completed
-        increment; see
+        """Restore the accumulated external work and the last completed increment; see
         :meth:`writeRestart`.
 
         Parameters
@@ -463,7 +458,6 @@ class NED(NonlinearSolverBase):
         """
         group = self.checkpointedState(restartFile)
         self._externalWork = float(group.attrs["externalWork"])
-        self.criticalTimeStep = float(group.attrs["criticalTimeStep"])
         self.prevTimeStep = readTimeStep(group, "prevTimeStep")
 
     def solveStep(
@@ -538,15 +532,18 @@ class NED(NonlinearSolverBase):
 
         Minv = theSystem.Minv
         U, dU, V, P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
+        # The time stepper runs on the stable time increment from here on, which it carries (and
+        # checkpoints) itself: a resumed step continues with the one it had.
         if not step.isResumed:
-            self.criticalTimeStep = theSystem.criticalTimeStep
+            step.timeStepper.enforceTimeIncrement(theSystem.criticalTimeStep)
 
         contactUpdateFrequency = self.options["contact-update-frequency"]
         topologyCheckFrequency = self.options["topology-check-frequency"]
         UAtLastConnectivitySearch = np.array(U)
 
         try:
-            for timeStep in step.getTimeStep(enforcedTimeIncrement=self.criticalTimeStep):
+            while not step.timeStepper.isFinished():
+                timeStep = step.timeStepper.proposeTimeStep()
                 # only print for increments matching the configured output-frequency
                 if timeStep.number % self.options["output-frequency"] == 0:
                     self.journal.printSeperationLine()
@@ -652,10 +649,11 @@ class NED(NonlinearSolverBase):
                         "model looked at, not a smaller step.".format(timeStep.number, e)
                     ) from e
                 else:
-                    # A zero increment is not a completed step: the generator yields one before the
-                    # first real increment, and the velocity update returns early for it. Recording
-                    # it here would overwrite the increment a RESUMED run was seeded with, putting
-                    # the run back on the cold-start half step it must not repeat.
+                    step.timeStepper.acceptTimeStep(timeStep)
+
+                    # The zero increment, before the first real one, is not a completed step: the
+                    # velocity update returns early for it, and the first real increment must be the
+                    # half step that starts the leapfrog.
                     if timeStep.timeIncrement > 0.0:
                         self.prevTimeStep = timeStep
 
@@ -688,10 +686,9 @@ class NED(NonlinearSolverBase):
                     # pairing of U with the half-step-staggered V is unambiguous only between
                     # increments.
                     #
-                    # Increment 0 is excluded deliberately. The time stepper yields a zero-length
-                    # increment first, before it has even taken up the enforced time increment, and
-                    # nothing has been solved at that point -- a live marker evaluated there would
-                    # refine on the initial condition, and revising the time increment there raises.
+                    # Increment 0 is excluded deliberately. It is the zero-length increment before the
+                    # first real one, and nothing has been solved at that point -- a live marker
+                    # evaluated there would refine on the initial condition.
                     if (
                         self._liveTopologyModifiers
                         and topologyCheckFrequency
@@ -739,15 +736,14 @@ class NED(NonlinearSolverBase):
                             # Lower only. Refinement shrinks the smallest element and tightens the
                             # limit, which must be honoured; softening raises it, and taking that up
                             # mid-step would change the integrator's dispersion for no benefit.
-                            if theSystem.criticalTimeStep < self.criticalTimeStep:
+                            if theSystem.criticalTimeStep < step.timeStepper.enforcedTimeIncrement:
                                 self.journal.message(
                                     "Refinement lowered the stable time increment from {:e} to "
-                                    "{:e}".format(self.criticalTimeStep, theSystem.criticalTimeStep),
+                                    "{:e}".format(step.timeStepper.enforcedTimeIncrement, theSystem.criticalTimeStep),
                                     self.identification,
                                     1,
                                 )
-                                self.criticalTimeStep = theSystem.criticalTimeStep
-                                step.enforceTimeIncrement(self.criticalTimeStep)
+                                step.timeStepper.enforceTimeIncrement(theSystem.criticalTimeStep)
 
                     # Written after the topology check, so that a checkpoint holds the state the next
                     # increment starts from: the mesh, the contact search and the force of the check.

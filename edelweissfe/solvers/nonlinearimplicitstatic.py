@@ -310,7 +310,8 @@ class NIST(NonlinearSolverBase):
         stepWallClockTic = perf_counter()
 
         try:
-            for timeStep in step.getTimeStep():
+            while not step.timeStepper.isFinished():
+                timeStep = step.timeStepper.proposeTimeStep()
                 topologyUpdate = self.updateTopologyAndConnectivity(
                     model, step, timeStep, offerModelModifiers=not incrementIsRetry
                 )
@@ -488,7 +489,7 @@ class NIST(NonlinearSolverBase):
                             self.identification,
                             1,
                         )
-                        step.discardAndChangeIncrement(cutbackFactor)
+                        step.timeStepper.rejectTimeStep(cutbackFactor)
                         self.prevTimeStep = None
                         incrementIsRetry = True
                         statusInfoDict["iters"] = np.inf
@@ -529,7 +530,7 @@ class NIST(NonlinearSolverBase):
 
                 except CutbackRequest as e:
                     self.journal.message(str(e), self.identification, 1)
-                    step.discardAndChangeIncrement(max(e.cutbackSize, cutbackFactor))
+                    step.timeStepper.rejectTimeStep(max(e.cutbackSize, cutbackFactor))
                     self.prevTimeStep = None
                     incrementIsRetry = True
 
@@ -543,7 +544,7 @@ class NIST(NonlinearSolverBase):
 
                 except (ReachedMaxIterations, DivergingSolution) as e:
                     self.journal.message(str(e), self.identification, 1)
-                    step.discardAndChangeIncrement(cutbackFactor)
+                    step.timeStepper.rejectTimeStep(cutbackFactor)
                     self.prevTimeStep = None
                     incrementIsRetry = True
 
@@ -568,7 +569,8 @@ class NIST(NonlinearSolverBase):
                     incrementIsRetry = False
 
                     if iterationCounter >= criticalIter:
-                        step.preventIncrementIncrease()
+                        step.timeStepper.preventIncrementIncrease()
+                    step.timeStepper.acceptTimeStep(timeStep)
 
                     # write results to nodes:
                     for fieldName, field in model.nodeFields.items():

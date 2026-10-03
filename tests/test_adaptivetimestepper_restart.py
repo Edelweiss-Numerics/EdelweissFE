@@ -24,92 +24,81 @@
 #
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
-#  ---------------------------------------------------------------------
-"""Regression test for AdaptiveTimeStepper.writeRestart/readRestart, found via a real end-to-end
-AnchorPryOut validation run: writeRestart is called (via the restart output manager's
-finalizeIncrement) while generateTimeStep is paused *at* the yield for the increment that just
-converged -- before that generator's own post-yield bookkeeping (the growth-factor update and the
-incrementCounter/nPassedGoodIncrements advance) has run. An uninterrupted run never notices, since
-the same generator applies that bookkeeping itself on its next resume. A *fresh* generator built
-for a resumed run has never reached that yield point, so without the fix it repeats the
-just-converged increment's size (mislabeled with its own incrementCounter) instead of continuing
-the growth sequence -- confirmed on the real case by increment sizes matching the *previous*
-increment's, shifted back by one, compounding across every subsequent increment."""
+"""A time stepper's checkpoint is its attributes after the last accepted increment: a stepper
+restored from it proposes exactly the increments the uninterrupted one proposes -- whatever happened
+before (growth, a cutback, a prevented increase)."""
 
 import h5py
+import pytest
 
 from edelweissfe.journal.journal import Journal
 from edelweissfe.timesteppers.adaptivetimestepper import AdaptiveTimeStepper
+from edelweissfe.timesteppers.simpletimestepper import SimpleTimeStepper
 
 
-def _makeStepper(journal):
-    return AdaptiveTimeStepper(
-        currentTime=0.0,
-        stepLength=1.0,
-        startIncrement=0.01,
-        maxIncrement=1.0,
-        minIncrement=1e-6,
-        maxNumberIncrements=1000,
-        journal=journal,
-        increaseFactor=1.1,
-        makeZeroIncrementFirst=False,
-    )
+def _adaptive():
+    return AdaptiveTimeStepper(0.0, 1.0, 0.01, 1.0, 1e-6, 1000, Journal(verbose=False), increaseFactor=1.1)
 
 
-def test_restart_snapshot_matches_the_uninterrupted_generators_next_increment(tmp_path):
-    journal = Journal(verbose=False)
+def _simple():
+    return SimpleTimeStepper(2.0, 1.0, 0.1, 0.1, 1e-6, 1000, Journal(verbose=False))
 
-    original = _makeStepper(journal)
-    gen = original.generateTimeStep()
 
-    # Four increments with no cutbacks/preventIncrementIncrease -- by the time increment 3 (0-based)
-    # is yielded, nPassedGoodIncrements has reached 3, priming growth for the *next* one.
-    for _ in range(4):
-        next(gen)
+def _accept(stepper, n):
+    for _ in range(n):
+        stepper.acceptTimeStep(stepper.proposeTimeStep())
 
-    assert original.nPassedGoodIncrements == 3
-    assert original.incrementCounter == 3
 
-    checkpointPath = tmp_path / "restart.h5"
-    with h5py.File(checkpointPath, "w") as f:
-        original.writeRestart(f)
+def _cutback(stepper):
+    stepper.proposeTimeStep()
+    stepper.rejectTimeStep(0.25)
+    _accept(stepper, 1)
 
-    # The uninterrupted generator's own next yield -- the ground truth this checkpoint must match.
-    expectedNext = next(gen)
 
-    resumed = _makeStepper(journal)
-    with h5py.File(checkpointPath, "r") as f:
+def _prevent(stepper):
+    stepper.preventIncrementIncrease()
+    _accept(stepper, 1)
+
+
+def _enforce(stepper):
+    stepper.enforceTimeIncrement(0.03)
+    _accept(stepper, 1)
+
+
+def _resumed(stepper, makeStepper, tmp_path):
+    with h5py.File(tmp_path / "chk.h5", "w") as f:
+        stepper.writeRestart(f)
+    resumed = makeStepper()
+    with h5py.File(tmp_path / "chk.h5", "r") as f:
         resumed.readRestart(f)
-    resumedGen = resumed.generateTimeStep()
-    actualNext = next(resumedGen)
-
-    assert actualNext.number == expectedNext.number
-    assert actualNext.timeIncrement == expectedNext.timeIncrement
-    assert actualNext.totalTime == expectedNext.totalTime
+    return resumed
 
 
-def test_restart_snapshot_does_not_grow_when_growth_conditions_are_not_met(tmp_path):
-    """Sanity check the other branch: before nPassedGoodIncrements reaches 3, the checkpoint must
-    NOT apply the growth factor -- only advance the counters."""
+@pytest.mark.parametrize(
+    "makeStepper, history",
+    [
+        (_adaptive, [lambda s: _accept(s, 1)]),
+        (_adaptive, [lambda s: _accept(s, 5)]),
+        (_adaptive, [lambda s: _accept(s, 4), _cutback]),
+        (_adaptive, [lambda s: _accept(s, 4), _prevent]),
+        (_simple, [lambda s: _accept(s, 1)]),
+        (_simple, [lambda s: _accept(s, 3)]),
+        (_simple, [lambda s: _accept(s, 3), _cutback]),
+        (_simple, [lambda s: _accept(s, 2), _enforce]),
+    ],
+)
+def test_a_restored_stepper_continues_exactly(makeStepper, history, tmp_path):
+    original = makeStepper()
+    for event in history:
+        event(original)
 
-    journal = Journal(verbose=False)
+    resumed = _resumed(original, makeStepper, tmp_path)
 
-    original = _makeStepper(journal)
-    gen = original.generateTimeStep()
-    next(gen)  # one increment yielded; its own post-yield bookkeeping hasn't run yet
-
-    assert original.nPassedGoodIncrements == 0
-
-    checkpointPath = tmp_path / "restart.h5"
-    with h5py.File(checkpointPath, "w") as f:
-        original.writeRestart(f)
-
-    expectedNext = next(gen)
-
-    resumed = _makeStepper(journal)
-    with h5py.File(checkpointPath, "r") as f:
-        resumed.readRestart(f)
-    actualNext = next(resumed.generateTimeStep())
-
-    assert actualNext.timeIncrement == expectedNext.timeIncrement
-    assert actualNext.number == expectedNext.number
+    for _ in range(20):
+        if original.isFinished():
+            break
+        expected, actual = original.proposeTimeStep(), resumed.proposeTimeStep()
+        assert vars(actual) == vars(expected)
+        original.acceptTimeStep(expected)
+        resumed.acceptTimeStep(actual)
+    assert resumed.isFinished() == original.isFinished()

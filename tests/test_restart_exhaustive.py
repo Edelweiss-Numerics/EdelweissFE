@@ -637,42 +637,42 @@ def _uninterrupted(scenario: str, solver: str, directory: Path):
     directory.mkdir(parents=True, exist_ok=True)
     # Instrument the time stepper to see increment sizes and cutbacks (the feature check only).
     increments, timeIncrements, nCutbacks = [], [], [0]
-    generate, discard = AdaptiveTimeStepper.generateTimeStep, AdaptiveTimeStepper.discardAndChangeIncrement
-    generateSimple = SimpleTimeStepper.generateTimeStep
+    propose, reject = AdaptiveTimeStepper.proposeTimeStep, AdaptiveTimeStepper.rejectTimeStep
+    proposeSimple = SimpleTimeStepper.proposeTimeStep
     write = restartOutputManager.writeCheckpoint
     #: The exported CSV rows at the moment each checkpoint was written, by checkpoint key.
     rowsAtCheckpoint = {}
 
-    def recordingGenerate(self, *args, **kwargs):
-        for timeStep in generate(self, *args, **kwargs):
-            increments.append(timeStep.stepProgressIncrement)
-            timeIncrements.append(timeStep.timeIncrement)
-            yield timeStep
+    def recordingPropose(self):
+        timeStep = propose(self)
+        increments.append(timeStep.stepProgressIncrement)
+        timeIncrements.append(timeStep.timeIncrement)
+        return timeStep
 
-    def recordingGenerateSimple(self, *args, **kwargs):
-        for timeStep in generateSimple(self, *args, **kwargs):
-            timeIncrements.append(timeStep.timeIncrement)
-            yield timeStep
+    def recordingProposeSimple(self):
+        timeStep = proposeSimple(self)
+        timeIncrements.append(timeStep.timeIncrement)
+        return timeStep
 
-    def countingDiscard(self, scaleFactor):
+    def countingReject(self, cutbackFactor):
         nCutbacks[0] += 1
-        return discard(self, scaleFactor)
+        return reject(self, cutbackFactor)
 
     def recordingWrite(fileName, model, step, outputManagers):
         write(fileName, model, step, outputManagers)
         rowsAtCheckpoint[_checkpointKey(Path(fileName))] = _csvRows(directory)
 
-    AdaptiveTimeStepper.generateTimeStep = recordingGenerate
-    AdaptiveTimeStepper.discardAndChangeIncrement = countingDiscard
-    SimpleTimeStepper.generateTimeStep = recordingGenerateSimple
+    AdaptiveTimeStepper.proposeTimeStep = recordingPropose
+    AdaptiveTimeStepper.rejectTimeStep = countingReject
+    SimpleTimeStepper.proposeTimeStep = recordingProposeSimple
     restartOutputManager.writeCheckpoint = recordingWrite
     spec = _SCENARIOS[scenario]
     try:
         deck = _deck(directory, scenario, solver, _writer(directory, spec.get("writeInterval", 1)))
         model = _run(directory / "uninterrupted.inp", deck)
     finally:
-        AdaptiveTimeStepper.generateTimeStep, AdaptiveTimeStepper.discardAndChangeIncrement = generate, discard
-        SimpleTimeStepper.generateTimeStep = generateSimple
+        AdaptiveTimeStepper.proposeTimeStep, AdaptiveTimeStepper.rejectTimeStep = propose, reject
+        SimpleTimeStepper.proposeTimeStep = proposeSimple
         restartOutputManager.writeCheckpoint = write
     checkpoints = _checkpoints(directory)
     run = dict(
