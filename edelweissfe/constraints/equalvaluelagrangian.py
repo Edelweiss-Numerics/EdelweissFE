@@ -115,6 +115,7 @@ class Constraint(ConstraintBase):
         self.component = configuration.component
         self._name = name
         self._nodes = nSet
+        self._recordSetVersion(self._nodes)
         self.nNodes = len(self._nodes)
         self.nMultipliers = len(self._nodes) - 1
 

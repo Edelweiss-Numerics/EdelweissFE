@@ -230,13 +230,28 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         Returns
         -------
         bool
-            True once per version bump of ``theSet`` since the last call for this same set.
+            True if ``theSet`` changed since its version was last recorded or checked.
         """
         setVersions = self.__dict__.setdefault("_setVersions", {})
-        key = id(theSet)
-        changed = setVersions.get(key, theSet._version) != theSet._version
-        setVersions[key] = theSet._version
+        if id(theSet) not in setVersions:
+            raise RuntimeError(
+                f"{type(self).__name__}: a set is checked for changes, but the state derived "
+                "from it never recorded its version (call _recordSetVersion where that state is built)."
+            )
+        changed = setVersions[id(theSet)] != theSet._version
+        setVersions[id(theSet)] = theSet._version
         return changed
+
+    def _recordSetVersion(self, theSet):
+        """Record the version of ``theSet`` that derived state was just built from, so the next
+        :meth:`_checkSetChanged` reports any change after this point -- including the first one.
+
+        Parameters
+        ----------
+        theSet
+            The set the derived state was built from.
+        """
+        self.__dict__.setdefault("_setVersions", {})[id(theSet)] = theSet._version
 
     def applyConstraintExplicit(
         self,

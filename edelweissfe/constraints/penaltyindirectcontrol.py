@@ -163,6 +163,8 @@ class Constraint(ConstraintBase):
 
         self.constrainedValue = 0.0
 
+        self._recordSetVersion(self.loadNSet)
+        self._recordSetVersion(self.constrainedNSet)
         self._rebuildDerivedState()
 
     @classmethod

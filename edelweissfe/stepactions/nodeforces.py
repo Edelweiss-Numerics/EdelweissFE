@@ -225,6 +225,7 @@ class StepAction(NodalLoadBase):
         self.nodeForcesStepStart = np.zeros(shape)
         self.nodeForcesDelta = np.zeros(shape)
         self._nSetNodeOrder = list(self._nSet)  # node identity per row, for the lazy resize below
+        self._recordSetVersion(self._nSet)
 
         self.updateStepAction(nodeForces, f_t=f_t)
 

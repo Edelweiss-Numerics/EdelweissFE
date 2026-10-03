@@ -332,7 +332,7 @@ class StepAction(DirichletBase):
         """
         self.active = True
 
-        self._checkSetChanged(self.nSet)
+        self._recordSetVersion(self.nSet)
 
         outOfRange = [index for index in prescribedComponents if not 0 <= index < self.fieldSize]
         if outOfRange:

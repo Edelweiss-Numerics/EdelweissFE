@@ -108,6 +108,7 @@ class Constraint(ConstraintBase):
 
         self.active = True
 
+        self._recordSetVersion(self._nodes)
         self._rebuildDerivedState()
 
     @classmethod
