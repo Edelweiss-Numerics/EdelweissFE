@@ -27,7 +27,9 @@ restart uses a tolerance. The rule has three consequences, each kept by construc
 Whatever cannot keep the rule refuses to resume, with a :class:`~edelweissfe.utils.exceptions.RestartError`:
 a solver that does not checkpoint its state (the default of
 :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.readRestart`), and a
-checkpoint written by an older version that lacks state the current one needs.
+checkpoint of another format version (every checkpoint carries one, and a run reads its own only),
+and a resume that would skip a step with a ``modelupdate`` -- a model update is not recorded in a
+checkpoint, so it is resumed from in or before that step only.
 
 One increment, and where the checkpoint is written
 --------------------------------------------------
@@ -67,15 +69,17 @@ The model is first rebuilt from the same input file, then restored in this order
      - catch up with the replayed mesh, as they had in the uninterrupted run
    * - node fields, scalar variables, element state
      - read
+   * - rigid bodies
+     - their surface nodes are moved to the restored configuration
    * - constraint state (e.g. a frozen contact search)
      - read; adopted only if it refers to the restored model's contact points, otherwise refused
    * - output managers' sequence bookkeeping
-     - read
+     - read, including each restart writer's position in its write interval
    * - time stepper
      - its progress within the step
    * - solver
      - its state between increments: the implicit solver's predictor (last accepted increment and
-       its ``dU``), the explicit solver's last increment and accumulated external work
+       its ``dU``), the explicit solver's last increment, its critical time step and accumulated external work
 
 Adding something that carries state between increments
 -------------------------------------------------------
