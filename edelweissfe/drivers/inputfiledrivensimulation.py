@@ -50,7 +50,7 @@ from edelweissfe.helpers.inputfilehelpers import (
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel, printPrettyModelSummary
 from edelweissfe.utils.checkpoint import ResumeCheckpoint
-from edelweissfe.utils.exceptions import StepFailed
+from edelweissfe.utils.exceptions import RestartError, StepFailed
 from edelweissfe.utils.fieldoutput import FieldOutputController
 
 
@@ -161,10 +161,9 @@ def finiteElementSimulation(
     # exist (createFieldValueEntry above) and after advanceToTime's cold-start bookkeeping, which
     # would otherwise clobber model.time back to job['startTime'].
     #
-    # Limitation: resuming skips every step before the checkpoint's step entirely. Topology changes
-    # made by model modifiers (e.g. AMR) are not affected -- readRestart replays them from the
-    # checkpoint's topology history -- but the step actions of a skipped step never run, so a
-    # one-off model change such as a `modelupdate` in a skipped step is lost on resume.
+    # Resuming skips every step before the checkpoint's step. Topology changes made by model
+    # modifiers (e.g. AMR) are replayed from the checkpoint's topology history, but the step actions
+    # of a skipped step never run -- so a skipped step with a `modelupdate` refuses to be skipped.
     restartDefinitions = inputfile["restart"]
     resumeCheckpoint = None
     resumeStepNumber = None
@@ -222,6 +221,11 @@ def finiteElementSimulation(
                     # Constructed (so its StepActions register/accumulate normally, see the comment
                     # above) but not solved -- it already ran, in full, before the interrupted job
                     # wrote this checkpoint.
+                    if step.actions["modelupdate"]:
+                        raise RestartError(
+                            "step {:} has a modelupdate, which is not recorded in a checkpoint; "
+                            "resume from a checkpoint written before it, or in it".format(step.number)
+                        )
                     continue
                 if step.number == resumeStepNumber:
                     resumeCheckpoint.restoreStep(step)
