@@ -646,8 +646,10 @@ def _reader(checkpoint: Path) -> str:
     return "\n*restart, readFrom={:}\n".format(checkpoint)
 
 
-#: Attributes that legitimately differ between a resumed and an uninterrupted run: wall-clock time.
-_WALL_CLOCK = {"_stepWallClockTic"}
+#: Attributes that legitimately differ between a resumed and an uninterrupted run: wall-clock time,
+#: and change counters that only invalidate caches -- how far they count depends on how many
+#: separate mutations a replay bundles into one, not on the state they guard.
+_NOT_STATE = {"_stepWallClockTic", "_version", "_seenParentVersion"}
 
 
 def _plainValue(value, directory: str, depth: int = 0):
@@ -679,7 +681,11 @@ def _plainValue(value, directory: str, depth: int = 0):
         return tuple(sorted(entries, key=repr))
     if depth == 0 and type(value).__module__.startswith("edelweissfe"):
         try:
-            attributes = {name: _plainValue(entry, directory, depth + 1) for name, entry in vars(value).items()}
+            attributes = {
+                name: _plainValue(entry, directory, depth + 1)
+                for name, entry in vars(value).items()
+                if name not in _NOT_STATE
+            }
         except TypeError:  # a compiled object without instance attributes
             return None
         return (type(value).__qualname__, tuple(sorted((n, a) for n, a in attributes.items() if a is not None)))
@@ -699,7 +705,7 @@ def _components(model, step, outputManagers, directory: Path) -> dict:
         key: {
             name: _plainValue(value, str(directory))
             for name, value in vars(component).items()
-            if name not in _WALL_CLOCK and _plainValue(value, str(directory)) is not None
+            if name not in _NOT_STATE and _plainValue(value, str(directory)) is not None
         }
         for key, component in components.items()
     }
