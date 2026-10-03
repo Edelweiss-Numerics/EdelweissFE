@@ -28,6 +28,10 @@ restart uses a tolerance. The rule has three consequences, each kept by construc
    contact searches, output and checkpoints happen at the same increments whether a run started cold
    or was resumed.
 
+A checkpoint file is written under a temporary name and renamed once complete, so a job killed while
+writing one never leaves a truncated checkpoint behind. Each carries a serial number, by which the
+restart writer finds the oldest one to replace -- not by file times, which copying changes.
+
 Whatever cannot keep the rule refuses to resume, with a :class:`~edelweissfe.utils.exceptions.RestartError`:
 a solver that does not checkpoint its state (the default of
 :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.readRestart`), and a

@@ -751,8 +751,8 @@ def _uninterrupted(scenario: str, solver: str, directory: Path):
         nCutbacks[0] += 1
         return reject(self, cutbackFactor)
 
-    def recordingWrite(fileName, model, step, outputManagers):
-        write(fileName, model, step, outputManagers)
+    def recordingWrite(fileName, model, step, outputManagers, **kwargs):
+        write(fileName, model, step, outputManagers, **kwargs)
         componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(
             model, step, outputManagers, Path(fileName).parent
         )
@@ -849,8 +849,8 @@ def test_resume_from_every_checkpoint_is_exact(workDirectory, scenario, solver, 
     componentsAtCheckpoint = {}
     write = restartOutputManager.writeCheckpoint
 
-    def recordingWrite(fileName, model, step, outputManagers):
-        write(fileName, model, step, outputManagers)
+    def recordingWrite(fileName, model, step, outputManagers, **kwargs):
+        write(fileName, model, step, outputManagers, **kwargs)
         componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(
             model, step, outputManagers, Path(fileName).parent
         )

@@ -46,6 +46,8 @@ Every component other than the model hands over its state as a mapping of arrays
 reads one back, the driver uses it.
 """
 
+import os
+
 import h5py
 
 from edelweissfe.utils.exceptions import RestartError
@@ -53,7 +55,7 @@ from edelweissfe.utils.exceptions import RestartError
 #: The layout of a checkpoint. Raise it whenever a checkpoint gains or changes state: a run resumes
 #: only from checkpoints of its own layout, so a missing piece of state is refused up front instead
 #: of surfacing as a lookup error deep inside some reader -- or as silently missing state.
-CHECKPOINT_FORMAT_VERSION = 7
+CHECKPOINT_FORMAT_VERSION = 8
 
 
 def writeRestartDataOf(group: h5py.Group, entities: dict):
@@ -96,23 +98,31 @@ def readRestartDataInto(group: h5py.Group, entities: dict, newEntitiesStartAfres
         entity.setRestartData({entryName: values[()] for entryName, values in group[name].items()})
 
 
-def writeCheckpoint(fileName: str, model, step, outputManagers: dict):
+def writeCheckpoint(fileName: str, model, step, outputManagers: dict, serial: int):
     """Write a restart checkpoint of the converged state.
+
+    Written to a temporary file first, and renamed to ``fileName`` only once complete: a job killed
+    while writing leaves the previous checkpoint of that name intact, never a truncated one.
 
     Parameters
     ----------
     fileName
-        The file to write; overwritten if it exists.
+        The file to write; replaced if it exists.
     model
         The model tree.
     step
         The current step, whose time stepper and solver write their own state.
     outputManagers
         The output managers, by name.
+    serial
+        The number of this checkpoint in the sequence its writer writes, stored in the file: it
+        orders checkpoints independently of file times.
     """
 
-    with h5py.File(fileName, "w") as f:
+    temporaryFileName = fileName + ".tmp"
+    with h5py.File(temporaryFileName, "w") as f:
         f.attrs["formatVersion"] = CHECKPOINT_FORMAT_VERSION
+        f.attrs["serial"] = serial
         f.attrs["stepNumber"] = step.number
         model.writeRestart(f)
         writeRestartDataOf(f, {"timestepper": step.timeStepper, "solver": step.solver})
@@ -121,6 +131,9 @@ def writeCheckpoint(fileName: str, model, step, outputManagers: dict):
             writeRestartDataOf(stepActionsGroup.create_group(actionType), actions)
         writeRestartDataOf(f.create_group("outputManagers"), outputManagers)
         writeRestartDataOf(f.create_group("fieldOutputs"), step.fieldOutputController.fieldOutputs)
+    with open(temporaryFileName, "rb+") as written:
+        os.fsync(written.fileno())
+    os.replace(temporaryFileName, fileName)
 
 
 class ResumeCheckpoint:
