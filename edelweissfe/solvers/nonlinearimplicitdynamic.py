@@ -385,6 +385,10 @@ class NonlinearImplicitDynamic(NIST):
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NIDSchema
 
+    #: The predictor's state, as in the parent, and the drift the conservation checks accumulate
+    #: over the step. The velocity and acceleration are node-field entries, restored with the model.
+    checkpointedState = NIST.checkpointedState | {"_conservationCheck": ConservationCheck}
+
     SolverSpecificOptions = NIST.SolverSpecificOptions | {
         "newmarkBeta": 0.25,
         "newmarkGamma": 0.5,

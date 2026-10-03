@@ -57,6 +57,7 @@ resume subset is taken: every checkpoint of every scenario is resumed from. To c
 add a row to ``_SCENARIOS``.
 """
 
+import shutil
 from functools import cache
 from pathlib import Path
 
@@ -586,11 +587,6 @@ def _export(directory: Path) -> str:
     )
 
 
-def _csvRows(directory: Path) -> int:
-    path = directory / "exportU.csv"
-    return len(path.read_text().splitlines()) if path.exists() else 0
-
-
 def _run(path: Path, text: str):
     path.write_text(text)
     model, _ = finiteElementSimulation(parseInputFile(str(path)), verbose=False, suppressPlots=True)
@@ -654,14 +650,32 @@ def _reader(checkpoint: Path) -> str:
 _WALL_CLOCK = {"_stepWallClockTic"}
 
 
-def _plainValue(value):
-    """A comparable copy of a plain value -- the kind of attribute state is made of -- or None."""
-    if isinstance(value, (bool, int, float, str, np.number)):
+def _plainValue(value, depth: int = 0):
+    """A canonical, comparable form of a plain value -- the kind of attribute state is made of --
+    or None. Containers of plain values count, and so do the plain attributes of a helper object
+    (one level deep, e.g. a solver's conservation check). Floats compare bitwise."""
+    if isinstance(value, (bool, int, str, np.bool_, np.integer)):
         return value
-    if isinstance(value, np.ndarray) and value.dtype != object:
-        return value.copy()
+    if isinstance(value, (float, np.floating)):
+        return float(value).hex()
+    if isinstance(value, np.ndarray):
+        return None if value.dtype == object else (value.dtype.str, value.shape, value.tobytes())
     if isinstance(value, TimeStep):
-        return (value.number, value.stepProgressIncrement, value.stepProgress, value.totalTime)
+        return _plainValue((value.number, value.stepProgressIncrement, value.stepProgress, value.totalTime))
+    if isinstance(value, (list, tuple, set, frozenset)):
+        entries = [_plainValue(entry, depth) for entry in value]
+        if any(entry is None for entry in entries):
+            return None
+        return tuple(sorted(entries, key=repr) if isinstance(value, (set, frozenset)) else entries)
+    if isinstance(value, dict):
+        entries = [(repr(key), _plainValue(entry, depth)) for key, entry in value.items()]
+        return None if any(entry is None for _, entry in entries) else tuple(sorted(entries))
+    if depth == 0 and type(value).__module__.startswith("edelweissfe"):
+        try:
+            attributes = {name: _plainValue(entry, depth + 1) for name, entry in vars(value).items()}
+        except TypeError:  # a compiled object without instance attributes
+            return None
+        return (type(value).__qualname__, tuple(sorted((n, a) for n, a in attributes.items() if a is not None)))
     return None
 
 
@@ -671,6 +685,7 @@ def _components(model, step, outputManagers) -> dict:
     components |= {"constraint " + name: c for name, c in model.constraints.items()}
     components |= {"modifier " + name: m for name, m in model.modelModifiers.items()}
     components |= {"output " + name: m for name, m in outputManagers.items()}
+    components |= {"fieldOutput " + name: o for name, o in step.fieldOutputController.fieldOutputs.items()}
     for actionType, actions in step.actions.items():
         components |= {"{:} {:}".format(actionType, name): a for name, a in actions.items()}
     return {
@@ -689,7 +704,7 @@ def _differingComponents(resumed: dict, reference: dict) -> list:
     for key in sorted(set(resumed) | set(reference)):
         a, b = resumed.get(key, {}), reference.get(key, {})
         for name in sorted(set(a) | set(b)):
-            if name not in a or name not in b or not np.array_equal(np.asarray(a[name]), np.asarray(b[name])):
+            if name not in a or name not in b or a[name] != b[name]:
                 differing.append("{:}.{:}".format(key, name))
     return differing
 
@@ -705,8 +720,8 @@ def _uninterrupted(scenario: str, solver: str, directory: Path):
     propose, reject = AdaptiveTimeStepper.proposeTimeStep, AdaptiveTimeStepper.rejectTimeStep
     proposeSimple = SimpleTimeStepper.proposeTimeStep
     write = restartOutputManager.writeCheckpoint
-    #: The exported CSV rows, and the components' attributes, at each checkpoint, by checkpoint key.
-    rowsAtCheckpoint, componentsAtCheckpoint = {}, {}
+    #: The components' attributes at each checkpoint, by checkpoint key.
+    componentsAtCheckpoint = {}
 
     def recordingPropose(self):
         timeStep = propose(self)
@@ -725,7 +740,6 @@ def _uninterrupted(scenario: str, solver: str, directory: Path):
 
     def recordingWrite(fileName, model, step, outputManagers):
         write(fileName, model, step, outputManagers)
-        rowsAtCheckpoint[_checkpointKey(Path(fileName))] = _csvRows(directory)
         componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(model, step, outputManagers)
 
     AdaptiveTimeStepper.proposeTimeStep = recordingPropose
@@ -749,9 +763,7 @@ def _uninterrupted(scenario: str, solver: str, directory: Path):
     )
     output = dict(
         checkpointKeys=[_checkpointKey(c) for c in checkpoints],
-        rowsAtCheckpoint=rowsAtCheckpoint,
         componentsAtCheckpoint=componentsAtCheckpoint,
-        rows=_csvRows(directory),
     )
     return _state(model), checkpoints, output, spec["check"](model, run)
 
@@ -798,8 +810,12 @@ def test_resume_from_every_checkpoint_is_exact(workDirectory, scenario, solver, 
 
     resumeDirectory = workDirectory / scenario / solver / "resume{:}".format("-".join(map(str, chain)))
     resumeDirectory.mkdir()
+    # Each resumed run finds the export file as an interrupted run leaves it: written past the
+    # checkpoint it resumes from (here, all the way to the end). It must continue it exactly.
+    referenceExport = workDirectory / scenario / solver / "exportU.csv"
     checkpoint = checkpoints[chain[0]]
     for j in chain[1:]:
+        shutil.copy(referenceExport, resumeDirectory / "exportU.csv")
         deck = _deck(resumeDirectory, scenario, solver, _reader(checkpoint) + writer(resumeDirectory))
         _run(resumeDirectory / "resumed.inp", deck)
         written = _checkpoints(resumeDirectory)
@@ -809,6 +825,7 @@ def test_resume_from_every_checkpoint_is_exact(workDirectory, scenario, solver, 
         resumeDirectory.mkdir()
 
     resumeKey = _checkpointKey(checkpoint)
+    shutil.copy(referenceExport, resumeDirectory / "exportU.csv")
     deck = _deck(resumeDirectory, scenario, solver, _reader(checkpoint) + writer(resumeDirectory))
     if spec.get("resumeIsRefused"):
         with pytest.raises(RestartError):
@@ -831,14 +848,13 @@ def test_resume_from_every_checkpoint_is_exact(workDirectory, scenario, solver, 
     differing += [key for key in resumed if key not in reference]
 
     # The resumed run writes the checkpoints the uninterrupted run wrote after the resume point --
-    # the same number, at the same (step, time) -- and gains as many exported CSV rows.
+    # the same number, at the same (step, time) -- and ends with the same export file, byte for byte.
     expectedKeys = [key for key in output["checkpointKeys"] if key > resumeKey]
     writtenKeys = [_checkpointKey(c) for c in _checkpoints(resumeDirectory)]
     if writtenKeys != expectedKeys:
         differing.append("checkpoints written {:} != expected {:}".format(writtenKeys, expectedKeys))
-    expectedRows = output["rows"] - output["rowsAtCheckpoint"][resumeKey]
-    if _csvRows(resumeDirectory) != expectedRows:
-        differing.append("CSV rows gained {:} != expected {:}".format(_csvRows(resumeDirectory), expectedRows))
+    if (resumeDirectory / "exportU.csv").read_bytes() != referenceExport.read_bytes():
+        differing.append("the export file differs from the uninterrupted run's")
 
     # And at every checkpoint it writes, every component -- solver, time stepper, constraints, model
     # modifiers, output managers, step actions -- holds what it held in the uninterrupted run. State a

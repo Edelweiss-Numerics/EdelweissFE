@@ -34,7 +34,9 @@ A checkpoint is an HDF5 file holding
 - groups ``timestepper`` and ``solver`` with the time stepper's and the solver's state;
 - a group ``stepActions`` with the state of every step action, by type and name -- including what
   the steps before carried over, e.g. an accumulated load, and whether an action is still active;
-- a group ``outputManagers`` with the state of every output manager.
+- a group ``outputManagers`` with the state of every output manager;
+- a group ``fieldOutputs`` with the history of every field output, and how much of its export file
+  belongs to the run.
 
 Every component other than the model hands over its state as a mapping of arrays, through
 ``getRestartData`` and ``setRestartData``; most just declare which of their attributes it is (see
@@ -51,7 +53,7 @@ from edelweissfe.utils.exceptions import RestartError
 #: The layout of a checkpoint. Raise it whenever a checkpoint gains or changes state: a run resumes
 #: only from checkpoints of its own layout, so a missing piece of state is refused up front instead
 #: of surfacing as a lookup error deep inside some reader -- or as silently missing state.
-CHECKPOINT_FORMAT_VERSION = 6
+CHECKPOINT_FORMAT_VERSION = 7
 
 
 def writeRestartDataOf(group: h5py.Group, entities: dict):
@@ -118,6 +120,7 @@ def writeCheckpoint(fileName: str, model, step, outputManagers: dict):
         for actionType, actions in step.actions.items():
             writeRestartDataOf(stepActionsGroup.create_group(actionType), actions)
         writeRestartDataOf(f.create_group("outputManagers"), outputManagers)
+        writeRestartDataOf(f.create_group("fieldOutputs"), step.fieldOutputController.fieldOutputs)
 
 
 class ResumeCheckpoint:
@@ -184,6 +187,9 @@ class ResumeCheckpoint:
 
         readRestartDataInto(self._file, {"solver": step.solver})
         readRestartDataInto(self._file["outputManagers"], outputManagers, newEntitiesStartAfresh=True)
+        readRestartDataInto(
+            self._file["fieldOutputs"], step.fieldOutputController.fieldOutputs, newEntitiesStartAfresh=True
+        )
         for actionType, actions in step.actions.items():
             if actions:  # the collection creates an empty entry for every type it is asked about
                 readRestartDataInto(self._file["stepActions"][actionType], actions)

@@ -367,6 +367,7 @@ class NED(NonlinearSolverBase):
         # The energy-balance warnings are given once per step, not again after a resume.
         "_warnedAboutMissingInternalEnergy": bool,
         "_warnedAboutMissingExternalWork": bool,
+        "_conservationCheck": ConservationCheck,
     }
 
     def __init__(self, jobInfo, journal, **kwargs):

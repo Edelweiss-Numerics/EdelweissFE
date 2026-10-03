@@ -507,6 +507,7 @@ class FEModel:
         # TopologyPipeline.replayHistory -- rather than serializing the resulting topology directly, so there
         # is exactly one code path that mutates topology, live or replayed.
         historyGroup = f.create_group("topologyHistory")
+        historyGroup.attrs["setupFingerprint"] = self.topology.setupFingerprint()
         historyGroup.attrs["count"] = len(self.topology.history)
         for index, record in enumerate(self.topology.history):
             recordGroup = historyGroup.create_group("{:06d}".format(index))
@@ -539,8 +540,13 @@ class FEModel:
         # elements/nodes a plain rebuild from the .inp file cannot reproduce (e.g. AMR-refined
         # children) -- the node-field and element-statevar restores that follow address elements by
         # label and would silently miss anything not already in self.elements/self.nodeFields yet.
-        records = []
         historyGroup = f["topologyHistory"]
+        if self.topology.setupFingerprint() != historyGroup.attrs["setupFingerprint"]:
+            raise RestartError(
+                "the model rebuilt from the input file is not the one the checkpoint was written from: "
+                "its mesh (nodes, elements, coordinates, numbering) differs"
+            )
+        records = []
         for index in range(int(historyGroup.attrs["count"])):
             recordGroup = historyGroup["{:06d}".format(index)]
             records.append(

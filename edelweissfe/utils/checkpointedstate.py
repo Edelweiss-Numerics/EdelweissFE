@@ -40,7 +40,9 @@ arrays a checkpoint stores, and back. An empty mapping declares that a component
 between increments. A component whose declaration is still None has not been declared at all, and
 cannot be checkpointed.
 
-An attribute that is None is simply left out, and read back as None.
+An attribute that is None is simply left out, and read back as None. A ``dict`` maps strings to
+floats. An attribute whose type is none of the plain ones is a helper object that declares its own
+``checkpointedState``; its state is stored under the attribute's name as a prefix.
 """
 
 import numpy as np
@@ -55,6 +57,7 @@ _TO_ARRAY = {
     bool: lambda value: np.array(value, dtype=bool),
     np.ndarray: np.asarray,
     list: np.asarray,
+    set: lambda value: np.array(sorted(value), dtype=bytes),
     TimeStep: lambda t: np.array(
         [t.number, t.stepProgressIncrement, t.stepProgress, t.timeIncrement, t.stepTime, t.totalTime]
     ),
@@ -66,6 +69,7 @@ _FROM_ARRAY = {
     bool: bool,
     np.ndarray: np.array,
     list: list,
+    set: lambda a: {entry.decode() for entry in a},
     TimeStep: lambda a: TimeStep(int(a[0]), float(a[1]), float(a[2]), float(a[3]), float(a[4]), float(a[5])),
 }
 
@@ -97,8 +101,15 @@ def packState(component) -> dict[str, np.ndarray]:
     state = {}
     for name, kind in _declaration(component).items():
         value = component.__dict__[name]
-        if value is not None:
+        if value is None:
+            continue
+        if kind is dict:
+            state[name + ".keys"] = np.array(list(value.keys()), dtype=bytes)
+            state[name + ".values"] = np.array(list(value.values()), dtype=float)
+        elif kind in _TO_ARRAY:
             state[name] = _TO_ARRAY[kind](value)
+        else:
+            state |= {name + "." + key: array for key, array in packState(value).items()}
     return state
 
 
@@ -114,4 +125,16 @@ def unpackState(component, state: dict[str, np.ndarray]):
     """
 
     for name, kind in _declaration(component).items():
-        component.__dict__[name] = _FROM_ARRAY[kind](state[name]) if name in state else None
+        if kind is dict:
+            keys = state.get(name + ".keys")
+            component.__dict__[name] = (
+                None if keys is None else {k.decode(): float(v) for k, v in zip(keys, state[name + ".values"])}
+            )
+        elif kind in _FROM_ARRAY:
+            component.__dict__[name] = _FROM_ARRAY[kind](state[name]) if name in state else None
+        else:
+            prefix = name + "."
+            unpackState(
+                component.__dict__[name],
+                {key[len(prefix) :]: array for key, array in state.items() if key.startswith(prefix)},
+            )

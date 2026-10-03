@@ -95,6 +95,9 @@ class TopologyPipeline:
         #: walk per record, so a long history replays in O(records x mesh) rather than O(mesh).
         #: Switch it on to locate a divergence the final check reported.
         self.verifyFingerprintsPerRecord = False
+        #: The fingerprint of the mesh as the input file built it, before any model modifier acted;
+        #: see :meth:`setupFingerprint`.
+        self._setupFingerprint = None
         #: True inside a :meth:`changes` window that defers the node-field bookkeeping.
         self.isDeferringFieldBookkeeping = False
         self._deferredNodeFieldResizeJournal = None
@@ -348,6 +351,7 @@ class TopologyPipeline:
             keeps planning in response to its own output. The message names the offenders.
         """
 
+        self.setupFingerprint()
         changed = False
         with self.changes():
             # Seeded with the version at the START of this update, not None: a modifier must see
@@ -406,6 +410,23 @@ class TopologyPipeline:
                         )
                     )
         return changed
+
+    def setupFingerprint(self) -> str:
+        """The :meth:`fingerprint` of the mesh as the input file built it, before any model modifier
+        acted: taken at the start of the first topology update (or replay), or now if there has been
+        none. A checkpoint carries it, so that a resumed run can verify that it was rebuilt from the
+        same mesh -- the recorded topology changes are verified by the replay, but they say nothing
+        about a mesh no modifier ever touched.
+
+        Returns
+        -------
+        str
+            The digest.
+        """
+
+        if self._setupFingerprint is None:
+            self._setupFingerprint = self.fingerprint()
+        return self._setupFingerprint
 
     def fingerprint(self) -> str:
         """A short digest of the model's topology *and its numbering*, for verifying that a restart
@@ -543,6 +564,7 @@ class TopologyPipeline:
             merely detected.
         """
 
+        self.setupFingerprint()
         perRecord = self.verifyFingerprints and self.verifyFingerprintsPerRecord
         with self.changes(deferFieldBookkeeping=True):
             for index, record in enumerate(records):

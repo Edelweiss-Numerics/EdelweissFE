@@ -84,6 +84,10 @@ class _RestartFileRingBuffer(deque):
     just resumed from.
     """
 
+    #: The slot written next. A restored writer continues from the checkpointed slot; only a writer
+    #: the checkpoint does not know starts from what it finds on disk.
+    checkpointedState = {"_nextIndex": int}
+
     def __init__(self, baseName: str, maxsize: int):
         super().__init__(maxlen=maxsize)
         self._baseName = baseName
@@ -126,9 +130,10 @@ class OutputManager(OutputManagerBase):
     #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
     schema = RestartOutputManagerSchema
 
-    #: How many increments passed since this writer last wrote a checkpoint: zero in its own
-    #: checkpoints, but another restart writer with a different interval may be anywhere in its cycle.
-    checkpointedState = {"_incrementsSinceLastWrite": int}
+    #: How many increments passed since this writer last wrote a checkpoint (zero in its own
+    #: checkpoints, but another restart writer with a different interval may be anywhere in its
+    #: cycle), and the slot of its ring buffer it writes next.
+    checkpointedState = {"_incrementsSinceLastWrite": int, "_files": _RestartFileRingBuffer}
 
     def __init__(
         self,

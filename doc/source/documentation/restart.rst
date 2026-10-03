@@ -74,7 +74,9 @@ The model is first rebuilt from the same input file, then restored in this order
    * - model time
      - read
    * - mesh
-     - the recorded topology decisions are replayed through the model modifiers' own ``apply``
+     - the mesh rebuilt from the input file is checked against the one the checkpointed run started
+       from (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.setupFingerprint`), then
+       the recorded topology decisions are replayed through the model modifiers' own ``apply``
        (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory`), and the
        result is checked against the recorded fingerprint
    * - ties, contact surfaces
@@ -118,9 +120,9 @@ Step actions declare their state too: a load ramped over several steps accumulat
 step, and most actions switch themselves off at the end of their step. A resumed run skips the
 steps before the checkpoint, so it restores that state rather than re-deriving it.
 
-One exception is known: the history of a field output (``FieldOutput.timeHistory``) is not
-checkpointed. Its exported CSV file is continued, but an output manager integrating over the
-history in memory (the fracture energy integrator) sees only what was computed after the resume.
+Field outputs carry their history the same way, and how much of their export file belongs to the
+run: before its first write, a resumed run cuts the file back to that size, so the rows an
+interrupted run wrote after its last checkpoint are replaced, not duplicated.
 
 Then add a scenario to ``tests/test_restart_exhaustive.py``: it resumes from every checkpoint of a
 small run and requires the bitwise-identical end state, the same checkpoints and the same output.
