@@ -51,7 +51,7 @@ from edelweissfe.utils.exceptions import RestartError
 #: The layout of a checkpoint. Raise it whenever a checkpoint gains or changes state: a run resumes
 #: only from checkpoints of its own layout, so a missing piece of state is refused up front instead
 #: of surfacing as a lookup error deep inside some reader -- or as silently missing state.
-CHECKPOINT_FORMAT_VERSION = 5
+CHECKPOINT_FORMAT_VERSION = 6
 
 
 def writeRestartDataOf(group: h5py.Group, entities: dict):
