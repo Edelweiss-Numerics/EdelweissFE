@@ -68,6 +68,7 @@ import edelweissfe.outputmanagers.restart as restartOutputManager
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.timesteppers.adaptivetimestepper import AdaptiveTimeStepper
 from edelweissfe.timesteppers.simpletimestepper import SimpleTimeStepper
+from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import RestartError
 from edelweissfe.utils.inputfileparser import parseInputFile
 
@@ -796,3 +797,84 @@ if __name__ == "__main__":
         for solver in spec["solvers"]:
             _, checkpoints, _, missing = _uninterrupted(scenario, solver, Path(tempfile.mkdtemp()))
             print(scenario, solver, "checkpoints:", len(checkpoints), "feature:", missing or "ok", file=sys.stderr)
+
+
+# --- Completeness of the declared state ---------------------------------------------------------
+
+#: Attributes that change between increments but are rebuilt from the model at the start of every
+#: increment or step, so a resumed run derives them itself. Each entry says why.
+_REBUILT = {}
+
+#: The scenarios whose components are watched: between them, every solver, contact and load type.
+_WATCHED = [
+    ("implicit", "amrRigidContact"),
+    ("explicit", "amrRigidContact"),
+    ("NID", "amrRigidContact"),
+    ("implicit", "deformableFrictionalContact"),
+    ("explicit", "deformableFrictionalContact"),
+    ("implicit", "nodeForcesTwoSteps"),
+    ("explicit", "amrPlasticExplicit"),
+]
+
+
+def _plainValue(value):
+    """A comparable copy of a plain value -- the kind of attribute state is made of -- or None."""
+    if isinstance(value, (bool, int, float, str, np.number)):
+        return value
+    if isinstance(value, np.ndarray) and value.dtype != object:
+        return value.copy()
+    if isinstance(value, TimeStep):
+        return (value.number, value.stepProgressIncrement, value.stepProgress, value.totalTime)
+    return None
+
+
+def _components(model, step, outputManagers):
+    yield "solver", step.solver
+    yield "timeStepper", step.timeStepper
+    for name, constraint in model.constraints.items():
+        yield "constraint " + name, constraint
+    for name, modifier in model.modelModifiers.items():
+        yield "modifier " + name, modifier
+    for name, manager in outputManagers.items():
+        yield "output " + name, manager
+    for actionType, actions in step.actions.items():
+        for name, action in actions.items():
+            yield "{:} {:}".format(actionType, name), action
+
+
+@pytest.mark.parametrize("solver, scenario", _WATCHED, ids=["-".join(w) for w in _WATCHED])
+def test_every_attribute_that_changes_between_checkpoints_is_declared(solver, scenario, tmp_path):
+    """The declared-state test checks that every component declares its state; this one checks that
+    the declaration is complete: an attribute whose value changes from one checkpoint to the next
+    is state, so it must be declared -- or be rebuilt from the model, and listed in _REBUILT."""
+
+    snapshots = []
+    write = restartOutputManager.writeCheckpoint
+
+    def recordingWrite(fileName, model, step, outputManagers):
+        write(fileName, model, step, outputManagers)
+        snapshot = {}
+        for key, component in _components(model, step, outputManagers):
+            declared = set(component.checkpointedState or ()) | set(component.getRestartData())
+            values = {name: _plainValue(value) for name, value in vars(component).items()}
+            snapshot[key] = (type(component).__qualname__, declared, values)
+        snapshots.append(snapshot)
+
+    restartOutputManager.writeCheckpoint = recordingWrite
+    try:
+        _run(tmp_path / "run.inp", _deck(tmp_path, scenario, solver, _writer(tmp_path)))
+    finally:
+        restartOutputManager.writeCheckpoint = write
+
+    assert len(snapshots) > 2, "too few checkpoints to watch anything"
+    undeclared = set()
+    for before, after in zip(snapshots, snapshots[1:]):
+        for key, (className, declared, values) in after.items():
+            previousValues = before[key][2] if key in before else {}
+            for name, value in values.items():
+                if value is None or name in declared or name in _REBUILT.get(className, ()):
+                    continue
+                previous = previousValues.get(name)
+                if previous is None or not np.array_equal(np.asarray(previous), np.asarray(value)):
+                    undeclared.add("{:} ({:}).{:}".format(key, className, name))
+    assert not undeclared, "changes between checkpoints but is not declared: " + ", ".join(sorted(undeclared))
