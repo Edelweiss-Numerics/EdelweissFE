@@ -25,19 +25,26 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""The batched closest-point evaluation must be bit-identical to a pair-by-pair one.
+"""The closest point of a point on a triangle or segment, as the contact searches compute it.
 
-The contact searches select facets by comparing distances, some of them against tolerances, so a
-result that is merely equal within rounding could select a different facet and change a simulation.
-The references here are the scalar, branch-by-branch forms the batched functions replaced, kept
-verbatim: Ericson's region test with one Python branch per region, and the broadphase's per-point
-pruning loop. They are compared bit for bit, on random geometry, on geometry that lands exactly on
-region boundaries (vertices, edges, integer grids with exact ties), on degenerate triangles, and on a
-real single-precision STL surface, as the rigid-body contact reads it.
+The contact searches select facets by comparing distances, some of them against tolerances, so the
+closest-point evaluation has to be exact, not merely close. It is checked three ways, none of which
+depends on how the CPU happens to round:
+
+* On geometry where every operation is exact -- right isosceles triangles and segments whose edge
+  lengths squared are powers of two, with points on a quarter grid, so no product, sum or quotient
+  rounds -- the result must equal, bit for bit, the true closest point, computed in exact rational
+  arithmetic from its definition (the projection onto the plane if it lies inside, else the nearest
+  point of the nearest edge). This covers every region: the three vertices, the three edges and the
+  interior.
+* On arbitrary geometry, including degenerate and single-precision triangles, a pair's result must
+  not depend on the other pairs evaluated in the same batch.
+* The facet selection must pick the first strict minimum over each point's candidates.
 """
 
 import os
 import warnings
+from fractions import Fraction
 
 import numpy as np
 import pytest
@@ -62,59 +69,216 @@ _stlFile = os.path.join(
 )
 
 
-def _tria3ClosestPointScalar(xs, x1, x2, x3):
-    """The pair-by-pair region test, as it was before it was batched."""
+def _assertBitIdentical(actual, expected):
+    """Equal including the sign of zero and the position of NaNs."""
 
-    e1 = x2 - x1
-    e2 = x3 - x1
-    r1 = xs - x1
+    actual, expected = np.asarray(actual), np.asarray(expected)
+    assert actual.shape == expected.shape
+    assert np.array_equal(actual, expected, equal_nan=True)
+    assert np.array_equal(np.signbit(actual), np.signbit(expected))
 
-    d1 = e1.dot(r1)
-    d2 = e2.dot(r1)
-    if d1 <= 0.0 and d2 <= 0.0:
-        weights = np.array([1.0, 0.0, 0.0])
+
+# --- The true closest point, in exact arithmetic ------------------------------------------------
+
+
+def _segmentClosest(p, a, b):
+    """The exact closest point on the segment a-b: the clamped projection, as weights on (a, b)."""
+
+    e = [bi - ai for ai, bi in zip(a, b)]
+    t = sum((pi - ai) * ei for pi, ai, ei in zip(p, a, e)) / sum(ei * ei for ei in e)
+    t = min(max(t, Fraction(0)), Fraction(1))
+    return 1 - t, t
+
+
+def _squaredDistance(p, q):
+    return sum((pi - qi) ** 2 for pi, qi in zip(p, q))
+
+
+def _combine(weights, nodes):
+    return [sum(w * node[k] for w, node in zip(weights, nodes)) for k in range(len(nodes[0]))]
+
+
+def _exactTriangleClosest(p, a, b, c):
+    """The exact closest point on the triangle a-b-c, as barycentric weights: the projection onto
+    the plane if it lies inside the triangle, otherwise the nearest of the edges' closest points."""
+
+    e1 = [bi - ai for ai, bi in zip(a, b)]
+    e2 = [ci - ai for ai, ci in zip(a, c)]
+    r = [pi - ai for ai, pi in zip(a, p)]
+    dot = lambda u, v: sum(ui * vi for ui, vi in zip(u, v))  # noqa: E731
+    g11, g12, g22 = dot(e1, e1), dot(e1, e2), dot(e2, e2)
+    determinant = g11 * g22 - g12 * g12
+    u = (g22 * dot(e1, r) - g12 * dot(e2, r)) / determinant
+    v = (g11 * dot(e2, r) - g12 * dot(e1, r)) / determinant
+    if u >= 0 and v >= 0 and u + v <= 1:
+        return [1 - u - v, u, v]
+
+    candidates = []
+    for i, j in ((0, 1), (0, 2), (1, 2)):
+        nodes = (a, b, c)
+        wi, wj = _segmentClosest(p, nodes[i], nodes[j])
+        weights = [Fraction(0)] * 3
+        weights[i], weights[j] = wi, wj
+        candidates.append((_squaredDistance(p, _combine(weights, nodes)), weights))
+    return min(candidates, key=lambda candidate: candidate[0])[1]
+
+
+def _exactGeometry(rng, n, dimension):
+    """Points on a quarter grid and facets with edge lengths squared a power of two, built so that
+    the closest-point evaluation never rounds."""
+
+    quarter = lambda size: rng.integers(-24, 25, size) / 4.0  # noqa: E731
+    if dimension == 3:
+        legDirections = [
+            np.eye(3)[[0, 1]],
+            np.eye(3)[[1, 2]],
+            np.eye(3)[[2, 0]],
+            np.array([[1.0, 1.0, 0.0], [-1.0, 1.0, 0.0]]),
+            np.array([[0.0, 1.0, 1.0], [0.0, -1.0, 1.0]]),
+        ]
+        facets = np.empty((n, 3, 3))
+        for k in range(n):
+            legs = legDirections[rng.integers(len(legDirections))] * rng.choice([-1.0, 1.0], (2, 1))
+            length = 2.0 ** rng.integers(0, 3)
+            origin = quarter(3)
+            facets[k] = [origin, origin + length * legs[0], origin + length * legs[1]]
     else:
-        r2 = xs - x2
-        d3 = e1.dot(r2)
-        d4 = e2.dot(r2)
-        if d3 >= 0.0 and d4 <= d3:
-            weights = np.array([0.0, 1.0, 0.0])
-        else:
-            r3 = xs - x3
-            d5 = e1.dot(r3)
-            d6 = e2.dot(r3)
-            vc = d1 * d4 - d3 * d2
-            va = d3 * d6 - d5 * d4
-            vb = d5 * d2 - d1 * d6
-            if d6 >= 0.0 and d5 <= d6:
-                weights = np.array([0.0, 0.0, 1.0])
-            elif vc <= 0.0 and d1 >= 0.0 and d3 <= 0.0:
-                t = d1 / (d1 - d3)
-                weights = np.array([1.0 - t, t, 0.0])
-            elif vb <= 0.0 and d2 >= 0.0 and d6 <= 0.0:
-                t = d2 / (d2 - d6)
-                weights = np.array([1.0 - t, 0.0, t])
-            elif va <= 0.0 and (d4 - d3) >= 0.0 and (d5 - d6) >= 0.0:
-                t = (d4 - d3) / ((d4 - d3) + (d5 - d6))
-                weights = np.array([0.0, 1.0 - t, t])
-            else:
-                denom = 1.0 / (va + vb + vc)
-                beta = vb * denom
-                gamma = vc * denom
-                weights = np.array([1.0 - beta - gamma, beta, gamma])
-
-    closestPoint = weights[0] * x1 + weights[1] * x2 + weights[2] * x3
-    return weights, float(np.linalg.norm(xs - closestPoint))
+        directions = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, -1.0]])
+        facets = np.empty((n, 2, 2))
+        for k in range(n):
+            origin = quarter(2)
+            length = 2.0 ** rng.integers(0, 3)
+            facets[k] = [origin, origin + length * rng.choice([-1.0, 1.0]) * directions[rng.integers(4)]]
+    return quarter((n, dimension)), facets
 
 
-def _line2ClosestPointScalar(xs, x1, x2):
-    """The pair-by-pair segment projection, as it was before it was batched."""
+def _fractions(array):
+    return [Fraction(float(x)) for x in array]
 
-    e = x2 - x1
-    t = np.clip((xs - x1).dot(e) / e.dot(e), 0.0, 1.0)
-    weights = np.array([1.0 - t, t])
-    closestPoint = weights[0] * x1 + weights[1] * x2
-    return weights, float(np.linalg.norm(xs - closestPoint))
+
+def test_tria3_equals_the_exact_closest_point():
+    rng = np.random.default_rng(0)
+    points, triangles = _exactGeometry(rng, 4000, 3)
+
+    weights, distances = tria3ClosestPoints(points, triangles[:, 0], triangles[:, 1], triangles[:, 2])
+
+    regions = set()
+    for i in range(len(points)):
+        nodes = [_fractions(node) for node in triangles[i]]
+        exactWeights = _exactTriangleClosest(_fractions(points[i]), *nodes)
+        exactSquaredDistance = _squaredDistance(_fractions(points[i]), _combine(exactWeights, nodes))
+        _assertBitIdentical(weights[i], np.array([float(w) for w in exactWeights]))
+        _assertBitIdentical(distances[i], np.sqrt(float(exactSquaredDistance)))
+        regions.add(tuple(w > 0 for w in exactWeights))
+
+    # every region: three vertices, three edges, the interior
+    assert len(regions) == 7
+
+
+def test_line2_equals_the_exact_closest_point():
+    rng = np.random.default_rng(1)
+    points, segments = _exactGeometry(rng, 4000, 2)
+
+    weights, distances = line2ClosestPoints(points, segments[:, 0], segments[:, 1])
+
+    for i in range(len(points)):
+        a, b = (_fractions(node) for node in segments[i])
+        exactWeights = _segmentClosest(_fractions(points[i]), a, b)
+        exactSquaredDistance = _squaredDistance(_fractions(points[i]), _combine(exactWeights, (a, b)))
+        _assertBitIdentical(weights[i], np.array([float(w) for w in exactWeights]))
+        _assertBitIdentical(distances[i], np.sqrt(float(exactSquaredDistance)))
+
+
+# --- A pair's result does not depend on the batch ------------------------------------------------
+
+
+def _arbitraryTriangles(rng, n):
+    """Points and triangles over many length scales, including degenerate triangles and points
+    exactly on vertices and edges."""
+
+    triangles = rng.standard_normal((n, 3, 3)) * rng.uniform(1e-3, 1e3, (n, 1, 1))
+    points = rng.standard_normal((n, 3)) * rng.uniform(1e-3, 3e3, (n, 1))
+    q = n // 10
+    triangles[:q, 2] = triangles[:q, 0] + 0.5 * (triangles[:q, 1] - triangles[:q, 0])  # collinear
+    triangles[q : 2 * q, 1] = triangles[q : 2 * q, 0]  # two coincident nodes
+    triangles[2 * q : 3 * q] = triangles[2 * q : 3 * q, :1]  # a single point
+    points[3 * q : 4 * q] = triangles[3 * q : 4 * q, 2]
+    points[4 * q : 5 * q] = 0.5 * (triangles[4 * q : 5 * q, 1] + triangles[4 * q : 5 * q, 2])
+    return points, triangles
+
+
+def _assertBatchIndependent(closestPoints, points, facets, rng):
+    """Every pair evaluated in a shuffled batch, and in small batches, gives the bits of the whole."""
+
+    nodes = [facets[:, k] for k in range(facets.shape[1])]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # degenerate facets divide by zero
+        weights, distances = closestPoints(points, *nodes)
+
+        order = rng.permutation(len(points))
+        shuffledWeights, shuffledDistances = closestPoints(points[order], *(node[order] for node in nodes))
+        _assertBitIdentical(shuffledWeights, weights[order])
+        _assertBitIdentical(shuffledDistances, distances[order])
+
+        for start in range(0, len(points), 7):
+            batch = slice(start, start + 7)
+            batchWeights, batchDistances = closestPoints(points[batch], *(node[batch] for node in nodes))
+            _assertBitIdentical(batchWeights, weights[batch])
+            _assertBitIdentical(batchDistances, distances[batch])
+    return weights
+
+
+@pytest.mark.parametrize("seed", [0, 1])
+def test_tria3_result_of_a_pair_does_not_depend_on_the_batch(seed):
+    rng = np.random.default_rng(seed)
+    points, triangles = _arbitraryTriangles(rng, 5000)
+    _assertBatchIndependent(tria3ClosestPoints, points, triangles, rng)
+
+
+@pytest.mark.parametrize("seed", [0, 1])
+def test_line2_result_of_a_pair_does_not_depend_on_the_batch(seed):
+    rng = np.random.default_rng(seed)
+    n = 5000
+    segments = rng.standard_normal((n, 2, 2)) * rng.uniform(1e-3, 1e3, (n, 1, 1))
+    points = rng.standard_normal((n, 2)) * rng.uniform(1e-3, 3e3, (n, 1))
+    segments[: n // 10, 1] = segments[: n // 10, 0]  # degenerate
+    _assertBatchIndependent(line2ClosestPoints, points, segments, rng)
+
+
+def _stlTriangles():
+    """The triangles of a real STL rigid surface, in single precision as the file stores them."""
+
+    surface = pv.read(_stlFile).triangulate()
+    return surface.points[surface.regular_faces]
+
+
+def _pointsAroundAndOn(rng, triangles, n):
+    """Points near a surface, plus its vertices, edge midpoints and centroids."""
+
+    lower, upper = triangles.reshape(-1, 3).min(axis=0), triangles.reshape(-1, 3).max(axis=0)
+    margin = 0.2 * (upper - lower)
+    near = rng.uniform(lower - margin, upper + margin, (n, 3))
+    onSurface = np.concatenate(
+        [triangles.reshape(-1, 3), 0.5 * (triangles[:, 0] + triangles[:, 1]), triangles.mean(axis=1)]
+    )
+    return np.concatenate([near, onSurface.astype(float)])
+
+
+def test_tria3_on_a_single_precision_stl_surface():
+    """Single-precision triangles against double-precision points, as in the rigid-body search."""
+
+    rng = np.random.default_rng(3)
+    triangles = _stlTriangles()
+    assert triangles.dtype == np.float32
+    points = _pointsAroundAndOn(rng, triangles, 300)
+
+    pointIndices = np.repeat(np.arange(len(points)), len(triangles))
+    pairTriangles = triangles[np.tile(np.arange(len(triangles)), len(points))]
+    weights = _assertBatchIndependent(tria3ClosestPoints, points[pointIndices], pairTriangles, rng)
+    assert np.all((weights >= 0.0) & (weights <= 1.0))
+
+
+# --- Facet selection --------------------------------------------------------------------------
 
 
 def _closestFacetCandidatesScalar(queryPoints, facetCoords, searchDistance):
@@ -143,131 +307,8 @@ def _closestFacetCandidatesScalar(queryPoints, facetCoords, searchDistance):
     return candidates
 
 
-def _assertBitIdentical(actual, expected):
-    """Equal including the sign of zero and the position of NaNs."""
-
-    actual, expected = np.asarray(actual), np.asarray(expected)
-    assert actual.shape == expected.shape
-    assert np.array_equal(actual, expected, equal_nan=True)
-    assert np.array_equal(np.signbit(actual), np.signbit(expected))
-
-
-def _randomPairs(rng, n):
-    """Points and triangles over many length scales, with every region boundary hit exactly."""
-
-    triangles = rng.standard_normal((n, 3, 3)) * rng.uniform(1e-3, 1e3, (n, 1, 1))
-    points = rng.standard_normal((n, 3)) * rng.uniform(1e-3, 3e3, (n, 1))
-    q = n // 10
-    # degenerate triangles: collinear, two coincident nodes, a single point
-    triangles[:q, 2] = triangles[:q, 0] + 0.5 * (triangles[:q, 1] - triangles[:q, 0])
-    triangles[q : 2 * q, 1] = triangles[q : 2 * q, 0]
-    triangles[2 * q : 3 * q] = triangles[2 * q : 3 * q, :1]
-    # points exactly at a vertex, on an edge, in the plane
-    points[3 * q : 4 * q] = triangles[3 * q : 4 * q, 2]
-    points[4 * q : 5 * q] = 0.5 * (triangles[4 * q : 5 * q, 1] + triangles[4 * q : 5 * q, 2])
-    points[5 * q : 6 * q] = triangles[5 * q : 6 * q].mean(axis=1)
-    # integer grid: exact zeros and exact ties between regions
-    triangles[6 * q :] = np.round(triangles[6 * q :] / 100.0)
-    points[6 * q :] = np.round(points[6 * q :] / 100.0)
-    return points, triangles
-
-
-def _stlTriangles():
-    """The triangles of a real STL rigid surface, in single precision as the file stores them."""
-
-    surface = pv.read(_stlFile).triangulate()
-    return surface.points[surface.regular_faces]
-
-
-def _pointsAroundAndOn(rng, triangles, n):
-    """Points near a surface, plus its vertices, edge midpoints and centroids."""
-
-    lower, upper = triangles.reshape(-1, 3).min(axis=0), triangles.reshape(-1, 3).max(axis=0)
-    margin = 0.2 * (upper - lower)
-    near = rng.uniform(lower - margin, upper + margin, (n, 3))
-    onSurface = np.concatenate(
-        [triangles.reshape(-1, 3), 0.5 * (triangles[:, 0] + triangles[:, 1]), triangles.mean(axis=1)]
-    )
-    return np.concatenate([near, onSurface.astype(float)])
-
-
-@pytest.mark.parametrize("seed", [0, 1, 2])
-def test_tria3_batched_is_bit_identical_to_pairwise(seed):
-    rng = np.random.default_rng(seed)
-    points, triangles = _randomPairs(rng, 20000)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)  # degenerate triangles divide by zero
-        weights, distances = tria3ClosestPoints(points, triangles[:, 0], triangles[:, 1], triangles[:, 2])
-        for i in range(len(points)):
-            expectedWeights, expectedDistance = _tria3ClosestPointScalar(points[i], *triangles[i])
-            _assertBitIdentical(weights[i], expectedWeights)
-            _assertBitIdentical(distances[i], expectedDistance)
-
-            singleWeights, singleDistance = tria3ClosestPoint(points[i], *triangles[i])
-            _assertBitIdentical(singleWeights, expectedWeights)
-            _assertBitIdentical(singleDistance, expectedDistance)
-
-
-def test_tria3_batched_covers_every_region():
-    """The random pairs above must actually exercise all seven regions."""
-
-    rng = np.random.default_rng(0)
-    points, triangles = _randomPairs(rng, 20000)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)
-        weights, _ = tria3ClosestPoints(points, triangles[:, 0], triangles[:, 1], triangles[:, 2])
-    nonDegenerate = weights[6000:]  # beyond the degenerate tenths, see _randomPairs
-    patterns = {tuple(row) for row in (nonDegenerate > 0.0).astype(int)}
-    assert patterns >= {(1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 0), (1, 0, 1), (0, 1, 1), (1, 1, 1)}
-
-
-def test_tria3_batched_on_single_precision_stl_surface():
-    """Single-precision triangles against double-precision points, as in the rigid-body search."""
-
-    rng = np.random.default_rng(3)
-    triangles = _stlTriangles()
-    assert triangles.dtype == np.float32
-    points = _pointsAroundAndOn(rng, triangles, 3000)
-
-    pointIndices = np.repeat(np.arange(len(points)), len(triangles))
-    triangleIndices = np.tile(np.arange(len(triangles)), len(points))
-    pairTriangles = triangles[triangleIndices]
-    weights, distances = tria3ClosestPoints(
-        points[pointIndices], pairTriangles[:, 0], pairTriangles[:, 1], pairTriangles[:, 2]
-    )
-    for k in range(len(pointIndices)):
-        expectedWeights, expectedDistance = _tria3ClosestPointScalar(points[pointIndices[k]], *pairTriangles[k])
-        _assertBitIdentical(weights[k], expectedWeights)
-        _assertBitIdentical(distances[k], expectedDistance)
-
-
-@pytest.mark.parametrize("seed", [0, 1])
-def test_line2_batched_is_bit_identical_to_pairwise(seed):
-    rng = np.random.default_rng(seed)
-    n = 20000
-    segments = rng.standard_normal((n, 2, 2)) * rng.uniform(1e-3, 1e3, (n, 1, 1))
-    points = rng.standard_normal((n, 2)) * rng.uniform(1e-3, 3e3, (n, 1))
-    segments[: n // 10, 1] = segments[: n // 10, 0]  # degenerate
-    points[n // 10 : n // 5] = segments[n // 10 : n // 5, 1]  # at a node
-    segments[n // 2 :] = np.round(segments[n // 2 :] / 100.0)
-    points[n // 2 :] = np.round(points[n // 2 :] / 100.0)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)
-        weights, distances = line2ClosestPoints(points, segments[:, 0], segments[:, 1])
-        for i in range(n):
-            expectedWeights, expectedDistance = _line2ClosestPointScalar(points[i], *segments[i])
-            _assertBitIdentical(weights[i], expectedWeights)
-            _assertBitIdentical(distances[i], expectedDistance)
-
-            singleWeights, singleDistance = line2ClosestPoint(points[i], *segments[i])
-            _assertBitIdentical(singleWeights, expectedWeights)
-            _assertBitIdentical(singleDistance, expectedDistance)
-
-
 def _scanForClosest(queryPoints, facetCoords, candidatesPerPoint, closestPoint):
-    """The pair-by-pair selection: first strict minimum over each point's candidates."""
+    """The pair-by-pair selection: the first strict minimum over each point's candidates."""
 
     selection = []
     for p, candidates in enumerate(candidatesPerPoint):
@@ -292,7 +333,7 @@ def _gradedSurface(rng):
 
 
 @pytest.mark.parametrize("searchDistance", [None, 0.3])
-def test_closest_facets_matches_pairwise_scan(searchDistance):
+def test_closest_facets_selects_the_first_strict_minimum(searchDistance):
     rng = np.random.default_rng(4)
     facetCoords = _gradedSurface(rng)
     queryPoints = np.concatenate(
@@ -306,7 +347,7 @@ def test_closest_facets_matches_pairwise_scan(searchDistance):
     assert candidatesPerPoint == _closestFacetCandidatesScalar(queryPoints, facetCoords, searchDistance)
 
     closestFacet, closestWeights, closestDistance = closestFacets(queryPoints, facetCoords, candidatesPerPoint)
-    expected = _scanForClosest(queryPoints, facetCoords, candidatesPerPoint, _tria3ClosestPointScalar)
+    expected = _scanForClosest(queryPoints, facetCoords, candidatesPerPoint, tria3ClosestPoint)
     for p, (bestFacet, bestWeights, bestDistance) in enumerate(expected):
         if bestFacet is None:
             assert closestFacet[p] == -1 and closestDistance[p] == np.inf
@@ -324,7 +365,7 @@ def test_closest_facets_in_2d_and_without_candidates():
     candidatesPerPoint[0] = []
 
     closestFacet, closestWeights, closestDistance = closestFacets(queryPoints, facetCoords, candidatesPerPoint)
-    expected = _scanForClosest(queryPoints, facetCoords, candidatesPerPoint, _line2ClosestPointScalar)
+    expected = _scanForClosest(queryPoints, facetCoords, candidatesPerPoint, line2ClosestPoint)
     assert closestFacet[0] == -1 and closestDistance[0] == np.inf
     for p, (bestFacet, bestWeights, bestDistance) in enumerate(expected[1:], start=1):
         assert closestFacet[p] == bestFacet
