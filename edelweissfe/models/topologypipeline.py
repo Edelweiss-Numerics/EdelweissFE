@@ -351,7 +351,6 @@ class TopologyPipeline:
             keeps planning in response to its own output. The message names the offenders.
         """
 
-        self.setupFingerprint()
         changed = False
         with self.changes():
             # Seeded with the version at the START of this update, not None: a modifier must see
@@ -411,21 +410,31 @@ class TopologyPipeline:
                     )
         return changed
 
+    def recordSetupFingerprint(self):
+        """Record the :meth:`fingerprint` of the mesh as the input file built it, once the model is
+        set up and before any model modifier acts; see :meth:`setupFingerprint`."""
+
+        self._setupFingerprint = self.fingerprint()
+
     def setupFingerprint(self) -> str:
-        """The :meth:`fingerprint` of the mesh as the input file built it, before any model modifier
-        acted: taken at the start of the first topology update (or replay), or now if there has been
-        none. A checkpoint carries it, so that a resumed run can verify that it was rebuilt from the
-        same mesh -- the recorded topology changes are verified by the replay, but they say nothing
-        about a mesh no modifier ever touched.
+        """The :meth:`fingerprint` of the mesh as the input file built it. A checkpoint carries it, so
+        that a resumed run can verify that it was rebuilt from the same mesh -- the recorded
+        topology changes are verified by the replay, but they say nothing about a mesh no modifier
+        ever touched.
 
         Returns
         -------
         str
             The digest.
+
+        Raises
+        ------
+        RuntimeError
+            If the model was never set up (:meth:`~edelweissfe.models.femodel.FEModel.prepareYourself`).
         """
 
         if self._setupFingerprint is None:
-            self._setupFingerprint = self.fingerprint()
+            raise RuntimeError("the model was not set up (prepareYourself), so its setup mesh is unknown")
         return self._setupFingerprint
 
     def fingerprint(self) -> str:
@@ -564,7 +573,6 @@ class TopologyPipeline:
             merely detected.
         """
 
-        self.setupFingerprint()
         perRecord = self.verifyFingerprints and self.verifyFingerprintsPerRecord
         with self.changes(deferFieldBookkeeping=True):
             for index, record in enumerate(records):

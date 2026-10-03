@@ -405,6 +405,7 @@ class FEModel:
         self.topology.checkModelModifierDomains()
         self._prepareVariablesAndFields(journal)
         self._prepareElements(journal)
+        self.topology.recordSetupFingerprint()
 
     def advanceToTime(self, time: float):
         """Accept the current state of the model and sub instances, and
