@@ -199,9 +199,10 @@ def line2GapGradientHessian(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> t
 
 
 def rowDot(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Row-wise dot product over the last axis, accumulated left to right onto +0.0 -- the order in
-    which ``np.dot`` of two short vectors sums, so a row of the result is bit-identical to it, down to
-    the sign of a zero (a sum of negative zeros is +0.0 there)."""
+    """Row-wise dot product over the last axis, accumulated left to right onto +0.0 (so a sum of
+    negative zeros is +0.0), with separate multiplications and additions. The order is fixed here,
+    not left to a BLAS: ``np.dot`` may fuse multiply and add on one CPU and not on another, and then
+    differs in the last bit."""
 
     dot = 0.0 + a[..., 0] * b[..., 0]
     for k in range(1, a.shape[-1]):
@@ -225,11 +226,10 @@ def tria3ClosestPoints(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray, x3: np.nd
     """Closest points of many (point, triangle) pairs at once, see :func:`tria3ClosestPoint`.
 
     Ericson's region test, evaluated for all pairs with array operations instead of one Python call
-    per pair. Every quantity is formed by the same operations, in the same order, as the
-    branch-by-branch scalar test would, and each pair is assigned the region the scalar test's first
-    satisfied condition selects (a NaN, which satisfies no condition, falls through to the interior,
-    as it does there). The weights and distances are therefore bit-identical to a pairwise
-    evaluation, not merely equal within rounding.
+    per pair. Each pair is assigned the region whose condition, in the order the branch-by-branch
+    test checks them, it satisfies first (a NaN, which satisfies no condition, falls through to the
+    interior). Every operation acts on each pair alone, so a pair's result does not depend on the
+    other pairs in the batch.
 
     Parameters
     ----------
