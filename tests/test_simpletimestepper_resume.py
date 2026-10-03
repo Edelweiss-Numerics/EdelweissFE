@@ -16,6 +16,7 @@ import pytest
 
 from edelweissfe.journal.journal import Journal
 from edelweissfe.timesteppers.simpletimestepper import SimpleTimeStepper
+from edelweissfe.utils.checkpoint import readRestartDataInto, writeRestartDataOf
 
 STEP_START = 2.0
 STEP_LENGTH = 4.0
@@ -55,10 +56,10 @@ def test_a_resumed_step_does_not_repeat_the_zero_increment(tmp_path):
         original.acceptTimeStep(original.proposeTimeStep())
 
     with h5py.File(tmp_path / "chk.h5", "w") as f:
-        original.writeRestart(f)
+        writeRestartDataOf(f, {"timestepper": original})
     resumed = _stepper()
     with h5py.File(tmp_path / "chk.h5", "r") as f:
-        resumed.readRestart(f)
+        readRestartDataInto(f, {"timestepper": resumed})
 
     first = resumed.proposeTimeStep()
     assert first.number == 3

@@ -138,7 +138,7 @@ from edelweissfe.solvers.base.conservationchecks import (
     linearMomentum,
 )
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
-from edelweissfe.timesteppers.timestep import TimeStep, readTimeStep, writeTimeStep
+from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import CutbackRequest, StepFailed
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
@@ -358,6 +358,11 @@ class NED(NonlinearSolverBase):
         "expect-first-order-fields": [],
     }
 
+    #: The last completed increment (the central-difference velocity update reads its length) and the
+    #: accumulated external work -- an accumulator, summed increment by increment from the reaction
+    #: forces at the prescribed degrees of freedom, which nothing in a converged solution reproduces.
+    checkpointedState = {"prevTimeStep": TimeStep, "_externalWork": float}
+
     def __init__(self, jobInfo, journal, **kwargs):
         self.journal = journal
 
@@ -417,42 +422,6 @@ class NED(NonlinearSolverBase):
         #: The lumped operators of the current equation system, kept across a rebuild that only a
         #: constraint's connectivity asked for; see :class:`_ReusableExplicitOperators`.
         self._reusableOperators = None
-
-    def writeRestart(self, restartFile):
-        """Persist the accumulated external work.
-
-        It is an ACCUMULATOR, not a state that can be recomputed: it is summed increment by
-        increment from the reaction forces at the prescribed degrees of freedom, so nothing in a
-        converged solution reproduces it.
-
-        A resumed run that started it at zero compared its kinetic energy against only the work
-        done since the resume -- and that comparison is the check on whether the run is still
-        quasi-static and whether energy is being created, so the one diagnostic that would flag a
-        run going wrong instead read as though the model were mostly kinetic. The anchor pry-out
-        run resumed at 22 % of its ramp reported kinetic energy at 41.7 % of external work for
-        that reason alone.
-
-        Parameters
-        ----------
-        restartFile
-            The open checkpoint to write to.
-        """
-        group = restartFile.require_group("solver")
-        group.attrs["externalWork"] = self._externalWork
-        writeTimeStep(group, "prevTimeStep", self.prevTimeStep)
-
-    def readRestart(self, restartFile):
-        """Restore the accumulated external work and the last completed increment; see
-        :meth:`writeRestart`.
-
-        Parameters
-        ----------
-        restartFile
-            The open checkpoint to read from.
-        """
-        group = self.checkpointedState(restartFile)
-        self._externalWork = float(group.attrs["externalWork"])
-        self.prevTimeStep = readTimeStep(group, "prevTimeStep")
 
     def beginStep(
         self,

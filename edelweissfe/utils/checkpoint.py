@@ -31,9 +31,12 @@ A checkpoint is an HDF5 file holding
 
 - the attribute ``stepNumber``, the step the run was in;
 - the model's state, written by :meth:`~edelweissfe.models.femodel.FEModel.writeRestart`;
-- the time stepper's and the solver's state, written by their own ``writeRestart``;
-- a group ``outputManagers`` with the sequence bookkeeping of every output manager that has some
-  (see :meth:`~edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.getRestartData`).
+- groups ``timestepper`` and ``solver`` with the time stepper's and the solver's state;
+- a group ``outputManagers`` with the state of every output manager.
+
+Every component other than the model hands over its state as a mapping of arrays, through
+``getRestartData`` and ``setRestartData``; most just declare which of their attributes it is (see
+:mod:`~edelweissfe.utils.checkpointedstate`).
 
 :func:`writeCheckpoint` writes one, the restart output manager calls it; :class:`ResumeCheckpoint`
 reads one back, the driver uses it.
@@ -46,15 +49,11 @@ from edelweissfe.utils.exceptions import RestartError
 #: The layout of a checkpoint. Raise it whenever a checkpoint gains or changes state: a run resumes
 #: only from checkpoints of its own layout, so a missing piece of state is refused up front instead
 #: of surfacing as a lookup error deep inside some reader -- or as silently missing state.
-CHECKPOINT_FORMAT_VERSION = 3
+CHECKPOINT_FORMAT_VERSION = 4
 
 
 def writeRestartDataOf(group: h5py.Group, entities: dict):
     """Store the restart data of each entity in its own subgroup, named after it.
-
-    For entities that hand over their restart state as a dict of arrays (constraints, output
-    managers) rather than writing it themselves. An entity whose ``getRestartData`` returns None
-    has nothing to store and gets no subgroup.
 
     Parameters
     ----------
@@ -65,16 +64,13 @@ def writeRestartDataOf(group: h5py.Group, entities: dict):
     """
 
     for name, entity in entities.items():
-        restartData = entity.getRestartData()
-        if restartData is None:
-            continue
         entityGroup = group.create_group(name)
-        for entryName, entryValues in restartData.items():
+        for entryName, entryValues in entity.getRestartData().items():
             entityGroup.create_dataset(entryName, data=entryValues)
 
 
-def readRestartDataInto(group: h5py.Group, entities: dict):
-    """Hand each entity the restart data :func:`writeRestartDataOf` stored for it, if any.
+def readRestartDataInto(group: h5py.Group, entities: dict, newEntitiesStartAfresh: bool = False):
+    """Hand each entity the restart data :func:`writeRestartDataOf` stored for it.
 
     Parameters
     ----------
@@ -82,12 +78,18 @@ def readRestartDataInto(group: h5py.Group, entities: dict):
         The group holding the subgroups.
     entities
         The entities, by name.
+    newEntitiesStartAfresh
+        If True, an entity the checkpoint holds nothing for keeps its initial state (an output
+        manager added for the resumed run). Otherwise it is refused: it does not belong to the
+        checkpointed run.
     """
 
     for name, entity in entities.items():
         if name not in group:
-            continue
-        entity.setRestartData({entryName: values[:] for entryName, values in group[name].items()})
+            if newEntitiesStartAfresh:
+                continue
+            raise RestartError("the checkpoint holds no state for {:}".format(name))
+        entity.setRestartData({entryName: values[()] for entryName, values in group[name].items()})
 
 
 def writeCheckpoint(fileName: str, model, step, outputManagers: dict):
@@ -109,8 +111,7 @@ def writeCheckpoint(fileName: str, model, step, outputManagers: dict):
         f.attrs["formatVersion"] = CHECKPOINT_FORMAT_VERSION
         f.attrs["stepNumber"] = step.number
         model.writeRestart(f)
-        step.timeStepper.writeRestart(f)
-        step.solver.writeRestart(f)
+        writeRestartDataOf(f, {"timestepper": step.timeStepper, "solver": step.solver})
         writeRestartDataOf(f.create_group("outputManagers"), outputManagers)
 
 
@@ -162,15 +163,15 @@ class ResumeCheckpoint:
         before the checkpoint.
         """
 
-        readRestartDataInto(self._file["outputManagers"], outputManagers)
+        readRestartDataInto(self._file["outputManagers"], outputManagers, newEntitiesStartAfresh=True)
 
     def restoreStep(self, step):
         """Continue ``step`` from the checkpoint, when the resumed step begins: its time stepper's
-        progress and its solver's state between increments; see
-        :meth:`~edelweissfe.steps.base.stepbase.StepBase.readRestart`.
+        progress and its solver's state between increments. The step's first increment is then the
+        one after the checkpoint.
         """
 
-        step.readRestart(self._file)
+        readRestartDataInto(self._file, {"timestepper": step.timeStepper, "solver": step.solver})
 
     def close(self):
         """Close the file. Nothing reads the checkpoint after :meth:`restoreStep`, and it must not

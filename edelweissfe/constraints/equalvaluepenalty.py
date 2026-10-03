@@ -91,6 +91,9 @@ class Constraint(ConstraintBase, MeshDependent):
     #: Option schema for this constraint, per OptionSchemaProvider.
     schema = EqualValuePenaltySchema
 
+    #: Carries nothing from one increment to the next.
+    checkpointedState = {}
+
     def __init__(
         self,
         name: str,

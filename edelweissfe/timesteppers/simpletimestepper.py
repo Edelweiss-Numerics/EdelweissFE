@@ -61,14 +61,14 @@ class SimpleTimeStepper(TimeStepperBase):
 
     identification = "SimpleTimeStepper"
 
-    checkpointedState = (
-        "currentTime",
-        "zeroIncrementDone",
-        "totalIncrements",
-        "finishedStepProgress",
-        "increment",
-        "enforcedTimeIncrement",
-    )
+    checkpointedState = {
+        "currentTime": float,
+        "zeroIncrementDone": bool,
+        "totalIncrements": int,
+        "finishedStepProgress": float,
+        "increment": float,
+        "enforcedTimeIncrement": float,
+    }
 
     def __init__(
         self,

@@ -34,6 +34,7 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.vijentitybase import VIJEntityBase
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.checkpointedstate import packState, unpackState
 from edelweissfe.utils.schema import OptionSchemaProvider
 from edelweissfe.variables.scalarvariable import ScalarVariable
 
@@ -43,6 +44,12 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
     #: Declared here so every constraint has it without touching its constructor; replaced by an
     #: instance-level array on first use, and re-allocated only when the DOF footprint changes.
     _discardedTangentScratch = None
+
+    #: The state this constraint carries from one increment to the next, by attribute name and type;
+    #: see :mod:`~edelweissfe.utils.checkpointedstate`. Every constraint declares it -- an empty
+    #: mapping if it carries none -- or overrides :meth:`getRestartData` and :meth:`setRestartData`.
+    #: Undeclared, it cannot be checkpointed.
+    checkpointedState: dict | None = None
 
     @classmethod
     def fromConstraintDefinition(
@@ -156,34 +163,28 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         The default implementation does nothing, which is correct for every stateless constraint
         (i.e. every constraint that does not override this method)."""
 
-    def getRestartData(self) -> dict[str, np.ndarray] | None:
-        """Return this constraint's converged internal history (state not covered by its
-        :attr:`scalarVariables`, e.g. frictional-contact history) to be serialized by
-        :meth:`~edelweissfe.models.femodel.FEModel.writeRestart`, or ``None`` if the constraint is
-        stateless.
-
-        The default implementation returns ``None``, which is correct for every constraint that
-        does not override it (its full state is either recomputed each increment or already covered
-        by :attr:`scalarVariables`).
+    def getRestartData(self) -> dict[str, np.ndarray]:
+        """The state this constraint carries from one increment to the next; by default the attributes
+        declared in :attr:`checkpointedState`. Overridden where the state is not a plain attribute.
 
         Returns
         -------
-        dict[str, np.ndarray] | None
-            A flat mapping of array name to array, or ``None``.
+        dict[str, numpy.ndarray]
+            A flat mapping of array name to array.
         """
 
-        return None
+        return packState(self)
 
     def setRestartData(self, data: dict[str, np.ndarray]):
-        """Restore this constraint's converged internal history from a restart checkpoint.
+        """Restore the state :meth:`getRestartData` returned.
 
         Parameters
         ----------
         data
-            The mapping previously returned by :meth:`getRestartData`.
+            The mapping of arrays.
         """
 
-        raise NotImplementedError("This constraint does not carry restartable internal history.")
+        unpackState(self, data)
 
     def getNumberOfAdditionalNeededScalarVariables(
         self,

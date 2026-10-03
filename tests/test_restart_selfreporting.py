@@ -16,6 +16,7 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
 from edelweissfe.timesteppers.simpletimestepper import SimpleTimeStepper
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.checkpoint import readRestartDataInto, writeRestartDataOf
 from edelweissfe.utils.exceptions import RestartError
 
 
@@ -58,11 +59,11 @@ def test_the_explicit_solver_state_survives_a_checkpoint_exactly(tmp_path):
 
     checkpoint = tmp_path / "chk.h5"
     with h5py.File(checkpoint, "w") as f:
-        solver.writeRestart(f)
+        writeRestartDataOf(f, {"solver": solver})
 
     resumed = _solver()
     with h5py.File(checkpoint, "r") as f:
-        resumed.readRestart(f)
+        readRestartDataInto(f, {"solver": resumed})
 
     assert resumed._externalWork == -1234.5
     restored = resumed.prevTimeStep
@@ -80,7 +81,17 @@ def test_a_checkpoint_carrying_no_solver_state_is_refused(tmp_path):
 
     with h5py.File(checkpoint, "r") as f:
         with pytest.raises(RestartError):
-            _solver().readRestart(f)
+            readRestartDataInto(f, {"solver": _solver()})
+
+
+def test_a_solver_that_does_not_declare_its_state_cannot_be_checkpointed():
+    """The explicit static solver carries its last increment between increments but does not
+    checkpoint it: writing a checkpoint refuses, before anything could be resumed from it."""
+
+    from edelweissfe.solvers.nonlinearexplicitstatic import NEST
+
+    with pytest.raises(RestartError):
+        NEST({}, Journal(verbose=False)).getRestartData()
 
 
 def test_resuming_at_or_past_the_increment_cap_is_reported():

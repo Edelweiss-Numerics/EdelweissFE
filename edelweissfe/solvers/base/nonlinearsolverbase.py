@@ -43,7 +43,8 @@ from edelweissfe.numerics.mpctransformation import (
 )
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.exceptions import DivergingSolution, RestartError, TopologyError
+from edelweissfe.utils.checkpointedstate import packState, unpackState
+from edelweissfe.utils.exceptions import DivergingSolution, TopologyError
 from edelweissfe.utils.schema import OptionSchemaProvider, fieldSchemaMeta
 
 
@@ -331,50 +332,34 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         return PExt, K
 
-    def writeRestart(self, restartFile):
-        """Write the state this solver carries from one increment to the next, exactly as it is.
+    def getRestartData(self) -> dict[str, np.ndarray]:
+        """The state this solver carries from one increment to the next, as it is; see
+        :attr:`checkpointedState`.
 
-        Called once per checkpoint by the restart output manager, after the increment was accepted,
-        alongside the model's and the time stepper's own ``writeRestart``. A no-op by default; a
-        solver that supports resuming writes its state here and reads it in :meth:`readRestart`.
+        Returns
+        -------
+        dict[str, numpy.ndarray]
+            The state; see :func:`~edelweissfe.utils.checkpointedstate.packState`.
+
+        Raises
+        ------
+        RestartError
+            If this solver does not declare its state, i.e. does not support restart.
+        """
+
+        return packState(self)
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore the state :meth:`getRestartData` returned, so that the resumed step continues
+        exactly where the uninterrupted run would have.
 
         Parameters
         ----------
-        restartFile
-            The open checkpoint to write to.
+        data
+            The state.
         """
 
-    def checkpointedState(self, restartFile):
-        """The checkpoint's group holding this solver's state, see :meth:`writeRestart`.
-
-        Parameters
-        ----------
-        restartFile
-            The open checkpoint to read from.
-        """
-
-        if "solver" not in restartFile:
-            raise RestartError(
-                "The checkpoint holds no solver state, so the {:} solver cannot continue exactly where "
-                "the uninterrupted run would have. It was written by an older EdelweissFE; resume it with "
-                "that version, or restart the analysis.".format(self.identification)
-            )
-        return restartFile["solver"]
-
-    def readRestart(self, restartFile):
-        """Restore what :meth:`writeRestart` wrote, so that the resumed step continues exactly where
-        the uninterrupted run would have.
-
-        Refuses by default: a solver supports resuming only once it writes and reads all the state
-        it carries between increments.
-
-        Parameters
-        ----------
-        restartFile
-            The open checkpoint to read from.
-        """
-
-        raise RestartError("The {:} solver does not support resuming from a checkpoint.".format(self.identification))
+        unpackState(self, data)
 
     def applyOptionsOverride(self, fieldValues: dict) -> None:
         """Apply a partial override of this solver's own ``schema`` fields onto ``self.options``.
@@ -406,6 +391,11 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     #: The status of the current increment, handed to the output managers (iterations, notes, ...),
     #: or None.
     incrementStatus = None
+
+    #: The state this solver carries from one increment to the next, by attribute name and type; see
+    #: :mod:`~edelweissfe.utils.checkpointedstate`. None for a solver that does not support restart:
+    #: writing a checkpoint then refuses.
+    checkpointedState: dict | None = None
 
     @abstractmethod
     def beginStep(self, step, model: FEModel, fieldOutputController, outputmanagers):

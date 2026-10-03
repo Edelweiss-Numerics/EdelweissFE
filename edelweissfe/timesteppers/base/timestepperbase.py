@@ -41,7 +41,7 @@
 
 All the stepper knows is in its attributes, and after :meth:`acceptTimeStep` they describe exactly
 the state the next increment starts from. A restart checkpoint is written after an increment is
-accepted, so it holds those attributes as they are, see :meth:`writeRestart`.
+accepted, so it holds those attributes as they are, see :attr:`checkpointedState`.
 """
 
 from abc import ABC, abstractmethod
@@ -49,6 +49,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.checkpointedstate import packState, unpackState
 
 
 class TimeStepperBase(ABC):
@@ -61,11 +62,11 @@ class TimeStepperBase(ABC):
     #: Overridden by every stepper; a default so base-class diagnostics can name their source.
     identification = "TimeStepper"
 
-    #: The attributes that make up the stepper's progress within the step, written to and read from
-    #: a restart checkpoint as they are. Not its configuration (step length, increment bounds, the
-    #: maximum number of increments): a resumed run takes that from its own input file, so it can be
-    #: changed between runs, e.g. to raise the maximum number of increments.
-    checkpointedState: tuple[str, ...] = ()
+    #: The attributes that make up the stepper's progress within the step, by type; see
+    #: :mod:`~edelweissfe.utils.checkpointedstate`. Not its configuration (step length, increment
+    #: bounds, the maximum number of increments): a resumed run takes that from its own input file,
+    #: so it can be changed between runs, e.g. to raise the maximum number of increments.
+    checkpointedState: dict | None = None
 
     @abstractmethod
     def isFinished(self) -> bool:
@@ -165,36 +166,27 @@ class TimeStepperBase(ABC):
 
         raise NotImplementedError(f"{type(self).__name__} cannot run on an enforced time increment.")
 
-    def writeRestart(self, restartFile):
-        """Write the attributes named in :attr:`checkpointedState` to a restart checkpoint, as they
-        are. An attribute that is None is written as an empty list.
+    def getRestartData(self) -> dict[str, np.ndarray]:
+        """The declared state, for a restart checkpoint.
+
+        Returns
+        -------
+        dict[str, numpy.ndarray]
+            The state; see :func:`~edelweissfe.utils.checkpointedstate.packState`.
+        """
+
+        return packState(self)
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore the declared state from a restart checkpoint.
 
         Parameters
         ----------
-        restartFile
-            An open, writable :class:`h5py.File` (or group) to write the checkpoint into.
+        data
+            What :meth:`getRestartData` returned.
         """
 
-        group = restartFile.create_group("timestepper")
-        for name in self.checkpointedState:
-            value = self.__dict__[name]
-            group.attrs[name] = [] if value is None else value
-
-    def readRestart(self, restartFile):
-        """Read the attributes named in :attr:`checkpointedState` back from a restart checkpoint
-        written by :meth:`writeRestart`.
-
-        Parameters
-        ----------
-        restartFile
-            An open, readable :class:`h5py.File` (or group) to read the checkpoint from.
-        """
-
-        group = restartFile["timestepper"]
-        for name in self.checkpointedState:
-            value = group.attrs[name]
-            self.__dict__[name] = None if np.size(value) == 0 else value
-
+        unpackState(self, data)
         self._warnIfResumedAtIncrementCap()
 
     @abstractmethod

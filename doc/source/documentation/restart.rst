@@ -97,7 +97,22 @@ The model is first rebuilt from the same input file, then restored in this order
 Adding something that carries state between increments
 -------------------------------------------------------
 
-Write it in ``writeRestart`` (or ``getRestartData`` for constraints and output managers) and read it
-back in ``readRestart`` (``setRestartData``) -- the value itself, not something to rebuild it from.
+Declare it. Every solver, time stepper, constraint and output manager states which of its attributes
+it carries from one increment to the next, by name and type, and the checkpoint writes and reads
+exactly those, as they are (:mod:`~edelweissfe.utils.checkpointedstate`):
+
+.. code-block:: python
+
+    class NIST(NonlinearSolverBase):
+        #: The predictor's state between increments: the last accepted increment and its dU.
+        checkpointedState = {"prevTimeStep": TimeStep, "dU": np.ndarray}
+
+A component that carries nothing declares an empty mapping. One whose state is not a plain attribute
+(Ensight's sequence bookkeeping, a frozen contact search) overrides ``getRestartData`` and
+``setRestartData`` instead. A component that declares nothing cannot be checkpointed:
+``tests/test_checkpointed_state_declared.py`` checks every class in the package, so a forgotten
+declaration fails there, and writing a checkpoint refuses. A solver that is not restartable says so
+by keeping the declaration None.
+
 Then add a scenario to ``tests/test_restart_exhaustive.py``: it resumes from every checkpoint of a
-small run and requires the bitwise-identical end state, so a forgotten piece of state fails there.
+small run and requires the bitwise-identical end state, the same checkpoints and the same output.

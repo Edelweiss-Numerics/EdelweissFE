@@ -217,6 +217,9 @@ class NEST(NIST):
         "pruneCondensedMatrixZeros": True,
     }
 
+    #: Not restartable: no restart scenario covers this solver, so it does not claim to be.
+    checkpointedState = None
+
     def __init__(self, jobInfo, journal, **kwargs):
         self.journal = journal
 

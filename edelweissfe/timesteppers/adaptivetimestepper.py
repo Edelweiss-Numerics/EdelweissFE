@@ -60,14 +60,14 @@ class AdaptiveTimeStepper(TimeStepperBase):
 
     identification = "AdaptiveTimeStepper"
 
-    checkpointedState = (
-        "currentTime",
-        "incrementCounter",
-        "nPassedGoodIncrements",
-        "finishedStepProgress",
-        "increment",
-        "allowedToIncreasedNext",
-    )
+    checkpointedState = {
+        "currentTime": float,
+        "incrementCounter": int,
+        "nPassedGoodIncrements": int,
+        "finishedStepProgress": float,
+        "increment": float,
+        "allowedToIncreasedNext": bool,
+    }
 
     def __init__(
         self,

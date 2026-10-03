@@ -45,7 +45,6 @@ from edelweissfe.utils.exceptions import (
     ConditionalStop,
     DivergingSolution,
     ReachedMaxIterations,
-    RestartError,
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.math import createModelAccessibleFunction
@@ -77,6 +76,10 @@ class NISTPArcLength(NISTParallel):
 
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NISTPArcLengthSchema
+
+    #: Not restartable: the arc-length parameter is not checkpointed, so a resumed step would restart
+    #: the load factor from zero.
+    checkpointedState = None
 
     def __init__(self, jobInfo, journal, **kwargs):
         self.Lambda = 0.0
@@ -120,18 +123,6 @@ class NISTPArcLength(NISTParallel):
         }
         if inheritedFieldValues:
             super().applyOptionsOverride(inheritedFieldValues)
-
-    def readRestart(self, restartFile):
-        """Refused: the arc-length parameter is not checkpointed, so a resumed step would restart
-        the load factor from zero.
-
-        Parameters
-        ----------
-        restartFile
-            The open checkpoint to read from.
-        """
-
-        raise RestartError("The {:} solver does not support resuming from a checkpoint.".format(self.identification))
 
     def beginStep(
         self,

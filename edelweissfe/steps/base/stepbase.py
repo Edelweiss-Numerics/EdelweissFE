@@ -238,16 +238,3 @@ class StepBase(ABC):
             fieldOutputController.finalizeStep()
             for manager in outputManagers:
                 manager.finalizeStep()
-
-    def readRestart(self, restartFile):
-        """Continue this step from a restart checkpoint: restore the time stepper, and the solver's
-        state between increments. The step's first increment is then the one after the checkpoint.
-
-        Parameters
-        ----------
-        restartFile
-            The open checkpoint to read from.
-        """
-
-        self.timeStepper.readRestart(restartFile)
-        self.solver.readRestart(restartFile)

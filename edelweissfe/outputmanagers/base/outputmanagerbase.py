@@ -33,6 +33,7 @@ import numpy as np
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.checkpointedstate import packState, unpackState
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.plotter import Plotter
 from edelweissfe.utils.schema import OptionSchemaProvider
@@ -70,6 +71,12 @@ class OutputManagerBase(OptionSchemaProvider, ABC):
     #: the end of an increment (e.g. a topology check) finalizes such a manager after that change,
     #: so that the checkpoint holds the state the next increment starts from.
     writesRestartCheckpoints: bool = False
+
+    #: The state this output manager carries from one increment to the next, by attribute name and
+    #: type; see :mod:`~edelweissfe.utils.checkpointedstate`. Every output manager declares it -- an
+    #: empty mapping if it carries none -- or overrides :meth:`getRestartData` and
+    #: :meth:`setRestartData`. Undeclared, it cannot be checkpointed.
+    checkpointedState: dict | None = None
 
     @abstractmethod
     def __init__(
@@ -183,34 +190,26 @@ class OutputManagerBase(OptionSchemaProvider, ABC):
             The final reaction vector.
         """
 
-    def getRestartData(self) -> dict[str, np.ndarray] | None:
-        """Return this output manager's own sequence/bookkeeping state needed to continue its
-        output correctly after a resume (e.g. Ensight's per-time-set history of already-written
-        time values, which its file/frame numbering is derived from), to be bundled into a restart
-        checkpoint by the restart-writing output manager (``outputmanagers/restart.py``), or
-        ``None`` if this output manager has nothing that would otherwise go stale on resume.
-
-        The default implementation returns ``None`` -- correct for most output managers, whose own
-        state is either trivially re-derivable (e.g. a status file that just keeps appending) or
-        irrelevant to correctness (only Ensight's transient sequence numbering silently corrupts
-        without this, since a resumed run's fresh instance would otherwise restart file/frame
-        numbering from zero, orphaning-and/or corrupting the pre-resume portion of the sequence).
+    def getRestartData(self) -> dict[str, np.ndarray]:
+        """The state this output manager carries from one increment to the next; by default the
+        attributes declared in :attr:`checkpointedState`. Overridden where the state is not a plain
+        attribute.
 
         Returns
         -------
-        dict[str, np.ndarray] | None
-            A flat mapping of array name to array, or ``None``.
+        dict[str, numpy.ndarray]
+            A flat mapping of array name to array.
         """
 
-        return None
+        return packState(self)
 
     def setRestartData(self, data: dict[str, np.ndarray]):
-        """Restore this output manager's own sequence/bookkeeping state from a restart checkpoint.
+        """Restore the state :meth:`getRestartData` returned.
 
         Parameters
         ----------
         data
-            The mapping previously returned by :meth:`getRestartData`.
+            The mapping of arrays.
         """
 
-        raise NotImplementedError("This output manager does not carry restartable sequence state.")
+        unpackState(self, data)

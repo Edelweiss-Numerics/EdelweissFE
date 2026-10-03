@@ -46,7 +46,7 @@ from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.dirichlet import applyDirichletToStiffness
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.timesteppers.timestep import TimeStep, readTimeStep, writeTimeStep
+from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
     CutbackRequest,
     DivergingSolution,
@@ -188,6 +188,9 @@ class NIST(NonlinearSolverBase):
         "report-performance-frequency": 0,
     }
 
+    #: The predictor's state between increments: the last accepted increment and its dU.
+    checkpointedState = {"prevTimeStep": TimeStep, "dU": np.ndarray}
+
     def __init__(self, jobInfo, journal, **kwargs):
         self.journal = journal
 
@@ -204,33 +207,6 @@ class NIST(NonlinearSolverBase):
         self.prevTimeStep = None
         #: The solution increment of the last accepted increment.
         self.dU = None
-
-    def writeRestart(self, restartFile):
-        """Write the predictor's state between increments: the last accepted increment and its dU.
-
-        Parameters
-        ----------
-        restartFile
-            The open checkpoint to write to.
-        """
-
-        group = restartFile.require_group("solver")
-        writeTimeStep(group, "prevTimeStep", self.prevTimeStep)
-        group.create_dataset("dU", data=np.empty(0) if self.dU is None else np.asarray(self.dU))
-
-    def readRestart(self, restartFile):
-        """Restore what :meth:`writeRestart` wrote; the resumed step's predictor continues from it.
-
-        Parameters
-        ----------
-        restartFile
-            The open checkpoint to read from.
-        """
-
-        group = self.checkpointedState(restartFile)
-        self.prevTimeStep = readTimeStep(group, "prevTimeStep")
-        dU = group["dU"][...]
-        self.dU = dU if dU.size else None
 
     def beginStep(
         self,

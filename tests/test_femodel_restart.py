@@ -147,13 +147,14 @@ def test_femodel_restart_roundtrip(tmp_path):
     np.testing.assert_allclose(fakeConstraint.history, [4.0, 5.0])
 
 
-def test_constraint_base_default_restart_data_is_none():
-    """A stateless constraint (the vast majority) must not force FEModel to serialize anything for
-    it -- getRestartData's default of None is the opt-out."""
+def test_a_constraint_declares_the_state_it_carries():
+    """A constraint carrying nothing between increments declares an empty mapping; one that has not
+    declared anything cannot be checkpointed -- it is refused, not silently treated as stateless."""
 
     from edelweissfe.constraints.base.constraintbase import ConstraintBase
+    from edelweissfe.utils.exceptions import RestartError
 
-    class _StatelessConstraint(ConstraintBase):
+    class _Constraint(ConstraintBase):
         def __init__(self, name, model):
             super().__init__(name, model)
 
@@ -172,5 +173,9 @@ def test_constraint_base_default_restart_data_is_none():
         def applyConstraint(self, U_np, dU, PExt, V, timeStep):
             pass
 
-    constraint = _StatelessConstraint("stateless", None)
-    assert constraint.getRestartData() is None
+    class _StatelessConstraint(_Constraint):
+        checkpointedState = {}
+
+    assert _StatelessConstraint("stateless", None).getRestartData() == {}
+    with pytest.raises(RestartError):
+        _Constraint("undeclared", None).getRestartData()

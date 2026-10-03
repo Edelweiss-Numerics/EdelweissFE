@@ -34,6 +34,7 @@ import pytest
 from edelweissfe.journal.journal import Journal
 from edelweissfe.timesteppers.adaptivetimestepper import AdaptiveTimeStepper
 from edelweissfe.timesteppers.simpletimestepper import SimpleTimeStepper
+from edelweissfe.utils.checkpoint import readRestartDataInto, writeRestartDataOf
 
 
 def _adaptive():
@@ -67,10 +68,10 @@ def _enforce(stepper):
 
 def _resumed(stepper, makeStepper, tmp_path):
     with h5py.File(tmp_path / "chk.h5", "w") as f:
-        stepper.writeRestart(f)
+        writeRestartDataOf(f, {"timestepper": stepper})
     resumed = makeStepper()
     with h5py.File(tmp_path / "chk.h5", "r") as f:
-        resumed.readRestart(f)
+        readRestartDataInto(f, {"timestepper": resumed})
     return resumed
 
 

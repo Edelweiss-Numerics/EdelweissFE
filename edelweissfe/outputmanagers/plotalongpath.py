@@ -88,6 +88,9 @@ class OutputManager(OutputManagerBase):
     #: Option schema for this output manager, per OptionSchemaProvider.
     schema = PlotAlongPathSchema
 
+    #: The plot stages still ahead in the step: consumed as the analysis passes them.
+    checkpointedState = {"plotStages": np.ndarray}
+
     def __init__(
         self,
         name: str,
@@ -187,6 +190,9 @@ class OutputManager(OutputManagerBase):
         pass
 
     def initializeStep(self, step):
+        # A resumed step continues with the stages still ahead, restored from the checkpoint.
+        if not step.timeStepper.isAtStepStart():
+            return
         for nJob in self.monitorJobs:
             self.plotStages = np.linspace(0, step.length, nJob["nStages"])
 
