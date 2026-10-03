@@ -30,6 +30,8 @@ import os
 from collections import deque
 from dataclasses import dataclass
 
+import numpy as np
+
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
@@ -183,6 +185,15 @@ class OutputManager(OutputManagerBase):
         writeCheckpoint(fileName, self.model, self._currentStep, self.model.outputManagers)
 
         self.journal.message("Wrote restart checkpoint {:}".format(fileName), self.identification, 2)
+
+    def getRestartData(self) -> dict[str, np.ndarray]:
+        """The write cadence: how many increments passed since this writer last wrote a
+        checkpoint. Zero in its own checkpoints, but another restart writer with a different
+        interval may be anywhere in its cycle."""
+        return {"incrementsSinceLastWrite": np.array([self._incrementsSinceLastWrite])}
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        self._incrementsSinceLastWrite = int(data["incrementsSinceLastWrite"][0])
 
     def finalizeFailedIncrement(self, **kwargs):
         pass
