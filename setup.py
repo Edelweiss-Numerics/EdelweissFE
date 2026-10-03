@@ -60,6 +60,8 @@ print("System prefix: " + sys.prefix)
 print("*" * 80)
 
 marmot_dir = expanduser(os.environ.get("MARMOT_INSTALL_DIR", native_prefix))
+# Name of the generated package file recording marmot_dir, read by edelweissfe/__init__.py.
+marmot_install_dir_file = "marmot_install_dir.txt"
 mkl_include = expanduser(os.environ.get("MKL_INCLUDE_DIR", join(native_prefix, "include")))
 eigen_include = expanduser(os.environ.get("EIGEN_INCLUDE_DIR", join(native_prefix, "include", "eigen3")))
 # MSVC has no -march=native equivalent, so no architecture flags by default on Windows.
@@ -333,27 +335,22 @@ class optional_build_ext(build_ext):
             except Exception as e:
                 print(f"[FAIL] Could not build {ext.name}: {e}")
 
-        self.write_build_log()
+        self.write_package_file("built_extensions.log", "\n".join(self.successful_extensions) + "\n")
+        # The Marmot installation the extensions were built against. On Windows, edelweissfe/__init__.py adds its
+        # bin directory to the DLL search path, the counterpart of the runtime library path baked in elsewhere.
+        self.write_package_file(marmot_install_dir_file, os.path.abspath(marmot_dir) + "\n")
 
-    def write_build_log(self):
-        log_file = pathlib.Path("edelweissfe") / "built_extensions.log"
+    def write_package_file(self, name, content):
+        """Write a generated file into the package, both in the source tree and in the build directory."""
+        source_file = pathlib.Path("edelweissfe") / name
+        source_file.parent.mkdir(parents=True, exist_ok=True)
+        source_file.write_text(content, encoding="utf-8")
 
-        log_file.parent.mkdir(parents=True, exist_ok=True)
+        build_file = pathlib.Path(self.build_lib) / "edelweissfe" / name
+        build_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_file, build_file)
 
-        log_file.write_text(
-            "\n".join(self.successful_extensions) + "\n",
-            encoding="utf-8",
-        )
-
-        print(f"Wrote build log to {log_file}")
-
-        # also copy into build/lib package dir
-        build_lib = pathlib.Path(self.build_lib) / "edelweissfe"
-        build_lib.mkdir(parents=True, exist_ok=True)
-
-        shutil.copy2(log_file, build_lib / "built_extensions.log")
-
-        print(f"Wrote build log to {build_lib / 'built_extensions.log'}")
+        print(f"Wrote {source_file} and {build_file}")
 
 
 setup(
@@ -361,7 +358,7 @@ setup(
     ext_modules=cythonize(extensions, compiler_directives=directives, annotate=True, language_level=3),
     include_package_data=True,
     package_data={
-        "edelweissfe": ["built_extensions.log"],
+        "edelweissfe": ["built_extensions.log", marmot_install_dir_file],
         # Downstream packages (e.g. EdelweissFD) compile their own Cython extensions against
         # the point-wise Marmot material interfaces, so the declarations and C++ shims they
         # cimport/include have to be part of the installed distribution, not just the source

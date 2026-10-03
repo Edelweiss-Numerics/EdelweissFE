@@ -1,7 +1,17 @@
 name: Build Marmot
 description: >
   Build and install Marmot for the EdelweissFE build, cached per Marmot commit, lockfile and OS, and export
-  MARMOT_INSTALL_DIR. Requires the environment from setup-locked-env.
+  MARMOT_INSTALL_DIR. Requires the environment from setup-locked-env (on Windows with init-shell cmd.exe).
+
+inputs:
+  repository:
+    description: The Marmot repository to build from.
+    default: MAteRialMOdelingToolbox/Marmot
+  ref:
+    description: >
+      The Marmot branch to build. Empty (the default): the branch under test, the PR's base branch or next_v26.11,
+      whichever exists first in the repository.
+    default: ""
 
 runs:
   using: composite
@@ -22,11 +32,15 @@ runs:
         # same-named Marmot branch (e.g. a "next_v26.11 -> master" promotion PR), the code under
         # test depends on that head branch's Marmot revision, not the base branch's -- using
         # base_ref there would silently build against the wrong (older/incompatible) Marmot.
-        CANDIDATE_BRANCHES=("${{ github.head_ref }}" "${{ github.base_ref }}" "next_v26.11")
+        if [ -n "${{ inputs.ref }}" ]; then
+          CANDIDATE_BRANCHES=("${{ inputs.ref }}")
+        else
+          CANDIDATE_BRANCHES=("${{ github.head_ref }}" "${{ github.base_ref }}" "next_v26.11")
+        fi
         branch=""
         for candidate in "${CANDIDATE_BRANCHES[@]}"; do
           [ -n "$candidate" ] || continue
-          sha=$(git ls-remote https://github.com/MAteRialMOdelingToolbox/Marmot.git "refs/heads/$candidate" | cut -f1)
+          sha=$(git ls-remote https://github.com/${{ inputs.repository }}.git "refs/heads/$candidate" | cut -f1)
           if [ -n "$sha" ]; then
             branch=$candidate
             break
@@ -46,22 +60,35 @@ runs:
       id: cache
       with:
         path: ${{ runner.temp }}/marmot
-        key: marmot-${{ runner.os }}-${{ runner.arch }}-${{ steps.resolve.outputs.sha }}-${{ hashFiles('conda-lock.yml') }}
+        key: marmot-${{ runner.os }}-${{ inputs.repository }}-${{ runner.arch }}-${{ steps.resolve.outputs.sha }}-${{ hashFiles('conda-lock.yml') }}
 
     - name: Build and install Marmot
-      if: steps.cache.outputs.cache-hit != 'true'
+      if: steps.cache.outputs.cache-hit != 'true' && runner.os != 'Windows'
       shell: bash -leo pipefail {0}
       run: |
         # Clone into the parent directory, never into the checkout: Marmot ships a committed symlink
         # _codeql_detected_source_root -> ., which `pip install .` otherwise follows into itself while
         # collecting the wheel's files.
         cd ..
-        git clone --recurse-submodules --branch "${{ steps.resolve.outputs.branch }}" https://github.com/MAteRialMOdelingToolbox/Marmot/
+        git clone --recurse-submodules --branch "${{ steps.resolve.outputs.branch }}" https://github.com/${{ inputs.repository }}.git Marmot
         git -C Marmot checkout --detach "${{ steps.resolve.outputs.sha }}"
         cmake -S Marmot -B Marmot/build -DCMAKE_INSTALL_PREFIX="${{ runner.temp }}/marmot" \
           -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF
         cmake --build Marmot/build -j 4
         cmake --install Marmot/build
+
+    # cmd.exe, because only its activation runs the environment's MSVC setup (vs2022_compiler_vars.bat). Release only;
+    # conda installs the dependencies' headers under %CONDA_PREFIX%\Library.
+    - name: Build and install Marmot (Windows)
+      if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows'
+      shell: cmd /C CALL {0}
+      run: |
+        cd ..
+        git clone --recurse-submodules --branch "${{ steps.resolve.outputs.branch }}" https://github.com/${{ inputs.repository }}.git Marmot || exit /b 1
+        git -C Marmot checkout --detach "${{ steps.resolve.outputs.sha }}" || exit /b 1
+        cmake -S Marmot -B Marmot\_build -DCMAKE_INSTALL_PREFIX="${{ runner.temp }}\marmot" -DCMAKE_PREFIX_PATH="%CONDA_PREFIX%\Library" -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF || exit /b 1
+        cmake --build Marmot\_build --config Release --parallel 4 || exit /b 1
+        cmake --install Marmot\_build --config Release || exit /b 1
 
     - name: Export MARMOT_INSTALL_DIR
       shell: bash
