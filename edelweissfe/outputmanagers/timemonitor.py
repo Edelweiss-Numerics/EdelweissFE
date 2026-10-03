@@ -71,6 +71,9 @@ class OutputManager(OutputManagerBase):
     #: Option schema for this output manager, per OptionSchemaProvider.
     schema = TimeMonitorSchema
 
+    #: The times of the increments written so far: exported all at once at the end of the job.
+    checkpointedState = {"timeVals": list}
+
     def __init__(
         self,
         name: str,

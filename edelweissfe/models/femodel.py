@@ -405,6 +405,7 @@ class FEModel:
         self.topology.checkModelModifierDomains()
         self._prepareVariablesAndFields(journal)
         self._prepareElements(journal)
+        self.topology.recordSetupFingerprint()
 
     def advanceToTime(self, time: float):
         """Accept the current state of the model and sub instances, and
@@ -494,13 +495,11 @@ class FEModel:
         for name, scalarVariable in self.scalarVariables.items():
             scalarVariablesGroup.attrs[name] = scalarVariable.value
 
+        writeRestartDataOf(f.create_group("modelModifiers"), self.modelModifiers)
+
         elementsGroup = f.create_group("elements")
         for elNumber, element in self.elements.items():
-            try:
-                stateVars = element.getStateVars()
-            except NotImplementedError:
-                continue
-            elementsGroup.create_dataset(str(elNumber), data=stateVars)
+            elementsGroup.create_dataset(str(elNumber), data=element.getStateVars())
 
         writeRestartDataOf(f.create_group("constraints"), self.constraints)
 
@@ -509,6 +508,7 @@ class FEModel:
         # TopologyPipeline.replayHistory -- rather than serializing the resulting topology directly, so there
         # is exactly one code path that mutates topology, live or replayed.
         historyGroup = f.create_group("topologyHistory")
+        historyGroup.attrs["setupFingerprint"] = self.topology.setupFingerprint()
         historyGroup.attrs["count"] = len(self.topology.history)
         for index, record in enumerate(self.topology.history):
             recordGroup = historyGroup.create_group("{:06d}".format(index))
@@ -541,8 +541,13 @@ class FEModel:
         # elements/nodes a plain rebuild from the .inp file cannot reproduce (e.g. AMR-refined
         # children) -- the node-field and element-statevar restores that follow address elements by
         # label and would silently miss anything not already in self.elements/self.nodeFields yet.
-        records = []
         historyGroup = f["topologyHistory"]
+        if self.topology.setupFingerprint() != historyGroup.attrs["setupFingerprint"]:
+            raise RestartError(
+                "the model rebuilt from the input file is not the one the checkpoint was written from: "
+                "its mesh (nodes, elements, coordinates, numbering) differs"
+            )
+        records = []
         for index in range(int(historyGroup.attrs["count"])):
             recordGroup = historyGroup["{:06d}".format(index)]
             records.append(
@@ -555,6 +560,7 @@ class FEModel:
                 )
             )
         self.topology.replayHistory(records, journal)
+        readRestartDataInto(f["modelModifiers"], self.modelModifiers)
         # Bring the mesh-dependent consumers (ties, contact surfaces) up to date with the replayed
         # mesh here, as part of restoring the model: the uninterrupted run's consumers had caught up
         # with every change before the checkpoint was written, so a resumed run must start the same.
@@ -563,7 +569,7 @@ class FEModel:
         for nf in self.nodeFields.values():
             storedField = f["nodeFields"].get(nf.name)
             if storedField is None:
-                continue
+                raise RestartError("the checkpoint holds no node field {:}".format(nf.name))
 
             # Iterate the checkpoint's entries, not the model's -- entries created only later by a
             # solver (e.g. the explicit solver's 'V') would otherwise never be restored.
@@ -588,6 +594,11 @@ class FEModel:
                     "topology replay -- the replayed model does not match the one checkpointed".format(elNumber)
                 )
             element.setStateVars(stateVars[:])
+
+        # A rigid body moves its surface nodes into the current configuration, a pure function of
+        # its reference point's restored DOFs: put them where the uninterrupted run had them.
+        for rigidBody in self.rigidBodies.values():
+            rigidBody.updateKinematics()
 
         readRestartDataInto(f["constraints"], self.constraints)
 

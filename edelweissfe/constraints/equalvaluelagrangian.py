@@ -37,6 +37,7 @@ from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
@@ -74,7 +75,7 @@ class EqualValueLagrangianSchema:
     )
 
 
-class Constraint(ConstraintBase):
+class Constraint(ConstraintBase, MeshDependent):
     """A Lagrangian multiplier based constraint enforcing equal nodal values on a node set.
 
     .. note::
@@ -100,6 +101,9 @@ class Constraint(ConstraintBase):
     #: Option schema for this constraint, per OptionSchemaProvider.
     schema = EqualValueLagrangianSchema
 
+    #: Carries nothing from one increment to the next.
+    checkpointedState = {}
+
     def __init__(
         self,
         name: str,
@@ -115,6 +119,8 @@ class Constraint(ConstraintBase):
         self.component = configuration.component
         self._name = name
         self._nodes = nSet
+        self._lastSeenTopologyVersion = model.topology.version
+        model.topology.registerMeshDependent(self)
         self.nNodes = len(self._nodes)
         self.nMultipliers = len(self._nodes) - 1
 
@@ -158,39 +164,30 @@ class Constraint(ConstraintBase):
     def nDof(self) -> int:
         return self._nDof
 
-    def updateConnectivity(self, model) -> bool:
-        """Called once per increment, before the equation system is (re)built.
+    def refresh(self, model: FEModel, change) -> bool:
+        """Refuse a topology change that touches the constrained node set; see
+        :class:`~edelweissfe.models.meshdependent.MeshDependent`.
 
         This constraint cannot adapt to a node set that changed size: it would need
         ``len(nSet) - 1`` Lagrange multipliers, but its scalar variables were already allocated for
         the original size and are not re-allocated per increment. Rebuilding the derived state
         would silently emit more DOF indices than ``nDof`` accounts for, so we fail loudly instead.
 
-        Parameters
-        ----------
-        model
-            The current model.
-
-        Returns
-        -------
-        bool
-            Always False; this constraint's DOF footprint is fixed at construction.
-
         Raises
         ------
         Exception
-            If the constrained node set was mutated in-place since the last check.
+            If the change touches the constrained node set.
         """
 
-        if self._checkSetChanged(self._nodes):
-            raise Exception(
-                "Constraint '{:}' (equalValueLagrangian) does not support a node set that changes "
-                "size during the simulation: its {:} Lagrange multipliers are allocated once, when "
-                "the equation system is first set up, and cannot grow with the node set (e.g. under "
-                "adaptive mesh refinement). Use the penalty variant 'equalValuePenalty' on this node "
-                "set instead, or constrain a node set that is not refined.".format(self._name, self.nMultipliers)
-            )
-        return False
+        if not change.touchesNodeSet(self._nodes.name):
+            return False
+        raise Exception(
+            "Constraint '{:}' (equalValueLagrangian) does not support a node set that changes "
+            "size during the simulation: its {:} Lagrange multipliers are allocated once, when "
+            "the equation system is first set up, and cannot grow with the node set (e.g. under "
+            "adaptive mesh refinement). Use the penalty variant 'equalValuePenalty' on this node "
+            "set instead, or constrain a node set that is not refined.".format(self._name, self.nMultipliers)
+        )
 
     def getNumberOfAdditionalNeededScalarVariables(self):
         return self.nNodes - 1

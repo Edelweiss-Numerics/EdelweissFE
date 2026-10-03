@@ -38,6 +38,10 @@ markers = [
     # Tests that spawn one fresh interpreter per module to check an import-order property, which
     # cannot be done in-process. Deselect with `-m "not slow"` while iterating.
     "slow: spawns many subprocesses; seconds rather than milliseconds",
+    # The restart test resumes from every checkpoint of every scenario. A representative subset runs
+    # always; the rest with `-m exhaustive`, before merging changes to restart, solvers, time
+    # steppers or the topology pipeline, and weekly in CI (run_restart_exhaustive.yml).
+    "exhaustive: the full restart test, every checkpoint of every scenario; minutes",
 ]
 
 [tool.coverage.run]

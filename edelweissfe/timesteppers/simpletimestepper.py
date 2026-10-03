@@ -33,7 +33,42 @@ from edelweissfe.utils.exceptions import ReachedMaxIncrements, ReachedMinIncreme
 
 
 class SimpleTimeStepper(TimeStepperBase):
+    """Divides a step into increments of a fixed size, or of a size enforced by the solver, after one
+    zero increment.
+
+    The zero increment comes first, so that an explicit integrator can build its initial state (mass,
+    internal force, contact) before taking a step. It is numbered 0; the increments after it are
+    numbered from 1. A step resumed from a checkpoint does not repeat it: whether it was done is part
+    of the stepper's state.
+
+    Parameters
+    ----------
+    currentTime
+        The start time of the step.
+    stepLength
+        The total length of the step.
+    startIncrement
+        The size of the start increment, relative to the step length.
+    maxIncrement
+        The maximum size of an increment, relative to the step length.
+    minIncrement
+        The minimum size of an increment, relative to the step length.
+    maxNumberIncrements
+        The maximum number of allowed increments.
+    journal
+        The journal instance for logging purposes.
+    """
+
     identification = "SimpleTimeStepper"
+
+    checkpointedState = {
+        "currentTime": float,
+        "zeroIncrementDone": bool,
+        "totalIncrements": int,
+        "finishedStepProgress": float,
+        "increment": float,
+        "enforcedTimeIncrement": float,
+    }
 
     def __init__(
         self,
@@ -45,256 +80,99 @@ class SimpleTimeStepper(TimeStepperBase):
         maxNumberIncrements: float,
         journal: Journal,
     ):
-        """
-        An increment generator for incremental-iterative simulations.
-
-        Implementation as generator class.
-
-        Parameters
-        ----------
-        currentTime
-            The current (start) time.
-        stepLength
-            The total length of the step.
-        startIncrement
-            The size of the start increment.
-        maxIncrement
-            The maximum size of an increment.
-        minIncrement
-            The minimum size of an increment.
-        maxNumberIncrements
-            The maximum number of allowed increments.
-        journal
-            The journal instance for logging purposes.
-        """
-
-        self.totalIncrements = int(0)
         self.startIncrement = startIncrement
         self.maxIncrement = maxIncrement
         self.minIncrement = minIncrement
         self.maxNumberIncrements = maxNumberIncrements
-
-        self.finishedStepProgress = 0.0
-        self.increment = min(startIncrement, maxIncrement)
-
-        self.currentTime = currentTime
         self.stepLength = stepLength
         self.journal = journal
+
+        #: The start time of the step.
+        self.currentTime = currentTime
+        #: Whether the zero increment was accepted.
+        self.zeroIncrementDone = False
+        #: The number of increments accepted after the zero increment.
+        self.totalIncrements = 0
+        #: The accepted progress within the step, from 0 to 1.
+        self.finishedStepProgress = 0.0
+        #: The size of the next increment, relative to the step length.
+        self.increment = min(startIncrement, maxIncrement)
+        #: The time increment the solver enforces, or None.
         self.enforcedTimeIncrement = None
 
-    def generateTimeStep(self, enforcedTimeIncrement=None) -> TimeStep:
-        """
-        Generate the next increment.
+    def isFinished(self) -> bool:
+        return self.zeroIncrementDone and self.finishedStepProgress >= (1.0 - 1e-15)
 
-        Returns
-        -------
-        TimeStep
-            The current time step.
-        """
+    def isAtStepStart(self) -> bool:
+        return not self.zeroIncrementDone
 
-        # A zero increment, yielded once before the first real one, so an explicit integrator can
-        # build its initial state (mass, internal force, contact) before taking a step.
-        #
-        # It reports the stepper's CURRENT position within the step, not the step's start. Those are
-        # the same thing on a cold start, where finishedStepProgress is 0 -- but not on a resumed
-        # run, and reporting the start there did two wrong things. The solver calls
-        # ``model.advanceToTime(timeStep.totalTime)`` on every increment, so model.time was rewound
-        # to the beginning of the step; and this increment's number is 0, hence a multiple of any
-        # ``output-frequency``, so an output frame stamped with that rewound time was written into
-        # the middle of an otherwise increasing Ensight time set -- leaving it non-monotonic, which
-        # is invalid in the format and makes a reader pair variables with the wrong geometry.
-        yield TimeStep(
-            0,
-            0.0,
-            self.finishedStepProgress,
-            0.0,
-            self.stepLength * self.finishedStepProgress,
-            self.currentTime + self.stepLength * self.finishedStepProgress,
-        )
-        self.enforcedTimeIncrement = enforcedTimeIncrement
+    def numberOfIncrementsDone(self) -> int:
+        return self.totalIncrements
 
-        if self.enforcedTimeIncrement is None:
-            while self.finishedStepProgress < (1.0 - 1e-15):
-                if self.totalIncrements >= self.maxNumberIncrements:
-                    self.journal.message("Reached maximum number of increments", self.identification)
-                    raise ReachedMaxIncrements()
-                if self.increment > self.maxIncrement:
-                    self.increment = self.maxIncrement
+    def proposeTimeStep(self) -> TimeStep:
+        progress = self.finishedStepProgress
 
-                remainder = 1.0 - self.finishedStepProgress
-                if remainder < self.increment:
-                    self.increment = remainder
-
-                dT = self.stepLength * self.increment
-                self.finishedStepProgress += self.increment
-                endTimeOfIncrementInStep = self.stepLength * self.finishedStepProgress
-                endTimeOfIncrementInTotal = self.currentTime + endTimeOfIncrementInStep
-
-                self.totalIncrements += 1
-
-                yield TimeStep(
-                    self.totalIncrements,
-                    self.increment,
-                    self.finishedStepProgress,
-                    dT,
-                    endTimeOfIncrementInStep,
-                    endTimeOfIncrementInTotal,
-                )
-        else:
-            while self.finishedStepProgress < (1.0 - 1e-15):
-                if self.totalIncrements >= self.maxNumberIncrements:
-                    self.journal.message("Reached maximum number of increments", self.identification)
-                    raise ReachedMaxIncrements()
-                if self.increment > self.maxIncrement:
-                    self.increment = self.maxIncrement
-
-                # dT = self.enforcedTimeIncrement
-                self.increment = self.enforcedTimeIncrement / self.stepLength
-                remainder = 1.0 - self.finishedStepProgress
-                if remainder < self.increment:
-                    self.increment = remainder
-
-                dT = self.stepLength * self.increment
-                self.finishedStepProgress += self.increment
-                endTimeOfIncrementInStep = self.stepLength * self.finishedStepProgress
-                endTimeOfIncrementInTotal = self.currentTime + endTimeOfIncrementInStep
-
-                self.totalIncrements += 1
-
-                yield TimeStep(
-                    self.totalIncrements,
-                    self.increment,
-                    self.finishedStepProgress,
-                    dT,
-                    endTimeOfIncrementInStep,
-                    endTimeOfIncrementInTotal,
-                )
-
-    def enforceTimeIncrement(self, timeIncrement: float):
-        """Replace the enforced time increment for the remaining increments. See
-        :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.enforceTimeIncrement`.
-
-        The generator reads ``self.enforcedTimeIncrement`` afresh on every iteration, so assigning it
-        here takes effect from the next increment on -- the one already yielded is untouched, which is
-        what the caller wants: an increment that has been computed is not retroactively resized.
-
-        Parameters
-        ----------
-        timeIncrement
-            The new enforced time increment.
-        """
-
-        if self.enforcedTimeIncrement is None:
-            raise NotImplementedError(
-                "This step is not running on an enforced time increment, so it cannot be given a new " "one mid-step."
+        if not self.zeroIncrementDone:
+            return TimeStep(
+                0, 0.0, progress, 0.0, self.stepLength * progress, self.currentTime + self.stepLength * progress
             )
 
-        self.enforcedTimeIncrement = timeIncrement
+        if self.totalIncrements >= self.maxNumberIncrements:
+            self.journal.message("Reached maximum number of increments", self.identification)
+            raise ReachedMaxIncrements()
 
-    def changeIncrementSize(self, scaleFactor: float):
-        """Change increment size between minIncrement and
-        maxIncrement by a given scale factor.
-
-        Parameters
-        ----------
-        scaleFactor
-            The factor for scaling based on the previous increment.
-        """
-
-        if self.finishedStepProgress == 0.0:
-            return
-
-        newIncrement = self.increment * scaleFactor
-
-        if newIncrement > self.maxIncrement:
+        if self.increment > self.maxIncrement:
             self.increment = self.maxIncrement
-        elif newIncrement < self.minIncrement:
-            self.increment = self.minIncrement
-        else:
-            self.increment = newIncrement
+        if self.enforcedTimeIncrement is not None:
+            self.increment = self.enforcedTimeIncrement / self.stepLength
+        remainder = 1.0 - progress
+        if remainder < self.increment:
+            self.increment = remainder
 
-        self.journal.message(
-            "New increment size {:}".format(self.increment),
-            self.identification,
-            2,
+        progress += self.increment
+        return TimeStep(
+            self.totalIncrements + 1,
+            self.increment,
+            progress,
+            self.stepLength * self.increment,
+            self.stepLength * progress,
+            self.currentTime + self.stepLength * progress,
         )
 
-    def discardAndChangeIncrement(self, scaleFactor: float):
-        """Change increment size between minIncrement and
-        maxIncrement by a given scale factor.
+    def acceptTimeStep(self, timeStep: TimeStep):
+        if not self.zeroIncrementDone:
+            self.zeroIncrementDone = True
+            return
 
-        Parameters
-        ----------
-        scaleFactor
-            The factor for scaling based on the previous increment.
-        """
+        self.finishedStepProgress = timeStep.stepProgress
+        self.totalIncrements += 1
+
+    def rejectTimeStep(self, cutbackFactor: float):
+        if not self.zeroIncrementDone:
+            self.journal.errorMessage("Failed zero increment", self.identification)
+            raise ReachedMinIncrementSize()
 
         if self.increment == self.minIncrement:
             self.journal.errorMessage("Cannot reduce increment size", self.identification)
             raise ReachedMinIncrementSize()
 
-        if self.finishedStepProgress == 0.0:
-            self.journal.errorMessage("Failed zero increment", self.identification)
-            raise ReachedMinIncrementSize()
-
-        self.finishedStepProgress -= self.increment
-        newIncrement = self.increment * scaleFactor
-        if newIncrement > self.maxIncrement:
-            self.increment = self.maxIncrement
-        elif newIncrement < self.minIncrement:
-            self.increment = self.minIncrement
-        else:
-            self.increment = newIncrement
+        self.increment = min(max(self.increment * cutbackFactor, self.minIncrement), self.maxIncrement)
 
         if self.enforcedTimeIncrement is not None:
-            # overwrite the enforced time increment with the new increment size
             self.enforcedTimeIncrement = self.increment * self.stepLength
 
-        self.journal.message(
-            "Cutback to increment size {:}".format(self.increment),
-            self.identification,
-            2,
-        )
-        self.totalIncrements -= 1
+        self.journal.message("Cutback to increment size {:}".format(self.increment), self.identification, 2)
+
+    def enforceTimeIncrement(self, timeIncrement: float):
+        self.enforcedTimeIncrement = timeIncrement
+
+    def changeIncrementSize(self, scaleFactor: float):
+        if not self.zeroIncrementDone:
+            return
+
+        self.increment = min(max(self.increment * scaleFactor, self.minIncrement), self.maxIncrement)
+
+        self.journal.message("New increment size {:}".format(self.increment), self.identification, 2)
 
     def preventIncrementIncrease(self):
-        """This time stepper never increases the increment size automatically,
-        hence this is a no-op."""
-
-    def writeRestart(self, restartFile):
-        """Write this time stepper's progress within the step to a restart checkpoint.
-
-        Deliberately restricted to the *dynamic* progress state (``currentTime``, ``totalIncrements``,
-        ``finishedStepProgress``, ``increment``), not the step's *configuration*
-        (``stepLength``, ``startIncrement``, ``maxIncrement``, ``minIncrement``,
-        ``maxNumberIncrements``) -- see :meth:`~edelweissfe.timesteppers.adaptivetimestepper.
-        AdaptiveTimeStepper.writeRestart`'s docstring for why.
-
-        Parameters
-        ----------
-        restartFile
-            The file to write the restart information to.
-        """
-        f = restartFile
-        f.create_group("timestepper")
-
-        f["timestepper"].attrs["currentTime"] = self.currentTime
-        f["timestepper"].attrs["totalIncrements"] = self.totalIncrements
-        f["timestepper"].attrs["finishedStepProgress"] = self.finishedStepProgress
-        f["timestepper"].attrs["increment"] = self.increment
-
-    def readRestart(self, restartFile):
-        """Restore this time stepper's progress within the step from a restart checkpoint written
-        by :meth:`writeRestart`.
-
-        Parameters
-        ----------
-        restartFile
-            The file to read the restart information from.
-        """
-        f = restartFile
-        self.currentTime = f["timestepper"].attrs["currentTime"]
-        self.totalIncrements = f["timestepper"].attrs["totalIncrements"]
-        self.warnIfResumedAtIncrementCap(self.totalIncrements, self.maxNumberIncrements, self.journal)
-        self.finishedStepProgress = f["timestepper"].attrs["finishedStepProgress"]
-        self.increment = f["timestepper"].attrs["increment"]
+        """This time stepper never increases the increment size automatically, hence this is a no-op."""

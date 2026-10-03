@@ -372,6 +372,9 @@ class OutputManager(OutputManagerBase):
     identification = "meshPlot"
     schema = MeshPlotSchema
 
+    #: Carries nothing from one increment to the next.
+    checkpointedState = {}
+
     def __init__(
         self,
         name,

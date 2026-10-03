@@ -18,33 +18,51 @@ restart uses a tolerance. The rule has three consequences, each kept by construc
    is, and read back.** Nothing is re-derived or reconstructed. What is a pure function of the
    restored model needs nothing.
 2. **The step start is not repeated.** Step-start actions (initial conditions, material
-   initialization, prescribed fields, model updates), the explicit solver's step-start topology
-   update and the first contact search all happened before the checkpoint was written. A resumed step
-   skips them. ``step.isResumed`` is the one place the code asks whether it was resumed.
-3. **Increment loops decide by increment number.** Topology checks, contact searches, output and
-   checkpoints happen at the same increments whether a run started cold or was resumed.
+   initialization, prescribed fields), the zero increment, the step-start topology update and the
+   first contact search all happened before the checkpoint was written. Whether a step is at its
+   start is part of the time stepper's state
+   (:meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.isAtStepStart`): nothing
+   accepted yet. A restored time stepper never is, so a resumed step skips them -- there is no
+   separate "resumed" flag.
+3. **The increment loop is written once, and decides by increment number.** Topology checks,
+   contact searches, output and checkpoints happen at the same increments whether a run started cold
+   or was resumed.
+
+A checkpoint file is written under a temporary name and renamed once complete, so a job killed while
+writing one never leaves a truncated checkpoint behind. Each carries a serial number, by which the
+restart writer finds the oldest one to replace -- not by file times, which copying changes.
 
 Whatever cannot keep the rule refuses to resume, with a :class:`~edelweissfe.utils.exceptions.RestartError`:
 a solver that does not checkpoint its state (the default of
 :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.readRestart`), and a
-checkpoint written by an older version that lacks state the current one needs.
+checkpoint of another format version (every checkpoint carries one, and a run reads its own only),
+and a resume past a ``modelupdate`` -- it executes an arbitrary expression whose effect no checkpoint
+records, so a run is resumed only from checkpoints written in steps before the first one.
 
 One increment, and where the checkpoint is written
 --------------------------------------------------
 
+The step's increment loop (:meth:`~edelweissfe.steps.base.stepbase.StepBase.solve`) is the same for
+every solver:
+
 .. code-block:: text
 
-    increment n                                                   (implicit: every increment;
-    ├── topology update     model modifiers (e.g. AMR), then ties   explicit: every
-    │                       and contact catch up                    topology-check-frequency)
-    ├── solve               Newton iterations / explicit update
-    ├── accept              material state, solver state (predictor, external work, ...)
-    └── output              field outputs, then the CHECKPOINT
+    increment n
+    ├── prepare      topology update when due: model modifiers   (implicit: every increment;
+    │                (e.g. AMR), then ties and contact catch up    explicit: at the step start and
+    │                                                               after every topology-check-
+    │                                                               frequency-th increment)
+    ├── propose      the time stepper proposes the increment
+    ├── attempt      Newton iterations / explicit update; if it fails: reject, retry smaller
+    ├── accept       solver: material state, solver state (predictor, external work, ...)
+    │                time stepper: progress, size of the next increment
+    └── output       field outputs, output managers, the CHECKPOINT last
                                                 ▲
     a resumed run starts here ──────────────────┘  with increment n + 1
 
-An implicit increment retried after a cutback starts from the same accepted state, so the model
-modifiers are not asked again: they decide once per accepted state.
+The topology update comes before the proposal, because a refinement may lower the stable time
+increment of an explicit analysis. An increment retried after a cutback starts from the same
+accepted state, so the model modifiers are not asked again: they decide once per accepted state.
 
 Restoring a checkpoint
 ----------------------
@@ -60,19 +78,24 @@ The model is first rebuilt from the same input file, then restored in this order
    * - model time
      - read
    * - mesh
-     - the recorded topology decisions are replayed through the model modifiers' own ``apply``
+     - the mesh rebuilt from the input file is checked against the one the checkpointed run started
+       from (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.setupFingerprint`), then
+       the recorded topology decisions are replayed through the model modifiers' own ``apply``
        (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory`), and the
        result is checked against the recorded fingerprint
    * - ties, contact surfaces
      - catch up with the replayed mesh, as they had in the uninterrupted run
    * - node fields, scalar variables, element state
      - read
+   * - rigid bodies
+     - their surface nodes are moved to the restored configuration
    * - constraint state (e.g. a frozen contact search)
      - read; adopted only if it refers to the restored model's contact points, otherwise refused
    * - output managers' sequence bookkeeping
-     - read
+     - read, including each restart writer's position in its write interval
    * - time stepper
-     - its progress within the step
+     - its state after the last accepted increment, as it is: progress, increment counter, the size
+       of the next increment, the enforced time increment, and whether the zero increment was done
    * - solver
      - its state between increments: the implicit solver's predictor (last accepted increment and
        its ``dU``), the explicit solver's last increment and accumulated external work
@@ -80,7 +103,30 @@ The model is first rebuilt from the same input file, then restored in this order
 Adding something that carries state between increments
 -------------------------------------------------------
 
-Write it in ``writeRestart`` (or ``getRestartData`` for constraints and output managers) and read it
-back in ``readRestart`` (``setRestartData``) -- the value itself, not something to rebuild it from.
+Declare it. Every solver, time stepper, constraint and output manager states which of its attributes
+it carries from one increment to the next, by name and type, and the checkpoint writes and reads
+exactly those, as they are (:mod:`~edelweissfe.utils.checkpointedstate`):
+
+.. code-block:: python
+
+    class NIST(NonlinearSolverBase):
+        #: The predictor's state between increments: the last accepted increment and its dU.
+        checkpointedState = {"prevTimeStep": TimeStep, "dU": np.ndarray}
+
+A component that carries nothing declares an empty mapping. One whose state is not a plain attribute
+(Ensight's sequence bookkeeping, a frozen contact search) overrides ``getRestartData`` and
+``setRestartData`` instead. A component that declares nothing cannot be checkpointed:
+``tests/test_checkpointed_state_declared.py`` checks every class in the package, so a forgotten
+declaration fails there, and writing a checkpoint refuses. A solver that is not restartable says so
+by keeping the declaration None.
+
+Step actions declare their state too: a load ramped over several steps accumulates from step to
+step, and most actions switch themselves off at the end of their step. A resumed run skips the
+steps before the checkpoint, so it restores that state rather than re-deriving it.
+
+Field outputs carry their history the same way, and how much of their export file belongs to the
+run: before its first write, a resumed run cuts the file back to that size, so the rows an
+interrupted run wrote after its last checkpoint are replaced, not duplicated.
+
 Then add a scenario to ``tests/test_restart_exhaustive.py``: it resumes from every checkpoint of a
-small run and requires the bitwise-identical end state, so a forgotten piece of state fails there.
+small run and requires the bitwise-identical end state, the same checkpoints and the same output.

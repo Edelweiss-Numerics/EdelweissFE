@@ -49,6 +49,22 @@ class CutbackRequest(Exception):
         self.cutbackSize = float(cutbackSize)
 
 
+class IncrementFailed(Exception):
+    """An increment could not be solved; it is retried smaller by ``cutbackFactor``.
+
+    Parameters
+    ----------
+    message
+        Why the increment failed.
+    cutbackFactor
+        The factor the time stepper scales the increment size by for the retry.
+    """
+
+    def __init__(self, message, cutbackFactor):
+        super().__init__(message)
+        self.cutbackFactor = float(cutbackFactor)
+
+
 class ReachedMaxIterations(Exception):
     """The maximum number of nonlinear iterations as attained."""
 

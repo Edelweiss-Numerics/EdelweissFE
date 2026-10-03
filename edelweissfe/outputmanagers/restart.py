@@ -30,6 +30,8 @@ import os
 from collections import deque
 from dataclasses import dataclass
 
+import h5py
+
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
@@ -84,36 +86,53 @@ class _RestartFileRingBuffer(deque):
     just resumed from.
     """
 
+    #: The slot written next, and the serial number of the next checkpoint. A restored writer
+    #: continues from the checkpointed ones; only a writer the checkpoint does not know starts from
+    #: what it finds on disk.
+    checkpointedState = {"_nextIndex": int, "_nextSerial": int}
+
     def __init__(self, baseName: str, maxsize: int):
         super().__init__(maxlen=maxsize)
         self._baseName = baseName
         self._maxsize = maxsize
-        self._nextIndex = self._resumeNextIndex()
+        self._nextIndex, self._nextSerial = self._continueFromDisk()
 
-    def _resumeNextIndex(self) -> int:
-        """The index to write next, continuing whatever ring-buffer state already exists on disk:
-        the first never-written slot if the buffer hasn't filled up yet, otherwise the slot
-        holding the oldest checkpoint (by mtime), i.e. the one due to be overwritten next."""
+    def _fileName(self, index: int) -> str:
+        return "{:}_{:}.h5".format(self._baseName, index)
 
-        existingMTimeByIndex = {}
+    def _continueFromDisk(self) -> tuple[int, int]:
+        """The slot and serial to write next, continuing whatever checkpoints already exist on
+        disk: the first never-written slot if the buffer has not filled up yet, otherwise the slot
+        holding the oldest checkpoint -- by the serial number each checkpoint carries, not by file
+        times, which copying changes. A file without one (an older format) counts as oldest."""
+
+        serialByIndex = {}
         for index in range(self._maxsize):
-            fileName = "{:}_{:}.h5".format(self._baseName, index)
-            if os.path.exists(fileName):
-                existingMTimeByIndex[index] = os.path.getmtime(fileName)
+            if os.path.exists(self._fileName(index)):
+                with h5py.File(self._fileName(index), "r") as f:
+                    serialByIndex[index] = int(f.attrs.get("serial", -1))
 
-        neverWritten = [index for index in range(self._maxsize) if index not in existingMTimeByIndex]
+        nextSerial = max(serialByIndex.values(), default=-1) + 1
+        neverWritten = [index for index in range(self._maxsize) if index not in serialByIndex]
         if neverWritten:
-            return min(neverWritten)
-        return min(existingMTimeByIndex, key=existingMTimeByIndex.get)
+            return min(neverWritten), nextSerial
+        return min(serialByIndex, key=serialByIndex.get), nextSerial
 
-    def nextFileName(self) -> str:
-        """The file name for the next checkpoint to be written, rotating over
-        ``[0, numberOfFilesToKeep)``."""
+    def nextCheckpoint(self) -> tuple[str, int]:
+        """The file name and serial number for the next checkpoint to be written, rotating over
+        ``[0, numberOfFilesToKeep)``.
 
-        fileName = "{:}_{:}.h5".format(self._baseName, self._nextIndex)
+        Returns
+        -------
+        tuple[str, int]
+            The file name and the serial number.
+        """
+
+        fileName, serial = self._fileName(self._nextIndex), self._nextSerial
         self._nextIndex = (self._nextIndex + 1) % self._maxsize
+        self._nextSerial += 1
         self.append(fileName)
-        return fileName
+        return fileName, serial
 
 
 class OutputManager(OutputManagerBase):
@@ -125,6 +144,11 @@ class OutputManager(OutputManagerBase):
 
     #: L2 schema declared for the L3 registry, per OptionSchemaProvider.
     schema = RestartOutputManagerSchema
+
+    #: How many increments passed since this writer last wrote a checkpoint (zero in its own
+    #: checkpoints, but another restart writer with a different interval may be anywhere in its
+    #: cycle), and the slot of its ring buffer it writes next.
+    checkpointedState = {"_incrementsSinceLastWrite": int, "_files": _RestartFileRingBuffer}
 
     def __init__(
         self,
@@ -179,8 +203,8 @@ class OutputManager(OutputManagerBase):
             return
 
         self._incrementsSinceLastWrite = 0
-        fileName = self._files.nextFileName()
-        writeCheckpoint(fileName, self.model, self._currentStep, self.model.outputManagers)
+        fileName, serial = self._files.nextCheckpoint()
+        writeCheckpoint(fileName, self.model, self._currentStep, self.model.outputManagers, serial=serial)
 
         self.journal.message("Wrote restart checkpoint {:}".format(fileName), self.identification, 2)
 

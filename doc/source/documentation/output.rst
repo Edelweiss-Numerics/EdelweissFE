@@ -113,3 +113,9 @@ module, used by this output manager for writing and by the driver for resuming (
 
 .. automodule:: edelweissfe.utils.checkpoint
    :members:
+
+The state each component carries between increments is declared on the component, and packed and
+unpacked by one module:
+
+.. automodule:: edelweissfe.utils.checkpointedstate
+   :members: packState, unpackState

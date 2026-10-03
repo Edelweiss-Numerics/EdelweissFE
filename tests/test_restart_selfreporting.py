@@ -16,6 +16,7 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
 from edelweissfe.timesteppers.simpletimestepper import SimpleTimeStepper
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.checkpoint import readRestartDataInto, writeRestartDataOf
 from edelweissfe.utils.exceptions import RestartError
 
 
@@ -36,7 +37,7 @@ def _solver():
     return NED({}, Journal(verbose=False))
 
 
-def _stepper(maxNumberIncrements=60000):
+def _stepper(journal, maxNumberIncrements=60000):
     return SimpleTimeStepper(
         currentTime=0.0,
         stepLength=1.0,
@@ -44,7 +45,7 @@ def _stepper(maxNumberIncrements=60000):
         maxIncrement=0.1,
         minIncrement=1e-8,
         maxNumberIncrements=maxNumberIncrements,
-        journal=Journal(verbose=False),
+        journal=journal,
     )
 
 
@@ -58,11 +59,11 @@ def test_the_explicit_solver_state_survives_a_checkpoint_exactly(tmp_path):
 
     checkpoint = tmp_path / "chk.h5"
     with h5py.File(checkpoint, "w") as f:
-        solver.writeRestart(f)
+        writeRestartDataOf(f, {"solver": solver})
 
     resumed = _solver()
     with h5py.File(checkpoint, "r") as f:
-        resumed.readRestart(f)
+        readRestartDataInto(f, {"solver": resumed})
 
     assert resumed._externalWork == -1234.5
     restored = resumed.prevTimeStep
@@ -80,7 +81,17 @@ def test_a_checkpoint_carrying_no_solver_state_is_refused(tmp_path):
 
     with h5py.File(checkpoint, "r") as f:
         with pytest.raises(RestartError):
-            _solver().readRestart(f)
+            readRestartDataInto(f, {"solver": _solver()})
+
+
+def test_a_solver_that_does_not_declare_its_state_cannot_be_checkpointed():
+    """The explicit static solver carries its last increment between increments but does not
+    checkpoint it: writing a checkpoint refuses, before anything could be resumed from it."""
+
+    from edelweissfe.solvers.nonlinearexplicitstatic import NEST
+
+    with pytest.raises(RestartError):
+        NEST({}, Journal(verbose=False)).getRestartData()
 
 
 def test_resuming_at_or_past_the_increment_cap_is_reported():
@@ -88,7 +99,9 @@ def test_resuming_at_or_past_the_increment_cap_is_reported():
     it far enough ends the step on its first check and the job reports success regardless."""
     for alreadyDone in (60000, 130000):
         journal = _RecordingJournal()
-        _stepper().warnIfResumedAtIncrementCap(alreadyDone, 60000, journal)
+        stepper = _stepper(journal)
+        stepper.totalIncrements = alreadyDone
+        stepper._warnIfResumedAtIncrementCap()
 
         assert len(journal.messages) == 1, "no warning at {:} of 60000".format(alreadyDone)
         reported = journal.messages[0]
@@ -98,5 +111,7 @@ def test_resuming_at_or_past_the_increment_cap_is_reported():
 
 def test_resuming_below_the_increment_cap_is_silent():
     journal = _RecordingJournal()
-    _stepper().warnIfResumedAtIncrementCap(59999, 60000, journal)
+    stepper = _stepper(journal)
+    stepper.totalIncrements = 59999
+    stepper._warnIfResumedAtIncrementCap()
     assert journal.messages == []

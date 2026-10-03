@@ -60,7 +60,7 @@ def test_the_parallel_element_loop_is_reached_through_nid():
     # the element loop is NISTParallel's, everything NID overrides is still NID's
     assert NIDParallel.computeElements is NISTParallel.computeElements
     assert NIDParallel.solveIncrement is NonlinearImplicitDynamic.solveIncrement
-    assert NIDParallel.solveStep is NonlinearImplicitDynamic.solveStep
+    assert NIDParallel.beginStep is NonlinearImplicitDynamic.beginStep
     assert NIDParallel.schema is NonlinearImplicitDynamic.schema
 
 

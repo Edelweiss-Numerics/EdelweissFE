@@ -44,10 +44,10 @@ from edelweissfe.solvers.nonlinearexplicitstatic import NEST
 class NESTParallel(NEST):
     identification = "NESTPSolver"
 
-    def solveStep(self, step, model, fieldOutputController, outputmanagers):
+    def beginStep(self, step, model, fieldOutputController, outputmanagers):
 
         reportThreadAvailability(getNumberOfThreads(), self.journal, self.identification)
-        return super().solveStep(step, model, fieldOutputController, outputmanagers)
+        return super().beginStep(step, model, fieldOutputController, outputmanagers)
 
     @performancetiming.timeit("elements")
     def computeElements(self, elements, Un1, dU, P, K, F, timeStep):

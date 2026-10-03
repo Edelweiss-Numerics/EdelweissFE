@@ -51,6 +51,8 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
     def elNumber(self) -> int:
         """The unique number of this element"""
 
+    @property
+    @abstractmethod
     def elType(self) -> str:
         """The type of this element."""
 

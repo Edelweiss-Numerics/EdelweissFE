@@ -171,6 +171,10 @@ class ConservationCheck:
         The owning solver's identification, for the journal.
     """
 
+    #: The drift accumulated over the step, and which totals were warned about: carried from one
+    #: increment to the next, so a resumed step continues them.
+    checkpointedState = {"_cumulativeDrift": dict, "_warned": set}
+
     def __init__(self, journal, identification: str):
         self.journal = journal
         self.identification = identification

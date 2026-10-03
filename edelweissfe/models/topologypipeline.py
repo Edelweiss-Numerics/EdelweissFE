@@ -95,6 +95,9 @@ class TopologyPipeline:
         #: walk per record, so a long history replays in O(records x mesh) rather than O(mesh).
         #: Switch it on to locate a divergence the final check reported.
         self.verifyFingerprintsPerRecord = False
+        #: The fingerprint of the mesh as the input file built it, before any model modifier acted;
+        #: see :meth:`setupFingerprint`.
+        self._setupFingerprint = None
         #: True inside a :meth:`changes` window that defers the node-field bookkeeping.
         self.isDeferringFieldBookkeeping = False
         self._deferredNodeFieldResizeJournal = None
@@ -323,7 +326,7 @@ class TopologyPipeline:
                         )
                     )
 
-    def update(self, step=None, timeStep: float = None) -> bool:
+    def update(self, step=None) -> bool:
         """Run every model modifier to a fixed point, inside one topology window.
 
         Modifiers depend on each other -- refinement invalidates a tied surface's facets, a
@@ -370,7 +373,7 @@ class TopologyPipeline:
                 for name, modifier in self._model.modelModifiers.items():
                     change = self.changesSince(lastPlannedVersion[name])
                     lastPlannedVersion[name] = self.version
-                    plan = modifier.plan(self._model, change, step, timeStep)
+                    plan = modifier.plan(self._model, change, step)
                     if plan is None:
                         continue
                     modelChange = modifier.apply(self._model, plan)
@@ -406,6 +409,33 @@ class TopologyPipeline:
                         )
                     )
         return changed
+
+    def recordSetupFingerprint(self):
+        """Record the :meth:`fingerprint` of the mesh as the input file built it, once the model is
+        set up and before any model modifier acts; see :meth:`setupFingerprint`."""
+
+        self._setupFingerprint = self.fingerprint()
+
+    def setupFingerprint(self) -> str:
+        """The :meth:`fingerprint` of the mesh as the input file built it. A checkpoint carries it, so
+        that a resumed run can verify that it was rebuilt from the same mesh -- the recorded
+        topology changes are verified by the replay, but they say nothing about a mesh no modifier
+        ever touched.
+
+        Returns
+        -------
+        str
+            The digest.
+
+        Raises
+        ------
+        RuntimeError
+            If the model was never set up (:meth:`~edelweissfe.models.femodel.FEModel.prepareYourself`).
+        """
+
+        if self._setupFingerprint is None:
+            raise RuntimeError("the model was not set up (prepareYourself), so its setup mesh is unknown")
+        return self._setupFingerprint
 
     def fingerprint(self) -> str:
         """A short digest of the model's topology *and its numbering*, for verifying that a restart
@@ -463,14 +493,13 @@ class TopologyPipeline:
         * an entry in :attr:`history`, holding the plan in the modifier's own serializable
           form plus the resulting topology fingerprint -- which is what lets a resumed run be
           checked round by round instead of only at the end;
-        * the ``modelChange`` itself, via :meth:`notifyModelChanged`, so :meth:`changesSince` and
-          :meth:`refreshMeshDependents` can see it.
+        * the ``modelChange`` itself, stamped with the next :attr:`version`, so :meth:`changesSince`
+          and :meth:`refreshMeshDependents` can see it.
 
         A model modifier therefore reports what it did in exactly one way: by returning a
         :class:`~edelweissfe.models.modelchange.ModelChange` from
-        :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply`. It must
-        not call :meth:`notifyModelChanged` itself -- there is no second channel to keep in sync,
-        and so no way to update one and forget the other.
+        :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply` -- there
+        is no second channel to keep in sync, and so no way to update one and forget the other.
 
         Both callers of ``apply`` (the live :meth:`update` loop and
         :meth:`replayHistory`) route through here, so a replayed run records the same
@@ -494,7 +523,9 @@ class TopologyPipeline:
         """
 
         if modelChange is not None:
-            self.notifyModelChanged(modelChange.kind, modelChange)
+            self.version += 1
+            modelChange.version = self.version
+            self._changeLog.append(modelChange)
 
         record = TopologyRecord(
             modifier=name,
@@ -554,8 +585,8 @@ class TopologyPipeline:
                     )
                 plan = modifier.decodePlan(record.plan)
                 modelChange = modifier.apply(self._model, plan)
-                # Carry the recorded digest forward instead of recomputing it: a record without one
-                # (an older checkpoint) is the only case that still pays the walk.
+                # Carry the recorded digest forward instead of recomputing it -- unless every record
+                # is to be verified, which needs the replayed one.
                 replayed = self.recordChange(
                     record.roundNumber,
                     record.modifier,
@@ -563,9 +594,9 @@ class TopologyPipeline:
                     plan,
                     modelChange,
                     time=record.time,
-                    fingerprint=None if perRecord else (record.fingerprint or None),
+                    fingerprint=None if perRecord else record.fingerprint,
                 )
-                if perRecord and record.fingerprint and replayed.fingerprint != record.fingerprint:
+                if perRecord and replayed.fingerprint != record.fingerprint:
                     raise TopologyError(
                         "restart replay diverged at record {:} of {:}: modifier {!r}, round {:}, "
                         "time {:}. The replayed topology does not match the recorded one, so this "
@@ -583,8 +614,6 @@ class TopologyPipeline:
                     "model.topology.verifyFingerprintsPerRecord=True to locate the first diverging "
                     "record.".format(len(records), last.modifier, last.roundNumber, last.time)
                 )
-        for name, modifier in self._model.modelModifiers.items():
-            modifier.restoreDecisionState([r for r in records if r.modifier == name])
         if journal is not None:
             journal.message(
                 "Replayed {:} recorded topology change(s); {:} elements, {:} nodes".format(
@@ -628,33 +657,6 @@ class TopologyPipeline:
 
         # materialise the list: any() would short-circuit and leave later consumers unrefreshed
         return any([consumer.refreshIfMeshChanged(self._model) for consumer in self.meshDependents])
-
-    def notifyModelChanged(self, changeType, change: ModelChange = None):
-        """Record a model mutation: bump :attr:`version` and append the changeset, so that
-        every :class:`~edelweissfe.models.meshdependent.MeshDependent` can catch up from
-        :meth:`changesSince` at the end of the topology update.
-
-        **Model modifiers must not call this.** :meth:`recordChange` calls it for them, from
-        the :class:`~edelweissfe.models.modelchange.ModelChange` their ``apply`` returns; see there.
-        It remains available for code that mutates the model outside the modifier pipeline.
-
-        Recording only -- there is no synchronous callback. Consumers are refreshed once, by
-        :meth:`refreshMeshDependents`, after the modifiers have settled; see there for why.
-
-        Parameters
-        ----------
-        changeType
-            The :class:`~edelweissfe.models.modelchangeobserver.ModelChangeType` of the mutation.
-        change
-            The structured :class:`ModelChange` describing what changed. If omitted, an empty one
-            (bare ``changeType`` marker only, e.g. for a modifier that hasn't adopted the changeset
-            yet) is recorded instead.
-        """
-        self.version += 1
-        if change is None:
-            change = ModelChange(kind=changeType)
-        change.version = self.version
-        self._changeLog.append(change)
 
     def changesSince(self, version: int) -> ModelChange:
         """The :class:`ModelChange` coalesced across every mutation recorded after ``version``, or

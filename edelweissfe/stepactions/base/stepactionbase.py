@@ -28,9 +28,12 @@
 
 from abc import ABC
 
+import numpy as np
+
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.checkpointedstate import packState, unpackState
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import OptionSchemaProvider
 
@@ -68,6 +71,35 @@ class StepActionBase(OptionSchemaProvider, ABC):
     journal
         The journal object for logging.
     """
+
+    #: The state this step action carries from one increment to the next -- and across step
+    #: boundaries, e.g. an accumulated load -- by attribute name and type; see
+    #: :mod:`~edelweissfe.utils.checkpointedstate`. Every step action declares it, or overrides
+    #: :meth:`getRestartData` and :meth:`setRestartData`. Undeclared, it cannot be checkpointed.
+    checkpointedState: dict | None = None
+
+    def getRestartData(self) -> dict[str, np.ndarray]:
+        """The state this step action carries; by default the attributes declared in
+        :attr:`checkpointedState`.
+
+        Returns
+        -------
+        dict[str, numpy.ndarray]
+            A flat mapping of array name to array.
+        """
+
+        return packState(self)
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore the state :meth:`getRestartData` returned.
+
+        Parameters
+        ----------
+        data
+            The mapping of arrays.
+        """
+
+        unpackState(self, data)
 
     def __init__(
         self,
@@ -221,10 +253,25 @@ class StepActionBase(OptionSchemaProvider, ABC):
         Returns
         -------
         bool
-            True once per version bump of ``theSet`` since the last call for this same set.
+            True if ``theSet`` changed since its version was last recorded or checked.
         """
         setVersions = self.__dict__.setdefault("_setVersions", {})
-        key = id(theSet)
-        changed = setVersions.get(key, theSet._version) != theSet._version
-        setVersions[key] = theSet._version
+        if theSet.name not in setVersions:
+            raise RuntimeError(
+                f"{type(self).__name__}: a set is checked for changes, but the state derived "
+                "from it never recorded its version (call _recordSetVersion where that state is built)."
+            )
+        changed = setVersions[theSet.name] != theSet._version
+        setVersions[theSet.name] = theSet._version
         return changed
+
+    def _recordSetVersion(self, theSet):
+        """Record the version of ``theSet`` that derived state was just built from, so the next
+        :meth:`_checkSetChanged` reports any change after this point -- including the first one.
+
+        Parameters
+        ----------
+        theSet
+            The set the derived state was built from.
+        """
+        self.__dict__.setdefault("_setVersions", {})[theSet.name] = theSet._version

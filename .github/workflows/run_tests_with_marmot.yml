@@ -40,7 +40,8 @@ jobs:
           # for the first time now that pytest runs in CI at all. Deselected rather than silently
           # ignored so this step's exit status still reflects everything else; tracked separately
           # for the module's own maintainer to investigate.
-          coverage run "$(command -v pytest)" tests \
+          # The full restart test runs in run_restart_exhaustive.yml; here its representative subset.
+          coverage run "$(command -v pytest)" tests -m "not exhaustive" \
             --deselect tests/test_stepoptions.py::test_the_dynamic_options_branch_is_declared_in_exactly_one_place
           coverage run -a "$(command -v run_tests_edelweissfe)" ./testfiles/marmot/
           coverage run -a "$(command -v run_tests_edelweissfe)" ./testfiles/edelweiss-only/

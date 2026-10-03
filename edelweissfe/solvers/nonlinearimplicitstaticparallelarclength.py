@@ -45,7 +45,6 @@ from edelweissfe.utils.exceptions import (
     ConditionalStop,
     DivergingSolution,
     ReachedMaxIterations,
-    RestartError,
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.math import createModelAccessibleFunction
@@ -58,7 +57,7 @@ class NISTPArcLengthSchema(NISTParallel.schema):
     bespoke fields this solver reads from an ``>>options`` block under the (mismatched)
     ``category=NISTArcLength`` -- not ``category=NISTPArcLength``, this solver's own
     :attr:`identification`. Neither is a ``*solver`` dataline option (there is no
-    ``SolverSpecificOptions`` entry for either; see :meth:`NISTPArcLength.solveStep`), so both are
+    ``SolverSpecificOptions`` entry for either; see :meth:`NISTPArcLength.beginStep`), so both are
     added here only, not to the parent schema.
     """
 
@@ -78,11 +77,15 @@ class NISTPArcLength(NISTParallel):
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NISTPArcLengthSchema
 
+    #: Not restartable: the arc-length parameter is not checkpointed, so a resumed step would restart
+    #: the load factor from zero.
+    checkpointedState = None
+
     def __init__(self, jobInfo, journal, **kwargs):
         self.Lambda = 0.0
         self.dLambda = 0.0
         self.arcLengthController = None
-        # arcLengthController/stopCondition are not consulted through self.options -- solveStep
+        # arcLengthController/stopCondition are not consulted through self.options -- beginStep
         # reads them from here directly, every step, unconditionally (see applyOptionsOverride).
         self._arcLengthOptions = {}
 
@@ -91,7 +94,7 @@ class NISTPArcLength(NISTParallel):
     def applyOptionsOverride(self, fieldValues: dict) -> None:
         """Split a validated ``>>options`` override between the two storage locations this solver
         actually consults: ``arcLengthController``/``stopCondition`` are read directly out of
-        :attr:`_arcLengthOptions` by :meth:`solveStep` (never through ``self.options``, and not
+        :attr:`_arcLengthOptions` by :meth:`beginStep` (never through ``self.options``, and not
         every step -- only when present), while every inherited ``NISTSchema`` field goes through
         the ordinary ``self.options`` dict via the base implementation.
 
@@ -121,19 +124,7 @@ class NISTPArcLength(NISTParallel):
         if inheritedFieldValues:
             super().applyOptionsOverride(inheritedFieldValues)
 
-    def readRestart(self, restartFile):
-        """Refused: the arc-length parameter is not checkpointed, so a resumed step would restart
-        the load factor from zero.
-
-        Parameters
-        ----------
-        restartFile
-            The open checkpoint to read from.
-        """
-
-        raise RestartError("The {:} solver does not support resuming from a checkpoint.".format(self.identification))
-
-    def solveStep(
+    def beginStep(
         self,
         step: dict,
         model: FEModel,
@@ -187,7 +178,7 @@ class NISTPArcLength(NISTParallel):
             self.arcLengthController = None
             self.dLambda = None
 
-        return super().solveStep(step, model, fieldOutputController, outputmanagers)
+        return super().beginStep(step, model, fieldOutputController, outputmanagers)
 
     def solveIncrement(
         self,

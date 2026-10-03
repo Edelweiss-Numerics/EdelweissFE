@@ -28,8 +28,8 @@
 
 """The structured changeset describing *what* changed in a model mutation, as opposed to the bare
 :class:`~edelweissfe.models.modelchangeobserver.ModelChangeType` marker. A modifier (e.g. AMR)
-populates one from the delta it already computes; :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.notifyModelChanged`
-records it (bumping ``model.topology.version``) and passes it to any registered push observers.
+populates one from the delta it already computes; :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.recordChange`
+records it, bumping ``model.topology.version``.
 
 A pull-based consumer instead compares its own last-seen version against ``model.topology.version``
 at its own next tick and, on a mismatch, reconciles from ``model.topology.changesSince(lastSeenVersion)`` --

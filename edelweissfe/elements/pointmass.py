@@ -121,6 +121,26 @@ class PointMass(BaseElement):
     def setNodes(self, nodes: list):
         self._nodes = nodes
 
+    def getStateVars(self) -> np.ndarray:
+        """This element carries no state from one increment to the next.
+
+        Returns
+        -------
+        np.ndarray
+            An empty buffer.
+        """
+
+        return np.empty(0)
+
+    def setStateVars(self, values: np.ndarray):
+        """Nothing to restore: this element carries no state.
+
+        Parameters
+        ----------
+        values
+            The empty buffer :meth:`getStateVars` returned.
+        """
+
     def acceptLastState(self):
         pass
 

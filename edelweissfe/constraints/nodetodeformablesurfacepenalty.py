@@ -1012,7 +1012,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         return self._assignMasterFacets(unpackAssignment(projection["assignedFacetIdx"]))
 
     def getRestartData(self) -> dict[str, np.ndarray]:
-        """Return the frozen projection and the frictional and augmented-Lagrange history."""
+        """Return the frozen projection and the frictional and augmented-Lagrange history. Overridden
+        rather than declared: the frozen projection is packed by :class:`FrozenContactSearch`."""
 
         return super().getRestartData() | {
             "tangentialForceConverged": self._tangentialForceConverged,

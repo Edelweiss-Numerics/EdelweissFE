@@ -120,7 +120,7 @@ those fields keep the parent's quasi-static treatment. A nonzero inertia an elem
 a rotational inertia, or the micro-inertia of a gradient-enhanced element -- is discarded with a
 warning, once per field. A model with no such field is refused.
 
-**Zero-length and negligible increments.** The time stepper yields a zero-length increment before
+**Zero-length and negligible increments.** The time stepper proposes a zero-length increment before
 the first real one of every step. A quasi-static solver equilibrates it; this solver skips it with
 the state kept, because in zero time nothing can move: displacement and velocity are continuous,
 and a load appearing at that instant is answered by the acceleration below, not by a displacement.
@@ -362,6 +362,9 @@ class _ConservedQuantities:
     momentum: np.ndarray
     kineticEnergy: float
 
+    #: Restored with the solver that measured it; see :attr:`NonlinearImplicitDynamic.checkpointedState`.
+    checkpointedState = {"massByField": dict, "momentum": np.ndarray, "kineticEnergy": float}
+
 
 class NonlinearImplicitDynamic(NIST):
     """This is the Nonlinear Implicit Dynamic -- solver (``NID``), Newmark-beta time integration on
@@ -385,6 +388,14 @@ class NonlinearImplicitDynamic(NIST):
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NIDSchema
 
+    #: The predictor's state, as in the parent, the drift the conservation checks accumulate over the
+    #: step, and the conserved totals after the last accepted increment, which a topology change is
+    #: compared against. The velocity and acceleration are node-field entries, restored with the model.
+    checkpointedState = NIST.checkpointedState | {
+        "_conservationCheck": ConservationCheck,
+        "_conservedAtLastAccept": _ConservedQuantities,
+    }
+
     SolverSpecificOptions = NIST.SolverSpecificOptions | {
         "newmarkBeta": 0.25,
         "newmarkGamma": 0.5,
@@ -399,7 +410,7 @@ class NonlinearImplicitDynamic(NIST):
         #: first increment of a step has built it. See :class:`_NewmarkSystem`.
         self._newmarkSystem = None
         #: Whether the next increment has to compute the acceleration from equilibrium first.
-        #: Armed by :meth:`solveStep` for a step starting cold, disarmed by the increment that
+        #: Armed by :meth:`beginStep` for a step starting cold, disarmed by the increment that
         #: consumes it.
         self._initialAccelerationPending = False
         #: Length of ``model.topology.history`` when the current equation system was assembled.
@@ -448,14 +459,14 @@ class NonlinearImplicitDynamic(NIST):
                 1,
             )
 
-    def solveStep(
+    def beginStep(
         self,
         step,
         model: FEModel,
         fieldOutputController: FieldOutputController,
         outputmanagers: dict[str, OutputManagerBase],
     ):
-        """Public interface to solve for a step; see the parent.
+        """Start a step; see the parent.
 
         Arms the initial-acceleration computation for a step starting cold and drops the operators
         of the previous step -- the parent rebuilds its equation system at the start of every step,
@@ -480,10 +491,12 @@ class NonlinearImplicitDynamic(NIST):
 
         self._newmarkSystem = None
         self._conservationCheck.reset()
+        #: Mass, momentum and kinetic energy after the last accepted increment of this step, or None.
+        self._conservedAtLastAccept = None
         # The mesh the step starts on, restored or not: a topology change is a change from this.
         self._topologyRecordsAtLastBuild = len(model.topology.history)
 
-        resumed = step.isResumed
+        resumed = not step.timeStepper.isAtStepStart()
         self._initialAccelerationPending = bool(self.options["computeInitialAcceleration"]) and not resumed
 
         self.journal.message(
@@ -504,7 +517,7 @@ class NonlinearImplicitDynamic(NIST):
             1,
         )
 
-        return super().solveStep(step, model, fieldOutputController, outputmanagers)
+        return super().beginStep(step, model, fieldOutputController, outputmanagers)
 
     def solveIncrement(
         self,
@@ -574,7 +587,7 @@ class NonlinearImplicitDynamic(NIST):
             # equilibrium solve for the initial acceleration provides -- not as a displacement.
             # The parent's quasi-static solve would instead put the model at static equilibrium
             # with the new load in zero time; for a suddenly applied load that is the whole dynamic
-            # response, skipped before it began. The time stepper yields one such increment before
+            # response, skipped before it began. The time stepper proposes one such increment before
             # the first real one of every step, so this is the ordinary path, not an edge case.
             #
             # An increment that is merely NEGLIGIBLE is treated the same way, for a different
@@ -713,6 +726,9 @@ class NonlinearImplicitDynamic(NIST):
 
         kineticEnergy = 0.5 * float(np.dot(np.asarray(system.V), system.M @ np.asarray(system.V)))
         self.journal.message("kinetic energy {:e}".format(kineticEnergy), self.identification, 2)
+
+        # What a topology change before the next increment is compared against.
+        self._conservedAtLastAccept = self._conservedQuantities(system, model)
 
     @staticmethod
     def _newmarkVelocityAndAcceleration(
@@ -876,9 +892,9 @@ class NonlinearImplicitDynamic(NIST):
         )
 
         if dofManagerChanged and topologyChanged:
-            if system is not None:
+            if self._conservedAtLastAccept is not None:
                 self.reportTopologyChangeConservation(
-                    self._conservedQuantities(system, model),
+                    self._conservedAtLastAccept,
                     self._conservedQuantities(self._newmarkSystem, model),
                 )
             self._initialAccelerationPending = bool(self.options["computeInitialAcceleration"])

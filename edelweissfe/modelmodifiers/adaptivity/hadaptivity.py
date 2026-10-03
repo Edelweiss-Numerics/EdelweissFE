@@ -267,6 +267,9 @@ class ModelModifier(ModelModifierBase):
     #: Module-based mechanism below.
     schema = HAdaptivitySchema
 
+    #: Whether the step-start markers are still to be evaluated: they act on the first decision only.
+    checkpointedState = {"_isFirstCall": bool}
+
     def __init__(self, name: str, model: FEModel, journal: Journal, *args, **kwargs):
         super().__init__(name, model, journal, *args, **kwargs)
         options = buildSchemaFromOptions(HAdaptivitySchema, kwargs)
@@ -465,7 +468,7 @@ class ModelModifier(ModelModifierBase):
         return all(marker.initialOnly for marker in self.markers)
 
     @timeit("AMR")
-    def plan(self, model: FEModel, change, step, timeStep: float) -> "RefinementPlan | None":
+    def plan(self, model: FEModel, change, step) -> "RefinementPlan | None":
         """Evaluate the markers and decide which octree cells to refine. See
         :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan`.
 
@@ -533,9 +536,11 @@ class ModelModifier(ModelModifierBase):
         octree split, 2:1 balance, hanging-node MPCs, element/node/set bookkeeping, and the
         :class:`ModelChange` notification.
 
-        Pure octree/topology mechanics with no dependence on solution history, which is what lets a
-        live run and a restart replay share it: given the same plan they produce byte-identical
-        topology, element numbers included. See
+        The topology is a pure function of the plan, which is what lets a live run and a restart
+        replay share this method: given the same plan they produce byte-identical topology, element
+        numbers included. It also transfers the solution state onto the new elements and nodes; in
+        a replay that transfer acts on the initial state and is then overwritten by the checkpoint's
+        state, so it costs time but cannot change the result. See
         :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply`.
 
         Parameters
@@ -957,13 +962,3 @@ class ModelModifier(ModelModifierBase):
         """Inverse of :meth:`encodePlan`."""
 
         return RefinementPlan(eids=[int(eid) for eid in data["eids"]])
-
-    def restoreDecisionState(self, records) -> None:
-        """Re-establish what the *next* decision needs, after a restart replay.
-
-        Only the initial-marker latch: every checkpoint is written after the step-start topology
-        update, so a resumed run never makes this modifier's first call. Everything else
-        :meth:`plan` reads is the restored model and solution state.
-        """
-
-        self._isFirstCall = False

@@ -50,7 +50,7 @@ from edelweissfe.helpers.inputfilehelpers import (
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel, printPrettyModelSummary
 from edelweissfe.utils.checkpoint import ResumeCheckpoint
-from edelweissfe.utils.exceptions import StepFailed
+from edelweissfe.utils.exceptions import RestartError, StepFailed
 from edelweissfe.utils.fieldoutput import FieldOutputController
 
 
@@ -161,10 +161,10 @@ def finiteElementSimulation(
     # exist (createFieldValueEntry above) and after advanceToTime's cold-start bookkeeping, which
     # would otherwise clobber model.time back to job['startTime'].
     #
-    # Limitation: resuming skips every step before the checkpoint's step entirely. Topology changes
-    # made by model modifiers (e.g. AMR) are not affected -- readRestart replays them from the
-    # checkpoint's topology history -- but the step actions of a skipped step never run, so a
-    # one-off model change such as a `modelupdate` in a skipped step is lost on resume.
+    # Resuming skips every step before the checkpoint's step. Topology changes made by model
+    # modifiers (e.g. AMR) are replayed from the checkpoint's topology history. A `modelupdate`
+    # executes an arbitrary expression, whose effect no checkpoint records -- so a resume past one,
+    # in a skipped step or at the start of the resumed step, is refused.
     restartDefinitions = inputfile["restart"]
     resumeCheckpoint = None
     resumeStepNumber = None
@@ -184,7 +184,7 @@ def finiteElementSimulation(
     stepManager = createStepManagerFromInputFile(inputfile)
     fieldOutputController = createFieldOutputFromInputFile(inputfile, model, journal)
     model.fieldOutputController = fieldOutputController
-    fieldOutputController.initializeJob(resuming=resumeCheckpoint is not None)
+    fieldOutputController.initializeJob()
 
     outputManagers = createOutputManagersFromInputFile(
         inputfile, jobName, model, fieldOutputController, journal, plotter
@@ -212,27 +212,26 @@ def finiteElementSimulation(
     model.outputManagers = {outputManager.name: outputManager for outputManager in outputManagers}
 
     # The output managers exist only now, well after the model was restored above.
-    if resumeCheckpoint is not None:
-        resumeCheckpoint.restoreOutputManagers(model.outputManagers)
-
     try:
         for step in stepManager.generateSteps(jobInfo, model, fieldOutputController, journal, solvers, outputManagers):
             if resumeStepNumber is not None:
+                if step.actions["modelupdate"]:
+                    raise RestartError(
+                        "step {:} has a modelupdate, whose effect is not recorded in a checkpoint, so "
+                        "the run cannot be resumed after it".format(step.number)
+                    )
                 if step.number < resumeStepNumber:
-                    # Constructed (so its StepActions register/accumulate normally, see the comment
-                    # above) but not solved -- it already ran, in full, before the interrupted job
-                    # wrote this checkpoint.
+                    # Constructed, so that its step actions exist, but not solved: it already ran
+                    # before the interrupted job wrote this checkpoint, and the state its step
+                    # actions carried over is restored with the resumed step.
                     continue
-                if step.number == resumeStepNumber:
-                    resumeCheckpoint.restoreStep(step)
-                    resumeStepNumber = None
-                    # Closed here, not after the step loop: see ResumeCheckpoint.close.
-                    resumeCheckpoint.close()
-                    resumeCheckpoint = None
+            resumeFrom = None
+            if step.number == resumeStepNumber:
+                resumeFrom, resumeStepNumber = resumeCheckpoint, None
 
             tic = getCurrentTime()
             try:
-                step.solve()
+                step.solve(resumeFrom)
             finally:
                 # Record inside finally so a step that raises (e.g. via a deliberate
                 # maxNumInc cap) still counts its elapsed time -- previously this sat after

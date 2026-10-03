@@ -121,6 +121,9 @@ class StepAction(StepActionBase):
     #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = IndirectContractionControlSchema
 
+    #: The controlled quantity at the end of the previous step, and its current value.
+    checkpointedState = {"currentL0": float, "_currentL": float}
+
     def __init__(
         self,
         name: str,

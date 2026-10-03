@@ -88,6 +88,9 @@ class OutputManager(OutputManagerBase):
     #: Option schema for this output manager, per OptionSchemaProvider.
     schema = PlotAlongPathSchema
 
+    #: The plot stages still ahead in the step: consumed as the analysis passes them.
+    checkpointedState = {"plotStages": np.ndarray}
+
     def __init__(
         self,
         name: str,

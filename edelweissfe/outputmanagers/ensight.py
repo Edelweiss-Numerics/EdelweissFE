@@ -1223,7 +1223,7 @@ class OutputManager(OutputManagerBase):
     ):
         self.ensightCase.finalize(replaceTimeValuesByEnumeration=False)
 
-    def getRestartData(self) -> dict[str, np.ndarray] | None:
+    def getRestartData(self) -> dict[str, np.ndarray]:
         """This export's transient-sequence bookkeeping: each Ensight time/file set's history of
         already-written time values (flattened CSR-style, since sets can have different lengths),
         which geometry trends have ever been written (name -> time/file set number -- unlike
@@ -1240,12 +1240,12 @@ class OutputManager(OutputManagerBase):
         trend registration above is a separate, independently-necessary piece for the ``.case``
         file to still reference the geometry at all.
 
-        ``None`` if nothing has been written yet (nothing to restore).
+        Empty if nothing has been written yet (nothing to restore).
         """
 
         timeAndFileSets = self.ensightCase.timeAndFileSets
         if not timeAndFileSets:
-            return None
+            return {}
 
         setNumbers = sorted(timeAndFileSets)
         sizes = [len(timeAndFileSets[n].timeValues) for n in setNumbers]
@@ -1270,6 +1270,9 @@ class OutputManager(OutputManagerBase):
         """Restore this export's transient-sequence bookkeeping from a restart checkpoint written
         by :meth:`getRestartData`, so the next chunk written continues the existing sequence
         (correct file numbering, correct ``.case`` step list) instead of starting a fresh one."""
+
+        if not data:
+            return
 
         offset = 0
         for setNumber, size in zip(data["setNumbers"], data["timeValueSizes"]):

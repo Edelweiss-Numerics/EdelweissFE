@@ -103,6 +103,15 @@ class FrozenContactSearch(ABC):
         """Install a projection from :meth:`_frozenProjection`; return as ``updateConnectivity``."""
 
     def getRestartData(self) -> dict[str, np.ndarray]:
+        """The frozen projection, packed into flat arrays (it is ragged: per contact point a variable
+        number of weights), together with the contact points and master entities it refers to.
+        Overridden rather than declared: the state is not a plain attribute.
+
+        Returns
+        -------
+        dict[str, numpy.ndarray]
+            The state.
+        """
         layout = {_layoutPrefix + key: value for key, value in self._searchLayout().items()}
         return layout | self._frozenProjection()
 

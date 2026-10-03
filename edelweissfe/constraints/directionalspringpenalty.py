@@ -37,6 +37,7 @@ from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
@@ -70,7 +71,7 @@ class DirectionalSpringPenaltySchema:
     )
 
 
-class Constraint(ConstraintBase):
+class Constraint(ConstraintBase, MeshDependent):
     """A penalty based constraint used for assigning a specific stiffness to the nodes of a
     defined node set.
 
@@ -90,6 +91,9 @@ class Constraint(ConstraintBase):
     #: Option schema for this constraint, per OptionSchemaProvider.
     schema = DirectionalSpringPenaltySchema
 
+    #: Carries nothing from one increment to the next.
+    checkpointedState = {}
+
     def __init__(
         self,
         name: str,
@@ -108,6 +112,8 @@ class Constraint(ConstraintBase):
 
         self.active = True
 
+        self._lastSeenTopologyVersion = model.topology.version
+        model.topology.registerMeshDependent(self)
         self._rebuildDerivedState()
 
     @classmethod
@@ -149,16 +155,15 @@ class Constraint(ConstraintBase):
     def nDof(self) -> int:
         return self._nDof
 
-    def updateConnectivity(self, model) -> bool:
-        """Called once per increment, before the equation system is (re)built. Recomputes the
-        node-set-sized derived state (see :meth:`_rebuildDerivedState`) if the constrained node set
-        was mutated in-place since the last check, and reports the change so the caller rebuilds
-        the equation system even on an increment where nothing else did."""
+    def refresh(self, model: FEModel, change) -> bool:
+        """Recompute the node-set-sized derived state (see :meth:`_rebuildDerivedState`) if a
+        topology change touched the constrained node set; see
+        :class:`~edelweissfe.models.meshdependent.MeshDependent`."""
 
-        if self._checkSetChanged(self._nodes):
-            self._rebuildDerivedState()
-            return True
-        return False
+        if not change.touchesNodeSet(self._nodes.name):
+            return False
+        self._rebuildDerivedState()
+        return True
 
     def applyConstraint(
         self,
