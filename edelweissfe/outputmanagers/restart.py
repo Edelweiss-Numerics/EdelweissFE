@@ -30,11 +30,10 @@ import os
 from collections import deque
 from dataclasses import dataclass
 
-import h5py
-
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
+from edelweissfe.utils.checkpoint import writeCheckpoint
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.plotter import Plotter
 from edelweissfe.utils.schema import schemaField
@@ -181,26 +180,7 @@ class OutputManager(OutputManagerBase):
 
         self._incrementsSinceLastWrite = 0
         fileName = self._files.nextFileName()
-        with h5py.File(fileName, "w") as f:
-            f.attrs["stepNumber"] = self._currentStep.number
-            self.model.writeRestart(f)
-            self._currentStep.timeStepper.writeRestart(f)
-            self._currentStep.solver.writeRestart(f)
-
-            # Sibling output managers' own sequence bookkeeping (e.g. Ensight's transient time/file
-            # sets, whose file numbering a resumed run would otherwise restart from zero, orphaning
-            # the pre-resume portion of the sequence). model.outputManagers is already populated by
-            # the time any increment converges -- it's set right after construction, well before
-            # stepping begins -- so it's safe to read here, unlike at readRestart time (see the
-            # driver's own restore pass for why that side needs separate handling).
-            outputManagersGroup = f.create_group("outputManagers")
-            for name, manager in self.model.outputManagers.items():
-                restartData = manager.getRestartData()
-                if restartData is None:
-                    continue
-                managerGroup = outputManagersGroup.create_group(name)
-                for entryName, entryValues in restartData.items():
-                    managerGroup.create_dataset(entryName, data=entryValues)
+        writeCheckpoint(fileName, self.model, self._currentStep, self.model.outputManagers)
 
         self.journal.message("Wrote restart checkpoint {:}".format(fileName), self.identification, 2)
 

@@ -36,8 +36,6 @@ A ``*job`` definition consists of multiple ``*steps``, associated with that job.
 
 from time import time as getCurrentTime
 
-import h5py
-
 from edelweissfe.config.configurator import loadConfiguration, updateConfiguration
 from edelweissfe.config.phenomena import carriesLinearMomentum, domainMapping
 from edelweissfe.config.solvers import getSolverByName
@@ -51,6 +49,7 @@ from edelweissfe.helpers.inputfilehelpers import (
 )
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel, printPrettyModelSummary
+from edelweissfe.utils.checkpoint import ResumeCheckpoint
 from edelweissfe.utils.exceptions import StepFailed
 from edelweissfe.utils.fieldoutput import FieldOutputController
 
@@ -170,13 +169,12 @@ def finiteElementSimulation(
     resumeCheckpoint = None
     resumeStepNumber = None
     if restartDefinitions and restartDefinitions[0].get("readFrom"):
-        checkpointPath = restartDefinitions[0]["readFrom"]
-        resumeCheckpoint = h5py.File(checkpointPath, "r")
-        resumeStepNumber = int(resumeCheckpoint.attrs["stepNumber"])
-        model.readRestart(resumeCheckpoint, journal)
+        resumeCheckpoint = ResumeCheckpoint(restartDefinitions[0]["readFrom"])
+        resumeStepNumber = resumeCheckpoint.stepNumber
+        resumeCheckpoint.restoreModel(model, journal)
         journal.message(
             "Resuming from restart checkpoint {:} (step {:}, time {:})".format(
-                checkpointPath, resumeStepNumber, model.time
+                resumeCheckpoint.fileName, resumeStepNumber, model.time
             ),
             identification,
             0,
@@ -213,20 +211,9 @@ def finiteElementSimulation(
     model.solvers = solvers
     model.outputManagers = {outputManager.name: outputManager for outputManager in outputManagers}
 
-    # Output managers don't exist yet at the earlier model.readRestart(resumeCheckpoint) call
-    # above (they're constructed here, well after) -- restore whichever of them wrote restart data
-    # (see outputmanagers/restart.py's finalizeIncrement) now that they do, and while the
-    # checkpoint is still open. Ensight is the motivating case: without this, its transient
-    # sequence numbering (derived from its own history of already-written time values) would
-    # restart from zero, orphaning the pre-resume portion of the sequence.
-    if resumeCheckpoint is not None and "outputManagers" in resumeCheckpoint:
-        for name, outputManager in model.outputManagers.items():
-            if name not in resumeCheckpoint["outputManagers"]:
-                continue
-            restartData = {
-                entryName: values[:] for entryName, values in resumeCheckpoint["outputManagers"][name].items()
-            }
-            outputManager.setRestartData(restartData)
+    # The output managers exist only now, well after the model was restored above.
+    if resumeCheckpoint is not None:
+        resumeCheckpoint.restoreOutputManagers(model.outputManagers)
 
     try:
         for step in stepManager.generateSteps(jobInfo, model, fieldOutputController, journal, solvers, outputManagers):
@@ -237,19 +224,9 @@ def finiteElementSimulation(
                     # wrote this checkpoint.
                     continue
                 if step.number == resumeStepNumber:
-                    step.timeStepper.readRestart(resumeCheckpoint)
-                    # Accumulators the solver cannot recompute from the converged solution -- the
-                    # explicit solver's external work is one; see its own readRestart.
-                    step.solver.readRestart(resumeCheckpoint)
+                    resumeCheckpoint.restoreStep(step)
                     resumeStepNumber = None
-
-                    # Nothing reads the checkpoint after this point, and it must not stay open:
-                    # the restart output manager's ring buffer rotates onto the oldest slot by
-                    # mtime, which -- once the ring has filled -- can be this very file, and HDF5
-                    # cannot truncate a file it still holds open. The resumed run then dies
-                    # mid-step with "unable to truncate a file which is already open", which reads
-                    # like a solver failure and is not one. Closing it here rather than after the
-                    # step loop is what keeps the writer's slot free.
+                    # Closed here, not after the step loop: see ResumeCheckpoint.close.
                     resumeCheckpoint.close()
                     resumeCheckpoint = None
 
