@@ -41,6 +41,13 @@ reads one back, the driver uses it.
 
 import h5py
 
+from edelweissfe.utils.exceptions import RestartError
+
+#: The layout of a checkpoint. Raise it whenever a checkpoint gains or changes state: a run resumes
+#: only from checkpoints of its own layout, so a missing piece of state is refused up front instead
+#: of surfacing as a lookup error deep inside some reader -- or as silently missing state.
+CHECKPOINT_FORMAT_VERSION = 2
+
 
 def writeRestartDataOf(group: h5py.Group, entities: dict):
     """Store the restart data of each entity in its own subgroup, named after it.
@@ -99,6 +106,7 @@ def writeCheckpoint(fileName: str, model, step, outputManagers: dict):
     """
 
     with h5py.File(fileName, "w") as f:
+        f.attrs["formatVersion"] = CHECKPOINT_FORMAT_VERSION
         f.attrs["stepNumber"] = step.number
         model.writeRestart(f)
         step.timeStepper.writeRestart(f)
@@ -123,6 +131,13 @@ class ResumeCheckpoint:
     def __init__(self, fileName: str):
         self.fileName = fileName
         self._file = h5py.File(fileName, "r")
+        formatVersion = int(self._file.attrs.get("formatVersion", 1))
+        if formatVersion != CHECKPOINT_FORMAT_VERSION:
+            self._file.close()
+            raise RestartError(
+                "checkpoint {:} has format version {:}, this version of EdelweissFE reads version {:} "
+                "only".format(fileName, formatVersion, CHECKPOINT_FORMAT_VERSION)
+            )
         #: The step the checkpointed run was in; the steps before it are not solved again.
         self.stepNumber = int(self._file.attrs["stepNumber"])
 
@@ -147,8 +162,7 @@ class ResumeCheckpoint:
         before the checkpoint.
         """
 
-        if "outputManagers" in self._file:
-            readRestartDataInto(self._file["outputManagers"], outputManagers)
+        readRestartDataInto(self._file["outputManagers"], outputManagers)
 
     def restoreStep(self, step):
         """Continue ``step`` from the checkpoint, when the resumed step begins: its time stepper's
