@@ -212,47 +212,6 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
 
         self.scalarVariables = scalarVariables
 
-    def _checkSetChanged(self, theSet) -> bool:
-        """Lazily detect whether ``theSet`` (a stable-identity
-        :class:`~edelweissfe.sets.nodeset.NodeSet` or :class:`~edelweissfe.sets.elementset.ElementSet`)
-        was mutated in-place (e.g. by AMR) since this constraint last checked it.
-
-        A constraint that pre-sizes a derived array to the set's size calls this at its own
-        per-increment entry point (e.g. :meth:`updateConnectivity`) to recompute that array
-        lazily, without registering as a
-        :class:`~edelweissfe.models.meshdependent.MeshDependent`.
-
-        Parameters
-        ----------
-        theSet
-            The set whose version is being tracked.
-
-        Returns
-        -------
-        bool
-            True if ``theSet`` changed since its version was last recorded or checked.
-        """
-        setVersions = self.__dict__.setdefault("_setVersions", {})
-        if id(theSet) not in setVersions:
-            raise RuntimeError(
-                f"{type(self).__name__}: a set is checked for changes, but the state derived "
-                "from it never recorded its version (call _recordSetVersion where that state is built)."
-            )
-        changed = setVersions[id(theSet)] != theSet._version
-        setVersions[id(theSet)] = theSet._version
-        return changed
-
-    def _recordSetVersion(self, theSet):
-        """Record the version of ``theSet`` that derived state was just built from, so the next
-        :meth:`_checkSetChanged` reports any change after this point -- including the first one.
-
-        Parameters
-        ----------
-        theSet
-            The set the derived state was built from.
-        """
-        self.__dict__.setdefault("_setVersions", {})[id(theSet)] = theSet._version
-
     def applyConstraintExplicit(
         self,
         U_np: np.ndarray,
