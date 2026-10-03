@@ -97,14 +97,14 @@ class TestSurfaceToDiscreteRigidBodyContact(unittest.TestCase):
         box.save(stlFile)
 
         model = FEModel(3)
-        with model.topologyChanges():
+        with model.topology.changes():
             nodes = []
             coordinates = _hexa20Coordinates(0.0)
-            for label, x in zip(model.reserveNodeNumbers(len(coordinates)), coordinates):
+            for label, x in zip(model.topology.reserveNodeNumbers(len(coordinates)), coordinates):
                 node = Node(label, x)
                 model.nodes[label] = node
                 nodes.append(node)
-            (elNumber,) = model.reserveElementNumbers(1)
+            (elNumber,) = model.topology.reserveElementNumbers(1)
             element = DisplacementElement("C3D20", elNumber)
             element.setNodes(nodes)
             model.createElement(element)
@@ -113,11 +113,11 @@ class TestSurfaceToDiscreteRigidBodyContact(unittest.TestCase):
             if mixedElements:
                 # A hexa8 cube next to the hexa20 one, for a slave surface of two element types.
                 hexa8Nodes = []
-                for label, x in zip(model.reserveNodeNumbers(8), coordinates[:8]):
+                for label, x in zip(model.topology.reserveNodeNumbers(8), coordinates[:8]):
                     node = Node(label, x + np.array([_SIDE, 0.0, 0.0]))
                     model.nodes[label] = node
                     hexa8Nodes.append(node)
-                (elNumber,) = model.reserveElementNumbers(1)
+                (elNumber,) = model.topology.reserveElementNumbers(1)
                 hexa8 = DisplacementElement("C3D8", elNumber)
                 hexa8.setNodes(hexa8Nodes)
                 model.createElement(hexa8)

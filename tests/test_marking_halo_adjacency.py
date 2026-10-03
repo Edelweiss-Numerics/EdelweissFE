@@ -179,7 +179,7 @@ def test_kept_adjacency_marks_exactly_what_a_fresh_build_marks(tmp_path, monkeyp
         marked = _MARKERS[0].mark(model, amr._refineableElements, amr._mesh)
         elForEid = {element: eid for eid, element in amr._eidToEl.items()}
         plan = RefinementPlan(eids=[elForEid[element] for element in sorted(marked, key=lambda e: e.elNumber)])
-        with model.topologyChanges():
+        with model.topology.changes():
             amr.apply(model, plan)
         _assertMarksMatchReference(model, amr)
 
@@ -202,14 +202,14 @@ def test_replayed_refinement_marks_what_the_live_run_marked(tmp_path, monkeypatc
         marked = _MARKERS[0].mark(live, liveAmr._refineableElements, liveAmr._mesh)
         elForEid = {element: eid for eid, element in liveAmr._eidToEl.items()}
         plans.append(RefinementPlan(eids=[elForEid[element] for element in sorted(marked, key=lambda e: e.elNumber)]))
-        with live.topologyChanges():
+        with live.topology.changes():
             liveAmr.apply(live, plans[-1])
 
     # the replayed modifier marks once on the unrefined mesh first, so it holds an adjacency the
     # replay has to discard
     _MARKERS[0].mark(replayed, replayedAmr._refineableElements, replayedAmr._mesh)
     for plan in plans:
-        with replayed.topologyChanges():
+        with replayed.topology.changes():
             replayedAmr.apply(replayed, plan)
 
     for marker in _MARKERS:

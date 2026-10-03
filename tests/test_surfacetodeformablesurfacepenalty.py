@@ -81,7 +81,7 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
         model = FEModel(3)
         label = 1
         elements = {}
-        with model.topologyChanges():
+        with model.topology.changes():
             for key, yOffset in (("upper", 0.0), ("lower", -_SIDE + penetration)):
                 nodes = []
                 for x in _hexa20Coordinates(yOffset):
@@ -89,7 +89,7 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
                     model.nodes[label] = node
                     nodes.append(node)
                     label += 1
-                (elNumber,) = model.reserveElementNumbers(1)
+                (elNumber,) = model.topology.reserveElementNumbers(1)
                 element = DisplacementElement("C3D20", elNumber)
                 element.setNodes(nodes)
                 model.createElement(element)
@@ -299,7 +299,7 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
         model = FEModel(3)
         label = 1
         elements = {}
-        with model.topologyChanges():
+        with model.topology.changes():
             for key, shift in (
                 ("masterLeft", np.array([0.0, 0.0, 0.0])),
                 ("masterRight", np.array([_SIDE, 0.0, 0.0])),
@@ -311,7 +311,7 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
                     model.nodes[label] = node
                     nodes.append(node)
                     label += 1
-                (elNumber,) = model.reserveElementNumbers(1)
+                (elNumber,) = model.topology.reserveElementNumbers(1)
                 element = DisplacementElement("C3D20", elNumber)
                 element.setNodes(nodes)
                 model.createElement(element)

@@ -116,12 +116,12 @@ class FEModel:
         if not self.topology.isOpen:
             raise TopologyError(
                 "node {:} was created outside a topology change: only model modifiers may create "
-                "or delete nodes, inside FEModel.topologyChanges()".format(node.label)
+                "or delete nodes, inside TopologyPipeline.changes()".format(node.label)
             )
         if node.label in self.nodes:
             raise TopologyError(
                 "node label {:} is already taken -- node labels are reserved via "
-                "FEModel.reserveNodeNumbers() and never recycled".format(node.label)
+                "TopologyPipeline.reserveNodeNumbers() and never recycled".format(node.label)
             )
 
         self.nodes[node.label] = node
@@ -138,12 +138,12 @@ class FEModel:
         if not self.topology.isOpen:
             raise TopologyError(
                 "element {:} was created outside a topology change: only model modifiers may create "
-                "or delete elements, inside FEModel.topologyChanges()".format(element.elNumber)
+                "or delete elements, inside TopologyPipeline.changes()".format(element.elNumber)
             )
         if element.elNumber in self.elements:
             raise TopologyError(
                 "element number {:} is already taken -- element numbers are reserved via "
-                "FEModel.reserveElementNumbers() and never recycled".format(element.elNumber)
+                "TopologyPipeline.reserveElementNumbers() and never recycled".format(element.elNumber)
             )
 
         self.elements[element.elNumber] = element
@@ -160,7 +160,7 @@ class FEModel:
         if not self.topology.isOpen:
             raise TopologyError(
                 "element {:} was deleted outside a topology change: only model modifiers may create "
-                "or delete elements, inside FEModel.topologyChanges()".format(elNumber)
+                "or delete elements, inside TopologyPipeline.changes()".format(elNumber)
             )
 
         del self.elements[elNumber]
@@ -224,7 +224,7 @@ class FEModel:
         nodes
             Nodes to be linked
 
-        Inside a deferring :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyChanges` window this only notes the request; the link is
+        Inside a deferring :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changes` window this only notes the request; the link is
         made once, for these nodes as they are then, when the window closes.
         """
 
@@ -321,7 +321,7 @@ class FEModel:
         Everything here is recomputed from the current elements, constraints and ``nodeSets["all"]``
         -- the node order of the resized fields is the model's node creation order, which is why one
         call after several mutations yields the same layout as one call per mutation. Inside a
-        deferring :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyChanges` window the call is therefore only noted, and made once when
+        deferring :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changes` window the call is therefore only noted, and made once when
         the window closes.
 
         Parameters
@@ -512,11 +512,11 @@ class FEModel:
 
         # The ordered record of every applied model-modifier decision (e.g. AMR refinements). A
         # resumed run replays these through the modifiers' own apply() -- see readRestart and
-        # replayTopologyHistory -- rather than serializing the resulting topology directly, so there
+        # TopologyPipeline.replayHistory -- rather than serializing the resulting topology directly, so there
         # is exactly one code path that mutates topology, live or replayed.
         historyGroup = f.create_group("topologyHistory")
-        historyGroup.attrs["count"] = len(self.topology.topologyHistory)
-        for index, record in enumerate(self.topology.topologyHistory):
+        historyGroup.attrs["count"] = len(self.topology.history)
+        for index, record in enumerate(self.topology.history):
             recordGroup = historyGroup.create_group("{:06d}".format(index))
             recordGroup.attrs["modifier"] = record.modifier
             recordGroup.attrs["roundNumber"] = record.roundNumber
@@ -560,7 +560,7 @@ class FEModel:
                     fingerprint=str(recordGroup.attrs["fingerprint"]),
                 )
             )
-        self.topology.replayTopologyHistory(records, journal)
+        self.topology.replayHistory(records, journal)
 
         for nf in self.nodeFields.values():
             storedField = f["nodeFields"].get(nf.name)
@@ -596,122 +596,6 @@ class FEModel:
                 continue
             restartData = {entryName: values[:] for entryName, values in f["constraints"][name].items()}
             constraint.setRestartData(restartData)
-
-    # Forwarding to model.topology, kept until every caller uses model.topology directly.
-
-    def topologyChanges(self, *args, **kwargs):
-        """Forwards to :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyChanges`."""
-        return self.topology.topologyChanges(*args, **kwargs)
-
-    def reserveElementNumbers(self, *args, **kwargs):
-        """Forwards to :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers`."""
-        return self.topology.reserveElementNumbers(*args, **kwargs)
-
-    def adoptSetupElementNumbers(self, *args, **kwargs):
-        """Forwards to :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.adoptSetupElementNumbers`."""
-        return self.topology.adoptSetupElementNumbers(*args, **kwargs)
-
-    def reserveNodeNumbers(self, *args, **kwargs):
-        """Forwards to :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers`."""
-        return self.topology.reserveNodeNumbers(*args, **kwargs)
-
-    def adoptSetupNodeNumbers(self, *args, **kwargs):
-        """Forwards to :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.adoptSetupNodeNumbers`."""
-        return self.topology.adoptSetupNodeNumbers(*args, **kwargs)
-
-    def ensureSurfaceFacetModifier(self, *args, **kwargs):
-        """Forwards to :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.ensureSurfaceFacetModifier`."""
-        return self.topology.ensureSurfaceFacetModifier(*args, **kwargs)
-
-    def checkModelModifierDomains(self, *args, **kwargs):
-        """Forwards to :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.checkModelModifierDomains`."""
-        return self.topology.checkModelModifierDomains(*args, **kwargs)
-
-    def updateTopology(self, *args, **kwargs):
-        """Forwards to :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.updateTopology`."""
-        return self.topology.updateTopology(*args, **kwargs)
-
-    def topologyFingerprint(self, *args, **kwargs):
-        """Forwards to :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyFingerprint`."""
-        return self.topology.topologyFingerprint(*args, **kwargs)
-
-    def recordTopologyChange(self, *args, **kwargs):
-        """Forwards to :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.recordTopologyChange`."""
-        return self.topology.recordTopologyChange(*args, **kwargs)
-
-    def replayTopologyHistory(self, *args, **kwargs):
-        """Forwards to :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.replayTopologyHistory`."""
-        return self.topology.replayTopologyHistory(*args, **kwargs)
-
-    def registerMeshDependent(self, *args, **kwargs):
-        """Forwards to :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.registerMeshDependent`."""
-        return self.topology.registerMeshDependent(*args, **kwargs)
-
-    def refreshMeshDependents(self, *args, **kwargs):
-        """Forwards to :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents`."""
-        return self.topology.refreshMeshDependents(*args, **kwargs)
-
-    def notifyModelChanged(self, *args, **kwargs):
-        """Forwards to :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.notifyModelChanged`."""
-        return self.topology.notifyModelChanged(*args, **kwargs)
-
-    def changesSince(self, *args, **kwargs):
-        """Forwards to :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changesSince`."""
-        return self.topology.changesSince(*args, **kwargs)
-
-    @property
-    def meshDependents(self):
-        """Forwards to :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.meshDependents`."""
-        return self.topology.meshDependents
-
-    @meshDependents.setter
-    def meshDependents(self, value):
-        self.topology.meshDependents = value
-
-    @property
-    def topologyVersion(self):
-        """Forwards to :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyVersion`."""
-        return self.topology.topologyVersion
-
-    @topologyVersion.setter
-    def topologyVersion(self, value):
-        self.topology.topologyVersion = value
-
-    @property
-    def topologyHistory(self):
-        """Forwards to :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyHistory`."""
-        return self.topology.topologyHistory
-
-    @topologyHistory.setter
-    def topologyHistory(self, value):
-        self.topology.topologyHistory = value
-
-    @property
-    def maxTopologyRounds(self):
-        """Forwards to :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.maxTopologyRounds`."""
-        return self.topology.maxTopologyRounds
-
-    @maxTopologyRounds.setter
-    def maxTopologyRounds(self, value):
-        self.topology.maxTopologyRounds = value
-
-    @property
-    def verifyTopologyFingerprints(self):
-        """Forwards to :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.verifyTopologyFingerprints`."""
-        return self.topology.verifyTopologyFingerprints
-
-    @verifyTopologyFingerprints.setter
-    def verifyTopologyFingerprints(self, value):
-        self.topology.verifyTopologyFingerprints = value
-
-    @property
-    def verifyTopologyFingerprintsPerRecord(self):
-        """Forwards to :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.verifyTopologyFingerprintsPerRecord`."""
-        return self.topology.verifyTopologyFingerprintsPerRecord
-
-    @verifyTopologyFingerprintsPerRecord.setter
-    def verifyTopologyFingerprintsPerRecord(self, value):
-        self.topology.verifyTopologyFingerprintsPerRecord = value
 
 
 def printPrettyModelSummary(model: FEModel, journal: Journal):

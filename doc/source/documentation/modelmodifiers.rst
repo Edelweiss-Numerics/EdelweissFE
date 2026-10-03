@@ -9,7 +9,7 @@ modifier may change the mesh topology itself during an analysis: adding or remov
 elements, re-partitioning element/node sets and surfaces, and reallocating the solution fields.
 A modifier is declared with the ``*modelModifier`` keyword. At the start of every increment the
 solver runs **all** modifiers to a fixed point via
-:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.updateTopology`, then lets mesh-dependent consumers catch
+:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`, then lets mesh-dependent consumers catch
 up, then solves; when the topology changed, the equation system (DOF manager, sparsity pattern,
 solution vectors and any multi-point-constraint transformation) is rebuilt first. A modifier itself
 is written as two halves -- :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan`,
@@ -382,7 +382,7 @@ code the live run executed. The marker evaluation that produced a decision is ne
 :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.encodePlan` and
 :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.decodePlan` so that its
 decision survives a checkpoint; :class:`~edelweissfe.models.femodel.FEModel` records every applied
-decision in :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyHistory` and replays it. An earlier
+decision in :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.history` and replays it. An earlier
 design had each modifier serializing its own history and implementing its own replay, which is
 precisely how a resumed run came to rebuild a differently-numbered mesh -- two implementations of
 one mutation always drift. See :doc:`topologypipeline`.

@@ -217,8 +217,8 @@ class Constraint(ConstraintBase, MeshDependent):
         self.rprpDof = self.nDim + self.nRot
 
         self._nSetName = nSet.name
-        self._lastSeenTopologyVersion = model.topologyVersion
-        model.registerMeshDependent(self)
+        self._lastSeenTopologyVersion = model.topology.version
+        model.topology.registerMeshDependent(self)
         self.slaveNodes = self._slaveNodesFrom(nSet)
         self._rebuildFromSlaveNodes()
 
@@ -281,7 +281,7 @@ class Constraint(ConstraintBase, MeshDependent):
         return True
 
     def updateConnectivity(self, model: FEModel) -> bool:
-        # refreshed by FEModel.refreshMeshDependents; nothing extra to do at this tick
+        # refreshed by TopologyPipeline.refreshMeshDependents; nothing extra to do at this tick
         return False
 
     @property

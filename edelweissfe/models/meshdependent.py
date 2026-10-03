@@ -53,11 +53,11 @@ class MeshDependent(ABC):
     def refresh(self, model, change) -> bool:
         """Patch cached mesh-derived state to account for ``change`` (a
         :class:`~edelweissfe.models.modelchange.ModelChange`). Called only when the model's
-        ``topologyVersion`` actually advanced since this consumer last checked.
+        ``model.topology.version`` actually advanced since this consumer last checked.
 
         **Must not create or delete elements or nodes.** Topology is a model modifier's business,
         and the topology window is closed by the time this runs (see
-        :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyChanges`), so an attempt raises.
+        :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changes`), so an attempt raises.
 
         Returns
         -------
@@ -79,8 +79,8 @@ class MeshDependent(ABC):
             override -- a mesh mutation this consumer didn't care about shouldn't, on its own,
             force an equation-system rebuild).
         """
-        if model.topologyVersion == self._lastSeenTopologyVersion:
+        if model.topology.version == self._lastSeenTopologyVersion:
             return False
-        change = model.changesSince(self._lastSeenTopologyVersion)
-        self._lastSeenTopologyVersion = model.topologyVersion
+        change = model.topology.changesSince(self._lastSeenTopologyVersion)
+        self._lastSeenTopologyVersion = model.topology.version
         return change is not None and self.refresh(model, change)

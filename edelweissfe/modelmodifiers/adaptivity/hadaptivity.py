@@ -309,7 +309,7 @@ class ModelModifier(ModelModifierBase):
         self.minMarkedElements = max(1, options.minMarkedElements)
         self._pendingMarkedElements = set()  # elements marked but not yet refined (below minMarkedElements)
         # Diagnostics only, for the journal and for tests. The authoritative record of what this
-        # modifier did -- the one a restart replays -- is model.topologyHistory.
+        # modifier did -- the one a restart replays -- is model.topology.history.
         self._committedOccasions = []
         self.splitFactor = options.splitFactor
         self._stateTransfer = _buildStateTransferStrategy(options.stateTransfer, options.stateTransferOverrides)
@@ -349,7 +349,7 @@ class ModelModifier(ModelModifierBase):
             )
 
         # Which elements this instance owns. Checked pairwise against every other modifier by
-        # FEModel.checkModelModifierDomains at the end of setup -- two hAdaptivity instances cannot
+        # TopologyPipeline.checkModelModifierDomains at the end of setup -- two hAdaptivity instances cannot
         # independently own overlapping elements, since each maintains its own AdaptiveMesh mirror
         # and materializes/deletes elements directly in the model.
         self._refineElementNumbers = {el.elNumber for el in refineElements}
@@ -372,7 +372,7 @@ class ModelModifier(ModelModifierBase):
         # The mirror mints its new node labels from the model's own allocator, so octree and
         # model share one monotonic node counter instead of each keeping their own.
         self._mesh = AdaptiveMesh(
-            splitFactor=self.splitFactor, topology=self._topology, reserve_labels=model.reserveNodeNumbers
+            splitFactor=self.splitFactor, topology=self._topology, reserve_labels=model.topology.reserveNodeNumbers
         )
         self._eidToEl = {}  # mesh element id -> live element
         #: Diagnostics only, parallel to _committedOccasions; see there.
@@ -595,7 +595,7 @@ class ModelModifier(ModelModifierBase):
 
         self._hanging.setRecords(records)
         # The change is not announced here: it is returned below, and the pipeline records it (see
-        # FEModel.recordTopologyChange). Consumers re-index later, once, in refreshMeshDependents.
+        # TopologyPipeline.recordChange). Consumers re-index later, once, in refreshMeshDependents.
         self._journal.message(
             "AMR ModelModifier: marked {:}, refined -> active elements {:} -> {:}, {:} hanging nodes".format(
                 len(markedEids), nBefore, len(self._mesh.active()), len(records)
@@ -627,7 +627,7 @@ class ModelModifier(ModelModifierBase):
         6. resize the node fields and write the warm-start values.
 
         Everything here runs identically live and on restart replay: ``apply()`` is one code path.
-        Element numbers come from the model's single allocator (:meth:`FEModel.reserveElementNumbers`);
+        Element numbers come from the model's single allocator (:meth:`TopologyPipeline.reserveElementNumbers`);
         this modifier keeps no counter of its own, so labels claimed by other consumers in between
         can never collide with it.
 
@@ -783,7 +783,7 @@ class ModelModifier(ModelModifierBase):
                     "disagree about which elements exist.".format(len(pending), sorted(pending)[0])
                 )
             change = ModelChange(kind=ModelChangeType.REFINEMENT)
-            childNumbers = model.reserveElementNumbers(len(levelEids))
+            childNumbers = model.topology.reserveElementNumbers(len(levelEids))
             with timeit("elements & state transfer"):
                 for eid, elNumber in zip(levelEids, childNumbers):
                     self._createChildElement(model, eid, elNumber, newNodes, oldValues, newValues, change)
@@ -942,7 +942,7 @@ class ModelModifier(ModelModifierBase):
         solvers) get just their own value.
 
         On the replay path the model postpones the resize to the end of the replay window -- see
-        :meth:`FEModel.topologyChanges` -- so the writes below are then dead work, overwritten by
+        :meth:`TopologyPipeline.changes` -- so the writes below are then dead work, overwritten by
         readRestart. The decision lives in the model: this method issues the same calls either way.
         """
 

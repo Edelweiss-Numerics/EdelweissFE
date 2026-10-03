@@ -118,7 +118,7 @@ def _driveMirrorAhead(model, modifier, levels: int):
     mesh = modifier._mesh
     deepest = max(mesh.active(), key=lambda e: mesh.elements[e]["coords"][:, 0].min())
     interface = mesh.elements[deepest]["coords"][:, 0].min()
-    with model.topologyChanges():
+    with model.topology.changes():
         for _ in range(levels):
             mesh.refine(deepest)
             deepest = _childTowards(mesh, deepest, interface)
@@ -136,7 +136,7 @@ def test_a_cascade_materialises_every_level_it_produced(tmp_path):
     _driveMirrorAhead(model, amr, 3)
     createdBefore = set(mesh.elements)
 
-    with model.topologyChanges():
+    with model.topology.changes():
         change = amr.apply(model, RefinementPlan(eids=[]))
 
     # 2:1 balancing had to cascade: it refined at least one cell that did not exist when apply()
@@ -173,13 +173,13 @@ def test_a_fully_resplit_parent_leaves_nothing_behind(tmp_path):
     mesh = amr._mesh
 
     root = max(mesh.active(), key=lambda e: mesh.elements[e]["coords"][:, 0].min())
-    with model.topologyChanges():  # the mirror mints its node labels from the model's allocator
+    with model.topology.changes():  # the mirror mints its node labels from the model's allocator
         mesh.refine(root)
         for child in list(mesh.elements[root]["children"]):
             mesh.refine(child)
     assert not any(mesh.elements[c]["active"] for c in mesh.elements[root]["children"])
 
-    with model.topologyChanges():
+    with model.topology.changes():
         amr.apply(model, RefinementPlan(eids=[]))
 
     assert set(amr._eidToEl) == set(mesh.active())
@@ -199,7 +199,7 @@ def test_an_orphaned_active_cell_is_reported_rather_than_dropped(tmp_path):
     amr._eidToEl.pop(orphan)
 
     with pytest.raises(TopologyError, match="no materialised ancestor"):
-        with model.topologyChanges():
+        with model.topology.changes():
             amr.apply(model, RefinementPlan(eids=[]))
 
 
@@ -221,7 +221,7 @@ def test_the_warm_start_reaches_the_deepest_new_nodes(tmp_path):
         nodeField["P"][idx, 0] = node.coordinates[0]
 
     _driveMirrorAhead(model, amr, 3)
-    with model.topologyChanges():
+    with model.topology.changes():
         amr.apply(model, RefinementPlan(eids=[]))
 
     nodeField = model.nodeFields["displacement"]

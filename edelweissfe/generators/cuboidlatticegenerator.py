@@ -233,9 +233,9 @@ class Generator(GeneratorBase):
         # This generator REPLACES the element dict wholesale, with its own 1..N numbering, rather
         # than creating elements through the model. Tell the allocator about those numbers, so that
         # everything minted afterwards (contact facets, rigid-body point masses, model modifiers)
-        # cannot collide with them. See FEModel.adoptSetupElementNumbers.
+        # cannot collide with them. See TopologyPipeline.adoptSetupElementNumbers.
         model.elements = elements
-        model.adoptSetupElementNumbers()
+        model.topology.adoptSetupElementNumbers()
 
         # get unit cell dimensions
         x_min = 0
@@ -255,7 +255,7 @@ class Generator(GeneratorBase):
             node.label = nodel_label_to_index[node.label] + 1  # re-label nodes to have continuous numbering
         # Same story as the elements above, for the node dict this generator also replaces
         # wholesale: the replications below mint their labels from the allocator.
-        model.adoptSetupNodeNumbers()
+        model.topology.adoptSetupNodeNumbers()
 
         # replicate the mesh of the unit cell in x direction
         replicateMesh(

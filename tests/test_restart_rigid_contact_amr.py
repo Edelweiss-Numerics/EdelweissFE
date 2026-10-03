@@ -160,7 +160,7 @@ def test_resume_across_refinement_next_to_a_moving_rigid_body(tmp_path):
 
     # The slave body was refined before the checkpoint, and the support had moved by then.
     assert len(resumed.elements) > 2 * 27
-    assert resumed.topologyHistory and resumed.topologyHistory[0].time > 0.0
+    assert resumed.topology.history and resumed.topology.history[0].time > 0.0
     for name, field in reference.nodeFields.items():
         for entry in ("U", "P"):
             assert np.array_equal(resumed.nodeFields[name][entry], field[entry]), f"{name}/{entry} differs"

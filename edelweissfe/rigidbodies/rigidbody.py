@@ -52,7 +52,7 @@ class RigidBody(ABC):
         """The reference coordinates of the nodes whose ``coordinates`` this body moves along with it.
 
         A node's ``coordinates`` are normally its reference coordinates, and the topology fingerprint
-        (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.topologyFingerprint`) hashes them. A rigid body that
+        (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint`) hashes them. A rigid body that
         writes its current configuration into its nodes reports their reference coordinates here, so
         that the fingerprint describes the mesh and not the body's current position.
 

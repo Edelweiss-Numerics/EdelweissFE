@@ -55,7 +55,7 @@ class TestDiscreteRigidBody(unittest.TestCase):
         filename = os.path.join(self.directory.name, f"{name}.stl")
         surface.save(filename)
         model = FEModel(3)
-        with model.topologyChanges():
+        with model.topology.changes():
             return generateDiscreteRigidBodyFromMeshFile(model, Journal(), name, filename)
 
     def _unitCube(self) -> pv.PolyData:

@@ -76,7 +76,7 @@ class NodeRegistry:
     ----------
     reserve_labels
         The ``count -> range`` label allocator of the model this registry mirrors, i.e.
-        ``FEModel.reserveNodeNumbers``, so model and octree draw from one counter and cannot collide.
+        ``TopologyPipeline.reserveNodeNumbers``, so model and octree draw from one counter and cannot collide.
         Without one (a standalone octree, e.g. in tests) the registry mints ``max + 1`` itself.
     """
 

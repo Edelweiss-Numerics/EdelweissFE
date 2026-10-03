@@ -148,11 +148,11 @@ class Generator(GeneratorBase):
             y0 : y0 + h : nNodesY * 1j,
         ]
 
-        # Node labels come from the model's monotonic allocator (FEModel.reserveNodeNumbers), not
+        # Node labels come from the model's monotonic allocator (TopologyPipeline.reserveNodeNumbers), not
         # from max(model.nodes). Every grid position becomes a model node here, so the whole grid is
         # reserved as one batch.
         nodes = []
-        reservedNodeLabels = iter(model.reserveNodeNumbers(nNodesX * nNodesY))
+        reservedNodeLabels = iter(model.topology.reserveNodeNumbers(nNodesX * nNodesY))
 
         for x in range(nNodesX):
             for y in range(nNodesY):
@@ -162,14 +162,14 @@ class Generator(GeneratorBase):
 
         nG = np.asarray(nodes).reshape(nNodesX, nNodesY)
 
-        # Element numbers come from the model's monotonic allocator (FEModel.reserveElementNumbers),
+        # Element numbers come from the model's monotonic allocator (TopologyPipeline.reserveElementNumbers),
         # not from max(model.elements). Reserved one at a time so the count need not be predicted;
         # nothing else mints during this loop, so the numbers are consecutive exactly as before.
 
         elements = []
         for x in range(nX):
             for y in range(nY):
-                (currentElementLabel,) = model.reserveElementNumbers(1)
+                (currentElementLabel,) = model.topology.reserveElementNumbers(1)
                 if testEl.nNodes == 4:
                     newEl = elType(elTypeName, currentElementLabel)
                     newEl.setNodes([nG[x, y], nG[x + 1, y], nG[x + 1, y + 1], nG[x, y + 1]])

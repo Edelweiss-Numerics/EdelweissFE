@@ -52,7 +52,7 @@ import numpy as np
 import pytest
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
-from edelweissfe.models.femodel import FEModel
+from edelweissfe.models.topologypipeline import TopologyPipeline
 from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 from edelweissfe.utils.inputfileparser import parseInputFile
 
@@ -270,7 +270,7 @@ def test_the_mesh_really_refines_twice_and_the_run_converges(tmp_path, monkeypat
 
     # one element -> 8 -> 64, and the parents are gone
     assert len(model.elements) == 64
-    assert len(model.topologyHistory) == 2
+    assert len(model.topology.history) == 2
     # uniform refinement, so there is no 2:1 interface and nothing hangs -- which is what makes
     # test_a_hanging_node_interface_refines_and_converges a different case rather than a rerun
     assert _hangingSlaveNodes(model) == 0
@@ -418,7 +418,7 @@ def test_a_hanging_node_interface_refines_and_converges(tmp_path, monkeypatch):
     # The constraint OBJECT exists after any refinement, holding no records when the refinement was
     # uniform, so its mere presence proves nothing; count the nodes it actually claims.
     assert _hangingSlaveNodes(model) > 0, "no node is actually constrained; this is not the 2:1 case"
-    assert len(model.topologyHistory) == 2
+    assert len(model.topology.history) == 2
     assert recorder.conservation, "the second refinement did not report; it may not have happened"
 
     # the mass is asserted by the solver itself; here only that the run reached the end intact
@@ -530,7 +530,7 @@ def test_a_rebuild_without_a_topology_change_does_not_re_equilibrate(tmp_path, m
 
     recorder = _instrument(monkeypatch)
 
-    trueRefresh = FEModel.refreshMeshDependents
+    trueRefresh = TopologyPipeline.refreshMeshDependents
     calls = {"n": 0}
 
     def refreshAndClaimAChangeOnce(self, *args, **kwargs):
@@ -540,7 +540,7 @@ def test_a_rebuild_without_a_topology_change_does_not_re_equilibrate(tmp_path, m
         # first, and this sweep runs on it too.
         return refreshed or calls["n"] == 3
 
-    monkeypatch.setattr(FEModel, "refreshMeshDependents", refreshAndClaimAChangeOnce)
+    monkeypatch.setattr(TopologyPipeline, "refreshMeshDependents", refreshAndClaimAChangeOnce)
 
     _run(tmp_path, "connectivity_only", _deck(nX=2, lX=4.0))
 

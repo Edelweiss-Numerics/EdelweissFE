@@ -119,23 +119,23 @@ def test_topology_history_roundtrip_reproduces_the_refinement(tmp_path):
     """The replay contract, at the level of one modifier: a model that replays the recorded history
     ends up byte-identical to the one that made the decisions live.
 
-    Compares by topologyFingerprint, which covers element numbers, connectivity and node
+    Compares by model.topology.fingerprint(), which covers element numbers, connectivity and node
     coordinates -- not just the element-number set the old per-modifier round-trip checked.
     """
 
     modelA = _buildModel(tmp_path, "a.inp")
     amrA = modelA.modelModifiers["amr"]
 
-    refined = modelA.updateTopology(step=None, timeStep=0.0)
+    refined = modelA.topology.update(step=None, timeStep=0.0)
     assert refined, "the initialOnly marker should have triggered a refinement on the first call"
-    assert modelA.topologyHistory, "an applied decision must be recorded in the topology history"
+    assert modelA.topology.history, "an applied decision must be recorded in the topology history"
 
     modelB = _buildModel(tmp_path, "b.inp")
     assert len(modelB.elements) < len(modelA.elements), "model B must start unrefined"
 
-    modelB.replayTopologyHistory(modelA.topologyHistory)
+    modelB.topology.replayHistory(modelA.topology.history)
 
-    assert modelB.topologyFingerprint() == modelA.topologyFingerprint()
+    assert modelB.topology.fingerprint() == modelA.topology.fingerprint()
     assert _hangingRecordsByLabel(modelB.modelModifiers["amr"]._hanging) == _hangingRecordsByLabel(amrA._hanging)
     # A checkpoint only exists after an increment converged, so a replayed run is never truly making
     # its first call -- otherwise initialOnly markers would re-evaluate redundantly on the next one.
@@ -145,23 +145,23 @@ def test_topology_history_roundtrip_reproduces_the_refinement(tmp_path):
 def test_replay_detects_a_tampered_plan_and_names_it(tmp_path):
     """A history that no longer reproduces its recorded topology must be reported, not silently
     applied. By default the replayed mesh is checked once, against the last record's fingerprint;
-    with verifyTopologyFingerprintsPerRecord every record is checked as it is applied, which is what
+    with verifyFingerprintsPerRecord every record is checked as it is applied, which is what
     turns "the resumed run diverged" into "it diverged at THIS record"."""
 
     modelA = _buildModel(tmp_path, "a.inp")
-    modelA.updateTopology(step=None, timeStep=0.0)
-    assert modelA.topologyHistory
+    modelA.topology.update(step=None, timeStep=0.0)
+    assert modelA.topology.history
 
-    tampered = [replace(record, fingerprint="0" * 32) for record in modelA.topologyHistory]
+    tampered = [replace(record, fingerprint="0" * 32) for record in modelA.topology.history]
 
     modelB = _buildModel(tmp_path, "b.inp")
     with pytest.raises(TopologyError, match="restart replay diverged: after replaying all"):
-        modelB.replayTopologyHistory(tampered)
+        modelB.topology.replayHistory(tampered)
 
     modelC = _buildModel(tmp_path, "c.inp")
-    modelC.verifyTopologyFingerprintsPerRecord = True
+    modelC.topology.verifyFingerprintsPerRecord = True
     with pytest.raises(TopologyError, match="replay diverged at record 0"):
-        modelC.replayTopologyHistory(tampered)
+        modelC.topology.replayHistory(tampered)
 
 
 def test_replay_keeps_the_time_each_decision_was_originally_made_at(tmp_path):
@@ -171,14 +171,14 @@ def test_replay_keeps_the_time_each_decision_was_originally_made_at(tmp_path):
 
     modelA = _buildModel(tmp_path, "a.inp")
     modelA.advanceToTime(3.5)
-    modelA.updateTopology(step=None, timeStep=0.0)
-    assert [record.time for record in modelA.topologyHistory] == [3.5]
+    modelA.topology.update(step=None, timeStep=0.0)
+    assert [record.time for record in modelA.topology.history] == [3.5]
 
     modelB = _buildModel(tmp_path, "b.inp")
     modelB.advanceToTime(9.0)
-    modelB.replayTopologyHistory(modelA.topologyHistory)
+    modelB.topology.replayHistory(modelA.topology.history)
 
-    assert [record.time for record in modelB.topologyHistory] == [3.5]
+    assert [record.time for record in modelB.topology.history] == [3.5]
     assert modelB.modelModifiers["amr"]._lastRefinedTime == 3.5
 
 
@@ -189,17 +189,17 @@ def test_pending_marks_are_not_checkpointed_but_re_derived(tmp_path):
 
     modelA = _buildModel(tmp_path, "a.inp")
     amrA = modelA.modelModifiers["amr"]
-    modelA.updateTopology(step=None, timeStep=0.0)
+    modelA.topology.update(step=None, timeStep=0.0)
 
     stillActive = [el for eid, el in amrA._eidToEl.items() if amrA._mesh.elements[eid]["active"]]
     amrA._pendingMarkedElements = set(stillActive[:1])
 
     modelB = _buildModel(tmp_path, "b.inp")
-    modelB.replayTopologyHistory(modelA.topologyHistory)
+    modelB.topology.replayHistory(modelA.topology.history)
 
     assert modelB.modelModifiers["amr"]._pendingMarkedElements == set()
     # what IS restored is the decision-side state the next plan() needs
-    assert modelB.modelModifiers["amr"]._lastRefinedTime == modelA.topologyHistory[-1].time
+    assert modelB.modelModifiers["amr"]._lastRefinedTime == modelA.topology.history[-1].time
 
 
 # ---- multi-round replay: one fingerprint and one field bookkeeping pass for the whole history ----
@@ -228,16 +228,16 @@ def _rounds(mesh):
 
 def _driveRounds(model: FEModel) -> None:
     """Apply a sequence of refinement decisions live, one topology window per decision -- the same
-    apply/record pair updateTopology issues per applied decision, fed explicit plans instead of a
+    apply/record pair model.topology.update issues per applied decision, fed explicit plans instead of a
     marker's, so that several rounds accumulate deterministically without a solve in between."""
 
     amr = model.modelModifiers["amr"]
     for roundIndex, eids in enumerate(_rounds(amr._mesh), start=1):
         model.advanceToTime(float(roundIndex))
-        with model.topologyChanges():
+        with model.topology.changes():
             plan = RefinementPlan(eids=list(eids))
             change = amr.apply(model, plan)
-            model.recordTopologyChange(1, "amr", amr, plan, change)
+            model.topology.recordChange(1, "amr", amr, plan, change)
 
 
 def _fieldBookkeepingByLabel(model: FEModel) -> dict:
@@ -271,8 +271,8 @@ def test_multi_round_replay_matches_the_live_run_exactly(tmp_path):
 
     modelA = _buildModel(tmp_path, "a.inp")
     _driveRounds(modelA)
-    assert len(modelA.topologyHistory) == 3
-    assert modelA.topologyHistory[-1].nElementsAdded > 8, "the last round should have cascaded"
+    assert len(modelA.topology.history) == 3
+    assert modelA.topology.history[-1].nElementsAdded > 8, "the last round should have cascaded"
 
     # the octree mirror's active-set cache agrees with a scan of the hierarchy
     mesh = modelA.modelModifiers["amr"]._mesh
@@ -287,7 +287,7 @@ def test_multi_round_replay_matches_the_live_run_exactly(tmp_path):
     with h5py.File(checkpoint, "w") as f:
         modelA.writeRestart(f)
 
-    referenceFingerprint = modelA.topologyFingerprint()
+    referenceFingerprint = modelA.topology.fingerprint()
     referenceBookkeeping = _fieldBookkeepingByLabel(modelA)
     referenceHanging = _hangingRecordsByLabel(modelA.modelModifiers["amr"]._hanging)
 
@@ -295,11 +295,11 @@ def test_multi_round_replay_matches_the_live_run_exactly(tmp_path):
     modelC = _buildModel(tmp_path, "c.inp")  # replays without it: inner scope of an open window
     with h5py.File(checkpoint, "r") as f:
         modelB.readRestart(f)
-        with modelC.topologyChanges():
+        with modelC.topology.changes():
             modelC.readRestart(f)
 
     for replayed in (modelB, modelC):
-        assert replayed.topologyFingerprint() == referenceFingerprint
+        assert replayed.topology.fingerprint() == referenceFingerprint
         assert set(replayed.elements) == set(modelA.elements)
         assert set(replayed.nodes) == set(modelA.nodes)
         assert _fieldBookkeepingByLabel(replayed) == referenceBookkeeping
@@ -308,8 +308,8 @@ def test_multi_round_replay_matches_the_live_run_exactly(tmp_path):
             for entry in ("U", "P"):
                 assert np.array_equal(replayed.nodeFields[name][entry], nodeField[entry])
         # the replayed history carries the digests that were verified, not freshly computed ones
-        assert [r.fingerprint for r in replayed.topologyHistory] == [r.fingerprint for r in modelA.topologyHistory]
-        assert [r.time for r in replayed.topologyHistory] == [1.0, 2.0, 3.0]
+        assert [r.fingerprint for r in replayed.topology.history] == [r.fingerprint for r in modelA.topology.history]
+        assert [r.time for r in replayed.topology.history] == [1.0, 2.0, 3.0]
 
 
 def test_replay_verifies_once_by_default_and_per_record_on_request(tmp_path):
@@ -319,26 +319,26 @@ def test_replay_verifies_once_by_default_and_per_record_on_request(tmp_path):
 
     modelA = _buildModel(tmp_path, "a.inp")
     _driveRounds(modelA)
-    history = modelA.topologyHistory
+    history = modelA.topology.history
 
     middleTampered = [replace(r, fingerprint="0" * 32) if i == 1 else r for i, r in enumerate(history)]
     modelB = _buildModel(tmp_path, "b.inp")
-    modelB.replayTopologyHistory(middleTampered)
-    assert modelB.topologyFingerprint() == modelA.topologyFingerprint()
+    modelB.topology.replayHistory(middleTampered)
+    assert modelB.topology.fingerprint() == modelA.topology.fingerprint()
 
     modelC = _buildModel(tmp_path, "c.inp")
-    modelC.verifyTopologyFingerprintsPerRecord = True
+    modelC.topology.verifyFingerprintsPerRecord = True
     with pytest.raises(TopologyError, match="replay diverged at record 1 of 3"):
-        modelC.replayTopologyHistory(middleTampered)
+        modelC.topology.replayHistory(middleTampered)
 
     lastTampered = [replace(r, fingerprint="0" * 32) if i == 2 else r for i, r in enumerate(history)]
     modelD = _buildModel(tmp_path, "d.inp")
     with pytest.raises(TopologyError, match="after replaying all 3 record"):
-        modelD.replayTopologyHistory(lastTampered)
+        modelD.topology.replayHistory(lastTampered)
 
     # a record without a fingerprint (an older checkpoint) is replayed without complaint, and the
     # replayed history then carries a freshly computed digest for it
     bare = [replace(r, fingerprint="") for r in history]
     modelE = _buildModel(tmp_path, "e.inp")
-    modelE.replayTopologyHistory(bare)
-    assert [r.fingerprint for r in modelE.topologyHistory] == [r.fingerprint for r in history]
+    modelE.topology.replayHistory(bare)
+    assert [r.fingerprint for r in modelE.topology.history] == [r.fingerprint for r in history]
