@@ -120,7 +120,7 @@ those fields keep the parent's quasi-static treatment. A nonzero inertia an elem
 a rotational inertia, or the micro-inertia of a gradient-enhanced element -- is discarded with a
 warning, once per field. A model with no such field is refused.
 
-**Zero-length and negligible increments.** The time stepper yields a zero-length increment before
+**Zero-length and negligible increments.** The time stepper proposes a zero-length increment before
 the first real one of every step. A quasi-static solver equilibrates it; this solver skips it with
 the state kept, because in zero time nothing can move: displacement and velocity are continuous,
 and a load appearing at that instant is answered by the acceleration below, not by a displacement.
@@ -574,7 +574,7 @@ class NonlinearImplicitDynamic(NIST):
             # equilibrium solve for the initial acceleration provides -- not as a displacement.
             # The parent's quasi-static solve would instead put the model at static equilibrium
             # with the new load in zero time; for a suddenly applied load that is the whole dynamic
-            # response, skipped before it began. The time stepper yields one such increment before
+            # response, skipped before it began. The time stepper proposes one such increment before
             # the first real one of every step, so this is the ordinary path, not an edge case.
             #
             # An increment that is merely NEGLIGIBLE is treated the same way, for a different

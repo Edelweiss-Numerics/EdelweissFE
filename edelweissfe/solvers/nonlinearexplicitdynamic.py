@@ -714,8 +714,8 @@ class NED(NonlinearSolverBase):
             # convergence to fail: its time step is dictated by stability, courant *
             # dt_crit from the mesh and the wave speed. Shrinking it does nothing for a
             # material that could not integrate, and doing so was actively destructive --
-            # discardAndChangeIncrement overwrites enforcedTimeIncrement with the reduced
-            # value, the generator reuses that value every iteration afterwards, and
+            # rejecting the increment overwrites the enforced time increment with the reduced
+            # value, every following increment reuses it, and
             # nothing raises it back (the critical step is enforced "lower only", and
             # SimpleTimeStepper.preventIncrementIncrease is a no-op). One failed
             # quadrature point permanently crippled the analysis: of three production runs
