@@ -138,7 +138,7 @@ from edelweissfe.solvers.base.conservationchecks import (
     linearMomentum,
 )
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
-from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.timesteppers.timestep import TimeStep, readTimeStep, writeTimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
     CutbackRequest,
@@ -405,10 +405,11 @@ class NED(NonlinearSolverBase):
         #: increment. Compared against the kinetic energy to detect energy creation; see
         #: _ENERGY_CREATION_TOLERANCE.
         self._externalWork = 0.0
-        #: The external work a resumed checkpoint carried, handed to the next solveStep. Staged
-        #: rather than assigned directly because readRestart necessarily runs before solveStep,
-        #: which resets the live accumulator; see :meth:`readRestart`.
-        self._resumedExternalWork = 0.0
+        #: The last completed increment. The central-difference velocity update reads
+        #: 0.5 * (dT + dT_prev); None makes the first increment of a cold step the half step that
+        #: starts a leapfrog. A resumed step continues from the checkpointed one instead: the
+        #: checkpointed velocity already carries the half-step offset.
+        self.prevTimeStep = None
         #: Per-constraint force buffer and scatter plan, by constraint name; see
         #: :meth:`assembleConstraintForces`. Cleared whenever the DofManager is rebuilt.
         self._constraintForcePlans = {}
@@ -442,35 +443,22 @@ class NED(NonlinearSolverBase):
         restartFile
             The open checkpoint to write to.
         """
-        restartFile.require_group("solver").attrs["externalWork"] = self._externalWork
-
-    def _consumeResumedExternalWork(self) -> float:
-        """The external work a resumed checkpoint carried, handed over exactly once.
-
-        The energy balance is per step, so the step being resumed picks up where the checkpoint
-        left off while any later step in the same job correctly starts from zero -- hence consumed
-        rather than merely read. It is staged in the first place because
-        :meth:`readRestart` necessarily runs BEFORE :meth:`solveStep`, which resets the live
-        accumulator and would otherwise wipe the restored value before the first increment.
-        """
-        resumed = self._resumedExternalWork
-        self._resumedExternalWork = 0.0
-        return resumed
+        group = restartFile.require_group("solver")
+        group.attrs["externalWork"] = self._externalWork
+        writeTimeStep(group, "prevTimeStep", self.prevTimeStep)
 
     def readRestart(self, restartFile):
-        """Restore the accumulated external work; see :meth:`writeRestart`.
-
-        Tolerates a checkpoint written before this state was carried, in which case the resumed
-        step's energy balance is wrong in the old way rather than the run failing.
+        """Restore the accumulated external work and the last completed increment; see
+        :meth:`writeRestart`.
 
         Parameters
         ----------
         restartFile
             The open checkpoint to read from.
         """
-        if "solver" not in restartFile or "externalWork" not in restartFile["solver"].attrs:
-            return
-        self._resumedExternalWork = float(restartFile["solver"].attrs["externalWork"])
+        group = self.checkpointedState(restartFile)
+        self._externalWork = float(group.attrs["externalWork"])
+        self.prevTimeStep = readTimeStep(group, "prevTimeStep")
 
     def solveStep(
         self,
@@ -503,7 +491,9 @@ class NED(NonlinearSolverBase):
         # window they never ran in and drive the residue negative.
         stepWallClockTic = perf_counter()
 
-        self._externalWork = self._consumeResumedExternalWork()
+        if not step.isResumed:
+            self._externalWork = 0.0
+            self.prevTimeStep = None
         self._conservationCheck.reset()
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
@@ -525,18 +515,18 @@ class NED(NonlinearSolverBase):
         ]
 
         # Step actions before the equation system, matching NIST: nothing they do depends on it.
-        self.applyStepActionsAtStepStart(model, step.actions)
+        self.applyStepActionsAtStepStart(model, step)
 
-        # One topology update, here and nowhere else. Every modifier this solver accepts acts only at
-        # the start of the analysis (validateModelCapabilities enforces that), and on its first call
-        # hAdaptivity evaluates exactly its initialOnly markers -- so this reproduces what an
-        # implicit run does on its own first pass. Running it before anything sized by the equation
-        # system exists is what makes it both cheap and safe: the mesh is final before the lumped
-        # mass, the multi-point-constraint condensation and the critical time step are derived from
-        # it, and no velocity state exists yet that would have to be carried onto new nodes.
+        # The step-start topology update: the modifiers acting at the start of the analysis (e.g.
+        # hAdaptivity's initialOnly markers) and the first contact search. It runs before anything
+        # sized by the equation system exists, so the mesh is final before the lumped mass, the
+        # multi-point-constraint condensation and the critical time step are derived from it; later
+        # updates happen inside the increment loop, at the topology-check increments.
         #
-        # A resumed step continues with the checkpointed contact search.
-        self.updateTopologyAndConnectivity(model, step, model.time, resumed=step.restoredTimeIncrement() is not None)
+        # A resumed step skips it: the checkpoint was written after this update (and after every later
+        # one), so the restored mesh, mesh dependents and contact search are already its result.
+        if not step.isResumed:
+            self.updateTopologyAndConnectivity(model, step, model.time)
 
         theSystem = self.buildEquationSystem(model, step)
 
@@ -547,18 +537,6 @@ class NED(NonlinearSolverBase):
         contactUpdateFrequency = self.options["contact-update-frequency"]
         topologyCheckFrequency = self.options["topology-check-frequency"]
         UAtLastConnectivitySearch = np.array(U)
-
-        # The central-difference velocity update reads 0.5 * (dT + dT_prev). Leaving this None
-        # makes the solver synthesise dT_prev = 0 further down, so the first increment gets dT/2 --
-        # the half step that starts a leapfrog correctly on a COLD start. A resumed run must not
-        # repeat that: the velocity in the checkpoint already carries the half-step offset, so
-        # starting again applies one half-impulse too few. Measured on an anchor pry-out resume,
-        # that alone left the final reaction force 2.34e-04 wrong while every other piece of state
-        # restored correctly.
-        restoredTimeIncrement = step.restoredTimeIncrement()
-        prevTimeStep = (
-            None if restoredTimeIncrement is None else TimeStep(0, 0.0, 0.0, restoredTimeIncrement, 0.0, model.time)
-        )
 
         try:
             for timeStep in step.getTimeStep(enforcedTimeIncrement=criticalTimeStep):
@@ -638,7 +616,7 @@ class NED(NonlinearSolverBase):
                         step.actions,
                         model,
                         timeStep,
-                        prevTimeStep,
+                        self.prevTimeStep,
                     )
 
                 except CutbackRequest as e:
@@ -672,7 +650,7 @@ class NED(NonlinearSolverBase):
                     # it here would overwrite the increment a RESUMED run was seeded with, putting
                     # the run back on the cold-start half step it must not repeat.
                     if timeStep.timeIncrement > 0.0:
-                        prevTimeStep = timeStep
+                        self.prevTimeStep = timeStep
 
                     self.publishNodeFields(model, U, V, P)
 

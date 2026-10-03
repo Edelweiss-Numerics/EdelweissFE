@@ -555,6 +555,10 @@ class FEModel:
                 )
             )
         self.topology.replayHistory(records, journal)
+        # Bring the mesh-dependent consumers (ties, contact surfaces) up to date with the replayed
+        # mesh here, as part of restoring the model: the uninterrupted run's consumers had caught up
+        # with every change before the checkpoint was written, so a resumed run must start the same.
+        self.topology.refreshMeshDependents()
 
         for nf in self.nodeFields.values():
             storedField = f["nodeFields"].get(nf.name)

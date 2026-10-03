@@ -64,3 +64,51 @@ class TimeStep:
         self.timeIncrement = timeIncrement
         self.stepTime = stepTime
         self.totalTime = totalTime
+
+
+def writeTimeStep(group, name: str, timeStep: TimeStep | None):
+    """Write ``timeStep`` (or its absence) into an HDF5 group of a restart checkpoint.
+
+    Parameters
+    ----------
+    group
+        The group to write into.
+    name
+        The name of the entry.
+    timeStep
+        The time step, or None.
+    """
+
+    if timeStep is None:
+        group.attrs[name] = []
+        return
+    group.attrs[name] = [
+        timeStep.number,
+        timeStep.stepProgressIncrement,
+        timeStep.stepProgress,
+        timeStep.timeIncrement,
+        timeStep.stepTime,
+        timeStep.totalTime,
+    ]
+
+
+def readTimeStep(group, name: str) -> TimeStep | None:
+    """Read back what :func:`writeTimeStep` wrote.
+
+    Parameters
+    ----------
+    group
+        The group to read from.
+    name
+        The name of the entry.
+
+    Returns
+    -------
+    TimeStep | None
+        The time step, or None if none was written.
+    """
+
+    values = [float(value) for value in group.attrs[name]]
+    if not values:
+        return None
+    return TimeStep(int(values[0]), *values[1:])

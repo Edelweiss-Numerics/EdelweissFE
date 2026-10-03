@@ -46,7 +46,7 @@ from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.dirichlet import applyDirichletToStiffness
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
-from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.timesteppers.timestep import TimeStep, readTimeStep, writeTimeStep
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
     CutbackRequest,
@@ -203,6 +203,38 @@ class NIST(NonlinearSolverBase):
         # are user typos and must not be swallowed
         self._updateOptions(kwargs, journal, strict=True)
 
+        #: The last accepted increment, from which the predictor extrapolates (None: no extrapolation).
+        self.prevTimeStep = None
+        #: The solution increment of the last accepted increment.
+        self.dU = None
+
+    def writeRestart(self, restartFile):
+        """Write the predictor's state between increments: the last accepted increment and its dU.
+
+        Parameters
+        ----------
+        restartFile
+            The open checkpoint to write to.
+        """
+
+        group = restartFile.require_group("solver")
+        writeTimeStep(group, "prevTimeStep", self.prevTimeStep)
+        group.create_dataset("dU", data=np.empty(0) if self.dU is None else np.asarray(self.dU))
+
+    def readRestart(self, restartFile):
+        """Restore what :meth:`writeRestart` wrote; the resumed step's predictor continues from it.
+
+        Parameters
+        ----------
+        restartFile
+            The open checkpoint to read from.
+        """
+
+        group = self.checkpointedState(restartFile)
+        self.prevTimeStep = readTimeStep(group, "prevTimeStep")
+        dU = group["dU"][...]
+        self.dU = dU if dU.size else None
+
     def solveStep(
         self,
         step,
@@ -261,18 +293,27 @@ class NIST(NonlinearSolverBase):
         self.mpcTransformation = None
         U = dU = P = K = None
 
-        prevTimeStep = None
+        # The predictor's state between increments: the last accepted increment and its dU. A cold
+        # step starts without; a resumed step continues from the checkpointed ones (readRestart).
+        if not step.isResumed:
+            self.prevTimeStep = None
+            self.dU = None
+        # True while an increment is retried after a cutback: the model modifiers already decided on
+        # the state the retry starts from.
+        incrementIsRetry = False
 
         self.validateModelCapabilities(model)
 
-        self.applyStepActionsAtStepStart(model, step.actions)
+        self.applyStepActionsAtStepStart(model, step)
 
         reportPerformanceFrequency = self.options["report-performance-frequency"]
         stepWallClockTic = perf_counter()
 
         try:
             for timeStep in step.getTimeStep():
-                topologyUpdate = self.updateTopologyAndConnectivity(model, step, timeStep)
+                topologyUpdate = self.updateTopologyAndConnectivity(
+                    model, step, timeStep, offerModelModifiers=not incrementIsRetry
+                )
                 modelHasChanged = topologyUpdate.topologyChanged
                 connectivityHasChanged = (
                     topologyUpdate.meshDependentsRefreshed or topologyUpdate.constraintConnectivityChanged
@@ -384,10 +425,14 @@ class NIST(NonlinearSolverBase):
                     self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
                     self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
 
-                    # The old dU/prevTimeStep no longer match the (possibly new) DOF layout, so
-                    # suppress extrapolation for this one increment -- the same fallback already
-                    # used elsewhere in this method after a failed/discarded increment.
-                    prevTimeStep = None
+                    # After a change of the mesh or of the constraint connectivity, the last accepted
+                    # dU belongs to a different DOF layout, so this one increment is not extrapolated
+                    # -- the same fallback as after a failed increment. Otherwise (the first build of a
+                    # step) the predictor continues from it.
+                    if modelHasChanged or connectivityHasChanged:
+                        self.prevTimeStep = None
+                    elif self.dU is not None:
+                        dU[:] = self.dU
 
                 statusInfoDict = {
                     "step": step.number,
@@ -408,7 +453,7 @@ class NIST(NonlinearSolverBase):
                     # increment holds every load at its previous absolute level (getCurrentLoad reads
                     # the absolute stepProgress) and yields a zero Dirichlet increment (getDelta reads
                     # the difference), with a zero time increment -> a pure equilibration solve. The
-                    # settled U feeds the real increment below; its dU is reset there (prevTimeStep is
+                    # settled U feeds the real increment below; its dU is reset there (self.prevTimeStep is
                     # None on a rebuild increment, so extrapolation zeroes dU).
                     equilibrationTimeStep = TimeStep(
                         timeStep.number,
@@ -444,7 +489,8 @@ class NIST(NonlinearSolverBase):
                             1,
                         )
                         step.discardAndChangeIncrement(cutbackFactor)
-                        prevTimeStep = None
+                        self.prevTimeStep = None
+                        incrementIsRetry = True
                         statusInfoDict["iters"] = np.inf
                         statusInfoDict["notes"] = "re-equilibration failed: {:}".format(str(e))
                         for man in outputmanagers:
@@ -475,7 +521,7 @@ class NIST(NonlinearSolverBase):
                         step.actions,
                         model,
                         timeStep,
-                        prevTimeStep,
+                        self.prevTimeStep,
                         extrapolation,
                         maxIter,
                         maxGrowingIter,
@@ -484,7 +530,8 @@ class NIST(NonlinearSolverBase):
                 except CutbackRequest as e:
                     self.journal.message(str(e), self.identification, 1)
                     step.discardAndChangeIncrement(max(e.cutbackSize, cutbackFactor))
-                    prevTimeStep = None
+                    self.prevTimeStep = None
+                    incrementIsRetry = True
 
                     statusInfoDict["iters"] = np.inf
                     statusInfoDict["notes"] = str(e)
@@ -497,7 +544,8 @@ class NIST(NonlinearSolverBase):
                 except (ReachedMaxIterations, DivergingSolution) as e:
                     self.journal.message(str(e), self.identification, 1)
                     step.discardAndChangeIncrement(cutbackFactor)
-                    prevTimeStep = None
+                    self.prevTimeStep = None
+                    incrementIsRetry = True
 
                     statusInfoDict["iters"] = np.inf
                     statusInfoDict["notes"] = str(e)
@@ -513,9 +561,11 @@ class NIST(NonlinearSolverBase):
                     # suppress extrapolation for the next increment (start it from a zero predictor)
                     # instead of extrapolating that polluted dU.
                     if modelHasChanged and not extrapolateAfterModelChange:
-                        prevTimeStep = None
+                        self.prevTimeStep = None
                     else:
-                        prevTimeStep = timeStep
+                        self.prevTimeStep = timeStep
+                    self.dU = dU
+                    incrementIsRetry = False
 
                     if iterationCounter >= criticalIter:
                         step.preventIncrementIncrease()

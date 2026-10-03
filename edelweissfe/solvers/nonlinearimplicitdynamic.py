@@ -402,10 +402,6 @@ class NonlinearImplicitDynamic(NIST):
         #: Armed by :meth:`solveStep` for a step starting cold, disarmed by the increment that
         #: consumes it.
         self._initialAccelerationPending = False
-        #: Staged by :meth:`readRestart`, which the driver calls BEFORE :meth:`solveStep` on the
-        #: resumed step, and consumed there exactly once -- the same staging the explicit solver
-        #: uses for its external work.
-        self._resumedFromCheckpoint = False
         #: Length of ``model.topology.history`` when the current equation system was assembled.
         #: A change in it is what distinguishes a rebuild caused by the mesh actually changing
         #: from one caused by a constraint re-reporting its connectivity; see
@@ -452,39 +448,6 @@ class NonlinearImplicitDynamic(NIST):
                 1,
             )
 
-    def writeRestart(self, restartFile):
-        """Mark the checkpoint as carrying Newmark kinematics.
-
-        The velocity and acceleration themselves need no solver code: they are node-field entries
-        and go into the checkpoint with every other entry. This marker exists so that a resumed
-        step knows the acceleration it finds there is the scheme's own consistent one and must not
-        be replaced by a fresh equilibrium solve -- see :meth:`readRestart`.
-
-        Parameters
-        ----------
-        restartFile
-            The open checkpoint to write to.
-        """
-
-        restartFile.require_group("solver").attrs["newmarkKinematicsCheckpointed"] = True
-
-    def readRestart(self, restartFile):
-        """Note that the step about to be solved resumes from a checkpoint written by this solver.
-
-        Tolerates a checkpoint written by another solver, or without the marker: the resumed step
-        then starts as a cold one, computing its initial acceleration from equilibrium, which is
-        the right answer for a state that carries no acceleration of its own.
-
-        Parameters
-        ----------
-        restartFile
-            The open checkpoint to read from.
-        """
-
-        if "solver" not in restartFile:
-            return
-        self._resumedFromCheckpoint = bool(restartFile["solver"].attrs.get("newmarkKinematicsCheckpointed", False))
-
     def solveStep(
         self,
         step,
@@ -517,9 +480,10 @@ class NonlinearImplicitDynamic(NIST):
 
         self._newmarkSystem = None
         self._conservationCheck.reset()
+        # The mesh the step starts on, restored or not: a topology change is a change from this.
+        self._topologyRecordsAtLastBuild = len(model.topology.history)
 
-        resumed = self._resumedFromCheckpoint
-        self._resumedFromCheckpoint = False
+        resumed = step.isResumed
         self._initialAccelerationPending = bool(self.options["computeInitialAcceleration"]) and not resumed
 
         self.journal.message(
@@ -826,19 +790,19 @@ class NonlinearImplicitDynamic(NIST):
         them onto the nodes it created. A step changing a material property mid-step invalidates the
         density, so the operators are reassembled every increment of such a step.
 
-        A rebuild that follows a recorded **topology change** additionally re-arms the
-        initial-acceleration solve and reports what the change did to the conserved quantities --
-        see the module docstring. Two conditions narrow that, and both matter:
+        A rebuild that follows a recorded **topology change** -- a ``model.topology.history`` grown
+        since the last build, or since the step started -- additionally re-arms the
+        initial-acceleration solve and reports what the change did to the conserved quantities (if
+        there is a previous system to compare with) -- see the module docstring. A step boundary
+        rebuilds the manager too, but changes no topology, so it is not such a rebuild; and the
+        first increment of a resumed step that refines is, exactly as it was in the uninterrupted
+        run.
 
-        * ``system is not None``: the first build of a step is not it. A step boundary rebuilds the
-          manager too, and :meth:`solveStep` has already decided there whether that step starts cold
-          (its own ``computeInitialAcceleration``/restart logic) -- re-deciding it here would
-          override that decision with a different one, for every existing multi-step deck.
-        * a grown ``model.topology.history``: a rebuild triggered by a constraint re-reporting its
-          connectivity (a contact candidate list, which can tick on any increment) has moved no
-          node and interpolated nothing, so there is no stale acceleration to replace and no
-          conservation statement to make. Restarting the acceleration of the whole model on it
-          would be both wrong and, repeated per increment, expensive.
+        It takes a grown history, not merely a rebuild: a rebuild triggered by a constraint
+        re-reporting its connectivity (a contact candidate list, which can tick on any increment)
+        has moved no node and interpolated nothing, so there is no stale acceleration to replace and
+        no conservation statement to make. Restarting the acceleration of the whole model on it
+        would be both wrong and, repeated per increment, expensive.
 
         Parameters
         ----------
@@ -911,11 +875,12 @@ class NonlinearImplicitDynamic(NIST):
             A=A,
         )
 
-        if dofManagerChanged and system is not None and topologyChanged:
-            self.reportTopologyChangeConservation(
-                self._conservedQuantities(system, model),
-                self._conservedQuantities(self._newmarkSystem, model),
-            )
+        if dofManagerChanged and topologyChanged:
+            if system is not None:
+                self.reportTopologyChangeConservation(
+                    self._conservedQuantities(system, model),
+                    self._conservedQuantities(self._newmarkSystem, model),
+                )
             self._initialAccelerationPending = bool(self.options["computeInitialAcceleration"])
             self.journal.message(
                 (

@@ -79,7 +79,6 @@ class SimpleTimeStepper(TimeStepperBase):
 
         self.currentTime = currentTime
         self.stepLength = stepLength
-        self.dT = 0.0
         self.journal = journal
         self.enforcedTimeIncrement = None
 
@@ -127,12 +126,6 @@ class SimpleTimeStepper(TimeStepperBase):
                     self.increment = remainder
 
                 dT = self.stepLength * self.increment
-                # Record the increment actually used. writeRestart checkpoints ``self.dT`` and
-                # restoredTimeIncrement() hands it back to a multi-step integrator on resume, so
-                # leaving it at its ``__init__`` value of 0.0 makes both silently meaningless: an
-                # explicit solver seeded with dT_prev = 0 repeats its leapfrog startup half-step on
-                # every resumed run, which is indistinguishable from a correct cold start.
-                self.dT = dT
                 self.finishedStepProgress += self.increment
                 endTimeOfIncrementInStep = self.stepLength * self.finishedStepProgress
                 endTimeOfIncrementInTotal = self.currentTime + endTimeOfIncrementInStep
@@ -162,12 +155,6 @@ class SimpleTimeStepper(TimeStepperBase):
                     self.increment = remainder
 
                 dT = self.stepLength * self.increment
-                # Record the increment actually used. writeRestart checkpoints ``self.dT`` and
-                # restoredTimeIncrement() hands it back to a multi-step integrator on resume, so
-                # leaving it at its ``__init__`` value of 0.0 makes both silently meaningless: an
-                # explicit solver seeded with dT_prev = 0 repeats its leapfrog startup half-step on
-                # every resumed run, which is indistinguishable from a correct cold start.
-                self.dT = dT
                 self.finishedStepProgress += self.increment
                 endTimeOfIncrementInStep = self.stepLength * self.finishedStepProgress
                 endTimeOfIncrementInTotal = self.currentTime + endTimeOfIncrementInStep
@@ -274,24 +261,11 @@ class SimpleTimeStepper(TimeStepperBase):
         """This time stepper never increases the increment size automatically,
         hence this is a no-op."""
 
-    def restoredTimeIncrement(self) -> float | None:
-        """See :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.
-        restoredTimeIncrement`.
-
-        The discriminator is ``totalIncrements``: readRestart sets it to the value the
-        checkpoint recorded, while a cold start leaves it at zero.
-        """
-
-        if self.totalIncrements <= 0:
-            return None
-
-        return float(self.dT)
-
     def writeRestart(self, restartFile):
         """Write this time stepper's progress within the step to a restart checkpoint.
 
         Deliberately restricted to the *dynamic* progress state (``currentTime``, ``totalIncrements``,
-        ``finishedStepProgress``, ``increment``, ``dT``), not the step's *configuration*
+        ``finishedStepProgress``, ``increment``), not the step's *configuration*
         (``stepLength``, ``startIncrement``, ``maxIncrement``, ``minIncrement``,
         ``maxNumberIncrements``) -- see :meth:`~edelweissfe.timesteppers.adaptivetimestepper.
         AdaptiveTimeStepper.writeRestart`'s docstring for why.
@@ -308,7 +282,6 @@ class SimpleTimeStepper(TimeStepperBase):
         f["timestepper"].attrs["totalIncrements"] = self.totalIncrements
         f["timestepper"].attrs["finishedStepProgress"] = self.finishedStepProgress
         f["timestepper"].attrs["increment"] = self.increment
-        f["timestepper"].attrs["dT"] = self.dT
 
     def readRestart(self, restartFile):
         """Restore this time stepper's progress within the step from a restart checkpoint written
@@ -325,4 +298,3 @@ class SimpleTimeStepper(TimeStepperBase):
         self.warnIfResumedAtIncrementCap(self.totalIncrements, self.maxNumberIncrements, self.journal)
         self.finishedStepProgress = f["timestepper"].attrs["finishedStepProgress"]
         self.increment = f["timestepper"].attrs["increment"]
-        self.dT = f["timestepper"].attrs["dT"]

@@ -120,6 +120,9 @@ class StepBase(ABC):
         options = buildSchemaFromOptions(StepIncrementationSchema, kwargs)
 
         self.number = number  #: The (unique) number of the step.
+        #: Whether this step continues from a restart checkpoint (see :meth:`readRestart`) rather than
+        #: starting cold. The one place a solver asks whether it was resumed.
+        self.isResumed = False
         self.model = model
         self.fieldOutputController = fieldOutputController
         self.journal = journal
@@ -159,8 +162,10 @@ class StepBase(ABC):
         outputManagers = self.outputManagers
 
         try:
-            for modelUpdate in self.actions["modelupdate"].values():
-                model = modelUpdate.updateModel(model, fieldOutputController, journal)
+            # Step-start model updates, not repeated by a resumed step: the checkpointed run made them.
+            if not self.isResumed:
+                for modelUpdate in self.actions["modelupdate"].values():
+                    model = modelUpdate.updateModel(model, fieldOutputController, journal)
 
             fieldOutputController.initializeStep(self)
             for manager in outputManagers:
@@ -228,8 +233,16 @@ class StepBase(ABC):
 
         return self.timeStepper.preventIncrementIncrease()
 
-    def restoredTimeIncrement(self) -> float | None:
-        """The increment size already completed if this step resumed from a restart checkpoint,
-        or None if it is starting cold."""
+    def readRestart(self, restartFile):
+        """Continue this step from a restart checkpoint: restore the time stepper, and the solver's
+        state between increments. The step's first increment is then the one after the checkpoint.
 
-        return self.timeStepper.restoredTimeIncrement()
+        Parameters
+        ----------
+        restartFile
+            The open checkpoint to read from.
+        """
+
+        self.timeStepper.readRestart(restartFile)
+        self.solver.readRestart(restartFile)
+        self.isResumed = True

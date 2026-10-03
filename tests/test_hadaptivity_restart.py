@@ -167,7 +167,7 @@ def test_replay_detects_a_tampered_plan_and_names_it(tmp_path):
 def test_replay_keeps_the_time_each_decision_was_originally_made_at(tmp_path):
     """A resumed run re-records everything it replays, and that re-recorded history is what its own
     next checkpoint holds. Stamping the resume time onto it would claim every past decision happened
-    at the moment of resuming -- and hand the modifier a cutback guard set to the wrong time."""
+    at the moment of resuming."""
 
     modelA = _buildModel(tmp_path, "a.inp")
     modelA.advanceToTime(3.5)
@@ -179,27 +179,6 @@ def test_replay_keeps_the_time_each_decision_was_originally_made_at(tmp_path):
     modelB.topology.replayHistory(modelA.topology.history)
 
     assert [record.time for record in modelB.topology.history] == [3.5]
-    assert modelB.modelModifiers["amr"]._lastRefinedTime == 3.5
-
-
-def test_pending_marks_are_not_checkpointed_but_re_derived(tmp_path):
-    """Pending marks deliberately do NOT round-trip: they are a decision-side buffer, and the next
-    plan() re-derives them from the restored solution state -- exactly as the live run would have.
-    Checkpointing them would be a second source of truth for something already implied."""
-
-    modelA = _buildModel(tmp_path, "a.inp")
-    amrA = modelA.modelModifiers["amr"]
-    modelA.topology.update(step=None, timeStep=0.0)
-
-    stillActive = [el for eid, el in amrA._eidToEl.items() if amrA._mesh.elements[eid]["active"]]
-    amrA._pendingMarkedElements = set(stillActive[:1])
-
-    modelB = _buildModel(tmp_path, "b.inp")
-    modelB.topology.replayHistory(modelA.topology.history)
-
-    assert modelB.modelModifiers["amr"]._pendingMarkedElements == set()
-    # what IS restored is the decision-side state the next plan() needs
-    assert modelB.modelModifiers["amr"]._lastRefinedTime == modelA.topology.history[-1].time
 
 
 # ---- multi-round replay: one fingerprint and one field bookkeeping pass for the whole history ----

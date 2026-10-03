@@ -32,8 +32,8 @@ Between two contact searches, a small-sliding contact constraint keeps the proje
 the last one (assigned master facet or rigid triangle, shape functions, normal). An explicit solver
 searches only every ``contact-update-frequency`` increments, so this projection belongs to an older
 configuration than the checkpointed one and cannot be recomputed on resume. It is therefore written
-to the checkpoint together with the layout it indexes (contact points and master entities), and a
-resumed step adopts it instead of searching, if the layout still matches.
+to the checkpoint together with the layout it indexes (contact points and master entities), and
+restoring the constraint adopts it; a layout that does not match the restored model raises.
 """
 
 from abc import ABC, abstractmethod
@@ -41,7 +41,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from edelweissfe.journal.journal import Journal
-from edelweissfe.models.femodel import FEModel
+from edelweissfe.utils.exceptions import RestartError
 
 #: Restart entries describing the search layout carry this prefix, the projection itself does not.
 _layoutPrefix = "searchLayout_"
@@ -80,8 +80,8 @@ class FrozenContactSearch(ABC):
     """Mixin writing the frozen projection to the checkpoint and adopting it on resume.
 
     The restart data holds two parts: the *layout* (which contact points and master entities the
-    projection refers to) and the *projection* itself. On resume, the projection is adopted only if
-    the layout of the resumed model is the same; otherwise the constraint searches afresh.
+    projection refers to) and the *projection* itself. Restoring adopts the projection, after checking
+    that the layout is the restored model's.
 
     Subclasses implement :meth:`_searchLayout`, :meth:`_frozenProjection` and
     :meth:`_adoptFrozenProjection`.
@@ -89,9 +89,6 @@ class FrozenContactSearch(ABC):
 
     name: str
     journal: Journal
-
-    #: Set by :meth:`setRestartData`, consumed once by :meth:`resumeConnectivity`.
-    _restoredRestartData: dict[str, np.ndarray] | None = None
 
     @abstractmethod
     def _searchLayout(self) -> dict[str, np.ndarray]:
@@ -110,24 +107,14 @@ class FrozenContactSearch(ABC):
         return layout | self._frozenProjection()
 
     def setRestartData(self, data: dict[str, np.ndarray]):
-        # Not adopted yet: the model's topology is replayed after this, and the layout must be
-        # compared with the replayed one, see resumeConnectivity.
-        self._restoredRestartData = dict(data)
-
-    def resumeConnectivity(self, model: FEModel) -> bool:
-        restored = self._restoredRestartData
-        self._restoredRestartData = None
-
-        if restored is not None and self._layoutMatches(restored):
-            return self._adoptFrozenProjection(restored)
-
-        self.journal.message(
-            "the checkpoint holds no frozen contact projection for these contact points; searching afresh, "
-            "the resumed run will not be bitwise identical",
-            self.name,
-            0,
-        )
-        return self.updateConnectivity(model)
+        # Called after the topology replay and after the mesh dependents caught up with it (see
+        # FEModel.readRestart), so the restored layout is compared with the replayed one.
+        if not self._layoutMatches(data):
+            raise RestartError(
+                "constraint {:}: the checkpointed contact search refers to contact points or master "
+                "entities that the restored model does not have".format(self.name)
+            )
+        self._adoptFrozenProjection(data)
 
     def _layoutMatches(self, restored: dict[str, np.ndarray]) -> bool:
         """Whether a checkpoint's layout entries equal the layout of this constraint."""
