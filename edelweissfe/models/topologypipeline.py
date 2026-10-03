@@ -463,14 +463,13 @@ class TopologyPipeline:
         * an entry in :attr:`history`, holding the plan in the modifier's own serializable
           form plus the resulting topology fingerprint -- which is what lets a resumed run be
           checked round by round instead of only at the end;
-        * the ``modelChange`` itself, via :meth:`notifyModelChanged`, so :meth:`changesSince` and
-          :meth:`refreshMeshDependents` can see it.
+        * the ``modelChange`` itself, stamped with the next :attr:`version`, so :meth:`changesSince`
+          and :meth:`refreshMeshDependents` can see it.
 
         A model modifier therefore reports what it did in exactly one way: by returning a
         :class:`~edelweissfe.models.modelchange.ModelChange` from
-        :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply`. It must
-        not call :meth:`notifyModelChanged` itself -- there is no second channel to keep in sync,
-        and so no way to update one and forget the other.
+        :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply` -- there
+        is no second channel to keep in sync, and so no way to update one and forget the other.
 
         Both callers of ``apply`` (the live :meth:`update` loop and
         :meth:`replayHistory`) route through here, so a replayed run records the same
@@ -494,7 +493,9 @@ class TopologyPipeline:
         """
 
         if modelChange is not None:
-            self.notifyModelChanged(modelChange.kind, modelChange)
+            self.version += 1
+            modelChange.version = self.version
+            self._changeLog.append(modelChange)
 
         record = TopologyRecord(
             modifier=name,
@@ -628,33 +629,6 @@ class TopologyPipeline:
 
         # materialise the list: any() would short-circuit and leave later consumers unrefreshed
         return any([consumer.refreshIfMeshChanged(self._model) for consumer in self.meshDependents])
-
-    def notifyModelChanged(self, changeType, change: ModelChange = None):
-        """Record a model mutation: bump :attr:`version` and append the changeset, so that
-        every :class:`~edelweissfe.models.meshdependent.MeshDependent` can catch up from
-        :meth:`changesSince` at the end of the topology update.
-
-        **Model modifiers must not call this.** :meth:`recordChange` calls it for them, from
-        the :class:`~edelweissfe.models.modelchange.ModelChange` their ``apply`` returns; see there.
-        It remains available for code that mutates the model outside the modifier pipeline.
-
-        Recording only -- there is no synchronous callback. Consumers are refreshed once, by
-        :meth:`refreshMeshDependents`, after the modifiers have settled; see there for why.
-
-        Parameters
-        ----------
-        changeType
-            The :class:`~edelweissfe.models.modelchangeobserver.ModelChangeType` of the mutation.
-        change
-            The structured :class:`ModelChange` describing what changed. If omitted, an empty one
-            (bare ``changeType`` marker only, e.g. for a modifier that hasn't adopted the changeset
-            yet) is recorded instead.
-        """
-        self.version += 1
-        if change is None:
-            change = ModelChange(kind=changeType)
-        change.version = self.version
-        self._changeLog.append(change)
 
     def changesSince(self, version: int) -> ModelChange:
         """The :class:`ModelChange` coalesced across every mutation recorded after ``version``, or

@@ -187,12 +187,6 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
             order. Empty if it never changed anything.
         """
 
-    def onStepStart(self, model: FEModel, step):
-        """Optional lifecycle hook called at the start of an analysis step."""
-
-    def onIncrementEnd(self, model: FEModel, step, timeStep: float):
-        """Optional lifecycle hook called after an increment converges."""
-
     # getRestartData/setRestartData are gone. A modifier no longer serializes its own history, nor
     # implements its own replay: FEModel records every applied plan in model.topology.history and
     # replays it through this class's apply(). The previous arrangement had each modifier
