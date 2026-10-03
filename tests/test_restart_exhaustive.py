@@ -650,6 +650,50 @@ def _reader(checkpoint: Path) -> str:
     return "\n*restart, readFrom={:}\n".format(checkpoint)
 
 
+#: Attributes that legitimately differ between a resumed and an uninterrupted run: wall-clock time.
+_WALL_CLOCK = {"_stepWallClockTic"}
+
+
+def _plainValue(value):
+    """A comparable copy of a plain value -- the kind of attribute state is made of -- or None."""
+    if isinstance(value, (bool, int, float, str, np.number)):
+        return value
+    if isinstance(value, np.ndarray) and value.dtype != object:
+        return value.copy()
+    if isinstance(value, TimeStep):
+        return (value.number, value.stepProgressIncrement, value.stepProgress, value.totalTime)
+    return None
+
+
+def _components(model, step, outputManagers) -> dict:
+    """Every plain-valued attribute of every component a checkpoint concerns, by component."""
+    components = {"solver": step.solver, "timeStepper": step.timeStepper}
+    components |= {"constraint " + name: c for name, c in model.constraints.items()}
+    components |= {"modifier " + name: m for name, m in model.modelModifiers.items()}
+    components |= {"output " + name: m for name, m in outputManagers.items()}
+    for actionType, actions in step.actions.items():
+        components |= {"{:} {:}".format(actionType, name): a for name, a in actions.items()}
+    return {
+        key: {
+            name: _plainValue(value)
+            for name, value in vars(component).items()
+            if name not in _WALL_CLOCK and _plainValue(value) is not None
+        }
+        for key, component in components.items()
+    }
+
+
+def _differingComponents(resumed: dict, reference: dict) -> list:
+    """The component attributes that differ between two snapshots of :func:`_components`."""
+    differing = []
+    for key in sorted(set(resumed) | set(reference)):
+        a, b = resumed.get(key, {}), reference.get(key, {})
+        for name in sorted(set(a) | set(b)):
+            if name not in a or name not in b or not np.array_equal(np.asarray(a[name]), np.asarray(b[name])):
+                differing.append("{:}.{:}".format(key, name))
+    return differing
+
+
 @cache
 def _uninterrupted(scenario: str, solver: str, directory: Path):
     """The reference run, writing a checkpoint after every increment; returns its final state, its
@@ -661,8 +705,8 @@ def _uninterrupted(scenario: str, solver: str, directory: Path):
     propose, reject = AdaptiveTimeStepper.proposeTimeStep, AdaptiveTimeStepper.rejectTimeStep
     proposeSimple = SimpleTimeStepper.proposeTimeStep
     write = restartOutputManager.writeCheckpoint
-    #: The exported CSV rows at the moment each checkpoint was written, by checkpoint key.
-    rowsAtCheckpoint = {}
+    #: The exported CSV rows, and the components' attributes, at each checkpoint, by checkpoint key.
+    rowsAtCheckpoint, componentsAtCheckpoint = {}, {}
 
     def recordingPropose(self):
         timeStep = propose(self)
@@ -682,6 +726,7 @@ def _uninterrupted(scenario: str, solver: str, directory: Path):
     def recordingWrite(fileName, model, step, outputManagers):
         write(fileName, model, step, outputManagers)
         rowsAtCheckpoint[_checkpointKey(Path(fileName))] = _csvRows(directory)
+        componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(model, step, outputManagers)
 
     AdaptiveTimeStepper.proposeTimeStep = recordingPropose
     AdaptiveTimeStepper.rejectTimeStep = countingReject
@@ -705,6 +750,7 @@ def _uninterrupted(scenario: str, solver: str, directory: Path):
     output = dict(
         checkpointKeys=[_checkpointKey(c) for c in checkpoints],
         rowsAtCheckpoint=rowsAtCheckpoint,
+        componentsAtCheckpoint=componentsAtCheckpoint,
         rows=_csvRows(directory),
     )
     return _state(model), checkpoints, output, spec["check"](model, run)
@@ -768,7 +814,18 @@ def test_resume_from_every_checkpoint_is_exact(workDirectory, scenario, solver, 
         with pytest.raises(RestartError):
             _run(resumeDirectory / "resumed.inp", deck)
         return
-    resumed = _state(_run(resumeDirectory / "resumed.inp", deck))
+    componentsAtCheckpoint = {}
+    write = restartOutputManager.writeCheckpoint
+
+    def recordingWrite(fileName, model, step, outputManagers):
+        write(fileName, model, step, outputManagers)
+        componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(model, step, outputManagers)
+
+    restartOutputManager.writeCheckpoint = recordingWrite
+    try:
+        resumed = _state(_run(resumeDirectory / "resumed.inp", deck))
+    finally:
+        restartOutputManager.writeCheckpoint = write
 
     differing = [key for key in reference if key not in resumed or not np.array_equal(resumed[key], reference[key])]
     differing += [key for key in resumed if key not in reference]
@@ -782,6 +839,14 @@ def test_resume_from_every_checkpoint_is_exact(workDirectory, scenario, solver, 
     expectedRows = output["rows"] - output["rowsAtCheckpoint"][resumeKey]
     if _csvRows(resumeDirectory) != expectedRows:
         differing.append("CSV rows gained {:} != expected {:}".format(_csvRows(resumeDirectory), expectedRows))
+
+    # And at every checkpoint it writes, every component -- solver, time stepper, constraints, model
+    # modifiers, output managers, step actions -- holds what it held in the uninterrupted run. State a
+    # component carries but does not checkpoint shows here, declared or not.
+    for key, components in componentsAtCheckpoint.items():
+        reference = output["componentsAtCheckpoint"].get(key)
+        if reference is not None:
+            differing += ["at {:}: {:}".format(key, d) for d in _differingComponents(components, reference)]
 
     assert not differing, "resuming from {:} ends elsewhere: {:}".format(checkpoint, differing[:8])
 
@@ -797,84 +862,3 @@ if __name__ == "__main__":
         for solver in spec["solvers"]:
             _, checkpoints, _, missing = _uninterrupted(scenario, solver, Path(tempfile.mkdtemp()))
             print(scenario, solver, "checkpoints:", len(checkpoints), "feature:", missing or "ok", file=sys.stderr)
-
-
-# --- Completeness of the declared state ---------------------------------------------------------
-
-#: Attributes that change between increments but are rebuilt from the model at the start of every
-#: increment or step, so a resumed run derives them itself. Each entry says why.
-_REBUILT = {}
-
-#: The scenarios whose components are watched: between them, every solver, contact and load type.
-_WATCHED = [
-    ("implicit", "amrRigidContact"),
-    ("explicit", "amrRigidContact"),
-    ("NID", "amrRigidContact"),
-    ("implicit", "deformableFrictionalContact"),
-    ("explicit", "deformableFrictionalContact"),
-    ("implicit", "nodeForcesTwoSteps"),
-    ("explicit", "amrPlasticExplicit"),
-]
-
-
-def _plainValue(value):
-    """A comparable copy of a plain value -- the kind of attribute state is made of -- or None."""
-    if isinstance(value, (bool, int, float, str, np.number)):
-        return value
-    if isinstance(value, np.ndarray) and value.dtype != object:
-        return value.copy()
-    if isinstance(value, TimeStep):
-        return (value.number, value.stepProgressIncrement, value.stepProgress, value.totalTime)
-    return None
-
-
-def _components(model, step, outputManagers):
-    yield "solver", step.solver
-    yield "timeStepper", step.timeStepper
-    for name, constraint in model.constraints.items():
-        yield "constraint " + name, constraint
-    for name, modifier in model.modelModifiers.items():
-        yield "modifier " + name, modifier
-    for name, manager in outputManagers.items():
-        yield "output " + name, manager
-    for actionType, actions in step.actions.items():
-        for name, action in actions.items():
-            yield "{:} {:}".format(actionType, name), action
-
-
-@pytest.mark.parametrize("solver, scenario", _WATCHED, ids=["-".join(w) for w in _WATCHED])
-def test_every_attribute_that_changes_between_checkpoints_is_declared(solver, scenario, tmp_path):
-    """The declared-state test checks that every component declares its state; this one checks that
-    the declaration is complete: an attribute whose value changes from one checkpoint to the next
-    is state, so it must be declared -- or be rebuilt from the model, and listed in _REBUILT."""
-
-    snapshots = []
-    write = restartOutputManager.writeCheckpoint
-
-    def recordingWrite(fileName, model, step, outputManagers):
-        write(fileName, model, step, outputManagers)
-        snapshot = {}
-        for key, component in _components(model, step, outputManagers):
-            declared = set(component.checkpointedState or ()) | set(component.getRestartData())
-            values = {name: _plainValue(value) for name, value in vars(component).items()}
-            snapshot[key] = (type(component).__qualname__, declared, values)
-        snapshots.append(snapshot)
-
-    restartOutputManager.writeCheckpoint = recordingWrite
-    try:
-        _run(tmp_path / "run.inp", _deck(tmp_path, scenario, solver, _writer(tmp_path)))
-    finally:
-        restartOutputManager.writeCheckpoint = write
-
-    assert len(snapshots) > 2, "too few checkpoints to watch anything"
-    undeclared = set()
-    for before, after in zip(snapshots, snapshots[1:]):
-        for key, (className, declared, values) in after.items():
-            previousValues = before[key][2] if key in before else {}
-            for name, value in values.items():
-                if value is None or name in declared or name in _REBUILT.get(className, ()):
-                    continue
-                previous = previousValues.get(name)
-                if previous is None or not np.array_equal(np.asarray(previous), np.asarray(value)):
-                    undeclared.add("{:} ({:}).{:}".format(key, className, name))
-    assert not undeclared, "changes between checkpoints but is not declared: " + ", ".join(sorted(undeclared))
