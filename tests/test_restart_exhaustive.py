@@ -266,6 +266,16 @@ _LOADS_BEND_BACK = """
 >>dirichlet, name=bend, nSet=beam_right, field=displacement, 2={amplitude}
 """
 
+#: A load ramped up by node forces in step 1, and held in step 2 (which only clamps). The force a
+#: step holds is what the steps before it accumulated -- state carried across the step boundary.
+_LOADS_PUSH = """
+>>dirichlet, name=clamp, nSet=beam_left, field=displacement, 1=0, 2=0, 3=0
+>>nodeforces, name=push, nSet=beam_right, field=displacement, components='0,-{amplitude},0'
+"""
+_LOADS_HOLD = """
+>>dirichlet, name=clamp, nSet=beam_left, field=displacement, 1=0, 2=0, 3=0
+"""
+
 #: Press the block into the base and drag it sideways at the same time.
 _LOADS_PRESS_AND_DRAG = """
 >>dirichlet, name=fixBase, nSet=beam_back, field=displacement, 1=0, 2=0, 3=0
@@ -428,6 +438,16 @@ _SCENARIOS = {
         threshold={"implicit": 6.0},
         steps=[_LOADS_BEND, _LOADS_BEND_BACK],
         check=_refinesRepeatedly,
+    ),
+    # (j2) Two steps, node forces ramped in the first and held in the second: resumes into step 2
+    # must hold the force step 1 accumulated, although step 1 is skipped.
+    "nodeForcesTwoSteps": dict(
+        solvers=["implicit"],
+        blocks=[_BEAM],
+        threshold={"implicit": 6.0},
+        amplitude={"implicit": 1.0},
+        steps=[_LOADS_PUSH, _LOADS_HOLD],
+        check=lambda model, run: "",
     ),
     # (k) Explicit dynamics with a von Mises material and live AMR: the stable time increment depends
     # on the state (refinement lowers it, mid-run, lower-only).
