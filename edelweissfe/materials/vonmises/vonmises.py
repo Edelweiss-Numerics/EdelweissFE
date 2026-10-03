@@ -120,8 +120,12 @@ class VonMisesMaterial(BaseHypoElasticMaterial):
         # derivative of fy dKappa
         self._dfy_ddKappa = lambda kappa_: self.HLin + self.deltaYieldStress * self.delta * np.exp(-self.delta * kappa_)
         self._G = self._E / (2 * (1.0 + self._v))
+        # E and v are immutable for the lifetime of this instance (ChangeMaterialProperty
+        # constructs a new material instance rather than mutating an existing one), so the
+        # elasticity matrix only needs to be assembled once.
+        self._Ei = self._computeElasticityMatrix()
 
-    def elasticityMatrix(self) -> np.ndarray:
+    def _computeElasticityMatrix(self) -> np.ndarray:
         """Initalize a 3D material elasticity matrix.
 
         Returns
@@ -146,6 +150,16 @@ class VonMisesMaterial(BaseHypoElasticMaterial):
         )
         return Ei
 
+    def elasticityMatrix(self) -> np.ndarray:
+        """The 3D material elasticity matrix.
+
+        Returns
+        -------
+        np.ndarray
+            The elasticity matrix."""
+
+        return self._Ei
+
     def assignCurrentStateVars(self, currentStateVars: np.ndarray):
         """Assign new current state vars.
 
@@ -155,31 +169,6 @@ class VonMisesMaterial(BaseHypoElasticMaterial):
             Array containing the material state vars."""
 
         self.kappaOld = currentStateVars
-
-    def computePlaneStress(
-        self,
-        stress: np.ndarray,
-        dStress_dStrain: np.ndarray,
-        dStrain: np.ndarray,
-        time: float,
-        dTime: float,
-    ):
-        """Computes the stresses for a plane stress material.
-
-        Parameters
-        ----------
-        stress
-            Vector containing the stresses.
-        dStress_dStrain
-            Matrix containing dStress/dStrain.
-        dStrain
-            Strain vector increment at time step t to t+dTime.
-        time
-            Array of step time and total time.
-        dTime
-            Current time step size."""
-
-        super().computePlaneStress(stress, dStress_dStrain, dStrain, time, dTime)
 
     def computeStress(
         self,
@@ -204,7 +193,7 @@ class VonMisesMaterial(BaseHypoElasticMaterial):
         dTime
             Current time step size."""
 
-        Ei = self.elasticityMatrix()
+        Ei = self._Ei
         # handle zero strain increment
         if np.linalg.norm(dStrain) < 10**-14:
             dStress_dStrain[:] = Ei
@@ -250,42 +239,6 @@ class VonMisesMaterial(BaseHypoElasticMaterial):
         else:  # elastic step
             stress[:] = trialStress
             dStress_dStrain[:] = Ei
-
-    def computeUniaxialStress(
-        self,
-        stress: np.ndarray,
-        dStress_dStrain: np.ndarray,
-        dStrain: np.ndarray,
-        time: float,
-        dTime: float,
-    ):
-        """Computes the stresses for a uniaxial stress state.
-
-        Parameters
-        ----------
-        stress
-            Vector containing the stresses.
-        dStress_dStrain
-            Matrix containing dStress/dStrain.
-        dStrain
-            Strain vector increment at time step t to t+dTime.
-        time
-            Array of step time and total time.
-        dTime
-            Current time step size."""
-
-        raise Exception("Computing uniaxial stress is not possible with this material.")
-
-    def getDensity(self) -> float:
-        """Get the density of the material.
-
-        Returns
-        -------
-        float
-            The density of the material."""
-        if not hasattr(self, "_density"):
-            raise Exception("Density is not defined for this material.")
-        return self._density
 
     def getResult(self, result: str) -> float:
         """Get the result, as a persistent view which is continiously

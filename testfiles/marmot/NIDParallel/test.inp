@@ -1,0 +1,54 @@
+** Newmark-beta implicit dynamics (NID): one Marmot C3D8 (LinearElastic) as a uniaxial bar under a
+** suddenly applied end load -- a single-degree-of-freedom oscillator with a closed-form solution.
+**
+** Geometry 1 x 1 x 1, fixed at x = 0, every lateral displacement suppressed, nu = 0: the x-motion of
+** the four loaded nodes is uniform (by symmetry), so the model IS the SDOF system
+**
+**     M u'' + K u = F,   K = E A / L = E,   M = rho A L / 3   (consistent mass, summed over the free x-dofs)
+**
+** with E = 4 pi^2 and rho = 3  ->  M = 1, K = 4 pi^2, omega = 2 pi, period T = 1. The load F = K * 0.01
+** is applied as a step (f(t) = 1) at t = 0 from rest, so the continuous solution is
+**
+**     u(t) = 0.01 (1 - cos 2 pi t).
+**
+** dt = 0.02 (50 increments per period) over two periods; U.ref pins this one dt. The verification
+** proper lives in tests/test_nid_newmark.py, which runs this same problem at several dt and checks
+** it against the closed form (O(dt^2) convergence), against the exact discrete Newmark recurrence
+** of the SDOF system (to round-off), and for exact conservation of the discrete energy.
+
+*material, name=LinearElastic, id=bar
+**E                   nu     density
+39.47841760435743,    0.0,   3.0
+
+*section, name=section1, material=bar, type=solid
+gen_all
+
+*job, name=nidjob, domain=3d
+*solver, solver=NIDParallel, name=theSolver
+newmarkBeta=0.25
+newmarkGamma=0.5
+
+*modelGenerator, generator=boxGen, name=gen
+nX=1
+nY=1
+nZ=1
+lX=1
+lY=1
+lZ=1
+elType=C3D8
+
+*fieldOutput
+>>perNode, elSet=gen_all, field=displacement, result=U, name=displacement
+>>perNode, nSet=gen_right, field=displacement, result=U, name=tipU, f(x)='np.mean(x[:,0])', saveHistory=True
+>>perNode, nSet=gen_right, field=displacement, result=V, name=tipV, f(x)='np.mean(x[:,0])', saveHistory=True
+>>perNode, nSet=gen_right, field=displacement, result=A, name=tipA, f(x)='np.mean(x[:,0])', saveHistory=True
+
+*output, type=monitor, name=monitor
+fieldOutput=tipU
+
+*step, solver=theSolver
+stepLength=2.0, startInc=0.01, maxInc=0.01, minInc=1e-4, maxNumInc=1000, maxIter=25
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=fixedEnd, nSet=gen_left, field=displacement, 1=0.0
+>>dirichlet, name=lateral, nSet=all, field=displacement, 2=0.0, 3=0.0
+>>nodeforces, name=endLoad, nSet=gen_right, field=displacement, 1=0.09869604401089358, f(t)='1'

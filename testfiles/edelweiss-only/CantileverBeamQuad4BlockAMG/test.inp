@@ -1,0 +1,34 @@
+** Regression test for the blockamg field-split block-AMG linear solver, on a single-field 2D
+** linear-elastic cantilever (610 displacement dofs). Exercises the solver end-to-end through the
+** Newton loop: equilibration, per-field AMGCL hierarchy (built via build/applyPreconditioner) with
+** the rigid-body translations as near null-space, block-GS-preconditioned GMRES. Requires the
+** optional amgcl extension; skipped where it is not built.
+*material, name=linearelastic, id=linearelastic, provider=edelweiss
+210000.0, 0.15
+
+*section, name=section1, thickness=40.0, material=linearelastic, type=plane
+all
+
+*job, name=cps4job, domain=2d
+*solver, solver=NIST, name=theSolver
+linsolver=blockamg
+linsolverConfigFile=blockamg.json
+
+*fieldOutput
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
+
+*modelGenerator, generator=planeRectQuad, name=gen
+x0=0, l=10000
+y0=0, h=100
+elType=CPE4
+elProvider=edelweiss
+nX=60
+nY=4
+
+*output, type=monitor
+fieldOutput=displacement, f(x)='mean(x[:,1])'
+
+*step, solver=theSolver
+maxInc=1e-0, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=100
+>>dirichlet, name=left, nSet=gen_left,  field=displacement, 2=0, 1=0
+>>nodeforces, name=cloadTop, nSet=gen_rightTop, components='0,-1000', field=displacement

@@ -27,12 +27,47 @@
 # Created on Sat Jan  21 12:18:10 2017
 
 from edelweissfe.journal.journal import Journal
+from edelweissfe.timesteppers.base.timestepperbase import TimeStepperBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import ReachedMaxIncrements, ReachedMinIncrementSize
 
 
-class AdaptiveTimeStepper:
+class AdaptiveTimeStepper(TimeStepperBase):
+    """Divides a step into increments whose size adapts to the convergence of the solver: it grows
+    after good increments and is cut back after failed ones.
+
+    Parameters
+    ----------
+    currentTime
+        The start time of the step.
+    stepLength
+        The total length of the step.
+    startIncrement
+        The size of the start increment, relative to the step length.
+    maxIncrement
+        The maximum size of an increment, relative to the step length.
+    minIncrement
+        The minimum size of an increment, relative to the step length.
+    maxNumberIncrements
+        The maximum number of allowed increments.
+    journal
+        The journal instance for logging purposes.
+    increaseFactor
+        The ratio to increase the increments in case of good convergence.
+    makeZeroIncrementFirst
+        If True, the first increment will be zero.
+    """
+
     identification = "AdaptiveTimeStepper"
+
+    checkpointedState = {
+        "currentTime": float,
+        "incrementCounter": int,
+        "nPassedGoodIncrements": int,
+        "finishedStepProgress": float,
+        "increment": float,
+        "allowedToIncreasedNext": bool,
+    }
 
     def __init__(
         self,
@@ -46,194 +81,93 @@ class AdaptiveTimeStepper:
         increaseFactor: float = 1.1,
         makeZeroIncrementFirst: bool = True,
     ):
-        """
-        An increment generator for incremental-iterative simulations.
-
-        Implementation as generator class.
-
-        Parameters
-        ----------
-        currentTime
-            The current (start) time.
-        stepLength
-            The total length of the step.
-        startIncrement
-            The size of the start increment.
-        maxIncrement
-            The maximum size of an increment.
-        minIncrement
-            The minimum size of an increment.
-        maxNumberIncrements
-            The maximum number of allowed increments.
-        journal
-            The journal instance for logging purposes.
-        increaseFactor
-            The ratio to increase the increments in case of good convergence.
-        makeZeroIncrementFirst
-            If True, the first increment will be zero.
-        """
-
-        self.nPassedGoodIncrements = int(0)
-        self.incrementCounter = int(0)
         self.startIncrement = startIncrement
         self.maxIncrement = maxIncrement
         self.minIncrement = minIncrement
         self.maxNumberIncrements = maxNumberIncrements
-
-        self.finishedStepProgress = 0.0
-        self.increment = min(startIncrement, maxIncrement)
-        self.allowedToIncreasedNext = True
-
-        self.currentTime = currentTime
         self.stepLength = stepLength
-        self.dT = 0.0
         self.journal = journal
         self.increaseFactor = increaseFactor
         self.makeZeroIncrementFirst = makeZeroIncrementFirst
 
-    def doesZeroIncrement(self):
-        return True
+        #: The start time of the step.
+        self.currentTime = currentTime
+        #: The number of the next increment; the zero increment, if any, is number 0.
+        self.incrementCounter = 0
+        #: Counts the good increments; the increment grows once three have passed.
+        self.nPassedGoodIncrements = 0
+        #: The accepted progress within the step, from 0 to 1.
+        self.finishedStepProgress = 0.0
+        #: The size of the next increment, relative to the step length.
+        self.increment = min(startIncrement, maxIncrement)
+        #: False if the solver asked to keep the next increment from growing.
+        self.allowedToIncreasedNext = True
 
-    def generateTimeStep(self) -> TimeStep:
-        """
-        Generate the next increment.
+    def isFinished(self) -> bool:
+        return self.finishedStepProgress >= (1.0 - 1e-15)
 
-        Returns
-        -------
-        TimeStep
-            The current time step.
-        """
+    def isAtStepStart(self) -> bool:
+        return self.incrementCounter == 0
 
-        while self.finishedStepProgress < (1.0 - 1e-15):
+    def numberOfIncrementsDone(self) -> int:
+        return self.incrementCounter
 
-            remainder = 1.0 - self.finishedStepProgress
-            if remainder < self.increment:
-                self.increment = remainder
+    def proposeTimeStep(self) -> TimeStep:
+        if self.incrementCounter > self.maxNumberIncrements:
+            self.journal.message("Reached maximum number of increments", self.identification)
+            raise ReachedMaxIncrements()
 
-            # Force a zero increment only for the first generated step when enabled.
-            if self.makeZeroIncrementFirst and (self.incrementCounter == 0):
-                theIncrement = 0.0
-            else:
-                theIncrement = self.increment
+        remainder = 1.0 - self.finishedStepProgress
+        if remainder < self.increment:
+            self.increment = remainder
 
-            dT = self.stepLength * theIncrement
-            self.finishedStepProgress += theIncrement
-            endTimeOfIncrementInStep = self.stepLength * self.finishedStepProgress
-            endTimeOfIncrementInTotal = self.currentTime + endTimeOfIncrementInStep
+        if self.makeZeroIncrementFirst and self.incrementCounter == 0:
+            theIncrement = 0.0
+        else:
+            theIncrement = self.increment
 
-            yield TimeStep(
-                self.incrementCounter,
-                theIncrement,
-                self.finishedStepProgress,
-                dT,
-                endTimeOfIncrementInStep,
-                endTimeOfIncrementInTotal,
-            )
+        progress = self.finishedStepProgress + theIncrement
+        return TimeStep(
+            self.incrementCounter,
+            theIncrement,
+            progress,
+            self.stepLength * theIncrement,
+            self.stepLength * progress,
+            self.currentTime + self.stepLength * progress,
+        )
 
-            if self.incrementCounter > self.maxNumberIncrements:
-                self.journal.errorMessage("Reached maximum number of increments", self.identification)
-                raise ReachedMaxIncrements()
+    def acceptTimeStep(self, timeStep: TimeStep):
+        self.finishedStepProgress = timeStep.stepProgress
 
-            if (self.nPassedGoodIncrements >= 3) and self.allowedToIncreasedNext:
-                self.increment *= self.increaseFactor
-                if self.increment > self.maxIncrement:
-                    self.increment = self.maxIncrement
-            self.allowedToIncreasedNext = True
+        if self.nPassedGoodIncrements >= 3 and self.allowedToIncreasedNext:
+            self.increment = min(self.increment * self.increaseFactor, self.maxIncrement)
+        self.allowedToIncreasedNext = True
 
-            self.incrementCounter += 1
-            self.nPassedGoodIncrements += 1
+        self.incrementCounter += 1
+        self.nPassedGoodIncrements += 1
 
-    def preventIncrementIncrease(
-        self,
-    ):
-        """May be called before an increment is requested, to prevent from
-        automatically increasing, e.g. in case of bad convergency."""
-
-        self.allowedToIncreasedNext = False
-
-    def reduceNextIncrement(self, scaleFactor: float):
-        """Reduce the increment size for the next increment."""
+    def rejectTimeStep(self, cutbackFactor: float):
+        if self.incrementCounter == 0:
+            self.journal.errorMessage("Failed zero increment", self.identification)
+            raise ReachedMinIncrementSize()
 
         if self.increment == self.minIncrement:
             self.journal.errorMessage("Cannot reduce increment size", self.identification)
             raise ReachedMinIncrementSize()
 
-        newIncrement = self.increment * scaleFactor
-        if newIncrement > self.maxIncrement:
-            self.increment = self.maxIncrement
-        elif newIncrement < self.minIncrement:
-            self.increment = self.minIncrement
-        else:
-            self.increment = newIncrement
+        # The retried increment counts as the first good one after the cutback, so the increment
+        # grows again once two more have passed.
+        self.nPassedGoodIncrements = 1
+        self.allowedToIncreasedNext = True
 
-        self.journal.message(
-            "Cutback to increment size {:}".format(self.increment),
-            self.identification,
-            2,
-        )
+        self.increment = min(max(self.increment * cutbackFactor, self.minIncrement), self.maxIncrement)
 
-    def discardAndChangeIncrement(self, scaleFactor: float):
-        """Change increment size between minIncrement and
-        maxIncrement by a given scale factor.
+        self.journal.message("Cutback to increment size {:}".format(self.increment), self.identification, 2)
 
-        Parameters
-        ----------
-        scaleFactor
-            The factor for scaling based on the previous increment.
-        """
+    def preventIncrementIncrease(self):
+        self.allowedToIncreasedNext = False
 
-        if self.incrementCounter == 0:
-            self.journal.errorMessage("Failed zero increment", self.identification)
-            raise ReachedMinIncrementSize()
+    def changeIncrementSize(self, scaleFactor: float):
+        self.increment = min(max(self.increment * scaleFactor, self.minIncrement), self.maxIncrement)
 
-        self.finishedStepProgress -= self.increment
-        self.incrementCounter -= 1
-        self.nPassedGoodIncrements = 0
-
-        self.reduceNextIncrement(scaleFactor)
-
-    def writeRestart(self, restartFile):
-        """Write restart information to a file.
-
-        Parameters
-        ----------
-        restartFile
-            The file to write the restart information to.
-        """
-        f = restartFile
-        f.create_group("timestepper")
-
-        f["timestepper"].attrs["currentTime"] = self.currentTime
-        f["timestepper"].attrs["stepLength"] = self.stepLength
-        f["timestepper"].attrs["startIncrement"] = self.startIncrement
-        f["timestepper"].attrs["maxIncrement"] = self.maxIncrement
-        f["timestepper"].attrs["minIncrement"] = self.minIncrement
-        f["timestepper"].attrs["maxNumberIncrements"] = self.maxNumberIncrements
-        f["timestepper"].attrs["nPassedGoodIncrements"] = self.nPassedGoodIncrements
-        f["timestepper"].attrs["incrementCounter"] = self.incrementCounter
-        f["timestepper"].attrs["finishedStepProgress"] = self.finishedStepProgress
-        f["timestepper"].attrs["increment"] = self.increment
-        f["timestepper"].attrs["allowedToIncreasedNext"] = self.allowedToIncreasedNext
-        f["timestepper"].attrs["dT"] = self.dT
-
-    def readRestart(self, restartFile):
-        """Read restart information from a file.
-
-        Parameters
-        ----------
-        restartFile
-            The file to read the restart information from.
-        """
-        f = restartFile
-        self.currentTime = f["timestepper"].attrs["currentTime"]
-        self.stepLength = f["timestepper"].attrs["stepLength"]
-        self.startIncrement = f["timestepper"].attrs["startIncrement"]
-        self.maxIncrement = f["timestepper"].attrs["maxIncrement"]
-        self.minIncrement = f["timestepper"].attrs["minIncrement"]
-        self.maxNumberIncrements = f["timestepper"].attrs["maxNumberIncrements"]
-        self.nPassedGoodIncrements = f["timestepper"].attrs["nPassedGoodIncrements"]
-        self.incrementCounter = f["timestepper"].attrs["incrementCounter"]
-        self.finishedStepProgress = f["timestepper"].attrs["finishedStepProgress"]
-        self.increment = f["timestepper"].attrs["increment"]
-        self.allowedToIncreasedNext = f["timestepper"].attrs["allowedToIncreasedNext"]
-        self.dT = f["timestepper"].attrs["dT"]
+        self.journal.message("New increment size {:}".format(self.increment), self.identification, 2)

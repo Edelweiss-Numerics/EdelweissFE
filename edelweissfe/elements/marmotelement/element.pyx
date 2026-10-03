@@ -35,9 +35,16 @@ cimport cython
 cimport libcpp.cast
 cimport numpy as np
 
-cimport edelweissfe.elements.marmotelement.element
-
 from edelweissfe.utils.exceptions import CutbackRequest
+
+# Point Marmot's warning channel at stdout, once, when this extension is imported. MarmotJournal
+# writes into a null streambuf unless a consumer calls setMSGOutputDirection, and nothing here ever
+# did -- so every warning Marmot raised on this path was discarded before it could be printed.
+# std::cout is where the solver's own output goes, so a redirected run log captures it.
+MarmotJournal.setMSGOutputDirection(cout)
+
+
+cimport edelweissfe.elements.marmotelement.element
 
 mapLoadTypes={
         "pressure" : DistributedLoadTypes.Pressure,
@@ -107,6 +114,11 @@ cdef class MarmotElementWrapper:
         return self._elNumber
 
     @property
+    def hasKernels(self):
+        """True: a Marmot element carries a material and a state; see BaseElement.hasKernels."""
+        return True
+
+    @property
     def nSpatialDimensions(self):
         return self._nSpatialDimensions
 
@@ -163,6 +175,31 @@ cdef class MarmotElementWrapper:
                         &self._elementProperties[0],
                         self._elementProperties.shape[0]))
 
+    def assignProperty(self, str propertyName, properties):
+        """Assign a single property of the element by name."""
+
+        cdef double[::1] _properties = np.ascontiguousarray(
+                np.atleast_1d(np.asarray(properties, dtype=np.float64)))
+
+        # The count travels with the pointer: the values come from a user-written input file and
+        # the element reads a fixed number per property name, so without it a short list is not an
+        # error but an out-of-bounds read landing in a material coefficient.
+        self.marmotElement.assignProperty(
+                propertyName.encode("UTF-8"),
+                &_properties[0],
+                _properties.shape[0])
+
+    def getPropertyNames(self):
+        """Get the names of all the valid properties of the element."""
+
+        cdef vector[string] names = self.marmotElement.getPropertyNames()
+        return [name.decode("utf-8") for name in names]
+
+    @property
+    def propertyNames(self):
+        """Get the names of all the valid properties of the element."""
+        return self.getPropertyNames()
+
     def initializeElement(self, ):
         """Let the underlying MarmotElement initialize itself"""
         self.marmotElement.initializeYourself()
@@ -208,59 +245,53 @@ cdef class MarmotElementWrapper:
         self.marmotElement.setInitialConditions(mapStateTypes[stateType], &values[0])
         self.acceptLastState()
 
-    cpdef void computeYourself(self,
-                               double[::1] Ke,
-                               double[::1] Pe,
-                               const double[::1] U,
-                               const double[::1] dU,
-                               const double[::1] time,
-                               double dTime) except * nogil:
+    cpdef void computeKernels(self,
+                              double[::1] Ke,
+                              double[::1] Pe,
+                              const double[::1] U,
+                              const double[::1] dU,
+                              double time,
+                              double dTime) except *:
         """Evaluate residual and stiffness for given time, field, and field increment."""
 
         if not self._hasMaterial:
             raise Exception("Element {:} has no material assigned!".format(self._elNumber))
 
-        cdef double pNewDT
-        with nogil:
-            self._initializeStateVarsTemp()
+        try:
+            with nogil:
+                self._initializeStateVarsTemp()
 
-            pNewDT = 1e36
+                self.marmotElement.computeKernels(&U[0],
+                                                  &dU[0],
+                                                  &Pe[0],
+                                                  &Ke[0],
+                                                  time,
+                                                  dTime)
+        except (RuntimeError, ValueError) as e:
+            raise CutbackRequest(str(e), 0.5)
 
-            self.marmotElement.computeYourself(&U[0],
-                                               &dU[0],
-                                               &Pe[0],
-                                               &Ke[0],
-                                               &time[0],
-                                               dTime,
-                                               pNewDT)
-            if pNewDT < 1.0:
-                raise CutbackRequest("Element {:} requests for a cutback!".format(self.elNumber), pNewDT)
-
-    cpdef void computeYourselfExplicit(self,
-                                       double[::1] Pe,
-                                       const double[::1] U,
-                                       const double[::1] dU,
-                                       const double[::1] time,
-                                       double dTime) except * nogil:
+    cpdef void computeKernelsExplicit(self,
+                                      double[::1] Pe,
+                                      const double[::1] U,
+                                      const double[::1] dU,
+                                      double time,
+                                      double dTime) except *:
         """Evaluate residual and stiffness for given time, field, and field increment."""
 
         if not self._hasMaterial:
             raise Exception("Element {:} has no material assigned!".format(self._elNumber))
 
-        cdef double pNewDT
-        with nogil:
-            self._initializeStateVarsTemp()
+        try:
+            with nogil:
+                self._initializeStateVarsTemp()
 
-            pNewDT = 1e36
-
-            self.marmotElement.computeYourselfExplicit(&U[0],
-                                                       &dU[0],
-                                                       &Pe[0],
-                                                       &time[0],
-                                                       dTime,
-                                                       pNewDT)
-            if pNewDT < 1.0:
-                raise CutbackRequest("Element {:} requests for a cutback!".format(self.elNumber), pNewDT)
+                self.marmotElement.computeKernelsExplicit(&U[0],
+                                                          &dU[0],
+                                                          &Pe[0],
+                                                          time,
+                                                          dTime)
+        except (RuntimeError, ValueError) as e:
+            raise CutbackRequest(str(e), 0.5)
 
     def computeDistributedLoad(self,
                                str loadType,
@@ -269,7 +300,7 @@ cdef class MarmotElementWrapper:
                                int faceID,
                                const double[::1] load,
                                const double[::1] U,
-                               const double[::1] time,
+                               double time,
                                double dTime):
         """Evaluate residual and stiffness for given time, field, and field increment due to a surface load."""
 
@@ -279,7 +310,7 @@ cdef class MarmotElementWrapper:
                                                   faceID,
                                                   &load[0],
                                                   &U[0],
-                                                  &time[0],
+                                                  time,
                                                   dTime)
 
     def computeBodyForce(self,
@@ -287,7 +318,7 @@ cdef class MarmotElementWrapper:
                          double[::1] K,
                          const double[::1] load,
                          const double[::1] U,
-                         const double[::1] time,
+                         double time,
                          double dTime):
         """Evaluate residual and stiffness for given time, field, and field increment due to a volume load."""
 
@@ -296,13 +327,27 @@ cdef class MarmotElementWrapper:
                                     &K[0],
                                     &load[0],
                                     &U[0],
-                                    &time[0],
+                                    time,
                                     dTime)
 
     def computeLumpedInertia(self, double[::1] M):
         """Compute the lumped mass matrix of the underlying MarmotElement"""
 
         self.marmotElement.computeLumpedInertia(&M[0])
+
+    def computeLumpedDamping(self, double[::1] C):
+        """Compute the lumped damping of the underlying MarmotElement"""
+
+        self.marmotElement.computeLumpedDamping(&C[0])
+
+    def computeConsistentInertia(self, double[::1] M):
+        """Compute the consistent (full) mass matrix of the underlying MarmotElement.
+
+        Written into ``M`` in the element's flat ``nDof * nDof`` layout -- the same layout
+        ``computeKernels`` writes the stiffness into, so an entity slice of a VIJ system matrix can
+        be handed over directly and the assembled mass shares the stiffness' sparsity pattern."""
+
+        self.marmotElement.computeConsistentInertia(&M[0])
 
     def computeCriticalTimeStepForExplicitDynamics(self, double[::1] Q):
         """Compute the critical time step for explicit dynamics of the underlying MarmotElement"""
@@ -320,6 +365,23 @@ cdef class MarmotElementWrapper:
         """Accept the computed state (in nonlinear iteration schemes)."""
 
         self._stateVars[:] = self._stateVarsTemp
+
+    def getStateVars(self):
+        """Return a copy of the converged quadrature-point state-variable buffer."""
+
+        return np.asarray(self._stateVars).copy()
+
+    def setStateVars(self, double[::1] values):
+        """Overwrite the converged and trial state-variable buffers in place (so the MarmotElement's
+        assigned pointer to the trial buffer stays valid). Used by adaptive refinement to transfer
+        history to child elements."""
+
+        if values.shape[0] != self._stateVars.shape[0]:
+            raise ValueError(
+                "setStateVars: expected {:} state variables, got {:}".format(
+                    self._stateVars.shape[0], values.shape[0]))
+        self._stateVars[:] = values
+        self._stateVarsTemp[:] = values
 
     def resetToLastValidState(self, ):
         """Reset to the last valid state."""
@@ -344,6 +406,22 @@ cdef class MarmotElementWrapper:
 
         return <double[:res.stateSize]> (res.stateLocation)
 
+    def getStateVarSlice(self, name):
+        """Locate a named state variable within one per-quadrature-point state block.
+
+        Returns the (offset, size) of the named variable relative to the start of a per-quadrature-
+        point block, computed from the pointer the MarmotElement hands out for quadrature point 0.
+        Used by adaptive refinement to route different state variables to different transfer
+        strategies (copy / project / reset)."""
+
+        if not self._hasMaterial:
+            raise Exception("Element {:} has no material assigned!".format(self._elNumber))
+
+        cdef string name_ = name.encode("UTF-8")
+        cdef StateView res = self.marmotElement.getStateView(name_, 0)
+        cdef Py_ssize_t offset = res.stateLocation - &self._stateVarsTemp[0]
+        return int(offset), int(res.stateSize)
+
     def getCoordinatesAtCenter(self):
         """Compute the underlying MarmotElement centroid coordinates."""
 
@@ -366,7 +444,12 @@ cdef class MarmotElementWrapper:
         """Return the number of entries this entity contributes to the VIJ (COO) system matrix."""
         return self.nDof**2
 
+    def shapeVIJContribution(self, flat_view: np.ndarray) -> np.ndarray:
+        """Keep the view flat for Cython 1-D memoryview compatibility."""
+        return flat_view
+
     def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
+
         """Initialize the I and J arrays for the VIJ (COO) system matrix assembly. """
 
         n = len(idcs)

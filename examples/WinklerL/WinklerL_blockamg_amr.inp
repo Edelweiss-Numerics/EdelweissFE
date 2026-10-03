@@ -1,0 +1,59 @@
+**=================================================================================================
+** Winkler L-panel, variant 3 of 3: blockamg (as variant 2) plus live h-adaptivity. Refinement runs
+** ahead of the crack: every concrete element whose plastic hardening variable alphaP exceeds 0.1 is
+** split into 2x2x2 children (one level), in batches of at least 20 marked elements (fewer rebuilds of
+** the equation system); the hanging nodes of the refined elements are constrained. Refining while the
+** elements are still nearly elastic keeps the transferred state close to equilibrium -- refining only
+** at alphaP > 0.8, inside already softening elements, disturbs it enough to force cutbacks.
+** The finer crack band gives a lower load-displacement curve than variants 1 and 2.
+** Units, geometry, boundary conditions and material: model.inp. How to run: README.md.
+**=================================================================================================
+*include, input=model.inp
+
+*job, name=WinklerL_blockamg_amr, domain=3d
+*solver, solver=NISTParallel, name=theSolver
+linsolver=blockamg
+** every blockamg setting, defaults included -- explained in README.md
+linsolverConfigFile=blockamg.json
+** condense the hanging-node constraints with AMGCL's threaded products (faster; off by default)
+useAmgclMPCCondensation=True
+
+*modelModifier, type=hAdaptivity, name=amr
+** mark every element whose largest alphaP (the fieldOutput of model.inp) exceeds 0.1
+>>marker, type=fieldOutput, fieldOutput=alphaP, operator='>', threshold=0.1
+** octree roots: all elements, steel included, so refinement next to the steel blocks stays conforming
+refineElSet=all
+** refine once (maxLevel), each marked element into 2 x 2 x 2 children (splitFactor)
+maxLevel=1
+splitFactor=2
+** collect marks until at least 20 elements are marked, then refine them in one pass
+minMarkedElements=20
+
+*fieldOutput
+** reaction force (sum) and displacement (mean) of the load line, y component, as histories, exported to CSV
+>>perNode, name=RF, nSet=setLoad, field=displacement, result=P, f(x)='np.sum(x[:,1])', saveHistory=True, export=RF_blockamg_amr
+>>perNode, name=U, nSet=setLoad, field=displacement, result=U, f(x)='np.mean(x[:,1])', saveHistory=True, export=U_blockamg_amr
+
+** prints the reaction force after every increment
+*output, type=monitor, name=monitor
+fieldOutput=RF
+
+** EnSight results for ParaView or pyvista: WinklerL_blockamg_amr.case
+*output, type=ensight, name=WinklerL_blockamg_amr
+>>perNode, fieldOutput=displacement
+>>perNode, fieldOutput=nonlocalDamage
+>>perElement, fieldOutput=damage
+>>perElement, fieldOutput=alphaP
+>>configuration, overwrite=yes
+
+** One step over pseudo-time 0..1 (stepLength). The increment adapts between minInc and maxInc (so at
+** least 100 increments); an increment that needs more than maxIter Newton iterations is cut back.
+*step, solver=theSolver
+maxInc=1e-2, minInc=1e-8, maxNumInc=10000, maxIter=25, stepLength=1
+** linear predictor: each increment starts from the last converged increment, extrapolated linearly
+>>options, name=theSolver, extrapolation=linear
+>>dirichlet, name=bottom, nSet=setBottom, field=displacement, 1=0, 2=0, 3=0
+>>dirichlet, name=back, nSet=setBack, field=displacement, 3=0
+** the load: the load line is raised by 1 mm (u_y = +1) over the step -- the peak load is reached at
+** about 0.1 mm, the panel then softens as the crack grows from the re-entrant corner
+>>dirichlet, name=load, nSet=setLoad, field=displacement, 2=+1

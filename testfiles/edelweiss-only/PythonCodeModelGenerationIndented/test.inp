@@ -1,0 +1,79 @@
+** Four-point bending of a two-layer beam (half model), with the node and element sets for
+** the load, the bearing and the soft mid-layer created by an executePythonCode generator.
+** The generator's datalines are written with literal \t sequences for indentation, which
+** executePythonCode converts to tabs, so nested loops and conditionals can be used.
+
+*modelgenerator, generator=boxgen, name=gen
+lX      =770
+lY      =81
+lZ      =150
+nX      =10
+nY      =3
+nZ      =2
+elProvider =edelweiss
+elType  =C3D20
+
+*modelGenerator, generator=executePythonCode, name=gen-2, executeAfterManualGeneration=False
+from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.sets.elementset import ElementSet
+def nodesOnFace(x, y, tol):
+\treturn [n for n in model.nodes.values() if abs(n.coordinates[0] - x) <= tol and abs(n.coordinates[1] - y) <= 1e-12]
+load_nodes = []
+for n in model.nodes.values():
+\tif abs( n.coordinates[0] - 495 ) <= 20:
+\t\tif abs( n.coordinates[1] - 81 ) <= 1e-12:
+\t\t\tload_nodes.append(n)
+model.nodeSets['load'] = NodeSet('load', load_nodes)
+model.nodeSets['bearing'] = NodeSet('bearing', nodesOnFace(41.25, 0, 20))
+mid_elements = []
+for e in model.elements.values():
+\tcenter = e.getCoordinatesAtCenter()
+\tif abs( center[1] - 81/2 ) <= 81/6:
+\t\tmid_elements.append(e)
+model.elementSets['mid-layer'] = ElementSet('mid-layer', mid_elements)
+
+*material, name=linearelastic, id=top-bottom, provider=edelweiss
+9000, 0.2
+
+*material, name=linearelastic, id=mid, provider=edelweiss
+4500, 0.2
+
+*section, name=section1, material=top-bottom, type=solid
+all
+
+*section, name=section2, material=mid, type=solid
+mid-layer
+
+*job, name=bendingjob, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*modelgenerator, generator=findclosestnode, executeAfterManualGeneration=True, name=fcn1
+location='41.25,0,150', storeIn=support
+
+*modelgenerator, generator=findclosestnode, executeAfterManualGeneration=True, name=fcn2
+location='495,82.5,150', storeIn=load-rp
+
+*constraint, type=linearizedrigidbody, name=bearing
+referencePoint=support
+nSet=bearing
+
+*constraint, type=linearizedrigidbody, name=load
+referencePoint=load-rp
+nSet=load
+
+*fieldOutput
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
+>>perNode, nSet=bearing, field=displacement, result=P, name=support-force, f(x)="np.sum( x[:,1] )", saveHistory=True
+
+*output, type=ensight, name=esExport
+>>configuration, overwrite=True
+>>perNode, fieldOutput=displacement
+
+*step, solver=theSolver
+maxInc=5e-1, minInc=1e-8, maxNumInc=1000, maxIter=25
+>>dirichlet, name=support, nSet=support,  field=displacement, 2=0
+>>dirichlet, name=support-rot, nSet=support,  field=rotation, 1=0, 2=0, 3=0
+>>dirichlet, name=load, nSet=load-rp,  field=displacement, 2=-5
+>>dirichlet, name=load-rot, nSet=load-rp,  field=rotation, 1=0, 2=0, 3=0
+>>dirichlet, name=sym-x, nSet=gen_right, field=displacement, 1=0
+>>dirichlet, name=sym-z, nSet=gen_back, field=displacement, 3=0,
