@@ -95,7 +95,7 @@ def test_restart_resume_matches_uninterrupted_reference(tmp_path):
     with h5py.File(checkpoint, "r") as f:
         stored = f["nodeFields"]["displacement"]
         assert "V" in stored and "A" in stored, "the checkpoint does not carry the Newmark kinematics"
-        assert "prevTimeStep" in f["solver"].attrs and "dU" in f["solver"], "the predictor state is not checkpointed"
+        assert "prevTimeStep" in f["solver"] and "dU" in f["solver"], "the predictor state is not checkpointed"
         checkpointTime = float(f.attrs["time"])
         # the checkpoint holds the truncated run's own final state, which is what gets resumed
         np.testing.assert_allclose(stored["V"][:], truncatedModel.nodeFields["displacement"]["V"], atol=0.0)
