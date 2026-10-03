@@ -362,6 +362,9 @@ class _ConservedQuantities:
     momentum: np.ndarray
     kineticEnergy: float
 
+    #: Restored with the solver that measured it; see :attr:`NonlinearImplicitDynamic.checkpointedState`.
+    checkpointedState = {"massByField": dict, "momentum": np.ndarray, "kineticEnergy": float}
+
 
 class NonlinearImplicitDynamic(NIST):
     """This is the Nonlinear Implicit Dynamic -- solver (``NID``), Newmark-beta time integration on
@@ -385,9 +388,13 @@ class NonlinearImplicitDynamic(NIST):
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NIDSchema
 
-    #: The predictor's state, as in the parent, and the drift the conservation checks accumulate
-    #: over the step. The velocity and acceleration are node-field entries, restored with the model.
-    checkpointedState = NIST.checkpointedState | {"_conservationCheck": ConservationCheck}
+    #: The predictor's state, as in the parent, the drift the conservation checks accumulate over the
+    #: step, and the conserved totals after the last accepted increment, which a topology change is
+    #: compared against. The velocity and acceleration are node-field entries, restored with the model.
+    checkpointedState = NIST.checkpointedState | {
+        "_conservationCheck": ConservationCheck,
+        "_conservedAtLastAccept": _ConservedQuantities,
+    }
 
     SolverSpecificOptions = NIST.SolverSpecificOptions | {
         "newmarkBeta": 0.25,
@@ -484,6 +491,8 @@ class NonlinearImplicitDynamic(NIST):
 
         self._newmarkSystem = None
         self._conservationCheck.reset()
+        #: Mass, momentum and kinetic energy after the last accepted increment of this step, or None.
+        self._conservedAtLastAccept = None
         # The mesh the step starts on, restored or not: a topology change is a change from this.
         self._topologyRecordsAtLastBuild = len(model.topology.history)
 
@@ -718,6 +727,9 @@ class NonlinearImplicitDynamic(NIST):
         kineticEnergy = 0.5 * float(np.dot(np.asarray(system.V), system.M @ np.asarray(system.V)))
         self.journal.message("kinetic energy {:e}".format(kineticEnergy), self.identification, 2)
 
+        # What a topology change before the next increment is compared against.
+        self._conservedAtLastAccept = self._conservedQuantities(system, model)
+
     @staticmethod
     def _newmarkVelocityAndAcceleration(
         dU: DofVector,
@@ -880,9 +892,9 @@ class NonlinearImplicitDynamic(NIST):
         )
 
         if dofManagerChanged and topologyChanged:
-            if system is not None:
+            if self._conservedAtLastAccept is not None:
                 self.reportTopologyChangeConservation(
-                    self._conservedQuantities(system, model),
+                    self._conservedAtLastAccept,
                     self._conservedQuantities(self._newmarkSystem, model),
                 )
             self._initialAccelerationPending = bool(self.options["computeInitialAcceleration"])

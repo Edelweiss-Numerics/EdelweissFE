@@ -134,7 +134,12 @@ def unpackState(component, state: dict[str, np.ndarray]):
             component.__dict__[name] = _FROM_ARRAY[kind](state[name]) if name in state else None
         else:
             prefix = name + "."
-            unpackState(
-                component.__dict__[name],
-                {key[len(prefix) :]: array for key, array in state.items() if key.startswith(prefix)},
-            )
+            nested = {key[len(prefix) :]: array for key, array in state.items() if key.startswith(prefix)}
+            if not nested:
+                component.__dict__[name] = None
+                continue
+            helper = component.__dict__.get(name)
+            if helper is None:
+                helper = kind.__new__(kind)
+            unpackState(helper, nested)
+            component.__dict__[name] = helper
