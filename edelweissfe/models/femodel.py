@@ -589,6 +589,11 @@ class FEModel:
                 )
             element.setStateVars(stateVars[:])
 
+        # A rigid body moves its surface nodes into the current configuration, a pure function of
+        # its reference point's restored DOFs: put them where the uninterrupted run had them.
+        for rigidBody in self.rigidBodies.values():
+            rigidBody.updateKinematics()
+
         readRestartDataInto(f["constraints"], self.constraints)
 
 
