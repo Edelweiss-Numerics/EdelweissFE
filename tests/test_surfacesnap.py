@@ -42,6 +42,7 @@ import numpy as np
 import pytest
 
 from edelweissfe.adaptivity.hex20topology import Hex20Topology
+from edelweissfe.adaptivity.marking import MarkerBase
 from edelweissfe.helpers.inputfilehelpers import fillFEModelFromInputFile
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
@@ -57,6 +58,24 @@ TRACKED_WALL_SET = "__surfaceSnap_snap_wallNodes"
 RADIUS_IN = 10.0
 RADIUS_OUT = 16.0
 Y0, Y1 = 0.0, 4.0
+
+
+class _MarkOnce(MarkerBase):
+    """Marks the given elements in the next topology update, and nothing afterwards: drives a second
+    refinement round through hAdaptivity's real marking path, as a dynamic marker on a later
+    increment would."""
+
+    def __init__(self, elements):
+        super().__init__(initialOnly=False)
+        self._elements = set(elements)
+
+    def mark(self, model, refineElements, mesh):
+        elements, self._elements = self._elements, set()
+        return elements
+
+
+def _markOnNextUpdate(amr, elements):
+    amr.markers.append(_MarkOnce(elements))
 
 
 def _buildFacetedRingMesh(nSectors: int, angleSpan: float = np.pi / 2):
@@ -260,7 +279,7 @@ def test_surfacesnap_fixes_new_boundary_nodes_after_refinement(tmp_path):
     model, wallLabels = _buildModel(tmp_path, midsideNodes="curved", maxLevel=1)
     preLabels = set(model.nodes)
 
-    changed = model.updateTopology()
+    changed = model.topology.update()
     assert changed, "hAdaptivity's initialOnly nodeSet marker should have refined the wall elements"
 
     newLabels = set(model.nodes) - preLabels
@@ -296,14 +315,14 @@ def test_straight_mode_leaves_a_small_residual_curved_mode_does_not(tmp_path):
 
     modelStraight, wallLabels = _buildModel(tmp_path / "straight", midsideNodes="straight", maxLevel=1)
     preStraight = set(modelStraight.nodes)
-    modelStraight.updateTopology()
+    modelStraight.topology.update()
     newStraightWall = (set(modelStraight.nodes) - preStraight) & {
         n.label for n in modelStraight.nodeSets[TRACKED_WALL_SET]
     }
 
     modelCurved, _ = _buildModel(tmp_path / "curved", midsideNodes="curved", maxLevel=1)
     preCurved = set(modelCurved.nodes)
-    modelCurved.updateTopology()
+    modelCurved.topology.update()
     newCurvedWall = (set(modelCurved.nodes) - preCurved) & {n.label for n in modelCurved.nodeSets[TRACKED_WALL_SET]}
 
     assert newStraightWall and newCurvedWall
@@ -322,29 +341,22 @@ def test_maxlevel_2_also_works(tmp_path):
     """Mirrors the Phase 1 prototype's own maxLevel=2 check, now through the real wired modifier.
 
     The fixture's marker is ``initialOnly=True``, so it can only ever mark on hAdaptivity's very
-    first ``plan()`` call -- one ``updateTopology()`` call therefore only ever reaches level 1,
-    regardless of ``maxLevel``. Reaching level 2 for real needs a second round: directly seed
-    ``amr._pendingMarkedElements`` (the same "drive the mirror/marks directly" pattern
-    ``tests/test_hadaptivity_cascade.py`` uses) with the now-active level-1 elements, then call
-    ``updateTopology()`` again -- the same shape of thing a real deck's DYNAMIC (non-initialOnly)
+    first ``plan()`` call -- one topology update therefore only ever reaches level 1,
+    regardless of ``maxLevel``. Reaching level 2 for real needs a second round: mark the now-active
+    level-1 elements with a marker that acts once (:class:`_MarkOnce`), then update the topology
+    again -- the same shape of thing a real deck's DYNAMIC (non-initialOnly)
     marker would do on a later increment.
     """
 
     model, wallLabels = _buildModel(tmp_path, midsideNodes="curved", maxLevel=2, nSectors=3)
-    model.updateTopology()
+    model.topology.update()
 
     amr = model.modelModifiers["amr"]
     levelOfElement = {el: amr._mesh.elements[eid]["level"] for eid, el in amr._eidToEl.items()}
-    assert set(levelOfElement.values()) == {
-        1
-    }, "sanity check: a single updateTopology() call must reach exactly level 1"
+    assert set(levelOfElement.values()) == {1}, "sanity check: a single topology update must reach exactly level 1"
 
-    # hAdaptivity guards against re-refining at the exact same model.time (a cutback retry) --
-    # advance time first, exactly as a real multi-increment run would between two refinement
-    # rounds, or this second, directly-seeded round is silently ignored.
-    model.advanceToTime(1.0)
-    amr._pendingMarkedElements = set(levelOfElement)
-    changed = model.updateTopology()
+    _markOnNextUpdate(amr, set(levelOfElement))
+    changed = model.topology.update()
     assert changed, "the second, directly-seeded round must also have refined something"
 
     levelOfElement = {el: amr._mesh.elements[eid]["level"] for eid, el in amr._eidToEl.items()}
@@ -371,7 +383,7 @@ def test_a_second_refinement_of_an_already_snapped_element_uses_corrected_geomet
 
     model, wallLabels = _buildModel(tmp_path, midsideNodes="curved", maxLevel=2, nSectors=1)
     amr = model.modelModifiers["amr"]
-    model.updateTopology()
+    model.topology.update()
 
     mismatches = [
         label
@@ -380,9 +392,8 @@ def test_a_second_refinement_of_an_already_snapped_element_uses_corrected_geomet
     ]
     assert not mismatches, f"hAdaptivity's mirror must be kept in sync with model.nodes, but diverged for {mismatches}"
 
-    model.advanceToTime(1.0)  # hAdaptivity's cutback guard blocks re-refining at the same time
-    amr._pendingMarkedElements = set(amr._eidToEl.values())
-    model.updateTopology()
+    _markOnNextUpdate(amr, set(amr._eidToEl.values()))
+    model.topology.update()
 
     finalWall = {n.label for n in model.nodeSets[TRACKED_WALL_SET]}
     assert len(finalWall) > len(wallLabels) * 2
@@ -468,7 +479,7 @@ def test_hanging_node_collisions_are_skipped_not_broken(tmp_path):
     # directly adjacent to (and sharing corners with) the wall.
     model, wallLabels = _buildAsymmetricRingModel(tmp_path, nSectors=4, refineElset="2")
 
-    changed = model.updateTopology()
+    changed = model.topology.update()
     assert changed
 
     # no exception, and the model must still be geometrically sane: no NaN/inf coordinates
@@ -501,7 +512,7 @@ def test_hanging_node_collisions_are_skipped_not_broken(tmp_path):
     # check would be a false negative here: a node this close to an already-exact parent can end
     # up almost exactly on the true radius from raw, un-snapped subdivide() alone.)
     snappedLabels = set()
-    for record in model.topologyHistory:
+    for record in model.topology.history:
         if record.modifier != "snap":
             continue
         plan = model.modelModifiers["snap"].decodePlan(record.plan)
@@ -530,7 +541,7 @@ def test_a_resolved_hanging_collision_is_retried_and_snapped(tmp_path):
     PENDING_SET = "__surfaceSnap_snap_pendingNodes"
 
     model, wallLabels = _buildAsymmetricRingModel(tmp_path, nSectors=4, refineElset="2")
-    model.updateTopology()
+    model.topology.update()
 
     pendingAfterRound1 = {n.label for n in model.nodeSets[PENDING_SET]}
     assert pendingAfterRound1, "the asymmetric refinement must have left at least one node pending"
@@ -540,9 +551,8 @@ def test_a_resolved_hanging_collision_is_retried_and_snapped(tmp_path):
     stillCoarse = {el for el, level in levelOf.items() if level == 0}
     assert stillCoarse, "sanity check: the other three sectors must still be unrefined"
 
-    model.advanceToTime(1.0)  # hAdaptivity's cutback guard blocks re-refining at the same time
-    amr._pendingMarkedElements = stillCoarse
-    model.updateTopology()
+    _markOnNextUpdate(amr, stillCoarse)
+    model.topology.update()
 
     pendingAfterRound2 = {n.label for n in model.nodeSets[PENDING_SET]}
     resolved = pendingAfterRound1 - pendingAfterRound2
@@ -554,8 +564,8 @@ def test_a_resolved_hanging_collision_is_retried_and_snapped(tmp_path):
     # resolvedPendingLabels in the recorded plans, unlike the other replay test -- must itself
     # replay correctly onto an independently-built, fresh model.
     modelB, _ = _buildAsymmetricRingModel(tmp_path / "replay", nSectors=4, refineElset="2")
-    modelB.replayTopologyHistory(model.topologyHistory)
-    assert modelB.topologyFingerprint() == model.topologyFingerprint()
+    modelB.topology.replayHistory(model.topology.history)
+    assert modelB.topology.fingerprint() == model.topology.fingerprint()
     assert {n.label for n in modelB.nodeSets[PENDING_SET]} == pendingAfterRound2
     assert {n.label for n in modelB.nodeSets[TRACKED_WALL_SET]} == {n.label for n in model.nodeSets[TRACKED_WALL_SET]}
 
@@ -567,19 +577,19 @@ def test_restart_replay_reproduces_the_snap(tmp_path):
     """
 
     modelA, wallLabels = _buildModel(tmp_path / "a", midsideNodes="curved", maxLevel=1)
-    changed = modelA.updateTopology()
+    changed = modelA.topology.update()
     assert changed
-    assert modelA.topologyHistory
+    assert modelA.topology.history
     assert any(
-        rec.modifier == "snap" for rec in modelA.topologyHistory
+        rec.modifier == "snap" for rec in modelA.topology.history
     ), "surfaceSnap must have recorded at least one round of its own"
 
     modelB, _ = _buildModel(tmp_path / "b", midsideNodes="curved", maxLevel=1)
     assert len(modelB.elements) < len(modelA.elements), "model B must start unrefined"
 
-    modelB.replayTopologyHistory(modelA.topologyHistory)
+    modelB.topology.replayHistory(modelA.topology.history)
 
-    assert modelB.topologyFingerprint() == modelA.topologyFingerprint()
+    assert modelB.topology.fingerprint() == modelA.topology.fingerprint()
     trackedA = {n.label for n in modelA.nodeSets[TRACKED_WALL_SET]}
     trackedB = {n.label for n in modelB.nodeSets[TRACKED_WALL_SET]}
     assert trackedB == trackedA, "the tracked wall node set must replay to the same membership"
@@ -591,8 +601,8 @@ def test_a_round_that_snaps_nothing_still_replays(tmp_path):
     (not depending on contriving a mesh where every single candidate on a face happens to collide
     with a hanging node): a round that discovers new wall-face membership but snaps ZERO node
     coordinates must still produce a non-empty ModelChange -- the same isEmpty gate
-    FEModel.updateTopology uses to decide whether to record a round at all (see
-    edelweissfe/models/femodel.py's updateTopology, and the module docstring of surfacesnap.py).
+    TopologyPipeline.update uses to decide whether to record a round at all (see the module
+    docstring of surfacesnap.py).
     A round that were empty here would never be recorded, and the tracked wall set's growth would
     be silently lost across a restart -- exactly the bug this test pins shut.
     """
@@ -615,7 +625,7 @@ def test_a_round_that_snaps_nothing_still_replays(tmp_path):
     assert change.movedNodes == set(), "this plan snapped no coordinates, by construction"
     assert not change.isEmpty, (
         "a round that only grows the tracked wall set (zero coordinates moved) must NOT be "
-        "reported as empty, or FEModel.updateTopology will never record it and a restart will "
+        "reported as empty, or the topology update will never record it and a restart will "
         "silently lose this face's tracking"
     )
     assert TRACKED_WALL_SET in change.changedNodeSets

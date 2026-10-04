@@ -273,6 +273,7 @@ _BUILTINS[("step", "adaptiveforexplicitsimulations")] = (
 )
 
 _BUILTINS[("modelmodifier", "hadaptivity")] = "edelweissfe.modelmodifiers.adaptivity.hadaptivity:ModelModifier"
+_BUILTINS[("modelmodifier", "surfacesnap")] = "edelweissfe.modelmodifiers.geometry.surfacesnap:ModelModifier"
 
 _BUILTINS[("statetransferstrategy", "nearestqp")] = "edelweissfe.adaptivity.statetransfer:NearestQuadraturePointCopy"
 _BUILTINS[("statetransferstrategy", "projection")] = "edelweissfe.adaptivity.statetransfer:PolynomialProjection"

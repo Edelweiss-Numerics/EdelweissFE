@@ -183,6 +183,10 @@ class ModelModifier(ModelModifierBase):
     #: Option schema for this model modifier, per OptionSchemaProvider.
     schema = SurfaceSnapSchema
 
+    #: Carries nothing from one decision to the next itself: the wall and pending nodes it tracks
+    #: are model node sets, grown in :meth:`apply` and therefore rebuilt by a restart's replay.
+    checkpointedState = {}
+
     def __init__(self, name: str, model: FEModel, journal: Journal, *args, **kwargs):
         super().__init__(name, model, journal, *args, **kwargs)
         options = buildSchemaFromOptions(SurfaceSnapSchema, kwargs)
@@ -281,7 +285,7 @@ class ModelModifier(ModelModifierBase):
                 return el
         return None
 
-    def plan(self, model: FEModel, change: "ModelChange | None", step, timeStep: float) -> "SnapPlan | None":
+    def plan(self, model: FEModel, change: "ModelChange | None", step) -> "SnapPlan | None":
         """Find newly-created nodes on a tracked wall face, plus any still-pending retries, and
         decide their snapped positions.
 
@@ -471,7 +475,7 @@ class ModelModifier(ModelModifierBase):
                 # legitimately snap zero nodes (every candidate a hanging-node collision, or the
                 # quality safeguard vetoed all of them) while still discovering real new wall-face
                 # membership a later round needs. Marking changedNodeSets here -- not just when
-                # movedNodes is non-empty -- is what makes updateTopology's isEmpty check record
+                # movedNodes is non-empty -- is what makes the topology update's isEmpty check record
                 # (and therefore restart-replay) this round even when nothing moved.
                 change.changedNodeSets.add(self._wallSetName)
 
