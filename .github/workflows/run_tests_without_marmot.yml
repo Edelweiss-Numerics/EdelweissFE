@@ -1,13 +1,28 @@
 name: Run tests without Marmot
 
-on: [push, pull_request]
+on:
+  # Pushes to the long-lived branches only: a branch with an open pull request is tested by the
+  # pull_request event, and testing every push as well would run each workflow twice.
+  push:
+    branches: [master, next_v26.11]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch or pull request supersedes the run in progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Fixed thread count, so that a result does not depend on the runner's core count.
+env:
+  OMP_NUM_THREADS: 2
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       # Installs exactly what conda-lock.yml pins (conda packages, no solving).
       - uses: ./.github/actions/setup-locked-env
