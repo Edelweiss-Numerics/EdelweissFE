@@ -90,6 +90,9 @@ jobs:
 
       - uses: mamba-org/setup-micromamba@v2
         with:
+          # micromamba 2.9.0 mis-solves conda-lock's virtual-package channel for osx-64 (a spurious
+          # __osx conflict locally, a segfault on the runner); 2.8.1 locks all four platforms.
+          micromamba-version: "2.8.1-1"
           environment-name: conda-lock
           create-args: conda-lock
           init-shell: bash
