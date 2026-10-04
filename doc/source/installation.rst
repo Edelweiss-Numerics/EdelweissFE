@@ -156,6 +156,11 @@ on Linux and macOS, the Marmot extensions find the library there through their e
 were built against, whatever the runtime environment. Rebuild EdelweissFE after moving or reinstalling Marmot
 elsewhere.
 
+The extensions are compiled with ``-march=native`` by default (no architecture flags on Windows), so a build only runs
+on processors like the one it was compiled on. For builds that must run elsewhere, e.g. container images or packages,
+set ``EDELWEISSFE_ARCH_FLAGS`` (e.g. ``-march=x86-64-v3``, or empty for none). The compile flags are defined in
+``edelweissfe.utils.extensionbuild``, which downstream packages (EdelweissMeshfree) use for their own extensions.
+
 Developing
 **********
 
