@@ -4,7 +4,22 @@
 # EdelweissFE build.
 name: Run tests with Marmot (Windows)
 
-on: [push, pull_request]
+on:
+  # Pushes to the long-lived branches only: a branch with an open pull request is tested by the
+  # pull_request event, and testing every push as well would run each workflow twice.
+  push:
+    branches: [master, next_v26.11]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch or pull request supersedes the run in progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Fixed thread count, so that a result does not depend on the runner's core count.
+env:
+  OMP_NUM_THREADS: 2
 
 jobs:
   build:
