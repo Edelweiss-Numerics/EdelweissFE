@@ -40,6 +40,18 @@ from Cython.Build import build_ext, cythonize
 from setuptools import setup
 from setuptools.extension import Extension
 
+# The platform-dependent build settings are shared with downstream packages (EdelweissMeshfree), which import
+# them from the installed package. Here, they are imported from the source tree.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from edelweissfe.utils.extensionbuild import (  # noqa: E402
+    compile_flags,
+    get_arch_flags,
+    is_windows,
+    link_flags,
+    native_prefix,
+    runtime_library_dirs,
+)
+
 directives = {
     "boundscheck": False,
     "wraparound": False,
@@ -51,9 +63,6 @@ directives = {
     "freethreading_compatible": True,
 }
 
-# On Windows, conda installs C/C++ headers and libraries under <prefix>\Library, not <prefix>.
-is_windows = sys.platform == "win32"
-native_prefix = join(sys.prefix, "Library") if is_windows else sys.prefix
 print("*" * 80)
 print("EdelweissFE setup")
 print("System prefix: " + sys.prefix)
@@ -64,12 +73,11 @@ marmot_dir = expanduser(os.environ.get("MARMOT_INSTALL_DIR", native_prefix))
 marmot_install_dir_file = "marmot_install_dir.txt"
 mkl_include = expanduser(os.environ.get("MKL_INCLUDE_DIR", join(native_prefix, "include")))
 eigen_include = expanduser(os.environ.get("EIGEN_INCLUDE_DIR", join(native_prefix, "include", "eigen3")))
-# MSVC has no -march=native equivalent, so no architecture flags by default on Windows.
-arch_flags = os.environ.get("EDELWEISSFE_ARCH_FLAGS", "" if is_windows else "-march=native").split()
 # AMGCL specifically defaults to no arch flags (see the comment at its Extension below) but
 # still honors an explicit EDELWEISSFE_ARCH_FLAGS override, consistent with every other
 # extension above -- only the *default* differs, not the override mechanism.
-amgcl_arch_flags = os.environ.get("EDELWEISSFE_ARCH_FLAGS", "").split()
+amgcl_arch_flags = get_arch_flags(default="")
+arch_flags = get_arch_flags()
 print("Marmot install directory (overwrite via environment var. MARMOT_INSTALL_DIR):")
 print(marmot_dir)
 print("MKL include directory (overwrite via environment var. MKL_INCLUDE_DIR):")
@@ -102,40 +110,6 @@ for description, header, searchPath, variable in [
         print("!" * 80)
 
 print("*" * 80)
-
-
-def compile_flags(*, optimize=True, cxx20=False, openmp=False, arch=(), gcc_only=()):
-    """Return the compile flags for the platform's compiler: MSVC on Windows, GCC/Clang elsewhere.
-
-    ``gcc_only`` flags (e.g. warning switches) are dropped for MSVC. MSVC uses its classic OpenMP runtime
-    (/openmp, vcomp140.dll): /openmp:llvm links Microsoft's copy of the LLVM runtime (libomp140), which aborts the
-    process ("OMP: Error #15") next to conda's own LLVM runtime (libomp.dll) that other packages load. vcomp
-    implements OpenMP 2.0, which covers the constructs used here (`omp simd` is excluded under MSVC).
-    """
-    if is_windows:
-        return [
-            *(["/O2"] if optimize else []),
-            *(["/std:c++20"] if cxx20 else []),
-            *(["/openmp"] if openmp else []),
-            *arch,
-        ]
-    return [
-        *(["-O3"] if optimize else []),
-        *(["-std=c++20"] if cxx20 else []),
-        *(["-fopenmp"] if openmp else []),
-        *arch,
-        *gcc_only,
-    ]
-
-
-def link_flags(*, openmp=False):
-    """Return the link flags for OpenMP: MSVC links its OpenMP runtime implicitly."""
-    return ["-fopenmp"] if openmp and not is_windows else []
-
-
-def runtime_library_dirs(*dirs):
-    """Return a runtime library search path; MSVC cannot embed one (Windows finds DLLs on PATH)."""
-    return [] if is_windows else list(dirs)
 
 
 print("Gather the extension for the MarmotElement base element, linked to the Marmot library")
