@@ -51,7 +51,7 @@ An *environment* is a separate folder that contains everything EdelweissFE needs
 tested with, without touching anything else on your computer. Create it with:
 
 ```console
-conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.09.28.2
+conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.10.04
 ```
 
 Always use this separate environment for EdelweissFE. If it ever breaks, delete it
