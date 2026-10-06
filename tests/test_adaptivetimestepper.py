@@ -24,18 +24,14 @@
 #
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
-#  ---------------------------------------------------------------------
-"""Pins ``AdaptiveTimeStepper.doesZeroIncrement()`` to what will actually happen next, not merely
-whether zero increments are configured -- it used to return a hardcoded ``True``, so its one
-intended use case (a caller that needs to know whether the *next* generated step has zero length,
-e.g. to skip initialisation logic that only applies to a genuine zero increment) could never
-distinguish "still at the zero increment" from "already past it", most obviously after a restart,
-which resumes with a non-zero ``incrementCounter``.
-"""
+"""The adaptive time stepper as a state machine: a proposal changes nothing, an accepted increment
+advances the step, a rejected one is retried smaller from exactly where the step stood."""
 
-from unittest.mock import MagicMock
+import pytest
 
+from edelweissfe.journal.journal import Journal
 from edelweissfe.timesteppers.adaptivetimestepper import AdaptiveTimeStepper
+from edelweissfe.utils.exceptions import ReachedMaxIncrements, ReachedMinIncrementSize
 
 
 def _timeStepper(**overrides) -> AdaptiveTimeStepper:
@@ -46,28 +42,79 @@ def _timeStepper(**overrides) -> AdaptiveTimeStepper:
         maxIncrement=1.0,
         minIncrement=0.01,
         maxNumberIncrements=100,
-        journal=MagicMock(),
+        journal=Journal(verbose=False),
     )
     kwargs.update(overrides)
     return AdaptiveTimeStepper(**kwargs)
 
 
-def test_reports_zero_increment_only_before_the_first_increment_is_generated():
+def test_the_first_increment_is_a_zero_increment():
     timeStepper = _timeStepper()
-    assert timeStepper.doesZeroIncrement()
+    first = timeStepper.proposeTimeStep()
+    assert (first.number, first.timeIncrement) == (0, 0.0)
 
-    timeStepper.incrementCounter = 1
-    assert not timeStepper.doesZeroIncrement()
+    timeStepper.acceptTimeStep(first)
+    second = timeStepper.proposeTimeStep()
+    assert (second.number, second.timeIncrement) == (1, 0.1)
 
 
-def test_reports_no_zero_increment_when_disabled():
+def test_no_zero_increment_when_disabled():
+    first = _timeStepper(makeZeroIncrementFirst=False).proposeTimeStep()
+    assert (first.number, first.timeIncrement) == (0, 0.1)
+
+
+def test_a_proposal_changes_nothing():
     timeStepper = _timeStepper(makeZeroIncrementFirst=False)
-    assert not timeStepper.doesZeroIncrement()
+    before = dict(vars(timeStepper))
+    first, again = timeStepper.proposeTimeStep(), timeStepper.proposeTimeStep()
+    assert vars(timeStepper) == before
+    assert vars(first) == vars(again)
 
 
-def test_reports_no_zero_increment_after_restart_resumes_a_non_zero_increment_counter():
-    """The motivating case: a restarted run's timestepper never sees ``incrementCounter == 0``, so
-    it must not claim the next generated step will be a zero increment."""
+def test_a_rejected_increment_is_retried_smaller_from_the_same_progress():
+    timeStepper = _timeStepper(makeZeroIncrementFirst=False)
+    timeStepper.acceptTimeStep(timeStepper.proposeTimeStep())
+    progress = timeStepper.finishedStepProgress
+
+    timeStepper.proposeTimeStep()
+    timeStepper.rejectTimeStep(0.5)
+    retry = timeStepper.proposeTimeStep()
+
+    assert timeStepper.finishedStepProgress == progress
+    assert retry.number == 1
+    assert retry.stepProgressIncrement == 0.05
+    assert retry.stepProgress == progress + 0.05
+
+
+def test_the_increment_grows_after_three_good_increments_unless_prevented():
+    growing, prevented = _timeStepper(makeZeroIncrementFirst=False), _timeStepper(makeZeroIncrementFirst=False)
+    for _ in range(4):
+        growing.acceptTimeStep(growing.proposeTimeStep())
+        prevented.preventIncrementIncrease()
+        prevented.acceptTimeStep(prevented.proposeTimeStep())
+
+    assert growing.increment == 0.1 * 1.1
+    assert prevented.increment == 0.1
+
+
+def test_the_step_finishes_exactly_at_its_end():
+    timeStepper = _timeStepper(makeZeroIncrementFirst=False, startIncrement=0.3)
+    while not timeStepper.isFinished():
+        timeStep = timeStepper.proposeTimeStep()
+        timeStepper.acceptTimeStep(timeStep)
+    assert timeStep.stepProgress == pytest.approx(1.0)
+
+
+def test_a_failed_zero_increment_cannot_be_cut_back():
     timeStepper = _timeStepper()
-    timeStepper.incrementCounter = 42
-    assert not timeStepper.doesZeroIncrement()
+    timeStepper.proposeTimeStep()
+    with pytest.raises(ReachedMinIncrementSize):
+        timeStepper.rejectTimeStep(0.5)
+
+
+def test_more_increments_than_allowed_are_refused():
+    timeStepper = _timeStepper(makeZeroIncrementFirst=False, maxNumberIncrements=2)
+    for _ in range(3):
+        timeStepper.acceptTimeStep(timeStepper.proposeTimeStep())
+    with pytest.raises(ReachedMaxIncrements):
+        timeStepper.proposeTimeStep()

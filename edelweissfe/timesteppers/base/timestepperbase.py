@@ -25,13 +25,31 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Time steppers generate the sequence of :class:`~edelweissfe.timesteppers.timestep.TimeStep` s
-within a simulation step, and allow the solvers to control the incrementation
-(cutbacks, rescaling, freezing the increment size)."""
+"""A time stepper divides a simulation step into increments. It is a small state machine:
+
+.. code-block:: text
+
+    while not stepper.isFinished():
+        timeStep = stepper.proposeTimeStep()      # the next increment; changes nothing
+        try:
+            solve the increment
+        except failed:
+            stepper.rejectTimeStep(cutbackFactor) # a smaller increment is proposed next
+            continue
+        stepper.acceptTimeStep(timeStep)          # the step advances by this increment
+        write output (and restart checkpoints)
+
+All the stepper knows is in its attributes, and after :meth:`acceptTimeStep` they describe exactly
+the state the next increment starts from. A restart checkpoint is written after an increment is
+accepted, so it holds those attributes as they are, see :attr:`checkpointedState`.
+"""
 
 from abc import ABC, abstractmethod
 
+import numpy as np
+
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.checkpointedstate import packState, unpackState
 
 
 class TimeStepperBase(ABC):
@@ -44,96 +62,74 @@ class TimeStepperBase(ABC):
     #: Overridden by every stepper; a default so base-class diagnostics can name their source.
     identification = "TimeStepper"
 
-    def warnIfResumedAtIncrementCap(self, incrementsAlreadyDone: int, maxNumberIncrements: int, journal):
-        """Warn when a checkpoint is resumed at or past the step's increment cap.
-
-        ``maxNumInc`` counts increments from the start of the analysis, not from the resume, and it
-        is deliberately taken from the step's own configuration rather than the checkpoint -- see
-        the subclasses' ``writeRestart`` -- precisely so it can be raised between runs. The
-        consequence is a trap: resume without raising it far enough and the stepper's very first
-        check ends the step, the solver catches that as a step which finished normally, and the job
-        exits reporting success having advanced nothing. That is indistinguishable from a completed
-        run, and it has been mistaken for one: a diagnostic arm resumed at increment 130 000 with
-        maxNumInc still at 60 000 ran a single zero increment, reported success, and was very
-        nearly read as evidence that a crash did not reproduce.
-
-        This does not change the behaviour -- the cap is absolute by design -- only the silence.
-
-        Parameters
-        ----------
-        incrementsAlreadyDone
-            The increment count restored from the checkpoint.
-        maxNumberIncrements
-            The cap this step was configured with.
-        journal
-            The journal to report on.
-        """
-        if incrementsAlreadyDone < maxNumberIncrements:
-            return
-
-        journal.message(
-            "WARNING: this checkpoint is already at increment {:}, at or past this step's "
-            "maxNumInc of {:}, so the resumed step will end immediately WITHOUT advancing the "
-            "solution -- and the job will then report success. maxNumInc counts increments from "
-            "the start of the analysis, not from the resume: raise it above {:} to continue.".format(
-                incrementsAlreadyDone, maxNumberIncrements, incrementsAlreadyDone
-            ),
-            self.identification,
-            0,
-        )
+    #: The attributes that make up the stepper's progress within the step, by type; see
+    #: :mod:`~edelweissfe.utils.checkpointedstate`. Not its configuration (step length, increment
+    #: bounds, the maximum number of increments): a resumed run takes that from its own input file,
+    #: so it can be changed between runs, e.g. to raise the maximum number of increments.
+    checkpointedState: dict | None = None
 
     @abstractmethod
-    def generateTimeStep(self, enforcedTimeIncrement: float = None) -> TimeStep:
-        """Generate the (sequence of) time steps.
+    def isFinished(self) -> bool:
+        """Whether the step has reached its end.
 
-        Parameters
-        ----------
-        enforcedTimeIncrement
-            If given, enforce this time increment size (e.g., a critical time step
-            in explicit simulations). Time steppers which do not support enforced
-            increments raise a ValueError if it is given.
+        Returns
+        -------
+        bool
+            True if no increment is left.
+        """
+
+    @abstractmethod
+    def isAtStepStart(self) -> bool:
+        """Whether no increment of the step was accepted yet. A step resumed from a checkpoint never
+        is: a checkpoint is written after an accepted increment.
+
+        Returns
+        -------
+        bool
+            True at the start of a step.
+        """
+
+    @abstractmethod
+    def proposeTimeStep(self) -> TimeStep:
+        """The next increment, starting from the last accepted one. Changes nothing: proposing twice
+        gives the same increment.
 
         Returns
         -------
         TimeStep
-            The generated time steps (generator).
-        """
-
-    @abstractmethod
-    def discardAndChangeIncrement(self, scaleFactor: float):
-        """Discard the current increment, and modify the increment size
-        by a given scale factor within the bounds of the minimum and maximum increment size.
-
-        Parameters
-        ----------
-        scaleFactor
-            The factor for scaling based on the discarded increment.
-        """
-
-    def enforceTimeIncrement(self, timeIncrement: float):
-        """Replace the enforced time increment for the remaining increments of the step.
-
-        Only meaningful for a stepper driven by an externally imposed increment rather than by its own
-        adaptation. The caller is an explicit solver whose stable time increment is a property of the
-        mesh, so it changes when the mesh does -- an h-adaptivity event mid-step can shrink the
-        smallest element and therefore the increment every subsequent increment must use. The
-        increment is passed to :meth:`generateTimeStep` once, before the first increment, so there
-        would otherwise be no way to revise it.
-
-        Parameters
-        ----------
-        timeIncrement
-            The new enforced time increment.
+            The proposed increment.
 
         Raises
         ------
-        NotImplementedError
-            If this stepper is not driven by an enforced time increment.
+        ReachedMaxIncrements
+            If the step needs more increments than it is allowed.
         """
 
-        raise NotImplementedError(
-            f"{type(self).__name__} is not driven by an enforced time increment, so it cannot be given " "a new one."
-        )
+    @abstractmethod
+    def acceptTimeStep(self, timeStep: TimeStep):
+        """Advance the step by ``timeStep``, the increment just solved, and choose the size of the next.
+
+        Parameters
+        ----------
+        timeStep
+            The increment, as :meth:`proposeTimeStep` returned it.
+        """
+
+    @abstractmethod
+    def rejectTimeStep(self, cutbackFactor: float):
+        """Discard the proposed increment, which could not be solved; the next one proposed is
+        smaller by ``cutbackFactor``, within the bounds of the minimum and maximum increment size.
+
+        Parameters
+        ----------
+        cutbackFactor
+            The factor scaling the increment size.
+
+        Raises
+        ------
+        ReachedMinIncrementSize
+            If the increment cannot be reduced any further.
+        """
 
     @abstractmethod
     def changeIncrementSize(self, scaleFactor: float):
@@ -148,44 +144,84 @@ class TimeStepperBase(ABC):
 
     @abstractmethod
     def preventIncrementIncrease(self):
-        """May be called before an increment is requested, to prevent
-        an automatic increase of the increment size, e.g., in case of bad convergence."""
+        """Keep the next increment from growing, e.g., in case of bad convergence. Called before
+        :meth:`acceptTimeStep`."""
 
-    def restoredTimeIncrement(self) -> float | None:
-        """The size of the increment already completed when this time stepper was restored from a
-        restart checkpoint.
+    def enforceTimeIncrement(self, timeIncrement: float):
+        """Use ``timeIncrement`` for every following increment, instead of adapting it.
 
-        A multi-step integrator needs the previous increment size to continue, and on a resumed run
-        that increment belongs to the run that wrote the checkpoint. Deliberately NOT abstract: a
-        time stepper that does not persist its progress inherits the cold-start answer rather than
-        being forced to implement something it has no state for.
+        The caller is an explicit solver, whose stable time increment is a property of the mesh: set
+        at the start of the step, and lowered when a refinement shrinks the smallest element.
+
+        Parameters
+        ----------
+        timeIncrement
+            The time increment to use.
+
+        Raises
+        ------
+        NotImplementedError
+            If this stepper cannot run on an enforced time increment.
+        """
+
+        raise NotImplementedError(f"{type(self).__name__} cannot run on an enforced time increment.")
+
+    def getRestartData(self) -> dict[str, np.ndarray]:
+        """The declared state, for a restart checkpoint.
 
         Returns
         -------
-        float | None
-            The completed increment size, or None if this time stepper is starting cold.
+        dict[str, numpy.ndarray]
+            The state; see :func:`~edelweissfe.utils.checkpointedstate.packState`.
         """
 
-        return None
+        return packState(self)
 
-    @abstractmethod
-    def writeRestart(self, restartFile):
-        """Write this time stepper's bookkeeping (current time, increment size, progress within
-        the step, ...) to a restart checkpoint.
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore the declared state from a restart checkpoint.
 
         Parameters
         ----------
-        restartFile
-            An open, writable :class:`h5py.File` (or group) to write the checkpoint into.
+        data
+            What :meth:`getRestartData` returned.
         """
+
+        unpackState(self, data)
+        self._warnIfResumedAtIncrementCap()
 
     @abstractmethod
-    def readRestart(self, restartFile):
-        """Restore this time stepper's bookkeeping from a restart checkpoint written by
-        :meth:`writeRestart`.
+    def numberOfIncrementsDone(self) -> int:
+        """The number of increments accepted so far, counted against the maximum number of increments.
 
-        Parameters
-        ----------
-        restartFile
-            An open, readable :class:`h5py.File` (or group) to read the checkpoint from.
+        Returns
+        -------
+        int
+            The number of increments.
         """
+
+    def _warnIfResumedAtIncrementCap(self):
+        """Warn when a checkpoint is resumed at or past the step's increment cap.
+
+        The maximum number of increments counts from the start of the analysis, not from the resume,
+        and it is taken from the step's own configuration rather than the checkpoint, so it can be
+        raised between runs. The trap: resume without raising it far enough, and the stepper's first
+        proposal ends the step, which the solver treats as a step that finished normally -- the job
+        reports success having advanced nothing. A diagnostic run resumed at increment 130 000 with
+        the cap still at 60 000 was very nearly read as evidence that a crash did not reproduce.
+
+        This does not change the behaviour -- the cap is absolute by design -- only the silence.
+        """
+
+        if self.numberOfIncrementsDone() < self.maxNumberIncrements:
+            return
+
+        self.journal.message(
+            "WARNING: this checkpoint is already at increment {0:}, at or past this step's "
+            "maxNumInc of {1:}, so the resumed step will end immediately WITHOUT advancing the "
+            "solution -- and the job will then report success. maxNumInc counts increments from "
+            "the start of the analysis, not from the resume: raise it above {0:} to continue.".format(
+                self.numberOfIncrementsDone(), self.maxNumberIncrements
+            ),
+            self.identification,
+            0,
+        )

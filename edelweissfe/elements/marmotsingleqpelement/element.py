@@ -89,6 +89,11 @@ class MarmotMaterialWrappingElement(BaseElement):
         return self._elNumber
 
     @property
+    def elType(self) -> str:
+        """The material driven at the single quadrature point stands for the element type."""
+        return self._materialType
+
+    @property
     def nNodes(self):
         return self._nNodes
 

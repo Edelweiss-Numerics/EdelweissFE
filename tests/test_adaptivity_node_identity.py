@@ -16,9 +16,7 @@ so the two neighbours' last-bit differences decide which way it rounds, and they
 """
 
 import numpy as np
-
-from edelweissfe.adaptivity.hex20topology import Hex20Topology
-from edelweissfe.adaptivity.refinement import AdaptiveMesh
+from _adaptivemeshbuilder import AdaptiveMeshBuilder
 
 # Two face-adjacent GC3D20R elements (7271 and 9540) of examples/AnchorPryOut, kept verbatim:
 # they share all eight nodes of one face, and the shared face carries the point
@@ -77,11 +75,10 @@ TIE_POINT = np.array([106.9208, -1.818182125, -54.47886])
 
 
 def _refineBoth():
-    mesh = AdaptiveMesh(splitFactor=2, topology=Hex20Topology())
-    eids = [mesh.add_root(PARENT_A, 0), mesh.add_root(PARENT_B, 0)]
-    for eid in eids:
-        mesh.refine(eid)
-    return mesh
+    builder = AdaptiveMeshBuilder(2)
+    for eid in [builder.addRoot(PARENT_A), builder.addRoot(PARENT_B)]:
+        builder.mesh.refine(eid)
+    return builder.mesh
 
 
 def _duplicateGroups(mesh, decimals=9):
@@ -120,9 +117,10 @@ def test_the_rounding_tie_point_is_a_single_node():
 def test_distinct_bodies_still_keep_distinct_labels():
     """The other half of the contract: a tied interface or a crack plane has two topologically
     distinct nodes at one point, and merging those would weld the model shut."""
-    mesh = AdaptiveMesh(splitFactor=2, topology=Hex20Topology())
-    mesh.refine(mesh.add_root(PARENT_A, 0))
-    mesh.refine(mesh.add_root(PARENT_A, 1))
+    builder = AdaptiveMeshBuilder(2)
+    mesh = builder.mesh
+    mesh.refine(builder.addRoot(PARENT_A, 0))
+    mesh.refine(builder.addRoot(PARENT_A, 1))
     labelsOfBody = []
     for componentId in (0, 1):
         labelsOfBody.append(

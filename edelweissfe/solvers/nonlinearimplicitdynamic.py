@@ -87,18 +87,31 @@ of the family) is refused, because the formulation above divides by it.
 :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeConsistentInertia` into the very
 sparsity pattern the stiffness uses -- both are scattered through the same VIJ layout of the
 :class:`~edelweissfe.numerics.dofmanager.DofManager`, so adding :math:`\\boldsymbol{M}/(\\beta \\Delta t^2)`
-to the tangent is an entry-wise addition of two value vectors, before the parent's in-place CSR
-update, its multi-point-constraint condensation and its Dirichlet row replacement, all of which
-therefore act on the effective matrix without knowing it is one. The damping :math:`\\boldsymbol{C}`
-is the diagonal each element reports through ``computeLumpedDamping``, placed on the diagonal of
-the same layout. Both are assembled when the equation system is (re)built -- at a step's start and
-after a topology change -- not per Newton iteration. A rebuild caused only by a constraint changing
+to the tangent is an entry-wise scaled addition of two value vectors, before the parent's in-place CSR update, its
+multi-point-constraint condensation and its Dirichlet row replacement, all of which therefore act
+on the effective matrix without knowing it is one. For the same reason the mass is summed into
+CSR form by the stiffness' own CSR generator. The damping :math:`\\boldsymbol{C}` is the diagonal
+each element reports through ``computeLumpedDamping``; being diagonal, it is kept only as its
+nonzero entries and their positions in the same layout, not as a full value vector. Both are
+assembled in one loop over the elements when the equation system is (re)built -- at a step's start
+and after a topology change -- not per Newton iteration. A rebuild caused only by a constraint changing
 its connectivity (a contact candidate list, which can change on every increment) leaves every
 element, and with it every element's slot in the layout, where it was: the operators are then
 reused in the new layout rather than reassembled -- see
 :meth:`NonlinearImplicitDynamic._reuseMassAndDamping`. The one exception is a step that changes a
 material property mid-step (``>>changematerialproperty``), which invalidates the density and makes
 them reassemble every increment.
+
+**Checks on the mass.** The assembled mass and damping are checked at runtime for non-finite
+entries, the damping for negative entries, and every time-integrated degree of freedom for a
+nonzero mass; the total mass of each field is reported. The *symmetry* of the mass is not checked
+at runtime -- on the assembled matrix that costs a transposed copy of it, gigabytes on a large
+model -- but pinned once per element type in ``tests/test_nid_element_mass.py``, together with the
+total mass :math:`\\rho V`. It does matter: a non-symmetric mass still converges, to a wrong response.
+That test covers only the element types it lists -- the Marmot hexahedra ``C3D8``, ``C3D20``,
+``C3D20R`` and the gradient-enhanced ``GC3D8``, ``GC3D20R``; any other element type (the plane
+elements, for one) is *not* guarded anywhere, so add it to that list before using it with this
+solver.
 
 **Which fields.** Only the fields whose inertia is a mass
 (:func:`~edelweissfe.config.phenomena.carriesLinearMomentum`, i.e. the displacement) are integrated
@@ -107,7 +120,7 @@ those fields keep the parent's quasi-static treatment. A nonzero inertia an elem
 a rotational inertia, or the micro-inertia of a gradient-enhanced element -- is discarded with a
 warning, once per field. A model with no such field is refused.
 
-**Zero-length and negligible increments.** The time stepper yields a zero-length increment before
+**Zero-length and negligible increments.** The time stepper proposes a zero-length increment before
 the first real one of every step. A quasi-static solver equilibrates it; this solver skips it with
 the state kept, because in zero time nothing can move: displacement and velocity are continuous,
 and a load appearing at that instant is answered by the acceleration below, not by a displacement.
@@ -199,11 +212,6 @@ from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
 
-#: Relative asymmetry above which an assembled consistent mass is rejected. It is the sum of
-#: element matrices :math:`\int \rho N^T N`, each symmetric by construction, so any asymmetry
-#: beyond round-off means an element wrote something that is not a mass matrix into its slot.
-_MASS_SYMMETRY_TOLERANCE = 1e-10
-
 #: An increment shorter than this fraction of the time elapsed in the step is the round-off
 #: remainder of the time stepper's progress accumulation, not an increment, and is skipped with the
 #: state kept -- see :meth:`NonlinearImplicitDynamic.solveIncrement`. Far below any increment a deck
@@ -277,11 +285,15 @@ class _NewmarkSystem:
         The degrees of freedom integrated in time -- those of the fields carrying a mass.
     dynamicFields
         The names of those fields, in the model's field order.
-    Mvij, Cvij
-        The consistent mass and the (diagonal) damping as VIJ value vectors, in the stiffness'
-        layout, ready to be scaled and added onto the tangent.
+    Mvij
+        The consistent mass as a VIJ value vector, in the stiffness' layout, ready to be scaled
+        and added onto the tangent.
+    dampingVIJIndices, dampingVIJValues
+        The diagonal damping, only where it is nonzero: each element's lumped damping at its own
+        diagonal slots of the VIJ layout. Diagonal by construction, so a full VIJ value vector for
+        it would be all zeros but for a few entries per element.
     M, C
-        The same operators as CSR matrices, for the residual's matrix-vector products.
+        The mass and the damping as CSR matrices, for the residual's matrix-vector products.
     V, A
         The velocity and acceleration at the last converged increment.
     """
@@ -290,7 +302,8 @@ class _NewmarkSystem:
     dynamicDofs: np.ndarray
     dynamicFields: list
     Mvij: VIJSystemMatrix
-    Cvij: VIJSystemMatrix
+    dampingVIJIndices: np.ndarray
+    dampingVIJValues: np.ndarray
     M: csr_matrix
     C: csr_matrix
     V: DofVector
@@ -310,8 +323,10 @@ class _NewmarkIncrement:
         The time increment.
     beta, gamma
         The Newmark parameters.
-    dynamicStiffness
-        :math:`M / (\\beta \\Delta t^2) + \\gamma C / (\\beta \\Delta t)` as a VIJ value vector.
+    massFactor, dampingFactor
+        :math:`1 / (\\beta \\Delta t^2)` and :math:`\\gamma / (\\beta \\Delta t)`: the derivatives of the
+        trial acceleration and velocity with respect to the displacement increment, i.e. the factors
+        the mass matrix and the damping enter the effective tangent with.
     V_np, A_np
         The trial velocity and acceleration of the current iteration.
     """
@@ -320,7 +335,8 @@ class _NewmarkIncrement:
     dT: float
     beta: float
     gamma: float
-    dynamicStiffness: np.ndarray
+    massFactor: float
+    dampingFactor: float
     V_np: DofVector
     A_np: DofVector
 
@@ -346,6 +362,9 @@ class _ConservedQuantities:
     momentum: np.ndarray
     kineticEnergy: float
 
+    #: Restored with the solver that measured it; see :attr:`NonlinearImplicitDynamic.checkpointedState`.
+    checkpointedState = {"massByField": dict, "momentum": np.ndarray, "kineticEnergy": float}
+
 
 class NonlinearImplicitDynamic(NIST):
     """This is the Nonlinear Implicit Dynamic -- solver (``NID``), Newmark-beta time integration on
@@ -369,6 +388,14 @@ class NonlinearImplicitDynamic(NIST):
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NIDSchema
 
+    #: The predictor's state, as in the parent, the drift the conservation checks accumulate over the
+    #: step, and the conserved totals after the last accepted increment, which a topology change is
+    #: compared against. The velocity and acceleration are node-field entries, restored with the model.
+    checkpointedState = NIST.checkpointedState | {
+        "_conservationCheck": ConservationCheck,
+        "_conservedAtLastAccept": _ConservedQuantities,
+    }
+
     SolverSpecificOptions = NIST.SolverSpecificOptions | {
         "newmarkBeta": 0.25,
         "newmarkGamma": 0.5,
@@ -383,14 +410,10 @@ class NonlinearImplicitDynamic(NIST):
         #: first increment of a step has built it. See :class:`_NewmarkSystem`.
         self._newmarkSystem = None
         #: Whether the next increment has to compute the acceleration from equilibrium first.
-        #: Armed by :meth:`solveStep` for a step starting cold, disarmed by the increment that
+        #: Armed by :meth:`beginStep` for a step starting cold, disarmed by the increment that
         #: consumes it.
         self._initialAccelerationPending = False
-        #: Staged by :meth:`readRestart`, which the driver calls BEFORE :meth:`solveStep` on the
-        #: resumed step, and consumed there exactly once -- the same staging the explicit solver
-        #: uses for its external work.
-        self._resumedFromCheckpoint = False
-        #: Length of ``model.topologyHistory`` when the current equation system was assembled.
+        #: Length of ``model.topology.history`` when the current equation system was assembled.
         #: A change in it is what distinguishes a rebuild caused by the mesh actually changing
         #: from one caused by a constraint re-reporting its connectivity; see
         #: :meth:`_updateNewmarkSystem`.
@@ -436,47 +459,14 @@ class NonlinearImplicitDynamic(NIST):
                 1,
             )
 
-    def writeRestart(self, restartFile):
-        """Mark the checkpoint as carrying Newmark kinematics.
-
-        The velocity and acceleration themselves need no solver code: they are node-field entries
-        and go into the checkpoint with every other entry. This marker exists so that a resumed
-        step knows the acceleration it finds there is the scheme's own consistent one and must not
-        be replaced by a fresh equilibrium solve -- see :meth:`readRestart`.
-
-        Parameters
-        ----------
-        restartFile
-            The open checkpoint to write to.
-        """
-
-        restartFile.require_group("solver").attrs["newmarkKinematicsCheckpointed"] = True
-
-    def readRestart(self, restartFile):
-        """Note that the step about to be solved resumes from a checkpoint written by this solver.
-
-        Tolerates a checkpoint written by another solver, or without the marker: the resumed step
-        then starts as a cold one, computing its initial acceleration from equilibrium, which is
-        the right answer for a state that carries no acceleration of its own.
-
-        Parameters
-        ----------
-        restartFile
-            The open checkpoint to read from.
-        """
-
-        if "solver" not in restartFile:
-            return
-        self._resumedFromCheckpoint = bool(restartFile["solver"].attrs.get("newmarkKinematicsCheckpointed", False))
-
-    def solveStep(
+    def beginStep(
         self,
         step,
         model: FEModel,
         fieldOutputController: FieldOutputController,
         outputmanagers: dict[str, OutputManagerBase],
     ):
-        """Public interface to solve for a step; see the parent.
+        """Start a step; see the parent.
 
         Arms the initial-acceleration computation for a step starting cold and drops the operators
         of the previous step -- the parent rebuilds its equation system at the start of every step,
@@ -501,9 +491,12 @@ class NonlinearImplicitDynamic(NIST):
 
         self._newmarkSystem = None
         self._conservationCheck.reset()
+        #: Mass, momentum and kinetic energy after the last accepted increment of this step, or None.
+        self._conservedAtLastAccept = None
+        # The mesh the step starts on, restored or not: a topology change is a change from this.
+        self._topologyRecordsAtLastBuild = len(model.topology.history)
 
-        resumed = self._resumedFromCheckpoint
-        self._resumedFromCheckpoint = False
+        resumed = not step.timeStepper.isAtStepStart()
         self._initialAccelerationPending = bool(self.options["computeInitialAcceleration"]) and not resumed
 
         self.journal.message(
@@ -524,7 +517,7 @@ class NonlinearImplicitDynamic(NIST):
             1,
         )
 
-        return super().solveStep(step, model, fieldOutputController, outputmanagers)
+        return super().beginStep(step, model, fieldOutputController, outputmanagers)
 
     def solveIncrement(
         self,
@@ -594,7 +587,7 @@ class NonlinearImplicitDynamic(NIST):
             # equilibrium solve for the initial acceleration provides -- not as a displacement.
             # The parent's quasi-static solve would instead put the model at static equilibrium
             # with the new load in zero time; for a suddenly applied load that is the whole dynamic
-            # response, skipped before it began. The time stepper yields one such increment before
+            # response, skipped before it began. The time stepper proposes one such increment before
             # the first real one of every step, so this is the ordinary path, not an edge case.
             #
             # An increment that is merely NEGLIGIBLE is treated the same way, for a different
@@ -644,19 +637,13 @@ class NonlinearImplicitDynamic(NIST):
         beta = self.options["newmarkBeta"]
         gamma = self.options["newmarkGamma"]
         dT = timeStep.timeIncrement
-        # d(A_np)/d(dU) and d(V_np)/d(dU), the factors the mass and the damping enter the tangent
-        # with. dT is fixed within the increment, so these two terms are too: formed once here
-        # rather than scaled and added as two full-length value vectors on every Newton iteration.
-        dynamicStiffness = (1.0 / (beta * dT * dT)) * np.asarray(system.Mvij) + (gamma / (beta * dT)) * np.asarray(
-            system.Cvij
-        )
-
         self._currentIncrement = _NewmarkIncrement(
             system=system,
             dT=dT,
             beta=beta,
             gamma=gamma,
-            dynamicStiffness=dynamicStiffness,
+            massFactor=1.0 / (beta * dT * dT),
+            dampingFactor=gamma / (beta * dT),
             V_np=self.theDofManager.constructDofVector(),
             A_np=self.theDofManager.constructDofVector(),
         )
@@ -711,9 +698,13 @@ class NonlinearImplicitDynamic(NIST):
         F += np.abs(PInertia)
         F += np.abs(PDamping)
 
-        # Same VIJ layout as K, so the effective tangent is an entry-wise sum, before the parent's
-        # CSR conversion, MPC condensation and Dirichlet row replacement.
-        K += increment.dynamicStiffness
+        # The effective tangent K + M / (beta dT^2) + gamma C / (beta dT). Same VIJ layout as K, so
+        # it is an entry-wise sum, before the parent's CSR conversion, MPC condensation and
+        # Dirichlet row replacement. Note that `a * M` forms a temporary VIJ-length vector for the
+        # duration of this line; it is not kept. The damping is diagonal and touches only its few
+        # nonzero slots.
+        K += increment.massFactor * np.asarray(system.Mvij)
+        K[system.dampingVIJIndices] += increment.dampingFactor * system.dampingVIJValues
 
     def finalizeIncrement(self, model: FEModel):
         """The converged trial kinematics become the state; see the parent's hook. Only an accepted
@@ -735,6 +726,9 @@ class NonlinearImplicitDynamic(NIST):
 
         kineticEnergy = 0.5 * float(np.dot(np.asarray(system.V), system.M @ np.asarray(system.V)))
         self.journal.message("kinetic energy {:e}".format(kineticEnergy), self.identification, 2)
+
+        # What a topology change before the next increment is compared against.
+        self._conservedAtLastAccept = self._conservedQuantities(system, model)
 
     @staticmethod
     def _newmarkVelocityAndAcceleration(
@@ -812,19 +806,19 @@ class NonlinearImplicitDynamic(NIST):
         them onto the nodes it created. A step changing a material property mid-step invalidates the
         density, so the operators are reassembled every increment of such a step.
 
-        A rebuild that follows a recorded **topology change** additionally re-arms the
-        initial-acceleration solve and reports what the change did to the conserved quantities --
-        see the module docstring. Two conditions narrow that, and both matter:
+        A rebuild that follows a recorded **topology change** -- a ``model.topology.history`` grown
+        since the last build, or since the step started -- additionally re-arms the
+        initial-acceleration solve and reports what the change did to the conserved quantities (if
+        there is a previous system to compare with) -- see the module docstring. A step boundary
+        rebuilds the manager too, but changes no topology, so it is not such a rebuild; and the
+        first increment of a resumed step that refines is, exactly as it was in the uninterrupted
+        run.
 
-        * ``system is not None``: the first build of a step is not it. A step boundary rebuilds the
-          manager too, and :meth:`solveStep` has already decided there whether that step starts cold
-          (its own ``computeInitialAcceleration``/restart logic) -- re-deciding it here would
-          override that decision with a different one, for every existing multi-step deck.
-        * a grown ``model.topologyHistory``: a rebuild triggered by a constraint re-reporting its
-          connectivity (a contact candidate list, which can tick on any increment) has moved no
-          node and interpolated nothing, so there is no stale acceleration to replace and no
-          conservation statement to make. Restarting the acceleration of the whole model on it
-          would be both wrong and, repeated per increment, expensive.
+        It takes a grown history, not merely a rebuild: a rebuild triggered by a constraint
+        re-reporting its connectivity (a contact candidate list, which can tick on any increment)
+        has moved no node and interpolated nothing, so there is no stale acceleration to replace and
+        no conservation statement to make. Restarting the acceleration of the whole model on it
+        would be both wrong and, repeated per increment, expensive.
 
         Parameters
         ----------
@@ -847,7 +841,7 @@ class NonlinearImplicitDynamic(NIST):
 
         # Safe to advance unconditionally here: a topology change always rebuilds the manager, so
         # it can never be missed by an increment that returned above.
-        topologyRecords = len(model.topologyHistory)
+        topologyRecords = len(model.topology.history)
         topologyChanged = topologyRecords != self._topologyRecordsAtLastBuild
         self._topologyRecordsAtLastBuild = topologyRecords
 
@@ -880,27 +874,29 @@ class NonlinearImplicitDynamic(NIST):
             reusedMassAndDamping = self._reuseMassAndDamping(system, model)
 
         if reusedMassAndDamping is not None:
-            Mvij, Cvij, M, C = reusedMassAndDamping
+            Mvij, damping, M, C = reusedMassAndDamping
         else:
-            Mvij, Cvij, M, C = self._assembleMassAndDamping(model, dynamicDofs, dynamicFields)
+            Mvij, damping, M, C = self._assembleMassAndDamping(model, dynamicDofs, dynamicFields)
 
         self._newmarkSystem = _NewmarkSystem(
             dofManager=self.theDofManager,
             dynamicDofs=dynamicDofs,
             dynamicFields=dynamicFields,
             Mvij=Mvij,
-            Cvij=Cvij,
+            dampingVIJIndices=damping[0],
+            dampingVIJValues=damping[1],
             M=M,
             C=C,
             V=V,
             A=A,
         )
 
-        if dofManagerChanged and system is not None and topologyChanged:
-            self.reportTopologyChangeConservation(
-                self._conservedQuantities(system, model),
-                self._conservedQuantities(self._newmarkSystem, model),
-            )
+        if dofManagerChanged and topologyChanged:
+            if self._conservedAtLastAccept is not None:
+                self.reportTopologyChangeConservation(
+                    self._conservedAtLastAccept,
+                    self._conservedQuantities(self._newmarkSystem, model),
+                )
             self._initialAccelerationPending = bool(self.options["computeInitialAcceleration"])
             self.journal.message(
                 (
@@ -917,7 +913,7 @@ class NonlinearImplicitDynamic(NIST):
     @performancetiming.timeit("reuse mass and damping")
     def _reuseMassAndDamping(
         self, system: _NewmarkSystem, model: FEModel
-    ) -> tuple[VIJSystemMatrix, VIJSystemMatrix, csr_matrix, csr_matrix] | None:
+    ) -> tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix] | None:
         """The mass and the damping of ``system``, moved into the layout of the current
         :class:`~edelweissfe.numerics.dofmanager.DofManager` without reassembling them -- or None if
         that manager differs from the old one in anything the operators depend on.
@@ -944,9 +940,10 @@ class NonlinearImplicitDynamic(NIST):
 
         Returns
         -------
-        tuple[VIJSystemMatrix, VIJSystemMatrix, csr_matrix, csr_matrix] | None
-            The mass and the damping as VIJ value vectors of the current manager and as CSR
-            matrices, or None if they have to be reassembled.
+        tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix] | None
+            The mass as a VIJ value vector of the current manager, the damping's VIJ indices and
+            values (all in the unchanged element slots), and both as CSR matrices -- or None if they
+            have to be reassembled.
         """
 
         old = system.dofManager
@@ -972,15 +969,12 @@ class NonlinearImplicitDynamic(NIST):
 
         # Behind the elements' slots lie only constraints', which carry no mass and no damping; a
         # nonzero there means the prefix assumption is wrong, not that the operators may be moved.
-        if np.any(np.asarray(system.Mvij)[nElementVIJ:]) or np.any(np.asarray(system.Cvij)[nElementVIJ:]):
+        if np.any(np.asarray(system.Mvij)[nElementVIJ:]) or np.any(system.dampingVIJIndices >= nElementVIJ):
             return None
 
         Mvij = new.constructVIJSystemMatrix()
-        Cvij = new.constructVIJSystemMatrix()
         Mvij[:] = 0.0
-        Cvij[:] = 0.0
         Mvij[:nElementVIJ] = system.Mvij[:nElementVIJ]
-        Cvij[:nElementVIJ] = system.Cvij[:nElementVIJ]
 
         self.journal.message(
             "constraint connectivity changed only: mass and damping reused, not reassembled",
@@ -988,7 +982,7 @@ class NonlinearImplicitDynamic(NIST):
             2,
         )
 
-        return Mvij, Cvij, system.M, system.C
+        return Mvij, (system.dampingVIJIndices, system.dampingVIJValues), system.M, system.C
 
     def _conservedQuantities(self, system: _NewmarkSystem, model: FEModel) -> _ConservedQuantities:
         """Total mass, linear momentum and kinetic energy of one Newmark system.
@@ -1135,7 +1129,7 @@ class NonlinearImplicitDynamic(NIST):
     @performancetiming.timeit("assemble mass and damping")
     def _assembleMassAndDamping(
         self, model: FEModel, dynamicDofs: np.ndarray, dynamicFields: list
-    ) -> tuple[VIJSystemMatrix, VIJSystemMatrix, csr_matrix, csr_matrix]:
+    ) -> tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix]:
         """Assemble the consistent mass and the diagonal damping, in the stiffness' VIJ layout and
         as CSR matrices.
 
@@ -1155,18 +1149,23 @@ class NonlinearImplicitDynamic(NIST):
 
         Returns
         -------
-        tuple[VIJSystemMatrix, VIJSystemMatrix, csr_matrix, csr_matrix]
-            The mass and the damping as VIJ value vectors, and the same two as CSR matrices.
+        tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix]
+            The mass as a VIJ value vector, the damping as the VIJ indices and values of its
+            nonzero diagonal entries (see :meth:`_lumpedDampingOfElement`), and the same two as CSR
+            matrices.
 
         Raises
         ------
         ValueError
-            If the assembled mass is not finite, not symmetric, or leaves a dynamic degree of
-            freedom without any mass.
+            If the assembled mass or damping is not finite, the damping is negative, or the mass
+            leaves a dynamic degree of freedom without any mass.
         """
 
         Mvij = self.theDofManager.constructVIJSystemMatrix()
-        Cvij = self.theDofManager.constructVIJSystemMatrix()
+        # Seeded with empty arrays, so that a model without any damping still concatenates to
+        # empty arrays of the right dtype below.
+        dampingVIJIndices = [np.zeros(0, dtype=np.int64)]
+        dampingVIJValues = [np.zeros(0)]
 
         for el in model.elements.values():
             if not el.hasKernels:
@@ -1183,11 +1182,12 @@ class NonlinearImplicitDynamic(NIST):
                     )
                 ) from error
 
-            Ce = np.zeros(el.nDof)
-            el.computeLumpedDamping(Ce)
-            if np.any(Ce):
-                CeView = Cvij[el]
-                CeView += np.diagflat(Ce).reshape(CeView.shape)
+            indices, values = self._lumpedDampingOfElement(el)
+            dampingVIJIndices.append(indices)
+            dampingVIJValues.append(values)
+
+        dampingVIJIndices = np.concatenate(dampingVIJIndices)
+        dampingVIJValues = np.concatenate(dampingVIJValues)
 
         nDof = self.theDofManager.nDof
         I = self.theDofManager.I  # noqa: E741
@@ -1196,26 +1196,25 @@ class NonlinearImplicitDynamic(NIST):
         isDynamic = np.zeros(nDof, dtype=bool)
         isDynamic[dynamicDofs] = True
         couplesDynamicOnly = isDynamic[I] & isDynamic[J]
-        self._warnAboutDiscardedInertia(Mvij, Cvij, couplesDynamicOnly)
+        self._warnAboutDiscardedInertia(Mvij, dampingVIJIndices, couplesDynamicOnly)
+        # Mass and damping on the quasi-static fields are discarded, see the warning above.
         Mvij[~couplesDynamicOnly] = 0.0
-        Cvij[~couplesDynamicOnly] = 0.0
+        keptDamping = couplesDynamicOnly[dampingVIJIndices]
+        dampingVIJIndices = dampingVIJIndices[keptDamping]
+        dampingVIJValues = dampingVIJValues[keptDamping]
 
-        if not np.all(np.isfinite(Mvij)) or not np.all(np.isfinite(Cvij)):
+        # The mass matrix has the stiffness' VIJ layout, so the solver's own CSR generator for K
+        # (built for this DofManager) sums it into K's sparsity pattern -- no COO sort of its own.
+        M = self.csrGenerator.updateCSR(np.asarray(Mvij))
+        C = coo_matrix((dampingVIJValues, (I[dampingVIJIndices], J[dampingVIJIndices])), shape=(nDof, nDof)).tocsr()
+
+        # Checked on the summed CSR values: a non-finite entry survives the summation, and the CSR
+        # arrays are the shorter ones. Symmetry is not checked here but per element type in the
+        # tests -- see the module documentation, "Checks on the mass".
+        if not np.all(np.isfinite(M.data)) or not np.all(np.isfinite(C.data)):
             raise ValueError("The assembled consistent mass or damping contains non-finite entries.")
 
-        M = coo_matrix((np.asarray(Mvij), (I, J)), shape=(nDof, nDof)).tocsr()
-        C = coo_matrix((np.asarray(Cvij), (I, J)), shape=(nDof, nDof)).tocsr()
-
-        massScale = float(np.max(np.abs(M.data))) if M.nnz else 0.0
-        antisymmetricPart = M - M.T
-        asymmetry = float(np.max(np.abs(antisymmetricPart.data))) if antisymmetricPart.nnz else 0.0
-        if massScale > 0.0 and asymmetry > _MASS_SYMMETRY_TOLERANCE * massScale:
-            raise ValueError(
-                "The assembled consistent mass is not symmetric (largest asymmetry {:e} against entries "
-                "up to {:e}); an element wrote something that is not a mass matrix.".format(asymmetry, massScale)
-            )
-
-        if np.any(np.asarray(C.data) < 0.0):
+        if np.any(C.data < 0.0):
             raise ValueError("The assembled damping has negative entries; a damping must dissipate.")
 
         # A dynamic degree of freedom no element gave any mass -- a zero density, or a node carried
@@ -1238,23 +1237,54 @@ class NonlinearImplicitDynamic(NIST):
                 2,
             )
 
-        return Mvij, Cvij, M, C
+        return Mvij, (dampingVIJIndices, dampingVIJValues), M, C
 
-    def _warnAboutDiscardedInertia(self, Mvij: VIJSystemMatrix, Cvij: VIJSystemMatrix, couplesDynamicOnly: np.ndarray):
+    def _lumpedDampingOfElement(self, el) -> tuple[np.ndarray, np.ndarray]:
+        """The lumped (diagonal) damping one element reports, placed on the diagonal of its own
+        block in the VIJ layout -- only the nonzero entries, as their VIJ indices and values.
+
+        An element's block occupies ``nDof * nDof`` consecutive VIJ entries in row-major order, so
+        its ``k``-th diagonal entry is at ``start + k * (nDof + 1)``. Each slot belongs to one
+        element, so indices collected over all elements are unique.
+
+        Parameters
+        ----------
+        el
+            The element.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            The VIJ indices of the element's nonzero damping entries, and the damping values there.
+        """
+
+        Ce = np.zeros(el.nDof)
+        el.computeLumpedDamping(Ce)
+        nonzero = np.flatnonzero(Ce)
+
+        start = self.theDofManager.idcsOfHigherOrderEntitiesInVIJ[el]
+        return (start + nonzero * (el.nDof + 1)).astype(np.int64), Ce[nonzero]
+
+    def _warnAboutDiscardedInertia(
+        self, Mvij: VIJSystemMatrix, dampingVIJIndices: np.ndarray, couplesDynamicOnly: np.ndarray
+    ):
         """Warn, once per field, when an element reported a nonzero inertia or damping on a field
         this solver keeps quasi-static -- a rotational inertia, or a gradient-enhanced element's
         micro-inertia -- which is about to be discarded.
 
         Parameters
         ----------
-        Mvij, Cvij
-            The assembled mass and damping, before the entries are zeroed.
+        Mvij
+            The assembled mass, before the entries are zeroed.
+        dampingVIJIndices
+            The VIJ indices of the nonzero damping, before those are dropped.
         couplesDynamicOnly
             Per VIJ entry, whether it couples two time-integrated degrees of freedom.
         """
 
-        discarded = ~couplesDynamicOnly & ((np.asarray(Mvij) != 0.0) | (np.asarray(Cvij) != 0.0))
-        if not np.any(discarded):
+        discarded = np.flatnonzero(~couplesDynamicOnly & (np.asarray(Mvij) != 0.0))
+        discarded = np.concatenate([discarded, dampingVIJIndices[~couplesDynamicOnly[dampingVIJIndices]]])
+        if not discarded.size:
             return
 
         I = self.theDofManager.I  # noqa: E741

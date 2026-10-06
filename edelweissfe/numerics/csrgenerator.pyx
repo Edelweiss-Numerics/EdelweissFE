@@ -63,7 +63,7 @@ cdef class CSRGenerator:
         cdef:
             int[::1] I = systemMatrix.I
             int[::1] J = systemMatrix.J
-            long nDof = systemMatrix.nDof
+            int nDof = systemMatrix.nDof  # as the nDof member
 
         self.nDof = nDof
         self.x = np.zeros_like (I , dtype=np.intc)

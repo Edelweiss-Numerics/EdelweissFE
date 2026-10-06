@@ -1,7 +1,10 @@
 ** tie patch test: two hexa20 blocks with matching interface meshes (2x2 vs 2x2), bonded by the
-** DOF-elimination tie constraint, under uniform compression with nu = 0. The upper block starts
-** with a 0.02 gap that the tie's adjust (default) closes at construction, so the exact solution
-** is homogeneous uniaxial stress: sigma = E * 0.06 / 2 = 540, and the interface displacement is
+** DOF-elimination tie constraint, under uniform compression with nu = 0. The upper block, 0.98
+** tall, starts with a 0.02 gap that the tie's adjust (default) closes at construction by moving
+** its bottom nodes -- and its elements with them -- onto the lower block, so the snapped column is
+** exactly 2 tall and the exact solution is homogeneous uniaxial stress: sigma = E * 0.06 / 2 = 540
+** (before 2026-10-02 the elements kept their pre-snap geometry, and a 1-tall upper block gave the
+** same number for the wrong reason), and the interface displacement is
 ** perfectly planar. On matching meshes every slave node projects exactly onto a master node
 ** (weights snap to a facet vertex), so the patch test passes to machine precision: RFBottom =
 ** 540 exactly, and the spread of the slave nodes' z-displacement (UzSpread) is ~1e-17. See
@@ -37,7 +40,7 @@ y0      =0
 z0      =1.02
 lX      =1
 lY      =1
-lZ      =1
+lZ      =0.98
 elProvider =edelweiss
 elType  =C3D20
 

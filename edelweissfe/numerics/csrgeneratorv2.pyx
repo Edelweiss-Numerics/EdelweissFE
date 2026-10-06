@@ -28,6 +28,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 cimport numpy as np
+from libc.stdint cimport int64_t
 from libcpp.vector cimport vector
 
 
@@ -104,7 +105,7 @@ class AliasedCSRMatrix(csr_matrix):
 
 cdef extern from "_csrcore.h":
     cdef cppclass CSRCore nogil:
-        CSRCore(const int* I, const int* J, long n_pairs, int n_dof, bint patternOnly) except +
+        CSRCore(const int* I, const int* J, int64_t n_pairs, int n_dof, bint patternOnly) except +
 
         vector[int] indptr
         vector[int] indices
@@ -114,19 +115,19 @@ cdef extern from "_csrcore.h":
         void update(const double* V_data, double* csr_data) nogil
         void releaseGatherMap()
         bint gatherMapReleased
-        long memoryBytes()
+        int64_t memoryBytes()
 
     cdef cppclass CSRDirectAssembler nogil:
         CSRDirectAssembler(const int* indptr, const int* indices, int nnz, int nDof,
-                           const int* I, const int* J, long nPairs, int nThreads) except +
+                           const int* I, const int* J, int64_t nPairs, int nThreads) except +
 
         void assembleFromVIJ(const double* V, const int* I, double* csr_data) nogil
-        void registerEntities(const long* mapStarts, const int* nDofs, int nEntities, const int* I)
+        void registerEntities(const int64_t* mapStarts, const int* nDofs, int nEntities, const int* I)
         void beginAssembly() nogil
         void scatterBlock(int tid, int entity, const double* block) nogil
         void reduce(double* csr_data) nogil
         void setNumBuffers(int n) except +
-        long memoryBytes()
+        int64_t memoryBytes()
         int nBuffers
 
 cdef class CSRGenerator:
@@ -151,7 +152,7 @@ cdef class CSRGenerator:
     cdef CSRCore* core
     cdef public object csrMatrix
     cdef double[:] data_view
-    cdef long nCooPairs  # Kept as long (int64)
+    cdef int64_t nCooPairs
 
     def __dealloc__(self):
         if self.core != NULL:
@@ -210,7 +211,7 @@ cdef class CSRGenerator:
         Neither figure counts the VIJ value array or the ``I``/``J`` index arrays: those belong to
         the DofManager, and ``I``/``J`` are needed by both paths.
         """
-        return self.core.memoryBytes() + 8 * <long> self.core.nnz
+        return self.core.memoryBytes() + 8 * <int64_t> self.core.nnz
 
     @property
     def nnz(self):
@@ -327,7 +328,7 @@ cdef class DirectCSRAssembler:
     cdef object _I
     cdef public object csrMatrix
     cdef double[:] data_view
-    cdef long nCooPairs
+    cdef int64_t nCooPairs
 
     def __dealloc__(self):
         if self.asm_ != NULL:
@@ -387,7 +388,7 @@ cdef class DirectCSRAssembler:
             self.asm_.assembleFromVIJ(&V[0], &I[0], &out[0])
         return self.csrMatrix
 
-    def registerEntities(self, long[::1] mapStarts, int[::1] nDofs):
+    def registerEntities(self, int64_t[::1] mapStarts, int[::1] nDofs):
         """Give each entity its slice of the offset map, once per connectivity change.
 
         ``mapStarts[e]`` is entity e's offset into the VIJ ordering -- the same value the DofManager

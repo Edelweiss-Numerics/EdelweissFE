@@ -142,7 +142,7 @@ class Generator(GeneratorBase):
             cmd = " ".join([cmd, exportFile])
 
             if silent:
-                cmd = " ".join([cmd, "> /dev/null"])
+                cmd = " ".join([cmd, ">", os.devnull])  # os.devnull: /dev/null, or nul on Windows
 
             os.system(cmd)
             os.remove(exportFile)

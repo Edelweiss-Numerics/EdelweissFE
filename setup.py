@@ -40,6 +40,18 @@ from Cython.Build import build_ext, cythonize
 from setuptools import setup
 from setuptools.extension import Extension
 
+# The platform-dependent build settings are shared with downstream packages (EdelweissMeshfree), which import
+# them from the installed package. Here, they are imported from the source tree.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from edelweissfe.utils.extensionbuild import (  # noqa: E402
+    compile_flags,
+    get_arch_flags,
+    is_windows,
+    link_flags,
+    native_prefix,
+    runtime_library_dirs,
+)
+
 directives = {
     "boundscheck": False,
     "wraparound": False,
@@ -51,20 +63,21 @@ directives = {
     "freethreading_compatible": True,
 }
 
-default_install_prefix = sys.prefix
 print("*" * 80)
 print("EdelweissFE setup")
 print("System prefix: " + sys.prefix)
 print("*" * 80)
 
-marmot_dir = expanduser(os.environ.get("MARMOT_INSTALL_DIR", default_install_prefix))
-mkl_include = expanduser(os.environ.get("MKL_INCLUDE_DIR", join(default_install_prefix, "include")))
-eigen_include = expanduser(os.environ.get("EIGEN_INCLUDE_DIR", join(default_install_prefix, "include/eigen3")))
-arch_flags = os.environ.get("EDELWEISSFE_ARCH_FLAGS", "-march=native").split()
+marmot_dir = expanduser(os.environ.get("MARMOT_INSTALL_DIR", native_prefix))
+# Name of the generated package file recording marmot_dir, read by edelweissfe/__init__.py.
+marmot_install_dir_file = "marmot_install_dir.txt"
+mkl_include = expanduser(os.environ.get("MKL_INCLUDE_DIR", join(native_prefix, "include")))
+eigen_include = expanduser(os.environ.get("EIGEN_INCLUDE_DIR", join(native_prefix, "include", "eigen3")))
 # AMGCL specifically defaults to no arch flags (see the comment at its Extension below) but
 # still honors an explicit EDELWEISSFE_ARCH_FLAGS override, consistent with every other
 # extension above -- only the *default* differs, not the override mechanism.
-amgcl_arch_flags = os.environ.get("EDELWEISSFE_ARCH_FLAGS", "").split()
+amgcl_arch_flags = get_arch_flags(default="")
+arch_flags = get_arch_flags()
 print("Marmot install directory (overwrite via environment var. MARMOT_INSTALL_DIR):")
 print(marmot_dir)
 print("MKL include directory (overwrite via environment var. MKL_INCLUDE_DIR):")
@@ -98,6 +111,7 @@ for description, header, searchPath, variable in [
 
 print("*" * 80)
 
+
 print("Gather the extension for the MarmotElement base element, linked to the Marmot library")
 extensions = [
     Extension(
@@ -106,9 +120,9 @@ extensions = [
         include_dirs=[join(marmot_dir, "include"), numpy.get_include()],
         libraries=["Marmot"],
         library_dirs=[join(marmot_dir, "lib")],
-        runtime_library_dirs=[join(marmot_dir, "lib")],
+        runtime_library_dirs=runtime_library_dirs(join(marmot_dir, "lib")),
         language="c++",
-        extra_compile_args=["-O3", *arch_flags],
+        extra_compile_args=compile_flags(arch=arch_flags),
     )
 ]
 
@@ -131,9 +145,9 @@ for marmot_material_source in [
             ],
             libraries=["Marmot"],
             library_dirs=[join(marmot_dir, "lib")],
-            runtime_library_dirs=[join(marmot_dir, "lib")],
+            runtime_library_dirs=runtime_library_dirs(join(marmot_dir, "lib")),
             language="c++",
-            extra_compile_args=["-O3", "-std=c++20"],
+            extra_compile_args=compile_flags(cxx20=True),
         )
     ]
 
@@ -144,7 +158,7 @@ extensions += [
         ["edelweissfe/utils/elementresultcollector.pyx"],
         include_dirs=[numpy.get_include()],
         language="c++",
-        extra_compile_args=["-O3", *arch_flags],
+        extra_compile_args=compile_flags(arch=arch_flags),
     )
 ]
 
@@ -165,8 +179,8 @@ extensions += [
         ["edelweissfe/numerics/csrgeneratorv2.pyx"],
         include_dirs=[numpy.get_include()],
         language="c++",
-        extra_compile_args=["-O3", "-std=c++20", *arch_flags, "-fopenmp"],
-        extra_link_args=["-fopenmp"],
+        extra_compile_args=compile_flags(cxx20=True, openmp=True, arch=arch_flags),
+        extra_link_args=link_flags(openmp=True),
     )
 ]
 
@@ -177,13 +191,8 @@ extensions += [
         sources=["edelweissfe/solvers/base/dirichlet.pyx"],
         include_dirs=[numpy.get_include()],
         language="c++",
-        extra_compile_args=[
-            "-O3",
-            *arch_flags,
-            "-fopenmp",
-            "-Wno-maybe-uninitialized",
-        ],
-        extra_link_args=["-fopenmp"],
+        extra_compile_args=compile_flags(openmp=True, arch=arch_flags, gcc_only=["-Wno-maybe-uninitialized"]),
+        extra_link_args=link_flags(openmp=True),
     )
 ]
 
@@ -198,13 +207,19 @@ extensions += [
             numpy.get_include(),
             mkl_include,
         ],
-        libraries=[
-            "mkl_gnu_thread",
-            "mkl_core",
-            "mkl_rt",
-            "mkl_gf_lp64",
-            "iomp5",
-        ],
+        # On Windows, MKL's single dynamic library (mkl_rt) selects threading and interface at runtime.
+        libraries=(
+            ["mkl_rt"]
+            if is_windows
+            else [
+                "mkl_gnu_thread",
+                "mkl_core",
+                "mkl_rt",
+                "mkl_gf_lp64",
+                "iomp5",
+            ]
+        ),
+        library_dirs=[join(native_prefix, "lib")],
         language="c++",
     )
 ]
@@ -228,6 +243,8 @@ extensions += [
         optional=True,
     )
 ]
+if is_windows:  # Panua PARDISO's link line is GCC/Linux-specific
+    extensions.pop()
 
 print("Gather the AMGCL interface")
 # No arch flags by default: -march=native measured ~40% SLOWER here on Skylake-SP, where AMGCL's
@@ -237,10 +254,11 @@ extensions += [
     Extension(
         "*",
         sources=["edelweissfe/linsolve/amgcl/amgcl.pyx"],
-        include_dirs=[numpy.get_include(), join(default_install_prefix, "include"), "."],
+        include_dirs=[numpy.get_include(), join(native_prefix, "include"), "."],
         language="c++",
-        extra_compile_args=["-std=c++11", "-fopenmp", "-O3", *amgcl_arch_flags],
-        extra_link_args=["-fopenmp"],
+        # MSVC's default language standard (C++14) already covers AMGCL's C++11 requirement.
+        extra_compile_args=([] if is_windows else ["-std=c++11"]) + compile_flags(openmp=True, arch=amgcl_arch_flags),
+        extra_link_args=link_flags(openmp=True),
     )
 ]
 
@@ -254,6 +272,8 @@ extensions += [
         ],
         include_dirs=[
             numpy.get_include(),
+            join(native_prefix, "include"),
+            join(native_prefix, "include", "suitesparse"),
         ],
         libraries=[
             "klu",
@@ -264,15 +284,13 @@ extensions += [
             "cholmod",
             "camd",
             "ccolamd",
-            "iomp5",
+            *([] if is_windows else ["iomp5"]),
             "suitesparseconfig",
         ],
+        library_dirs=[join(native_prefix, "lib")],
         language="c",
-        extra_compile_args=[
-            "-fopenmp",
-            "-Wno-maybe-uninitialized",
-        ],
-        extra_link_args=["-fopenmp"],
+        extra_compile_args=compile_flags(optimize=False, openmp=True, gcc_only=["-Wno-maybe-uninitialized"]),
+        extra_link_args=link_flags(openmp=True),
     )
 ]
 
@@ -291,27 +309,22 @@ class optional_build_ext(build_ext):
             except Exception as e:
                 print(f"[FAIL] Could not build {ext.name}: {e}")
 
-        self.write_build_log()
+        self.write_package_file("built_extensions.log", "\n".join(self.successful_extensions) + "\n")
+        # The Marmot installation the extensions were built against. On Windows, edelweissfe/__init__.py adds its
+        # bin directory to the DLL search path, the counterpart of the runtime library path baked in elsewhere.
+        self.write_package_file(marmot_install_dir_file, os.path.abspath(marmot_dir) + "\n")
 
-    def write_build_log(self):
-        log_file = pathlib.Path("edelweissfe") / "built_extensions.log"
+    def write_package_file(self, name, content):
+        """Write a generated file into the package, both in the source tree and in the build directory."""
+        source_file = pathlib.Path("edelweissfe") / name
+        source_file.parent.mkdir(parents=True, exist_ok=True)
+        source_file.write_text(content, encoding="utf-8")
 
-        log_file.parent.mkdir(parents=True, exist_ok=True)
+        build_file = pathlib.Path(self.build_lib) / "edelweissfe" / name
+        build_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_file, build_file)
 
-        log_file.write_text(
-            "\n".join(self.successful_extensions) + "\n",
-            encoding="utf-8",
-        )
-
-        print(f"Wrote build log to {log_file}")
-
-        # also copy into build/lib package dir
-        build_lib = pathlib.Path(self.build_lib) / "edelweissfe"
-        build_lib.mkdir(parents=True, exist_ok=True)
-
-        shutil.copy2(log_file, build_lib / "built_extensions.log")
-
-        print(f"Wrote build log to {build_lib / 'built_extensions.log'}")
+        print(f"Wrote {source_file} and {build_file}")
 
 
 setup(
@@ -319,7 +332,7 @@ setup(
     ext_modules=cythonize(extensions, compiler_directives=directives, annotate=True, language_level=3),
     include_package_data=True,
     package_data={
-        "edelweissfe": ["built_extensions.log"],
+        "edelweissfe": ["built_extensions.log", marmot_install_dir_file],
         # Downstream packages (e.g. EdelweissFD) compile their own Cython extensions against
         # the point-wise Marmot material interfaces, so the declarations and C++ shims they
         # cimport/include have to be part of the installed distribution, not just the source

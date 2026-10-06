@@ -37,7 +37,11 @@ within -- nothing else about the model is touched.
 import numpy as np
 
 import edelweissfe.adaptivity.marking as marking
-from edelweissfe.adaptivity.marking import FieldOutputMarker, FieldOutputMarkerSchema
+from edelweissfe.adaptivity.marking import (
+    FieldOutputMarker,
+    FieldOutputMarkerSchema,
+    RefineableElements,
+)
 from edelweissfe.utils.schema import buildSchemaFromOptions
 
 
@@ -73,7 +77,7 @@ def _markMiddleOnly(monkeypatch, elements, halo):
 
     monkeypatch.setattr(marking, "_perElementFieldOutputResult", fakeResult)
     m = FieldOutputMarker("dummy", threshold=1.0, operator=">=", halo=halo)
-    return m.mark(model=None, refineElements=elements, mesh=None)
+    return m.mark(model=None, refineElements=RefineableElements(elements), mesh=None)
 
 
 def test_halo_zero_is_the_bare_threshold_set_backward_compatible(monkeypatch):
@@ -108,7 +112,7 @@ def test_halo_never_leaks_outside_the_refineable_candidate_pool(monkeypatch):
     m = FieldOutputMarker("dummy", threshold=1.0, operator=">=", halo=5)
     # candidate pool excludes element 4 entirely
     restrictedPool = elements[:4]
-    marked = m.mark(model=None, refineElements=restrictedPool, mesh=None)
+    marked = m.mark(model=None, refineElements=RefineableElements(restrictedPool), mesh=None)
     assert elements[4] not in marked
     assert marked == {elements[0], elements[1], elements[2], elements[3]}
 
@@ -121,7 +125,7 @@ def test_halo_is_a_noop_when_nothing_is_marked(monkeypatch):
 
     monkeypatch.setattr(marking, "_perElementFieldOutputResult", fakeResult)
     m = FieldOutputMarker("dummy", threshold=1.0, operator=">=", halo=3)
-    assert m.mark(model=None, refineElements=elements, mesh=None) == set()
+    assert m.mark(model=None, refineElements=RefineableElements(elements), mesh=None) == set()
 
 
 def test_schema_default_halo_is_zero():

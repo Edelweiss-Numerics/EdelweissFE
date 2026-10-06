@@ -44,6 +44,7 @@ from edelweissfe.stepactions.base.amplitude import (
 from edelweissfe.stepactions.base.nodalloadbase import NodalLoadBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.exceptions import RestartError
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
 from edelweissfe.utils.schema import (
     buildSchemaFromOptions,
@@ -225,6 +226,7 @@ class StepAction(NodalLoadBase):
         self.nodeForcesStepStart = np.zeros(shape)
         self.nodeForcesDelta = np.zeros(shape)
         self._nSetNodeOrder = list(self._nSet)  # node identity per row, for the lazy resize below
+        self._recordSetVersion(self._nSet)
 
         self.updateStepAction(nodeForces, f_t=f_t)
 
@@ -417,6 +419,50 @@ class StepAction(NodalLoadBase):
 
             self.nodeForcesDelta[:] = 0
             self._idle = True
+
+    def getRestartData(self) -> dict[str, np.ndarray]:
+        """The accumulated and pending forces, row by row, with the label of each row's node -- the
+        rows follow the node set as it grew under refinement, which a fresh instance cannot
+        reconstruct -- and whether the action is idle.
+
+        Returns
+        -------
+        dict[str, numpy.ndarray]
+            The state.
+        """
+
+        return {
+            "rowNodeLabels": np.array([node.label for node in self._nSetNodeOrder], dtype=np.int64),
+            "nodeForcesStepStart": self.nodeForcesStepStart,
+            "nodeForcesDelta": self.nodeForcesDelta,
+            "idle": np.array(self._idle),
+        }
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore the state :meth:`getRestartData` returned.
+
+        Parameters
+        ----------
+        data
+            The state.
+
+        Raises
+        ------
+        RestartError
+            If the rows refer to other nodes than the restored node set holds.
+        """
+
+        labels = [int(label) for label in data["rowNodeLabels"]]
+        if sorted(labels) != sorted(node.label for node in self._nSet):
+            raise RestartError(
+                "node forces {:}: the checkpointed rows refer to other nodes than the restored node set "
+                "holds".format(self.name)
+            )
+        self._nSetNodeOrder = [self._model.nodes[label] for label in labels]
+        self.nodeForcesStepStart = np.array(data["nodeForcesStepStart"])
+        self.nodeForcesDelta = np.array(data["nodeForcesDelta"])
+        self._idle = bool(data["idle"])
+        self._recordSetVersion(self._nSet)
 
     def getCurrentLoad(self, timeStep: TimeStep) -> np.ndarray:
         """The nodal forces at the current point of the step.

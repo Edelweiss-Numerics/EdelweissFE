@@ -22,17 +22,24 @@ By participating in this project, you agree to uphold a respectful, inclusive en
 
 EdelweissFE requires **Python >= 3.14** and targets the free-threaded ("nogil") CPython build (`python-freethreading`).
 
+The environment is declared in `environment.yml`, pinned for every platform by the lockfile `conda-lock.yml`, and
+published as the conda package `edelweissfe-dev` (version in `conda/edelweissfe-dev/VERSION`). When changing
+dependencies, re-lock, set a new version, and commit everything together. See the
+[installation documentation](doc/source/installation.rst) for details.
+
 ### 1. Standalone / Without Marmot (Pure Python/Cython only)
+Create the environment with the `conda create` command in the [README](README.md#installation), then:
 ```bash
-mamba install --file conda_requirements.txt
-pip install -r pip_requirements.txt
-pip install .
+conda activate edelweissfe
+pip install -e .
+PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 ```
 
 ### 2. With Marmot (Native C++ Element & Material Formulations)
-Requires Eigen, autodiff, Fastor, AMGCL, and [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) installed into `$CONDA_PREFIX`:
+Build [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) (branch `next_v26.11`) into `$CONDA_PREFIX` first;
+its dependencies (Eigen, autodiff, Fastor) and AMGCL are already in the environment:
 ```bash
-pip install -v .
+pip install -v -e .
 ```
 
 ### Build Environment Overrides
@@ -134,7 +141,7 @@ We follow the GitHub flow: **fork → branch → PR → review → merge**.
    git checkout -b feat/<short-scope>-<concise-topic> origin/next_v26.11
    ```
 2. **Develop & Format**: Make your changes and verify that `pre-commit run --all-files` passes locally.
-3. **Build & Test**: Ensure the package builds cleanly (`pip install -v .`) and all relevant tests pass (`run_tests_edelweissfe`).
+3. **Build & Test**: Ensure the package builds cleanly (`pip install -v -e .`) and all relevant tests pass (`run_tests_edelweissfe`).
 4. **Open a PR**: Target the correct branch (`master` for bug fixes, `next_v<YY>.<MM>` for features/enhancements), provide a clear title following Conventional Commits, and link relevant issues.
 
 ### Synchronizing with Marmot
@@ -144,7 +151,7 @@ If your changes depend on features or fixes in [Marmot](https://github.com/MAteR
 - [ ] PR targets the correct branch (`master` for bugfixes, `next_v<YY>.<MM>` for features/enhancements).
 - [ ] PR title follows Conventional Commits format.
 - [ ] `pre-commit run --all-files` passes cleanly.
-- [ ] Project builds cleanly via `pip install .` (and `pip install -v .` if using Marmot).
+- [ ] Project builds cleanly via `pip install -e .` (`-v` to see the Marmot extensions being built).
 - [ ] All tests pass locally via `run_tests_edelweissfe ./testfiles/edelweiss-only/` (and `./testfiles/marmot/`).
 - [ ] New features, keywords, or options are documented in `doc/source/documentation/`.
 - [ ] New features or bug fixes include a regression test deck (`test.inp` + `U.ref`).

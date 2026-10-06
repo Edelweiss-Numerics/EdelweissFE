@@ -242,8 +242,8 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
     """
 
     # Model setup is a topology change: it is the one phase besides a model modifier's own update in
-    # which elements may be created (see FEModel.topologyChanges). Everything below runs inside it.
-    with model.topologyChanges():
+    # which elements may be created (see TopologyPipeline.changes). Everything below runs inside it.
+    with model.topology.changes():
         return _fillFEModelFromInputFile(model, inputfile, journal)
 
 
@@ -273,11 +273,11 @@ def _fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal)
     model = abqModelConstructor.createGeometryFromInputFile(model, inputfile)
 
     # The base mesh is complete here, and it numbers its nodes and elements from the input file
-    # rather than from the allocators (see FEModel.adoptSetupElementNumbers). Raise both allocators
+    # rather than from the allocators (see TopologyPipeline.adoptSetupElementNumbers). Raise both allocators
     # above it now, so that everything created from this point on -- contact facets, rigid-body
     # point masses, and later every model modifier -- draws numbers that cannot collide with it.
-    model.adoptSetupElementNumbers()
-    model.adoptSetupNodeNumbers()
+    model.topology.adoptSetupElementNumbers()
+    model.topology.adoptSetupNodeNumbers()
 
     model = abqModelConstructor.createMaterialsFromInputFile(model, inputfile)
     model = abqModelConstructor.createAdvancedMaterialsFromInputFile(model, inputfile)
@@ -540,11 +540,13 @@ def createPlotterFromInputFile(inputfile: dict, journal: Journal) -> Plotter:
         The resulting plotter instance
     """
     plotConfigurations = [
-        convertLineToStringDictionary(c) for configEntry in inputfile["configurePlots"] for c in configEntry["data"]
+        convertLineToStringDictionary(c)
+        for configEntry in inputfile["configurePlots"]
+        for c in configEntry["datalines"]
     ]
 
     exportJobs = [
-        convertLineToStringDictionary(c) for configEntry in inputfile["exportPlots"] for c in configEntry["data"]
+        convertLineToStringDictionary(c) for configEntry in inputfile["exportPlots"] for c in configEntry["datalines"]
     ]
 
     plotter = Plotter(journal, plotConfigurations, exportJobs)

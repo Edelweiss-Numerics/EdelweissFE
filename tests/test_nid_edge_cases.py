@@ -140,3 +140,70 @@ def test_a_reduced_integration_element_starts_under_load(tmp_path):
     # same mass, softer stiffness: comparable response, nothing of the 1e14 of a singular a0
     assert aReduced < 10.0 * aFull, (aReduced, aFull)
     assert uReduced < 10.0 * uFull, (uReduced, uFull)
+
+
+def _corruptTheAssembledMass(monkeypatch, value: float):
+    """Replace the first nonzero entry of the assembled mass matrix (still in VIJ form) by
+    ``value`` -- the elements' own output is out of reach of a test, the Marmot elements being
+    compiled. The discarded-inertia warning is the hook: it is handed the mass right before the
+    CSR conversion and the checks."""
+
+    from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
+
+    trueWarn = NonlinearImplicitDynamic._warnAboutDiscardedInertia
+
+    def corruptingWarn(self, Mvij, dampingVIJIndices, couplesDynamicOnly):
+        trueWarn(self, Mvij, dampingVIJIndices, couplesDynamicOnly)
+        Mvij[np.flatnonzero(np.asarray(Mvij))[0]] = value
+
+    monkeypatch.setattr(NonlinearImplicitDynamic, "_warnAboutDiscardedInertia", corruptingWarn)
+
+
+def _reportADamping(monkeypatch, value: float):
+    """Let every element report ``value`` as the damping of its first (dynamic) dof -- the
+    elements' own output is out of reach of a test, the Marmot elements being compiled."""
+
+    from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
+
+    def lumpedDampingOfElement(self, el):
+        start = self.theDofManager.idcsOfHigherOrderEntitiesInVIJ[el]
+        return np.array([start], dtype=np.int64), np.array([value])
+
+    monkeypatch.setattr(NonlinearImplicitDynamic, "_lumpedDampingOfElement", lumpedDampingOfElement)
+
+
+def test_refuses_a_non_finite_mass(tmp_path, monkeypatch):
+    _corruptTheAssembledMass(monkeypatch, np.nan)
+    with pytest.raises(ValueError, match="non-finite entries"):
+        _run(tmp_path, "nid_non_finite_mass", _deck(0.02, maxNumInc=1))
+
+
+def test_refuses_a_non_finite_damping(tmp_path, monkeypatch):
+    _reportADamping(monkeypatch, np.inf)
+    with pytest.raises(ValueError, match="non-finite entries"):
+        _run(tmp_path, "nid_non_finite_damping", _deck(0.02, maxNumInc=1))
+
+
+def test_refuses_a_negative_damping(tmp_path, monkeypatch):
+    _reportADamping(monkeypatch, -1.0)
+    with pytest.raises(ValueError, match="negative entries"):
+        _run(tmp_path, "nid_negative_damping", _deck(0.02, maxNumInc=1))
+
+
+def test_reports_the_assembled_total_mass(tmp_path, monkeypatch):
+    from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
+
+    reported = []
+    trueTotalMassByField = NonlinearImplicitDynamic._totalMassByField
+
+    def recordingTotalMassByField(*args):
+        totals = trueTotalMassByField(*args)
+        reported.append(totals)
+        return totals
+
+    monkeypatch.setattr(NonlinearImplicitDynamic, "_totalMassByField", staticmethod(recordingTotalMassByField))
+    _run(tmp_path, "nid_mass_report", _deck(0.02, maxNumInc=1))
+
+    assert reported and set(reported[0]) == {"displacement"}
+    # the whole unit bar: rho * volume
+    np.testing.assert_allclose(reported[0]["displacement"], RHO, rtol=1e-12)

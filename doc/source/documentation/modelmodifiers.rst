@@ -9,7 +9,7 @@ modifier may change the mesh topology itself during an analysis: adding or remov
 elements, re-partitioning element/node sets and surfaces, and reallocating the solution fields.
 A modifier is declared with the ``*modelModifier`` keyword. At the start of every increment the
 solver runs **all** modifiers to a fixed point via
-:meth:`~edelweissfe.models.femodel.FEModel.updateTopology`, then lets mesh-dependent consumers catch
+:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`, then lets mesh-dependent consumers catch
 up, then solves; when the topology changed, the equation system (DOF manager, sparsity pattern,
 solution vectors and any multi-point-constraint transformation) is rebuilt first. A modifier itself
 is written as two halves -- :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan`,
@@ -42,9 +42,9 @@ the container on its own. Two mechanisms remain, narrowed to exactly these cases
   registration and therefore has no observer lifecycle to leak.
 * **Registered mesh dependent** -- for derived *geometry* that must be regenerated before the next
   equation-system rebuild (facet-based contact and tie; see below), a component registers itself via
-  :meth:`~edelweissfe.models.femodel.FEModel.registerMeshDependent` and implements
+  :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.registerMeshDependent` and implements
   :meth:`~edelweissfe.models.meshdependent.MeshDependent.refresh`. Once per increment, after every
-  modifier has settled, :meth:`~edelweissfe.models.femodel.FEModel.refreshMeshDependents` hands it
+  modifier has settled, :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents` hands it
   the *net* change since it last looked -- added/removed nodes and elements, the parent -> children
   map, the per-face child tiling, and which node/element sets or surfaces were touched (with
   ``touchesSurface``/``touchesNodeSet``/``touchesElementSet`` early-outs so a consumer can skip a
@@ -73,6 +73,11 @@ interpolation) and quadrature-point history (via a pluggable state-transfer stra
 non-conforming interface with an exact hanging-node multi-point constraint. Element/node sets, sections and element-based surfaces are propagated to
 the children so material assignment and surface loads stay consistent.
 
+A child is assigned its section exactly like an element of the initial mesh: parameters set by
+``>>materialParameterFromField`` (e.g. a random strength field) are evaluated at the child's own
+center. The analytical field is a function of position only, so a refined region samples the same
+field realization more finely -- just as a mesh that was refined from the start would.
+
 The octree mirror only ever tracks the refineable 20-node elements: a model that also contains
 elements of a different kind (e.g. lower-order contact-facet elements bonded to the mesh) is left
 untouched by construction, since anything without exactly 20 nodes is skipped automatically. To
@@ -91,6 +96,72 @@ bisection), so pinning each hanging
 The same field-independent weights apply to every field on the node (equal-order serendipity), so a
 single record per hanging node covers displacement and nonlocal damage alike. The constraint itself
 (``*constraint, type=hangingnode``) is documented under :doc:`constraints`.
+
+**Vocabulary.** A *root element* is an element of the mesh before refinement; every refined element
+lies inside exactly one. The reference cube of a root carries an integer *reference lattice*, fine
+enough that every node a subdivision can create sits on a lattice point, and every element covers an
+exact *reference box* of it. A *root entity* is a vertex, edge or face of the root mesh, named by the
+labels of its corner nodes. A node's *key* is the lowest-dimensional root entity containing it plus its
+exact integer position there. A node *hangs* on an element if it lies on the element's boundary without
+being one of its own nodes.
+
+**Topology is decided exactly, never from coordinates.** Which nodes coincide, which node lies on which
+face or edge of an element, which elements share a face (2:1 balancing), which nodes hang -- and with
+which weights -- and which new nodes join a node set, are all decided topologically and in exact
+integer arithmetic, the way established AMR libraries do it (deal.II, p4est, MFEM):
+
+* every element knows its root element and its exact box in the root's reference cube (from the
+  subdivision order), so every node sits at an exact lattice point of its root;
+* the root mesh's vertices, edges and faces are named by the labels of their corner nodes, and a point
+  on them is measured in a frame those labels fix -- two roots sharing a face therefore derive the
+  identical name and coordinates for it in any relative orientation
+  (:class:`~edelweissfe.adaptivity.rootentities.RootEntityTable`);
+* a hanging node is a node on the boundary of an active element that is not one of its own nodes; its
+  master entity (edge or face) follows from its exact reference coordinates in that element, and its
+  weights are the element's own shape functions there, the exact coarse trace;
+* a new node joins a node set iff it lies, by its exact lattice position, on a parent face or edge
+  whose nodes are all in the set.
+
+No tolerance enters any of these decisions, so curved, warped and arbitrarily oriented unstructured
+meshes (e.g. from Cubit) behave exactly like axis-aligned ones. The requirements are a *conforming* root
+mesh and a refinement depth of at most 20 levels (the depth of the exact lattice). A collapsed root
+element -- one that repeats a corner node, e.g. a degenerated wedge -- or a non-manifold root mesh stops
+the analysis at setup with an error naming the element.
+
+**Node sets are inherited through faces and edges.** A new node joins a node set iff it lies on a face
+or edge of its parent whose nodes are *all* in the set. Two consequences follow from node membership
+alone: a set that holds every node of a face -- even if it was meant as the face's perimeter only --
+gains the new nodes inside that face, and a set never gains the new nodes inside a parent element. Where
+a different membership is intended, define the boundary condition through an element set (or an
+element-based surface) instead, which refinement propagates to the children exactly.
+
+**2:1 balancing is face-based.** After each refinement, any element with a *face* neighbour two or more
+levels finer is refined too, until every face-adjacent pair differs by at most one level. Elements that
+touch only along an **edge** or at a **vertex** are *not* balanced: next to a level-0 element, an
+element that shares only an edge with it may be at level 2 or deeper. Such an interface stays exactly
+conforming -- the finer nodes on that edge hang on the coarsest element's edge, through constraint
+chains that are resolved exactly and verified -- so this affects mesh grading and local accuracy (an
+abrupt size jump along the edge), not correctness. With ``maxLevel=1`` (the default) no two-level jump
+can occur at all. Edge or vertex balancing (as p4est's edge/full balance) is not implemented; it would
+refine additional elements and change the results of multi-level runs.
+
+**Invariants, checked after every adaptation.** A violation raises an error naming the offending nodes
+instead of producing a silently non-conforming mesh:
+
+* one node per point and one point per node (no split or merged nodes);
+* every node on the boundary of an active element is one of its nodes or a hanging-node slave
+  (:meth:`~edelweissfe.adaptivity.refinement.AdaptiveMesh.check_conformity`);
+* every hanging node's weights are verified in exact arithmetic: they vanish off the chosen edge or
+  face and reproduce the constant, the node's reference coordinates and every quadratic monomial;
+* the hanging-node constraint can never be overruled by another multi-point constraint claiming the
+  same slave (it is registered first in model order; a dropped hanging-node record is an error).
+
+.. autoclass:: edelweissfe.adaptivity.rootentities.RootEntityTable
+    :members: add_root, key, roots_sharing, roots_touching, root_face_position, local_point
+
+.. autoclass:: edelweissfe.adaptivity.refinement.AdaptiveMesh
+    :members: add_root, refine, balance_2to1, classify_hanging, hanging_mpc_records, check_conformity,
+        node_keys, node_lattice_points
 
 **Refinement markers.** Which elements are refined each increment is decided by one or more
 ``>>marker`` sub-keywords; the modifier refines the *union* of their marked sets. The available
@@ -117,17 +188,17 @@ Every refinement pass forces the solver to rebuild the equation system (DOF mana
 pattern, solution vectors and any multi-point-constraint transformation), which is expensive on a
 large model. Left unchecked, a marker whose criterion is crossed by elements one at a time --
 rather than in a single burst -- triggers that rebuild on every increment a lone element newly
-qualifies. ``minMarkedElements`` (default ``1``, i.e. the previous behaviour: refine as soon as
-anything is marked) raises the bar: newly marked elements accumulate across increments, and the
-modifier defers refining until the accumulated count reaches ``minMarkedElements``, at which point
-all of them are refined together in a single pass. This trades refinement latency (a marked element
-may sit unrefined, still on the coarse mesh, for a few extra increments) for fewer, larger equation-
-system rebuilds.
+qualifies. ``minMarkedElements`` (default ``1``: refine as soon as anything is marked) raises the
+bar: a refinement pass happens only if one evaluation of the markers marks at least
+``minMarkedElements`` eligible elements. Marks are not carried over to later evaluations -- they are
+a function of the current state only, which is what keeps a restarted run identical to an
+uninterrupted one. This trades refinement latency (a marked element may stay on the coarse mesh
+until enough elements qualify at once) for fewer, larger equation-system rebuilds.
 
 .. literalinclude:: ../../../testfiles/marmot/AMR_MinMarkedElements/test.inp
     :language: edelweiss
     :caption: Example (refinement deferred indefinitely because only one of the two elements ever
-              crosses the marker threshold, so the accumulated count never reaches
+              crosses the marker threshold, so no evaluation reaches
               ``minMarkedElements=2``): ``testfiles/marmot/AMR_MinMarkedElements/test.inp``
 
 State-variable transfer strategies
@@ -246,7 +317,7 @@ Refining a solid whose surface feeds a facet-based contact or :mod:`~edelweissfe
 constraint works out of the box: the modifier keeps the relevant ``*surface`` definition in sync
 with the refined child faces, and the constraint -- a :class:`~edelweissfe.models.meshdependent.
 MeshDependent` -- regenerates its facets from it. :mod:`~edelweissfe.constraints.
-nodetodeformablesurfacepenalty` notices via :meth:`~edelweissfe.models.femodel.FEModel.changesSince`
+nodetodeformablesurfacepenalty` notices via :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changesSince`
 at its own next connectivity update (a pull, since that tick already runs before the equation
 system is rebuilt); a tie has no such early tick of its own (its only hook is called *from inside*
 that rebuild, too late to safely swap in new facet elements), so it reconciles via the model's push
@@ -296,6 +367,76 @@ amrtransparencyprobe``) that does exactly this, registers no observer and implem
 refinement it should have seen -- guarding against a regression that reintroduces replacing a set
 instead of mutating it.
 
+``surfaceSnap`` - Analytical-surface node snapping for AMR-refined curved boundaries
+--------------------------------------------------------------------------------------
+
+Module ``edelweissfe.modelmodifiers.geometry.surfacesnap``
+
+.. automodule:: edelweissfe.modelmodifiers.geometry.surfacesnap
+    :members: __doc__
+
+A coarse HEX20 mesh represents a curved boundary -- a borehole, a cylindrical bore, a fillet -- as
+a polygon of flat facets. ``Hex20Topology.subdivide()`` (used by ``hAdaptivity``, above) evaluates
+the *parent* element's own isoparametric map when it creates new nodes, so a flat parent facet only
+ever produces more flat sub-facets: refinement makes the polygon finer-grained, never rounder.
+``surfaceSnap`` is a purely reactive model modifier (``initiatesTopologyChanges = False``) that
+watches ``hAdaptivity``'s own :class:`~edelweissfe.models.modelchange.ModelChange` and, for every
+newly-created node that lands on a tracked boundary, projects it exactly onto a specified
+analytical surface -- currently a cylinder (``originX/Y/Z`` + ``axisX/Y/Z`` + ``radius``). Every
+pre-existing node is left untouched: the ``nodeSet`` option names a node set whose members must
+*already* lie exactly on the true surface (e.g. a borehole wall exported from an actual cylindrical
+CAD cut), and only faces entirely within that set -- and their new AMR-created nodes -- are ever
+moved.
+
+**Corners vs. midsides.** A new corner node is always radially projected onto the cylinder,
+unconditionally. A new midside node has two modes, via ``midsideNodes``:
+
+* ``straight`` (default) -- recomputed as the mean of its two (already-snapped) corner endpoints,
+  keeping the edge a straight chord. Faceted, but with correctly-placed vertices; cheap and safe.
+* ``curved`` -- independently projected onto the cylinder too, giving a true curved quadratic edge.
+  Better geometric fidelity per element, at the cost of a small extra deviation from a pure straight
+  chord representation elsewhere in the model (see the theory note in the module docstring for the
+  chord-vs-arc argument).
+
+**Hanging nodes and mesh quality are never compromised -- and a skipped node is retried, not
+abandoned.** A candidate node that is also an AMR hanging-node slave
+(:class:`~edelweissfe.constraints.hangingnode.Constraint`) is skipped rather than snapped -- moving
+it would break its own multi-point constraint -- and a journal warning names it. Before committing a
+round, every affected element's minimum corner Jacobian determinant is checked before and after; if
+any element would invert or drop below ``qualityDropThreshold`` (default ``0.5``, must be in
+``(0, 1]``) of its pre-snap value, the *entire round's* snapping is skipped (nothing moves). Either
+way the skipped node stays in a modifier-private *pending* set and is reconsidered on every later
+round that changes anything: a hanging slave stops being one once its coarse neighbour is itself
+refined, and a quality veto can clear once local geometry changes.
+
+**Keeping AMR's own mirror in sync.** ``hAdaptivity`` keeps a private ``AdaptiveMesh`` mirror whose
+node coordinates are cached at the moment each element is created, and never re-read from the live
+model afterward. Without correcting that cache too, a LATER refinement of an element ``surfaceSnap``
+already snapped would silently subdivide from the stale, pre-snap geometry. ``surfaceSnap`` calls
+``HAdaptivityModelModifier.syncNodeCoordinates`` on every ``hAdaptivity`` instance in the model right
+after writing ``model.nodes``, closing this gap.
+
+.. pprint:: modelmodifier:surfacesnap
+    :caption: Options:
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/AMR_SurfaceSnap/test.inp
+    :language: edelweiss
+    :caption: Example (a coarse, geometrically exact-on-the-cylinder inner wall; refining it and
+              snapping the new boundary nodes with ``midsideNodes=curved``):
+              ``testfiles/edelweiss-only/AMR_SurfaceSnap/test.inp``
+
+**Restart safety.** Which element faces lie on the tracked surface, and which candidates are still
+pending a retry, is decision-side state that must survive a checkpoint/resume exactly like
+``hAdaptivity``'s own tracked node sets do. Rather than private Python state, both live in genuine,
+modifier-private :class:`~edelweissfe.sets.nodeset.NodeSet` instances that a restart rebuilds by
+*replaying* this modifier's own recorded decisions -- the same mechanism described below for
+``hAdaptivity``, not a parallel one. Because a round can legitimately discover new boundary-face
+membership (or resolve an earlier round's pending node) while moving zero node coordinates,
+:class:`~edelweissfe.models.modelchange.ModelChange` carries a dedicated ``movedNodes`` field and
+:class:`~edelweissfe.models.modelchangeobserver.ModelChangeType` a ``GEOMETRY_CHANGE`` kind, so that
+a coordinate-only (or even a zero-coordinate, node-set-only) mutation is never mistaken for an
+empty, unrecorded one.
+
 Restart / checkpointing
 ------------------------
 
@@ -311,7 +452,7 @@ code the live run executed. The marker evaluation that produced a decision is ne
 :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.encodePlan` and
 :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.decodePlan` so that its
 decision survives a checkpoint; :class:`~edelweissfe.models.femodel.FEModel` records every applied
-decision in :attr:`~edelweissfe.models.femodel.FEModel.topologyHistory` and replays it. An earlier
+decision in :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.history` and replays it. An earlier
 design had each modifier serializing its own history and implementing its own replay, which is
 precisely how a resumed run came to rebuild a differently-numbered mesh -- two implementations of
 one mutation always drift. See :doc:`topologypipeline`.

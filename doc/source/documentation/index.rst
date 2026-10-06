@@ -27,6 +27,7 @@ Documentation
    mesh
    modelmodifiers
    topologypipeline
+   restart
    adaptivitytheory
    output
    parallelization

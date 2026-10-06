@@ -87,6 +87,9 @@ class StepAction(StepActionBase):
     #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = InitializeMaterialSchema
 
+    #: Whether this action still acts: it switches itself off at the end of its step.
+    checkpointedState = {"active": bool}
+
     def __init__(self, name: str, elementSet):
         self.name = name
 

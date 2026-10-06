@@ -36,8 +36,6 @@ A ``*job`` definition consists of multiple ``*steps``, associated with that job.
 
 from time import time as getCurrentTime
 
-import h5py
-
 from edelweissfe.config.configurator import loadConfiguration, updateConfiguration
 from edelweissfe.config.phenomena import carriesLinearMomentum, domainMapping
 from edelweissfe.config.solvers import getSolverByName
@@ -51,7 +49,8 @@ from edelweissfe.helpers.inputfilehelpers import (
 )
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel, printPrettyModelSummary
-from edelweissfe.utils.exceptions import StepFailed
+from edelweissfe.utils.checkpoint import ResumeCheckpoint
+from edelweissfe.utils.exceptions import RestartError, StepFailed
 from edelweissfe.utils.fieldoutput import FieldOutputController
 
 
@@ -162,21 +161,20 @@ def finiteElementSimulation(
     # exist (createFieldValueEntry above) and after advanceToTime's cold-start bookkeeping, which
     # would otherwise clobber model.time back to job['startTime'].
     #
-    # Limitation: resuming skips *solving* every step before the checkpoint's step entirely --
-    # correct for the common case, but a `modelupdate` step action (or any other topology mutation)
-    # in a skipped step's `solve()` never runs, so restart is only supported for analyses whose
-    # topology is static across the resumed run.
+    # Resuming skips every step before the checkpoint's step. Topology changes made by model
+    # modifiers (e.g. AMR) are replayed from the checkpoint's topology history. A `modelupdate`
+    # executes an arbitrary expression, whose effect no checkpoint records -- so a resume past one,
+    # in a skipped step or at the start of the resumed step, is refused.
     restartDefinitions = inputfile["restart"]
     resumeCheckpoint = None
     resumeStepNumber = None
     if restartDefinitions and restartDefinitions[0].get("readFrom"):
-        checkpointPath = restartDefinitions[0]["readFrom"]
-        resumeCheckpoint = h5py.File(checkpointPath, "r")
-        resumeStepNumber = int(resumeCheckpoint.attrs["stepNumber"])
-        model.readRestart(resumeCheckpoint)
+        resumeCheckpoint = ResumeCheckpoint(restartDefinitions[0]["readFrom"])
+        resumeStepNumber = resumeCheckpoint.stepNumber
+        resumeCheckpoint.restoreModel(model, journal)
         journal.message(
             "Resuming from restart checkpoint {:} (step {:}, time {:})".format(
-                checkpointPath, resumeStepNumber, model.time
+                resumeCheckpoint.fileName, resumeStepNumber, model.time
             ),
             identification,
             0,
@@ -186,7 +184,7 @@ def finiteElementSimulation(
     stepManager = createStepManagerFromInputFile(inputfile)
     fieldOutputController = createFieldOutputFromInputFile(inputfile, model, journal)
     model.fieldOutputController = fieldOutputController
-    fieldOutputController.initializeJob(resuming=resumeCheckpoint is not None)
+    fieldOutputController.initializeJob()
 
     outputManagers = createOutputManagersFromInputFile(
         inputfile, jobName, model, fieldOutputController, journal, plotter
@@ -213,49 +211,27 @@ def finiteElementSimulation(
     model.solvers = solvers
     model.outputManagers = {outputManager.name: outputManager for outputManager in outputManagers}
 
-    # Output managers don't exist yet at the earlier model.readRestart(resumeCheckpoint) call
-    # above (they're constructed here, well after) -- restore whichever of them wrote restart data
-    # (see outputmanagers/restart.py's finalizeIncrement) now that they do, and while the
-    # checkpoint is still open. Ensight is the motivating case: without this, its transient
-    # sequence numbering (derived from its own history of already-written time values) would
-    # restart from zero, orphaning the pre-resume portion of the sequence.
-    if resumeCheckpoint is not None and "outputManagers" in resumeCheckpoint:
-        for name, outputManager in model.outputManagers.items():
-            if name not in resumeCheckpoint["outputManagers"]:
-                continue
-            restartData = {
-                entryName: values[:] for entryName, values in resumeCheckpoint["outputManagers"][name].items()
-            }
-            outputManager.setRestartData(restartData)
-
+    # The output managers exist only now, well after the model was restored above.
     try:
         for step in stepManager.generateSteps(jobInfo, model, fieldOutputController, journal, solvers, outputManagers):
             if resumeStepNumber is not None:
+                if step.actions["modelupdate"]:
+                    raise RestartError(
+                        "step {:} has a modelupdate, whose effect is not recorded in a checkpoint, so "
+                        "the run cannot be resumed after it".format(step.number)
+                    )
                 if step.number < resumeStepNumber:
-                    # Constructed (so its StepActions register/accumulate normally, see the comment
-                    # above) but not solved -- it already ran, in full, before the interrupted job
-                    # wrote this checkpoint.
+                    # Constructed, so that its step actions exist, but not solved: it already ran
+                    # before the interrupted job wrote this checkpoint, and the state its step
+                    # actions carried over is restored with the resumed step.
                     continue
-                if step.number == resumeStepNumber:
-                    step.timeStepper.readRestart(resumeCheckpoint)
-                    # Accumulators the solver cannot recompute from the converged solution -- the
-                    # explicit solver's external work is one; see its own readRestart.
-                    step.solver.readRestart(resumeCheckpoint)
-                    resumeStepNumber = None
-
-                    # Nothing reads the checkpoint after this point, and it must not stay open:
-                    # the restart output manager's ring buffer rotates onto the oldest slot by
-                    # mtime, which -- once the ring has filled -- can be this very file, and HDF5
-                    # cannot truncate a file it still holds open. The resumed run then dies
-                    # mid-step with "unable to truncate a file which is already open", which reads
-                    # like a solver failure and is not one. Closing it here rather than after the
-                    # step loop is what keeps the writer's slot free.
-                    resumeCheckpoint.close()
-                    resumeCheckpoint = None
+            resumeFrom = None
+            if step.number == resumeStepNumber:
+                resumeFrom, resumeStepNumber = resumeCheckpoint, None
 
             tic = getCurrentTime()
             try:
-                step.solve()
+                step.solve(resumeFrom)
             finally:
                 # Record inside finally so a step that raises (e.g. via a deliberate
                 # maxNumInc cap) still counts its elapsed time -- previously this sat after

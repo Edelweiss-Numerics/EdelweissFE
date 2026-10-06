@@ -145,6 +145,14 @@ action changes a material property mid-step. Anything that does not match falls 
 build. A topology change -- a mesh refinement -- is not a connectivity change and never takes this
 path at all: it builds the system from scratch.
 
+Work per increment outside the elements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An explicit increment is cheap, so the work around the element loop counts. Second-order degrees
+of freedom are updated by the central difference with mass-proportional damping, first-order ones
+by forward Euler. The damping rate and a second-order mask are formed once per equation system, so
+the update runs on whole vectors instead of indexed subsets, and gives the same result to the bit.
+
 ``NEDParallel`` - Nonlinear Explicit Dynamic (parallel)
 --------------------------------------------------------
 

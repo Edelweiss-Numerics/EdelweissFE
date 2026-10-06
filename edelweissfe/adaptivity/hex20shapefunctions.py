@@ -43,6 +43,7 @@ All parametric coordinates live on the reference cube [-1, 1]^3.
 """
 
 import math
+from fractions import Fraction
 
 import numpy as np
 
@@ -140,7 +141,9 @@ def _partition_local_coords():
     :func:`hex20_shape` -- called ~10^5-10^6 times per refinement event via the Newton-Raphson
     inverse map (:meth:`~edelweissfe.adaptivity.hex20topology.Hex20Topology.inverse_map`) -- never
     pays per-call numpy-array-indexing/branching overhead for a fixed, tiny (20-entry) topology."""
-    coords = [tuple(row) for row in LOCAL_COORDS.tolist()]
+    # integers (the reference coordinates are exactly -1, 0, 1): identical in floating point, and they
+    # keep an evaluation at a rational point exact (see hex20_shape_exact)
+    coords = [tuple(int(v) for v in row) for row in LOCAL_COORDS.tolist()]
     corner = [(i, xa, ya, za) for i, (xa, ya, za) in enumerate(coords) if xa != 0 and ya != 0 and za != 0]
     midX = [(i, ya, za) for i, (xa, ya, za) in enumerate(coords) if xa == 0]
     midY = [(i, xa, za) for i, (xa, ya, za) in enumerate(coords) if xa != 0 and ya == 0]
@@ -151,21 +154,32 @@ def _partition_local_coords():
 _CORNER_NODES, _MIDX_NODES, _MIDY_NODES, _MIDZ_NODES = _partition_local_coords()
 
 
-def hex20_shape(xi, eta, zeta):
-    """Evaluate the 20 serendipity shape functions at (xi, eta, zeta)."""
-    N = [0.0] * N_NODES
+def _hex20_shape(xi, eta, zeta, eighth, quarter) -> list:
+    """The 20 serendipity shape functions at (xi, eta, zeta), with the constants 1/8 and 1/4 passed in
+    so that one formula serves floating-point and exact rational evaluation alike."""
+    N = [0] * N_NODES
     for i, xa, ya, za in _CORNER_NODES:
-        N[i] = 0.125 * (1 + xi * xa) * (1 + eta * ya) * (1 + zeta * za) * (xi * xa + eta * ya + zeta * za - 2)
+        N[i] = eighth * (1 + xi * xa) * (1 + eta * ya) * (1 + zeta * za) * (xi * xa + eta * ya + zeta * za - 2)
     xi2 = 1 - xi**2
     for i, ya, za in _MIDX_NODES:
-        N[i] = 0.25 * xi2 * (1 + eta * ya) * (1 + zeta * za)
+        N[i] = quarter * xi2 * (1 + eta * ya) * (1 + zeta * za)
     eta2 = 1 - eta**2
     for i, xa, za in _MIDY_NODES:
-        N[i] = 0.25 * eta2 * (1 + xi * xa) * (1 + zeta * za)
+        N[i] = quarter * eta2 * (1 + xi * xa) * (1 + zeta * za)
     zeta2 = 1 - zeta**2
     for i, xa, ya in _MIDZ_NODES:
-        N[i] = 0.25 * zeta2 * (1 + xi * xa) * (1 + eta * ya)
-    return np.array(N)
+        N[i] = quarter * zeta2 * (1 + xi * xa) * (1 + eta * ya)
+    return N
+
+
+def hex20_shape(xi, eta, zeta):
+    """Evaluate the 20 serendipity shape functions at (xi, eta, zeta)."""
+    return np.array(_hex20_shape(xi, eta, zeta, 0.125, 0.25), dtype=float)
+
+
+def hex20_shape_exact(xi, eta, zeta) -> list:
+    """The 20 serendipity shape functions at an exact rational point, as :class:`~fractions.Fraction`."""
+    return _hex20_shape(Fraction(xi), Fraction(eta), Fraction(zeta), Fraction(1, 8), Fraction(1, 4))
 
 
 def hex20_shape_grad(xi, eta, zeta):

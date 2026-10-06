@@ -128,7 +128,7 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.phenomena import carriesKineticEnergy, carriesLinearMomentum
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
+from edelweissfe.numerics.dofmanager import DofManager, DofVector
 from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.conservationchecks import (
@@ -138,15 +138,8 @@ from edelweissfe.solvers.base.conservationchecks import (
     linearMomentum,
 )
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
-from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.exceptions import (
-    ConditionalStop,
-    CutbackRequest,
-    ReachedMaxIncrements,
-    ReachedMinIncrementSize,
-    StepFailed,
-)
+from edelweissfe.utils.exceptions import CutbackRequest, StepFailed
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
 
@@ -164,7 +157,7 @@ class NEDSchema:
     """The options of the ``*solver`` datalines and of an ``>>options`` block routed to this
     solver, owned by this module and never mutated from outside it.
 
-    Mirrors :attr:`NED.NEDOptions` one-for-one; the plain ``self.options`` dict remains the actual
+    Mirrors :attr:`NED.SolverSpecificOptions` one-for-one; the plain ``self.options`` dict remains the actual
     source of truth consulted at runtime (see :class:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema`
     for why). The hyphenated option names are not valid Python identifiers, hence the
     ``optionName`` indirection.
@@ -352,25 +345,37 @@ class NED(NonlinearSolverBase):
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NEDSchema
 
-    NEDOptions = {
+    SolverSpecificOptions = {
         "courant-number": 0.8,
         "output-frequency": 1000,
         "contact-update-frequency": 100,
         "topology-check-frequency": 0,
         "report-performance": False,
         "lumped-quantity-conservation-tolerance": CONSERVATION_TOLERANCE,
-        # Lists, so _updateOptions comma-splits them. Empty means "assert nothing", which is what
+        # Lists, so _updateOptions appends the comma-separated items. Empty means "assert nothing", which is what
         # every deck that does not mention them gets.
         "expect-second-order-fields": [],
         "expect-first-order-fields": [],
+    }
+
+    #: The last completed increment (the central-difference velocity update reads its length) and the
+    #: accumulated external work -- an accumulator, summed increment by increment from the reaction
+    #: forces at the prescribed degrees of freedom, which nothing in a converged solution reproduces.
+    checkpointedState = {
+        "prevTimeStep": TimeStep,
+        "_externalWork": float,
+        # The energy-balance warnings are given once per step, not again after a resume.
+        "_warnedAboutMissingInternalEnergy": bool,
+        "_warnedAboutMissingExternalWork": bool,
+        "_conservationCheck": ConservationCheck,
     }
 
     def __init__(self, jobInfo, journal, **kwargs):
         self.journal = journal
 
         # Ensure mutable defaults (field lists) are isolated per solver instance.
-        self.options = deepcopy(self.NEDOptions)
-        self._updateOptions(kwargs, journal)
+        self.options = deepcopy(self.SolverSpecificOptions)
+        self._updateOptions(kwargs, journal, strict=True)
         #: Fields integrated first order (forward Euler) and second order (central difference) in
         #: time, and their degrees of freedom. All four are DERIVED from the assembled inertia and
         #: damping in :meth:`_classifyFieldsByScheme`, never declared.
@@ -393,6 +398,10 @@ class NED(NonlinearSolverBase):
         #: reported no damping, which is what makes the one damped update rule below reduce
         #: exactly to the undamped central difference there.
         self._dampingRate = None
+        #: Half the damping rate on second-order DOFs, zero elsewhere; see solveIncrement.
+        self._halfDampingRate = None
+        #: 1.0 on second-order DOFs, 0.0 elsewhere; see solveIncrement.
+        self._secondOrderMask = None
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
         #: The per-topology-change conservation check of every field's lumped total, and the
@@ -402,10 +411,11 @@ class NED(NonlinearSolverBase):
         #: increment. Compared against the kinetic energy to detect energy creation; see
         #: _ENERGY_CREATION_TOLERANCE.
         self._externalWork = 0.0
-        #: The external work a resumed checkpoint carried, handed to the next solveStep. Staged
-        #: rather than assigned directly because readRestart necessarily runs before solveStep,
-        #: which resets the live accumulator; see :meth:`readRestart`.
-        self._resumedExternalWork = 0.0
+        #: The last completed increment. The central-difference velocity update reads
+        #: 0.5 * (dT + dT_prev); None makes the first increment of a cold step the half step that
+        #: starts a leapfrog. A resumed step continues from the checkpointed one instead: the
+        #: checkpointed velocity already carries the half-step offset.
+        self.prevTimeStep = None
         #: Per-constraint force buffer and scatter plan, by constraint name; see
         #: :meth:`assembleConstraintForces`. Cleared whenever the DofManager is rebuilt.
         self._constraintForcePlans = {}
@@ -420,98 +430,27 @@ class NED(NonlinearSolverBase):
         #: constraint's connectivity asked for; see :class:`_ReusableExplicitOperators`.
         self._reusableOperators = None
 
-    def _updateOptions(self, updatedOptions: dict, journal):
-        """Update options of the solver using a string dict
-
-        Parameters
-        ----------
-        updatedOptions
-            The options dictionary.
-        journal
-            The journal module.
-        """
-
-        for k, v in updatedOptions.items():
-            if k in self.NEDOptions:
-                journal.message("Updating option {:}={:}".format(k, v), self.identification)
-                if isinstance(self.NEDOptions[k], list):
-                    for item in v.split(","):
-                        self.options[k].append(item.strip())
-                else:
-                    self.options[k] = type(self.NEDOptions[k])(updatedOptions[k])
-            else:
-                raise AttributeError("Invalid option {:} for {:}".format(k, self.identification))
-
-    def writeRestart(self, restartFile):
-        """Persist the accumulated external work.
-
-        It is an ACCUMULATOR, not a state that can be recomputed: it is summed increment by
-        increment from the reaction forces at the prescribed degrees of freedom, so nothing in a
-        converged solution reproduces it.
-
-        A resumed run that started it at zero compared its kinetic energy against only the work
-        done since the resume -- and that comparison is the check on whether the run is still
-        quasi-static and whether energy is being created, so the one diagnostic that would flag a
-        run going wrong instead read as though the model were mostly kinetic. The anchor pry-out
-        run resumed at 22 % of its ramp reported kinetic energy at 41.7 % of external work for
-        that reason alone.
-
-        Parameters
-        ----------
-        restartFile
-            The open checkpoint to write to.
-        """
-        restartFile.require_group("solver").attrs["externalWork"] = self._externalWork
-
-    def _consumeResumedExternalWork(self) -> float:
-        """The external work a resumed checkpoint carried, handed over exactly once.
-
-        The energy balance is per step, so the step being resumed picks up where the checkpoint
-        left off while any later step in the same job correctly starts from zero -- hence consumed
-        rather than merely read. It is staged in the first place because
-        :meth:`readRestart` necessarily runs BEFORE :meth:`solveStep`, which resets the live
-        accumulator and would otherwise wipe the restored value before the first increment.
-        """
-        resumed = self._resumedExternalWork
-        self._resumedExternalWork = 0.0
-        return resumed
-
-    def readRestart(self, restartFile):
-        """Restore the accumulated external work; see :meth:`writeRestart`.
-
-        Tolerates a checkpoint written before this state was carried, in which case the resumed
-        step's energy balance is wrong in the old way rather than the run failing.
-
-        Parameters
-        ----------
-        restartFile
-            The open checkpoint to read from.
-        """
-        if "solver" not in restartFile or "externalWork" not in restartFile["solver"].attrs:
-            return
-        self._resumedExternalWork = float(restartFile["solver"].attrs["externalWork"])
-
-    def solveStep(
+    def beginStep(
         self,
         step,
         model: FEModel,
         fieldOutputController: FieldOutputController,
         outputmanagers: dict[str, OutputManagerBase],
     ):
-        """Public interface to solve for a step.
+        """Start the step; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`. The equation
+        system is built by the first :meth:`prepareIncrement`.
 
         Parameters
         ----------
-        stepNumber
-            The step number.
         step
-            The dictionary containing the step definition.
-        stepActions
-            The dictionary containing all step actions.
+            The step to be solved.
         model
-            The  model tree.
+            The model tree.
         fieldOutputController
             The field output controller.
+        outputmanagers
+            The output managers.
         """
 
         self.validateModelCapabilities(model)
@@ -520,9 +459,10 @@ class NED(NonlinearSolverBase):
         # everything this method does -- the initial topology refinement and the first equation
         # system included, since both are timed categories that would otherwise be subtracted from a
         # window they never ran in and drive the residue negative.
-        stepWallClockTic = perf_counter()
+        self._stepWallClockTic = perf_counter()
 
-        self._externalWork = self._consumeResumedExternalWork()
+        self._externalWork = 0.0
+        self.prevTimeStep = None
         self._conservationCheck.reset()
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
@@ -544,263 +484,296 @@ class NED(NonlinearSolverBase):
         ]
 
         # Step actions before the equation system, matching NIST: nothing they do depends on it.
-        self.applyStepActionsAtStepStart(model, step.actions)
+        self.applyStepActionsAtStepStart(model, step)
 
-        # One topology update, here and nowhere else. Every modifier this solver accepts acts only at
-        # the start of the analysis (validateModelCapabilities enforces that), and on its first call
-        # hAdaptivity evaluates exactly its initialOnly markers -- so this reproduces what an
-        # implicit run does on its own first pass. Running it before anything sized by the equation
-        # system exists is what makes it both cheap and safe: the mesh is final before the lumped
-        # mass, the multi-point-constraint condensation and the critical time step are derived from
-        # it, and no velocity state exists yet that would have to be carried onto new nodes.
-        self.updateTopologyAndConnectivity(model, step)
+        self._system = None
 
-        theSystem = self.buildEquationSystem(model, step)
+    def prepareIncrement(self, step, model: FEModel, isRetry: bool):
+        """The topology update, when due, and the equation system; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.prepareIncrement`.
 
-        Minv = theSystem.Minv
-        U, dU, V, P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
-        criticalTimeStep = theSystem.criticalTimeStep
+        The topology update is due at the start of the step, and after every
+        ``topology-check-frequency``-th increment. At the start of the step it runs before anything
+        sized by the equation system exists, so the mesh is final before the lumped mass, the
+        multi-point-constraint condensation and the critical time step are derived from it. It runs
+        here, before the next increment is proposed, because a refinement may lower the stable time
+        increment that increment has to use.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        isRetry
+            Never True: this solver does not retry increments.
+        """
+
+        if step.timeStepper.isAtStepStart():
+            # The step-start topology update: the modifiers acting at the start of the analysis (e.g.
+            # hAdaptivity's initialOnly markers) and the first contact search.
+            self.updateTopologyAndConnectivity(model, step)
+
+        if self._system is None:
+            self._buildSystem(self.buildEquationSystem(model, step))
+            # The time stepper runs on the stable time increment from here on, which it carries (and
+            # checkpoints) itself: a resumed step continues with the one it had.
+            if step.timeStepper.enforcedTimeIncrement is None:
+                step.timeStepper.enforceTimeIncrement(self._system.criticalTimeStep)
+
+        # --- h-adaptivity, mid-run ----------------------------------------------------------------
+        # After every topology-check-frequency-th increment, so after its output: the marker refines
+        # on the last *finalized* field output, so anywhere earlier it would decide on stale results.
+        # And the pairing of U with the half-step-staggered V is unambiguous only between increments.
+        # The zero increment is never recorded as the last increment, so a live marker is never
+        # evaluated on the initial condition.
+        topologyCheckFrequency = self.options["topology-check-frequency"]
+        if not (
+            self._liveTopologyModifiers
+            and topologyCheckFrequency
+            and self.prevTimeStep is not None
+            and self.prevTimeStep.number % topologyCheckFrequency == 0
+        ):
+            return
+
+        theSystem, V = self._system, self._V
+        lumpedTotalsBefore = self._perFieldLumpedTotals()
+        momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, V, model)
+        kineticBefore = 0.5 * float(
+            np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
+        )
+
+        topologyUpdate = self.updateTopologyAndConnectivity(model, step)
+        meshChanged = topologyUpdate.topologyChanged or topologyUpdate.meshDependentsRefreshed
+        connectivityChanged = topologyUpdate.constraintConnectivityChanged
+
+        if meshChanged or connectivityChanged:
+            # Only a mesh change needs a system built afresh. A change of the contact
+            # connectivity alone carries solution, velocity and force over, as after a
+            # periodic contact search.
+            self._buildSystem(self.buildEquationSystem(model, step, previous=None if meshChanged else theSystem))
+            theSystem = self._system
+
+        U, V, P = self._U, self._V, self._P
+
+        if meshChanged:
+            # The net force is deliberately NOT re-evaluated on the new mesh. It
+            # could be, with one extra element pass -- but that would run the
+            # constitutive law off-cycle, with a zero strain increment, purely to
+            # obtain a force, and the material state is what that call writes into.
+            # Zeroing costs exactly one increment of force contribution to the
+            # velocity update: an O(dT) error confined to the increment following an
+            # event, after which it is computed normally. A bounded known error is
+            # preferable to an unbounded unknown one.
+            P[:] = 0.0
+            self.publishNodeFields(model, U, V, P)
+
+            self.reportTopologyChangeConservation(lumpedTotalsBefore, momentumBefore, kineticBefore, V, model)
+
+            # Lower only. Refinement shrinks the smallest element and tightens the
+            # limit, which must be honoured; softening raises it, and taking that up
+            # mid-step would change the integrator's dispersion for no benefit.
+            if theSystem.criticalTimeStep < step.timeStepper.enforcedTimeIncrement:
+                self.journal.message(
+                    "Refinement lowered the stable time increment from {:e} to "
+                    "{:e}".format(step.timeStepper.enforcedTimeIncrement, theSystem.criticalTimeStep),
+                    self.identification,
+                    1,
+                )
+                step.timeStepper.enforceTimeIncrement(theSystem.criticalTimeStep)
+
+    def _buildSystem(self, theSystem):
+        """Adopt a (re)built equation system, and the vectors the increments work on.
+
+        Parameters
+        ----------
+        theSystem
+            The equation system.
+        """
+
+        self._system = theSystem
+        self._Minv = theSystem.Minv
+        self._U, self._dU, self._V, self._P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
+
+    def isOutputIncrement(self, timeStep: TimeStep) -> bool:
+        """Only every ``output-frequency``-th increment: an explicit run has millions.
+
+        Parameters
+        ----------
+        timeStep
+            The accepted increment.
+
+        Returns
+        -------
+        bool
+            True to write output.
+        """
+
+        return timeStep.number % self.options["output-frequency"] == 0
+
+    def attemptIncrement(self, step, model: FEModel, timeStep: TimeStep):
+        """The periodic contact search, when due, and the central-difference update; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.attemptIncrement`.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        timeStep
+            The increment.
+
+        Raises
+        ------
+        StepFailed
+            If a material requests a cutback: an explicit increment is not retried smaller.
+        """
 
         contactUpdateFrequency = self.options["contact-update-frequency"]
         topologyCheckFrequency = self.options["topology-check-frequency"]
-        UAtLastConnectivitySearch = np.array(U)
+        theSystem, Minv = self._system, self._Minv
+        U, dU, V, P = self._U, self._dU, self._V, self._P
 
-        # The central-difference velocity update reads 0.5 * (dT + dT_prev). Leaving this None
-        # makes the solver synthesise dT_prev = 0 further down, so the first increment gets dT/2 --
-        # the half step that starts a leapfrog correctly on a COLD start. A resumed run must not
-        # repeat that: the velocity in the checkpoint already carries the half-step offset, so
-        # starting again applies one half-impulse too few. Measured on an anchor pry-out resume,
-        # that alone left the final reaction force 2.34e-04 wrong while every other piece of state
-        # restored correctly.
-        restoredTimeIncrement = step.restoredTimeIncrement()
-        prevTimeStep = (
-            None if restoredTimeIncrement is None else TimeStep(0, 0.0, 0.0, restoredTimeIncrement, 0.0, model.time)
-        )
+        # only print for increments matching the configured output-frequency
+        if timeStep.number % self.options["output-frequency"] == 0:
+            self.journal.printSeperationLine()
+            self.journal.message(
+                "increment {:}: {:8e}, {:8e}; time {:10e} to {:10e}".format(
+                    timeStep.number,
+                    timeStep.stepProgressIncrement,
+                    timeStep.stepProgress,
+                    timeStep.totalTime - timeStep.timeIncrement,
+                    timeStep.totalTime,
+                ),
+                self.identification,
+                level=1,
+            )
 
-        try:
-            for timeStep in step.getTimeStep(enforcedTimeIncrement=criticalTimeStep):
-                # only print for increments matching the configured output-frequency
-                if timeStep.number % self.options["output-frequency"] == 0:
-                    self.journal.printSeperationLine()
-                    self.journal.message(
-                        "increment {:}: {:8e}, {:8e}; time {:10e} to {:10e}".format(
-                            timeStep.number,
-                            timeStep.stepProgressIncrement,
-                            timeStep.stepProgress,
-                            timeStep.totalTime - timeStep.timeIncrement,
-                            timeStep.totalTime,
-                        ),
-                        self.identification,
-                        level=1,
-                    )
-
-                    if self.options["report-performance"]:
-                        # The cumulative table, as at the end of the step: an explicit run is
-                        # millions of increments long, and without this the final table is the
-                        # only one anyone would ever see.
-                        self.journal.printPrettyTable(
-                            performancetiming.makePrettyTable(wallTime=perf_counter() - stepWallClockTic),
-                            self.identification,
-                        )
-
-                # The mid-run topology check at the end of this same increment re-runs the
-                # connectivity search on EVERY constraint, these included. Searching here as well
-                # would build and query the same k-d tree twice within one increment: the later
-                # search is the one that has to happen, because a refinement in between invalidates
-                # whatever this one found. Deferring to it costs one increment of staleness -- the
-                # same staleness the configured frequency already accepts, and orders of magnitude
-                # below a facet dimension at an explicit time step.
-                topologyCheckDueThisIncrement = bool(
-                    self._liveTopologyModifiers
-                    and topologyCheckFrequency
-                    and timeStep.number > 0
-                    and timeStep.number % topologyCheckFrequency == 0
+            if self.options["report-performance"]:
+                # The cumulative table, as at the end of the step: an explicit run is
+                # millions of increments long, and without this the final table is the
+                # only one anyone would ever see.
+                self.journal.printPrettyTable(
+                    performancetiming.makePrettyTable(wallTime=perf_counter() - self._stepWallClockTic),
+                    self.identification,
                 )
 
-                if (
-                    self._dynamicConnectivityConstraints
-                    and contactUpdateFrequency
-                    and timeStep.number > 0
-                    and timeStep.number % contactUpdateFrequency == 0
-                    and not topologyCheckDueThisIncrement
-                ):
-                    connectivityChanged = self.updateConstraintConnectivity(model)
-                    motionSinceLastSearch = float(np.max(np.abs(np.asarray(U) - UAtLastConnectivitySearch)))
-                    UAtLastConnectivitySearch = np.array(U)
+        # The mid-run topology check at the end of this same increment re-runs the
+        # connectivity search on EVERY constraint, these included. Searching here as well
+        # would build and query the same k-d tree twice within one increment: the later
+        # search is the one that has to happen, because a refinement in between invalidates
+        # whatever this one found. Deferring to it costs one increment of staleness -- the
+        # same staleness the configured frequency already accepts, and orders of magnitude
+        # below a facet dimension at an explicit time step.
+        topologyCheckDueThisIncrement = bool(
+            self._liveTopologyModifiers
+            and topologyCheckFrequency
+            and timeStep.number > 0
+            and timeStep.number % topologyCheckFrequency == 0
+        )
 
-                    if connectivityChanged:
-                        # The motion is reported rather than assumed: it is the upper bound on how
-                        # far a slave node can have travelled relative to its master surface since
-                        # the previous search, which is what says whether the configured frequency
-                        # is defensible against this model's facet size.
-                        self.journal.message(
-                            "Constraint connectivity changed; largest nodal motion since the "
-                            "previous search: {:e}".format(motionSinceLastSearch),
-                            self.identification,
-                            2,
-                        )
-                        theSystem = self.buildEquationSystem(model, step, previous=theSystem)
+        if (
+            self._dynamicConnectivityConstraints
+            and contactUpdateFrequency
+            and timeStep.number > 0
+            and timeStep.number % contactUpdateFrequency == 0
+            and not topologyCheckDueThisIncrement
+        ):
+            connectivityChanged = self.updateConstraintConnectivity(model)
 
-                        Minv = theSystem.Minv
-                        U, dU, V, P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
+            if connectivityChanged:
+                self.journal.message("Constraint connectivity changed", self.identification, 2)
+                self._buildSystem(self.buildEquationSystem(model, step, previous=theSystem))
+                theSystem, Minv = self._system, self._Minv
+                U, dU, V, P = self._U, self._dU, self._V, self._P
 
-                dU[:] = 0.0
-                try:
-                    U, V, P = self.solveIncrement(
-                        U,
-                        dU,
-                        V,
-                        P,
-                        Minv,
-                        step.actions,
-                        model,
-                        timeStep,
-                        prevTimeStep,
-                    )
+        dU[:] = 0.0
+        try:
+            U, V, P = self.solveIncrement(
+                U,
+                dU,
+                V,
+                P,
+                Minv,
+                step.actions,
+                model,
+                timeStep,
+                self.prevTimeStep,
+            )
 
-                except CutbackRequest as e:
-                    # A cutback answers a CONVERGENCE failure, and an explicit scheme has no
-                    # convergence to fail: its time step is dictated by stability, courant *
-                    # dt_crit from the mesh and the wave speed. Shrinking it does nothing for a
-                    # material that could not integrate, and doing so was actively destructive --
-                    # discardAndChangeIncrement overwrites enforcedTimeIncrement with the reduced
-                    # value, the generator reuses that value every iteration afterwards, and
-                    # nothing raises it back (the critical step is enforced "lower only", and
-                    # SimpleTimeStepper.preventIncrementIncrease is a no-op). One failed
-                    # quadrature point permanently crippled the analysis: of three production runs
-                    # of the anchor pry-out model, two cut back to minInc and died, and the third
-                    # spent 291000 of 300000 increments at ~1e-14 s, covering 6e-09 s of loading.
-                    #
-                    # So the request is refused and the failure is surfaced where it happened.
-                    for man in outputmanagers:
-                        man.finalizeFailedIncrement(
-                            statusInfoDict=None,
-                        )
-                    raise StepFailed(
-                        "A material requested a cutback in increment {:}: {:}. The explicit time "
-                        "step is set by stability, not by convergence, so it cannot be reduced in "
-                        "response -- either the material cannot integrate at the stable step, or "
-                        "the state reaching it is already wrong. Both need the material or the "
-                        "model looked at, not a smaller step.".format(timeStep.number, e)
-                    ) from e
-                else:
-                    # A zero increment is not a completed step: the generator yields one before the
-                    # first real increment, and the velocity update returns early for it. Recording
-                    # it here would overwrite the increment a RESUMED run was seeded with, putting
-                    # the run back on the cold-start half step it must not repeat.
-                    if timeStep.timeIncrement > 0.0:
-                        prevTimeStep = timeStep
+        except CutbackRequest as e:
+            # A cutback answers a CONVERGENCE failure, and an explicit scheme has no
+            # convergence to fail: its time step is dictated by stability, courant *
+            # dt_crit from the mesh and the wave speed. Shrinking it does nothing for a
+            # material that could not integrate, and doing so was actively destructive --
+            # rejecting the increment overwrites the enforced time increment with the reduced
+            # value, every following increment reuses it, and
+            # nothing raises it back (the critical step is enforced "lower only", and
+            # SimpleTimeStepper.preventIncrementIncrease is a no-op). One failed
+            # quadrature point permanently crippled the analysis: of three production runs
+            # of the anchor pry-out model, two cut back to minInc and died, and the third
+            # spent 291000 of 300000 increments at ~1e-14 s, covering 6e-09 s of loading.
+            #
+            # So the request is refused and the failure is surfaced where it happened.
+            raise StepFailed(
+                "A material requested a cutback in increment {:}: {:}. The explicit time "
+                "step is set by stability, not by convergence, so it cannot be reduced in "
+                "response -- either the material cannot integrate at the stable step, or "
+                "the state reaching it is already wrong. Both need the material or the "
+                "model looked at, not a smaller step.".format(timeStep.number, e)
+            ) from e
 
-                    with performancetiming.timeit("publish node fields"):
-                        for fieldName, field in model.nodeFields.items():
-                            self.theDofManager.writeDofVectorToNodeField(U, field, "U")
-                            self.theDofManager.writeDofVectorToNodeField(P, field, "P")
+        self._U, self._V, self._P = U, V, P
 
-                            # Published every increment, not only on output increments, for two
-                            # reasons: an h-adaptivity event can fall on any increment and its
-                            # interpolation reads this entry, and a restart checkpoint written from a
-                            # node field is the only way an explicit run can resume with its kinetic
-                            # state intact. It is an O(nDof) copy.
-                            self.theDofManager.writeDofVectorToNodeField(V, field, "V")
+    def acceptIncrement(self, step, model: FEModel, timeStep: TimeStep):
+        """Commit the increment to the model; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.acceptIncrement`.
 
-                        for variable in model.scalarVariables.values():
-                            variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        timeStep
+            The increment.
+        """
 
-                    self.updateRigidBodies(model, timeStep)
+        U, V, P = self._U, self._V, self._P
 
-                    # Timed because it is not what it looks like. FEModel.advanceToTime is a generic
-                    # method shared with the implicit solvers, where it runs once per *converged*
-                    # increment and is amortised over a Newton loop; here it runs on every one of
-                    # millions of increments, and it is a serial Python loop over every element,
-                    # constraint and multi-point constraint in the model.
-                    with performancetiming.timeit("accept state"):
-                        model.advanceToTime(timeStep.totalTime)
+        # The zero increment, before the first real one, is not a completed step: the
+        # velocity update returns early for it, and the first real increment must be the
+        # half step that starts the leapfrog.
+        if timeStep.timeIncrement > 0.0:
+            self.prevTimeStep = timeStep
 
-                    if timeStep.number % self.options["output-frequency"] == 0:
-                        with performancetiming.timeit("finalize output"):
-                            fieldOutputController.finalizeIncrement()
-                            for man in outputmanagers:
-                                man.finalizeIncrement(
-                                    statusInfoDict=None,
-                                )
+        self.publishNodeFields(model, U, V, P)
 
-                    # --- h-adaptivity, mid-run ------------------------------------------------
-                    # Placed exactly here for three independent reasons. The marker refines on the
-                    # last *finalized* field output, so anywhere earlier it would decide on stale
-                    # results. The cutback path restores U/V/P from vectors sized by the old equation
-                    # system, so a topology change interleaved with a cutback would restore the wrong
-                    # length -- ending a successful increment keeps the two paths disjoint. And the
-                    # pairing of U with the half-step-staggered V is unambiguous only between
-                    # increments.
-                    #
-                    # Increment 0 is excluded deliberately. The time stepper yields a zero-length
-                    # increment first, before it has even taken up the enforced time increment, and
-                    # nothing has been solved at that point -- a live marker evaluated there would
-                    # refine on the initial condition, and revising the time increment there raises.
-                    if (
-                        self._liveTopologyModifiers
-                        and topologyCheckFrequency
-                        and timeStep.number > 0
-                        and timeStep.number % topologyCheckFrequency == 0
-                    ):
-                        lumpedTotalsBefore = self._perFieldLumpedTotals()
-                        momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, V, model)
-                        kineticBefore = 0.5 * float(
-                            np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
-                        )
+        self.updateRigidBodies(model, timeStep)
 
-                        if self.updateTopologyAndConnectivity(model, step):
-                            theSystem = self.buildEquationSystem(model, step)
+        # Timed because it is not what it looks like. FEModel.advanceToTime is a generic
+        # method shared with the implicit solvers, where it runs once per *converged*
+        # increment and is amortised over a Newton loop; here it runs on every one of
+        # millions of increments, and it is a serial Python loop over every element,
+        # constraint and multi-point constraint in the model.
+        with performancetiming.timeit("accept state"):
+            model.advanceToTime(timeStep.totalTime)
 
-                            Minv = theSystem.Minv
-                            U, dU, V, P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
-                            UAtLastConnectivitySearch = np.array(U)
+    def endStep(self, step, model: FEModel):
+        """Report the step's performance timing.
 
-                            # The net force is deliberately NOT re-evaluated on the new mesh. It
-                            # could be, with one extra element pass -- but that would run the
-                            # constitutive law off-cycle, with a zero strain increment, purely to
-                            # obtain a force, and the material state is what that call writes into.
-                            # Zeroing costs exactly one increment of force contribution to the
-                            # velocity update: an O(dT) error confined to the increment following an
-                            # event, after which it is computed normally. A bounded known error is
-                            # preferable to an unbounded unknown one.
-                            P[:] = 0.0
+        Parameters
+        ----------
+        step
+            The step that was solved.
+        model
+            The model tree.
+        """
 
-                            self.reportTopologyChangeConservation(
-                                lumpedTotalsBefore, momentumBefore, kineticBefore, V, model
-                            )
-
-                            # Lower only. Refinement shrinks the smallest element and tightens the
-                            # limit, which must be honoured; softening raises it, and taking that up
-                            # mid-step would change the integrator's dispersion for no benefit.
-                            if theSystem.criticalTimeStep < criticalTimeStep:
-                                self.journal.message(
-                                    "Refinement lowered the stable time increment from {:e} to "
-                                    "{:e}".format(criticalTimeStep, theSystem.criticalTimeStep),
-                                    self.identification,
-                                    1,
-                                )
-                                criticalTimeStep = theSystem.criticalTimeStep
-                                step.enforceTimeIncrement(criticalTimeStep)
-
-        except ReachedMaxIncrements:
-            self.applyStepActionsAtStepEnd(model, step.actions)
-
-        except ReachedMinIncrementSize:
-            self.journal.errorMessage("Incrementation failed", self.identification)
-            raise StepFailed()
-
-        except ConditionalStop:
-            self.journal.message("Conditional Stop", self.identification)
-            self.applyStepActionsAtStepEnd(model, step.actions)
-
-        else:
-            self.applyStepActionsAtStepEnd(model, step.actions)
-
-        finally:
-            prettyTable = performancetiming.makePrettyTable(wallTime=perf_counter() - stepWallClockTic)
-            self.journal.printPrettyTable(prettyTable, self.identification)
-            performancetiming.reset()
+        prettyTable = performancetiming.makePrettyTable(wallTime=perf_counter() - self._stepWallClockTic)
+        self.journal.printPrettyTable(prettyTable, self.identification)
+        performancetiming.reset()
 
     @performancetiming.timeit("increment")
     def solveIncrement(
@@ -901,23 +874,26 @@ class NED(NonlinearSolverBase):
                 V[dirichlet.constrainedDofIndices] = prescribedVelocity
                 prescribedVelocities.append((dirichlet.constrainedDofIndices, prescribedVelocity))
 
-            if self.ids_1st is not None:
-                V[self.ids_1st] = Minv[self.ids_1st] * P[self.ids_1st]
-            if self.ids_2nd is not None:
-                dtAverage = 0.5 * (timeStep.timeIncrement + prevTimeStep.timeIncrement)
+            # Second-order DOFs: central difference with mass-proportional damping,
+            # V = ((1 - h) V + Minv P dt) / (1 + h), h = alpha dt / 2: the rate alpha = C/M enters
+            # as one factor on each side rather than as an extra force evaluation, so a damped
+            # degree of freedom costs what an undamped one does. At alpha = 0 it is bit-identical to
+            # the undamped update, which is why there is no branch -- and why mechanical Rayleigh
+            # damping would need no code here. The damping is not optional for a hyperbolic
+            # non-local field: undamped, the transients minted at the start of the step and at every
+            # refinement never decay, and the damage variable follows every overshoot instead of the
+            # mean. Written on whole vectors: h and the mask are zero off the second-order DOFs,
+            # which leaves those velocities unchanged. First-order DOFs: V = Minv P (forward Euler).
+            dtAverage = 0.5 * (timeStep.timeIncrement + prevTimeStep.timeIncrement)
+            halfRateStep = self._halfDampingRate * dtAverage
+            forceOverMass = Minv.asPlainArray() * P.asPlainArray()
 
-                # Central difference with mass-proportional damping: the rate alpha = C/M enters
-                # as one factor on each side rather than as an extra force evaluation, so a damped
-                # degree of freedom costs what an undamped one does. At alpha = 0 it is
-                # bit-identical to the undamped update, which is why there is no branch -- and why
-                # mechanical Rayleigh damping would need no code here. The damping is not optional
-                # for a hyperbolic non-local field: undamped, the transients minted at the start of
-                # the step and at every refinement never decay, and the damage variable follows
-                # every overshoot instead of the mean.
-                halfRateStep = 0.5 * self._dampingRate[self.ids_2nd] * dtAverage
-                V[self.ids_2nd] = (
-                    (1.0 - halfRateStep) * V[self.ids_2nd] + Minv[self.ids_2nd] * P[self.ids_2nd] * dtAverage
-                ) / (1.0 + halfRateStep)
+            velocity = V.asPlainArray()
+            velocity *= 1.0 - halfRateStep
+            velocity += forceOverMass * (self._secondOrderMask * dtAverage)
+            velocity /= 1.0 + halfRateStep
+            if self.ids_1st is not None:
+                velocity[self.ids_1st] = forceOverMass[self.ids_1st]
 
             # A prescribed velocity is a boundary condition, not a solution, and both updates above
             # overwrote it: the damped one scales it by (1 - alpha dt/2)/(1 + alpha dt/2), the
@@ -945,7 +921,7 @@ class NED(NonlinearSolverBase):
         P[:] = 0.0
         P, psi = self.computeElements(elements, U_n, dU, P, timeStep)
         P[:] = -P[:]
-        P = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_n, P, timeStep)
+        P, _ = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_n, P, None, timeStep)
         P = self.assembleConstraintForces(model.constraints, U_n, dU, P, timeStep)
 
         # fold the forces acting on slave DOFs onto their masters (action-reaction through the
@@ -1081,92 +1057,6 @@ class NED(NonlinearSolverBase):
 
         return U_n, V, P
 
-    @performancetiming.timeit("distributed loads")
-    def computeDistributedLoads(
-        self,
-        distributedLoads: list[StepActionBase],
-        U_np: DofVector,
-        PExt: DofVector,
-        timeStep: TimeStep,
-    ) -> DofVector:
-        """Loop over all distributed loads acting on elements, and evaluate them.
-        Assembles into the global external load vector.
-
-        Parameters
-        ----------
-        distributedLoads
-            The list of distributed loads.
-        U_np
-            The current solution vector.
-        PExt
-            The external load vector to be augmented.
-        timeStep
-            The current time step.
-
-        Returns
-        -------
-        DofVector
-            The augmented load vector.
-        """
-
-        time = timeStep.totalTime
-        dT = timeStep.timeIncrement
-
-        for dLoad in distributedLoads:
-            load = dLoad.getCurrentLoad(timeStep)
-            for faceID, elementSet in dLoad.surface.items():
-                for el in elementSet:
-                    Pe = np.zeros(el.nDof)
-                    Ke = np.zeros((el.nDof, el.nDof)).ravel()
-                    el.computeDistributedLoad(dLoad.loadType, Pe, Ke, faceID, load, U_np[el], time, dT)
-
-                    PExt[el] += Pe
-
-        return PExt
-
-    @performancetiming.timeit("body forces")
-    def computeBodyForces(
-        self,
-        bodyForces: list[StepActionBase],
-        U_np: DofVector,
-        PExt: DofVector,
-        timeStep: TimeStep,
-    ) -> DofVector:
-        """Loop over all body forces loads acting on elements, and evaluate them.
-        Assembles into the global external load vector and the system matrix.
-
-        Parameters
-        ----------
-        distributedLoads
-            The list of distributed loads.
-        U_np
-            The current solution vector.
-        PExt
-            The external load vector to be augmented.
-        increment
-            The increment.
-
-        Returns
-        -------
-        tuple[DofVector,VIJSystemMatrix]
-            The augmented load vector and system matrix.
-        """
-
-        time = timeStep.totalTime
-        dT = timeStep.timeIncrement
-
-        for bForce in bodyForces:
-            force = bForce.getCurrentLoad(timeStep)
-            for el in bForce.elementSet:
-                Pe = np.zeros(el.nDof)
-                Ke = np.zeros((el.nDof, el.nDof)).ravel()
-
-                el.computeBodyForce(Pe, Ke, force, U_np[el], time, dT)
-
-                PExt[el] += Pe
-
-        return PExt
-
     @performancetiming.timeit("elements")
     def computeElements(
         self,
@@ -1177,7 +1067,7 @@ class NED(NonlinearSolverBase):
         timeStep: TimeStep,
     ) -> tuple[DofVector]:
         """Loop over all elements, and evalute them.
-        Is is called by solveStep() in each iteration.
+        Is called by solveIncrement() in each iteration.
 
         Parameters
         ----------
@@ -1211,48 +1101,6 @@ class NED(NonlinearSolverBase):
             P[el] += Pe
 
         return P, psi
-
-    @performancetiming.timeit("assemble loads")
-    def assembleLoads(
-        self,
-        nodeForces: list[StepActionBase],
-        distributedLoads: list[StepActionBase],
-        bodyForces: list[StepActionBase],
-        U_np: DofVector,
-        PExt: DofVector,
-        timeStep: TimeStep,
-    ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Assemble all loads into a right hand side vector.
-
-        Parameters
-        ----------
-        nodeForces
-            The list of concentrated (nodal) loads.
-        distributedLoads
-            The list of distributed (surface) loads.
-        bodyForces
-            The list of body (volumetric) loads.
-        U_np
-            The current solution vector.
-        PExt
-            The external load vector.
-        timeStep
-            The current time step.
-
-        Returns
-        -------
-        tuple[DofVector,VIJSystemMatrix]
-            - The augmented external load vector.
-            - The augmented system matrix.
-        """
-        for cLoad in nodeForces:
-            PExt[
-                self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[cLoad.field][cLoad.nodeSet]
-            ] += cLoad.getCurrentLoad(timeStep).flatten()
-        PExt = self.computeDistributedLoads(distributedLoads, U_np, PExt, timeStep)
-        PExt = self.computeBodyForces(bodyForces, U_np, PExt, timeStep)
-
-        return PExt
 
     def validateModelCapabilities(self, model: FEModel):
         """Refuse the model features this solver cannot integrate, on top of the base checks.
@@ -1357,38 +1205,34 @@ class NED(NonlinearSolverBase):
                     "(penalty formulations) are supported here."
                 )
 
-    @performancetiming.timeit("topology update")
-    def updateTopologyAndConnectivity(self, model: FEModel, step) -> bool:
-        """Run the topology update, then let every mesh-dependent consumer catch up on it.
+    @performancetiming.timeit("publish node fields")
+    def publishNodeFields(self, model: FEModel, U, V, P):
+        """Write the solution, velocity and force to the node fields and the scalar variables.
 
-        The same two-phase sequence the implicit solver runs at the start of each of its increments
-        (see :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveStep`): the modifiers plan
-        and apply to a fixed point inside one topology window, then the pure readers of a settled
-        model -- surface facets, tie and contact connectivity -- catch up, once, on the net change.
-        Both sweeps are materialised rather than short-circuited: neither may be skipped because the
-        other already reported a change.
+        Published every increment, not only on output increments, for two reasons: an h-adaptivity
+        event can fall on any increment and its interpolation reads these entries, and a restart
+        checkpoint written from the node fields is the only way an explicit run can resume with its
+        kinetic state intact. It is an O(nDof) copy.
 
         Parameters
         ----------
         model
             The model tree.
-        step
-            The step being solved.
-
-        Returns
-        -------
-        bool
-            Whether anything changed, i.e. whether the equation system has to be built afresh. The
-            only caller today builds it unconditionally right afterwards; the return value is what
-            makes this reusable from inside an increment loop.
+        U
+            The solution vector.
+        V
+            The velocity vector.
+        P
+            The net force vector.
         """
 
-        modelHasChanged = model.updateTopology(step, model.time)
+        for field in model.nodeFields.values():
+            self.theDofManager.writeDofVectorToNodeField(U, field, "U")
+            self.theDofManager.writeDofVectorToNodeField(P, field, "P")
+            self.theDofManager.writeDofVectorToNodeField(V, field, "V")
 
-        refreshed = model.refreshMeshDependents()
-        ticked = any([constraint.updateConnectivity(model) for constraint in model.constraints.values()])
-
-        return modelHasChanged or refreshed or ticked
+        for variable in model.scalarVariables.values():
+            variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
 
     @performancetiming.timeit("constraint connectivity")
     def updateConstraintConnectivity(self, model: FEModel) -> bool:
@@ -1766,6 +1610,12 @@ class NED(NonlinearSolverBase):
                 dampingRate=np.array(self._dampingRate),
                 mpcTransformation=self.mpcTransformation,
             )
+
+        # Per-DOF factors of the velocity update, so that it runs on whole vectors.
+        self._secondOrderMask = np.zeros(self._dampingRate.shape[0])
+        if self.ids_2nd is not None:
+            self._secondOrderMask[self.ids_2nd] = 1.0
+        self._halfDampingRate = 0.5 * np.asarray(self._dampingRate) * self._secondOrderMask
 
         U = self.theDofManager.constructDofVector()  # initialize displacement vector
         dU = self.theDofManager.constructDofVector()  # initialize displacement vector

@@ -28,6 +28,7 @@
 
 import dataclasses
 from abc import ABC, abstractmethod
+from typing import NamedTuple
 
 import numpy as np
 from numpy import ndarray
@@ -42,8 +43,20 @@ from edelweissfe.numerics.mpctransformation import (
 )
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.exceptions import DivergingSolution
+from edelweissfe.utils.checkpointedstate import packState, unpackState
+from edelweissfe.utils.exceptions import DivergingSolution, TopologyError
 from edelweissfe.utils.schema import OptionSchemaProvider, fieldSchemaMeta
+
+
+class TopologyUpdate(NamedTuple):
+    """What changed in one topology update, see :meth:`NonlinearSolverBase.updateTopologyAndConnectivity`."""
+
+    topologyChanged: bool
+    """A model modifier (e.g. AMR) changed the mesh."""
+    meshDependentsRefreshed: bool
+    """A mesh-dependent consumer (e.g. a tie or contact surface) was rebuilt on the changed mesh."""
+    constraintConnectivityChanged: bool
+    """A constraint changed the degrees of freedom it couples, e.g. after a contact search."""
 
 
 class NonlinearSolverBase(OptionSchemaProvider, ABC):
@@ -66,7 +79,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     supportsMPC = False
 
     #: Whether this solver runs the topology update (e.g. h-adaptivity) at all. Subclasses that
-    #: call model.updateTopology(...) anywhere in solveStep must set this to True; without it, a
+    #: call model.topology.update(...) anywhere in an increment must set this to True; without it, a
     #: modifier silently never runs and the model never adapts. Setting it does not promise the
     #: update runs every increment: a solver that runs it once, before its increment loop, sets this
     #: and then refuses the modifiers that would need it later -- see
@@ -77,7 +90,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     #: whenever there are no multi-point constraints in the model. Lets
     #: applyDirichletToStiffness tell an MPC-transformed (fresh, disposable) system matrix
     #: apart from the assembler's own persistent, in-place-updated one: both implicit and
-    #: explicit-dynamic solvers build one when needed (see NonlinearExplicitDynamic.solveStep),
+    #: explicit-dynamic solvers build one when needed (see NonlinearExplicitDynamic.prepareIncrement),
     #: the distinction is about which matrix is in play, not about the solver family.
     mpcTransformation = None
 
@@ -140,35 +153,213 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             if isinstance(defaultValue, bool):
                 # bool("False") is truthy, so parse the string explicitly rather than via bool(...)
                 self.options[canonicalKey] = str(v).strip().lower() in ("true", "1", "yes", "on")
+            elif isinstance(defaultValue, list):
+                self.options[canonicalKey] = self.options[canonicalKey] + [item.strip() for item in str(v).split(",")]
             else:
                 self.options[canonicalKey] = type(defaultValue)(v)
 
-    def writeRestart(self, restartFile):
-        """Write solver state that a resumed run cannot reconstruct from the converged solution.
+    @performancetiming.timeit("topology update")
+    def updateTopologyAndConnectivity(self, model: FEModel, step, offerModelModifiers: bool = True) -> TopologyUpdate:
+        """Run the topology update, then let every mesh-dependent consumer catch up on it.
 
-        Called once per checkpoint by the restart output manager, alongside the model's and the
-        time stepper's own ``writeRestart``. Most solvers need nothing here: an implicit solver
-        rebuilds everything it uses from the solution it just converged. A no-op by default, so a
-        solver declares such state only when it actually carries some.
+        Two phases. First, the model modifiers plan and apply to a fixed point inside one topology
+        window (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`). Second, the pure
+        readers of the settled model -- tie and contact surfaces, constraint connectivity -- catch
+        up, once, on the net change. They may not create or delete elements: the topology window
+        is closed by then, so an attempt raises.
 
-        Parameters
-        ----------
-        restartFile
-            The open checkpoint to write to.
-        """
-
-    def readRestart(self, restartFile):
-        """Restore what :meth:`writeRestart` wrote.
-
-        Must tolerate a checkpoint that carries no state for this solver -- one written by a
-        different solver, or written before this solver carried any. A resumed run then behaves as
-        it did before the state was checkpointed, rather than failing.
+        Both sweeps of the second phase are materialized lists rather than ``any()`` over a
+        generator, which would stop at the first consumer reporting a change and skip the rest.
 
         Parameters
         ----------
-        restartFile
-            The open checkpoint to read from.
+        model
+            The model tree.
+        step
+            The step being solved.
+        offerModelModifiers
+            False when an increment is retried after a cutback. The model modifiers decide once per
+            converged state: the retry starts from the state they already decided on.
+
+        Returns
+        -------
+        TopologyUpdate
+            What changed; the solver decides from it whether to rebuild its equation system.
         """
+
+        topologyChanged = model.topology.update(step) if offerModelModifiers else False
+        meshDependentsRefreshed = model.topology.refreshMeshDependents()
+        constraintConnectivityChanged = any(
+            [constraint.updateConnectivity(model) for constraint in model.constraints.values()]
+        )
+        return TopologyUpdate(topologyChanged, meshDependentsRefreshed, constraintConnectivityChanged)
+
+    @performancetiming.timeit("distributed loads")
+    def computeDistributedLoads(
+        self,
+        distributedLoads: list[StepActionBase],
+        U_np: DofVector,
+        PExt: DofVector,
+        K: VIJSystemMatrix | None,
+        timeStep: TimeStep,
+    ) -> tuple[DofVector, VIJSystemMatrix]:
+        """Loop over all distributed loads acting on elements, and evaluate them.
+        Assembles into the global external load vector and, if given, the system matrix.
+
+        Parameters
+        ----------
+        distributedLoads
+            The list of distributed loads.
+        U_np
+            The current solution vector.
+        PExt
+            The external load vector to assemble into.
+        K
+            The system matrix to assemble into; None for an explicit solver, which needs no tangent.
+        timeStep
+            The current time step.
+
+        Returns
+        -------
+        tuple[DofVector,VIJSystemMatrix]
+            The updated load vector and system matrix.
+        """
+
+        time = timeStep.totalTime
+        dT = timeStep.timeIncrement
+
+        for dLoad in distributedLoads:
+            load = dLoad.getCurrentLoad(timeStep)
+            for faceID, elementSet in dLoad.surface.items():
+                for el in elementSet:
+                    Ke = K[el] if K is not None else np.zeros(el.nDof * el.nDof)
+                    Pe = np.zeros(el.nDof)
+
+                    el.computeDistributedLoad(dLoad.loadType, Pe, Ke, faceID, load, U_np[el], time, dT)
+
+                    PExt[el] += Pe
+
+        return PExt, K
+
+    @performancetiming.timeit("body forces")
+    def computeBodyForces(
+        self,
+        bodyForces: list[StepActionBase],
+        U_np: DofVector,
+        PExt: DofVector,
+        K: VIJSystemMatrix | None,
+        timeStep: TimeStep,
+    ) -> tuple[DofVector, VIJSystemMatrix]:
+        """Loop over all body forces loads acting on elements, and evaluate them.
+        Assembles into the global external load vector and, if given, the system matrix.
+
+        Parameters
+        ----------
+        distributedLoads
+            The list of distributed loads.
+        U_np
+            The current solution vector.
+        PExt
+            The external load vector to assemble into.
+        K
+            The system matrix to assemble into; None for an explicit solver, which needs no tangent.
+        increment
+            The increment.
+
+        Returns
+        -------
+        tuple[DofVector,VIJSystemMatrix]
+            The updated load vector and system matrix.
+        """
+
+        time = timeStep.totalTime
+        dT = timeStep.timeIncrement
+
+        for bForce in bodyForces:
+            force = bForce.getCurrentLoad(timeStep)
+            for el in bForce.elementSet:
+                Pe = np.zeros(el.nDof)
+                Ke = K[el] if K is not None else np.zeros(el.nDof * el.nDof)
+
+                el.computeBodyForce(Pe, Ke, force, U_np[el], time, dT)
+
+                PExt[el] += Pe
+
+        return PExt, K
+
+    @performancetiming.timeit("assemble loads")
+    def assembleLoads(
+        self,
+        nodeForces: list[StepActionBase],
+        distributedLoads: list[StepActionBase],
+        bodyForces: list[StepActionBase],
+        U_np: DofVector,
+        PExt: DofVector,
+        K: VIJSystemMatrix | None,
+        timeStep: TimeStep,
+    ) -> tuple[DofVector, VIJSystemMatrix]:
+        """Assemble all loads into a right hand side vector.
+
+        Parameters
+        ----------
+        nodeForces
+            The list of concentrated (nodal) loads.
+        distributedLoads
+            The list of distributed (surface) loads.
+        bodyForces
+            The list of body (volumetric) loads.
+        U_np
+            The current solution vector.
+        PExt
+            The external load vector.
+        K
+            The system matrix to assemble into; None for an explicit solver, which needs no tangent.
+        timeStep
+            The current time step.
+
+        Returns
+        -------
+        tuple[DofVector,VIJSystemMatrix]
+            - The updated external load vector.
+            - The updated system matrix.
+        """
+        for cLoad in nodeForces:
+            PExt[
+                self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[cLoad.field][cLoad.nodeSet]
+            ] += cLoad.getCurrentLoad(timeStep).flatten()
+        PExt, K = self.computeDistributedLoads(distributedLoads, U_np, PExt, K, timeStep)
+        PExt, K = self.computeBodyForces(bodyForces, U_np, PExt, K, timeStep)
+
+        return PExt, K
+
+    def getRestartData(self) -> dict[str, np.ndarray]:
+        """The state this solver carries from one increment to the next, as it is; see
+        :attr:`checkpointedState`.
+
+        Returns
+        -------
+        dict[str, numpy.ndarray]
+            The state; see :func:`~edelweissfe.utils.checkpointedstate.packState`.
+
+        Raises
+        ------
+        RestartError
+            If this solver does not declare its state, i.e. does not support restart.
+        """
+
+        return packState(self)
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore the state :meth:`getRestartData` returned, so that the resumed step continues
+        exactly where the uninterrupted run would have.
+
+        Parameters
+        ----------
+        data
+            The state.
+        """
+
+        unpackState(self, data)
 
     def applyOptionsOverride(self, fieldValues: dict) -> None:
         """Apply a partial override of this solver's own ``schema`` fields onto ``self.options``.
@@ -180,7 +371,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         result to actually apply them.
 
         ``fieldValues`` is keyed by *schema field name* (e.g. ``rungeKuttaStages``), while
-        ``self.options`` -- read throughout ``solveStep``/``solveIncrement`` -- is keyed by the
+        ``self.options`` -- read throughout a step -- is keyed by the
         option's ``.inp``-facing spelling (e.g. ``"runge-kutta-stages"``), which are not always the
         same (a hyphenated name cannot be a Python identifier). The schema's ``optionName`` metadata
         is the one place that mapping is recorded, so it is consulted here rather than duplicated.
@@ -197,9 +388,119 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             self.journal.message("Updating option {:}={:}".format(optionName, value), self.identification)
             self.options[optionName] = value
 
+    #: The status of the current increment, handed to the output managers (iterations, notes, ...),
+    #: or None.
+    incrementStatus = None
+
+    #: The state this solver carries from one increment to the next, by attribute name and type; see
+    #: :mod:`~edelweissfe.utils.checkpointedstate`. None for a solver that does not support restart:
+    #: writing a checkpoint then refuses.
+    checkpointedState: dict | None = None
+
     @abstractmethod
-    def solveStep(self, *args):
-        pass
+    def beginStep(self, step, model: FEModel, fieldOutputController, outputmanagers):
+        """Start a step: set up what the step needs, and -- on a cold start only, see
+        :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.isAtStepStart` -- apply
+        the step actions' step-start parts and reset the state carried between increments. A resumed
+        step continues from the state the checkpoint restored.
+
+        The step's increment loop (:meth:`~edelweissfe.steps.base.stepbase.StepBase.solve`) then
+        calls, per increment, :meth:`prepareIncrement`, :meth:`attemptIncrement` and
+        :meth:`acceptIncrement`, and finally :meth:`endStep`.
+
+        Parameters
+        ----------
+        step
+            The step to be solved.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controller.
+        outputmanagers
+            The output managers.
+        """
+
+    @abstractmethod
+    def prepareIncrement(self, step, model: FEModel, isRetry: bool):
+        """Bring the model up to date before an increment is proposed: the topology update, when due,
+        and whatever the solver derives from the mesh. Runs before the time stepper proposes the
+        increment, because it may change what is proposed (an explicit solver lowers its stable time
+        increment after a refinement).
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        isRetry
+            True if the increment is retried after a cutback. The model modifiers decide once per
+            accepted state: the retry starts from the state they already decided on.
+        """
+
+    @abstractmethod
+    def attemptIncrement(self, step, model: FEModel, timeStep: TimeStep):
+        """Solve the increment, without committing anything to the model.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        timeStep
+            The increment proposed by the time stepper.
+
+        Raises
+        ------
+        IncrementFailed
+            If the increment cannot be solved; it is retried smaller.
+        """
+
+    @abstractmethod
+    def acceptIncrement(self, step, model: FEModel, timeStep: TimeStep):
+        """Commit the solved increment to the model, and keep the state the solver carries to the next
+        increment. Called before the time stepper accepts it, so that the solver may still keep the
+        next increment from growing.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        timeStep
+            The solved increment.
+        """
+
+    def isOutputIncrement(self, timeStep: TimeStep) -> bool:
+        """Whether field outputs, output managers and restart checkpoints are written after this
+        increment. By default, after every increment.
+
+        Parameters
+        ----------
+        timeStep
+            The accepted increment.
+
+        Returns
+        -------
+        bool
+            True to write output.
+        """
+
+        return True
+
+    @abstractmethod
+    def endStep(self, step, model: FEModel):
+        """Finish a step, however it ended.
+
+        Parameters
+        ----------
+        step
+            The step that was solved.
+        model
+            The model tree.
+        """
 
     @abstractmethod
     def solveIncrement(self, *args):
@@ -245,7 +546,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     ) -> tuple[bool, dict]:
         """Check the convergence, individually for each field,
         similar to Abaqus based on the current total flux residual and the field correction
-        Is called by solveStep() to decide whether to continue iterating or stop.
+        Is called by solveIncrement() to decide whether to continue iterating or stop.
 
         Parameters
         ----------
@@ -509,18 +810,24 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 level=2,
             )
 
-    def applyStepActionsAtStepStart(self, model: FEModel, stepActions: dict[str, StepActionBase]):
-        """Called when all step actions should be appliet at the start a step.
+    def applyStepActionsAtStepStart(self, model: FEModel, step):
+        """Apply every step action's step-start part (initial conditions, material initialization,
+        prescribed fields, ...).
+
+        Only at the start of a step: a resumed step was checkpointed after the step's real start,
+        and the state these set has evolved since -- applying them again would overwrite it.
 
         Parameters
         ----------
         model
             The model tree.
-        stepActions
-            The dictionary of active step actions.
+        step
+            The step being started.
         """
 
-        for stepActionType in stepActions.values():
+        if not step.timeStepper.isAtStepStart():
+            return
+        for stepActionType in step.actions.values():
             for action in stepActionType.values():
                 action.applyAtStepStart(model)
 
@@ -534,9 +841,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         (e.g. the fast-path AABB of :meth:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getAABB`)
         sees the current configuration.
 
-        Every nonlinear solver must call this once per converged increment. It lives on the base
-        class so that solvers overriding :meth:`solveStep` (e.g. the parallel and arc-length
-        variants) stay consistent with the serial implementation instead of silently omitting it.
+        Every nonlinear solver must call this once per converged increment, in :meth:`acceptIncrement`.
 
         Parameters
         ----------
@@ -720,6 +1025,12 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         for name, mpc in model.multiPointConstraints.items():
             for record in mpc.getMultiPointConstraints(self.theDofManager):
                 if record[0] in claimed:
+                    if not mpc.mayYieldSlaveToEarlierClaim:
+                        raise TopologyError(
+                            f"multi-point constraint '{name}' must keep every slave it declares, but DOF "
+                            f"{record[0]} is already claimed by a constraint earlier in model order; such a "
+                            "constraint has to be registered before any constraint that may claim its slaves"
+                        )
                     dropped[name] = dropped.get(name, 0) + 1
                     continue
                 claimed.add(record[0])

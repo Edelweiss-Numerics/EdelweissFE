@@ -104,3 +104,18 @@ Outputmanagers
 .. pprint:: outputmanager:restart
     :caption: Options:
 
+
+Checkpoint file layout
+~~~~~~~~~~~~~~~~~~~~~~
+
+The layout of a checkpoint -- what is written, and how a resumed run reads it back -- lives in one
+module, used by this output manager for writing and by the driver for resuming (``*restart, readFrom=``).
+
+.. automodule:: edelweissfe.utils.checkpoint
+   :members:
+
+The state each component carries between increments is declared on the component, and packed and
+unpacked by one module:
+
+.. automodule:: edelweissfe.utils.checkpointedstate
+   :members: packState, unpackState

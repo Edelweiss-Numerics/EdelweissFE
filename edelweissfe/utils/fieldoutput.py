@@ -38,6 +38,7 @@ ATTENTION:
     the time History is automatically appended to the .csv file"
 """
 
+import os
 from dataclasses import dataclass
 from typing import Callable, Union
 
@@ -192,10 +193,12 @@ class _FieldOutputBase:
         self.f_export = fExport_x
         self.timeHistory = []
         self.export = export
+        #: The size of the export file the run has written so far. Before its first write, a
+        #: process truncates the file to it: a cold run starts the file afresh, and a resumed run
+        #: drops whatever the interrupted run wrote after its checkpoint.
+        self._exportedBytes = 0
+        self._exportFileTruncated = False
         self._reshape_to_dimensions = reshape_to_dimensions
-        #: Set transiently by ``initializeJob(resuming=True)``, and consumed (reset to ``False``)
-        #: by the next ``initializeStep`` -- see the docstring there.
-        self._resuming = False
 
     def getLastResult(
         self,
@@ -318,7 +321,14 @@ class _FieldOutputBase:
             self.journal.message("Reshaping fieldOutput result for export in .csv file", self.name)
             res = res.reshape((res.shape[0], -1))
 
-        with open(f"{self.export}.csv", "a") as f:
+        fileName = f"{self.export}.csv"
+        if not self._exportFileTruncated:
+            open(fileName, "a").close()
+            if os.path.getsize(fileName) > self._exportedBytes:
+                os.truncate(fileName, self._exportedBytes)
+            self._exportFileTruncated = True
+
+        with open(fileName, "a") as f:
             np.savetxt(
                 f,
                 np.hstack(
@@ -328,43 +338,60 @@ class _FieldOutputBase:
                     )
                 ).reshape((1, -1)),
             )
+            self._exportedBytes = f.tell()
 
-    def initializeJob(self, resuming: bool = False):
+    def initializeJob(self):
         """Initalize everything. Will also update the results
-        based on the proved start time and solution.
+        based on the proved start time and solution."""
+
+        self.updateResults(self.model)
+
+    def getRestartData(self) -> dict[str, np.ndarray]:
+        """The history this field output carries from one increment to the next -- the times, the
+        results (flattened, since refinement changes their shape), and how much of the export file
+        belongs to the run.
+
+        Returns
+        -------
+        dict[str, numpy.ndarray]
+            The state.
+        """
+
+        state = {"timeHistory": np.array(self.timeHistory, dtype=float), "exportedBytes": np.array(self._exportedBytes)}
+        if self.appendResults:
+            state["resultShapes"] = np.array([np.shape(r) for r in self.result], dtype=np.int64)
+            state["resultValues"] = np.concatenate([np.ravel(r) for r in self.result]) if self.result else np.empty(0)
+        elif self.result is not None:
+            state["result"] = np.asarray(self.result)
+        return state
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore the state :meth:`getRestartData` returned.
 
         Parameters
         ----------
-        resuming
-            Whether this job is resuming from a ``*restart, readFrom=...`` checkpoint. When
-            ``True``, an existing ``{export}.csv`` (written by the interrupted run) is kept and
-            appended to instead of being truncated -- otherwise every restart would silently wipe
-            all history written before the checkpoint being resumed from.
+        data
+            The state.
         """
 
-        self.updateResults(self.model)
-        self._resuming = resuming
-
-        if self.export:
-            f = open(f"{self.export}.csv", "a" if resuming else "w")
-            f.close()
+        self.timeHistory = [float(t) for t in data["timeHistory"]]
+        self._exportedBytes = int(data["exportedBytes"])
+        if self.appendResults:
+            self.result, offset = [], 0
+            for shape in data["resultShapes"]:
+                size = int(np.prod(shape))
+                self.result.append(np.array(data["resultValues"][offset : offset + size]).reshape(shape))
+                offset += size
+        else:
+            self.result = np.array(data["result"]) if "result" in data else None
 
     def initializeStep(self, step):
         """Write the current (just-updated) result as the first row of this step.
 
-        Skipped once, on the step a restart resumes into: the restored state
-        ``initializeJob(resuming=True)`` just sampled is exactly the state the interrupted run
-        already exported as the last row of ``{export}.csv`` -- a checkpoint is always written
-        right after the same completed-increment hook that exports this field output (see
-        ``outputmanagers/restart.py``), so writing it again here would duplicate that row a second
-        time. One copy of it is unavoidable regardless (a cold start has the same duplicate at
-        t=0, from the zero increment every explicit solver run starts with landing on an
-        output-frequency boundary and re-exporting a result that has not advanced) -- skipping
-        here just keeps a resume's seam consistent with that pre-existing cold-start artifact
-        instead of tripling the row.
+        Only at the start of a step: a step resumed from a checkpoint already exported this state,
+        as the last row before the checkpoint was written.
         """
-        if self._resuming:
-            self._resuming = False
+        if not step.timeStepper.isAtStepStart():
             return
 
         if self.export:
@@ -944,9 +971,9 @@ class FieldOutputController:
             quadraturePoints,
         )
 
-    def initializeJob(self, resuming: bool = False):
+    def initializeJob(self):
         for fieldOutput in self.fieldOutputs.values():
-            fieldOutput.initializeJob(resuming=resuming)
+            fieldOutput.initializeJob()
 
     def finalizeIncrement(
         self,

@@ -30,6 +30,7 @@
 import numpy as np
 
 cimport cython
+from libc.stdint cimport int64_t
 
 from collections.abc import Iterable
 
@@ -85,7 +86,7 @@ def applyDirichletToStiffness(K: csr_matrix, dirichlets: Iterable, rhs=None) -> 
     for d in dirichlets:
         all_indices.append(d.constrainedDofIndices)
 
-    cdef long[::1] dirichletIndices = np.concatenate(all_indices).astype(np.int64)
+    cdef int64_t[::1] dirichletIndices = np.concatenate(all_indices).astype(np.int64)
 
     cdef int i, j, k, row, col
     cdef int [::1] indices = K.indices
