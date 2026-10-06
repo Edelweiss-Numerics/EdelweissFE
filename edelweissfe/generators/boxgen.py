@@ -145,7 +145,7 @@ class Generator(GeneratorBase):
             nNodesY = 2 * nY + 1
             nNodesZ = 2 * nZ + 1
         else:
-            return
+            raise Exception(f"Generator called with unsupported element type {configuration.elType}.")
 
         # coordinates of layers
         xLayers = np.linspace(x0, x0 + lX, nNodesX)

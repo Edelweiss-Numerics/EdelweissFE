@@ -416,7 +416,7 @@ class Generator(GeneratorBase):
         elif testEl.nNodes == 20:
             order = 2
         else:
-            return
+            raise Exception(f"Generator called with unsupported element type {elTypeName}.")
 
         # --- in-plane O-grid mesh (core block + radial rings) ---------------------
         nodesLin, quadsLin, nBoundary = _generateOGridMesh(radius, nCore, nRing, coreFraction)
@@ -458,12 +458,14 @@ class Generator(GeneratorBase):
         isCenterLineV2D = np.isclose(nodes2D[:, 0], 0.0, atol=tol)
         isCenter2D = isCenterLineU2D & isCenterLineV2D
 
-        currentNodeLabel = 1
-        if model.nodes:
-            currentNodeLabel += max(model.nodes.keys())
-        currentElementLabel = 1
-        if model.elements:
-            currentElementLabel += max(model.elements.keys())
+        # labels come from the model's monotonic allocator, not from max(model.nodes)/max(model.elements);
+        # quadratic meshes carry only corner nodes on the intermediate (odd) layers
+        if order == 1:
+            nNodes = (nY + 1) * len(nodes2D)
+        else:
+            nNodes = (nY + 1) * len(nodes2D) + nY * len(nodesLin)
+        currentNodeLabel = model.topology.reserveNodeNumbers(nNodes).start
+        currentElementLabel = model.topology.reserveElementNumbers(nY * len(quads2D)).start
 
         elements = []
         elementsTop = []
@@ -513,7 +515,7 @@ class Generator(GeneratorBase):
                 for U, V in nodes2D:
                     node = Node(currentNodeLabel, makeCoordinates(U, V, yLayers[iy]))
                     layer.append(node)
-                    model.nodes[currentNodeLabel] = node
+                    model.createNode(node)
                     currentNodeLabel += 1
                 layerNodes.append(layer)
                 if iy == 0:
@@ -537,7 +539,7 @@ class Generator(GeneratorBase):
                     newEl.setNodes(nodeList)
 
                     elements.append(newEl)
-                    model.elements[currentElementLabel] = newEl
+                    model.createElement(newEl)
 
                     if iy == 0:
                         elementsBottom.append(newEl)
@@ -561,7 +563,7 @@ class Generator(GeneratorBase):
                 for U, V in coordsUV:
                     node = Node(currentNodeLabel, makeCoordinates(U, V, yLayers[t]))
                     layer.append(node)
-                    model.nodes[currentNodeLabel] = node
+                    model.createNode(node)
                     currentNodeLabel += 1
                 layerNodes.append(layer)
                 if fullLayer:
@@ -596,7 +598,7 @@ class Generator(GeneratorBase):
                     newEl.setNodes(nodeList)
 
                     elements.append(newEl)
-                    model.elements[currentElementLabel] = newEl
+                    model.createElement(newEl)
 
                     if iy == 0:
                         elementsBottom.append(newEl)
