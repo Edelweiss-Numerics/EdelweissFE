@@ -43,10 +43,7 @@ from edelweissfe.constraints.nodetodeformablesurfacepenalty import (
 from edelweissfe.constraints.nodetodeformablesurfacepenalty import (
     NodeToDeformableSurfacePenaltySchema,
 )
-from edelweissfe.elements.contactsurfaceelement import (
-    Tria3ContactFacet,
-    facetNormalAndMeasure,
-)
+from edelweissfe.elements.contactsurfaceelement import Tria3ContactFacet
 from edelweissfe.elements.displacementelement.element import DisplacementElement
 from edelweissfe.generators.surfaceelementgenerator import (
     buildContactFacets,
@@ -56,6 +53,7 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
+from edelweissfe.utils.facetcontactgeometry import facetNormalAndMeasure
 from edelweissfe.utils.parentfacegeometry import (
     facetQuadratureRule,
     parentFaceShapeFunctions,
@@ -113,8 +111,8 @@ class TestContactFacetNodalWeights(unittest.TestCase):
         for node in nodes:
             model.nodes[node.label] = node
 
-        with model.topologyChanges():
-            (elNumber,) = model.reserveElementNumbers(1)
+        with model.topology.changes():
+            (elNumber,) = model.topology.reserveElementNumbers(1)
             element = DisplacementElement("C3D20", elNumber)
             element.setNodes(nodes)
             model.createElement(element)
@@ -136,7 +134,7 @@ class TestContactFacetNodalWeights(unittest.TestCase):
         """Generate the Ymin face's facets under ``nodalWeights`` and return its (corner shares,
         midside shares) as arrays, plus the facet element set name."""
 
-        with model.topologyChanges():
+        with model.topology.changes():
             facetsSetName, _ = buildContactFacets(model, "theSurface", "pfx", "midside", nodalWeights, self.journal)
         shares = self._sharesPerNode(model, facetsSetName)
         (sourceElement,) = model.surfaces["theSurface"][1]
@@ -191,7 +189,7 @@ class TestContactFacetNodalWeights(unittest.TestCase):
         transferred force is redistributed, never scaled)."""
 
         model = self._modelWithOneHexa20()
-        with model.topologyChanges():
+        with model.topology.changes():
             facetsSetName, _ = buildContactFacets(
                 model, "theSurface", "pfx", "midside", "serendipityOptimal", self.journal
             )
@@ -207,7 +205,7 @@ class TestContactFacetNodalWeights(unittest.TestCase):
 
     def test_facetConsistent_installs_no_transform(self):
         model = self._modelWithOneHexa20()
-        with model.topologyChanges():
+        with model.topology.changes():
             facetsSetName, _ = buildContactFacets(
                 model, "theSurface", "pfx", "midside", "facetConsistent", self.journal
             )
@@ -219,7 +217,7 @@ class TestContactFacetNodalWeights(unittest.TestCase):
         which would silently zero every weight of a quadratic face."""
 
         model = self._modelWithOneHexa20()
-        with self.assertRaises(ValueError) as ctx, model.topologyChanges():
+        with self.assertRaises(ValueError) as ctx, model.topology.changes():
             buildContactFacets(model, "theSurface", "pfx", "corner", "serendipityOptimal", self.journal)
         self.assertIn("requires triangulation='midside'", str(ctx.exception))
 
@@ -240,8 +238,8 @@ class TestContactFacetNodalWeights(unittest.TestCase):
         for node in nodes:
             model.nodes[node.label] = node
 
-        with model.topologyChanges():
-            (elNumber,) = model.reserveElementNumbers(1)
+        with model.topology.changes():
+            (elNumber,) = model.topology.reserveElementNumbers(1)
             element = DisplacementElement("CPE8", elNumber)
             element.setNodes(nodes)
             model.createElement(element)
@@ -260,13 +258,13 @@ class TestContactFacetNodalWeights(unittest.TestCase):
         """
 
         model = self._modelWithOneQuad8()
-        with self.assertRaises(ValueError) as ctx, model.topologyChanges():
+        with self.assertRaises(ValueError) as ctx, model.topology.changes():
             buildContactFacets(model, "theSurface", "pfx", "midside", "serendipityOptimal", self.journal)
         self.assertIn("not available for 2D higher-order element edges", str(ctx.exception))
 
     def test_unknown_nodalWeights_is_rejected(self):
         model = self._modelWithOneHexa20()
-        with self.assertRaises(ValueError) as ctx, model.topologyChanges():
+        with self.assertRaises(ValueError) as ctx, model.topology.changes():
             buildContactFacets(model, "theSurface", "pfx", "midside", "nonsense", self.journal)
         self.assertIn("nodalWeights 'nonsense' is not supported", str(ctx.exception))
 
@@ -276,7 +274,7 @@ class TestContactFacetNodalWeights(unittest.TestCase):
         so no force reaches the corner node."""
 
         model = self._modelWithOneHexa20()
-        with model.topologyChanges():
+        with model.topology.changes():
             facetsSetName, _ = buildContactFacets(
                 model, "theSurface", "pfx", "midside", "serendipityOptimal", self.journal
             )
@@ -317,7 +315,7 @@ class TestContactFacetNodalWeights(unittest.TestCase):
         formulation; finite sliding must refuse it rather than half-support it."""
 
         model = self._modelWithOneHexa20()
-        with model.topologyChanges():
+        with model.topology.changes():
             facetsSetName, _ = buildContactFacets(
                 model, "theSurface", "pfx", "midside", "serendipityOptimal", self.journal
             )
@@ -370,7 +368,7 @@ class TestParentFaceIntegration(unittest.TestCase):
 
         for nPoints in (3, 6):
             model = TestContactFacetNodalWeights._modelWithOneHexa20(self)
-            with model.topologyChanges():
+            with model.topology.changes():
                 facetsSetName, _ = buildContactFacets(
                     model, "theSurface", "pfx", "midside", "facetConsistent", self.journal
                 )
@@ -390,7 +388,7 @@ class TestParentFaceIntegration(unittest.TestCase):
         basis and reproduces the same loads."""
 
         model = TestContactFacetNodalWeights._modelWithOneHexa20(self)
-        with model.topologyChanges():
+        with model.topology.changes():
             facetsSetName, _ = buildContactFacets(model, "theSurface", "pfx", "corner", "facetConsistent", self.journal)
         loads = self._consistentLoadsOfUnitPressure(model, facetsSetName, 3)
         sourceNodes = model.surfaces["theSurface"][1][0].nodes
@@ -404,7 +402,7 @@ class TestParentFaceIntegration(unittest.TestCase):
         there is separation."""
 
         model = TestContactFacetNodalWeights._modelWithOneHexa20(self)
-        with model.topologyChanges():
+        with model.topology.changes():
             facetsSetName, _ = buildContactFacets(
                 model, "theSurface", "pfx", "midside", "facetConsistent", self.journal
             )

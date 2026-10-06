@@ -160,6 +160,9 @@ class StepAction(StepActionBase):
         The options to apply, coerced and validated against ``type(target).schema``.
     """
 
+    #: Carries nothing from one increment to the next: options are configuration.
+    checkpointedState = {}
+
     def __init__(self, name: str, target, overrides: dict):
         self.name = name
         self._target = target

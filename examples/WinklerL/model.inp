@@ -1,0 +1,65 @@
+**=================================================================================================
+** Winkler L-shaped panel -- shared model, included by the three WinklerL_*.inp variants.
+**
+** Units: mm, N, MPa (N/mm^2).
+**
+** Geometry (x right, y up, z through the thickness of 50 mm):
+**   concrete L-panel     x 0..500, y 100..500, without the cut-out x > 250, y < 250
+**   steel support block  x 0..250, y 0..100, under the left leg
+**   steel load block     x 400..500, y 250..350, at the underside of the right arm
+** Mesh: mesh.inp holds 20-node hexahedra (GC3D20R concrete: displacement + nonlocal damage; C3D20R steel:
+** displacement only), generated from the linear mesh_hex8.inp by hex8_to_hex20.py -- h-adaptivity
+** refines HEX20-family elements only.
+**
+** Boundary conditions (the same in every variant, see the *step in each file):
+**   setBottom  bottom face of the support block, clamped (u_x = u_y = u_z = 0)
+**   setBack    the complete back face z = 0, supported in z (u_z = 0, a symmetry condition): it holds
+**              the plate against out-of-plane bending
+**   setLoad    the load line in the load block, displaced upwards (u_y) -- the loading
+**
+** Concrete: gradient-enhanced concrete damage plasticity (Marmot GCDP, a private Marmot module),
+** Winkler's E, nu and tensile strength ftu = 2.70 MPa.
+**=================================================================================================
+*include, input=mesh.inp
+
+*material, name=GCDP, id=GCDP
+** Parameter order and names as read by Marmot's GCDP (19 values):
+**   E, nu            elasticity
+**   fcy, fcu         uniaxial compressive yield and ultimate strength
+**   fbu              biaxial compressive ultimate strength
+**   ftu              uniaxial tensile strength
+**   Df, Ah..Dh       plasticity parameters (Df dilatancy, Ah..Dh hardening and ductility)
+**   As, epsF         damage (softening) parameters
+**   lDamage          nonlocal radius of the damage field [mm]
+**   m                nonlocal weighting parameter
+**   maxDmg           damage cap -- damage never exceeds it
+**   drvtvMthd        derivative method of the return mapping (0 automatic, 1 central differences)
+**   dTThrshHold      below this time increment the damaged elastic stiffness is used (0: never)
+**   viscosity        Duvaut-Lions viscoplasticity (0: rate independent)
+**E         nu          fcy         fcu         fbu         ftu         Df          Ah
+25850.0,    0.18,       10.33,      31.0,       35.96,      2.70,       0.85,       0.08,
+**Bh        Ch          Dh          As          epsF        lDamage     m           maxDmg
+0.003,      2.0,        0.000001,   15,         0.0017,     2,          1.0,        0.99,
+**drvtvMthd dTThrshHold viscosity
+0,          0,          0
+
+*material, name=linearElastic, id=steelLoad
+** E, nu
+37000.0, 0.3
+*material, name=linearElastic, id=steelBottom
+44400.0, 0.3
+
+*section, name=secConc, material=GCDP, type=solid
+secConc
+*section, name=secSteelLoad, material=steelLoad, type=solid
+secSteelLoad
+*section, name=secSteelBottom, material=steelBottom, type=solid
+secSteelBottom
+
+*fieldOutput
+>>perNode, elSet=all, name=displacement, field=displacement, result=U
+>>perNode, elSet=secConc, name=nonlocalDamage, field=nonlocal damage, result=U
+** per element: the largest value over its 8 quadrature points
+>>perElement, elSet=secConc, name=damage, result=omega, quadraturePoint=0:8, f(x)='np.max(x,axis=1)'
+** largest plastic hardening variable of each element -- what the h-adaptivity marker of variant 3 thresholds
+>>perElement, elSet=secConc, name=alphaP, result=alphaP, quadraturePoint=0:8, f(x)='np.max(x,axis=1)'

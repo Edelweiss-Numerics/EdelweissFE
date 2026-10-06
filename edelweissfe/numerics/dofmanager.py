@@ -30,6 +30,7 @@
 This module contains important classes for describing the global equation system by means of a sparse system.
 """
 
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from itertools import chain
 
@@ -376,6 +377,39 @@ class DofManager:
 
         return nAccumulatedNodalFluxesFieldwise
 
+    def _accumulateNodalFluxesFieldwise(self, entities: list) -> dict:
+        """Count the nodal fluxes Σ_entities Σ_nodes ( nDof (field) ) for each field.
+
+        A node shared by many entities contributes the same count to each of them, so the nodes are
+        first counted, and each distinct node's fields are then looked up only once, weighted by
+        that count. The result is an integer sum and hence identical to visiting every node of every
+        entity.
+
+        Parameters
+        ----------
+        entities
+           The list of entities (elements or constraints), whose nodes are considered.
+
+        Returns
+        -------
+        dict
+            The number of accumulated fluxes per field, for every field in
+            :data:`~edelweissfe.config.phenomena.phenomena`.
+        """
+
+        nAccumulatedFluxesFieldwise = dict.fromkeys(phenomena.keys(), 0)
+
+        nodeMultiplicity = Counter(chain.from_iterable(e.nodes for e in entities))
+
+        idcsOfFieldVariables = self.idcsOfFieldVariablesInDofVector
+        for node, multiplicity in nodeMultiplicity.items():
+            for field, fv in node.fields.items():
+                indices = idcsOfFieldVariables.get(fv)
+                if indices is not None:
+                    nAccumulatedFluxesFieldwise[field] += multiplicity * len(indices)
+
+        return nAccumulatedFluxesFieldwise
+
     def _gatherElementsInformation(self, entities: list) -> tuple[int, int, int, int]:
         """Generates some auxiliary information,
         which may be required by some modules of EdelweissFE.
@@ -398,19 +432,12 @@ class DofManager:
         accumulatedEntityVIJSize = 0
         largestNumberOfAnyEntitityDof = 0
 
-        nAccumulatedFluxesFieldwise = {k: 0 for k in phenomena.keys()}
-
         for e in entities:
             accumulatedEntityNDof += e.nDof
             accumulatedEntityVIJSize += e.nDof**2
-
-            for node in e.nodes:
-                for field, fv in node.fields.items():
-                    indices = self.idcsOfFieldVariablesInDofVector.get(fv)
-                    if indices is not None:
-                        nAccumulatedFluxesFieldwise[field] += len(indices)
-
             largestNumberOfAnyEntitityDof = max(e.nDof, largestNumberOfAnyEntitityDof)
+
+        nAccumulatedFluxesFieldwise = self._accumulateNodalFluxesFieldwise(entities)
 
         return (
             accumulatedEntityNDof,
@@ -442,20 +469,13 @@ class DofManager:
         accumulatedEntityVIJSize = 0
         largestNumberOfAnyEntitityDof = 0
 
-        nAccumulatedFluxesFieldwise = dict.fromkeys(phenomena.keys(), 0)
-
         for e in entities:
             accumulatedEntityNDof += e.nDof
             # Use the constraint-declared VIJ size (may be sparse, i.e. < nDof**2).
             accumulatedEntityVIJSize += e.getVIJContributionSize()
-
-            for node in e.nodes:
-                for field, fv in node.fields.items():
-                    indices = self.idcsOfFieldVariablesInDofVector.get(fv)
-                    if indices is not None:
-                        nAccumulatedFluxesFieldwise[field] += len(indices)
-
             largestNumberOfAnyEntitityDof = max(e.nDof, largestNumberOfAnyEntitityDof)
+
+        nAccumulatedFluxesFieldwise = self._accumulateNodalFluxesFieldwise(entities)
 
         return (
             accumulatedEntityNDof,
@@ -610,10 +630,12 @@ class DofManager:
         for field in self.idcsOfNodeFieldsInDofVector:
             nodeSetFieldsInDofVector[field] = dict()
             for nSet in nodeSets:
-                indices_gen = chain.from_iterable(
-                    field_var_map[node.fields[field]] for node in nSet if field in node.fields
+                # Concatenate the per-node index arrays as whole arrays: iterating them element by
+                # element, as np.fromiter over a chain would, is a Python-level loop over every DOF.
+                indicesPerNode = [field_var_map[node.fields[field]] for node in nSet if field in node.fields]
+                nodeSetFieldsInDofVector[field][nSet] = (
+                    np.concatenate(indicesPerNode).astype(int, copy=False) if indicesPerNode else np.empty(0, dtype=int)
                 )
-                nodeSetFieldsInDofVector[field][nSet] = np.fromiter(indices_gen, dtype=int)
 
         return nodeSetFieldsInDofVector
 

@@ -36,6 +36,7 @@ import numpy as np
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.stepactions.base.amplitude import (
     amplitudeFromExpression,
@@ -105,7 +106,7 @@ class PenaltyIndirectControlSchema:
     f_t: str | None = schemaField(description="Amplitude function.", dtype=str, default=None, optionName="f(t)")
 
 
-class Constraint(ConstraintBase):
+class Constraint(ConstraintBase, MeshDependent):
     """A penalty based constraint used for indirect (displacement) control.
 
     Parameters
@@ -125,6 +126,9 @@ class Constraint(ConstraintBase):
 
     #: Option schema for this constraint, per OptionSchemaProvider.
     schema = PenaltyIndirectControlSchema
+
+    #: Carries nothing from one increment to the next.
+    checkpointedState = {}
 
     def __init__(
         self,
@@ -163,6 +167,8 @@ class Constraint(ConstraintBase):
 
         self.constrainedValue = 0.0
 
+        self._lastSeenTopologyVersion = model.topology.version
+        model.topology.registerMeshDependent(self)
         self._rebuildDerivedState()
 
     @classmethod
@@ -224,17 +230,15 @@ class Constraint(ConstraintBase):
     def nDof(self) -> int:
         return self._nDof
 
-    def updateConnectivity(self, model) -> bool:
-        """Called once per increment, before the equation system is (re)built. Recomputes the
-        node lists, DOF-block boundaries and unit residual (see :meth:`_rebuildDerivedState`) if
-        either watched node set was mutated in-place since the last check, and reports the change
-        so the caller rebuilds the equation system even on an increment where nothing else did."""
-        loadChanged = self._checkSetChanged(self.loadNSet)
-        constrainedChanged = self._checkSetChanged(self.constrainedNSet)
-        if loadChanged or constrainedChanged:
-            self._rebuildDerivedState()
-            return True
-        return False
+    def refresh(self, model: FEModel, change) -> bool:
+        """Recompute the node lists, DOF-block boundaries and unit residual (see
+        :meth:`_rebuildDerivedState`) if a topology change touched either watched node set; see
+        :class:`~edelweissfe.models.meshdependent.MeshDependent`."""
+
+        if not (change.touchesNodeSet(self.loadNSet.name) or change.touchesNodeSet(self.constrainedNSet.name)):
+            return False
+        self._rebuildDerivedState()
+        return True
 
     def applyConstraint(self, U_np, dU, PExt, K, timeStep: TimeStep):
         if not self.active:

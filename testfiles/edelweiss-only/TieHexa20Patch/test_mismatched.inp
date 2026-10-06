@@ -36,7 +36,7 @@ y0      =0
 z0      =1.02
 lX      =1
 lY      =1
-lZ      =1
+lZ      =0.98
 elProvider =edelweiss
 elType  =C3D20
 

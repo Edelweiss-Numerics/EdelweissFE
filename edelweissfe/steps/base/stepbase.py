@@ -35,7 +35,13 @@ from dataclasses import dataclass
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.base.timestepperbase import TimeStepperBase
-from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.exceptions import (
+    ConditionalStop,
+    IncrementFailed,
+    ReachedMaxIncrements,
+    ReachedMinIncrementSize,
+    StepFailed,
+)
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
@@ -149,16 +155,50 @@ class StepBase(ABC):
             The time stepper controlling the incrementation of this step.
         """
 
-    def solve(self):
-        """Let this step be solved by its solver, including the surrounding
-        bookkeeping of field outputs and output managers."""
+    def solve(self, resumeFrom=None):
+        """Solve this step, increment by increment.
+
+        The increment loop, the same for every solver:
+
+        .. code-block:: text
+
+            begin the step
+            while the step is not finished:
+                prepare the increment     topology update when due
+                propose an increment      time stepper
+                attempt it                solver; if it fails: reject it, retry smaller
+                accept it                 solver, then time stepper
+                write output              field outputs, output managers, restart checkpoint last
+            end the step
+
+        A restart checkpoint is written after an accepted increment, as the last output, so it holds
+        exactly the state the next increment starts from -- and a resumed step simply continues
+        this loop. It begins like any step, and then takes over the checkpointed state, in this one
+        place.
+
+        Parameters
+        ----------
+        resumeFrom
+            The :class:`~edelweissfe.utils.checkpoint.ResumeCheckpoint` this step continues from, or
+            None.
+        """
 
         model = self.model
+        solver = self.solver
+        timeStepper = self.timeStepper
         fieldOutputController = self.fieldOutputController
         journal = self.journal
         outputManagers = self.outputManagers
+        # Restart checkpoints last, so that they hold the bookkeeping of every other output.
+        outputManagers = [m for m in outputManagers if not m.writesRestartCheckpoints] + [
+            m for m in outputManagers if m.writesRestartCheckpoints
+        ]
+
+        if resumeFrom is not None:
+            resumeFrom.restoreTimeStepper(self)
 
         try:
+            # Step-start model updates. A resumed step has none: resuming past one is refused.
             for modelUpdate in self.actions["modelupdate"].values():
                 model = modelUpdate.updateModel(model, fieldOutputController, journal)
 
@@ -166,70 +206,49 @@ class StepBase(ABC):
             for manager in outputManagers:
                 manager.initializeStep(self)
 
-            self.solver.solveStep(self, model, fieldOutputController, outputManagers)
+            solver.beginStep(self, model, fieldOutputController, outputManagers)
+            if resumeFrom is not None:
+                resumeFrom.restoreStep(self, model.outputManagers)
+                # Closed here, before the first increment: see ResumeCheckpoint.close.
+                resumeFrom.close()
+            try:
+                isRetry = False
+                while not timeStepper.isFinished():
+                    solver.prepareIncrement(self, model, isRetry)
+                    timeStep = timeStepper.proposeTimeStep()
+
+                    try:
+                        solver.attemptIncrement(self, model, timeStep)
+                    except IncrementFailed as e:
+                        journal.message(str(e), solver.identification, 1)
+                        timeStepper.rejectTimeStep(e.cutbackFactor)
+                        for manager in outputManagers:
+                            manager.finalizeFailedIncrement(statusInfoDict=solver.incrementStatus)
+                        isRetry = True
+                        continue
+
+                    solver.acceptIncrement(self, model, timeStep)
+                    timeStepper.acceptTimeStep(timeStep)
+                    isRetry = False
+
+                    if solver.isOutputIncrement(timeStep):
+                        fieldOutputController.finalizeIncrement()
+                        for manager in outputManagers:
+                            manager.finalizeIncrement(statusInfoDict=solver.incrementStatus)
+
+            except ReachedMaxIncrements:
+                pass
+            except ReachedMinIncrementSize:
+                journal.errorMessage("Incrementation failed", solver.identification)
+                raise StepFailed()
+            except ConditionalStop:
+                journal.message("Conditional Stop", solver.identification)
+            finally:
+                solver.endStep(self, model)
+
+            solver.applyStepActionsAtStepEnd(model, self.actions)
 
         finally:
             fieldOutputController.finalizeStep()
             for manager in outputManagers:
                 manager.finalizeStep()
-
-    def getTimeStep(self, enforcedTimeIncrement: float = None) -> TimeStep:
-        """Generate the sequence of time steps for this step.
-
-        Parameters
-        ----------
-        enforcedTimeIncrement
-            If given, enforce this time increment size (if supported by the time stepper).
-
-        Returns
-        -------
-        TimeStep
-            The generated time steps (generator).
-        """
-
-        return self.timeStepper.generateTimeStep(enforcedTimeIncrement=enforcedTimeIncrement)
-
-    def discardAndChangeIncrement(self, cutbackFactor: float):
-        """Discard the current increment and modify the increment size by a given scale factor.
-
-        Parameters
-        ----------
-        cutbackFactor
-            The factor for scaling based on the discarded increment.
-        """
-
-        return self.timeStepper.discardAndChangeIncrement(cutbackFactor)
-
-    def enforceTimeIncrement(self, timeIncrement: float):
-        """Revise the enforced time increment for the remaining increments of this step. See
-        :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.enforceTimeIncrement`.
-
-        Parameters
-        ----------
-        timeIncrement
-            The new enforced time increment.
-        """
-
-        return self.timeStepper.enforceTimeIncrement(timeIncrement)
-
-    def changeIncrementSize(self, scaleFactor: float):
-        """Modify the size of the next increment by a given scale factor.
-
-        Parameters
-        ----------
-        scaleFactor
-            The factor for scaling based on the current increment.
-        """
-
-        return self.timeStepper.changeIncrementSize(scaleFactor)
-
-    def preventIncrementIncrease(self):
-        """Prevent an automatic increase of the increment size for the next increment."""
-
-        return self.timeStepper.preventIncrementIncrease()
-
-    def restoredTimeIncrement(self) -> float | None:
-        """The increment size already completed if this step resumed from a restart checkpoint,
-        or None if it is starting cold."""
-
-        return self.timeStepper.restoredTimeIncrement()

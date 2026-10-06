@@ -61,7 +61,7 @@ Built-in coverage
 The ``_BUILTINS`` table below covers these categories:
 
 ``outputmanager`` (10), ``section`` (3), ``constraint`` (12), ``stepaction`` (13),
-``generator`` (11), ``analyticalfield`` (3), ``solver`` (7), ``step`` (2), ``modelmodifier`` (1),
+``generator`` (11), ``analyticalfield`` (3), ``solver`` (7), ``step`` (2), ``modelmodifier`` (2),
 ``statetransferstrategy`` (3), ``element`` (42), ``material`` (7), ``linsolver`` (10).
 
 ``keyword`` is the single source the ``.inp`` parser consults for every top-level keyword
@@ -195,6 +195,7 @@ _addBuiltins(
         "penaltyindirectcontrol",
         "rigidbody",
         "surfacetodeformablesurfacepenalty",
+        "surfacetodiscreterigidbodypenalty",
         "tie",
     ],
     "edelweissfe.constraints",
@@ -250,16 +251,22 @@ _addBuiltins(
 # solver / step / modelmodifier / statetransferstrategy are not "one module per name" -- this table
 # is their only copy. config/solvers.py's Sphinx ``.. pprint::`` directive reads this registry
 # directly rather than keeping its own copy.
-for _solverName, _moduleName in {
-    "NIST": "nonlinearimplicitstatic",
-    "NEST": "nonlinearexplicitstatic",
-    "NED": "nonlinearexplicitdynamic",
-    "NISTParallel": "nonlinearimplicitstaticparallel",
-    "NESTParallel": "nonlinearexplicitstaticparallel",
-    "NEDParallel": "nonlinearexplicitdynamicparallel",
-    "NISTPArcLength": "nonlinearimplicitstaticparallelarclength",
+#
+# The value is ``<module>:<class>`` rather than a bare module name: the deck-facing solver name and
+# the class name coincide for most solvers, but not for all (``NID`` is
+# ``NonlinearImplicitDynamic``), so the class is spelled out rather than assumed to equal the key.
+for _solverName, _target in {
+    "NIST": "nonlinearimplicitstatic:NIST",
+    "NEST": "nonlinearexplicitstatic:NEST",
+    "NED": "nonlinearexplicitdynamic:NED",
+    "NID": "nonlinearimplicitdynamic:NonlinearImplicitDynamic",
+    "NIDParallel": "nonlinearimplicitdynamicparallel:NIDParallel",
+    "NISTParallel": "nonlinearimplicitstaticparallel:NISTParallel",
+    "NESTParallel": "nonlinearexplicitstaticparallel:NESTParallel",
+    "NEDParallel": "nonlinearexplicitdynamicparallel:NEDParallel",
+    "NISTPArcLength": "nonlinearimplicitstaticparallelarclength:NISTPArcLength",
 }.items():
-    _BUILTINS[("solver", _solverName.casefold())] = f"edelweissfe.solvers.{_moduleName}:{_solverName}"
+    _BUILTINS[("solver", _solverName.casefold())] = f"edelweissfe.solvers.{_target}"
 
 _BUILTINS[("step", "adaptive")] = "edelweissfe.steps.adaptivestep:AdaptiveStep"
 _BUILTINS[("step", "adaptiveforexplicitsimulations")] = (
@@ -267,6 +274,7 @@ _BUILTINS[("step", "adaptiveforexplicitsimulations")] = (
 )
 
 _BUILTINS[("modelmodifier", "hadaptivity")] = "edelweissfe.modelmodifiers.adaptivity.hadaptivity:ModelModifier"
+_BUILTINS[("modelmodifier", "surfacesnap")] = "edelweissfe.modelmodifiers.geometry.surfacesnap:ModelModifier"
 
 _BUILTINS[("statetransferstrategy", "nearestqp")] = "edelweissfe.adaptivity.statetransfer:NearestQuadraturePointCopy"
 _BUILTINS[("statetransferstrategy", "projection")] = "edelweissfe.adaptivity.statetransfer:PolynomialProjection"

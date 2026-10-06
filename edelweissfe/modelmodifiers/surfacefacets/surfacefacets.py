@@ -75,10 +75,13 @@ class ModelModifier(ModelModifierBase):
     #: Purely reactive: plan() returns None unless another modifier already changed the mesh.
     initiatesTopologyChanges = False
 
+    #: Carries nothing from one decision to the next.
+    checkpointedState = {}
+
     def __init__(self, name: str, model: FEModel, journal: Journal, **kwargs):
         super().__init__(name, model, journal, **kwargs)
 
-    def plan(self, model: FEModel, change, step, timeStep: float) -> "FacetPlan | None":
+    def plan(self, model: FEModel, change, step) -> "FacetPlan | None":
         """Retile every recorded recipe whose surface this change touched.
 
         On the first round of an update (``change is None``) there is nothing to react to yet: the

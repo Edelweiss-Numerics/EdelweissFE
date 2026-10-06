@@ -1,148 +1,49 @@
 name: Run tests
 
-on: [push, pull_request]
+on:
+  # Pushes to the long-lived branches only: a branch with an open pull request is tested by the
+  # pull_request event, and testing every push as well would run each workflow twice.
+  push:
+    branches: [master, next_v26.11]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch or pull request supersedes the run in progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Fixed thread count, so that a result does not depend on the runner's core count.
+env:
+  OMP_NUM_THREADS: 2
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - name: Setup Mambaforge
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          use-mamba: true
-          miniforge-variant: Miniforge3
-          miniforge-version: latest
-          activate-environment: anaconda-client-env
+      # Installs exactly what conda-lock.yml pins (conda packages, no solving).
+      - uses: ./.github/actions/setup-locked-env
 
-      - name: Install conda packages
-        shell: bash -l {0}
-        run: |
-          mamba install --file conda_requirements.txt
-
-      - name: Install pip packages
-        shell: bash -l {0}
-        run: |
-          pip install -r pip_requirements.txt
-
-      - name: Install Eigen
-        shell: bash -l {0}
-        run: |
-          cd ..
-          git clone --branch 3.4.0 https://gitlab.com/libeigen/eigen.git
-          cd eigen
-          mkdir build
-          cd build
-          cmake -DBUILD_TESTING=OFF  -DINCLUDE_INSTALL_DIR=$CONDA_PREFIX/include -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-          make install
-          cd ../..
-
-      - name: Install Autodiff
-        shell: bash -l {0}
-        run: |
-          git clone --branch v1.1.0 https://github.com/autodiff/autodiff.git
-          cd autodiff
-          mkdir build
-          cd build
-          cmake -DAUTODIFF_BUILD_TESTS=OFF \
-            -DAUTODIFF_BUILD_PYTHON=OFF \
-            -DAUTODIFF_BUILD_EXAMPLES=OFF \
-            -DAUTODIFF_BUILD_DOCS=OFF \
-            -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \
-            ..
-          make install
-          cd ../..
-
-      - name: Install Fastor
-        shell: bash -l {0}
-        run: |
-          git clone https://github.com/romeric/Fastor.git
-          cd Fastor
-          mkdir build
-          cd build
-          cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-          make install
-          cd ../..
-
-      - name: Build Boost
-        shell: bash -l {0}
-        run: |
-          # boost-cpp's only conda-forge build (1.85.0) pins icu<76, which
-          # conflicts with the icu>=78.3 that the only free-threaded-Python
-          # matplotlib build needs, so it can't live in the same env as the
-          # rest of conda_requirements.txt. Build the specific libraries
-          # AMGCL needs from source instead, into the same conda prefix as
-          # everything else.
-          curl -L -o boost_1_85_0.tar.gz https://archives.boost.io/release/1.85.0/source/boost_1_85_0.tar.gz
-          tar xzf boost_1_85_0.tar.gz
-          cd boost_1_85_0
-          ./bootstrap.sh --prefix=$CONDA_PREFIX --with-libraries=program_options,serialization,test
-          ./b2 install
-          cd ..
-
-      - name: Install AMGCL
-        shell: bash -l {0}
-        run: |
-          # A plain, unhinted cmake here can silently pick up an unrelated
-          # Boost from elsewhere on the system instead of the one just built
-          # (verified, not hypothetical) — point it at $CONDA_PREFIX explicitly.
-          git clone --branch 1.4.7 --depth 1 https://github.com/ddemidov/amgcl.git
-          cd amgcl
-          mkdir build
-          cd build
-          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DBOOST_ROOT=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX ..
-          make install
-          cd ../..
-
-      - name: Install Marmot
-        shell: bash -l {0}
-        run: |
-          # Try, in order: the branch actually under test (github.head_ref, set for a pull_request
-          # event), the PR's base branch (github.base_ref), then next_v26.11, the shared
-          # development branch - NOT github.ref_name, since the EdelweissFE branch name essentially
-          # never matches a Marmot branch name, and falling through to Marmot's default branch
-          # ("master") silently builds against a stale, possibly API-incompatible Marmot revision.
-          #
-          # head_ref must be tried before base_ref: for a PR whose head branch itself has a
-          # same-named Marmot branch (e.g. a "next_v26.11 -> master" promotion PR), the code under
-          # test depends on that head branch's Marmot revision, not the base branch's -- using
-          # base_ref there would silently build against the wrong (older/incompatible) Marmot.
-          CANDIDATE_BRANCHES=("${{ github.head_ref }}" "${{ github.base_ref }}" "next_v26.11")
-
-          git clone --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/
-          cd Marmot
-
-          TARGET_BRANCH=""
-          for candidate in "${CANDIDATE_BRANCHES[@]}"; do
-            if [ -n "$candidate" ] && git show-ref --verify --quiet "refs/remotes/origin/$candidate"; then
-              TARGET_BRANCH="$candidate"
-              break
-            fi
-          done
-
-          if [ -z "$TARGET_BRANCH" ]; then
-            echo "::error::None of the candidate branches (${CANDIDATE_BRANCHES[*]}) exist in Marmot, and there is no safe default to fall back to."
-            exit 1
-          fi
-
-          echo "Using Marmot branch: $TARGET_BRANCH"
-          git checkout --detach "origin/$TARGET_BRANCH"
-
-          mkdir build
-          cd build
-          cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-          make install
-          cd ../../
+      # Branch selection, caching and MARMOT_INSTALL_DIR: see .github/actions/build-marmot.
+      - uses: ./.github/actions/build-marmot
 
       - name: Build EdelweissFE
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
-          pip install -v .
+          pip install -v --no-deps --no-build-isolation .
+
+      - name: Check the Marmot extension
+        shell: bash -leo pipefail {0}
+        working-directory: ${{ runner.temp }}
+        run: |
+          # A failed Marmot extension would not fail the build, and its test cases would merely be skipped: import it.
+          python -c "import edelweissfe.elements.marmotelement.element"
 
       - name: Run tests
-        shell: bash -l {0}
+        shell: bash -leo pipefail {0}
         run: |
           # Invoke the installed console-script files directly (not `python -m ...`), which would
           # unconditionally prepend the repo root to sys.path and let the local, uncompiled
@@ -161,7 +62,8 @@ jobs:
           # for the first time now that pytest runs in CI at all. Deselected rather than silently
           # ignored so this step's exit status still reflects everything else; tracked separately
           # for the module's own maintainer to investigate.
-          coverage run "$(command -v pytest)" tests \
+          # The full restart test runs in run_restart_exhaustive.yml; here its representative subset.
+          coverage run "$(command -v pytest)" tests -m "not exhaustive" \
             --deselect tests/test_stepoptions.py::test_the_dynamic_options_branch_is_declared_in_exactly_one_place
           coverage run -a "$(command -v run_tests_edelweissfe)" ./testfiles/marmot/
           coverage run -a "$(command -v run_tests_edelweissfe)" ./testfiles/edelweiss-only/

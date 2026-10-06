@@ -276,9 +276,9 @@ def generateDiscreteRigidBodyFromMeshFile(
 
     # The surface nodes and the reference point below are labelled consecutively. Unless the
     # caller pins the first label explicitly, the labels come from the model's monotonic allocator
-    # (FEModel.reserveNodeNumbers) rather than from max(model.nodes).
+    # (TopologyPipeline.reserveNodeNumbers) rather than from max(model.nodes).
     rigidNodes = []
-    nodeLabel = start_label if start_label is not None else model.reserveNodeNumbers(len(points) + 1).start
+    nodeLabel = start_label if start_label is not None else model.topology.reserveNodeNumbers(len(points) + 1).start
     for point in points:
         node = Node(nodeLabel, point.copy())
         model.createNode(node)
@@ -301,7 +301,7 @@ def generateDiscreteRigidBodyFromMeshFile(
     if start_label is not None:
         # Caller-pinned labels bypass the allocator, so lift it above them; otherwise a later
         # allocation could hand out a label this body already occupies.
-        model.adoptSetupNodeNumbers()
+        model.topology.adoptSetupNodeNumbers()
 
     rpNodeSetName = f"{name}_rp"
     model.nodeSets[rpNodeSetName] = NodeSet(rpNodeSetName, [referencePoint])
@@ -349,7 +349,14 @@ def _readGenericSurfaceMesh(filename: str, translation: np.ndarray = None):
     """
     mesh = pv.read(filename)
     if isinstance(mesh, pv.MultiBlock):
-        mesh = mesh.combine()
+        # Exodus files come back as nested MultiBlocks that include empty side/node-set blocks, which
+        # pyvista>=0.49 refuses to combine (VTKExecutionError), so merge only the non-empty blocks.
+        # merge_points=False, as combine() did: pv.merge() would otherwise weld coincident but logically
+        # distinct points of different blocks, silently changing the surface topology.
+        blocks = list(mesh.recursive_iterator(skip_none=True, skip_empty=True))
+        if not blocks:
+            raise ValueError(f"The discrete rigid body surface file '{filename}' contains no points.")
+        mesh = pv.merge(blocks, merge_points=False)
 
     surf = mesh.extract_surface(algorithm="dataset_surface")
     surf.compute_normals(cell_normals=True, point_normals=False, inplace=True)

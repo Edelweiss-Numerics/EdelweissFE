@@ -109,28 +109,62 @@ class Section(OptionSchemaProvider, ABC):
             self.materialPropertiesFileName = definition.filename
 
     def assignSectionPropertiesToModel(self, model):
-        if any(self.materialParameterFromFieldDefs):
-            for elSet in self.elSets:
-                for el in elSet:
-                    if isinstance(self.material, dict):  # for marmotmaterial provider
-                        modifiedMaterial = self.material.copy()
-                        modifiedMaterial["properties"] = self.propertiesFromField(el, self.material, model, True)
-                    else:  # for edelweissmaterial provider
-                        materialType = type(self.material)
-                        modifiedProperties = self.propertiesFromField(el, self.material, model, False)
-                        modifiedMaterial = materialType(modifiedProperties)
-                        if hasattr(self.material, "_materialEnergy"):  # for autodiff materials
-                            modifiedMaterial.setEnergyFunction(self.material._materialEnergy)
-                    self.assignSectionPropertiesToElement(el, material=modifiedMaterial)
-        else:
-            for elSet in self.elSets:
-                for el in elSet:
-                    self.assignSectionPropertiesToElement(el)
+        for elSet in self.elSets:
+            for el in elSet:
+                self.assignSectionToElement(el, model)
 
         if self.writeMaterialPropertiesToFile:
             self.exportMaterialPropertiesToFile(self.elSets)
 
         return model
+
+    def assignSectionToElement(self, element, model):
+        """Assign this section, including its material, to a single element.
+
+        This is the one entry point for every element of this section: the elements of the initial
+        mesh as well as elements created later, e.g., by mesh refinement. The material is evaluated
+        at the element's position (see :meth:`materialAtElement`), so an element gets the same
+        material no matter when or how it was created.
+
+        Parameters
+        ----------
+        element
+            The element.
+        model
+            The model, which holds the analytical fields used by ``materialParameterFromField``.
+        """
+        self.assignSectionPropertiesToElement(element, material=self.materialAtElement(element, model))
+
+    def materialAtElement(self, element, model):
+        """The material of this section at an element, including ``materialParameterFromField``.
+
+        Without any ``materialParameterFromField`` definition, this is the nominal material of the
+        section. Otherwise, a new material is created, with its parameters modified by the
+        analytical fields evaluated at the element center.
+
+        Parameters
+        ----------
+        element
+            The element.
+        model
+            The model, which holds the analytical fields.
+
+        Returns
+        -------
+        The material to be assigned to the element.
+        """
+        if not self.materialParameterFromFieldDefs:
+            return self.material
+
+        if isinstance(self.material, dict):  # for marmotmaterial provider
+            modifiedMaterial = self.material.copy()
+            modifiedMaterial["properties"] = self.propertiesFromField(element, self.material, model, True)
+        else:  # for edelweissmaterial provider
+            materialType = type(self.material)
+            modifiedProperties = self.propertiesFromField(element, self.material, model, False)
+            modifiedMaterial = materialType(modifiedProperties)
+
+        return modifiedMaterial
 
     @abstractmethod
     def assignSectionPropertiesToElement(self, element, material):

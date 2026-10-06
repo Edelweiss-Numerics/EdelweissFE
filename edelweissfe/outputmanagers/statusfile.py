@@ -64,6 +64,9 @@ class OutputManager(OutputManagerBase):
     #: Option schema for this output manager, per OptionSchemaProvider.
     schema = StatusFileSchema
 
+    #: Carries nothing from one increment to the next.
+    checkpointedState = {}
+
     def __init__(
         self,
         name: str,

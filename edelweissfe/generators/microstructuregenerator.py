@@ -150,7 +150,7 @@ class Generator(GeneratorBase):
 
         # create nodes and elements for the unit cell
         _nodes = []
-        for label, node in zip(model.reserveNodeNumbers(len(all_nodes)), all_nodes):
+        for label, node in zip(model.topology.reserveNodeNumbers(len(all_nodes)), all_nodes):
             _node = Node(label, np.array(node))
             _nodes.append(_node)
             model.createNode(_node)
@@ -159,7 +159,7 @@ class Generator(GeneratorBase):
         for block_id, el_ids in block_elements_assignments.items():
             elements_per_block = []
             for local_el_id in el_ids:
-                (elNumber,) = model.reserveElementNumbers(1)
+                (elNumber,) = model.topology.reserveElementNumbers(1)
                 newEl = elementType(configuration.elType, elNumber)
                 nodeList = [_nodes[nid] for nid in all_elements[local_el_id]]
                 newEl.setNodes(nodeList)
@@ -296,7 +296,7 @@ def replicateMesh(
             # len(model.nodes) + 1 was a positional guess, not an allocator, and would silently
             # overwrite a live node the moment the label range had a gap. The rest of this function
             # addresses nodes as `label - 1` into all_nodes, so keep the association in that form.
-            (label,) = model.reserveNodeNumbers(1)
+            (label,) = model.topology.reserveNodeNumbers(1)
             associated_nodes.append([k, label - 1])
             _node = Node(label, np.array(new_nodes[-1]))
             model.createNode(_node)
@@ -329,7 +329,7 @@ def replicateMesh(
                 # len(model.elements) + 1 was not merely unidiomatic: element numbers are never
                 # recycled, so the dict has gaps, and len()+1 could land on a live element and
                 # silently overwrite it.
-                (elNumber,) = model.reserveElementNumbers(1)
+                (elNumber,) = model.topology.reserveElementNumbers(1)
                 newEl = elementType(elTypeName, elNumber)
                 nodeList = [model.nodes[nid + 1] for nid in new_el]
                 newEl.setNodes(nodeList)

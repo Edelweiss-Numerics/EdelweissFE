@@ -32,6 +32,15 @@ copyright = "2022, Matthias Neuner"
 author = "Matthias Neuner"
 release = "v22.07"
 
+# The version of the edelweissfe-dev environment package, read from its single source, so that the install commands
+# in the documentation never go stale: use |edelweissfe_dev_version| (in parsed-literal blocks for commands).
+_edelweissfeDevVersion = (
+    (__import__("pathlib").Path(__file__).resolve().parents[2] / "conda" / "edelweissfe-dev" / "VERSION")
+    .read_text()
+    .strip()
+)
+rst_prolog = f".. |edelweissfe_dev_version| replace:: {_edelweissfeDevVersion}\n"
+
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 

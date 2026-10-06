@@ -19,7 +19,7 @@ The adaptive loop and where markers sit
 ---------------------------------------
 
 *When* the topology update runs is the solver's decision, and the two solver families differ: the
-implicit solvers run :meth:`~edelweissfe.models.femodel.FEModel.updateTopology` at the start of
+implicit solvers run :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update` at the start of
 every increment, while the explicit dynamic solver runs it at the *end* of a finalized increment
 and only every ``topology-check-frequency`` increments -- see
 :ref:`adaptivity-explicit-dynamics` below. Either way, the update asks the modifier to

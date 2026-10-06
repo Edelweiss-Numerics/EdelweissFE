@@ -11,8 +11,7 @@ application, linear solver interfaces). It optionally links against the sister C
 [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) for element/material formulations, but also
 ships pure-Python/Cython element and material implementations that work standalone.
 
-Requires Python >= 3.14. The pip-only environment (`pip_requirements.txt` / `conda_requirements.txt`
-"without Marmot") targets the free-threaded ("nogil") CPython build (`python-freethreading`); see the
+Requires Python >= 3.14. The conda environment (`environment.yml`, pinned by `conda-lock.yml`, published as `edelweissfe-dev`) targets the free-threaded ("nogil") CPython build (`python-freethreading`); see the
 `freethreading_compatible` Cython directive in `setup.py` — importing a non-freethreading-safe extension
 would silently re-enable the GIL process-wide and disable the thread-parallel element loops.
 
@@ -21,16 +20,17 @@ would silently re-enable the GIL process-wide and disable the thread-parallel el
 Cython extensions are compiled at install time via `setup.py` (`cythonize`, `-O3 -march=native`, with optional extensions skipped if native libraries are missing — see `edelweissfe/built_extensions.log`).
 
 ```console
-# Standalone (pure Python/Cython elements & materials only)
-mamba install --file conda_requirements.txt
-pip install -r pip_requirements.txt
-pip install .
+# Create the environment with the `conda create` command in README.md (pinned edelweissfe-dev version), then:
+conda activate edelweissfe
 
-# With Marmot (native C++ element/material formulations):
-pip install -v .
+# Standalone (pure Python/Cython elements & materials only)
+pip install -e .
+
+# With Marmot (native C++ element/material formulations), after building Marmot into $CONDA_PREFIX:
+pip install -v -e .
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md#environment-setup--installation) for full environment prerequisites (Eigen, autodiff, Fastor, AMGCL, Marmot) and build overrides (`MARMOT_INSTALL_DIR`, `MKL_INCLUDE_DIR`, `EIGEN_INCLUDE_DIR`, `EDELWEISSFE_ARCH_FLAGS`).
+See [doc/source/installation.rst](doc/source/installation.rst) for the full procedure (incl. building Marmot) and build overrides (`MARMOT_INSTALL_DIR`, `MKL_INCLUDE_DIR`, `EIGEN_INCLUDE_DIR`, `EDELWEISSFE_ARCH_FLAGS`).
 
 ## Running tests
 
@@ -139,7 +139,7 @@ the `edelweissfe` CLI and `run_tests_edelweissfe`):
 #### Solvers & Parallelization
 - **Nonlinear Solvers** (`edelweissfe/solvers/`): Implicit/explicit static/dynamic solvers (`NIST`, `NEST`, `NED`),
   each with serial and `...Parallel` thread-parallel variants (e.g. `NISTParallel`), plus arc-length methods
-  (`NISTPArcLength`).
+  (`NISTPArcLength`) and Newmark-beta implicit dynamics (`NID`/`NIDParallel`, consistent mass, extends `NIST`'s Newton loop).
 - **Thread Parallelism & Free-Threading**: Element loops dispatch element chunks across persistent thread pools
   (`edelweissfe/numerics/parallelizationutilities.py::getThreadPool`). `ScatterDofVector` uses precomputed layout
   templates (`ScatterDofVectorTemplate`) and `np.bincount` for lock-free parallel accumulation. Third-party C

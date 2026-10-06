@@ -52,7 +52,7 @@ class SuperLUSolver(LinearSolver):
         # but the convention is kept uniform across all factories.
         from scipy.sparse.linalg import spsolve
 
-        return spsolve(A, b, use_umfpack=False)
+        return spsolve(A.copy(), b, use_umfpack=False)
 
 
 def createSolver(opts) -> Callable:

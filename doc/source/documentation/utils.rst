@@ -91,12 +91,22 @@ Module ``edelweissfe.utils.elementresultcollector``
 .. autoclass:: edelweissfe.utils.elementresultcollector.ElementResultCollector
    :members:
 
-Adaptive time stepping
-----------------------
+Time stepping
+-------------
+
+.. automodule:: edelweissfe.timesteppers.base.timestepperbase
+
+.. autoclass:: edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase
+   :members:
 
 Module ``edelweissfe.timesteppers.adaptivetimestepper``
 
 .. autoclass:: edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper
+   :members:
+
+Module ``edelweissfe.timesteppers.simpletimestepper``
+
+.. autoclass:: edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper
    :members:
 
 Parent element faces and facet quadrature

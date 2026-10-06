@@ -340,6 +340,15 @@ cdef class MarmotElementWrapper:
 
         self.marmotElement.computeLumpedDamping(&C[0])
 
+    def computeConsistentInertia(self, double[::1] M):
+        """Compute the consistent (full) mass matrix of the underlying MarmotElement.
+
+        Written into ``M`` in the element's flat ``nDof * nDof`` layout -- the same layout
+        ``computeKernels`` writes the stiffness into, so an entity slice of a VIJ system matrix can
+        be handed over directly and the assembled mass shares the stiffness' sparsity pattern."""
+
+        self.marmotElement.computeConsistentInertia(&M[0])
+
     def computeCriticalTimeStepForExplicitDynamics(self, double[::1] Q):
         """Compute the critical time step for explicit dynamics of the underlying MarmotElement"""
         cdef double criticalTimeStep = 1e36

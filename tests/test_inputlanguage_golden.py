@@ -78,7 +78,7 @@ def test_inputlanguage_surface_matches_golden():
 
     if os.environ.get("EDELWEISS_UPDATE_GOLDEN"):
         GOLDEN_PATH.parent.mkdir(parents=True, exist_ok=True)
-        GOLDEN_PATH.write_text(current)
+        GOLDEN_PATH.write_text(current, encoding="utf-8")
         pytest.skip("Regenerated the golden file because EDELWEISS_UPDATE_GOLDEN was set.")
 
     if not GOLDEN_PATH.exists():
@@ -87,7 +87,7 @@ def test_inputlanguage_surface_matches_golden():
             f"EDELWEISS_UPDATE_GOLDEN=1 python -m pytest {Path(__file__).name}"
         )
 
-    expected = GOLDEN_PATH.read_text()
+    expected = GOLDEN_PATH.read_text(encoding="utf-8")  # not the platform default (cp1252 on Windows)
     assert current == expected, (
         "The input-language surface (printKeywords() + module documentation) changed. "
         "If this is an intentional grammar change, review the diff carefully and then "

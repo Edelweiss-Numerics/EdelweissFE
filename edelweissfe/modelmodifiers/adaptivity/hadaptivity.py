@@ -34,6 +34,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.adaptivity.hex20topology import Hex20Topology
+from edelweissfe.adaptivity.marking import RefineableElements
 from edelweissfe.adaptivity.refinement import AdaptiveMesh
 from edelweissfe.adaptivity.statetransfer.perstatevar import PerStateVarStateTransfer
 from edelweissfe.config.elementlibrary import getElementClass
@@ -116,13 +117,12 @@ class HAdaptivitySchema:
     maxLevel: int = schemaField(description="Maximum refinement level.", dtype=int, default=1)
     minMarkedElements: int = schemaField(
         description=(
-            "Minimum number of eligible elements that must be marked before a refinement pass is "
-            "triggered. Marked elements persist (accumulate) across increments -- across calls where "
-            "fewer than this many are marked, no refinement happens and no equation system rebuild is "
-            "triggered -- until the accumulated count reaches this threshold, at which point all of "
-            "them are refined together in a single pass. Note that individual markers may cap their "
-            "own marks per pass (e.g. 'maxRefinedFraction') or expand them (e.g. 'halo') before "
-            "accumulating here. Default 1 refines as soon as any element is marked (previous behavior)."
+            "Minimum number of eligible elements one evaluation of the markers must mark for a "
+            "refinement pass to happen; with fewer, nothing is refined and no equation system is "
+            "rebuilt. Marks are not carried over to later evaluations: they are a function of the "
+            "current state only. Individual markers may cap their own marks (e.g. "
+            "'maxRefinedFraction') or expand them (e.g. 'halo') before this count is taken. Default 1 "
+            "refines as soon as any element is marked."
         ),
         dtype=int,
         default=1,
@@ -237,18 +237,28 @@ def _connectedComponents(elements: list) -> dict:
 
 
 #: The node-field value entries carried across a refinement by isoparametric interpolation from the
-#: parent element. ``"U"`` is the solution and is always present. ``"V"`` is the velocity, which only
-#: exists when an explicit dynamic solver put it there -- and it *has* to be carried, because unlike
-#: an implicit solver, which reconstructs everything it needs from ``"U"``, a central-difference
-#: scheme holds kinetic state that nothing else can reproduce: a new node whose velocity defaulted to
-#: zero would silently lose it. Interpolating it with the same operator as ``"U"`` is also what keeps
-#: the two consistent -- the shape functions are a partition of unity, so a uniform velocity field is
-#: reproduced exactly and the patch's momentum is conserved exactly in that case (the general case
-#: differs at second order in the velocity gradient across the parent, which is discretisation error,
-#: not a defect).
+#: parent element. ``"U"`` is the solution and is always present. ``"V"`` (velocity) and ``"A"``
+#: (acceleration) are the kinematic state of a dynamic solver -- and they *have* to be carried,
+#: because unlike a quasi-static solver, which reconstructs everything it needs from ``"U"``, a time
+#: integrator holds state that nothing else can reproduce: a new node whose velocity defaulted to
+#: zero would silently lose it. Interpolating them with the same operator as ``"U"`` is also what
+#: keeps them consistent with it -- the shape functions are a partition of unity, so a uniform
+#: velocity field is reproduced exactly and the patch's momentum is conserved exactly in that case
+#: (the general case differs at second order in the velocity gradient across the parent, which is
+#: discretisation error, not a defect).
+#:
+#: ``"A"`` is carried for the same reason, with one qualification the implicit dynamic solver acts
+#: on: an interpolated acceleration is not in equilibrium with the operators that are reassembled on
+#: the refined mesh, so that solver re-solves it from equilibrium on the next increment (see
+#: :mod:`~edelweissfe.solvers.nonlinearimplicitdynamic`). The interpolation is still what that solve
+#: starts from, and what a solver that switches the re-solve off keeps.
+#:
+#: Carrying an entry a given run never writes is free: the entries exist (zero) on every
+#: mass-carrying node field from job setup on, and interpolating zeros yields zeros -- so a static
+#: or explicit run is unaffected by ``"A"`` being listed here.
 #:
 #: An entry absent from a given node field is skipped, so this list is safe to extend.
-WARM_STARTED_NODE_FIELD_ENTRIES = ("U", "V")
+WARM_STARTED_NODE_FIELD_ENTRIES = ("U", "V", "A")
 
 
 class ModelModifier(ModelModifierBase):
@@ -256,6 +266,9 @@ class ModelModifier(ModelModifierBase):
     #: (see HAdaptivitySchema's own docstring) -- construction still goes through the
     #: Module-based mechanism below.
     schema = HAdaptivitySchema
+
+    #: Whether the step-start markers are still to be evaluated: they act on the first decision only.
+    checkpointedState = {"_isFirstCall": bool}
 
     def __init__(self, name: str, model: FEModel, journal: Journal, *args, **kwargs):
         super().__init__(name, model, journal, *args, **kwargs)
@@ -296,9 +309,8 @@ class ModelModifier(ModelModifierBase):
 
         self.maxLevel = options.maxLevel
         self.minMarkedElements = max(1, options.minMarkedElements)
-        self._pendingMarkedElements = set()  # elements marked but not yet refined (below minMarkedElements)
         # Diagnostics only, for the journal and for tests. The authoritative record of what this
-        # modifier did -- the one a restart replays -- is model.topologyHistory.
+        # modifier did -- the one a restart replays -- is model.topology.history.
         self._committedOccasions = []
         self.splitFactor = options.splitFactor
         self._stateTransfer = _buildStateTransferStrategy(options.stateTransfer, options.stateTransferOverrides)
@@ -338,29 +350,30 @@ class ModelModifier(ModelModifierBase):
             )
 
         # Which elements this instance owns. Checked pairwise against every other modifier by
-        # FEModel.checkModelModifierDomains at the end of setup -- two hAdaptivity instances cannot
+        # TopologyPipeline.checkModelModifierDomains at the end of setup -- two hAdaptivity instances cannot
         # independently own overlapping elements, since each maintains its own AdaptiveMesh mirror
         # and materializes/deletes elements directly in the model.
         self._refineElementNumbers = {el.elNumber for el in refineElements}
 
-        # element type: infer from a refineable element if not given
-        anyEl = refineElements[0]
-        self._elementType = options.elementType or anyEl.elType
-        self._elementClass = getElementClass(self._elementType, self._provider)
+        # element type of the children: the one given, or else each child is of its own parent's
+        # type -- a multi-material mesh (e.g. GC3D20R concrete next to C3D20R steel) keeps each
+        # element family's field layout and material interface across refinement
+        self._elementType = options.elementType
+        self._elementClasses = {}
 
         # bodies of the refineable mesh: node labels are namespaced per body, so coincident nodes of
         # two bodies (a tied interface -- 'adjust' makes it flush by default --, a zero-gap contact
         # pair, a duplicated-node crack plane) are never deduplicated into one label
         componentOfElement = _connectedComponents(refineElements)
 
-        # build the AdaptiveMesh mirror, sharing node labels with the live model. Only the nodes of
-        # the refineable elements are seeded: a node the octree does not own must not be able to
-        # claim a coordinate key, and only an octree-owned node can be seeded with a body.
+        # build the AdaptiveMesh mirror, sharing node labels with the live model: the roots are the
+        # refineable elements with the model's own connectivity. Only their nodes are seeded -- with
+        # their coordinates and body -- since only octree-owned nodes can be seeded with a body.
         self._topology = Hex20Topology()
         # The mirror mints its new node labels from the model's own allocator, so octree and
         # model share one monotonic node counter instead of each keeping their own.
         self._mesh = AdaptiveMesh(
-            splitFactor=self.splitFactor, topology=self._topology, reserve_labels=model.reserveNodeNumbers
+            splitFactor=self.splitFactor, topology=self._topology, reserve_labels=model.topology.reserveNodeNumbers
         )
         self._eidToEl = {}  # mesh element id -> live element
         #: Diagnostics only, parallel to _committedOccasions; see there.
@@ -370,8 +383,11 @@ class ModelModifier(ModelModifierBase):
             for n in el.nodes:
                 self._mesh.registry.seed(n.label, n.coordinates, componentId)
             coords = np.array([n.coordinates for n in el.nodes])
-            eid = self._mesh.add_root(coords, componentId)
+            eid = self._mesh.add_root(coords, [n.label for n in el.nodes], componentId)
             self._eidToEl[eid] = el
+        # what the markers see: a live view of the active elements, whose node adjacency (for a
+        # marker's halo) is kept across planning passes until _materialize changes the mesh
+        self._refineableElements = RefineableElements(self._eidToEl.values())
         # nodes outside the refineable mesh are not seeded, but their labels are taken:
         # keep the registry's high-water mark above them so new nodes never collide with them
         self._mesh.registry.reserve_labels_up_to(max(model.nodes.keys(), default=0))
@@ -422,8 +438,6 @@ class ModelModifier(ModelModifierBase):
         # and eventually by the mesh itself. tests/test_mpc_slave_claim_arbitration.py pins it.
         self._hanging = HangingNodeConstraint(name + "_hanging", model)
         model.multiPointConstraints = {name + "_hanging": self._hanging, **model.multiPointConstraints}
-        self._converged = False  # set True once an increment has converged
-        self._lastRefinedTime = None  # model.time of the last refinement (guards re-refine on cutback)
         self._isFirstCall = True
         # parent-parametric coords of each child's nodes (used for warm-start interpolation)
         self._octantParams = self._topology.subdivision_children_param(self.splitFactor)
@@ -435,6 +449,46 @@ class ModelModifier(ModelModifierBase):
         ``>>marker`` lines instead -- including ``initialOnly`` ones."""
 
         return self._refineElementNumbers
+
+    def syncNodeCoordinates(self, coordinatesByLabel: dict) -> None:
+        """Update this instance's own :class:`~edelweissfe.adaptivity.refinement.AdaptiveMesh`
+        mirror's cached node coordinates after an EXTERNAL mutation of ``model.nodes`` -- e.g. a
+        geometry-snap modifier (``edelweissfe.modelmodifiers.geometry.surfacesnap``) reprojecting
+        AMR-created boundary nodes onto an analytical surface.
+
+        Without this, the mirror silently keeps subdividing from its own pre-mutation coordinates:
+        ``AdaptiveMesh.refine`` calls ``Hex20Topology.subdivide(e["coords"], ...)``, where
+        ``e["coords"]`` was captured once, at the moment that element's own parent was refined --
+        never re-read from ``model.nodes`` afterward. A LATER refinement of an already-corrected
+        element would therefore generate its children from the geometry as it stood before the
+        correction, silently discarding it. This is a reactive fix, called from the correcting
+        modifier's own ``apply()`` (it has no way to reach into this mirror on its own); it does
+        nothing for a label this mirror does not track.
+
+        Parameters
+        ----------
+        coordinatesByLabel
+            Mapping of node label to its new coordinate. Only labels this mirror actually knows
+            about (its own registry, or the connectivity of one of its active elements) are
+            touched.
+        """
+
+        reg = self._mesh.registry
+        touched = set()
+        for label, coord in coordinatesByLabel.items():
+            if label in reg.coordinates:
+                reg.coordinates[label] = np.asarray(coord, dtype=float)
+                touched.add(label)
+        if not touched:
+            return
+        # `e["coords"]` is what `AdaptiveMesh.refine` actually subdivides from (see docstring
+        # above) -- resync every active leaf that owns one of the touched labels, not just the
+        # registry dict, or a later refine() would still use the stale per-element array.
+        for eid in self._mesh.active():
+            e = self._mesh.elements[eid]
+            if touched.isdisjoint(e["conn"]):
+                continue
+            e["coords"] = np.array([reg.coordinates[label] for label in e["conn"]])
 
     @property
     def actsOnlyAtSimulationStart(self) -> bool:
@@ -454,7 +508,7 @@ class ModelModifier(ModelModifierBase):
         return all(marker.initialOnly for marker in self.markers)
 
     @timeit("AMR")
-    def plan(self, model: FEModel, change, step, timeStep: float) -> "RefinementPlan | None":
+    def plan(self, model: FEModel, change, step) -> "RefinementPlan | None":
         """Evaluate the markers and decide which octree cells to refine. See
         :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan`.
 
@@ -463,13 +517,11 @@ class ModelModifier(ModelModifierBase):
         assigned by the model's allocator in an order that depends on what else minted.
         """
 
-        # Nothing this modifier cares about changed since it last planned in this topology update
-        # -- another modifier's mutation. Returning None here is what lets the pipeline settle.
-        if change is not None and not (change.addedElements or change.removedElements):
-            return None
-
-        # Do not re-refine if the solver is re-trying the exact same time state after a cutback
-        if self._lastRefinedTime is not None and abs(model.time - self._lastRefinedTime) < 1e-12:
+        # The markers are evaluated once per topology update, in its first round (change is None):
+        # they read the solution of the last accepted increment, which a refinement in this update
+        # does not change. Evaluating them again in a later round would only repeat, or cascade,
+        # the decision already taken -- and returning None is what lets the pipeline settle.
+        if change is not None:
             return None
 
         elForEid = {v: k for k, v in self._eidToEl.items()}
@@ -478,7 +530,7 @@ class ModelModifier(ModelModifierBase):
         if self._isFirstCall:
             initial_markers = [m for m in self.markers if m.initialOnly]
             for m in initial_markers:
-                elements = m.mark(model, self._eidToEl.values(), self._mesh)
+                elements = m.mark(model, self._refineableElements, self._mesh)
                 marked_elements.update(elements)
 
         # dynamic markers (not initialOnly) evaluate the converged solution, so they need at least
@@ -490,43 +542,31 @@ class ModelModifier(ModelModifierBase):
         if not self._isFirstCall:
             dynamic_markers = [m for m in self.markers if not m.initialOnly]
             for m in dynamic_markers:
-                marked_elements.update(m.mark(model, self._eidToEl.values(), self._mesh))
+                marked_elements.update(m.mark(model, self._refineableElements, self._mesh))
 
         self._isFirstCall = False
 
-        # freshly marked elements accumulate onto any still-pending ones from earlier increments; a
-        # stale pending element that another path already refined/removed is dropped by the
-        # elForEid/maxLevel filter below, same as a freshly marked one would be.
-        self._pendingMarkedElements.update(marked_elements)
-
-        if not self._pendingMarkedElements:
+        if not marked_elements:
             return None
 
         # keep only active elements below maxLevel
         with timeit("marking filter"):
             eligible = [
                 el
-                for el in sorted(self._pendingMarkedElements, key=lambda e: e.elNumber)
+                for el in sorted(marked_elements, key=lambda e: e.elNumber)
                 if el in elForEid and self._mesh.elements[elForEid[el]]["level"] < self.maxLevel
             ]
-        self._pendingMarkedElements = set(eligible)
 
         if len(eligible) < self.minMarkedElements:
             if eligible:
                 self._journal.message(
-                    "AMR ModelModifier: {:} element(s) marked, deferring refinement until {:} accumulate".format(
+                    "AMR ModelModifier: {:} element(s) marked, fewer than minMarkedElements={:}; not refining".format(
                         len(eligible), self.minMarkedElements
                     ),
                     "hadaptivity",
                     1,
                 )
             return None
-
-        self._pendingMarkedElements = set()
-
-        # Stamped here, not in apply(): it guards the *next* planning pass against re-refining after
-        # a cutback, and apply() must not read solution state (model.time included).
-        self._lastRefinedTime = float(model.time)
 
         return RefinementPlan(eids=[elForEid[el] for el in eligible])
 
@@ -536,9 +576,11 @@ class ModelModifier(ModelModifierBase):
         octree split, 2:1 balance, hanging-node MPCs, element/node/set bookkeeping, and the
         :class:`ModelChange` notification.
 
-        Pure octree/topology mechanics with no dependence on solution history, which is what lets a
-        live run and a restart replay share it: given the same plan they produce byte-identical
-        topology, element numbers included. See
+        The topology is a pure function of the plan, which is what lets a live run and a restart
+        replay share this method: given the same plan they produce byte-identical topology, element
+        numbers included. It also transfers the solution state onto the new elements and nodes; in
+        a replay that transfer acts on the initial state and is then overwritten by the checkpoint's
+        state, so it costs time but cannot change the result. See
         :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply`.
 
         Parameters
@@ -570,12 +612,17 @@ class ModelModifier(ModelModifierBase):
         with timeit("hanging nodes"):
             records = self._mesh.hanging_mpc_records()  # computed once (expensive), reused below
 
+        with timeit("conformity check"):
+            # Exact and topological: raises if any node on an active element's boundary is neither one
+            # of its nodes nor a hanging-node slave, i.e. if the refined interface is not conforming.
+            self._mesh.check_conformity(records)
+
         with timeit("materialize"):
             change = self._materialize(model, records)
 
         self._hanging.setRecords(records)
         # The change is not announced here: it is returned below, and the pipeline records it (see
-        # FEModel.recordTopologyChange). Consumers re-index later, once, in refreshMeshDependents.
+        # TopologyPipeline.recordChange). Consumers re-index later, once, in refreshMeshDependents.
         self._journal.message(
             "AMR ModelModifier: marked {:}, refined -> active elements {:} -> {:}, {:} hanging nodes".format(
                 len(markedEids), nBefore, len(self._mesh.active()), len(records)
@@ -587,25 +634,90 @@ class ModelModifier(ModelModifierBase):
         self._committedOccasionEids.append(list(markedEids))
         return change
 
+    def _makeElement(self, elementType, elNumber):
+        """Instantiate a child element of the given type, resolving (and caching) its class once per type."""
+        if elementType not in self._elementClasses:
+            self._elementClasses[elementType] = getElementClass(elementType, self._provider)
+        return self._elementClasses[elementType](elementType, elNumber)
+
     def _materialize(self, model: FEModel, records: dict):
+        """Turn the refined octree into model elements, nodes, sets and fields.
+
+        The steps, in order:
+
+        1. snapshot the converged nodal values, for the warm start;
+        2. create the new nodes;
+        3. create the child elements, level by level, with state transfer and interpolated nodal
+           values;
+        4. remove the refined parents, and check that octree and model agree;
+        5. update the surfaces and the node and element sets;
+        6. resize the node fields and write the warm-start values.
+
+        Everything here runs identically live and on restart replay: ``apply()`` is one code path.
+        Element numbers come from the model's single allocator (:meth:`TopologyPipeline.reserveElementNumbers`);
+        this modifier keeps no counter of its own, so labels claimed by other consumers in between
+        can never collide with it.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        records
+            The hanging-node constraint records, by slave node label.
+
+        Returns
+        -------
+        ModelChange
+            The net change of this refinement.
+        """
+
         mesh = self._mesh
-        reg = mesh.registry
+        # the active elements are about to change; so does the adjacency a marker's halo grows over
+        self._refineableElements.invalidateNodeAdjacency()
+        oldValues = self._snapshotNodalValues(model)
+        newNodes = self._createNewNodes(model)
 
-        # Element numbers come from the model's single monotonic allocator
-        # (FEModel.reserveElementNumbers). This modifier deliberately keeps no counter of its own:
-        # the one it used to keep had to be resynced against max(model.elements) on every call,
-        # because a tied surface's facets -- rebuilt via the observer/MeshDependent escape hatches
-        # fired at the end of THIS very call -- claim labels in between, and a private counter would
-        # collide with (and silently overwrite) them, after which they were deleted as "stale",
-        # orphaning the solid elements that had taken their labels.
+        active = set(mesh.active())
+        newValues = {key: {} for key in oldValues}  # interpolated values for new nodes, per (field, entry)
+        levelChanges, newChildEids = self._createChildElements(model, active, newNodes, oldValues, newValues)
 
-        # snapshot the converged nodal values BEFORE the mesh mutates, for the warm start
+        # The new nodes and the removals ride on the LAST level's changeset: nothing created there
+        # is transient (only intermediates are, and they always have a level below them), so the
+        # coalesce below cannot drop them.
+        change = levelChanges[-1] if levelChanges else ModelChange(kind=ModelChangeType.REFINEMENT)
+        change.addedNodes |= set(newNodes.keys())
+        self._removeRefinedParents(model, active, change)
+        if len(levelChanges) > 1:
+            change = coalesce(levelChanges)
+        self._checkOctreeMatchesModel(active)
+
+        self._updateSurfaces(model, newChildEids, change)
+        with timeit("sets & fields sync"):
+            self._updateSets(model, records, newNodes, newChildEids, change)
+
+        with timeit("fields resize & restore"):
+            self._resizeNodeFieldsAndWarmStart(model, oldValues, newValues)
+
+        # Separately timed: this relinks EVERY node's field variables, so its cost scales with the
+        # whole mesh rather than with what this refinement actually changed.
+        with timeit("relink field variables"):
+            model._linkFieldVariableObjects(model.nodeSets["all"])
+        return change
+
+    def _snapshotNodalValues(self, model: FEModel) -> dict:
+        """Copy the converged values of every warm-started node field entry, before the mesh changes.
+
+        On the replay path this is dead work -- readRestart overwrites every node field right
+        afterwards -- but a "skip this on replay" branch is exactly the kind of live/replay
+        divergence that made a resumed run rebuild a different mesh.
+
+        Returns
+        -------
+        dict
+            ``{(fieldName, entryName): {node: value}}``.
+        """
+
         oldValues = {}
-        # Runs on the replay path too. It is dead work there -- readRestart overwrites every node
-        # field right afterwards -- but apply() is ONE code path, and a "skip this on replay" branch
-        # is exactly the kind of live/replay divergence that made a resumed run rebuild a different
-        # mesh. If this ever costs measurably, the flag belongs in the recorded plan, not in an
-        # ambient replay mode.
         for fieldName, nodeField in model.nodeFields.items():
             for entryName in WARM_STARTED_NODE_FIELD_ENTRIES:
                 if entryName in nodeField:
@@ -613,37 +725,76 @@ class ModelModifier(ModelModifierBase):
                     oldValues[(fieldName, entryName)] = {
                         node: entryValues[nodeField._indicesOfNodesInArray[node]].copy() for node in nodeField.nodes
                     }
+        return oldValues
 
-        # new nodes
+    def _createNewNodes(self, model: FEModel) -> dict:
+        """Create a model node for every octree node the model does not have yet.
+
+        Returns
+        -------
+        dict
+            The new nodes, by label.
+        """
+
         newNodes = {}
-        for label, coord in reg.coordinates.items():
+        for label, coord in self._mesh.registry.coordinates.items():
             if label not in model.nodes:
                 node = Node(label, np.asarray(coord, dtype=float))
                 model.createNode(node)
                 newNodes[label] = node
+        return newNodes
 
-        active = set(mesh.active())
-        newValues = {key: {} for key in oldValues}  # interpolated values for new nodes, per (field, entry)
+    def _cellsToCreate(self, active: set) -> set:
+        """Every octree cell that must become a model element but is not one yet.
 
-        # Every octree cell that must become a model element but is not one yet. Usually that is
-        # exactly the children of the cells refined in this call. It is not always: 2:1 balancing
-        # refines until the mesh is graded, and can therefore split a cell it created earlier in
-        # the same call, leaving an active leaf whose parent is itself brand new. Walking each such
-        # leaf up to its nearest materialised ancestor collects those intermediate cells as well;
-        # they are created below and removed again with the other refined parents, so however many
-        # levels a cascade went, every one of them is handled by the same "split a materialised
-        # parent into its children" code.
+        Usually that is exactly the children of the cells refined in this call. It is not always:
+        2:1 balancing can split a cell it created earlier in the same call, leaving an active leaf
+        whose parent is itself brand new. Walking each such leaf up to its nearest materialized
+        ancestor collects those intermediate cells as well; they are created and removed again with
+        the other refined parents, so however many levels a cascade went, every one of them is
+        handled by the same "split a materialized parent into its children" code.
+        """
+
+        mesh = self._mesh
         pending = set()
         for eid in active - set(self._eidToEl):
             ancestor = eid
             while ancestor is not None and ancestor not in self._eidToEl and ancestor not in pending:
                 pending.add(ancestor)
                 ancestor = mesh.elements[ancestor]["parent"]
+        return pending
 
-        # One changeset per materialised level, coalesced at the end: the merge is what resolves an
-        # intermediate's create-then-remove into the direct parent -> grandchild relation a consumer
-        # needs, rather than leaving a phantom element in both the added and the removed set (see
-        # ModelChange.mergedWith).
+    def _createChildElements(
+        self, model: FEModel, active: set, newNodes: dict, oldValues: dict, newValues: dict
+    ) -> tuple[list, set]:
+        """Create the child elements of every refined parent, one octree level at a time.
+
+        One changeset per level, coalesced by the caller: the merge is what resolves an
+        intermediate's create-then-remove into the direct parent -> grandchild relation a consumer
+        needs, rather than leaving a phantom element in both the added and the removed set (see
+        :meth:`ModelChange.mergedWith`).
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        active
+            The active octree cells.
+        newNodes
+            The nodes created in this refinement, by label.
+        oldValues
+            The snapshot of the converged nodal values, see :meth:`_snapshotNodalValues`.
+        newValues
+            Filled with the values interpolated at the new nodes, keyed like ``oldValues``.
+
+        Returns
+        -------
+        tuple[list, set]
+            The changeset of every level, and the octree ids of all cells created.
+        """
+
+        mesh = self._mesh
+        pending = self._cellsToCreate(active)
         levelChanges = []
         newChildEids = set()
         while pending:
@@ -659,82 +810,98 @@ class ModelModifier(ModelModifierBase):
                     "disagree about which elements exist.".format(len(pending), sorted(pending)[0])
                 )
             change = ModelChange(kind=ModelChangeType.REFINEMENT)
-            childNumbers = model.reserveElementNumbers(len(levelEids))
+            childNumbers = model.topology.reserveElementNumbers(len(levelEids))
             with timeit("elements & state transfer"):
                 for eid, elNumber in zip(levelEids, childNumbers):
-                    e = mesh.elements[eid]
-                    parentEid = e["parent"]
-                    parentEl = self._eidToEl[parentEid]
-                    child = self._elementClass(self._elementType, elNumber)
-                    child.setNodes([model.nodes[label] for label in e["conn"]])
-                    self._sectionOf[parentEl].assignSectionPropertiesToElement(child)
-                    for elementProperty in self._elementPropertiesOf.get(parentEl, ()):
-                        child.assignProperty(elementProperty.propertyName, elementProperty.values)
-                    # Runs on replay too, identically: apply() is one code path, and element state
-                    # is restored by number afterwards either way.
-                    self._stateTransfer.transferState(parentEl, [child], self._topology)
-
-                    # warm start: interpolate each NEW node's field values from the parent via the
-                    # HEX20 isoparametric map, so the increment restarts from a consistent state,
-                    # not zero
-                    octant = mesh.elements[parentEid]["children"].index(eid)
-                    childParams = self._octantParams[octant]
-                    for i, label in enumerate(e["conn"]):
-                        node = model.nodes[label]
-                        if label in newNodes and any(node not in newValues[f] for f in oldValues):
-                            N = self._topology.shape_functions(*childParams[i])
-                            for key, vals in oldValues.items():
-                                # An intermediate parent's own nodes are new, so they are not in the
-                                # pre-mutation snapshot -- the level above interpolated them, and the
-                                # next level down interpolates from that in turn.
-                                interpolated = newValues[key]
-                                parentVals = [vals[pn] if pn in vals else interpolated.get(pn) for pn in parentEl.nodes]
-                                if all(v is not None for v in parentVals):
-                                    newValues[key][node] = N @ np.array(parentVals)
-
-                    model.createElement(child)
-                    self._eidToEl[eid] = child
-                    self._sectionOf[child] = self._sectionOf[parentEl]
-                    if parentEl in self._elementPropertiesOf:
-                        self._elementPropertiesOf[child] = self._elementPropertiesOf[parentEl]
-
-                    change.addedElements.add(child.elNumber)
-                    change.parentToChildren.setdefault(parentEl.elNumber, []).append(child.elNumber)
-
-            # per-face parent -> child tiling (the faceMap), while parents are still materialized
-            for parentEid in {mesh.elements[eid]["parent"] for eid in levelEids}:
-                parentLabel = self._eidToEl[parentEid].elNumber
-                childEids = mesh.elements[parentEid]["children"]
-                for faceID, faceIndex in self._topology.faceid_to_face.items():
-                    childLabels = [
-                        self._eidToEl[childEids[j]].elNumber
-                        for j in self._topology.face_child_indices(faceIndex, self.splitFactor)
-                    ]
-                    change.faceMap[(parentLabel, faceID)] = [(label, faceID) for label in childLabels]
+                    self._createChildElement(model, eid, elNumber, newNodes, oldValues, newValues, change)
+            self._recordFaceMap(levelEids, change)
 
             levelChanges.append(change)
             newChildEids |= set(levelEids)
             pending -= set(levelEids)
+        return levelChanges, newChildEids
 
-        # The new nodes and the removals ride on the LAST level's changeset: nothing created there
-        # is transient (only intermediates are, and they always have a level below them), so the
-        # coalesce below cannot drop them.
-        change = levelChanges[-1] if levelChanges else ModelChange(kind=ModelChangeType.REFINEMENT)
-        change.addedNodes |= set(newNodes.keys())
+    def _createChildElement(
+        self,
+        model: FEModel,
+        eid: int,
+        elNumber: int,
+        newNodes: dict,
+        oldValues: dict,
+        newValues: dict,
+        change: ModelChange,
+    ):
+        """Create the model element of one octree child cell, inheriting section, properties and
+        state from its parent, and interpolate the nodal values at its new nodes."""
 
-        # remove refined parents, transient intermediates included (sorted, so the changeset is
-        # built in a reproducible order)
+        mesh = self._mesh
+        e = mesh.elements[eid]
+        parentEid = e["parent"]
+        parentEl = self._eidToEl[parentEid]
+        child = self._makeElement(self._elementType or parentEl.elType, elNumber)
+        child.setNodes([model.nodes[label] for label in e["conn"]])
+        self._sectionOf[parentEl].assignSectionToElement(child, model)
+        for elementProperty in self._elementPropertiesOf.get(parentEl, ()):
+            child.assignProperty(elementProperty.propertyName, elementProperty.values)
+        self._stateTransfer.transferState(parentEl, [child], self._topology)
+
+        # warm start: interpolate each NEW node's field values from the parent via the HEX20
+        # isoparametric map, so the increment restarts from a consistent state, not zero
+        octant = mesh.elements[parentEid]["children"].index(eid)
+        childParams = self._octantParams[octant]
+        for i, label in enumerate(e["conn"]):
+            node = model.nodes[label]
+            if label in newNodes and any(node not in newValues[f] for f in oldValues):
+                N = self._topology.shape_functions(*childParams[i])
+                for key, vals in oldValues.items():
+                    # An intermediate parent's own nodes are new, so they are not in the
+                    # pre-mutation snapshot -- the level above interpolated them, and the next
+                    # level down interpolates from that in turn.
+                    interpolated = newValues[key]
+                    parentVals = [vals[pn] if pn in vals else interpolated.get(pn) for pn in parentEl.nodes]
+                    if all(v is not None for v in parentVals):
+                        newValues[key][node] = N @ np.array(parentVals)
+
+        model.createElement(child)
+        self._eidToEl[eid] = child
+        self._sectionOf[child] = self._sectionOf[parentEl]
+        if parentEl in self._elementPropertiesOf:
+            self._elementPropertiesOf[child] = self._elementPropertiesOf[parentEl]
+
+        change.addedElements.add(child.elNumber)
+        change.parentToChildren.setdefault(parentEl.elNumber, []).append(child.elNumber)
+
+    def _recordFaceMap(self, levelEids: list, change: ModelChange):
+        """Record which child faces tile each parent face, while the parents still exist."""
+
+        mesh = self._mesh
+        for parentEid in {mesh.elements[eid]["parent"] for eid in levelEids}:
+            parentLabel = self._eidToEl[parentEid].elNumber
+            childEids = mesh.elements[parentEid]["children"]
+            for faceID, faceIndex in self._topology.faceid_to_face.items():
+                childLabels = [
+                    self._eidToEl[childEids[j]].elNumber
+                    for j in self._topology.face_child_indices(faceIndex, self.splitFactor)
+                ]
+                change.faceMap[(parentLabel, faceID)] = [(label, faceID) for label in childLabels]
+
+    def _removeRefinedParents(self, model: FEModel, active: set, change: ModelChange):
+        """Remove every element whose octree cell is no longer active: the refined parents,
+        transient intermediates included (sorted, so the changeset is built in a reproducible
+        order)."""
+
         for eid in sorted(set(self._eidToEl) - active):
             el = self._eidToEl.pop(eid)
             model.removeElement(el.elNumber)
             change.removedElements.add(el.elNumber)
 
-        if len(levelChanges) > 1:
-            change = coalesce(levelChanges)
+    def _checkOctreeMatchesModel(self, active: set):
+        """Raise unless every active octree cell has exactly one model element, and vice versa.
 
-        # The octree mirror decides which elements exist; if the model no longer agrees, every
-        # consumer downstream is reading a mesh that is not the one being refined. Cheap next to
-        # everything else in here, and it turns a silent desync into a located failure.
+        The octree mirror decides which elements exist; if the model no longer agrees, every
+        consumer downstream is reading a mesh that is not the one being refined.
+        """
+
         if set(self._eidToEl) != active:
             raise TopologyError(
                 "AMR: the octree mirror and the model disagree after materialisation -- {:} active "
@@ -743,8 +910,10 @@ class ModelModifier(ModelModifierBase):
                 )
             )
 
-        # keep model.surfaces in sync: parent (eid,faceID) -> child faces
-        for surfaceName, pairs in mesh.surfaces.items():
+    def _updateSurfaces(self, model: FEModel, newChildEids: set, change: ModelChange):
+        """Replace each refined parent face in ``model.surfaces`` by its child faces."""
+
+        for surfaceName, pairs in self._mesh.surfaces.items():
             if surfaceName in model.surfaces:
                 if any(meid in newChildEids for meid, _ in pairs):
                     change.changedSurfaces.add(surfaceName)
@@ -756,85 +925,73 @@ class ModelModifier(ModelModifierBase):
                         byFace[faceID].append(self._eidToEl[meid])
                 model.surfaces[surfaceName].replaceData({f: els for f, els in byFace.items()})
 
-        with timeit("sets & fields sync"):
-            # Tracked (non-all) node sets that gain nodes are rebuilt with the new members (excluding
-            # hanging slave nodes, whose motion is set by the MPC).
-            slaves = set(records.keys())
-            for setName, labels in mesh.nodeSets.items():
-                present = {n.label for n in model.nodeSets[setName].nodes}
-                if any(label not in present and label not in slaves for label in labels):
-                    members = [model.nodes[label] for label in sorted(labels) if label not in slaves]
-                    model.nodeSets[setName].replaceMembers(members)
-                    change.changedNodeSets.add(setName)
+    def _updateSets(self, model: FEModel, records: dict, newNodes: dict, newChildEids: set, change: ModelChange):
+        """Add the new nodes and elements to the node and element sets they belong to."""
 
-            # sync all element sets (user sets like 'concrete' and all-encompassing sets)
-            allNodes = list(model.nodes.values())
-            if newNodes:
-                for setName in self._allLikeSets | {"all"}:
-                    model.nodeSets[setName].replaceMembers(allNodes)
-                    change.changedNodeSets.add(setName)
-            for setName, eids in mesh.elementSets.items():
-                if setName in model.elementSets:
-                    if eids & newChildEids:
-                        change.changedElementSets.add(setName)
-                    # sorted, for the same reason as the surface sync above: this order becomes the
-                    # element set's member order, which downstream generators number entities by
-                    elements = [self._eidToEl[eid] for eid in sorted(eids) if eid in self._eidToEl]
-                    # carry the non-mirrored members along: the octree only knows refineable elements,
-                    # so a mixed set would silently drop them here. Members deleted from the model in
-                    # the meantime are filtered out by their label
-                    elements += [el for el in self._untrackedOfElementSet[setName] if el.elNumber in model.elements]
-                    model.elementSets[setName].replaceMembers(elements)
-            model.elementSets["all"].replaceMembers(list(model.elements.values()))
-            change.changedElementSets.add("all")
+        mesh = self._mesh
+        # Tracked (non-all) node sets that gain nodes are rebuilt with the new members (excluding
+        # hanging slave nodes, whose motion is set by the MPC).
+        slaves = set(records.keys())
+        for setName, labels in mesh.nodeSets.items():
+            present = {n.label for n in model.nodeSets[setName].nodes}
+            if any(label not in present and label not in slaves for label in labels):
+                members = [model.nodes[label] for label in sorted(labels) if label not in slaves]
+                model.nodeSets[setName].replaceMembers(members)
+                change.changedNodeSets.add(setName)
 
-        with timeit("fields resize & restore"):
-            # resize node fields in place to include the new nodes, then restore the warm start:
-            # converged values on the retained nodes and interpolated values on the new nodes.
-            # Both U (current) and P (previous converged) get the same warm-start value, so the first
-            # Newton iteration after refinement sees a normal residual rather than a spurious dU = U - P
-            # = U - 0 cold-restart spike on every retained/new node (P-field warm-start fix).
-            model._resizeNodeFieldsForNodes(self._journal)
-            for fieldName, nodeField in model.nodeFields.items():
-                if "U" not in nodeField:
-                    nodeField.createFieldValueEntry("U")
-                if "P" not in nodeField:
-                    nodeField.createFieldValueEntry("P")
-                U = nodeField["U"]
-                P = nodeField["P"]
-                old = oldValues.get((fieldName, "U"), {})
-                new = newValues.get((fieldName, "U"), {})
+        allNodes = list(model.nodes.values())
+        if newNodes:
+            for setName in self._allLikeSets | {"all"}:
+                model.nodeSets[setName].replaceMembers(allNodes)
+                change.changedNodeSets.add(setName)
+        for setName, eids in mesh.elementSets.items():
+            if setName in model.elementSets:
+                if eids & newChildEids:
+                    change.changedElementSets.add(setName)
+                # sorted, for the same reason as the surface update: this order becomes the
+                # element set's member order, which downstream generators number entities by
+                elements = [self._eidToEl[eid] for eid in sorted(eids) if eid in self._eidToEl]
+                # carry the non-mirrored members along: the octree only knows refineable elements,
+                # so a mixed set would silently drop them here. Members deleted from the model in
+                # the meantime are filtered out by their label
+                elements += [el for el in self._untrackedOfElementSet[setName] if el.elNumber in model.elements]
+                model.elementSets[setName].replaceMembers(elements)
+        model.elementSets["all"].replaceMembers(list(model.elements.values()))
+        change.changedElementSets.add("all")
+
+    def _resizeNodeFieldsAndWarmStart(self, model: FEModel, oldValues: dict, newValues: dict):
+        """Resize the node fields to the new nodes, then write the warm-start values: the
+        converged value on a retained node, the interpolated value on a new one.
+
+        ``U`` is also written to ``P`` (the previous converged solution), so the first Newton
+        iteration after refinement sees a normal residual rather than a spurious ``dU = U - P = U``
+        on every node. The other warm-started entries (``V``, ``A``, present only for the dynamic
+        solvers) get just their own value.
+
+        On the replay path the model postpones the resize to the end of the replay window -- see
+        :meth:`TopologyPipeline.changes` -- so the writes below are then dead work, overwritten by
+        readRestart. The decision lives in the model: this method issues the same calls either way.
+        """
+
+        model._resizeNodeFieldsForNodes(self._journal)
+        for fieldName, nodeField in model.nodeFields.items():
+            if "U" not in nodeField:
+                nodeField.createFieldValueEntry("U")
+            if "P" not in nodeField:
+                nodeField.createFieldValueEntry("P")
+            for entryName in WARM_STARTED_NODE_FIELD_ENTRIES:
+                if entryName not in nodeField:
+                    continue
+                targets = [nodeField["U"], nodeField["P"]] if entryName == "U" else [nodeField[entryName]]
+                old = oldValues.get((fieldName, entryName), {})
+                new = newValues.get((fieldName, entryName), {})
                 for node in nodeField.nodes:
-                    idx = nodeField._indicesOfNodesInArray[node]
-                    if node in old:
-                        U[idx] = old[node]
-                        P[idx] = old[node]
-                    elif node in new:
-                        U[idx] = new[node]
-                        P[idx] = new[node]
-
-                # Every other warm-started entry gets the interpolation and nothing else -- in
-                # particular NOT the "P := U" trick above, which exists only so an implicit solver
-                # sees a sane first residual. An entry that is not present here (the usual case for
-                # "V", which only an explicit solver creates) is simply skipped.
-                for entryName in WARM_STARTED_NODE_FIELD_ENTRIES:
-                    if entryName == "U" or entryName not in nodeField:
+                    value = old[node] if node in old else new.get(node)
+                    if value is None:
                         continue
-                    entryValues = nodeField[entryName]
-                    oldEntry = oldValues.get((fieldName, entryName), {})
-                    newEntry = newValues.get((fieldName, entryName), {})
-                    for node in nodeField.nodes:
-                        idx = nodeField._indicesOfNodesInArray[node]
-                        if node in oldEntry:
-                            entryValues[idx] = oldEntry[node]
-                        elif node in newEntry:
-                            entryValues[idx] = newEntry[node]
-
-        # Separately timed: this relinks EVERY node's field variables, so its cost scales with the
-        # whole mesh rather than with what this refinement actually changed.
-        with timeit("relink field variables"):
-            model._linkFieldVariableObjects(model.nodeSets["all"])
-        return change
+                    idx = nodeField._indicesOfNodesInArray[node]
+                    for target in targets:
+                        target[idx] = value
 
     def encodePlan(self, plan: "RefinementPlan") -> dict:
         """Serialize a :class:`RefinementPlan` -- just the octree eids it names."""
@@ -845,22 +1002,3 @@ class ModelModifier(ModelModifierBase):
         """Inverse of :meth:`encodePlan`."""
 
         return RefinementPlan(eids=[int(eid) for eid in data["eids"]])
-
-    def restoreDecisionState(self, records) -> None:
-        """Re-establish what the *next* decision needs, after a restart replay.
-
-        Two things, neither of which touches the mesh:
-
-        - the cutback guard, so the first post-resume call does not re-refine at a time this
-          modifier already refined at;
-        - the initial-marker latch, since a checkpoint only exists after an increment converged, so
-          a resumed run is never truly making its first call.
-
-        Notably absent: the pending marks. Those are re-derived by the next :meth:`plan` from the
-        restored solution state -- which is exactly what the live run would have done -- so they need
-        no checkpointing at all.
-        """
-
-        if records:
-            self._lastRefinedTime = float(records[-1].time)
-        self._isFirstCall = False

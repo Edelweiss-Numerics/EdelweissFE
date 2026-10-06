@@ -33,7 +33,7 @@ One increment, three phases
                                                                    │  │
     ╔══════════════════════════════════════════════════════════════▼══▼═════════╗
     ║ PHASE 2 — REFRESH  [ window CLOSED ]  pure readers: nothing born or dies  ║
-    ║   each mesh-dependent asks: has topologyVersion moved since I last looked? ║
+    ║   each mesh-dependent asks: has topology.version moved since I last looked?║
     ║        yes → refresh once, from the NET change across all rounds           ║
     ║   order is irrelevant — none of them can invalidate another's work         ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
@@ -42,8 +42,8 @@ One increment, three phases
     ║ PHASE 3 — SOLVE   assemble the equation system and iterate to convergence  ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 
-Phase 1 is :meth:`~edelweissfe.models.femodel.FEModel.updateTopology`, phase 2 is
-:meth:`~edelweissfe.models.femodel.FEModel.refreshMeshDependents`. The solver calls both, in that
+Phase 1 is :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`, phase 2 is
+:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents`. The solver calls both, in that
 order, before every solve.
 
 
@@ -61,7 +61,7 @@ structure, not from luck: within a round, modifiers run in the order they were d
 file.
 
 A modifier that keeps planning in response to its own output would never settle. That is a bug in
-the modifier, and :attr:`~edelweissfe.models.femodel.FEModel.maxTopologyRounds` turns it into a loud
+the modifier, and :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.maxRounds` turns it into a loud
 error naming the offender rather than a hang.
 
 Two modifiers must not change the same element within one update, in *any* round -- whichever ran
@@ -91,14 +91,14 @@ A modifier implements two halves, and the split is the single most important thi
 
 .. code-block:: python
 
-    def plan(self, model, change, step, timeStep):
+    def plan(self, model, change, step):
         if change is not None and not change.touchesElementSet(self.myElSet):
             return None                      # not my business -- let the pipeline settle
         marked = self.evaluateMarkers(model) # reads solution state: allowed here
         return None if not marked else MyPlan(ids=sorted(marked))
 
     def apply(self, model, plan):
-        numbers = model.reserveElementNumbers(len(plan.ids))
+        numbers = model.topology.reserveElementNumbers(len(plan.ids))
         for identifier, elNumber in zip(plan.ids, numbers):
             model.createElement(self.makeElement(elNumber, identifier))
         return change                        # a ModelChange describing what happened
@@ -110,10 +110,10 @@ the pipeline reach a fixed point instead of looping. ``change`` is ``None`` on t
 update, meaning "evaluate freshly".
 
 **Never write** ``model.elements`` **or** ``model.nodes`` **directly.** Use
-:meth:`~edelweissfe.models.femodel.FEModel.reserveElementNumbers`,
+:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers`,
 :meth:`~edelweissfe.models.femodel.FEModel.createElement` and
 :meth:`~edelweissfe.models.femodel.FEModel.removeElement`, and their node-side counterparts
-:meth:`~edelweissfe.models.femodel.FEModel.reserveNodeNumbers` and
+:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers` and
 :meth:`~edelweissfe.models.femodel.FEModel.createNode`.
 
 **Say so if your modifier is purely reactive.** A modifier that can only act in response to another
@@ -147,7 +147,7 @@ The ``plan``/``apply`` split removes the second implementation:
     modifier.plan(model, …)                        read recorded plan
     reads markers, state, time                     no markers re-evaluated
          │        │                                     │            │
-         │        └── records ──▶ topologyHistory ── restores ───────┘
+         │        └── records ──▶ topology.history ─ restores ───────┘
          │                                                           │
          └──────────── applies ──▶┌───────────────────────┐◀─ applies┘
                                   │ modifier.apply(model, │
@@ -158,34 +158,59 @@ The ``plan``/``apply`` split removes the second implementation:
                                               │
                         identical element numbers · identical topology
 
-:attr:`~edelweissfe.models.femodel.FEModel.topologyHistory` records every applied decision -- the
+:attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.history` records every applied decision -- the
 modifier's own serialized plan, via
 :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.encodePlan`, plus the
-resulting :meth:`~edelweissfe.models.femodel.FEModel.topologyFingerprint`. A restart replays it
-through :meth:`~edelweissfe.models.femodel.FEModel.replayTopologyHistory`, which calls the same
+resulting :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint`. A restart replays it
+through :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory`, which calls the same
 ``apply``. ``plan`` is never called during a replay.
 
-The fingerprint is not decoration. Recorded per decision, it turns *"the resumed run diverged
-somewhere"* into *"it diverged at record 12, modifier* ``amr`` *, round 2"* -- a divergence you can
-bisect rather than hunt. It is not free either: it walks the whole mesh, measured at 0.188 s on 64k
-elements / 69k nodes, and that is paid once per *applied* decision -- not per iteration, but often
-enough to notice on a large model.
+The fingerprint is not decoration. Recorded per decision, it is what lets a resumed run prove it
+rebuilt the mesh it was checkpointed with. It is not free either: it walks the whole mesh, measured
+at 0.188 s on 64k elements / 69k nodes, and a live run pays that once per *applied* decision -- not
+per iteration, but often enough to notice on a large model.
 
-**What is not checkpointed:** decision-side state, such as a marker's buffer of pending marks. The
-next ``plan`` re-derives it from the restored solution state -- exactly as the live run would have.
-If a modifier genuinely needs something back, it overrides the optional
-:meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.restoreDecisionState`.
-That is deliberately separate from ``apply``: it affects how the *next* decision is made, so getting
-it wrong cannot corrupt the mesh.
+A replay pays it **once**: the recorded digests are carried forward into the replayed history, and
+the mesh is checked against the last one after the whole history has been applied. Checking every
+record instead would make replaying a long history O(records x mesh) rather than O(mesh) -- a few
+hundred refinements on a mesh of tens of thousands of elements took minutes that way. When the
+final check does report a divergence, set
+:attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.verifyFingerprintsPerRecord` and replay again:
+that turns *"the resumed run diverged somewhere"* into *"it diverged at record 12, modifier*
+``amr`` *, round 2"* -- a divergence you can bisect rather than hunt.
+
+The fingerprint hashes every element's number, type and connectivity and every node's label and
+**reference** coordinates -- the mesh, not the motion. The surface nodes of a discrete rigid body are
+the one exception to the rule that a node's ``coordinates`` are its reference coordinates: the body
+writes its current position into them. It therefore reports their reference coordinates to the
+fingerprint
+(:meth:`~edelweissfe.rigidbodies.rigidbody.RigidBody.referenceCoordinatesOfMovedNodes`). Otherwise a
+decision recorded after the body had moved could never be verified on resume, because the replay runs
+before the displacement is restored, with the body still at its reference position.
+
+For the same reason the node-field bookkeeping a mutator requests after each change -- activating
+field variables on every node, resizing every NodeField, relinking every field variable -- is
+deferred to the end of the replay window and run once
+(:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changes` with ``deferFieldBookkeeping``). It
+is recomputed from the final mesh either way, so the result is the same; only the intermediate
+layouts, which no increment ever solves on, are skipped. The live per-increment window does not
+defer, and ``apply`` itself is unaware of the difference: it issues the same calls in both cases.
+
+**What a modifier carries between decisions** is declared like every other component's state, in
+:attr:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.checkpointedState` --
+hAdaptivity's flag that its step-start markers were evaluated, for instance -- and restored after the
+replay. Everything else ``plan`` reads is the restored model and solution state. This is deliberately
+separate from ``apply``: it affects how the *next* decision is made, so getting it wrong cannot
+corrupt the mesh.
 
 
 Element and node numbers
 ------------------------
 
 Element numbers come from one monotonic allocator,
-:meth:`~edelweissfe.models.femodel.FEModel.reserveElementNumbers`. They are **never recycled**, and
+:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers`. They are **never recycled**, and
 never derived from ``max(model.elements)``. Node labels get exactly the same treatment from
-:meth:`~edelweissfe.models.femodel.FEModel.reserveNodeNumbers`, for exactly the same reasons; the
+:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers`, for exactly the same reasons; the
 rest of this section says "element" for both.
 
 That is not tidiness. Deriving the next number from the current maximum makes numbering a function
@@ -198,15 +223,15 @@ Never recycling also means a number refers to one element for the model's entire
 reference cached by number cannot silently come to mean something else.
 
 Numbers may only be reserved inside a **topology window**
-(:meth:`~edelweissfe.models.femodel.FEModel.topologyChanges`), which the pipeline opens around
+(:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changes`), which the pipeline opens around
 phase 1. Outside it, creating or deleting an element or a node raises
 :class:`~edelweissfe.utils.exceptions.TopologyError`. This is what makes "only model modifiers
 change the topology" an enforced property rather than a convention.
 
 There is exactly one allocator per model, and everything that mints draws from it: the mesh
-generators (which run in a setup-time window opened around model setup), and the coordinate-keyed
+generators (which run in a setup-time window opened around model setup), and the
 node registry of adaptive refinement. That registry lives in the model-agnostic octree layer, so it
-is handed :meth:`~edelweissfe.models.femodel.FEModel.reserveNodeNumbers` as a plain ``count -> range``
+is handed :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers` as a plain ``count -> range``
 callable rather than a model. Without one it falls back to minting ``max + 1`` itself, which keeps
 the octree usable standalone but is only safe while nothing else mints.
 
@@ -230,7 +255,7 @@ uses the data -- which makes it correct on a replay for free.
 
 **Tier 2 --** :class:`~edelweissfe.models.meshdependent.MeshDependent`. For cached *geometry*:
 contact facets, tie records, projections. Register once with
-:meth:`~edelweissfe.models.femodel.FEModel.registerMeshDependent`, implement
+:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.registerMeshDependent`, implement
 :meth:`~edelweissfe.models.meshdependent.MeshDependent.refresh`, and phase 2 calls it once per
 increment with the net change.
 
@@ -238,7 +263,7 @@ increment with the net change.
 
     class MyConstraint(ConstraintBase, MeshDependent):
         def __init__(self, name, model, ...):
-            model.registerMeshDependent(self)
+            model.topology.registerMeshDependent(self)
 
         def refresh(self, model, change):
             if not change.touchesSurface(self.mySurface):
@@ -269,7 +294,7 @@ modifier's own loop.
 
 Push is not merely riskier here; it is at the wrong granularity. It reports transients, and
 consumers want the settled model. So phase 2 pulls: each consumer diffs against its own last-seen
-:attr:`~edelweissfe.models.femodel.FEModel.topologyVersion` and reconciles once, from the change
+:attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.version` and reconciles once, from the change
 coalesced across every round.
 
 
@@ -280,6 +305,6 @@ A checklist for a new modifier
 #. Return ``None`` from ``plan`` when the incoming change does not touch your domain.
 #. Reserve element numbers from the model; never write ``model.elements``.
 #. Implement ``encodePlan``/``decodePlan`` so your decision survives a checkpoint.
-#. Override ``restoreDecisionState`` only if ``plan`` needs history back -- not to rebuild the mesh.
+#. Declare ``checkpointedState``: what ``plan`` carries from one decision to the next (often nothing).
 #. Verify with a restart round-trip and compare
-   :meth:`~edelweissfe.models.femodel.FEModel.topologyFingerprint`, not just element counts.
+   :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint`, not just element counts.

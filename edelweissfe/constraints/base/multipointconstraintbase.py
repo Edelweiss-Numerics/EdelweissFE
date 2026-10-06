@@ -65,6 +65,12 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
     #: storing their records elsewhere override :meth:`claimedSlaveNodes` instead.
     _records: list = []
 
+    #: Whether a slave DOF of this constraint may be left to a constraint earlier in model order that
+    #: claims it too (its record is then dropped). A constraint without a stand-in for its equation --
+    #: the hanging-node constraint: nothing else keeps a hanging node on the coarse face -- sets this
+    #: to False, and a dropped record is then an error, not a log line.
+    mayYieldSlaveToEarlierClaim: bool = True
+
     @classmethod
     def fromConstraintDefinition(
         cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None

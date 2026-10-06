@@ -31,7 +31,7 @@
 This module once also defined a push-based ``ModelChangeObserver``, notified synchronously at the
 instant of each mutation. It was removed in favour of a single pull mechanism
 (:class:`~edelweissfe.models.meshdependent.MeshDependent`, driven by
-:meth:`~edelweissfe.models.femodel.FEModel.refreshMeshDependents`): model modifiers now run to a
+:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents`): model modifiers now run to a
 fixed point in rounds, so a per-mutation callback necessarily fires mid-pipeline -- handing the
 consumer a state that no longer exists by the time the solve begins, and letting a consumer that
 mutates in response do so re-entrantly, inside the modifier's own loop.
@@ -45,3 +45,4 @@ class ModelChangeType(Enum):
     COARSENING = auto()  # elements merged / nodes removed
     ELEMENT_EROSION = auto()  # elements deleted
     TOPOLOGY_CHANGE = auto()  # boundary / surface / set changes
+    GEOMETRY_CHANGE = auto()  # existing node coordinates moved; no element/node added or removed

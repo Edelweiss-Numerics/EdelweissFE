@@ -50,7 +50,7 @@ class UMFPACKSolver(LinearSolver):
         # why every one of the factories does it this way.
         from scipy.sparse.linalg import spsolve
 
-        return spsolve(A, b, use_umfpack=True)
+        return spsolve(A.copy(), b, use_umfpack=True)
 
 
 def createSolver(opts) -> Callable:

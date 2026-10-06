@@ -200,10 +200,10 @@ maxInc=0.02, minInc=1e-6, maxNumInc={maxNumInc}, maxIter=25, stepLength=1
 
 def test_restart_resume_matches_uninterrupted_reference_with_amr(tmp_path):
     """The gap #97 shipped without: AMR-refined topology can't be reconstructed from the .inp file,
-    so a checkpoint records FEModel.topologyHistory (the refinement decisions) instead, and a
+    so a checkpoint records TopologyPipeline.history (the refinement decisions) instead, and a
     resumed run replays them through hAdaptivity's own apply() before restoring node/element state.
     This is the actual read/write of that history through a real checkpoint file -- the lower-level
-    replayTopologyHistory() round-trip in test_hadaptivity_restart.py never touches an HDF5 file.
+    model.topology.replayHistory() round-trip in test_hadaptivity_restart.py never touches an HDF5 file.
     """
 
     fullPath = tmp_path / "full.inp"

@@ -68,6 +68,17 @@ class PointMass(BaseElement):
         if self._use_rotation:
             Me[n_disp : n_disp + self.inertia.shape[0]] = self.inertia
 
+    def computeConsistentInertia(self, M: np.ndarray):
+        """
+        Populate the consistent inertia matrix for this element, as required by the implicit
+        dynamic solver. A point mass has no shape functions, so its consistent inertia is exactly
+        its lumped one placed on the diagonal.
+        M is the element's slice of the system matrix, flat (size self.nDof * self.nDof) or square.
+        """
+        Me = np.zeros(self.nDof)
+        self.computeLumpedInertia(Me)
+        M[:] = np.diagflat(Me).reshape(M.shape)
+
     # Dummy implementations for abstract methods of BaseElement
     @property
     def ensightType(self) -> str:
@@ -109,6 +120,26 @@ class PointMass(BaseElement):
 
     def setNodes(self, nodes: list):
         self._nodes = nodes
+
+    def getStateVars(self) -> np.ndarray:
+        """This element carries no state from one increment to the next.
+
+        Returns
+        -------
+        np.ndarray
+            An empty buffer.
+        """
+
+        return np.empty(0)
+
+    def setStateVars(self, values: np.ndarray):
+        """Nothing to restore: this element carries no state.
+
+        Parameters
+        ----------
+        values
+            The empty buffer :meth:`getStateVars` returned.
+        """
 
     def acceptLastState(self):
         pass

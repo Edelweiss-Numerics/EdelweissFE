@@ -1,0 +1,34 @@
+name: Restart test, exhaustive
+
+# The full restart test: resumes from every checkpoint of every scenario. The regular workflow
+# (run_tests_with_marmot.yml) runs a representative subset; this one runs the rest, weekly and on
+# demand -- before merging a change to restart, the solvers, the time steppers or the topology
+# pipeline.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 0"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      # Installs exactly what conda-lock.yml pins (conda packages, no solving).
+      - uses: ./.github/actions/setup-locked-env
+
+      # Branch selection, caching and MARMOT_INSTALL_DIR: see .github/actions/build-marmot.
+      - uses: ./.github/actions/build-marmot
+
+      - name: Build EdelweissFE
+        shell: bash -leo pipefail {0}
+        run: |
+          pip install -v --no-deps --no-build-isolation .
+
+      - name: Run the exhaustive restart test
+        shell: bash -leo pipefail {0}
+        run: |
+          # The installed console script, not `python -m pytest`: see run_tests_with_marmot.yml.
+          "$(command -v pytest)" tests/test_restart_exhaustive.py -m exhaustive

@@ -16,7 +16,19 @@ class _DummySolver(NonlinearSolverBase):
     def solveIncrement(self, *args, **kwargs):
         pass
 
-    def solveStep(self, *args, **kwargs):
+    def beginStep(self, *args, **kwargs):
+        pass
+
+    def prepareIncrement(self, *args, **kwargs):
+        pass
+
+    def attemptIncrement(self, *args, **kwargs):
+        pass
+
+    def acceptIncrement(self, *args, **kwargs):
+        pass
+
+    def endStep(self, *args, **kwargs):
         pass
 
 

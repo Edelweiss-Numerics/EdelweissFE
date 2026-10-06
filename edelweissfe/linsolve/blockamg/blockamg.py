@@ -527,7 +527,7 @@ class BlockAMGSolver(LinearSolver):
         self._dumpOnDegradationMaxDumps = dumpOnDegradationMaxDumps
         self._dumpOnDegradationContextSolves = dumpOnDegradationContextSolves
 
-        # Hot reload: the path to watch, and the (mtime_ns, size) it was last read at. Seeded as
+        # Hot reload: the path to watch, and the file contents it was last applied from. Seeded as
         # None rather than from the file, so the first solve reads and reports the settings actually
         # in force -- which is the whole point when the file is being edited during a long run.
         self._hotReloadConfigFile = hotReloadConfigFile
@@ -925,22 +925,24 @@ class BlockAMGSolver(LinearSolver):
         if self._hotReloadConfigFile is None:
             return False
 
+        # The contents themselves are the stamp, not (mtime, size): on kernels with coarse file
+        # timestamps, two same-size saves within one clock tick share an mtime, and the second edit
+        # would be skipped for good. The file is a few hundred bytes, read once per solve.
         try:
-            fileStat = os.stat(self._hotReloadConfigFile)
-            stamp = (fileStat.st_mtime_ns, fileStat.st_size)
+            with open(self._hotReloadConfigFile, "r") as configFile:
+                stamp = configFile.read()
         except OSError as error:
-            self._log("warning", "hot reload: cannot stat {:}: {:}".format(self._hotReloadConfigFile, error))
+            self._log("warning", "hot reload: cannot read {:}: {:}".format(self._hotReloadConfigFile, error))
             return False
 
         if stamp == self._hotReloadStamp:
             return False
 
         try:
-            with open(self._hotReloadConfigFile, "r") as configFile:
-                newOptions = json.load(configFile)
+            newOptions = json.loads(stamp)
             if not isinstance(newOptions, dict):
                 raise ValueError("expected a JSON object, got {:}".format(type(newOptions).__name__))
-        except (OSError, ValueError) as error:
+        except ValueError as error:
             self._log(
                 "warning",
                 "hot reload: {:} is not readable as a JSON object ({:}); keeping the settings in "

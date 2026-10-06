@@ -39,7 +39,7 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.utils.facetcontactgeometry import line2ClosestPoint, tria3ClosestPoint
+from edelweissfe.utils.facetcontactgeometry import closestFacets, facetClosestPoints
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
@@ -249,14 +249,15 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         self.tiedRecords, self.untiedSlaveNodes = self._buildTiedRecords(
             slaveFacetElements, masterFacetElements, adjust=configuration.adjust
         )
+        self._reassignNodesOfElementsWithSnappedNodes(model)
         self._publishTiedUntiedNodeSets(model)
 
         # Registration is what gets a tie refreshed at all: multi-point constraints live in
         # model.multiPointConstraints, which no per-increment sweep iterates, and
         # getMultiPointConstraints() is called from inside the DofManager/VIJSystemMatrix rebuild --
-        # too late to safely swap in newly regenerated facet elements. FEModel.refreshMeshDependents
+        # too late to safely swap in newly regenerated facet elements. TopologyPipeline.refreshMeshDependents
         # runs after the model modifiers have settled and strictly before that rebuild decision.
-        model.registerMeshDependent(self)
+        model.topology.registerMeshDependent(self)
 
     @classmethod
     def fromConstraintDefinition(cls, name: str, definition: dict, model: FEModel, journal: Journal) -> "Constraint":
@@ -302,7 +303,6 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
 
         slaveNodes = list(dict.fromkeys(node for el in slaveFacetElements for node in el.nodes))
 
-        closestPointFunction = tria3ClosestPoint if self.nDim == 3 else line2ClosestPoint
         masterFacetCoords = [np.array([n.coordinates for n in el.nodes]) for el in masterFacetElements]
 
         # Frozen at construction (see __init__) -- NOT recomputed from the current (possibly
@@ -328,28 +328,31 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
                 float(np.linalg.norm(coords - coords.mean(axis=0), axis=1).max()) for coords in masterFacetCoords
             )
 
+        # All slave nodes are projected at once. Snapping below moves only the node it ties, after its
+        # projection, so projecting first is the same as projecting each node right before it is tied.
+        slaveCoords = np.array([slaveNode.coordinates for slaveNode in slaveNodes], dtype=float).reshape(-1, self.nDim)
+        if masterFacetCoords and slaveNodes:
+            _, seedIndices = facetTree.query(slaveCoords, k=1)
+            _, seedDistances = facetClosestPoints(slaveCoords, np.asarray(masterFacetCoords)[seedIndices])
+            ballCandidates = facetTree.query_ball_point(slaveCoords, seedDistances + maxFacetRadius)
+            candidatesPerSlave = [
+                sorted(set(ballCandidate) | {int(seedIdx)})
+                for ballCandidate, seedIdx in zip(ballCandidates, seedIndices)
+            ]
+        else:
+            candidatesPerSlave = [[] for _ in slaveNodes]
+        closestFacet, closestWeights, closestDistance = closestFacets(
+            slaveCoords, masterFacetCoords, candidatesPerSlave
+        )
+
         tiedRecords = []
         untiedSlaveNodes = []
+        self._snappedNodes = []
 
-        for slaveNode in slaveNodes:
-            bestWeights = None
-            bestFacetIdx = None
-            bestDistance = np.inf
+        for s, slaveNode in enumerate(slaveNodes):
+            bestFacetIdx, bestWeights, bestDistance = int(closestFacet[s]), closestWeights[s], closestDistance[s]
 
-            if masterFacetCoords:
-                xs = slaveNode.coordinates
-                _, seedIdx = facetTree.query(xs, k=1)
-                _, seedDistance = closestPointFunction(xs, *masterFacetCoords[int(seedIdx)])
-                candidates = set(facetTree.query_ball_point(xs, seedDistance + maxFacetRadius))
-                candidates.add(int(seedIdx))
-                for facetIdx in sorted(candidates):
-                    weights, distance = closestPointFunction(xs, *masterFacetCoords[facetIdx])
-                    if distance < bestDistance:
-                        bestDistance = distance
-                        bestWeights = weights
-                        bestFacetIdx = facetIdx
-
-            if bestFacetIdx is None or bestDistance > membershipTolerance:
+            if bestFacetIdx < 0 or bestDistance > membershipTolerance:
                 untiedSlaveNodes.append(slaveNode)
                 continue
 
@@ -359,10 +362,46 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
             withinAdjustTolerance = self._adjustTolerance is None or bestDistance <= self._adjustTolerance
             if adjust and withinAdjustTolerance and bestDistance > 0.0:
                 slaveNode.coordinates[:] = bestWeights @ masterFacetCoords[bestFacetIdx]
+                self._snappedNodes.append(slaveNode)
 
             tiedRecords.append((slaveNode, masterFacetElements[bestFacetIdx].nodes, bestWeights))
 
         return tiedRecords, untiedSlaveNodes
+
+    def _reassignNodesOfElementsWithSnappedNodes(self, model: FEModel):
+        """Let every element with a snapped node take up the node's new position.
+
+        An element copies the coordinates of its nodes when they are assigned -- a Marmot element
+        into the buffer its C++ element reads, a displacement element into its coordinate matrix --
+        and never reads the nodes again. Snapping moves the nodes after that, so without this the
+        elements kept the gap the snap was meant to remove: the nodes, the output and any element a
+        refinement creates later saw the snapped position, the original elements did not (on the
+        c1_150 edge breakout, 525 elements, by up to 0.5 mm). Re-assigning the nodes is enough
+        because a tie is constructed before the elements are initialized (``prepareYourself``).
+
+        A contact facet copies its coordinates when it is initialized, which its generator does at
+        once; a facet of another constraint's contact surface therefore keeps the unsnapped position
+        -- see the ``adjust`` option.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        """
+
+        if not self._snappedNodes:
+            return
+
+        snapped = set(self._snappedNodes)
+        for element in model.elements.values():
+            if not snapped.isdisjoint(element.nodes):
+                element.setNodes(element.nodes)
+
+        self._journal.message(
+            "snapped {:} slave node(s) onto the master surface".format(len(self._snappedNodes)),
+            self.name,
+            1,
+        )
 
     def _publishTiedUntiedNodeSets(self, model: FEModel):
         """Expose the tied/untied slave nodes as ordinary node sets -- e.g. via *fieldOutput, or for
@@ -412,7 +451,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
             return False
 
         # The facets themselves were already regenerated, in the topology-update phase, by the
-        # implicit surfaceFacets modifier (see FEModel.ensureSurfaceFacetModifier). This constraint
+        # implicit surfaceFacets modifier (see TopologyPipeline.ensureSurfaceFacetModifier). This constraint
         # is a pure reader: it re-projects onto whatever now tiles the surface.
         slaveFacetElements = list(model.elementSets[self._slaveSurfaceSetName])
         masterFacetElements = list(model.elementSets[self._masterSurfaceSetName])

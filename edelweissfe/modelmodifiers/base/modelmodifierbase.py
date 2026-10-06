@@ -30,8 +30,11 @@
 
 from abc import ABC, abstractmethod
 
+import numpy as np
+
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.utils.checkpointedstate import packState, unpackState
 from edelweissfe.utils.schema import OptionSchemaProvider
 
 
@@ -80,7 +83,7 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
         return self._name
 
     @abstractmethod
-    def plan(self, model: FEModel, change, step, timeStep: float):
+    def plan(self, model: FEModel, change, step):
         """Decide what, if anything, this modifier wants to change about the model -- without
         changing it.
 
@@ -101,11 +104,9 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
             planned within the current topology update, or ``None`` on the first round. **Return
             ``None`` when it does not touch this modifier's domain** -- that is what lets the
             pipeline reach a fixed point instead of looping (see
-            :meth:`~edelweissfe.models.femodel.FEModel.updateTopology`).
+            :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`).
         step
             The current step.
-        timeStep
-            The current timeStep.
 
         Returns
         -------
@@ -123,8 +124,8 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
         second implementation to drift apart from this one.
 
         Runs inside an open topology window (see
-        :meth:`~edelweissfe.models.femodel.FEModel.topologyChanges`), so it may create and delete
-        elements -- through :meth:`~edelweissfe.models.femodel.FEModel.reserveElementNumbers` and
+        :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changes`), so it may create and delete
+        elements -- through :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers` and
         :meth:`~edelweissfe.models.femodel.FEModel.createElement`, never by writing
         ``model.elements`` directly.
 
@@ -163,7 +164,7 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
         holding a stale reference, which later corrupts element-set membership and can surface as a
         node that is simultaneously Dirichlet-prescribed and a multi-point-constraint slave.
 
-        :meth:`~edelweissfe.models.femodel.FEModel.checkModelModifierDomains` compares these
+        :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.checkModelModifierDomains` compares these
         pairwise once, at the end of setup, and refuses the model rather than letting the conflict
         appear deep in the solve loop. The default claims nothing, which is correct for a modifier
         that only ever *adds* entities.
@@ -171,31 +172,37 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
 
         return set()
 
-    def restoreDecisionState(self, records):
-        """Restore whatever *decision-side* state :meth:`plan` needs, from this modifier's own
-        records, after a restart replay.
+    #: The state this modifier carries from one decision to the next, by attribute name and type;
+    #: see :mod:`~edelweissfe.utils.checkpointedstate`. Not the mesh it built: a restart replays the
+    #: recorded decisions through :meth:`apply`. Every modifier declares it -- an empty mapping if it
+    #: carries none. Undeclared, it cannot be checkpointed.
+    checkpointedState: dict | None = None
 
-        Optional -- the default does nothing, which is correct for any modifier whose next decision
-        depends only on the model and the solution state, both of which the restart restores anyway.
-        Deliberately separate from :meth:`apply`: this is about how the *next* decision is made, not
-        about reconstructing the model, so getting it wrong cannot corrupt the mesh.
+    def getRestartData(self) -> dict[str, np.ndarray]:
+        """The declared state; see :attr:`checkpointedState`.
+
+        Returns
+        -------
+        dict[str, numpy.ndarray]
+            A flat mapping of array name to array.
+        """
+
+        return packState(self)
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore the state :meth:`getRestartData` returned.
 
         Parameters
         ----------
-        records
-            This modifier's :class:`~edelweissfe.models.modelchange.TopologyRecord` entries, in
-            order. Empty if it never changed anything.
+        data
+            The mapping of arrays.
         """
 
-    def onStepStart(self, model: FEModel, step):
-        """Optional lifecycle hook called at the start of an analysis step."""
-
-    def onIncrementEnd(self, model: FEModel, step, timeStep: float):
-        """Optional lifecycle hook called after an increment converges."""
+        unpackState(self, data)
 
     # getRestartData/setRestartData are gone. A modifier no longer serializes its own history, nor
-    # implements its own replay: FEModel records every applied plan in model.topologyHistory and
+    # implements its own replay: FEModel records every applied plan in model.topology.history and
     # replays it through this class's apply(). The previous arrangement had each modifier
     # reimplementing the mutation for the replay path, which is precisely why a resumed run could
     # rebuild a differently-numbered mesh -- two implementations of one mutation always drift.
-    # Decision-side state that plan() needs goes through restoreDecisionState() instead.
+    # State that plan() carries from one decision to the next is declared in checkpointedState.
