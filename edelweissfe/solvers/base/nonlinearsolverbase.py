@@ -540,13 +540,15 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         self,
         R: DofVector,
         ddU: DofVector,
+        dU: DofVector,
         F: DofVector,
+        FConstraints: DofVector,
         iterationCounter: int,
         residualHistory: dict,
     ) -> tuple[bool, dict]:
-        """Check the convergence, individually for each field,
-        similar to Abaqus based on the current total flux residual and the field correction
-        Is called by solveIncrement() to decide whether to continue iterating or stop.
+        """Check the convergence, individually for each field, based on the current flux residual and the field
+        correction, using the convergence criterion of the solver (see :mod:`edelweissfe.solvers.base.convergencecriteria`).
+        Is called by solveStep() to decide whether to continue iterating or stop.
 
         Parameters
         ----------
@@ -554,8 +556,12 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The current residual.
         ddU
             The current correction increment.
+        dU
+            The current solution increment.
         F
-            The accumulated fluxes.
+            The accumulated absolute element fluxes.
+        FConstraints
+            The accumulated absolute constraint fluxes.
         iterationCounter
             The current iteration number.
         residualHistory
@@ -573,25 +579,24 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         convergedAtAll = True
         nodesWithLargestResidual = {}
 
-        spatialAveragedFluxes = self.computeSpatialAveragedFluxes(F)
-
-        if iterationCounter < 15:  # standard tolerance set
-            fluxResidualTolerances = self.fluxResidualTolerances
-        else:  # alternative tolerance set
-            fluxResidualTolerances = self.fluxResidualTolerancesAlt
+        spatialAveragedFluxes = self.convergenceCriterion.computeSpatialAveragedFluxes(
+            F, FConstraints, self.theDofManager
+        )
 
         for field, fieldIndices in self.theDofManager.idcsOfFieldsInDofVector.items():
-            fieldResidualAbs = np.abs(R[fieldIndices])
+            fieldConvergence = self.convergenceCriterion.checkField(
+                field,
+                R[fieldIndices],
+                ddU[fieldIndices] if ddU is not None else None,
+                dU[fieldIndices],
+                spatialAveragedFluxes[field],
+                iterationCounter,
+            )
+            fluxResidual = fieldConvergence.fluxResidual
 
-            indexOfMax = np.argmax(fieldResidualAbs)
-            fluxResidual = fieldResidualAbs[indexOfMax]
-
-            nodesWithLargestResidual[field] = self.theDofManager.getNodeForIndexInDofVector(indexOfMax)
-
-            fieldCorrection = np.linalg.norm(ddU[fieldIndices], np.inf) if ddU is not None else 0.0
-
-            convergedCorrection = fieldCorrection < self.fieldCorrectionTolerances[field]
-            convergedFlux = fluxResidual <= max(fluxResidualTolerances[field] * spatialAveragedFluxes[field], 1e-7)
+            nodesWithLargestResidual[field] = self.theDofManager.getNodeForIndexInDofVector(
+                range(len(R))[fieldIndices][fieldConvergence.indexOfLargestResidual]
+            )
 
             previousFluxResidual, nGrew = residualHistory[field]
             if fluxResidual > previousFluxResidual:
@@ -600,13 +605,18 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
             iterationMessage += self.iterationMessageTemplate.format(
                 fluxResidual,
-                "✓" if convergedFlux else " ",
-                fieldCorrection,
-                "✓" if convergedCorrection else " ",
+                "✓" if fieldConvergence.fluxResidualConverged else " ",
+                fieldConvergence.correction,
+                "✓" if fieldConvergence.correctionConverged else " ",
             )
-            convergedAtAll = convergedAtAll and convergedCorrection and convergedFlux
+            convergedAtAll = (
+                convergedAtAll and fieldConvergence.correctionConverged and fieldConvergence.fluxResidualConverged
+            )
 
         if self.theDofManager.idcsOfScalarVariablesInDofVector:
+            fluxResidualTolerances = (
+                self.fluxResidualTolerances if iterationCounter < 15 else self.fluxResidualTolerancesAlt
+            )
             residualScalarVariables = max(np.abs(R[list(self.theDofManager.idcsOfScalarVariablesInDofVector.values())]))
             correction = (
                 np.linalg.norm(
@@ -705,29 +715,6 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         # are fully overwritten again on the next update.
         KCsr = self.csrGenerator.updateInPlace(K)
         return KCsr
-
-    def computeSpatialAveragedFluxes(self, F: DofVector) -> dict[str, float]:
-        """Compute the spatial averaged flux for every field
-        Is usually called by checkConvergence().
-
-        Parameters
-        ----------
-        F
-            The accumulated flux vector.
-
-        Returns
-        -------
-        dict[str,float]
-            A dictioary containg the spatial average fluxes for every field.
-        """
-        spatialAveragedFluxes = dict.fromkeys(self.theDofManager.idcsOfFieldsInDofVector, 0.0)
-        for field, nDof in self.theDofManager.nAccumulatedNodalFluxesFieldwise.items():
-            spatialAveragedFluxes[field] = max(
-                1e-10,
-                np.linalg.norm(F[self.theDofManager.idcsOfFieldsInDofVector[field]], 1) / nDof,
-            )
-
-        return spatialAveragedFluxes
 
     def extrapolateLastIncrement(
         self,

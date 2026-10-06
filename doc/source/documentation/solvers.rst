@@ -98,6 +98,19 @@ momentum and kinetic energy in that case.
 
 .. pprint:: solver:NIDParallel
 
+Convergence criteria of the implicit solvers
+--------------------------------------------
+
+The implicit solvers (``NIST``, ``NISTParallel``, ``NISTPArcLength``, ``NID``, ``NIDParallel``) select the
+criterion of their Newton iterations with the solver option ``convergenceCriterion``, e.g.:
+
+.. code-block:: edelweiss
+
+    >>options, name=theSolver, convergenceCriterion=abaqus
+
+.. automodule:: edelweissfe.solvers.base.convergencecriteria
+   :members:
+
 ``NEST`` - Nonlinear Explicit Static
 -------------------------------------
 
