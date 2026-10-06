@@ -99,6 +99,35 @@ def test_a_malformed_config_changes_nothing_and_is_retried(configuredSolver):
     assert solver._sweeps == 4
 
 
+def test_values_are_converted_as_at_construction(configuredSolver):
+    """A JSON value is converted exactly as the factory converts it, not applied raw.
+
+    ``"outerTol": "adaptive"`` -- in the shipped configs -- is ``None`` at construction; applied raw,
+    the string ended a live run at its first solve (LEO5 job 8021070, TypeError in the forcing term).
+    """
+    solver, configPath = configuredSolver
+    _reload(solver)
+
+    _write(configPath, {"sweeps": 1, "outerTol": "adaptive", "hotReloadConfigFile": str(configPath)})
+    assert _reload(solver) is False, "'adaptive' is the setting in force, not a change"
+    assert solver._outerTol is None
+
+    _write(configPath, {"sweeps": "2", "outerTol": "1e-6", "hotReloadConfigFile": str(configPath)})
+    assert _reload(solver) is True
+    assert solver._sweeps == 2
+    assert solver._outerTol == 1e-6
+
+
+def test_an_unconvertible_value_is_rejected_and_changes_nothing(configuredSolver):
+    solver, configPath = configuredSolver
+    _reload(solver)
+
+    _write(configPath, {"sweeps": 1, "etaMax": "loose", "hotReloadConfigFile": str(configPath)})
+
+    assert _reload(solver) is False
+    assert solver._etaMax == BlockAMGSolver()._etaMax
+
+
 def test_a_json_scalar_is_rejected_like_a_parse_error(configuredSolver):
     solver, configPath = configuredSolver
     _reload(solver)

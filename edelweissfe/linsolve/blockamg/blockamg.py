@@ -157,6 +157,50 @@ _DEFAULT_SCALAR_PRECOND = {
 }
 
 
+def _outerTolFromConfig(value) -> float | None:
+    """``outerTol`` unset, ``None``, or the literal string ``"adaptive"`` all select the adaptive forcing."""
+    return None if value in (None, "adaptive") else float(value)
+
+
+#: The conversion of every configuration file key from its JSON value to the constructor argument of
+#: :class:`BlockAMGSolver`. Shared by the factory :func:`edelweissfe.linsolve.blockamg.createSolver` and
+#: the hot reload, so that a value means the same thing at construction and when reloaded during a run.
+CONFIG_CASTS = {
+    "outerTol": _outerTolFromConfig,
+    "outerRestart": int,
+    "outerMaxiter": int,
+    "outerSolver": str,
+    "lgmresM": int,
+    "lgmresK": int,
+    "lgmresAlwaysReset": bool,
+    "lgmresResetOnNewIncrement": bool,
+    "sweeps": int,
+    "symmetric": bool,
+    "useRigidBodyNullspace": bool,
+    "etaMin": float,
+    "etaMax": float,
+    "ewGamma": float,
+    "ewAlpha": float,
+    "residualGrowthFactor": float,
+    "hierarchyStalenessFactor": float,
+    "trueResidualMaxContinuations": int,
+    "gapCompensatedTolerance": bool,
+    "gapSafetyFactor": float,
+    "verbosity": str,
+    "warnOuterIterationsThreshold": int,
+    "dumpOnDegradationDir": str,
+    "dumpOnDegradationThreshold": int,
+    "dumpOnDegradationMaxDumps": int,
+    "dumpOnDegradationContextSolves": int,
+    "hotReloadConfigFile": str,
+    "hierarchyDropTol": float,
+    "hierarchyDropLumping": bool,
+    "gapMaxFactor": float,
+    "fieldPreconds": dict,
+    "p1FieldNames": list,
+}
+
+
 class BlockAMGSolver(LinearSolver):
     """Field-split block-AMG preconditioned GMRES. Callable as ``(A, b) -> x``.
 
@@ -964,6 +1008,15 @@ class BlockAMGSolver(LinearSolver):
             if name not in validNames:
                 unknown.append(name)
                 continue
+
+            # The same conversion as at construction: the raw JSON value can differ in type or even
+            # meaning from the argument it stands for (``"outerTol": "adaptive"`` is ``None``).
+            if name in CONFIG_CASTS:
+                try:
+                    value = CONFIG_CASTS[name](value)
+                except (TypeError, ValueError) as error:
+                    rejected.append("{:} ({:})".format(name, error))
+                    continue
 
             if name == "verbosity":
                 if value not in _VERBOSITY_LEVELS:
