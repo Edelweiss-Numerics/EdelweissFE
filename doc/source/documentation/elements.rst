@@ -159,5 +159,11 @@ Implementing your own elements
 
 Relevant module: ``edelweissfe.elements.base.baseelement``
 
+An element carrying a material should also implement
+:meth:`~edelweissfe.elements.base.baseelement.BaseElement.updateMaterialProperty`, through which the
+:doc:`changeMaterialProperty <stepactions>` step action changes a material property during an
+analysis. Unlike ``setMaterial``, it must keep the element's state: neither reset nor re-initialize the
+state variables, and keep the arrays holding them, which field outputs keep viewing.
+
 .. automodule:: edelweissfe.elements.base.baseelement
    :members:

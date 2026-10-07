@@ -75,6 +75,14 @@ class MarmotMaterialWrappingElement(BaseElement):
         self._ensightType = "point"
         self._hasMaterial = False
 
+        # How the driven material is rebuilt by updateMaterialProperty: by its Marmot name, or by
+        # the type of the already constructed material instance (then the name is None).
+        self._materialName = None
+        self._materialClass = None
+        # The characteristic element length communicated to the material, if any, which a
+        # rebuilt material has to be told again.
+        self._characteristicElementLength = None
+
         self._driver = materialDriverForMaterialType(materialType)()
         self._fields = (self._driver.fields,)
         self._nDof = self._driver.nDof
@@ -187,8 +195,9 @@ class MarmotMaterialWrappingElement(BaseElement):
                     "a material name; omit it only when passing an already constructed material."
                 )
 
+            self._materialName = materialNameOrInstance.upper()
             self._materialProperties = materialProperties
-            self._driver.createMaterial(materialNameOrInstance.upper(), materialProperties)
+            self._driver.createMaterial(self._materialName, materialProperties)
         else:
             if materialProperties is not None:
                 raise TypeError(
@@ -196,6 +205,9 @@ class MarmotMaterialWrappingElement(BaseElement):
                     "is an already constructed material."
                 )
 
+            self._materialName = None
+            self._materialClass = type(materialNameOrInstance)
+            self._materialProperties = materialNameOrInstance.materialProperties
             self._driver.setMaterial(materialNameOrInstance)
 
         self._nStateVars = self._driver.getNumberOfRequiredStateVars()
@@ -209,6 +221,37 @@ class MarmotMaterialWrappingElement(BaseElement):
 
         self._hasMaterial = True
 
+    def updateMaterialProperty(self, index: int, value: float):
+        """Change one entry of the property vector of the driven material, keeping the state.
+
+        The material is rebuilt from its modified property vector and handed the very same state
+        variable arrays again, which are neither reset nor re-initialized. A characteristic element
+        length communicated before is communicated to the rebuilt material again.
+
+        Parameters
+        ----------
+        index
+            The index of the property in the material's property vector.
+        value
+            The new value of the property.
+        """
+
+        materialProperties = self._materialProperties.copy()
+        materialProperties[index] = value
+
+        if self._materialName is not None:
+            self._driver.createMaterial(self._materialName, materialProperties)
+        else:
+            self._driver.setMaterial(self._materialClass(materialProperties))
+
+        self._materialProperties = materialProperties
+
+        # The driver keeps persistent views into the temporary state vars only.
+        self._driver.assignStateVars(self._stateVarsTemp)
+
+        if self._characteristicElementLength is not None:
+            self._driver.setCharacteristicElementLength(self._characteristicElementLength)
+
     def _initializeStateVarsTemp(
         self,
     ):
@@ -221,6 +264,7 @@ class MarmotMaterialWrappingElement(BaseElement):
             self._driver.initializeYourself()
 
         if stateType == "characteristic element length":
+            self._characteristicElementLength = values[0]
             self._driver.setCharacteristicElementLength(values[0])
 
         self.acceptLastState()

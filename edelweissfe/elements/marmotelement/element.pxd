@@ -191,6 +191,7 @@ cdef class MarmotElementWrapper:
     cdef list _fields
     cdef str _ensightType
     cdef int _hasMaterial
+    cdef str _materialName
     cdef np.ndarray _dofIndicesPermutation
 
     cdef public double[::1] _stateVars, nodeCoordinates

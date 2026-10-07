@@ -211,15 +211,16 @@ cdef class MarmotElementWrapper:
             - the actual set,
             - and a temporary set for backup in nonlinear iteration schemes.
         """
+        self._materialName = materialName.upper()
         self._materialProperties = materialProperties
         try:
             self.marmotElement.assignProperty(
                     MarmotMaterialSection(
-                            materialName.upper().encode("UTF-8"),
+                            self._materialName.encode("UTF-8"),
                             &self._materialProperties[0],
                             self._materialProperties.shape[0]))
         except ValueError:
-            raise NotImplementedError("Marmot material {:} not found in library.".format(materialName.upper()))
+            raise NotImplementedError("Marmot material {:} not found in library.".format(self._materialName))
 
         self.nStateVars = self.marmotElement.getNumberOfRequiredStateVars()
 
@@ -229,6 +230,51 @@ cdef class MarmotElementWrapper:
         self.marmotElement.assignStateVars(&self._stateVarsTemp[0], self.nStateVars)
 
         self._hasMaterial = True
+
+    def updateMaterialProperty(self, int index, double value):
+        """Change one entry of the property vector of the material, keeping the state.
+
+        The underlying MarmotElement creates its materials anew from the modified property vector,
+        which they keep a pointer to, and is handed the very same state variable arrays again. The
+        state is neither reset nor re-initialized, and the arrays stay the same objects, so
+        persistent result views remain valid.
+
+        Parameters
+        ----------
+        index
+            The index of the property in the material's property vector.
+        value
+            The new value of the property.
+        """
+
+        if not self._hasMaterial:
+            raise Exception("Element {:} has no material assigned!".format(self._elNumber))
+
+        # A copy, owned by this element: the Marmot materials point into it, and the remaining
+        # properties may be specific to this element (e.g., materialParameterFromField).
+        if not 0 <= index < self._materialProperties.shape[0]:
+            raise IndexError(
+                "Element {:}: material property index {:} is out of range for {:} properties.".format(
+                    self._elNumber, index, self._materialProperties.shape[0]))
+
+        cdef double[::1] materialProperties = np.array(self._materialProperties, dtype=np.float64, copy=True)
+        materialProperties[index] = value
+
+        self.marmotElement.assignProperty(
+                MarmotMaterialSection(
+                        self._materialName.encode("UTF-8"),
+                        &materialProperties[0],
+                        materialProperties.shape[0]))
+
+        # Only now the previous array may be released, which the replaced materials pointed into.
+        self._materialProperties = materialProperties
+
+        if self.marmotElement.getNumberOfRequiredStateVars() != self.nStateVars:
+            raise ValueError(
+                "Element {:}: changing a material property must not change the number of state "
+                "variables.".format(self._elNumber))
+
+        self.marmotElement.assignStateVars(&self._stateVarsTemp[0], self.nStateVars)
 
     cpdef void _initializeStateVarsTemp(self, ) noexcept nogil:
         self._stateVarsTemp[:] = self._stateVars
