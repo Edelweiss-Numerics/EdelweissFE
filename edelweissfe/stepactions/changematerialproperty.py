@@ -25,6 +25,16 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
+"""
+Change a property of a material during a step.
+
+At the start of every increment, one entry of the material's property vector is set to a value
+prescribed as a function of the step time, for every element of every section using the material.
+The elements keep their state: a changed property affects how the state evolves from then on, but
+the state accumulated so far (stress, plastic strain, damage, ...) is neither reset nor
+re-initialized. Properties an element was assigned individually (``materialParameterFromField``) are
+kept, apart from the changed one.
+"""
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -35,11 +45,6 @@ from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
-
-"""
-Stepaction to change material properties.
-
-"""
 
 
 @dataclass(frozen=True)
@@ -256,8 +261,9 @@ class StepAction(StepActionBase):
             self.name,
         )
 
-        modifiedProperties = self._propertyVector()
-        modifiedProperties[self.theIndex] = theCurrentProperty
+        # The model's material record carries the current value as well, e.g., for elements a Marmot
+        # material is assigned to later on, by mesh refinement.
+        self._propertyVector()[self.theIndex] = theCurrentProperty
 
         for section in model.sections.values():
             if not self._sectionUsesThisMaterial(section):
@@ -265,12 +271,9 @@ class StepAction(StepActionBase):
 
             for elSet in section.elSets:
                 for el in elSet:
-                    # The material is rebuilt per element on purpose: an edelweiss material instance
-                    # holds the state vars of the element it is assigned to, so one instance shared
-                    # across an element set would alias them.
-                    section.assignSectionPropertiesToElement(
-                        el, material=self._materialWithProperties(section.material, modifiedProperties)
-                    )
+                    # Not a re-assignment of the section: that would hand the element a new material
+                    # along with new, zeroed state variables, wiping its state at every increment.
+                    el.updateMaterialProperty(self.theIndex, theCurrentProperty)
 
     def _materialLabel(self) -> str:
         """The name of the driven material, for logging.
@@ -320,33 +323,3 @@ class StepAction(StepActionBase):
             return isinstance(section.material, dict) and section.material["name"] == self.theMaterial["name"]
 
         return section.material is self.theMaterial
-
-    @staticmethod
-    def _materialWithProperties(sectionMaterial, modifiedProperties):
-        """Create a copy of a section's material carrying the modified property vector.
-
-        Parameters
-        ----------
-        sectionMaterial
-            The material currently assigned to the section.
-        modifiedProperties
-            The modified property vector.
-
-        Returns
-        -------
-        The material to be assigned to the section's elements, of the same kind as
-        ``sectionMaterial``.
-
-        Notes
-        -----
-        The autodiff materials' energy density function needs no carrying over: the property set
-        still carries ``psi_e``, and the material's ``__init__`` installs it from there.
-        """
-
-        if isinstance(sectionMaterial, dict):  # for marmotmaterial provider
-            modifiedMaterial = sectionMaterial.copy()
-            modifiedMaterial["properties"] = modifiedProperties
-            return modifiedMaterial
-
-        # for edelweissmaterial provider: rebuild the instance from the modified properties
-        return type(sectionMaterial)(modifiedProperties)

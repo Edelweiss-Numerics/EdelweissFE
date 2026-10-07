@@ -721,6 +721,14 @@ Records the model time at the end of every increment and writes the collected ti
     [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
     [delta] In subsequent steps only: define the updated force vector incrementally (<class 'str'>, default = 0)
 ===== module documentation: edelweissfe.stepactions.changematerialproperty =====
+Change a property of a material during a step.
+
+At the start of every increment, one entry of the material's property vector is set to a value
+prescribed as a function of the step time, for every element of every section using the material.
+The elements keep their state: a changed property affects how the state evolves from then on, but
+the state accumulated so far (stress, plastic strain, damage, ...) is neither reset nor
+re-initialized. Properties an element was assigned individually (``materialParameterFromField``) are
+kept, apart from the changed one.
 < changematerialproperty > Stepaction to change material properties.
   required arguments
     [name] Name of the step action. (<class 'str'>)
