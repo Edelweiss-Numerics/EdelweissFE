@@ -271,6 +271,7 @@ class NISTPArcLength(NISTParallel):
         R_0 = R_[:, 0]
         R_f = R_[:, 1]
         F = self.theDofManager.constructDofVector()  # accumulated Flux vector
+        FConstraints = self.theDofManager.constructDofVector()  # accumulated constraint Flux vector
 
         P_0 = self.theDofManager.constructDofVector()
         P_f = self.theDofManager.constructDofVector()
@@ -299,10 +300,10 @@ class NISTPArcLength(NISTParallel):
             U_np[:] = U_n
             U_np += dU
 
-            P[:] = K[:] = F[:] = P_0[:] = P_f[:] = K_f[:] = K_0[:] = 0.0
+            P[:] = K[:] = F[:] = FConstraints[:] = P_0[:] = P_f[:] = K_f[:] = K_0[:] = 0.0
 
             P, K, F = self.computeElements(model.elements, U_np, dU, P, K, F, timeStep)
-            P, K = self.assembleConstraints(model.constraints, U_np, dU, P, K, timeStep)
+            P, K = self.assembleConstraints(model.constraints, U_np, dU, P, K, timeStep, FConstraints)
 
             P_0, K_0 = self.assembleLoads(
                 nodeForces, distributedLoads, bodyForces, U_np, P_0, K_0, zeroTimeStep
@@ -339,7 +340,7 @@ class NISTPArcLength(NISTParallel):
 
             if iterationCounter > 0 or isExtrapolatedIncrement:
                 converged, nodesWithLargestResidual = self.checkConvergence(
-                    R_0, ddU, F, iterationCounter, incrementResidualHistory
+                    R_0, ddU, dU, F, FConstraints, iterationCounter, incrementResidualHistory
                 )
 
                 if converged:

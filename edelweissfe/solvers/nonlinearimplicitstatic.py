@@ -43,6 +43,11 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
+from edelweissfe.solvers.base.convergencecriteria import (
+    AbaqusConvergenceCriterion,
+    ConvergenceCriterionBase,
+    LegacyConvergenceCriterion,
+)
 from edelweissfe.solvers.base.dirichlet import applyDirichletToStiffness
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
@@ -153,6 +158,47 @@ class NISTSchema:
         default=0,
         optionName="report-performance-frequency",
     )
+    convergenceCriterion: str | None = schemaField(
+        description=(
+            "The convergence criterion of the Newton iterations, legacy (the original EdelweissFE one) or abaqus "
+            "(the one of Abaqus/Standard); see edelweissfe.solvers.base.convergencecriteria."
+        ),
+        dtype=str,
+        default="legacy",
+    )
+    abaqusResidualTolerance: float | None = schemaField(
+        description="abaqus criterion: R_n, the flux residual tolerance relative to the time average flux.",
+        dtype=float,
+        default=5e-3,
+    )
+    abaqusCorrectionTolerance: float | None = schemaField(
+        description="abaqus criterion: C_n, the correction tolerance relative to the largest increment of the field.",
+        dtype=float,
+        default=1e-2,
+    )
+    abaqusResidualToleranceAlternative: float | None = schemaField(
+        description="abaqus criterion: R_p, the flux residual tolerance used from iteration I_p on.",
+        dtype=float,
+        default=2e-2,
+    )
+    abaqusIterationsForAlternativeTolerance: int | None = schemaField(
+        description="abaqus criterion: I_p, the iteration from which on R_p is used.", dtype=int, default=9
+    )
+    abaqusZeroFluxThreshold: float | None = schemaField(
+        description="abaqus criterion: epsilon, below which (relative to the time average flux) a field carries no flux.",
+        dtype=float,
+        default=1e-5,
+    )
+    abaqusZeroFluxCorrectionTolerance: float | None = schemaField(
+        description="abaqus criterion: C_epsilon, the relative correction tolerance of a field without flux.",
+        dtype=float,
+        default=1e-3,
+    )
+    abaqusLinearResidualTolerance: float | None = schemaField(
+        description="abaqus criterion: R_l, below which a field is converged irrespective of its correction.",
+        dtype=float,
+        default=1e-8,
+    )
 
 
 class NIST(NonlinearSolverBase):
@@ -186,7 +232,18 @@ class NIST(NonlinearSolverBase):
         "pruneCondensedMatrixZeros": True,
         "useAmgclMPCCondensation": False,
         "report-performance-frequency": 0,
+        "convergenceCriterion": "legacy",
+        "abaqusResidualTolerance": 5e-3,
+        "abaqusCorrectionTolerance": 1e-2,
+        "abaqusResidualToleranceAlternative": 2e-2,
+        "abaqusIterationsForAlternativeTolerance": 9,
+        "abaqusZeroFluxThreshold": 1e-5,
+        "abaqusZeroFluxCorrectionTolerance": 1e-3,
+        "abaqusLinearResidualTolerance": 1e-8,
     }
+
+    #: The convergence criterion of the current step.
+    convergenceCriterion = None
 
     #: The predictor's state between increments: the last accepted increment and its dU.
     checkpointedState = {"prevTimeStep": TimeStep, "dU": np.ndarray}
@@ -244,6 +301,10 @@ class NIST(NonlinearSolverBase):
         # Every registered linsolver inherits LinearSolver's setJournal() (a safe no-op-ish default for
         # solvers that do not log), so this is unconditional -- no isinstance check needed.
         self.linSolver.setJournal(self.journal)
+
+        convergenceCriterion = self.createConvergenceCriterion()
+        convergenceCriterion.startStep(self.convergenceCriterion)
+        self.convergenceCriterion = convergenceCriterion
 
         # The equation system (DofManager, VIJ pattern, CSR structure) is (re)built lazily, at the
         # start of whichever increment first needs it -- either the very first one, or any later
@@ -559,6 +620,7 @@ class NIST(NonlinearSolverBase):
         else:
             self.prevTimeStep = timeStep
         self.dU = dU
+        self.convergenceCriterion.acceptIncrement()
 
         if iterationCounter >= step.criticalIter:
             step.timeStepper.preventIncrementIncrease()
@@ -599,6 +661,34 @@ class NIST(NonlinearSolverBase):
         prettyTable = performancetiming.makePrettyTable(wallTime=perf_counter() - self._stepWallClockTic)
         self.journal.printPrettyTable(prettyTable, self.identification)
         performancetiming.reset()
+
+    def createConvergenceCriterion(self) -> ConvergenceCriterionBase:
+        """Create the convergence criterion selected by the option ``convergenceCriterion``.
+
+        Returns
+        -------
+        ConvergenceCriterionBase
+            The convergence criterion.
+        """
+        criterion = self.options["convergenceCriterion"]
+
+        if criterion == "legacy":
+            return LegacyConvergenceCriterion(
+                self.fluxResidualTolerances, self.fluxResidualTolerancesAlt, self.fieldCorrectionTolerances
+            )
+
+        if criterion == "abaqus":
+            return AbaqusConvergenceCriterion(
+                residualTolerance=self.options["abaqusResidualTolerance"],
+                correctionTolerance=self.options["abaqusCorrectionTolerance"],
+                residualToleranceAlternative=self.options["abaqusResidualToleranceAlternative"],
+                iterationsForAlternativeTolerance=self.options["abaqusIterationsForAlternativeTolerance"],
+                zeroFluxThreshold=self.options["abaqusZeroFluxThreshold"],
+                zeroFluxCorrectionTolerance=self.options["abaqusZeroFluxCorrectionTolerance"],
+                linearResidualTolerance=self.options["abaqusLinearResidualTolerance"],
+            )
+
+        raise ValueError("Unknown convergence criterion '{:}', use 'legacy' or 'abaqus'".format(criterion))
 
     def solveIncrement(
         self,
@@ -662,6 +752,7 @@ class NIST(NonlinearSolverBase):
 
         R = self.theDofManager.constructDofVector()
         F = self.theDofManager.constructDofVector()
+        FConstraints = self.theDofManager.constructDofVector()
         PExt = self.theDofManager.constructDofVector()
         U_np = self.theDofManager.constructDofVector()
         ddU = None
@@ -689,11 +780,11 @@ class NIST(NonlinearSolverBase):
             U_np[:] = U_n
             U_np += dU
 
-            P[:] = K[:] = F[:] = PExt[:] = 0.0
+            P[:] = K[:] = F[:] = FConstraints[:] = PExt[:] = 0.0
 
             P, K, F = self.computeElements(elements, U_np, dU, P, K, F, timeStep)
             PExt, K = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_np, PExt, K, timeStep)
-            PExt, K = self.assembleConstraints(constraints, U_np, dU, PExt, K, timeStep)
+            PExt, K = self.assembleConstraints(constraints, U_np, dU, PExt, K, timeStep, FConstraints)
 
             R[:] = -P
             R += PExt
@@ -728,7 +819,7 @@ class NIST(NonlinearSolverBase):
                     R[dirichlet.constrainedDofIndices] = 0.0
 
                 converged, nodesWithLargestResidual = self.checkConvergence(
-                    R, ddU, F, iterationCounter, incrementResidualHistory
+                    R, ddU, dU, F, FConstraints, iterationCounter, incrementResidualHistory
                 )
 
                 if converged:
@@ -924,8 +1015,9 @@ class NIST(NonlinearSolverBase):
         PExt: DofVector,
         K: VIJSystemMatrix,
         timeStep: TimeStep,
+        FConstraints: DofVector = None,
     ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Loop over all elements, and evaluate them.
+        """Loop over all constraints, and evaluate them.
         Is called by solveIncrement() in each iteration.
 
         Parameters
@@ -940,14 +1032,14 @@ class NIST(NonlinearSolverBase):
             The external load vector.
         K
             The system matrix.
-        dT
-            The time increment.
-        time
-            The step and total time.
+        timeStep
+            The time step.
+        FConstraints
+            The vector of accumulated absolute constraint fluxes for convergence checks, if given.
 
         Returns
         -------
-        tuple[DofVector,VIJSystemMatrix,DofVector]
+        tuple[DofVector,VIJSystemMatrix]
             - The modified external load vector.
             - The modified system matrix.
         """
@@ -960,5 +1052,7 @@ class NIST(NonlinearSolverBase):
 
             # instead of PExt[constraint] += Pe, np.add.at allows for repeated indices
             np.add.at(PExt, PExt.entitiesInDofVector[constraint], Pc)
+            if FConstraints is not None:
+                np.add.at(FConstraints, FConstraints.entitiesInDofVector[constraint], np.abs(Pc))
 
         return PExt, K
