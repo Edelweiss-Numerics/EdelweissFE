@@ -117,53 +117,12 @@ def createSolver(opts) -> Callable:
         A :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`, callable as ``(A, b) -> x``.
     """
 
-    from edelweissfe.linsolve.blockamg.blockamg import BlockAMGSolver
+    from edelweissfe.linsolve.blockamg.blockamg import CONFIG_CASTS, BlockAMGSolver
 
     optionMap = opts if isinstance(opts, Mapping) else {}
 
-    kwargs = {}
-    recognized = {"outerTol", "fieldPreconds", "p1FieldNames"}
-    if "outerTol" in optionMap:
-        value = optionMap["outerTol"]
-        kwargs["outerTol"] = None if value in (None, "adaptive") else float(value)
-    for key, cast in (
-        ("outerRestart", int),
-        ("outerMaxiter", int),
-        ("outerSolver", str),
-        ("lgmresM", int),
-        ("lgmresK", int),
-        ("lgmresAlwaysReset", bool),
-        ("lgmresResetOnNewIncrement", bool),
-        ("sweeps", int),
-        ("symmetric", bool),
-        ("useRigidBodyNullspace", bool),
-        ("etaMin", float),
-        ("etaMax", float),
-        ("ewGamma", float),
-        ("ewAlpha", float),
-        ("residualGrowthFactor", float),
-        ("hierarchyStalenessFactor", float),
-        ("trueResidualMaxContinuations", int),
-        ("gapCompensatedTolerance", bool),
-        ("gapSafetyFactor", float),
-        ("verbosity", str),
-        ("warnOuterIterationsThreshold", int),
-        ("dumpOnDegradationDir", str),
-        ("dumpOnDegradationThreshold", int),
-        ("dumpOnDegradationMaxDumps", int),
-        ("dumpOnDegradationContextSolves", int),
-        ("hotReloadConfigFile", str),
-        ("hierarchyDropTol", float),
-        ("hierarchyDropLumping", bool),
-        ("gapMaxFactor", float),
-    ):
-        if key in optionMap:
-            kwargs[key] = cast(optionMap[key])
-        recognized.add(key)
-    if "fieldPreconds" in optionMap:
-        kwargs["fieldPreconds"] = dict(optionMap["fieldPreconds"])
-    if "p1FieldNames" in optionMap:
-        kwargs["p1FieldNames"] = list(optionMap["p1FieldNames"])
+    kwargs = {key: CONFIG_CASTS[key](value) for key, value in optionMap.items() if key in CONFIG_CASTS}
+    recognized = set(CONFIG_CASTS)
 
     # A key this factory does not know would otherwise be dropped without a word -- a typo, or a
     # setting that only the constructor takes, then silently has no effect on the run.
