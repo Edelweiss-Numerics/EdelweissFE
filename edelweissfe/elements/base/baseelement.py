@@ -158,6 +158,27 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
             The numpy array containing the material properties.
         """
 
+    def updateMaterialProperty(self, index: int, value: float):
+        """Change one entry of the property vector of the assigned material, during an analysis.
+
+        Unlike :meth:`setMaterial`, this keeps the state of the element: the state variables (e.g.
+        stress, plastic strain, damage) are neither reset nor re-initialized, and the arrays holding
+        them stay the same objects, so persistent result views (field outputs) remain valid. All
+        other properties, including any assigned per element (e.g. ``materialParameterFromField``),
+        are kept.
+
+        Elements without a material do not support this.
+
+        Parameters
+        ----------
+        index
+            The index of the property in the material's property vector.
+        value
+            The new value of the property.
+        """
+
+        raise NotImplementedError(f"{type(self).__name__} does not support changing the properties of its material.")
+
     @abstractmethod
     def setInitialCondition(self, stateType: str, values: np.ndarray):
         """Assign initial conditions.

@@ -99,6 +99,7 @@ class VonMisesMaterial(BaseHypoElasticMaterial):
         return 1
 
     def __init__(self, materialProperties: np.ndarray):
+        self._materialProperties = materialProperties
         # elasticity parameters
         self._E = materialProperties[0]  # set E
         self._v = materialProperties[1]  # set v

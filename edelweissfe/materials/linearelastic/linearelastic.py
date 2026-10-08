@@ -57,6 +57,7 @@ class LinearElasticMaterial(BaseHypoElasticMaterial):
         return 0
 
     def __init__(self, materialProperties: np.ndarray):
+        self._materialProperties = materialProperties
         self._E = materialProperties[0]  # set E
         self._v = materialProperties[1]  # set v
         if len(materialProperties) > 2:

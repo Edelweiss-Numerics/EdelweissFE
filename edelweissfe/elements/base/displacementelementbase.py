@@ -423,6 +423,25 @@ class DisplacementElementBase(BaseElement):
         else:
             self._isHyperelastic = False
 
+    def updateMaterialProperty(self, index: int, value: float):
+        """Change one entry of the property vector of the assigned material, keeping the state.
+
+        The material instance is rebuilt from its modified property vector; the state lives in the
+        arrays of this element, not in the material, and is handed to the material before every
+        evaluation, so it is preserved as is.
+
+        Parameters
+        ----------
+        index
+            The index of the property in the material's property vector.
+        value
+            The new value of the property.
+        """
+
+        materialProperties = self.material.materialProperties.copy()
+        materialProperties[index] = value
+        self.material = type(self.material)(materialProperties)
+
     def acceptLastState(
         self,
     ):

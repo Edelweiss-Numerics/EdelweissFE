@@ -161,6 +161,20 @@ class DisplacementTLElement(DisplacementElementBase):
         else:
             self._dStress_dStrain = np.zeros([self._nInt, self._matrixSize, self._matrixSize])
 
+    def updateMaterialProperty(self, index: int, value: float):
+        """Change one entry of the property vector of the assigned material, keeping the state.
+
+        Parameters
+        ----------
+        index
+            The index of the property in the material's property vector.
+        value
+            The new value of the property.
+        """
+
+        super().updateMaterialProperty(index, value)
+        self._materialProperties = self.material.materialProperties
+
     def computeKernels(
         self,
         K_: np.ndarray,

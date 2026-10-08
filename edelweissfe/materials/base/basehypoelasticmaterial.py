@@ -43,7 +43,9 @@ class BaseHypoElasticMaterial(ABC):
 
     @property
     def materialProperties(self) -> np.ndarray:
-        """The properties the material has."""
+        """The properties the material has, as handed to ``__init__``."""
+
+        return self._materialProperties
 
     @abstractmethod
     def getNumberOfRequiredStateVars(self) -> int:
