@@ -334,6 +334,8 @@ def _resolveSections(sectionLengths, sectionNY, lY, nY):
     the section index of each element layer, and whether sections were given at all.
     """
     if sectionLengths is None and sectionNY is None:
+        if lY <= 0:
+            raise Exception("lY must be positive.")
         return np.linspace(0.0, lY, nY + 1), np.zeros(nY, dtype=int), False
 
     if sectionLengths is None or sectionNY is None:
@@ -537,8 +539,8 @@ class Generator(GeneratorBase):
         coreFraction = configuration.coreFraction
         curvedBoundary = configuration.curvedBoundary
 
-        if radius <= 0 or lY <= 0:
-            raise Exception("radius and lY must be positive.")
+        if radius <= 0:
+            raise Exception("radius must be positive.")
 
         # axial offsets of the element layer boundaries and the section of each element layer
         layerOffsets, layerSection, hasSections = _resolveSections(
