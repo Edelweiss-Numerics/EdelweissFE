@@ -41,8 +41,9 @@ requirements:
     - setuptools
     - cython
     - numpy
-    # run_exports pins marmot to exactly this build.
-    - marmot
+    # run_exports pins marmot to exactly this build. A release builds against the Marmot release of the same version
+    # (tagged first); a development snapshot against the Marmot built just before it in the same CI job.
+    - ${{ "marmot" if "dev" in version else "marmot " ~ version ~ ".*" }}
     - eigen
     - amgcl
     - libboost-devel
