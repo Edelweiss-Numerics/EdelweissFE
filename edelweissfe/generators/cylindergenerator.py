@@ -51,6 +51,21 @@ on the top and bottom end faces only. <A> is spelled in upper case, so the
 default ``axis=y`` yields _centerLineXTop/_centerLineXBottom and
 _centerLineZTop/_centerLineZBottom.
 
+Optionally, the cylinder can be divided into sections along its length with
+``sectionLengths`` and ``sectionNY`` (one entry per section, from bottom to
+top), which then replace ``lY`` and ``nY``. Each section i (0-based) gets an
+elSet and an nSet 'name'_section<i>; the nSet includes the nodes on the
+section's end faces, which are shared with the adjacent sections. The part of
+the outer surface belonging to a section is additionally available as nSet,
+elSet and surface 'name'_section<i>_outer.
+
+Symmetry can be exploited by modeling only a half or a quarter of the
+cylinder, selected with ``part``: a half is given by one signed in-plane axis
+(e.g. ``+x``, the half with x >= x0), a quarter by two (e.g. ``+x-z``). The
+mesh is exactly the corresponding part of the full mesh. For each cutting
+plane, an nSet 'name'_symmetry<A> holds the nodes on the plane normal to
+axis <A> (upper case), e.g. _symmetryX for ``part=+x``.
+
 Example
 -------
 
@@ -81,9 +96,33 @@ still give the center of the bottom face:
         nR      =4
         nY      =8
         elType  =C3D8
+
+Three sections of different lengths and mesh densities:
+
+.. code-block:: edelweiss
+
+    *modelGenerator, generator=cylinderGenerator, name=gen
+        radius          =5.0
+        sectionLengths  ='2.0, 6.0, 2.0'
+        sectionNY       ='4, 6, 4'
+        nR              =4
+        elType          =C3D8
+
+A quarter of the cylinder, x >= 0 and z <= 0:
+
+.. code-block:: edelweiss
+
+    *modelGenerator, generator=cylinderGenerator, name=gen
+        radius  =5.0
+        lY      =10.0
+        nR      =4
+        nY      =8
+        part    =+x-z
+        elType  =C3D8
 """
 
 import math
+import re
 from dataclasses import dataclass
 
 import numpy as np
@@ -165,6 +204,32 @@ class CylinderGeneratorSchema:
         default=4,
     )
 
+    sectionLengths: str | None = schemaField(
+        description=(
+            "Lengths of the sections the cylinder is divided into along ``axis``, from bottom to top, as a "
+            "comma-separated list (quoted in the input file). Replaces ``lY``; requires ``sectionNY``."
+        ),
+        dtype=str,
+        default=None,
+    )
+    sectionNY: str | None = schemaField(
+        description=(
+            "Number of elements along ``axis`` per section, as a comma-separated list matching "
+            "``sectionLengths``. Replaces ``nY``."
+        ),
+        dtype=str,
+        default=None,
+    )
+
+    part: str = schemaField(
+        description=(
+            "Part of the cross section to model, exploiting symmetry: 'full', a half given by one signed "
+            "in-plane axis (e.g. '+x' for the half with x >= x0), or a quarter given by two (e.g. '+x-z')."
+        ),
+        dtype=str,
+        default="full",
+    )
+
     coreFraction: float = schemaField(
         description="Half-width of the central square core block, as a fraction of the radius.",
         dtype=float,
@@ -206,6 +271,90 @@ def _resolveAxis(axis):
     iU, iV = inPlaneAxes[axis]
 
     return iAxis, iU, iV, axis == "y"
+
+
+def _resolvePart(part, iU, iV):
+    """Resolve the modeled part into the required sign of the local (u, v) coordinates (0: unrestricted)."""
+    part = part.strip().lower().replace(" ", "")
+    signs = [0, 0]
+    if part == "full":
+        return signs
+
+    if not re.fullmatch(r"([+-][xyz]){1,2}", part):
+        raise Exception("part must be 'full' or one or two signed axes, e.g. '+x' or '+x-z', got '{:}'.".format(part))
+
+    for sign, axisName in re.findall(r"([+-])([xyz])", part):
+        iGlobal = "xyz".index(axisName)
+        if iGlobal not in (iU, iV):
+            raise Exception("part may only refer to the in-plane axes, got '{:}'.".format(axisName))
+        local = 0 if iGlobal == iU else 1
+        if signs[local]:
+            raise Exception("part refers to axis '{:}' twice.".format(axisName))
+        signs[local] = 1 if sign == "+" else -1
+
+    return signs
+
+
+def _cropOGridMesh(nodes, quads, outerQuadMask, isOuterNode, signs, tol):
+    """Keep only the quads in the part selected by ``signs``, and the nodes they use.
+
+    The full O-grid is symmetric about both local axes and no quad crosses them, so the cut runs
+    along existing edges. Node order is preserved; nodes on the cutting planes are snapped onto them.
+    """
+    centroids = nodes[quads].mean(axis=1)
+    keep = np.ones(len(quads), dtype=bool)
+    for local, sign in enumerate(signs):
+        if sign:
+            keep &= sign * centroids[:, local] > 0
+
+    quads = quads[keep]
+    usedNodes = np.unique(quads)
+    newIndex = np.full(len(nodes), -1, dtype=int)
+    newIndex[usedNodes] = np.arange(len(usedNodes))
+
+    nodes = nodes[usedNodes].copy()
+    for local, sign in enumerate(signs):
+        if sign:
+            nodes[np.abs(nodes[:, local]) < tol, local] = 0.0
+
+    return nodes, newIndex[quads], outerQuadMask[keep], isOuterNode[usedNodes]
+
+
+def _parseList(value, dtype):
+    """Parse a comma- or whitespace-separated string (or an already split sequence) into a list."""
+    if isinstance(value, str):
+        value = value.replace(",", " ").split()
+    return [dtype(v) for v in value]
+
+
+def _resolveSections(sectionLengths, sectionNY, lY, nY):
+    """Resolve the sections along the axis into the element layer boundaries.
+
+    Returns the axial offsets of the nY + 1 element layer boundaries (relative to the bottom face),
+    the section index of each element layer, and whether sections were given at all.
+    """
+    if sectionLengths is None and sectionNY is None:
+        if lY <= 0:
+            raise Exception("lY must be positive.")
+        return np.linspace(0.0, lY, nY + 1), np.zeros(nY, dtype=int), False
+
+    if sectionLengths is None or sectionNY is None:
+        raise Exception("sectionLengths and sectionNY must be given together.")
+
+    lengths = _parseList(sectionLengths, float)
+    nYs = _parseList(sectionNY, int)
+
+    if len(lengths) != len(nYs) or not lengths:
+        raise Exception("sectionLengths and sectionNY must have the same, nonzero number of entries.")
+    if any(length <= 0 for length in lengths) or any(n < 1 for n in nYs):
+        raise Exception("sectionLengths must be positive and sectionNY >= 1.")
+
+    starts = np.concatenate([[0.0], np.cumsum(lengths)])
+    offsets = [0.0]
+    for start, length, n in zip(starts, lengths, nYs):
+        offsets += list(start + np.linspace(0.0, length, n + 1)[1:])
+
+    return np.array(offsets), np.repeat(np.arange(len(nYs)), nYs), True
 
 
 def _generateOGridMesh(radius, nCore, nRing, coreFraction):
@@ -375,6 +524,7 @@ class Generator(GeneratorBase):
             :class:`CylinderGeneratorSchema`.
         """
         iAxis, iU, iV, reverseWinding = _resolveAxis(configuration.axis)
+        partSigns = _resolvePart(configuration.part, iU, iV)
 
         # the origin's axial component locates the bottom face, the two in-plane ones the center
         # of the cross section
@@ -385,15 +535,22 @@ class Generator(GeneratorBase):
         lY = configuration.lY
 
         nR = configuration.nR
-        nY = configuration.nY
 
         coreFraction = configuration.coreFraction
         curvedBoundary = configuration.curvedBoundary
 
-        if radius <= 0 or lY <= 0:
-            raise Exception("radius and lY must be positive.")
+        if radius <= 0:
+            raise Exception("radius must be positive.")
+
+        # axial offsets of the element layer boundaries and the section of each element layer
+        layerOffsets, layerSection, hasSections = _resolveSections(
+            configuration.sectionLengths, configuration.sectionNY, lY, configuration.nY
+        )
+        nY = len(layerSection)
+
         if nR < 2 or nY < 1:
             raise Exception("nR must be >= 2 (at least one element in the core block and one ring) and nY >= 1.")
+        nSections = layerSection[-1] + 1
         if not (0 < coreFraction < 1 / math.sqrt(2)):
             raise Exception("coreFraction must be in (0, 1/sqrt(2)) so the core block stays inside the cylinder.")
 
@@ -427,6 +584,17 @@ class Generator(GeneratorBase):
         outerQuadMask = np.zeros(len(quadsLin), dtype=bool)
         outerQuadMask[-nBoundary:] = True
 
+        # likewise, the last `nBoundary` corner nodes are exactly the outer boundary loop. Determining
+        # the outer nodes this way (rather than by checking coordinates against `radius`) keeps it
+        # correct even if curvedBoundary=False.
+        isOuterCorner2D = np.zeros(len(nodesLin), dtype=bool)
+        isOuterCorner2D[-nBoundary:] = True
+
+        tol = radius * 1e-6
+        nodesLin, quadsLin, outerQuadMask, isOuterCorner2D = _cropOGridMesh(
+            nodesLin, quadsLin, outerQuadMask, isOuterCorner2D, partSigns, tol
+        )
+
         if order == 1:
             nodes2D = nodesLin
             quads2D = quadsLin
@@ -435,14 +603,9 @@ class Generator(GeneratorBase):
 
         nCorners2D = len(nodesLin)
 
-        # the last `nBoundary` corner nodes are, by construction, exactly the outer boundary loop.
-        # For quadratic elements, the outer mid-side node of an outer-ring quad (c0,c1,c2,c3,m01,m12,m23,m30)
+        # for quadratic elements, the outer mid-side node of an outer-ring quad (c0,c1,c2,c3,m01,m12,m23,m30)
         # is m12 (the mid-node of edge c1-c2, which is always the outer edge of that quad, see the ring
-        # construction in `_generateOGridMesh`). Determining the outer node set this way (rather than by
-        # checking coordinates against `radius`) keeps it correct even if curvedBoundary=False.
-        isOuterCorner2D = np.zeros(nCorners2D, dtype=bool)
-        isOuterCorner2D[nCorners2D - nBoundary :] = True
-
+        # construction in `_generateOGridMesh`).
         isOuter2D = np.zeros(len(nodes2D), dtype=bool)
         isOuter2D[:nCorners2D] = isOuterCorner2D
         if order == 2:
@@ -453,10 +616,17 @@ class Generator(GeneratorBase):
         # consist of nodes with local v=0 and local u=0, respectively; their intersection is the
         # single center node. Only needed on the top/bottom (always "full") layers, hence based on
         # `nodes2D` only.
-        tol = radius * 1e-6
         isCenterLineU2D = np.isclose(nodes2D[:, 1], 0.0, atol=tol)
         isCenterLineV2D = np.isclose(nodes2D[:, 0], 0.0, atol=tol)
         isCenter2D = isCenterLineU2D & isCenterLineV2D
+
+        # nodes on the cutting planes, normal to the local axes u and v; these are the center lines
+        # parallel to the respective other axis
+        symmetryPlanes = [
+            (axisIdx, isOnPlane2D, [])
+            for axisIdx, isOnPlane2D, sign in ((iU, isCenterLineV2D, partSigns[0]), (iV, isCenterLineU2D, partSigns[1]))
+            if sign
+        ]
 
         # labels come from the model's monotonic allocator, not from max(model.nodes)/max(model.elements);
         # quadratic meshes carry only corner nodes on the intermediate (odd) layers
@@ -480,6 +650,10 @@ class Generator(GeneratorBase):
         nodesCenterLineUBottom = []
         nodesCenterLineVTop = []
         nodesCenterLineVBottom = []
+        elementsSection = [[] for _ in range(nSections)]
+        nodesSection = [[] for _ in range(nSections)]
+        elementsOuterSection = [[] for _ in range(nSections)]
+        nodesOuterSection = [[] for _ in range(nSections)]
 
         def makeCoordinates(u, v, axial):
             """Scatter the local (in-plane, axial) coordinates onto the global axes."""
@@ -507,7 +681,7 @@ class Generator(GeneratorBase):
 
         if order == 1:
             nNodesY = nY + 1
-            yLayers = np.linspace(origin[iAxis], origin[iAxis] + lY, nNodesY)
+            yLayers = origin[iAxis] + layerOffsets
 
             layerNodes = []
             for iy in range(nNodesY):
@@ -528,7 +702,14 @@ class Generator(GeneratorBase):
                     nodesCenterTop.extend(n for n, isC in zip(layer, isCenter2D) if isC)
                     nodesCenterLineUTop.extend(n for n, isC in zip(layer, isCenterLineU2D) if isC)
                     nodesCenterLineVTop.extend(n for n, isC in zip(layer, isCenterLineV2D) if isC)
-                nodesOuter.extend(n for n, isOuter in zip(layer, isOuter2D) if isOuter)
+                layerOuter = [n for n, isOuter in zip(layer, isOuter2D) if isOuter]
+                nodesOuter.extend(layerOuter)
+                for _, isOnPlane2D, nodesOnPlane in symmetryPlanes:
+                    nodesOnPlane.extend(n for n, isOn in zip(layer, isOnPlane2D) if isOn)
+                # boundary layers between two sections belong to both
+                for iSection in {layerSection[max(iy - 1, 0)], layerSection[min(iy, nY - 1)]}:
+                    nodesSection[iSection].extend(layer)
+                    nodesOuterSection[iSection].extend(layerOuter)
 
             for iy in range(nY):
                 for iq, (c0, c1, c2, c3) in enumerate(quads2D):
@@ -547,12 +728,17 @@ class Generator(GeneratorBase):
                         elementsTop.append(newEl)
                     if outerQuadMask[iq]:
                         elementsOuter.append(newEl)
+                        elementsOuterSection[layerSection[iy]].append(newEl)
+                    elementsSection[layerSection[iy]].append(newEl)
 
                     currentElementLabel += 1
 
         else:
             nNodesYTotal = 2 * nY + 1
-            yLayers = np.linspace(origin[iAxis], origin[iAxis] + lY, nNodesYTotal)
+            # element boundary layers at even, mid-side layers at odd indices
+            yLayers = np.empty(nNodesYTotal)
+            yLayers[0::2] = origin[iAxis] + layerOffsets
+            yLayers[1::2] = 0.5 * (yLayers[0:-1:2] + yLayers[2::2])
 
             layerNodes = []
             for t in range(nNodesYTotal):
@@ -577,7 +763,14 @@ class Generator(GeneratorBase):
                         nodesCenterTop.extend(n for n, isC in zip(layer, isCenter2D) if isC)
                         nodesCenterLineUTop.extend(n for n, isC in zip(layer, isCenterLineU2D) if isC)
                         nodesCenterLineVTop.extend(n for n, isC in zip(layer, isCenterLineV2D) if isC)
-                nodesOuter.extend(n for n, isOut in zip(layer, isOuter) if isOut)
+                layerOuter = [n for n, isOut in zip(layer, isOuter) if isOut]
+                nodesOuter.extend(layerOuter)
+                for _, isOnPlane2D, nodesOnPlane in symmetryPlanes:
+                    nodesOnPlane.extend(n for n, isOn in zip(layer, isOnPlane2D[: len(layer)]) if isOn)
+                # boundary layers between two sections belong to both
+                for iSection in {layerSection[max((t - 1) // 2, 0)], layerSection[min(t // 2, nY - 1)]}:
+                    nodesSection[iSection].extend(layer)
+                    nodesOuterSection[iSection].extend(layerOuter)
 
             for iy in range(nY):
                 tBottom, tMid, tTop = 2 * iy, 2 * iy + 1, 2 * iy + 2
@@ -606,6 +799,8 @@ class Generator(GeneratorBase):
                         elementsTop.append(newEl)
                     if outerQuadMask[iq]:
                         elementsOuter.append(newEl)
+                        elementsOuterSection[layerSection[iy]].append(newEl)
+                    elementsSection[layerSection[iy]].append(newEl)
 
                     currentElementLabel += 1
 
@@ -627,6 +822,21 @@ class Generator(GeneratorBase):
             model.nodeSets[setName] = NodeSet(setName, nodesTopLine)
             setName = "{:}_centerLine{:}Bottom".format(name, axisNames[axisIdx])
             model.nodeSets[setName] = NodeSet(setName, nodesBottomLine)
+
+        for axisIdx, _, nodesOnPlane in symmetryPlanes:
+            setName = "{:}_symmetry{:}".format(name, axisNames[axisIdx])
+            model.nodeSets[setName] = NodeSet(setName, nodesOnPlane)
+
+        if hasSections:
+            for iSection in range(nSections):
+                setName = "{:}_section{:}".format(name, iSection)
+                model.nodeSets[setName] = NodeSet(setName, nodesSection[iSection])
+                model.elementSets[setName] = ElementSet(setName, elementsSection[iSection])
+
+                setName = "{:}_section{:}_outer".format(name, iSection)
+                model.nodeSets[setName] = NodeSet(setName, nodesOuterSection[iSection])
+                model.elementSets[setName] = ElementSet(setName, elementsOuterSection[iSection])
+                model.surfaces[setName] = EntityBasedSurface(setName, {5: model.elementSets[setName]})
 
         # element sets
         model.elementSets["{:}_all".format(name)] = ElementSet("{:}_all".format(name), elements)
