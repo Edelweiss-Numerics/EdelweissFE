@@ -1,6 +1,7 @@
 # Builds the `edelweissfe` conda package (conda/edelweissfe) on every platform, for every PR and push to the
 # development branch, and uploads it to the prefix.dev channel matthiasneuner/edelweiss for a release tag
-# (v26.11 -> 26.11). Uploading needs the PREFIX_API_KEY repository secret.
+# (v26.11 -> 26.11).
+# Uploading uses trusted publishing (no secret), see the upload job.
 #
 # Marmot: for a release tag, the released `marmot` package from the channel (tag Marmot first). Otherwise Marmot's own
 # recipe (conda/recipe.yaml) is built from the Marmot branch resolved as for the other workflows
@@ -90,6 +91,12 @@ jobs:
     needs: build
     if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
+    # Trusted publishing: prefix.dev accepts this workflow's GitHub identity token (registered in the channel's
+    # settings), so no API key is stored. The `release` environment can require an approval before uploading.
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -101,8 +108,6 @@ jobs:
           run-install: false
 
       - name: Upload to prefix.dev
-        env:
-          PREFIX_API_KEY: ${{ secrets.PREFIX_API_KEY }}
         run: |
           pixi global install rattler-build
           find output -name '*.conda' -print0 | xargs -0 rattler-build upload prefix --skip-existing --channel "$CHANNEL"
