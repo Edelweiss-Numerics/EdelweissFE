@@ -1,4 +1,5 @@
 [![documentation](https://github.com/EdelweissFE/EdelweissFE/actions/workflows/sphinx.yml/badge.svg)](https://edelweiss-numerics.github.io/EdelweissFE)
+[![codecov](https://codecov.io/gh/EdelweissFE/EdelweissFE/graph/badge.svg)](https://codecov.io/gh/EdelweissFE/EdelweissFE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![DOI](https://zenodo.org/badge/1095513352.svg)](https://doi.org/10.5281/zenodo.17603044)
 
@@ -24,118 +25,86 @@ EdelweissFE makes use of the [Marmot](https://github.com/MAteRialMOdelingToolbox
 
 ## Installation
 
-The following installation paths assume that you are in the repository root and that your conda environment is active.
+EdelweissFE runs on Linux, macOS (version 14 or newer) and Windows. Installing it takes four steps and about
+15 minutes, most of it waiting for downloads.
 
-### Working installation without Marmot
+### 1. Install conda
 
-Step 1: Install the required conda packages.
+EdelweissFE and everything it needs (Python, numerical libraries, compilers) are installed with **conda**, a
+package manager. If you do not have conda yet, install **Miniforge**, a free distribution of conda:
 
-```console
-mamba install --file conda_requirements.txt
-```
+- **Linux or macOS:** open a terminal and run
+  ```console
+  curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
+  bash Miniforge3-$(uname)-$(uname -m).sh
+  ```
+  then close and reopen the terminal.
+- **Windows:** download and run the installer from [conda-forge.org/download](https://conda-forge.org/download/).
+  Windows also needs Microsoft's C++ compiler, which conda cannot install: install the free
+  [Visual Studio 2022 Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) and select
+  *Desktop development with C++*. Afterwards, run all commands below in the **Miniforge Prompt** (find it in the
+  Start menu).
 
-Step 2: Install the additional pip packages.
+### 2. Create the EdelweissFE environment
 
-```console
-pip install -r pip_requirements.txt
-```
-
-Step 3: Install EdelweissFE.
-
-```console
-pip install .
-```
-
-Step 4: Validate the EdelweissFE-only installation.
-
-```console
-run_tests_edelweissfe ./testfiles/edelweiss-only/
-```
-
-### Working installation with Marmot
-
-Step 1: Install the required conda packages.
+An *environment* is a separate folder that contains everything EdelweissFE needs, in exactly the versions it is
+tested with, without touching anything else on your computer. Create it with:
 
 ```console
-mamba install --file conda_requirements.txt
+conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.10.04
 ```
 
-Step 2: Install the additional pip packages.
+Always use this separate environment for EdelweissFE. If it ever breaks, delete it
+(`conda env remove -n edelweissfe`) and run the command again.
+
+### 3. Download and install EdelweissFE
 
 ```console
-pip install -r pip_requirements.txt
+conda activate edelweissfe
+git clone --branch next_v26.11 https://github.com/Edelweiss-Numerics/EdelweissFE.git
+cd EdelweissFE
+pip install -e .
 ```
 
-Step 3: Install Eigen.
+`conda activate edelweissfe` switches to the environment. You need it again in every new terminal before using
+EdelweissFE.
+
+### 4. Check that it works
+
+Run the test suite (it takes a few minutes and should end with `Tests failed: 0`):
+
+- **Linux or macOS:**
+  ```console
+  PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
+  ```
+- **Windows:**
+  ```console
+  set PYTHON_GIL=0
+  run_tests_edelweissfe .\testfiles\edelweiss-only\
+  ```
+
+`PYTHON_GIL=0` lets EdelweissFE compute in parallel on several processor cores.
+
+### Running a simulation
 
 ```console
-cd ..
-git clone --branch 3.4.0 https://gitlab.com/libeigen/eigen.git
-cd eigen
-mkdir build
-cd build
-cmake -DBUILD_TESTING=OFF -DINCLUDE_INSTALL_DIR=$CONDA_PREFIX/include -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-make install
-cd ../..
+conda activate edelweissfe
+edelweissfe my_simulation.inp
 ```
 
-Step 4: Install autodiff.
+### Optional: Marmot
+
+[Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) adds further elements and material models. Build it into the same environment, then reinstall
+EdelweissFE (on Windows, see the [installation documentation](doc/source/installation.rst) for the commands):
 
 ```console
-git clone --branch v1.1.0 https://github.com/autodiff/autodiff.git
-cd autodiff
-mkdir build
-cd build
-cmake -DAUTODIFF_BUILD_TESTS=OFF -DAUTODIFF_BUILD_PYTHON=OFF -DAUTODIFF_BUILD_EXAMPLES=OFF -DAUTODIFF_BUILD_DOCS=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-make install
-cd ../..
+conda activate edelweissfe
+git clone --recurse-submodules --branch next_v26.11 https://github.com/MAteRialMOdelingToolbox/Marmot/ ../Marmot
+cmake -S ../Marmot -B ../Marmot/build -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
+cmake --build ../Marmot/build -j && cmake --install ../Marmot/build
+pip install -e .
+PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/marmot/
 ```
 
-Step 5: Install Fastor.
-
-```console
-git clone https://github.com/romeric/Fastor.git
-cd Fastor
-mkdir build
-cd build
-cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-make install
-cd ../..
-```
-
-Step 6: Install AMGCL.
-
-```console
-git clone --branch 1.4.7 --depth 1 https://github.com/ddemidov/amgcl.git
-cd amgcl
-mkdir build
-cd build
-cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-make install
-cd ../..
-```
-
-Step 7: Install Marmot from the master branch.
-
-```console
-git clone --branch master --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/
-cd Marmot
-mkdir build
-cd build
-cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-make install
-cd ../../EdelweissFE
-```
-
-Step 8: Install EdelweissFE with Marmot available.
-
-```console
-pip install -v .
-```
-
-Step 9: Validate the Marmot-enabled installation.
-
-```console
-run_tests_edelweissfe ./testfiles/marmot/
-run_tests_edelweissfe ./testfiles/edelweiss-only/
-```
+More details, including how the environment is pinned, how to change dependencies and troubleshooting, are in the
+[installation documentation](doc/source/installation.rst).

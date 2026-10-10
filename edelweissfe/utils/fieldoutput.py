@@ -38,6 +38,8 @@ ATTENTION:
     the time History is automatically appended to the .csv file"
 """
 
+import os
+from dataclasses import dataclass
 from typing import Callable, Union
 
 import numpy as np
@@ -48,52 +50,101 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.orderedset import OrderedSet
 from edelweissfe.utils.elementresultcollector import ElementResultCollector
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
+from edelweissfe.utils.schema import schemaField, subKeywordField
 
-inputLanguage = InputLanguage()
 
-module = Module("fieldOutput", "Manage field outputs.")
+@dataclass(frozen=True)
+class FieldOutputPerNodeSchema:
+    """The options of a single ``>>perNode`` field-output block."""
 
-keyword = "fieldOutput"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
+    name: str | None = schemaField(description="Name of the field output.", dtype=str, default=None, required=True)
+    field: str | None = schemaField(description="Field of the result.", dtype=str, default=None, required=True)
+    result: str | None = schemaField(description="Result name.", dtype=str, default=None, required=True)
+    elSet: str | None = schemaField(description="Element set.", dtype=str, default=None)
+    nSet: str | None = schemaField(description="Node set.", dtype=str, default=None)
+    rigidBody: str | None = schemaField(
+        description="Rigid body (as registered in model.rigidBodies).", dtype=str, default=None
+    )
+    saveHistory: bool = schemaField(
+        description="Save complete History or only last (increment) result", dtype=bool, default=False
+    )
+    f_x: str | None = schemaField(
+        description="Function to apply in each increment.", dtype=str, default=None, optionName="f(x)"
+    )
+    f_export_x: str | None = schemaField(
+        description="Function to apply on final result (table).", dtype=str, default=None, optionName="f_export(x)"
+    )
+    export: str | None = schemaField(
+        description="Export the field output to a file at the end of the job.", dtype=str, default=None
+    )
 
-kw = module.addOptionalKeyword("perNode", "Create node-based field output.")
-kw.addRequiredArg("name", "Name of the field output.", str)
-kw.addRequiredArg("field", "Field of the result.", str)
-kw.addRequiredArg("result", "Result name.", str)
-kw.addOptionalArg("elSet", "Element set.", str, None)
-kw.addOptionalArg("nSet", "Node set.", str, None)
-kw.addOptionalArg("saveHistory", "Save complete History or only last (increment) result", bool, False)
-kw.addOptionalArg("f(x)", "Function to apply in each increment.", str, None)
-kw.addOptionalArg("f_export(x)", "Function to apply on final result (table).", str, None)
-kw.addOptionalArg("export", "Export the field output to a file at the end of the job.", str, None)
 
-documentation = [kw]
+@dataclass(frozen=True)
+class FieldOutputPerElementSchema:
+    """The options of a single ``>>perElement`` field-output block."""
 
-kw = module.addOptionalKeyword("perElement", "Create element-based field output.")
-kw.addRequiredArg("name", "Name of the field output.", str)
-kw.addRequiredArg("elSet", "Element set.", str)
-kw.addRequiredArg("result", "Result name.", str)
-kw.addRequiredArg("quadraturePoint", "Integer or slice.", str)
-kw.addOptionalArg("saveHistory", "Save complete History or only last (increment) result", bool, False)
-kw.addOptionalArg("f(x)", "Function to apply in each increment.", str, None)
-kw.addOptionalArg("f_export(x)", "Function to apply on final result (table).", str, None)
-kw.addOptionalArg("export", "Export the field output to a file at the end of the job.", str, None)
+    name: str | None = schemaField(description="Name of the field output.", dtype=str, default=None, required=True)
+    elSet: str | None = schemaField(description="Element set.", dtype=str, default=None, required=True)
+    result: str | None = schemaField(description="Result name.", dtype=str, default=None, required=True)
+    quadraturePoint: str | None = schemaField(description="Integer or slice.", dtype=str, default=None, required=True)
+    saveHistory: bool = schemaField(
+        description="Save complete History or only last (increment) result", dtype=bool, default=False
+    )
+    f_x: str | None = schemaField(
+        description="Function to apply in each increment.", dtype=str, default=None, optionName="f(x)"
+    )
+    f_export_x: str | None = schemaField(
+        description="Function to apply on final result (table).", dtype=str, default=None, optionName="f_export(x)"
+    )
+    export: str | None = schemaField(
+        description="Export the field output to a file at the end of the job.", dtype=str, default=None
+    )
 
-documentation.append(kw)
 
-kw = module.addOptionalKeyword("fromExpression", "Create field output from expression.")
-kw.addRequiredArg("name", "Name of the field output.", str)
-kw.addOptionalArg("elSet", "Element set.", str, None)
-kw.addOptionalArg("nSet", "Node set.", str, None)
-kw.addRequiredArg("expression", "Expression for retrieving field output.", str)
-kw.addOptionalArg("saveHistory", "Save complete History or only last (increment) result", bool, False)
-kw.addOptionalArg("f(x)", "Function to apply in each increment.", str, None)
-kw.addOptionalArg("f_export(x)", "Function to apply on final result (table).", str, None)
-kw.addOptionalArg("export", "Export the field output to a file at the end of the job.", str, None)
+@dataclass(frozen=True)
+class FieldOutputFromExpressionSchema:
+    """The options of a single ``>>fromExpression`` field-output block."""
 
-documentation.append(kw)
+    name: str | None = schemaField(description="Name of the field output.", dtype=str, default=None, required=True)
+    elSet: str | None = schemaField(description="Element set.", dtype=str, default=None)
+    nSet: str | None = schemaField(description="Node set.", dtype=str, default=None)
+    expression: str | None = schemaField(
+        description="Expression for retrieving field output.", dtype=str, default=None, required=True
+    )
+    saveHistory: bool = schemaField(
+        description="Save complete History or only last (increment) result", dtype=bool, default=False
+    )
+    f_x: str | None = schemaField(
+        description="Function to apply in each increment.", dtype=str, default=None, optionName="f(x)"
+    )
+    f_export_x: str | None = schemaField(
+        description="Function to apply on final result (table).", dtype=str, default=None, optionName="f_export(x)"
+    )
+    export: str | None = schemaField(
+        description="Export the field output to a file at the end of the job.", dtype=str, default=None
+    )
+
+
+@dataclass(frozen=True)
+class FieldOutputSchema:
+    """The sub-keyword blocks of the ``*fieldOutput`` keyword.
+
+    ``*fieldOutput`` itself declares no line options of its own (see
+    ``edelweissfe.keywords.fieldoutput``'s module docstring) -- its entire grammar is these three
+    repeatable ``>>`` blocks. Documentation/parser-validation only: ``_FieldOutputBase`` and friends
+    still construct from the raw parsed dict via ``abqmodelconstructor``/``inputfilehelpers``,
+    unchanged.
+    """
+
+    perNode: tuple[FieldOutputPerNodeSchema, ...] = subKeywordField(
+        description="Create node-based field output.", schema=FieldOutputPerNodeSchema
+    )
+    perElement: tuple[FieldOutputPerElementSchema, ...] = subKeywordField(
+        description="Create element-based field output.", schema=FieldOutputPerElementSchema
+    )
+    fromExpression: tuple[FieldOutputFromExpressionSchema, ...] = subKeywordField(
+        description="Create field output from expression.", schema=FieldOutputFromExpressionSchema
+    )
 
 
 class _FieldOutputBase:
@@ -142,6 +193,11 @@ class _FieldOutputBase:
         self.f_export = fExport_x
         self.timeHistory = []
         self.export = export
+        #: The size of the export file the run has written so far. Before its first write, a
+        #: process truncates the file to it: a cold run starts the file afresh, and a resumed run
+        #: drops whatever the interrupted run wrote after its checkpoint.
+        self._exportedBytes = 0
+        self._exportFileTruncated = False
         self._reshape_to_dimensions = reshape_to_dimensions
 
     def getLastResult(
@@ -161,7 +217,9 @@ class _FieldOutputBase:
         self,
     ) -> np.ndarray:
         """Get the history.
-        Throws an exception if the history is not stored.
+        Throws an exception if the history is not stored, or if the stored entries do not all
+        share the same shape (e.g. because the mesh changed under adaptive refinement, in which
+        case a rectangular per-node history is not well-defined).
 
         Returns
         -------
@@ -173,6 +231,17 @@ class _FieldOutputBase:
             raise Exception(
                 "fieldOutput {:} does not save any history; please define it with saveHistory=True!".format(self.name)
             )
+
+        if self.result:
+            firstShape = np.shape(self.result[0])
+            if any(np.shape(r) != firstShape for r in self.result):
+                raise Exception(
+                    "fieldOutput {:} has a per-node/per-element history with varying shapes across "
+                    "increments (e.g. due to adaptive mesh refinement); a rectangular history is not "
+                    "well-defined. Use a reducing f(x) (as for RF in examples/WinklerL/WinklerL_blockamg_amr.inp) "
+                    "instead of saveHistory=True in this case.".format(self.name)
+                )
+
         return np.asarray(self.result)
 
     def getTimeHistory(
@@ -211,6 +280,31 @@ class _FieldOutputBase:
         else:
             self.result = result
 
+    def _resultTableForExport(self) -> np.ndarray:
+        """Assemble the result table that ``f_export`` is applied to.
+
+        Normally this is the whole stored history, so that a table-wide ``f_export`` such as
+        ``x[:,:,1]`` sees the increment axis it expects. Under adaptive mesh refinement the
+        per-increment shape changes, and the history as a whole is no longer representable as a
+        single rectangular array; in that case only the last increment is tabulated, as a table
+        of one row. This keeps the dimensionality (and hence ``f_export``) valid while exporting
+        the current increment, which is all ``writeLastResult`` consumes.
+
+        Returns
+        -------
+        np.ndarray
+            The result table, with the increment as leading axis.
+        """
+
+        if not self.appendResults:
+            return np.asarray(self.result)
+
+        lastShape = np.shape(self.result[-1])
+        if any(np.shape(entry) != lastShape for entry in self.result):
+            return np.asarray(self.result[-1:])
+
+        return np.asarray(self.result)
+
     def writeLastResult(self):
         """Update file output.
 
@@ -219,7 +313,7 @@ class _FieldOutputBase:
         model
             The model tree.
         """
-        res = np.asarray(self.result)
+        res = self._resultTableForExport()
         if self.f_export:
             res = self.f_export(res)
 
@@ -227,7 +321,14 @@ class _FieldOutputBase:
             self.journal.message("Reshaping fieldOutput result for export in .csv file", self.name)
             res = res.reshape((res.shape[0], -1))
 
-        with open(f"{self.export}.csv", "a") as f:
+        fileName = f"{self.export}.csv"
+        if not self._exportFileTruncated:
+            open(fileName, "a").close()
+            if os.path.getsize(fileName) > self._exportedBytes:
+                os.truncate(fileName, self._exportedBytes)
+            self._exportFileTruncated = True
+
+        with open(fileName, "a") as f:
             np.savetxt(
                 f,
                 np.hstack(
@@ -237,19 +338,62 @@ class _FieldOutputBase:
                     )
                 ).reshape((1, -1)),
             )
+            self._exportedBytes = f.tell()
 
     def initializeJob(self):
         """Initalize everything. Will also update the results
-        based on the proved start time and solution.
-        """
+        based on the proved start time and solution."""
 
         self.updateResults(self.model)
 
-        if self.export:
-            f = open(f"{self.export}.csv", "w")
-            f.close()
+    def getRestartData(self) -> dict[str, np.ndarray]:
+        """The history this field output carries from one increment to the next -- the times, the
+        results (flattened, since refinement changes their shape), and how much of the export file
+        belongs to the run.
+
+        Returns
+        -------
+        dict[str, numpy.ndarray]
+            The state.
+        """
+
+        state = {"timeHistory": np.array(self.timeHistory, dtype=float), "exportedBytes": np.array(self._exportedBytes)}
+        if self.appendResults:
+            state["resultShapes"] = np.array([np.shape(r) for r in self.result], dtype=np.int64)
+            state["resultValues"] = np.concatenate([np.ravel(r) for r in self.result]) if self.result else np.empty(0)
+        elif self.result is not None:
+            state["result"] = np.asarray(self.result)
+        return state
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore the state :meth:`getRestartData` returned.
+
+        Parameters
+        ----------
+        data
+            The state.
+        """
+
+        self.timeHistory = [float(t) for t in data["timeHistory"]]
+        self._exportedBytes = int(data["exportedBytes"])
+        if self.appendResults:
+            self.result, offset = [], 0
+            for shape in data["resultShapes"]:
+                size = int(np.prod(shape))
+                self.result.append(np.array(data["resultValues"][offset : offset + size]).reshape(shape))
+                offset += size
+        else:
+            self.result = np.array(data["result"]) if "result" in data else None
 
     def initializeStep(self, step):
+        """Write the current (just-updated) result as the first row of this step.
+
+        Only at the start of a step: a step resumed from a checkpoint already exported this state,
+        as the last row before the checkpoint was written.
+        """
+        if not step.timeStepper.isAtStepStart():
+            return
+
         if self.export:
             self.writeLastResult()
 
@@ -265,7 +409,24 @@ class _FieldOutputBase:
     def finalizeStep(
         self,
     ):
-        pass
+        """Bring the stored result up to date with the model's final state, if the step advanced
+        past the increment that stored the current one.
+
+        The output managers write one final frame at the end of a step, from the result stored
+        here -- see the Ensight export's ``finalizeStep``, which writes whenever time has advanced
+        since its last frame. If the topology changed after that result was stored, which is
+        exactly what live h-adaptivity does between two output increments, the result belongs to a
+        different mesh than the one being written and the export rejects it::
+
+            Variable displacement result size (32) does not match the number of nodes (141)
+
+        Guarded on time having advanced, by the same rule the managers use, so the two decisions
+        cannot disagree: whenever a manager writes a final frame the result behind it has just been
+        refreshed, and a step ending on an increment that already stored a result does not store a
+        second one at the same time and duplicate the last point of a history export.
+        """
+        if not self.timeHistory or self.model.time - self.timeHistory[-1] > 1e-12:
+            self.updateResults(self.model)
 
     def finalizeJob(
         self,
@@ -353,7 +514,7 @@ class NodeFieldOutput(_FieldOutputBase):
         fExport_x: Callable = None,
     ):
         self.entry = result
-
+        self.fieldName = nodeField.name
         self._nodeField = nodeField
         self.associatedSet = nodeField.associatedSet
 
@@ -370,6 +531,72 @@ class NodeFieldOutput(_FieldOutputBase):
         """
 
         result = self._nodeField[self.entry]
+
+        return super()._applyResultsPipleline(result)
+
+
+class RigidBodyFieldOutput(_FieldOutputBase):
+    """
+    This is a FieldOutput operating directly on a RigidBody.
+
+    A rigid body's visualization (e.g., surface) nodes are not independent
+    degrees of freedom -- they are fully determined by the rigid body's
+    reference point, which is itself part of an ordinary NodeField. This
+    FieldOutput therefore does not operate on a NodeField at all: it queries
+    :meth:`~edelweissfe.rigidbodies.rigidbody.RigidBody.getVisualizationField`,
+    which computes the requested field directly from the rigid body's
+    (already solved) kinematics.
+
+    Parameters
+    ----------
+    name
+        The name of this FieldOutput.
+    rigidBody
+        The RigidBody on which this FieldOutput operates.
+    field
+        The name of the field to retrieve from the rigid body (e.g., "displacement").
+    model
+        The model tree instance.
+    journal
+        The journal object for logging.
+    saveHistory
+        Save the complete history or only the last result.
+    f_x
+        Apply a math function on the results.
+    export
+        Export the results to a file.
+    fExport_x
+        Apply a math function on the results before exporting.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        rigidBody,
+        field: str,
+        model: FEModel,
+        journal: Journal,
+        saveHistory: bool = False,
+        f_x: Callable = None,
+        export: str = None,
+        fExport_x: Callable = None,
+    ):
+        self._rigidBody = rigidBody
+        self._field = field
+        self.associatedSet = rigidBody
+
+        super().__init__(name, model, journal, saveHistory, f_x, export, fExport_x)
+
+    def updateResults(self, model: FEModel):
+        """Update the field output from the rigid body's current kinematics.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        """
+
+        result = self._rigidBody.getVisualizationField(self._field)
 
         return super()._applyResultsPipleline(result)
 
@@ -420,11 +647,23 @@ class ElementFieldOutput(_FieldOutputBase):
         self.resultName = resultName
         self.quadraturePoints = quadraturePoints
 
+        self._seenSetVersion = elSet._version
         self.elementResultCollector = ElementResultCollector(
             list(self.associatedSet), self.quadraturePoints, self.resultName
         )
 
         super().__init__(name, model, journal, saveHistory, f_x, export, fExport_x)
+
+    def _rebuildCollectorIfSetChanged(self):
+        """Rebuild the element result collector -- which pins a fixed snapshot of the element
+        list at construction -- if the associated ElementSet was mutated in-place (e.g. AMR
+        replacing a refined parent element with its children) since the last check. Unlike a plain
+        iteration over the set, this pinned snapshot does not see new elements on its own."""
+        if self.associatedSet._version != self._seenSetVersion:
+            self.elementResultCollector = ElementResultCollector(
+                list(self.associatedSet), self.quadraturePoints, self.resultName
+            )
+            self._seenSetVersion = self.associatedSet._version
 
     def updateResults(self, model: FEModel):
         """Update the field output.
@@ -436,6 +675,7 @@ class ElementFieldOutput(_FieldOutputBase):
             The model tree.
         """
 
+        self._rebuildCollectorIfSetChanged()
         result = self.elementResultCollector.getCurrentResults()
 
         super()._applyResultsPipleline(result)
@@ -452,6 +692,7 @@ class ElementFieldOutput(_FieldOutputBase):
         if self.f:
             raise Exception("cannot set field output for modified results (f(x) != None) !")
 
+        self._rebuildCollectorIfSetChanged()
         for i, el in enumerate(self.associatedSet):
             for j, g in enumerate(self.quadraturePoints):
                 theArray = el.getResultArray(self.resultName, g, True)
@@ -623,6 +864,51 @@ class FieldOutputController:
             name,
             nodeField,
             result,
+            self.model,
+            self.journal,
+            saveHistory,
+            f_x,
+            export,
+            fExport_x,
+        )
+
+    def addRigidBodyFieldOutput(
+        self,
+        name: str,
+        rigidBody,
+        field: str,
+        saveHistory=False,
+        f_x: Callable = None,
+        export: str = None,
+        fExport_x: Callable = None,
+    ):
+        """Add a new FieldOutput entry operating directly on a RigidBody.
+
+        Parameters
+        ----------
+        name
+            The name of this FieldOutput.
+        rigidBody
+            The :class:`~edelweissfe.rigidbodies.rigidbody.RigidBody` on which this FieldOutput should operate.
+        field
+            The name of the field to retrieve from the rigid body (e.g., "displacement").
+        saveHistory
+            Save the complete history or only the last result.
+        f_x
+            Apply a math function on the results.
+        export
+            Export the results to a file.
+        fExport_x
+            Apply a math function on the results before exporting.
+        """
+
+        if name in self.fieldOutputs:
+            raise Exception("FieldOutput {:} already exists!".format(name))
+
+        self.fieldOutputs[name] = RigidBodyFieldOutput(
+            name,
+            rigidBody,
+            field,
             self.model,
             self.journal,
             saveHistory,

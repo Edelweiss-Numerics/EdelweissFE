@@ -1,0 +1,348 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#  ---------------------------------------------------------------------
+#
+#  _____    _      _              _         _____ _____
+# | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|
+# |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|
+# | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___
+# |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
+#
+#
+#  Unit of Strength of Materials and Structural Analysis
+#  University of Innsbruck,
+#  2017 - today
+#
+#  Matthias Neuner matthias.neuner@uibk.ac.at
+#
+#  This file is part of EdelweissFE.
+#
+#  This library is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU Lesser General Public
+#  License as published by the Free Software Foundation; either
+#  version 2.1 of the License, or (at your option) any later version.
+#
+#  The full text of the license can be found in the file LICENSE.md at
+#  the top level directory of EdelweissFE.
+#  ---------------------------------------------------------------------
+
+"""``renderSchemaSurface``: render the ``.inp`` grammar surface directly from schemas -- the sole
+grammar-rendering mechanism.
+
+``tests/golden/inputlanguage_surface.txt`` is the frozen reference for that surface. This module
+implements two related bracket-and-indent formats: one keyed on a keyword's own name/description
+(rendered by :func:`renderSchemaSurface`, used for every ``KeywordBase``-based module's "module
+documentation" section) and a second, unrelated one used only for the top-level structural/
+type-dispatch keywords' summary block (:func:`renderPrintKeywordsBlock`). Both are driven entirely
+by a schema and a name/description pair -- there is no other grammar representation left to consult.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import textwrap
+from dataclasses import dataclass
+from typing import Iterable, Mapping
+
+from edelweissfe.utils.schema import (
+    MISSING,
+    SchemaFieldMeta,
+    datalineFieldMeta,
+    schemaFields,
+)
+
+#: The two indentation levels used throughout: a "required/optional arguments|keywords|datalines"
+#: section header, and the entries within it.
+_INDENT1 = "  "
+_INDENT2 = "    "
+
+#: The format used for the top-level structural/type-dispatch keywords' summary block (as opposed
+#: to the per-module "module documentation" format above).
+_PRINT_KEYWORDS_HEADER = "    {:}    "
+_PRINT_KEYWORDS_ARG = "        {:22}{:20}"
+
+#: Matches ``edelweissfe.utils.misc.typeString``'s ``dtypeMapping`` exactly.
+_PRINT_KEYWORDS_TYPE_STRING = {str: "string", bool: "boolean", int: "integer", float: "float"}
+
+
+@dataclass(frozen=True)
+class KeywordSurfaceSpec:
+    """One renderable keyword, built directly from a schema -- the input :func:`renderSchemaSurface`
+    consumes.
+
+    A top-level ``.inp`` keyword (``*ensight``, ``*section``, ...) is described by one of these; a
+    ``>>`` sub-keyword block is described by another, nested inside the enclosing schema via
+    :func:`~edelweissfe.utils.schema.subKeywordField` -- :func:`renderSchemaSurface` builds the
+    nested spec for each such field itself, from the field's own :class:`SchemaFieldMeta`, so a
+    caller never constructs one by hand for a sub-keyword.
+
+    Parameters
+    ----------
+    name
+        The keyword's name, as written after ``*``/``>>`` in an ``.inp`` file.
+    description
+        Human-readable description of the keyword, rendered on the header line. May be empty (as
+        for ensight's ``>>configuration``, which has none), in which case the header line carries
+        no trailing text.
+    schema
+        The schema dataclass describing this keyword's own line options, dataline payload, and
+        ``>>`` sub-blocks -- typically a :class:`~edelweissfe.keywords.base.keywordbase.KeywordBase`
+        subclass's :attr:`~edelweissfe.utils.schema.OptionSchemaProvider.schema`. ``None`` renders
+        just the header line (a keyword that declares no schema at all).
+    """
+
+    name: str
+    description: str
+    schema: type | None = None
+
+
+def specFromKeywordClass(keywordClass: type) -> KeywordSurfaceSpec:
+    """Build the :class:`KeywordSurfaceSpec` for a top-level keyword from its
+    :class:`~edelweissfe.keywords.base.keywordbase.KeywordBase` subclass.
+
+    The keyword's spelling (:attr:`~edelweissfe.keywords.base.keywordbase.KeywordBase.keywordName`,
+    in exact display case), its description, and its schema all come from the class -- the single
+    source of truth -- so the grammar surface, the parser, and any test all agree by construction
+    rather than re-transcribing the name/description anywhere. Use this in preference to constructing
+    a :class:`KeywordSurfaceSpec` by hand for a registered keyword.
+
+    Parameters
+    ----------
+    keywordClass
+        A concrete ``KeywordBase`` subclass.
+
+    Returns
+    -------
+    KeywordSurfaceSpec
+        The spec rendering that keyword's ``printKeywords`` block / module documentation.
+    """
+    return KeywordSurfaceSpec(
+        name=keywordClass.keywordName,
+        description=keywordClass.keywordDescription,
+        schema=keywordClass.schema,
+    )
+
+
+def renderSchemaSurface(specs: Iterable[KeywordSurfaceSpec], *, bracket: str = "[", joiner: str = "\n\n") -> str:
+    """Render a sequence of top-level keyword specs in the "module documentation" format.
+
+    Parameters
+    ----------
+    specs
+        One :class:`KeywordSurfaceSpec` per top-level keyword to render, in the order they should
+        appear.
+    bracket
+        The header bracket style: ``"["`` (the default) renders ``[name] ...``, the shape most
+        keywords are documented with; ``"<"`` renders ``< name > ...``, the shape a step action's
+        keyword (and its ``update<keyword>`` partial-redeclaration counterpart) is documented with,
+        since it is registered once per step type rather than once overall.
+    joiner
+        The separator between consecutive blocks. The default, a blank line, matches how multiple
+        *independent* top-level keywords are joined. A step action's documentation instead repeats
+        its (main, optional update) block pair once per registered step type and joins every block
+        with a single newline, no blank line in between -- pass ``specs`` pre-built with that
+        repetition and ``joiner="\\n"`` to reproduce it; see
+        ``tests/_inputlanguage_snapshot.py``'s step-action rendering, which does exactly this.
+
+    Returns
+    -------
+    str
+        The rendered surface: one keyword's block per spec, joined by ``joiner``.
+    """
+    return joiner.join(_renderKeywordBlock(spec, bracket=bracket) for spec in specs)
+
+
+def _renderKeywordBlock(spec: KeywordSurfaceSpec, bracket: str) -> str:
+    """Render one keyword (or sub-keyword) spec, as a single newline-joined string."""
+    return "\n".join(_renderKeywordLines(spec, bracket))
+
+
+def _fieldDefault(field: dataclasses.Field, meta: SchemaFieldMeta):
+    """The value shown as this (optional) field's default, mirroring
+    ``OptionalKeywordArg.documentedDefault`` -- rendered via ``str()``, not ``repr()``, which is why
+    a string default such as ``"Monitor"`` prints unquoted in the golden format.
+
+    ``meta.documentedDefault`` wins when set: it exists precisely for the rare field whose
+    documented default legitimately differs from its runtime one (see
+    :attr:`~edelweissfe.utils.schema.SchemaFieldMeta.documentedDefault`). Otherwise this falls back
+    to the dataclass field's own default/``default_factory``.
+    """
+    if meta.documentedDefault is not MISSING:
+        return meta.documentedDefault
+    if field.default is not dataclasses.MISSING:
+        return field.default
+    if field.default_factory is not dataclasses.MISSING:  # pragma: no cover -- no scalar field uses this today
+        return field.default_factory()
+    return None
+
+
+def _renderScalarEntry(optionName: str, meta: SchemaFieldMeta, field: dataclasses.Field | None) -> str:
+    """One ``[optionName] description (<class 'dtype'>[, default = X])`` line, matching
+    ``KeywordArg.__doc__``/``OptionalKeywordArg.__doc__`` exactly."""
+    if meta.required:
+        return f"[{optionName}] {meta.description} ({meta.dtype!r})"
+    default = _fieldDefault(field, meta) if field is not None else meta.documentedDefault
+    return f"[{optionName}] {meta.description} ({meta.dtype!r}, default = {default})"
+
+
+def _renderKeywordLines(spec: KeywordSurfaceSpec, bracket: str) -> list[str]:
+    """The line-by-line rendering of one keyword/sub-keyword spec, unindented (the caller is
+    responsible for indenting every line when nesting this under a parent -- see
+    :func:`_renderSubKeywordLines`, which prepends ``_INDENT2`` to every such line).
+    """
+    header = f"[{spec.name}]" if bracket == "[" else f"< {spec.name} >"
+    lines = [f"{header} {spec.description}" if spec.description else header]
+
+    if spec.schema is None:
+        return lines
+
+    fieldsByName = {field.name: field for field in dataclasses.fields(spec.schema)}
+    meta = schemaFields(spec.schema)
+
+    scalarRequired: list[tuple[str, str]] = []
+    scalarOptional: list[tuple[str, str]] = []
+    subRequired: list[tuple[str, str]] = []
+    subOptional: list[tuple[str, str]] = []
+    for fieldName, fieldMeta in meta.items():
+        if fieldMeta.isDataline:
+            continue
+        optionName = fieldMeta.optionName or fieldName
+        if fieldMeta.subSchema is not None:
+            (subRequired if fieldMeta.required else subOptional).append((optionName, fieldName))
+        elif fieldMeta.optionsOverrideOnly:
+            # Reachable only via a later ">>options" override, not part of this keyword's own
+            # line/">>"-block grammar -- see SchemaFieldMeta.optionsOverrideOnly. Rendering-only
+            # exclusion: scalarOptionNames/optionNames still include it, so the dynamic ">>options"
+            # validation (coercePresentOptions against this very schema) is unaffected.
+            continue
+        elif fieldMeta.updateOnly:
+            # Belongs only to this schema's "update<keyword>" grammar (e.g. distributedload's
+            # "delta"), not to the base keyword's own line grammar -- see
+            # SchemaFieldMeta.updateOnly. Rendering-only exclusion, from the *base* keyword's block;
+            # a dedicated update-keyword spec built with its own schema renders it normally.
+            continue
+        else:
+            (scalarRequired if fieldMeta.required else scalarOptional).append((optionName, fieldName))
+
+    if scalarRequired:
+        lines.append(_INDENT1 + "required arguments")
+        for optionName, fieldName in scalarRequired:
+            lines.append(_INDENT2 + _renderScalarEntry(optionName, meta[fieldName], fieldsByName[fieldName]))
+
+    if scalarOptional:
+        lines.append(_INDENT1 + "optional arguments")
+        for optionName, fieldName in scalarOptional:
+            lines.append(_INDENT2 + _renderScalarEntry(optionName, meta[fieldName], fieldsByName[fieldName]))
+
+    if subRequired:
+        lines.append(_INDENT1 + "required keywords")
+        for optionName, fieldName in subRequired:
+            lines.extend(_renderSubKeywordLines(optionName, meta[fieldName]))
+
+    if subOptional:
+        lines.append(_INDENT1 + "optional keywords")
+        for optionName, fieldName in subOptional:
+            lines.extend(_renderSubKeywordLines(optionName, meta[fieldName]))
+
+    datalineMeta = datalineFieldMeta(spec.schema)
+    if datalineMeta is not None:
+        section = "required datalines" if datalineMeta.required else "optional datalines"
+        lines.append(_INDENT1 + section)
+        lines.append(_INDENT2 + datalineMeta.description)
+
+    return lines
+
+
+def _printKeywordsTypeString(dtype: type) -> str:
+    """Mirror ``edelweissfe.utils.misc.typeString`` exactly, without importing it: that function
+    also accepts a raw string (for a caller passing an already-rendered type), a case this
+    renderer's schema-sourced ``dtype`` never needs."""
+    return _PRINT_KEYWORDS_TYPE_STRING.get(dtype, str(dtype))
+
+
+def renderPrintKeywordsBlock(spec: KeywordSurfaceSpec) -> str:
+    """Render one top-level keyword's summary block, over the 21 structural/type-dispatch keywords.
+
+    This is the *second* rendering format (see the module docstring), distinct from the
+    "module documentation" format :func:`renderSchemaSurface` produces. It differs in three
+    respects: required arguments are listed before optional ones with no section header separating
+    them, no default value is ever shown (even for an optional argument), and neither ``>>``
+    sub-keyword blocks nor the dataline payload are rendered at all.
+
+    Uses :mod:`textwrap` with the exact same ``TextWrapper(width=80, replace_whitespace=False)``
+    configuration and ``kwString``/``kwDataString`` indent templates as ``printKeywords()``, so a
+    multi-line-wrapped description reproduces the original's wrapping byte-for-byte.
+
+    Parameters
+    ----------
+    spec
+        The keyword to render. ``spec.schema`` may be ``None`` (a keyword with no line options at
+        all), in which case only the header line is rendered.
+
+    Returns
+    -------
+    str
+        The rendered block: the header line, then one wrapped line (or more) per required and
+        optional scalar argument, newline-joined -- **without** the blank-line separator
+        ``printKeywords()`` prints between keywords (``print("\\n")``), which is a concern of the
+        caller joining multiple blocks, not of rendering one.
+    """
+    wrapper = textwrap.TextWrapper(width=80, replace_whitespace=False)
+    wrapper.initial_indent = _PRINT_KEYWORDS_HEADER.format(spec.name)
+    wrapper.subsequent_indent = " " * len(wrapper.initial_indent)
+    lines = [wrapper.fill(spec.description)]
+
+    if spec.schema is None:
+        return "\n".join(lines)
+
+    meta = schemaFields(spec.schema)
+    required: list[tuple[str, SchemaFieldMeta]] = []
+    optional: list[tuple[str, SchemaFieldMeta]] = []
+    for fieldName, fieldMeta in meta.items():
+        if fieldMeta.isDataline or fieldMeta.subSchema is not None:
+            continue
+        optionName = fieldMeta.optionName or fieldName
+        (required if fieldMeta.required else optional).append((optionName, fieldMeta))
+
+    for optionName, fieldMeta in (*required, *optional):
+        wrapper.initial_indent = _PRINT_KEYWORDS_ARG.format(optionName, _printKeywordsTypeString(fieldMeta.dtype))
+        wrapper.subsequent_indent = " " * len(wrapper.initial_indent)
+        lines.append(wrapper.fill(fieldMeta.description))
+
+    return "\n".join(lines)
+
+
+def _renderSubKeywordLines(optionName: str, fieldMeta: SchemaFieldMeta) -> list[str]:
+    """Render one ``>>`` sub-keyword block, indented one level under its ``required``/``optional
+    keywords`` section header -- ``_INDENT2`` is prepended to *every* line of the block's own
+    rendering (including its header line), not only to the block as a whole.
+    """
+    subSpec = KeywordSurfaceSpec(name=optionName, description=fieldMeta.description, schema=fieldMeta.subSchema)
+    return [_INDENT2 + line for line in _renderKeywordLines(subSpec, bracket="<")]
+
+
+def renderDictDocumentation(documentation: Mapping[str, str]) -> str:
+    """Render a dict-style ``documentation = {optionName: description}`` module attribute.
+
+    This is a third rendering format, alongside the two the module docstring describes:
+    ``edelweissfe.outputmanagers.meshplot`` declares only a placeholder keyword to the input
+    language (see that module's own docstring), so its "module documentation" golden section is
+    not derived from any keyword/schema at all, just this hand-maintained ``{name: description}``
+    mapping, rendered by ``tests/_inputlanguage_snapshot.py::_renderDocumentation``'s dict branch:
+    ``"\\n".join(f"  {key}: {documentation[key]}" for key in sorted(documentation))``. This
+    function reproduces that exact format, so a caller need not special-case meshplot's own
+    ``documentation`` dict to render it identically. The dict itself remains the single source of
+    truth for this one module; there is no schema-driven equivalent to build this from.
+
+    Parameters
+    ----------
+    documentation
+        The module's ``documentation`` dict, mapping an option name (or ``"tag=value"`` spelling,
+        e.g. ``"create=perNode"``) to its human-readable description.
+
+    Returns
+    -------
+    str
+        One ``  key: description`` line per entry, sorted by key.
+    """
+    return "\n".join(f"  {key}: {documentation[key]}" for key in sorted(documentation))

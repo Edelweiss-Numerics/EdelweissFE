@@ -28,16 +28,26 @@
 
 from abc import ABC, abstractmethod
 
+import numpy as np
+
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.checkpointedstate import packState, unpackState
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.plotter import Plotter
+from edelweissfe.utils.schema import OptionSchemaProvider
 
 
-class OutputManagerBase(ABC):
+class OutputManagerBase(OptionSchemaProvider, ABC):
     """This is the abstract base class for all output managers.
     User defined output managers must implement the abstract methods.
+
+    Deriving from :class:`~edelweissfe.utils.schema.OptionSchemaProvider` means every output
+    manager -- including one supplied by a third-party package via an entry point -- exposes a
+    ``schema`` class attribute, so the registry can hand its option schema to the caller alongside
+    the class itself. Subclasses that do not define their own option schema simply inherit the
+    default of ``None``.
 
     Parameters
     ----------
@@ -57,6 +67,17 @@ class OutputManagerBase(ABC):
 
     identification = "OutputManagerBase"
 
+    #: Whether this output manager writes restart checkpoints. A solver that changes the model at
+    #: the end of an increment (e.g. a topology check) finalizes such a manager after that change,
+    #: so that the checkpoint holds the state the next increment starts from.
+    writesRestartCheckpoints: bool = False
+
+    #: The state this output manager carries from one increment to the next, by attribute name and
+    #: type; see :mod:`~edelweissfe.utils.checkpointedstate`. Every output manager declares it -- an
+    #: empty mapping if it carries none -- or overrides :meth:`getRestartData` and
+    #: :meth:`setRestartData`. Undeclared, it cannot be checkpointed.
+    checkpointedState: dict | None = None
+
     @abstractmethod
     def __init__(
         self,
@@ -69,9 +90,41 @@ class OutputManagerBase(ABC):
     ):
         pass
 
-    # @abstractmethod
-    # def updateDefinition(self, **kwargs: dict):
-    #     pass
+    def applyOptionsOverride(self, fieldValues: dict) -> None:
+        """Apply a partial override of this output manager's own ``schema`` fields.
+
+        The counterpart, on the output manager side, of the name-based ``>>options`` override
+        mechanism (``stepactions/options.py``): once that mechanism has resolved an ``>>options,
+        name=X, ...`` block to this output manager instance and validated the present keys against
+        ``type(self).schema`` via :func:`~edelweissfe.utils.schema.coercePresentOptions`, it calls
+        this method with the result to actually apply them.
+
+        Concrete output managers vary in how (or whether) they store overridable runtime options --
+        unlike a solver's uniform ``self.options`` dict, there is no single shared storage shape to
+        update generically here, so a subclass that wants ``>>options`` support overrides this with
+        its own named fields (ordinary polymorphism, not attribute probing -- see
+        :class:`OutputManager` in ``ensight.py`` for the one concrete case that needs this today).
+
+        The default here raises rather than silently doing nothing: without an override, a
+        ``>>options, name=X, someField=...`` block against ``X`` would otherwise validate cleanly
+        against ``type(X).schema`` (``stepactions/options.py``) and then apply no change at all --
+        indistinguishable, from the ``.inp`` author's side, from success.
+
+        Parameters
+        ----------
+        fieldValues
+            Maps schema field name to its new, already-coerced value.
+
+        Raises
+        ------
+        NotImplementedError
+            If ``fieldValues`` is non-empty and the subclass has not overridden this method.
+        """
+        if fieldValues:
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support '>>options' overrides for "
+                f"{sorted(fieldValues)} -- applyOptionsOverride is not implemented for this output manager."
+            )
 
     @abstractmethod
     def initializeJob(self):
@@ -136,3 +189,27 @@ class OutputManagerBase(ABC):
         P
             The final reaction vector.
         """
+
+    def getRestartData(self) -> dict[str, np.ndarray]:
+        """The state this output manager carries from one increment to the next; by default the
+        attributes declared in :attr:`checkpointedState`. Overridden where the state is not a plain
+        attribute.
+
+        Returns
+        -------
+        dict[str, numpy.ndarray]
+            A flat mapping of array name to array.
+        """
+
+        return packState(self)
+
+    def setRestartData(self, data: dict[str, np.ndarray]):
+        """Restore the state :meth:`getRestartData` returned.
+
+        Parameters
+        ----------
+        data
+            The mapping of arrays.
+        """
+
+        unpackState(self, data)

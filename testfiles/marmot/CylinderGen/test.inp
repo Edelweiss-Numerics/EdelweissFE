@@ -1,0 +1,79 @@
+*material, name=LinearElastic, id=linearelastic
+2.0e4, 0.2
+
+*material, name=LinearElastic, id=soft
+2.0e3, 0.2
+
+*job, name=job, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=cylinderGenerator, name=gen
+    radius  =5.0
+    lY      =10.0
+    nR      =3
+    nY      =5
+    elType  =C3D20R
+
+** second cylinder, offset from the first and divided into three sections along its length
+*modelGenerator, generator=cylinderGenerator, name=gen2
+    x0              =15.0
+    radius          =5.0
+    sectionLengths  ='3.0, 4.0, 3.0'
+    sectionNY       ='2, 3, 2'
+    nR              =3
+    elType          =C3D20R
+
+** half cylinder (z <= 0), exploiting symmetry
+*modelGenerator, generator=cylinderGenerator, name=gen3
+    x0      =30.0
+    radius  =5.0
+    lY      =10.0
+    nR      =3
+    nY      =2
+    part    =-z
+    elType  =C3D20R
+
+** quarter cylinder (x >= x0, z <= 0), divided into sections, exploiting symmetry
+*modelGenerator, generator=cylinderGenerator, name=gen4
+    x0              =45.0
+    radius          =5.0
+    sectionLengths  ='4.0, 6.0'
+    sectionNY       ='1, 1'
+    nR              =3
+    part            =+x-z
+    elType          =C3D8
+
+*section, name=section1, material=linearelastic, type=solid
+gen_all
+gen2_section0
+gen2_section2
+gen3_all
+gen4_all
+
+*section, name=section2, material=soft, type=solid
+gen2_section1
+
+*fieldOutput
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
+
+*output, type=ensight, name=test
+>>perNode, fieldOutput=displacement
+>>configuration, overwrite=yes
+
+*step, solver=theSolver
+maxInc=1.0, minInc=1.0, maxNumInc=100, maxIter=25, stepLength=1
+>>dirichlet,        name=fixBottom,    nSet=gen_bottom,  field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet,        name=axialTop,     nSet=gen_top,     field=displacement, 2=-0.05
+>>distributedload,  name=confinement,  surface=gen_outer,  magnitude=1.0, f(t)=1, type=pressure
+>>dirichlet,        name=fixBottom2,   nSet=gen2_bottom, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet,        name=axialTop2,    nSet=gen2_top,    field=displacement, 2=-0.05
+>>distributedload,  name=confinement2, surface=gen2_outer, magnitude=1.0, f(t)=1, type=pressure
+>>dirichlet,        name=fixBottom3,   nSet=gen3_bottom,    field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet,        name=axialTop3,    nSet=gen3_top,       field=displacement, 2=-0.05
+>>dirichlet,        name=symmetryZ3,   nSet=gen3_symmetryZ, field=displacement, 3=0.0
+>>distributedload,  name=confinement3, surface=gen3_outer,  magnitude=1.0, f(t)=1, type=pressure
+>>dirichlet,        name=fixBottom4,   nSet=gen4_bottom,    field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet,        name=axialTop4,    nSet=gen4_top,       field=displacement, 2=-0.05
+>>dirichlet,        name=symmetryX4,   nSet=gen4_symmetryX, field=displacement, 1=0.0
+>>dirichlet,        name=symmetryZ4,   nSet=gen4_symmetryZ, field=displacement, 3=0.0
+>>distributedload,  name=confinement4, surface=gen4_section1_outer, magnitude=1.0, f(t)=1, type=pressure

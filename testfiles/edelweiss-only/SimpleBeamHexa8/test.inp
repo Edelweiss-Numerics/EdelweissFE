@@ -28,7 +28,7 @@ all
 
 *step, solver=theSolver
 maxInc=1e0, minInc=1e-9, maxNumInc=1000, maxIter=25, stepLength=1
->>options, category=NISTSolver, extrapolation=off
+>>options, name=theSolver, extrapolation=off
 >>dirichlet, name=left,  nSet=gen_leftBack, field=displacement, 1=0.0, 2=0.0, 3=.0
 >>dirichlet, name=right,  nSet=gen_rightBack, field=displacement, 1=0.0, 2=0.0, 3=.0
 >>nodeforces, name=top, nSet=gen_front, components='0, 0, -4.16', field=displacement

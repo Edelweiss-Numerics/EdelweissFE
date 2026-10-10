@@ -80,3 +80,14 @@ class VIJEntityBase:
         VIJLocations = np.tile(idcs, (n, 1))
         I_[offset : offset + n**2] = VIJLocations.flatten()
         J_[offset : offset + n**2] = VIJLocations.flatten("F")
+
+    def shapeVIJContribution(self, flat_view: np.ndarray) -> np.ndarray:
+        """Shape the flat VIJ values slice for this entity.
+
+        By default, if the contribution is dense (size = nDof**2),
+        it reshapes the flat view to a 2-D array of shape (nDof, nDof)
+        using column-major (Fortran) order.
+        """
+        if self.getVIJContributionSize() == self.nDof**2:
+            return flat_view.reshape((self.nDof, self.nDof), order="F")
+        return flat_view

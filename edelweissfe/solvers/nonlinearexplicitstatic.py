@@ -27,26 +27,23 @@
 #  ---------------------------------------------------------------------
 
 import json
+from dataclasses import dataclass
 
 import numpy as np
 
 import edelweissfe.utils.performancetiming as performancetiming
-from edelweissfe.config.linsolve import getLinSolverByName
+from edelweissfe.config.linsolve import getDefaultLinSolver, getLinSolverByName
 from edelweissfe.config.timing import createTimingDict
+from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.csrgenerator import CSRGenerator
+from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.exceptions import (
-    ConditionalStop,
-    CutbackRequest,
-    ReachedMaxIncrements,
-    ReachedMinIncrementSize,
-    StepFailed,
-)
+from edelweissfe.utils.exceptions import CutbackRequest, IncrementFailed
 from edelweissfe.utils.fieldoutput import FieldOutputController
+from edelweissfe.utils.schema import schemaField
 
 
 def getRungeKuttaParameters(rungeKuttaStages: int) -> tuple[dict, dict, dict]:
@@ -149,6 +146,49 @@ def getRungeKuttaParameters(rungeKuttaStages: int) -> tuple[dict, dict, dict]:
     return _alpha, _omega, _lambda
 
 
+@dataclass(frozen=True)
+class NESTSchema:
+    """The options of the ``*solver`` datalines and of an ``>>options`` block routed to this
+    solver, owned by this module and never mutated from outside it.
+
+    Mirrors :attr:`NEST.SolverSpecificOptions` one-for-one; the plain ``self.options`` dict remains
+    the actual source of truth consulted at runtime (see :class:`NISTSchema` for why). The
+    ``runge-kutta-*`` option names are not valid Python identifiers, hence the ``optionName``
+    indirection.
+    """
+
+    rungeKuttaStages: int | None = schemaField(
+        description="The number of Runge-Kutta stages.", dtype=int, default=2, optionName="runge-kutta-stages"
+    )
+    rungeKuttaErrorTolerance: float | None = schemaField(
+        description="The error tolerance for the Runge-Kutta error control.",
+        dtype=float,
+        default=1e-3,
+        optionName="runge-kutta-error-tolerance",
+    )
+    rungeKuttaErrorControl: str | None = schemaField(
+        description="Activate the Runge-Kutta error control (on|off).",
+        dtype=str,
+        default="on",
+        optionName="runge-kutta-error-control",
+    )
+    linsolver: str | None = schemaField(description="The linear solver to be used.", dtype=str, default="pardiso")
+    linsolverConfigFile: str | None = schemaField(
+        description="A JSON configuration file for the linear solver.", dtype=str, default=""
+    )
+    # Inherited behaviour, so it needs an entry here too: NEST reuses NIST.applyDirichletK, which
+    # reads this option, but replaces SolverSpecificOptions wholesale rather than extending it -- so
+    # an option missing from that list is a KeyError at solve time, not a silent default.
+    pruneCondensedMatrixZeros: bool | None = schemaField(
+        description=(
+            "Compact explicitly stored zeros out of the multi-point-constraint-condensed system "
+            "matrix before solving. See NISTSchema for the trade-off; default True."
+        ),
+        dtype=bool,
+        default=True,
+    )
+
+
 class NEST(NIST):
     """This is the Nonlinear Explicit STatic -- solver.
 
@@ -162,42 +202,63 @@ class NEST(NIST):
 
     identification = "NESTSolver"
 
+    supportsMPC = False
+    supportsModelModifiers = False
+
+    #: Option schema for this solver, per OptionSchemaProvider.
+    schema = NESTSchema
+
     SolverSpecificOptions = {
         "runge-kutta-stages": 2,
         "runge-kutta-error-tolerance": 1e-3,
         "runge-kutta-error-control": "on",
-        "linsolver": "pardiso",
+        "linsolver": "",
         "linsolverConfigFile": "",
+        "pruneCondensedMatrixZeros": True,
     }
+
+    #: Not restartable: no restart scenario covers this solver, so it does not claim to be.
+    checkpointedState = None
 
     def __init__(self, jobInfo, journal, **kwargs):
         self.journal = journal
 
         self.options = self.SolverSpecificOptions.copy()
-        self._updateOptions(kwargs, journal)
+        # the datalines of the *solver keyword belong exclusively to this solver, so unknown entries
+        # are user typos and must not be swallowed
+        self._updateOptions(kwargs, journal, strict=True)
 
-    def solveStep(
+    def beginStep(
         self,
         step,
         model: FEModel,
         fieldOutputController: FieldOutputController,
         outputmanagers: dict[str, OutputManagerBase],
-    ) -> tuple[bool, FEModel]:
-        """Public interface to solve for a step.
+    ):
+        """Build the equation system, once per step, and start the step; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`.
 
         Parameters
         ----------
-        stepNumber
-            The step number.
         step
-            The dictionary containing the step definition.
-        stepActions
-            The dictionary containing all step actions.
+            The step to be solved.
         model
-            The  model tree.
+            The model tree.
         fieldOutputController
             The field output controller.
+        outputmanagers
+            The output managers.
         """
+
+        self.validateModelCapabilities(model)
+
+        for constraintName, constraint in model.constraints.items():
+            if type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity:
+                raise Exception(
+                    f"Constraint '{constraintName}' requires a dynamic connectivity update "
+                    f"(contact) every increment, which {self.identification} never performs -- "
+                    "contact is not currently supported with this solver."
+                )
 
         self.journal.message("Creating monolithic equation system", self.identification, 0)
         self.theDofManager = DofManager(
@@ -224,13 +285,16 @@ class NEST(NIST):
 
         nVariables = len(presentVariableNames)
         self.iterationHeader = ("{:^25}" * nVariables).format(*presentVariableNames)
-        self.iterationHeader2 = (" {:<10}  {:<10}  ").format("||R||∞", "||ddU||∞") * nVariables
+        # Centers each label over its 12-wide value+marker cell; kept in sync with
+        # NonlinearImplicitStatic's identical real-field header.
+        self.iterationHeader2 = ("{:^12}{:^12} ").format("||R||∞", "||ddU||∞") * nVariables
         self.iterationMessageTemplate = "{:11.2e}{:1}{:11.2e}{:1} "
 
         self.computationTimes = createTimingDict()
 
-        _optionsUpdate = step.actions["options"].get("NESTSolver", {})
-        self._updateOptions(_optionsUpdate, self.journal)
+        # self.options already reflects every >>options, name=<this solver's name>, ... block applied
+        # so far, applied as each block is constructed or re-declared; there is nothing to reset or
+        # re-fetch here.
 
         # get parameters for runge kutta scheme
         self.rkAlpha, self.rkOmega, self.rkLambda = getRungeKuttaParameters(self.options.get("runge-kutta-stages", 2))
@@ -243,7 +307,19 @@ class NEST(NIST):
         if linsolverOptions:
             with open(linsolverOptions, "r") as f:
                 linsolverOptionDict = json.load(f)
-        self.linSolver = getLinSolverByName(self.options.get("linsolver", "default"), linsolverOptionDict)
+        self.linSolver = (
+            getLinSolverByName(self.options["linsolver"], linsolverOptionDict)
+            if self.options["linsolver"]
+            else getDefaultLinSolver()
+        )
+        # NEST solves a linear system per Runge-Kutta stage (see solveIncrement, via the inherited
+        # linearSolve()), so its linear solver needs the same initialization NIST gives its own:
+        # setJournal for solvers that log, and setModel for solvers that derive anything beyond the
+        # plain (A, b) call -- a field-split solver such as blockamg raises without the field
+        # structure setModel supplies. NEST's equation system is built once here rather than being
+        # rebuilt on connectivity changes, so one call at construction is enough.
+        self.linSolver.setJournal(self.journal)
+        self.linSolver.setModel(model, self.theDofManager)
 
         U = self.theDofManager.constructDofVector()
         P = self.theDofManager.constructDofVector()
@@ -257,98 +333,121 @@ class NEST(NIST):
         for variable in model.scalarVariables.values():
             U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
 
-        prevTimeStep = None
+        self._U, self._dU, self._P, self._K = U, dU, P, K
 
-        self.applyStepActionsAtStepStart(model, step.actions)
+        self.prevTimeStep = None
 
+        self.applyStepActionsAtStepStart(model, step)
+
+    def prepareIncrement(self, step, model: FEModel, isRetry: bool):
+        """Nothing to prepare: this solver has neither topology updates nor contact."""
+
+    def attemptIncrement(self, step, model: FEModel, timeStep: TimeStep):
+        """Integrate the increment with the embedded Runge-Kutta scheme; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.attemptIncrement`.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        timeStep
+            The increment.
+
+        Raises
+        ------
+        IncrementFailed
+            If the scheme requests a smaller increment.
+        """
+
+        self.incrementStatus = {
+            "step": step.number,
+            "inc": timeStep.number,
+            "iters": None,
+            "converged": False,
+            "time inc": timeStep.timeIncrement,
+            "time end": timeStep.totalTime,
+            "notes": "",
+        }
+
+        self.journal.printSeperationLine()
+        self.journal.message(
+            "increment {:}: {:8f}, {:8f}; time {:10f} to {:10f}".format(
+                timeStep.number,
+                timeStep.stepProgressIncrement,
+                timeStep.stepProgress,
+                timeStep.totalTime - timeStep.timeIncrement,
+                timeStep.totalTime,
+            ),
+            self.identification,
+            level=1,
+        )
         try:
-            for timeStep in step.getTimeStep():
+            U, dU, P, incScaleFactor = self.solveIncrement(
+                self._U,
+                self._dU,
+                self._P,
+                self._K,
+                step.actions,
+                model,
+                timeStep,
+                self.prevTimeStep,
+            )
+        except CutbackRequest as e:
+            self.prevTimeStep = None
+            self.incrementStatus["notes"] = str(e)
+            raise IncrementFailed(str(e), max(e.cutbackSize, 0.25)) from e
 
-                statusInfoDict = {
-                    "step": step.number,
-                    "inc": timeStep.number,
-                    "iters": None,
-                    "converged": False,
-                    "time inc": timeStep.timeIncrement,
-                    "time end": timeStep.totalTime,
-                    "notes": "",
-                }
+        self._U, self._dU, self._P = U, dU, P
+        self._incScaleFactor = incScaleFactor
 
-                self.journal.printSeperationLine()
-                self.journal.message(
-                    "increment {:}: {:8f}, {:8f}; time {:10f} to {:10f}".format(
-                        timeStep.number,
-                        timeStep.stepProgressIncrement,
-                        timeStep.stepProgress,
-                        timeStep.totalTime - timeStep.timeIncrement,
-                        timeStep.totalTime,
-                    ),
-                    self.identification,
-                    level=1,
-                )
-                try:
-                    U, dU, P, incScaleFactor = self.solveIncrement(
-                        U,
-                        dU,
-                        P,
-                        K,
-                        step.actions,
-                        model,
-                        timeStep,
-                        prevTimeStep,
-                    )
+    def acceptIncrement(self, step, model: FEModel, timeStep: TimeStep):
+        """Commit the increment to the model, and let the error estimate size the next one; see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.acceptIncrement`.
 
-                    step.changeIncrementSize(incScaleFactor)
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        timeStep
+            The solved increment.
+        """
 
-                except CutbackRequest as e:
-                    self.journal.message(str(e), self.identification, 1)
-                    step.discardAndChangeIncrement(max(e.cutbackSize, 0.25))
-                    prevTimeStep = None
+        U, dU, P = self._U, self._dU, self._P
 
-                    statusInfoDict["notes"] = str(e)
+        step.timeStepper.changeIncrementSize(self._incScaleFactor)
+        self.prevTimeStep = timeStep
 
-                    for man in outputmanagers:
-                        man.finalizeFailedIncrement(
-                            statusInfoDict=statusInfoDict,
-                            currentComputingTimes=self.computationTimes,
-                        )
+        # write results to nodes:
+        for fieldName, field in model.nodeFields.items():
+            self.theDofManager.writeDofVectorToNodeField(U, field, "U")
+            self.theDofManager.writeDofVectorToNodeField(P, field, "P")
+            self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
 
-                else:
-                    prevTimeStep = timeStep
+        for variable in model.scalarVariables.values():
+            variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
 
-                    # write results to nodes:
-                    for fieldName, field in model.nodeFields.items():
-                        self.theDofManager.writeDofVectorToNodeField(U, field, "U")
-                        self.theDofManager.writeDofVectorToNodeField(P, field, "P")
-                        self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
+        self.updateRigidBodies(model, timeStep)
 
-                    for variable in model.scalarVariables.values():
-                        variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+        model.advanceToTime(timeStep.totalTime)
 
-                    model.advanceToTime(timeStep.totalTime)
+    def endStep(self, step, model: FEModel):
+        """Report the step's performance timing.
 
-                    fieldOutputController.finalizeIncrement()
-                    for man in outputmanagers:
-                        man.finalizeIncrement(
-                            currentComputingTimes=self.computationTimes,
-                            statusInfoDict=statusInfoDict,
-                        )
+        Parameters
+        ----------
+        step
+            The step that was solved.
+        model
+            The model tree.
+        """
 
-        except (ReachedMaxIncrements, ReachedMinIncrementSize):
-            self.journal.errorMessage("Incrementation failed", self.identification)
-            raise StepFailed()
-
-        except ConditionalStop:
-            self.journal.message("Conditional Stop", self.identification)
-            self.applyStepActionsAtStepEnd(model, step.actions)
-
-        else:
-            self.applyStepActionsAtStepEnd(model, step.actions)
-
-        finally:
-            prettyTable = performancetiming.makePrettyTable()
-            self.journal.printPrettyTable(prettyTable, self.identification)
-            performancetiming.reset()
+        prettyTable = performancetiming.makePrettyTable()
+        self.journal.printPrettyTable(prettyTable, self.identification)
+        performancetiming.reset()
 
     def solveIncrement(
         self,
@@ -410,6 +509,9 @@ class NEST(NIST):
         distributedLoads = stepActions["distributedload"].values()
         bodyForces = stepActions["bodyforce"].values()
 
+        # Find which global DOFs the Dirichlet BCs constrain, once up front.
+        self.locateConstrainedDofs(dirichlets)
+
         self.applyStepActionsAtIncrementStart(model, timeStep, stepActions)
 
         for geostatic in stepActions["geostatic"].values():
@@ -435,13 +537,14 @@ class NEST(NIST):
             PExt, K = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_np, PExt, K, timeStep)
             PExt, K = self.assembleConstraints(constraints, U_np, dU_[k], PExt, K, timeStep)
 
-            R[:] = P
+            R[:] = -P
             R += PExt
 
-            R = self.applyDirichlet(timeStep, R, dirichlets)
+            R = self.applyDirichletToResidual(timeStep, R, dirichlets)
 
             K_ = self.assembleStiffnessCSR(K)
-            K_ = self.applyDirichletK(K_, dirichlets)
+            # identity rows, and the columns eliminated into R
+            K_ = self.applyDirichletToStiffness(K_, dirichlets, R)
 
             # solve for increment
             dU_[k] = self.linearSolve(K_, R)
