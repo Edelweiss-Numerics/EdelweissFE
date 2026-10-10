@@ -19,6 +19,28 @@ The recipes of that channel are maintained at
 
 Supported platforms are Linux (x86-64), macOS 14 or newer (arm64 and x86-64), and Windows (x64).
 
+Ready-to-run package
+********************
+
+To run simulations without developing EdelweissFE, install the conda package ``edelweissfe`` (released versions,
+with Marmot's public elements and materials and all linear solvers; same platforms as below):
+
+.. code-block:: console
+
+    conda create -n edelweissfe -c https\://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe
+
+It depends on the matching ``marmot`` package, pinned exactly: compiled C++ code has no stable interface across
+Marmot versions. Both are built with portable compiler flags (no ``-march=native``).
+
+Everything else on this page is for **developing** EdelweissFE or Marmot, adding (private) Marmot modules, or
+compiling for your own CPU. Do that in a separate environment created from ``edelweissfe-dev``, never in one with the
+``edelweissfe`` or ``marmot`` package installed: a self-built Marmot installed there overwrites files conda manages,
+and the packaged EdelweissFE would then run against a library it was not compiled for. Likewise, ``pip install -e .``
+on top of the ``edelweissfe`` package leaves two copies of EdelweissFE in the environment.
+
+The recipe is ``conda/edelweissfe/recipe.yaml``; the ``conda`` workflow builds and tests it (against Marmot's own
+recipe, built from the matching Marmot branch) on every pull request and uploads it for a release tag.
+
 Get conda
 *********
 

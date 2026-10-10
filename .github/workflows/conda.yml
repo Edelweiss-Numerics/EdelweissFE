@@ -1,0 +1,108 @@
+# Builds the `edelweissfe` conda package (conda/edelweissfe) on every platform, for every PR and push to the
+# development branch, and uploads it to the prefix.dev channel matthiasneuner/edelweiss for a release tag
+# (v26.11 -> 26.11). Uploading needs the PREFIX_API_KEY repository secret.
+#
+# Marmot: for a release tag, the released `marmot` package from the channel (tag Marmot first). Otherwise Marmot's own
+# recipe (conda/recipe.yaml) is built from the Marmot branch resolved as for the other workflows
+# (.github/actions/resolve-marmot), and edelweissfe against it.
+name: conda
+
+on:
+  push:
+    branches: [next_v26.11]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CHANNEL: matthiasneuner/edelweiss
+  # The release the development snapshots lead up to: they are versioned <NEXT_RELEASE>.dev<commit time>.
+  NEXT_RELEASE: "26.11"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.subdir }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { subdir: linux-64, os: ubuntu-24.04 }
+          - { subdir: osx-arm64, os: macos-15 }
+          - { subdir: osx-64, os: macos-15-intel }
+          - { subdir: win-64, os: windows-2022 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: prefix-dev/setup-pixi@v0.9.1
+        with:
+          run-install: false
+
+      - name: Version
+        run: |
+          if [ "${{ github.ref_type }}" = tag ]; then
+            version=${GITHUB_REF_NAME#v}
+          else
+            version="$NEXT_RELEASE.dev$(git log -1 --format=%cd --date=format:%Y%m%d%H%M)"
+          fi
+          echo "EDELWEISSFE_CONDA_VERSION=$version" >> "$GITHUB_ENV"
+          echo "version: $version"
+          pixi global install rattler-build
+
+      - name: Resolve the Marmot branch
+        if: github.ref_type != 'tag'
+        id: marmot
+        uses: ./.github/actions/resolve-marmot
+
+      # Into the parent directory, never into the checkout (see .github/actions/build-marmot).
+      - name: Build Marmot
+        if: github.ref_type != 'tag'
+        run: |
+          git clone --branch "${{ steps.marmot.outputs.branch }}" https://github.com/MAteRialMOdelingToolbox/Marmot.git ../Marmot
+          git -C ../Marmot checkout --detach "${{ steps.marmot.outputs.sha }}"
+          MARMOT_CONDA_VERSION="$NEXT_RELEASE.dev$(git -C ../Marmot log -1 --format=%cd --date=format:%Y%m%d%H%M)" \
+            rattler-build build --recipe ../Marmot/conda -c "https://repo.prefix.dev/$CHANNEL" -c conda-forge \
+            --output-dir output --log-style plain
+
+      # The package tests run as part of the build: every expected extension imports, the GIL stays off, and one
+      # test case with and one without Marmot passes. rattler-build uses output/ as a channel, so a Marmot built
+      # above takes precedence.
+      - name: Build EdelweissFE
+        run: |
+          rattler-build build --recipe conda/edelweissfe -m conda/edelweissfe/variants.yaml \
+            -c "https://repo.prefix.dev/$CHANNEL" -c conda-forge --output-dir output --log-style plain
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: conda-${{ matrix.subdir }}
+          path: output/${{ matrix.subdir }}/edelweissfe-*.conda
+
+  upload:
+    name: upload
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: conda-*
+          path: output
+
+      - uses: prefix-dev/setup-pixi@v0.9.1
+        with:
+          run-install: false
+
+      - name: Upload to prefix.dev
+        env:
+          PREFIX_API_KEY: ${{ secrets.PREFIX_API_KEY }}
+        run: |
+          pixi global install rattler-build
+          find output -name '*.conda' -print0 | xargs -0 rattler-build upload prefix --skip-existing --channel "$CHANNEL"

@@ -1,0 +1,62 @@
+name: Resolve Marmot
+description: >
+  Resolve the Marmot branch (and its current commit) to build EdelweissFE against: the branch under test, the PR's
+  base branch or next_v26.11, whichever exists first in the repository.
+
+inputs:
+  repository:
+    description: The Marmot repository.
+    default: MAteRialMOdelingToolbox/Marmot
+  ref:
+    description: "The Marmot branch. Empty (the default): resolved as described above."
+    default: ""
+
+outputs:
+  branch:
+    description: The resolved branch.
+    value: ${{ steps.resolve.outputs.branch }}
+  sha:
+    description: The branch's current commit.
+    value: ${{ steps.resolve.outputs.sha }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve the Marmot branch and commit
+      id: resolve
+      # Not a login shell (-l): this step needs no environment, and a login shell's exit runs ~/.bash_logout,
+      # whose failing clear_console (no terminal) turns `exit 0` into a failure under -e.
+      shell: bash -eo pipefail {0}
+      run: |
+        # Try, in order: the branch actually under test (github.head_ref, set for a pull_request
+        # event), the PR's base branch (github.base_ref), then next_v26.11, the shared
+        # development branch - NOT github.ref_name, since the EdelweissFE branch name essentially
+        # never matches a Marmot branch name, and falling through to Marmot's default branch
+        # ("master") silently builds against a stale, possibly API-incompatible Marmot revision.
+        #
+        # head_ref must be tried before base_ref: for a PR whose head branch itself has a
+        # same-named Marmot branch (e.g. a "next_v26.11 -> master" promotion PR), the code under
+        # test depends on that head branch's Marmot revision, not the base branch's -- using
+        # base_ref there would silently build against the wrong (older/incompatible) Marmot.
+        if [ -n "${{ inputs.ref }}" ]; then
+          CANDIDATE_BRANCHES=("${{ inputs.ref }}")
+        else
+          CANDIDATE_BRANCHES=("${{ github.head_ref }}" "${{ github.base_ref }}" "next_v26.11")
+        fi
+        branch=""
+        for candidate in "${CANDIDATE_BRANCHES[@]}"; do
+          [ -n "$candidate" ] || continue
+          sha=$(git ls-remote https://github.com/${{ inputs.repository }}.git "refs/heads/$candidate" | cut -f1)
+          if [ -n "$sha" ]; then
+            branch=$candidate
+            break
+          fi
+        done
+        if [ -z "$branch" ]; then
+          echo "::error::None of the candidate branches (${CANDIDATE_BRANCHES[*]}) exist in Marmot, and there is no safe default to fall back to."
+          false
+        fi
+        echo "Using Marmot branch $branch at $sha"
+        echo "branch=$branch" >> "$GITHUB_OUTPUT"
+        echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
