@@ -33,13 +33,15 @@ assert runner, "run_tests_edelweissfe is not on PATH"
 env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
 # The installed launcher itself must start (on Windows a broken one exits 1 silently).
 subprocess.run([runner, "--help"], check=True, env=env)
+# Each case must PASS: the runner exits 0 for a SKIPPED case (e.g. an element or material the packaged Marmot lacks).
 failed = []
-for directory in ["testfiles/edelweiss-only", "testfiles/marmot"]:
+for directory, case in [("testfiles/edelweiss-only", "CantileverBeamQuad4"), ("testfiles/marmot", "CPS4")]:
     result = subprocess.run(
         [runner, directory], capture_output=True, text=True, encoding="utf-8", errors="replace", env=env
     )
     print(result.stdout)
     print(result.stderr, file=sys.stderr)
-    if result.returncode != 0:
-        failed.append(directory)
-assert not failed, f"test cases failed in {failed}"
+    passed = any(case in line and "PASSED" in line for line in result.stdout.splitlines())
+    if result.returncode != 0 or not passed:
+        failed.append(case)
+assert not failed, f"test cases did not pass: {failed}"

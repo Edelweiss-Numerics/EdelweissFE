@@ -42,9 +42,12 @@ jobs:
       # against next_v26.11).
       - name: Changed environment files
         id: changes
+        # The PR's base branch through the environment, not pasted into the script.
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           if [ "${{ github.event_name }}" = pull_request ]; then
-            base=origin/${{ github.base_ref }}
+            base="origin/$BASE_REF"
           elif [ -n "${{ github.event.before }}" ] && ! [[ "${{ github.event.before }}" =~ ^0+$ ]]; then
             base=${{ github.event.before }}
           else

@@ -9,7 +9,8 @@ source:
   path: ../..
   use_gitignore: true
 build:
-  number: 0
+  # Set by .github/workflows/conda.yml (workflow_dispatch input): raise it to republish a fixed build of a release.
+  number: ${{ env.get("EDELWEISSFE_CONDA_BUILD_NUMBER", default="0") | int }}
   script:
     env:
       # Portable binaries: setup.py defaults to -march=native on Linux and macOS.
@@ -41,9 +42,10 @@ requirements:
     - setuptools
     - cython
     - numpy
-    # run_exports pins marmot to exactly this build. A release builds against the Marmot release of the same version
-    # (tagged first); a development snapshot against the Marmot built just before it in the same CI job.
-    - ${{ "marmot" if "dev" in version else "marmot " ~ version ~ ".*" }}
+    # run_exports pins marmot to exactly this build. A release builds against exactly the Marmot release of the same
+    # version (or EDELWEISSFE_MARMOT_VERSION), never a development snapshot; a development snapshot against the Marmot
+    # built from the matching branch in the same CI job.
+    - ${{ "marmot" if "dev" in version else "marmot ==" ~ env.get("EDELWEISSFE_MARMOT_VERSION", default=version) }}
     - eigen
     - amgcl
     - libboost-devel
@@ -61,6 +63,9 @@ requirements:
     - sympy
     - matplotlib-base
     - prettytable
+    # rich (run_tests_edelweissfe's output) and meshio (microstructure generator) are imported directly.
+    - rich
+    - meshio
     - gstools
     # vtk-base, not vtk: see EdelweissFE's environment.yml (vtk-io-ffmpeg's dependencies hang on Windows).
     - vtk-base
@@ -87,10 +92,9 @@ tests:
         - testfiles/marmot/CPS4/U.ref
       recipe:
         - tests/check_package.py
+    # No PYTHON_GIL=0 here: it would keep the GIL off whatever the extensions do, so the check could never fail.
     script:
       interpreter: python
-      env:
-        PYTHON_GIL: "0"
       content: |
         import runpy
         runpy.run_path("tests/check_package.py", run_name="__main__")
