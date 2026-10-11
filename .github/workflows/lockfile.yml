@@ -39,16 +39,19 @@ jobs:
           fi
 
       # What this push/PR changed: against the PR base, or against the commit before the push (for a new branch,
-      # against next_v26.11).
+      # against master).
       - name: Changed environment files
         id: changes
+        # The PR's base branch through the environment, not pasted into the script.
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           if [ "${{ github.event_name }}" = pull_request ]; then
-            base=origin/${{ github.base_ref }}
+            base="origin/$BASE_REF"
           elif [ -n "${{ github.event.before }}" ] && ! [[ "${{ github.event.before }}" =~ ^0+$ ]]; then
             base=${{ github.event.before }}
           else
-            base=$(git merge-base origin/next_v26.11 HEAD)
+            base=$(git merge-base origin/master HEAD)
           fi
           changed=$(git diff --name-only "$base"...HEAD)
           echo "Changed since $base:"; echo "$changed"
@@ -90,7 +93,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: next_v26.11
+          ref: master
 
       - uses: mamba-org/setup-micromamba@v2
         with:
@@ -136,7 +139,7 @@ jobs:
           # their CI would never run. LOCKFILE_UPDATE_TOKEN (a fine-grained token with contents and
           # pull-requests write access) makes CI run; without it the PR is still opened.
           token: ${{ secrets.LOCKFILE_UPDATE_TOKEN || secrets.GITHUB_TOKEN }}
-          base: next_v26.11
+          base: master
           branch: chore/update-conda-lock
           commit-message: "chore: update the locked environment"
           title: "chore: update the locked environment (conda-lock.yml, edelweissfe-dev)"

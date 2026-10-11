@@ -1,0 +1,66 @@
+name: Resolve Marmot
+description: >
+  Resolve the Marmot branch (and its current commit) to build EdelweissFE against: the branch under test, the PR's
+  base branch or master, whichever exists first in the repository.
+
+inputs:
+  repository:
+    description: The Marmot repository.
+    default: MAteRialMOdelingToolbox/Marmot
+  ref:
+    description: "The Marmot branch. Empty (the default): resolved as described above."
+    default: ""
+
+outputs:
+  branch:
+    description: The resolved branch.
+    value: ${{ steps.resolve.outputs.branch }}
+  sha:
+    description: The branch's current commit.
+    value: ${{ steps.resolve.outputs.sha }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve the Marmot branch and commit
+      id: resolve
+      # Not a login shell (-l): this step needs no environment, and a login shell's exit runs ~/.bash_logout,
+      # whose failing clear_console (no terminal) turns `exit 0` into a failure under -e.
+      shell: bash -eo pipefail {0}
+      # Passed through the environment, never pasted into the script: branch names come from (fork) pull requests
+      # and may contain shell syntax.
+      env:
+        INPUT_REF: ${{ inputs.ref }}
+        REPOSITORY: ${{ inputs.repository }}
+        HEAD_REF: ${{ github.head_ref }}
+        BASE_REF: ${{ github.base_ref }}
+        REF_NAME: ${{ github.ref_name }}
+      run: |
+        # Try, in order: the branch actually under test (github.head_ref, set for a pull_request event), the PR's
+        # base branch (github.base_ref), the pushed branch (github.ref_name, for a push to a development branch,
+        # which Marmot has under the same name), then master, the development branch.
+        #
+        # head_ref must be tried before base_ref: for a PR whose head branch itself has a same-named Marmot branch
+        # (a feature with a companion Marmot branch), the code under test depends on that head branch's Marmot
+        # revision, not the base branch's -- using base_ref there would silently build against the wrong Marmot.
+        if [ -n "$INPUT_REF" ]; then
+          CANDIDATE_BRANCHES=("$INPUT_REF")
+        else
+          CANDIDATE_BRANCHES=("$HEAD_REF" "$BASE_REF" "$REF_NAME" "master")
+        fi
+        branch=""
+        for candidate in "${CANDIDATE_BRANCHES[@]}"; do
+          [ -n "$candidate" ] || continue
+          sha=$(git ls-remote "https://github.com/$REPOSITORY.git" "refs/heads/$candidate" | cut -f1)
+          if [ -n "$sha" ]; then
+            branch=$candidate
+            break
+          fi
+        done
+        if [ -z "$branch" ]; then
+          echo "::error::None of the candidate branches (${CANDIDATE_BRANCHES[*]}) exist in Marmot, and there is no safe default to fall back to."
+          false
+        fi
+        echo "Using Marmot branch $branch at $sha"
+        echo "branch=$branch" >> "$GITHUB_OUTPUT"
+        echo "sha=$sha" >> "$GITHUB_OUTPUT"
