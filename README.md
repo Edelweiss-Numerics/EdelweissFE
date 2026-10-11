@@ -28,6 +28,16 @@ EdelweissFE makes use of the [Marmot](https://github.com/MAteRialMOdelingToolbox
 EdelweissFE runs on Linux, macOS (version 14 or newer) and Windows. Installing it takes four steps and about
 15 minutes, most of it waiting for downloads.
 
+**Just want to run simulations?** With conda installed (step 1), one command installs a released EdelweissFE
+including Marmot, no compiler needed:
+
+```console
+conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe
+```
+
+The steps below set up a **development** installation instead: use them to change EdelweissFE or Marmot, add Marmot
+modules, or compile for your own CPU. Keep the two in separate environments.
+
 ### 1. Install conda
 
 EdelweissFE and everything it needs (Python, numerical libraries, compilers) are installed with **conda**, a
