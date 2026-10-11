@@ -146,7 +146,7 @@ built from source, into the environment:
 
 .. code-block:: console
 
-    git clone --recurse-submodules --branch next_v26.11 https://github.com/MAteRialMOdelingToolbox/Marmot/ ../Marmot
+    git clone --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/ ../Marmot
     cmake -S ../Marmot -B ../Marmot/build -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
           -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF
     cmake --build ../Marmot/build -j
@@ -157,7 +157,7 @@ Marmot is built in the ``Release`` configuration:
 
 .. code-block:: console
 
-    git clone --recurse-submodules --branch next_v26.11 https://github.com/MAteRialMOdelingToolbox/Marmot/ ..\Marmot
+    git clone --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/ ..\Marmot
     cmake -S ..\Marmot -B ..\Marmot\build -DCMAKE_INSTALL_PREFIX=%CONDA_PREFIX%\Library ^
           -DCMAKE_PREFIX_PATH=%CONDA_PREFIX%\Library -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF
     cmake --build ..\Marmot\build --config Release --parallel
@@ -207,7 +207,7 @@ With conda-lock in its own environment (``conda create -n conda-lock -c conda-fo
 Then set a new version, today's date, in ``conda/edelweissfe-dev/VERSION`` (append ``.1``, ``.2``, ... for further
 changes on the same day) and in the ``conda create`` command of the README (this page reads it from ``VERSION``). Commit everything together;
 CI fails if the lockfile is out of date with ``environment.yml``, if it changed without a new version, or if the
-documented commands do not show the current version. Once merged into ``next_v26.11``, CI publishes the new
+documented commands do not show the current version. Once merged into ``master``, CI publishes the new
 ``edelweissfe-dev``.
 
 ``virtual-packages.yml`` tells conda-lock which system properties (e.g. the minimum macOS version) to assume for each

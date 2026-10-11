@@ -1,7 +1,7 @@
 name: Resolve Marmot
 description: >
   Resolve the Marmot branch (and its current commit) to build EdelweissFE against: the branch under test, the PR's
-  base branch or next_v26.11, whichever exists first in the repository.
+  base branch or master, whichever exists first in the repository.
 
 inputs:
   repository:
@@ -38,8 +38,7 @@ runs:
       run: |
         # Try, in order: the branch actually under test (github.head_ref, set for a pull_request event), the PR's
         # base branch (github.base_ref), the pushed branch (github.ref_name, for a push to a development branch,
-        # which Marmot has under the same name), then next_v26.11, the shared development branch -- never Marmot's
-        # default branch ("master"), which would silently build against a stale, possibly API-incompatible Marmot.
+        # which Marmot has under the same name), then master, the development branch.
         #
         # head_ref must be tried before base_ref: for a PR whose head branch itself has a same-named Marmot branch
         # (a feature with a companion Marmot branch), the code under test depends on that head branch's Marmot
@@ -47,7 +46,7 @@ runs:
         if [ -n "$INPUT_REF" ]; then
           CANDIDATE_BRANCHES=("$INPUT_REF")
         else
-          CANDIDATE_BRANCHES=("$HEAD_REF" "$BASE_REF" "$REF_NAME" "next_v26.11")
+          CANDIDATE_BRANCHES=("$HEAD_REF" "$BASE_REF" "$REF_NAME" "master")
         fi
         branch=""
         for candidate in "${CANDIDATE_BRANCHES[@]}"; do

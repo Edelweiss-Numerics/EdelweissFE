@@ -2,7 +2,7 @@ name: Development environment package
 
 # Builds the edelweissfe-dev meta-package (conda/edelweissfe-dev) from conda-lock.yml for every platform, checks that
 # `conda create ... edelweissfe-dev=<VERSION>` reproduces the locked environment, and publishes it to the
-# matthiasneuner/edelweiss channel when conda-lock.yml or VERSION changes on next_v26.11.
+# matthiasneuner/edelweiss channel when conda-lock.yml or VERSION changes on master.
 on:
   push:
     paths: ["conda-lock.yml", "conda/edelweissfe-dev/**", ".github/workflows/dev_environment.yml"]
@@ -106,7 +106,7 @@ jobs:
 
   publish:
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/next_v26.11'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

@@ -36,7 +36,7 @@ PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 ```
 
 ### 2. With Marmot (Native C++ Element & Material Formulations)
-Build [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) (branch `next_v26.11`) into `$CONDA_PREFIX` first;
+Build [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) (branch `master`) into `$CONDA_PREFIX` first;
 its dependencies (Eigen, autodiff, Fastor) and AMGCL are already in the environment:
 ```bash
 pip install -v -e .
@@ -128,21 +128,21 @@ Before opening a new issue, search existing issues and pull requests to avoid du
 We follow the GitHub flow: **fork → branch → PR → review → merge**.
 
 ### Target Branches
-- **Bug fixes (`fix`)**: Open pull requests targeting the `master` branch.
-- **Features, enhancements, and refactoring (`feat`, `refactor`, `perf`, etc.)**: Open pull requests targeting the upcoming release branch: `next_v<YY>.<MM>` (e.g., `next_v26.11`).
+All pull requests (fixes, features, refactoring) target `master`, the development branch. Releases are tags on
+`master` (`v<YY>.<MM>`, e.g. `v26.11`).
 
 ### Workflow
-1. **Fork** the repository and create a feature/bugfix branch from the appropriate target base (`master` for fixes, `next_v<YY>.<MM>` for features):
+1. **Fork** the repository and create a feature/bugfix branch from `master`:
    ```bash
    # For a bug fix:
    git checkout -b fix/<short-scope>-<concise-topic> origin/master
 
    # For a new feature / refactoring:
-   git checkout -b feat/<short-scope>-<concise-topic> origin/next_v26.11
+   git checkout -b feat/<short-scope>-<concise-topic> origin/master
    ```
 2. **Develop & Format**: Make your changes and verify that `pre-commit run --all-files` passes locally.
 3. **Build & Test**: Ensure the package builds cleanly (`pip install -v -e .`) and all relevant tests pass (`run_tests_edelweissfe`).
-4. **Open a PR**: Target the correct branch (`master` for bug fixes, `next_v<YY>.<MM>` for features/enhancements), provide a clear title following Conventional Commits, and link relevant issues.
+4. **Open a PR**: Target `master`, provide a clear title following Conventional Commits, and link relevant issues.
 
 ### Synchronizing with Marmot
 If your changes depend on features or fixes in [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/), ensure the Marmot-side branch is named identically to your EdelweissFE branch. CI automatically resolves and checks out matching Marmot branches during test runs.
