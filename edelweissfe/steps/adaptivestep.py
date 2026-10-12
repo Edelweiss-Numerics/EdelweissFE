@@ -51,4 +51,6 @@ class AdaptiveStep(StepBase):
             self.minIncrementSize,
             self.maxNumberIncrements,
             self.journal,
+            increaseFactor=self.increaseFactor,
+            goodIncrementsBeforeIncrease=self.goodIncrementsBeforeIncrease,
         )

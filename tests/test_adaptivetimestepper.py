@@ -97,6 +97,48 @@ def test_the_increment_grows_after_three_good_increments_unless_prevented():
     assert prevented.increment == 0.1
 
 
+def test_growth_factor_and_good_increments_are_configurable():
+    timeStepper = _timeStepper(makeZeroIncrementFirst=False, increaseFactor=1.5, goodIncrementsBeforeIncrease=1)
+    # the first good increment has no good one before it: no growth yet
+    timeStepper.acceptTimeStep(timeStepper.proposeTimeStep())
+    assert timeStepper.increment == pytest.approx(0.1)
+    # from then on, every good increment lets the next one grow
+    timeStepper.acceptTimeStep(timeStepper.proposeTimeStep())
+    assert timeStepper.increment == pytest.approx(0.1 * 1.5)
+    timeStepper.acceptTimeStep(timeStepper.proposeTimeStep())
+    assert timeStepper.increment == pytest.approx(0.1 * 1.5**2)
+
+
+def test_after_a_cutback_growth_resumes_after_the_configured_good_increments():
+    timeStepper = _timeStepper(makeZeroIncrementFirst=False, increaseFactor=2.0, goodIncrementsBeforeIncrease=2)
+    timeStepper.acceptTimeStep(timeStepper.proposeTimeStep())
+    timeStepper.proposeTimeStep()
+    timeStepper.rejectTimeStep(0.5)
+    assert timeStepper.increment == pytest.approx(0.05)
+
+    # a cutback already counts as one good increment, so the retried increment has one before it: no growth yet
+    timeStepper.acceptTimeStep(timeStepper.proposeTimeStep())
+    assert timeStepper.increment == pytest.approx(0.05)
+    # the next one has two before it: growth
+    timeStepper.acceptTimeStep(timeStepper.proposeTimeStep())
+    assert timeStepper.increment == pytest.approx(0.1)
+
+
+def test_growth_is_capped_by_the_maximum_increment():
+    timeStepper = _timeStepper(
+        makeZeroIncrementFirst=False, maxIncrement=0.12, increaseFactor=1.5, goodIncrementsBeforeIncrease=1
+    )
+    for _ in range(2):
+        timeStepper.acceptTimeStep(timeStepper.proposeTimeStep())
+    assert timeStepper.increment == pytest.approx(0.12)
+
+
+@pytest.mark.parametrize("overrides", [dict(increaseFactor=0.9), dict(goodIncrementsBeforeIncrease=0)])
+def test_invalid_growth_settings_are_refused(overrides):
+    with pytest.raises(ValueError):
+        _timeStepper(**overrides)
+
+
 def test_the_step_finishes_exactly_at_its_end():
     timeStepper = _timeStepper(makeZeroIncrementFirst=False, startIncrement=0.3)
     while not timeStepper.isFinished():

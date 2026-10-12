@@ -68,7 +68,7 @@ class StepIncrementationSchema:
     maxNumInc: int = schemaField(description="The maximal number of increments allowed.", dtype=int, default=1000)
     maxIter: int = schemaField(description="The maximal number of iterations allowed.", dtype=int, default=10)
     criticalIter: int = schemaField(
-        description="The number of critical iterations after which the next increment is reduced.",
+        description="Increments needing at least this many iterations keep the next increment from growing.",
         dtype=int,
         default=5,
     )
@@ -79,6 +79,19 @@ class StepIncrementationSchema:
         description="Factor by which the increment size is reduced if no convergence was achieved.",
         dtype=float,
         default=0.25,
+    )
+    increaseFactor: float = schemaField(
+        description="Factor by which the increment size grows after good increments (adaptive steps only).",
+        dtype=float,
+        default=1.1,
+    )
+    goodIncrementsBeforeIncrease: int = schemaField(
+        description=(
+            "Number of good increments that must already have passed, since the step start or the last cutback "
+            "(which counts as one), before an accepted increment lets the next one grow (adaptive steps only)."
+        ),
+        dtype=int,
+        default=3,
     )
 
 
@@ -142,6 +155,8 @@ class StepBase(ABC):
         self.criticalIter = options.criticalIter
         self.maxGrowIter = options.maxGrowIter
         self.cutbackFactor = options.cutbackFactor
+        self.increaseFactor = options.increaseFactor
+        self.goodIncrementsBeforeIncrease = options.goodIncrementsBeforeIncrease
 
         self.timeStepper = self._createTimeStepper()
 
