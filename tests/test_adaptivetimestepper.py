@@ -133,7 +133,9 @@ def test_growth_is_capped_by_the_maximum_increment():
     assert timeStepper.increment == pytest.approx(0.12)
 
 
-@pytest.mark.parametrize("overrides", [dict(increaseFactor=0.9), dict(goodIncrementsBeforeIncrease=0)])
+@pytest.mark.parametrize(
+    "overrides", [dict(increaseFactor=0.9), dict(increaseFactor=float("nan")), dict(goodIncrementsBeforeIncrease=0)]
+)
 def test_invalid_growth_settings_are_refused(overrides):
     with pytest.raises(ValueError):
         _timeStepper(**overrides)

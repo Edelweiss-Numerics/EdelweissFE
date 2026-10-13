@@ -26,6 +26,8 @@
 #  ---------------------------------------------------------------------
 # Created on Sat Jan  21 12:18:10 2017
 
+import math
+
 from edelweissfe.journal.journal import Journal
 from edelweissfe.timesteppers.base.timestepperbase import TimeStepperBase
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -54,12 +56,12 @@ class AdaptiveTimeStepper(TimeStepperBase):
         The journal instance for logging purposes.
     increaseFactor
         The ratio to increase the increments in case of good convergence.
+    makeZeroIncrementFirst
+        If True, the first increment will be zero.
     goodIncrementsBeforeIncrease
         The number of good increments that must already have passed before an accepted increment lets the next one
         grow: counted from the step start (the zero increment included), or from the last cutback, which itself counts
         as one. From then on, every further good increment lets the next one grow.
-    makeZeroIncrementFirst
-        If True, the first increment will be zero.
     """
 
     identification = "AdaptiveTimeStepper"
@@ -83,11 +85,11 @@ class AdaptiveTimeStepper(TimeStepperBase):
         maxNumberIncrements: int,
         journal: Journal,
         increaseFactor: float = 1.1,
-        goodIncrementsBeforeIncrease: int = 3,
         makeZeroIncrementFirst: bool = True,
+        goodIncrementsBeforeIncrease: int = 3,
     ):
-        if increaseFactor < 1.0:
-            raise ValueError("increaseFactor must be at least 1, got {:}".format(increaseFactor))
+        if not (math.isfinite(increaseFactor) and increaseFactor >= 1.0):
+            raise ValueError("increaseFactor must be finite and at least 1, got {:}".format(increaseFactor))
         if goodIncrementsBeforeIncrease < 1:
             raise ValueError(
                 "goodIncrementsBeforeIncrease must be at least 1, got {:}".format(goodIncrementsBeforeIncrease)
@@ -168,8 +170,8 @@ class AdaptiveTimeStepper(TimeStepperBase):
             self.journal.errorMessage("Cannot reduce increment size", self.identification)
             raise ReachedMinIncrementSize()
 
-        # The retried increment counts as the first good one after the cutback, so the increment
-        # grows again once goodIncrementsBeforeIncrease good increments have passed.
+        # The cutback itself counts as the first good increment, so with goodIncrementsBeforeIncrease=1
+        # the increment already grows again after the retried increment is accepted.
         self.nPassedGoodIncrements = 1
         self.allowedToIncreasedNext = True
 
