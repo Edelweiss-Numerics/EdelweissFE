@@ -130,3 +130,24 @@ def test_spatial_averaged_fluxes_include_constraints_only_for_abaqus():
 
     assert legacy().computeSpatialAveragedFluxes(F, FConstraints, DofManager())["u"] == 1.0
     assert AbaqusConvergenceCriterion().computeSpatialAveragedFluxes(F, FConstraints, DofManager())["u"] == 2.0
+
+
+def test_abaqus_initial_time_average_flux_for_a_field_without_flux_yet():
+    # A nonlocal damage field before the onset of damage, solved by a direct solver: its flux and residual are
+    # round-off, not exactly zero. Against a reference of zero it would count as carrying flux, compare its residual
+    # with itself and never converge; against q~0 = 1e-2 it carries no flux.
+    criterion = AbaqusConvergenceCriterion()
+    roundOff = criterion.checkField("nonlocal", np.array([3e-42]), np.array([2e-44]), np.array([1e-29]), 1e-42, 5)
+    assert roundOff.fluxResidualConverged and roundOff.correctionConverged
+
+    # a real flux, however small in absolute terms, still counts
+    assert criterion.timeAveragedFlux("nonlocal", 1e-4) == pytest.approx(1e-4)
+
+    # a field that carried no flux in the whole step passes q~0 on to the next step
+    criterion.acceptIncrement()
+    assert criterion.timeAveragedFluxesAtStepEnd() == {}
+    following = AbaqusConvergenceCriterion(initialTimeAveragedFlux=1e-2)
+    following.startStep(criterion)
+    assert following.checkField(
+        "nonlocal", np.array([3e-42]), np.array([2e-44]), np.array([1e-29]), 1e-42, 1
+    ).fluxResidualConverged

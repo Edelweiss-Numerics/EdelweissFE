@@ -53,10 +53,14 @@ Two criteria are available, selected by the solver option ``convergenceCriterion
     largest increment of the field in the current increment, so the correction criterion is *relative*.
     :math:`\\tilde{q}` is the *time average* flux: the spatial average flux :math:`\\bar{q}` averaged over all
     converged increments of the step in which the field carried flux, and the current iteration. The spatial
-    average :math:`\\bar{q}` includes the fluxes of constraints (e.g., contact forces).
+    average :math:`\\bar{q}` includes the fluxes of constraints (e.g., contact forces). Until a field has carried
+    flux, :math:`\\tilde{q}` is the time average flux of the previous step or, in the first step, the initial value
+    :math:`\\tilde{q}^0` (Abaqus' "initial value of time average force", ``1e-2``).
 
     A field whose current spatial average flux is below :math:`\\varepsilon \\, \\tilde{q}` carries no flux; it is
-    converged if :math:`c_{\\max} \\leq C_\\varepsilon \\, \\Delta u_{\\max}`. A field with
+    converged if :math:`c_{\\max} \\leq C_\\varepsilon \\, \\Delta u_{\\max}`. Without :math:`\\tilde{q}^0`, a field
+    that has not carried flux yet (e.g., a nonlocal damage field before the onset of damage) would compare its
+    round-off flux against a reference of zero, count as carrying flux, and never converge. A field with
     :math:`r_{\\max} \\leq R_l \\, \\tilde{q}` is converged irrespective of the correction (linear case).
 
     Not implemented: the estimate of the next correction from the convergence rate (Abaqus accepts an increment
@@ -238,6 +242,8 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
         :math:`C_\\varepsilon`, the correction tolerance of a field without flux.
     linearResidualTolerance
         :math:`R_l`, below which a field is converged irrespective of its correction.
+    initialTimeAveragedFlux
+        :math:`\\tilde{q}^0`, the time average flux of a field that has not carried flux yet, in the first step.
     """
 
     def __init__(
@@ -249,6 +255,7 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
         zeroFluxThreshold: float = 1e-5,
         zeroFluxCorrectionTolerance: float = 1e-3,
         linearResidualTolerance: float = 1e-8,
+        initialTimeAveragedFlux: float = 1e-2,
     ):
         self.residualTolerance = residualTolerance
         self.correctionTolerance = correctionTolerance
@@ -257,6 +264,7 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
         self.zeroFluxThreshold = zeroFluxThreshold
         self.zeroFluxCorrectionTolerance = zeroFluxCorrectionTolerance
         self.linearResidualTolerance = linearResidualTolerance
+        self.initialTimeAveragedFlux = initialTimeAveragedFlux
 
         # Per field: the sum and the number of the spatial average fluxes of the converged increments with flux.
         self._sumOfConvergedSpatialAveragedFluxes = {}
@@ -287,7 +295,7 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
     def _timeAveragedFluxOfConvergedIncrements(self, field: str) -> float:
         nIncrements = self._nIncrementsWithFlux.get(field, 0)
         if nIncrements == 0:
-            return self._timeAveragedFluxOfPreviousStep.get(field, 0.0)
+            return self._timeAveragedFluxOfPreviousStep.get(field, self.initialTimeAveragedFlux)
         return self._sumOfConvergedSpatialAveragedFluxes[field] / nIncrements
 
     def _carriesFlux(self, field: str, spatialAveragedFlux: float) -> bool:

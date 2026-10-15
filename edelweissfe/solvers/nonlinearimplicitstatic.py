@@ -199,6 +199,11 @@ class NISTSchema:
         dtype=float,
         default=1e-8,
     )
+    abaqusInitialTimeAveragedFlux: float | None = schemaField(
+        description="abaqus criterion: q~0, the time average flux of a field that has not carried flux yet (first step).",
+        dtype=float,
+        default=1e-2,
+    )
 
 
 class NIST(NonlinearSolverBase):
@@ -240,6 +245,7 @@ class NIST(NonlinearSolverBase):
         "abaqusZeroFluxThreshold": 1e-5,
         "abaqusZeroFluxCorrectionTolerance": 1e-3,
         "abaqusLinearResidualTolerance": 1e-8,
+        "abaqusInitialTimeAveragedFlux": 1e-2,
     }
 
     #: The convergence criterion of the current step.
@@ -686,6 +692,7 @@ class NIST(NonlinearSolverBase):
                 zeroFluxThreshold=self.options["abaqusZeroFluxThreshold"],
                 zeroFluxCorrectionTolerance=self.options["abaqusZeroFluxCorrectionTolerance"],
                 linearResidualTolerance=self.options["abaqusLinearResidualTolerance"],
+                initialTimeAveragedFlux=self.options["abaqusInitialTimeAveragedFlux"],
             )
 
         raise ValueError("Unknown convergence criterion '{:}', use 'legacy' or 'abaqus'".format(criterion))
