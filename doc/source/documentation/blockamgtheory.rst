@@ -87,6 +87,13 @@ has been moved to the right-hand side -- so a symmetric operator stays symmetric
 aggregation and the Chebyshev smoother assume. Both steps are size-preserving and leave the DOF
 manager's ordering intact, so the field blocks still describe the matrix that actually arrives.
 
+The MPC condensation is skipped entirely while no multi-point constraint has a record -- e.g. an
+``hAdaptivity`` before its first refinement, whose hanging-node constraint is registered up front.
+This matters for hierarchy reuse: the condensed matrix is pruned of exact zeros
+(``pruneCondensedMatrixZeros``), which changes its sparsity pattern from one Newton iteration to
+the next, and a changed pattern forces a hierarchy rebuild (step (4) below). The uncondensed
+matrix keeps the assembler's fixed pattern.
+
 Beyond that matrix and right-hand side, the solver is told nothing about the Newton loop -- like
 every registered linear solver it is called as ``(A, b) -> x``. Both of its stateful mechanisms
 (adaptive tolerance and hierarchy reuse) therefore *reconstruct* the loop state from
