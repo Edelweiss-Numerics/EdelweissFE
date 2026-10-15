@@ -842,6 +842,12 @@ class NIST(NonlinearSolverBase):
             K_ = self.applyDirichletToStiffness(K_, dirichlets, R)
 
             ddU = self.linearSolve(K_, R)
+
+            # The condensed solve returns only the drift correction at the slave DOFs; add the
+            # master-interpolated part.
+            if self.mpcTransformation is not None:
+                ddU = self.mpcTransformation.recoverSlaveSolution(ddU)
+
             dU += ddU
             iterationCounter += 1
 
@@ -933,7 +939,7 @@ class NIST(NonlinearSolverBase):
         #   belongs to which (row, col) -- silently misaligned values from the next
         #   iteration on. Must NOT eliminate.
         # - MPC transformation active (hanging nodes / ties): K is the freshly computed,
-        #   disposable T^T @ K @ T + C from mpcTransformation.transformSystemMatrix,
+        #   disposable T^T @ K @ T + I_s from mpcTransformation.transformSystemMatrix,
         #   independent of the generator's buffer and discarded after this solve.
         #   Eliminating here is always safe, and PARDISO's reordering on these more
         #   poorly conditioned, path-dependent (contact/friction) condensed systems is

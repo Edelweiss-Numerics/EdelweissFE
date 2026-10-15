@@ -338,13 +338,16 @@ displacement is constrained to the frozen facet-linear interpolation of its clos
 :math:`u_s = \sum_a N_a \, u_{m_a}`, and the slave DOFs are condensed out of the equation system
 -- exact enforcement, no penalty parameter, no additional DOFs, zero added stiffness. The same
 mechanism serves the implicit solvers (system matrix transformation
-:math:`\tilde{K} = T^T K \, T + C`, see
+:math:`\tilde{K} = T^T K \, T + I_s`, the identity :math:`I_s` filling the structurally zero
+slave rows and columns, followed by the recovery :math:`\delta u_s \mathrel{+}= \sum_a N_a \,
+\delta u_{m_a}` after each linear solve -- symmetric whenever :math:`K` is, and free of any scale of
+its own, so it equilibrates cleanly also for a consistent mass matrix; see
 :class:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation`) and explicit
 dynamics (mass-conserving row-sum folding of slave masses and forces onto the masters, direct
 kinematic slaving -- the critical time step is untouched).
 
 The implicit solver's ``useAmgclMPCCondensation`` option (:doc:`solvers`, ``NIST``) offers an
-alternative way to compute :math:`T^T K T + C` through AMGCL's own OpenMP-threaded sparse
+alternative way to compute :math:`T^T K T + I_s` through AMGCL's own OpenMP-threaded sparse
 matrix-matrix product/sum instead of SciPy's single-threaded CSR routines (correctness-equivalent
 to floating-point precision; measured ~2.4--2.6x faster offline and ~7.3% faster end-to-end live on
 a large-scale contact+AMR+tie model). It is off by default, pending a live gate at more thread

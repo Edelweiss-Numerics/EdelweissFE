@@ -40,7 +40,7 @@ field, a screened-Poisson (Helmholtz) operator for a gradient-enhanced damage fi
 
 ``blockamg`` is a *feasibility-grade* solver in the sense that it buys reach, not necessarily speed.
 On the reference models AMGCL's smoothed aggregation converges, but not tightly, on the
-non-symmetric (contact- and tie-condensed) displacement block, so the outer Krylov solve needs
+non-symmetric (contact-condensed) displacement block, so the outer Krylov solve needs
 :math:`O(100)` iterations. That is an acceptable price where the alternative is not fitting in memory
 at all; at problem sizes a direct factorization still handles comfortably, a direct solver (e.g.
 ``pardiso``) can be competitive or faster. Which one wins depends on problem size, conditioning, and
@@ -80,7 +80,10 @@ The solve pipeline
 ------------------
 
 ``blockamg`` sees only the condensed, Dirichlet-eliminated system: the nonlinear solver applies the
-multi-point-constraint transform :math:`\hat K = T^\mathsf{T} K T + C` (hanging nodes, ties) and then
+multi-point-constraint transform :math:`\hat K = T^\mathsf{T} K T + I_s` (hanging nodes, ties; the
+identity :math:`I_s` fills the structurally zero slave rows and columns, and the slave DOFs are
+recovered from their masters after the solve, so the transform keeps a symmetric :math:`K` symmetric
+and adds no slave-to-master coupling that the equilibration below could blow up) and then
 the symmetric Dirichlet elimination before calling the linear solver: each constrained row becomes
 the identity row, and each constrained column is zeroed after its coupling to the prescribed value
 has been moved to the right-hand side -- so a symmetric operator stays symmetric, as smoothed
@@ -97,7 +100,7 @@ every registered linear solver it is called as ``(A, b) -> x``. Both of its stat
     Newton iteration k, in the nonlinear solver
        assembled K (VIJ -> CSR)  and  residual R
                 |
-                |  MPC condensation      K <- T' K T + C       both size preserving:
+                |  MPC condensation      K <- T' K T + I_s     both size preserving:
                 |  Dirichlet elimination  row, column i -> e_i  DOF ordering unchanged
                 |
                 |  setModel(model, dofManager)  -- on a (re)build only
@@ -132,7 +135,11 @@ every registered linear solver it is called as ``(A, b) -> x``. Both of its stat
                 |
           (7)   record ||b||, eta, nnz and the outer iteration count for the next solve
                 v
-    x ------> nonlinear solver (the Newton correction)
+    x ------> nonlinear solver
+                |
+                |  MPC slave recovery    x_s <- x_s + W x      (master-interpolated part)
+                v
+              the Newton correction
 
 
 Anatomy of one solve

@@ -1383,6 +1383,8 @@ class NonlinearImplicitDynamic(NIST):
         MEff = self.applyDirichletToStiffness(MEff, dirichlets)
 
         A0 = self.linearSolve(MEff, R)
+        if self.mpcTransformation is not None:
+            A0 = self.mpcTransformation.recoverSlaveSolution(A0)
 
         system.A[:] = 0.0
         system.A[system.dynamicDofs] = A0[system.dynamicDofs]
