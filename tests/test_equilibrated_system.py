@@ -139,3 +139,19 @@ def test_a_vector_of_the_wrong_length_raises(system):
         equilibrated.matvec(np.zeros(A.shape[0] + 1))
     with pytest.raises(ValueError, match="length"):
         equilibrated.residual(np.zeros(A.shape[0]), np.zeros(A.shape[0] - 3))
+
+
+def test_a_failing_preconditioner_is_called_once_and_its_exception_raised(system):
+    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLLGMRESSolver
+
+    A, As, dinv, equilibrated = system
+    calls = []
+
+    def failing(r):
+        calls.append(1)
+        raise RuntimeError("preconditioner failed")
+
+    solver = PyAMGCLLGMRESSolver(A.shape[0], {"M": 10, "K": 2})
+    with pytest.raises(RuntimeError, match="preconditioner failed"):
+        solver.solve(equilibrated, np.ones(A.shape[0]), failing, 1e-10, 50)
+    assert len(calls) == 1

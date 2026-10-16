@@ -181,6 +181,25 @@ def _checkLgmresRecyclingKeys(lgmresAlwaysReset: bool, lgmresResetOnNewIncrement
             )
 
 
+def _boolFromConfig(value) -> bool:
+    """A JSON boolean -- or its spelling as a string, ``"true"``/``"false"`` -- and nothing else: ``bool("false")``
+    is ``True``, so a plain ``bool`` cast would turn a quoted ``"false"`` into the opposite setting."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().lower() in ("true", "false"):
+        return value.strip().lower() == "true"
+    raise ValueError("expected true or false, got {!r}".format(value))
+
+
+def _fieldNamesFromConfig(value) -> list:
+    """A list of field names; a single name given as a plain string is that one name, not its characters."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, (list, tuple)) and all(isinstance(name, str) for name in value):
+        return list(value)
+    raise ValueError("expected a field name or a list of field names, got {!r}".format(value))
+
+
 def _outerTolFromConfig(value) -> float | None:
     """``outerTol`` unset, ``None``, or the literal string ``"adaptive"`` all select the adaptive forcing."""
     return None if value in (None, "adaptive") else float(value)
@@ -196,20 +215,20 @@ CONFIG_CASTS = {
     "outerSolver": str,
     "lgmresM": int,
     "lgmresK": int,
-    "lgmresAlwaysReset": bool,
-    "lgmresResetOnNewIncrement": bool,
+    "lgmresAlwaysReset": _boolFromConfig,
+    "lgmresResetOnNewIncrement": _boolFromConfig,
     "sweeps": int,
-    "symmetric": bool,
-    "useRigidBodyNullspace": bool,
+    "symmetric": _boolFromConfig,
+    "useRigidBodyNullspace": _boolFromConfig,
     "etaMin": float,
     "etaMax": float,
     "ewGamma": float,
     "ewAlpha": float,
     "residualGrowthFactor": float,
     "hierarchyStalenessFactor": float,
-    "refreshOnNewIncrement": bool,
+    "refreshOnNewIncrement": _boolFromConfig,
     "trueResidualMaxContinuations": int,
-    "gapCompensatedTolerance": bool,
+    "gapCompensatedTolerance": _boolFromConfig,
     "gapSafetyFactor": float,
     "verbosity": str,
     "warnOuterIterationsThreshold": int,
@@ -219,10 +238,10 @@ CONFIG_CASTS = {
     "dumpOnDegradationContextSolves": int,
     "hotReloadConfigFile": str,
     "hierarchyDropTol": float,
-    "hierarchyDropLumping": bool,
+    "hierarchyDropLumping": _boolFromConfig,
     "gapMaxFactor": float,
     "fieldPreconds": dict,
-    "p1FieldNames": list,
+    "p1FieldNames": _fieldNamesFromConfig,
     "p1Nu": int,
     "p1NuPre": int,
     "p1NuPost": int,
@@ -230,7 +249,7 @@ CONFIG_CASTS = {
     "p1FineBlockSize": int,
     "p1FineValueType": str,
     "p1CoarseValueType": str,
-    "p1FineSpectralRadiusReuse": bool,
+    "p1FineSpectralRadiusReuse": _boolFromConfig,
     "p1CoarsePrecond": dict,
 }
 
@@ -627,7 +646,7 @@ class BlockAMGSolver(LinearSolver):
         # Per-field fine spectral radius and dominant vector of the p-two-grid smoother, kept for the next build only with
         # p1FineSpectralRadiusReuse; dropped in setModel() like the caches above.
         self._p1FineSpectralRadiusCache = {}
-        self._p1FieldNamesRequested = set(p1FieldNames or [])
+        self._p1FieldNamesRequested = set(_fieldNamesFromConfig(p1FieldNames) if p1FieldNames is not None else [])
         self._p1Nu = p1Nu
         self._p1NuPre = p1NuPre
         self._p1NuPost = p1NuPost

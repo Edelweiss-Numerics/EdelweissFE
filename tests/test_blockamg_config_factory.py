@@ -75,3 +75,18 @@ def test_the_former_lgmres_recycling_keys_are_accepted_only_at_their_non_recycli
         createSolver({"lgmresAlwaysReset": False})
     with pytest.raises(ValueError, match="recycling"):
         createSolver({"lgmresResetOnNewIncrement": True})
+
+
+def test_a_quoted_false_is_false_and_anything_else_raises():
+    assert createSolver({"symmetric": "false"})._symmetric is False
+    assert createSolver({"symmetric": "True"})._symmetric is True
+    with pytest.raises(ValueError):
+        createSolver({"symmetric": "no"})
+    with pytest.raises(ValueError):
+        createSolver({"gapCompensatedTolerance": 0})
+
+
+def test_a_single_field_name_is_not_split_into_characters():
+    assert createSolver({"p1FieldNames": "displacement"})._p1FieldNamesRequested == {"displacement"}
+    with pytest.raises(ValueError):
+        createSolver({"p1FieldNames": 3})

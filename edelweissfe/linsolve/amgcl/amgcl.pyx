@@ -393,7 +393,7 @@ cdef void _lgmresPrecondApplyTrampoline(void* ctx, int n, const double* rhs, dou
     it is caught here and stashed on the calling instance instead; :meth:`PyAMGCLLGMRESSolver.solve`
     re-raises it once the (now-abandoned) AMGCL call returns. ``x`` is zeroed on that path so the
     (about-to-be-discarded) AMGCL iteration continues on defined, if meaningless, numbers rather than
-    whatever uninitialized/stale data happened to be there.
+    whatever uninitialized/stale data happened to be there, and every further call returns at once.
     """
     cdef PyAMGCLLGMRESSolver self = <PyAMGCLLGMRESSolver> ctx
     cdef Py_ssize_t i
@@ -402,8 +402,15 @@ cdef void _lgmresPrecondApplyTrampoline(void* ctx, int n, const double* rhs, dou
     # array rather than wrapped in a zero-copy memoryview, which would need casting away the pointer's
     # constness. n is at most the outer Krylov restart length, so this copy is not the cost driver
     # here -- the Python-level preconditioner call below is.
-    cdef np.ndarray[np.float64_t, ndim=1, mode="c"] rhsArr = np.empty(n, dtype=np.float64)
+    cdef np.ndarray[np.float64_t, ndim=1, mode="c"] rhsArr
     cdef double[::1] xView
+    if self._pendingException is not None:
+        # an earlier application already failed: the AMGCL call is abandoned anyway, so do not keep
+        # calling into Python (and raising) for every remaining Arnoldi vector
+        for i in range(n):
+            x[i] = 0.0
+        return
+    rhsArr = np.empty(n, dtype=np.float64)
     try:
         for i in range(n):
             rhsArr[i] = rhs[i]
