@@ -96,8 +96,8 @@ def createSolver(opts) -> Callable:
             translations-only unconditionally.
         ``p1FieldNames``
             Optional list of vector field names (e.g. ``["displacement"]``) to precondition with
-            p-multigrid instead of the single-level AMGCL default -- an opt-in, experimental variant,
-            not recommended as a default (see the module docstring of
+            p-multigrid instead of the single-level AMGCL default -- an opt-in variant, not the
+            recommended configuration (see the module docstring of
             :mod:`edelweissfe.linsolve.blockamg.ptwogrid`). The actual topology map is computed
             lazily by the solver itself, from the live model reference ``setModel`` provides, the
             first time one of these fields' hierarchies is built -- not known at construction time,

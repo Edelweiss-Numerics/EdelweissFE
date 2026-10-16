@@ -290,12 +290,12 @@ class BlockAMGSolver(LinearSolver):
        ``hierarchyStalenessFactor`` times (and 15 more than) that of the solve the hierarchies were built
        for, or hit the iteration cap, or missed its tolerance.
 
-    Every solve also enforces the requested tolerance on the *true* (unpreconditioned) residual, not
-    just GMRES's own preconditioned stopping check -- see ``trueResidualMaxContinuations``. GMRES's
-    convergence test here is on the preconditioned residual (``callback_type="pr_norm"``), which can be
-    considerably smaller than the true one under an imperfect preconditioner (this one, by design), so
-    "converged" could otherwise mean a true residual well above ``eta`` (measured on a real reference
-    model: a 1.6e-2 true residual when 1e-4 was requested).
+    Every solve also enforces the requested tolerance on the *true* residual, not just the outer solve's
+    own stopping test -- see ``trueResidualMaxContinuations``. That test is on the residual of the
+    *scaled* (equilibrated) system for AMGCL's right-preconditioned LGMRES, and on the preconditioned
+    residual for SciPy's GMRES (``callback_type="pr_norm"``); either can be considerably smaller than the
+    true one, so "converged" could otherwise mean a true residual well above ``eta`` (measured on a real
+    reference model: a 1.6e-2 true residual when 1e-4 was requested).
 
     Parameters
     ----------
@@ -357,7 +357,7 @@ class BlockAMGSolver(LinearSolver):
         Optional mapping of field name to a ``(isCorner, edgeEndpoints)`` P1 topology map
         (:func:`edelweissfe.numerics.p1topology.buildP1Map`), injected directly. A vector field named
         here gets a :class:`~edelweissfe.linsolve.blockamg.ptwogrid.PTwoGridPreconditioner` (an
-        opt-in, experimental two-grid variant -- see the module docstring of
+        opt-in two-grid variant -- see the module docstring of
         :mod:`edelweissfe.linsolve.blockamg.ptwogrid`) instead of the single-level AMGCL default -- the
         map's presence *is* the opt-in, matching ``fieldPreconds``'s own by-presence convention. This
         is the offline-probe construction path (the map is known before the solver exists); for a live
