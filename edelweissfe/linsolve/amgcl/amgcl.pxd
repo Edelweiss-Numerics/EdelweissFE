@@ -50,15 +50,6 @@ cdef extern from "amgcl-wrapper.hpp":
     # 3x3 blocks set up in double and stored in float), owned by the caller.
     AMGCLSolverInterface* makeAMGCLSolver(const char* json_params, int blockSize, bint isFloat) except +
 
-    # A standalone, OpenMP-threaded relaxation smoother -- e.g. the p-two-grid
-    # preconditioner's fine sweep, one level below a full AMG hierarchy. Its own constructor
-    # parameter tree is flat ({"type": "chebyshev", ...}), not nested under "precond.relax".
-    cdef cppclass RelaxationSmoother:
-        RelaxationSmoother(const char* json_params) except +
-        void build(int n, const int* ptr, const int* col, const double* val) except +
-        void applyStep(int n, const double* rhs, double* x) except +
-        void residual(int n, const double* rhs, const double* x, double* r) except +
-
     # blockamg's equilibrated, field-split system As = D A D: the outer Krylov operator, the
     # coupling blocks between fields and, on demand, the diagonal blocks -- built in one threaded
     # pass, see EquilibratedSystemT's own comment.
