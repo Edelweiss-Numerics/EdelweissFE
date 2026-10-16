@@ -199,6 +199,8 @@ CONFIG_CASTS = {
     "fieldPreconds": dict,
     "p1FieldNames": list,
     "p1Nu": int,
+    "p1NuPre": int,
+    "p1NuPost": int,
     "p1FineDegree": int,
     "p1FineBlockSize": int,
     "p1FineValueType": str,
@@ -335,6 +337,11 @@ class BlockAMGSolver(LinearSolver):
         Chebyshev degree, and the coarse level's AMGCL preconditioner tree. ``None`` (the default)
         keeps :mod:`~edelweissfe.linsolve.blockamg.ptwogrid`'s own defaults (1, 5, and smoothed
         aggregation with a degree-4 Chebyshev smoother).
+    p1NuPre, p1NuPost
+        Separate p-two-grid pre- and post-smoothing sweep counts, each defaulting to ``p1Nu`` --
+        e.g. ``0`` / ``1`` for a cycle that starts with the coarse-grid correction and ends on one
+        (higher-degree) smoothing sweep; see
+        :class:`~edelweissfe.linsolve.blockamg.ptwogrid.PTwoGridPreconditioner`.
     p1FineBlockSize
         Storage of the p-two-grid fine operator: ``1`` (scalar, default) or ``3`` (node-wise 3x3
         blocks, 3D fields only) -- the same cycle up to summation order, with roughly half the memory
@@ -538,6 +545,8 @@ class BlockAMGSolver(LinearSolver):
         p1Maps: dict = None,
         p1FieldNames: list = None,
         p1Nu: int = None,
+        p1NuPre: int = None,
+        p1NuPost: int = None,
         p1FineDegree: int = None,
         p1FineBlockSize: int = 1,
         p1FineValueType: str = "double",
@@ -588,6 +597,8 @@ class BlockAMGSolver(LinearSolver):
         self._p1FineSpectralRadiusCache = {}
         self._p1FieldNamesRequested = set(p1FieldNames or [])
         self._p1Nu = p1Nu
+        self._p1NuPre = p1NuPre
+        self._p1NuPost = p1NuPost
         self._p1FineDegree = p1FineDegree
         self._p1FineBlockSize = p1FineBlockSize
         self._p1FineValueType = p1FineValueType
@@ -1276,6 +1287,8 @@ class BlockAMGSolver(LinearSolver):
                             key: value
                             for key, value in (
                                 ("nu", self._p1Nu),
+                                ("nuPre", self._p1NuPre),
+                                ("nuPost", self._p1NuPost),
                                 ("fineDegree", self._p1FineDegree),
                                 ("coarsePrecond", self._p1CoarsePrecond),
                             )

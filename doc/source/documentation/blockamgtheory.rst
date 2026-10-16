@@ -550,6 +550,10 @@ Block preconditioner and per-field hierarchies
     * - ``p1Nu``
       - ``1``
       - p-multigrid: fine Chebyshev sweeps before and after the coarse-grid correction.
+    * - ``p1NuPre``, ``p1NuPost``
+      - ``p1Nu``
+      - p-multigrid: separate pre- and post-smoothing sweep counts, e.g. ``0`` / ``1`` for a cycle
+        that starts with the coarse-grid correction and ends on one smoothing sweep.
     * - ``p1FineDegree``
       - ``5``
       - p-multigrid: fine Chebyshev polynomial degree.

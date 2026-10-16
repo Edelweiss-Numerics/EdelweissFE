@@ -1385,7 +1385,7 @@ public:
   std::vector< double >                coarseNullspace_;
 
   std::vector< char >   isDirichlet_;
-  int                   n_ = 0, nCoarseFree_ = 0, nu_ = 1;
+  int                   n_ = 0, nCoarseFree_ = 0, nuPre_ = 1, nuPost_ = 1;
   double                fineSpectralRadius_ = 0.0;
   std::vector< double > fineDominantVector_;
   // how the last build arrived at its fine spectral radius: 0 estimated in full, 1 supplied and kept,
@@ -1451,7 +1451,11 @@ public:
     }
     const int nDim = n / nNodes;
     n_             = n;
-    nu_            = prm.get( "nu", 1 );
+    nuPre_         = prm.get( "nuPre", prm.get( "nu", 1 ) );
+    nuPost_        = prm.get( "nuPost", prm.get( "nu", 1 ) );
+    if ( nuPre_ < 0 || nuPost_ < 0 ) {
+      throw std::runtime_error( "ptwogrid: negative fine sweep counts" );
+    }
 
     // Dirichlet rows: exactly one stored entry, which must be the diagonal (see the class comment:
     // the exact decoupling relies on it).
@@ -1768,18 +1772,19 @@ public:
     PT_ = amgcl::backend::transpose( *P_ );
   }
 
-  // @brief nu fine sweeps; the first one from x = 0 if xIsZero
-  void smoothFine( double* x, bool xIsZero )
+  // @brief `sweeps` fine sweeps; the first one from x = 0 if xIsZero
+  void smoothFine( double* x, int sweeps, bool xIsZero )
   {
-    if ( xIsZero && nu_ == 0 )
-      std::fill( x, x + n_, 0.0 );
-    for ( int sweep = 0; sweep < nu_; ++sweep )
+    for ( int sweep = 0; sweep < sweeps; ++sweep )
       fine_->smooth( rhs_.data(), x, xIsZero && sweep == 0 );
   }
 
-  // @brief x <- M^-1 r: one two-grid cycle on the free DOFs; Dirichlet DOFs pass through, x_i = r_i.
-  // The cycle's fine iterate is x itself: the pre-smoothing writes it from x = 0 without reading it,
-  // and it stays zero on Dirichlet DOFs (zero right-hand side there) until they are set to r_i last.
+  // @brief x <- M^-1 r: one two-grid cycle on the free DOFs -- nuPre fine sweeps, coarse-grid
+  // correction, nuPost fine sweeps; Dirichlet DOFs pass through, x_i = r_i. The cycle's fine iterate
+  // is x itself: written from x = 0 without reading it (by the first pre-sweep, or, with no
+  // pre-sweeps, by the prolongated coarse correction itself), it stays zero on Dirichlet DOFs (zero
+  // right-hand side there, no rows of P) until they are set to r_i last. Without pre-sweeps the
+  // fine residual of x = 0 is the right-hand side itself, so no product is needed for it.
   void apply( int n, const double* r, double* x )
   {
     if ( !coarse_ && !coarseFloat_ ) {
@@ -1793,8 +1798,11 @@ public:
 #pragma omp parallel for
     for ( ptrdiff_t i = 0; i < n; ++i )
       rhs_[i] = isDirichlet_[i] ? 0.0 : r[i];
-    smoothFine( x, /*xIsZero=*/true );
-    fine_->residual( rhs_.data(), x, res_.data() );
+    if ( nuPre_ > 0 ) {
+      smoothFine( x, nuPre_, /*xIsZero=*/true );
+      fine_->residual( rhs_.data(), x, res_.data() );
+    }
+    const std::vector< double >& fineResidual = nuPre_ > 0 ? res_ : rhs_;
     applyFineSeconds_ += secondsSince( start );
 
     // the coarse AMG cycle overwrites its x itself (amgcl::amg::apply clears it, or copies rhs)
@@ -1802,7 +1810,7 @@ public:
     auto fineRange      = amgcl::make_iterator_range( x, x + n );
     auto coarseRhsRange = amgcl::make_iterator_range( coarseRhs_.data(), coarseRhs_.data() + nCoarseFree_ );
     auto coarseXRange   = amgcl::make_iterator_range( coarseX_.data(), coarseX_.data() + nCoarseFree_ );
-    amgcl::backend::spmv( 1.0, *PT_, res_, 0.0, coarseRhsRange );
+    amgcl::backend::spmv( 1.0, *PT_, fineResidual, 0.0, coarseRhsRange );
     if ( coarseFloat_ ) {
       const ptrdiff_t nc = nCoarseFree_;
 #pragma omp parallel for
@@ -1817,11 +1825,12 @@ public:
     }
     else
       coarse_->apply( coarseRhsRange, coarseXRange );
-    amgcl::backend::spmv( 1.0, *P_, coarseXRange, 1.0, fineRange );
+    // x <- x + P e after pre-sweeps, x <- P e (overwriting) without
+    amgcl::backend::spmv( 1.0, *P_, coarseXRange, nuPre_ > 0 ? 1.0 : 0.0, fineRange );
     applyCoarseSeconds_ += secondsSince( start );
 
     start = Clock::now();
-    smoothFine( x, /*xIsZero=*/false );
+    smoothFine( x, nuPost_, /*xIsZero=*/false );
     for ( size_t k = 0; k < dirichletRows_.size(); ++k )
       x[dirichletRows_[k]] = r[dirichletRows_[k]];
     applyFineSeconds_ += secondsSince( start );

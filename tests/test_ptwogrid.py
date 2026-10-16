@@ -114,7 +114,7 @@ def problem():
     return As, dinv, coords, isCorner, edgeEndpoints, r
 
 
-def _referenceCycle(As, dinv, coords, isCorner, edgeEndpoints, spectralRadius, nu, degree, r):
+def _referenceCycle(As, dinv, coords, isCorner, edgeEndpoints, spectralRadius, nuPre, nuPost, degree, r):
     """The former pure-Python cycle, on the extracted free submatrix."""
     n, nNodes = As.shape[0], len(isCorner)
     nDim = n // nNodes
@@ -167,10 +167,10 @@ def _referenceCycle(As, dinv, coords, isCorner, edgeEndpoints, spectralRadius, n
 
     rFree = r[free]
     xFree = np.zeros_like(rFree)
-    for _ in range(nu):
+    for _ in range(nuPre):
         xFree = smooth(xFree, rFree)
     xFree = xFree + P_free @ coarse.applyPreconditioner(P_free.T @ (rFree - A_free @ xFree))
-    for _ in range(nu):
+    for _ in range(nuPost):
         xFree = smooth(xFree, rFree)
     x = r.copy()
     x[free] = xFree
@@ -181,14 +181,14 @@ def _relativeDifference(x, y):
     return np.linalg.norm(x - y) / np.linalg.norm(y)
 
 
-@pytest.mark.parametrize("nu, degree", [(1, 5), (2, 8)])
-def test_the_scalar_cycle_matches_the_free_submatrix_reference(problem, nu, degree):
+@pytest.mark.parametrize("nuPre, nuPost, degree", [(1, 1, 5), (2, 2, 8), (0, 1, 16), (1, 0, 8), (0, 2, 4)])
+def test_the_scalar_cycle_matches_the_free_submatrix_reference(problem, nuPre, nuPost, degree):
     As, dinv, coords, isCorner, edgeEndpoints, r = problem
-    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, nu=nu, fineDegree=degree)
+    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, nuPre=nuPre, nuPost=nuPost, fineDegree=degree)
     preconditioner.build(As, dinv, coords=coords)
     x = preconditioner.applyPreconditioner(r)
     reference = _referenceCycle(
-        As, dinv, coords, isCorner, edgeEndpoints, preconditioner.fineSpectralRadius, nu, degree, r
+        As, dinv, coords, isCorner, edgeEndpoints, preconditioner.fineSpectralRadius, nuPre, nuPost, degree, r
     )
     assert _relativeDifference(x, reference) < 1e-12
 

@@ -128,6 +128,15 @@ class PTwoGridPreconditioner:
         field's own node order.
     nu
         Fine Chebyshev sweeps before *and* after the coarse-grid correction.
+    nuPre, nuPost
+        Separate pre- and post-smoothing sweep counts, each ``None`` (default) for ``nu``. With
+        ``nuPre = 0`` the cycle starts with the coarse-grid correction of the right-hand side itself
+        (the residual of x = 0) and ends with ``nuPost`` sweeps: one smoother application fewer per
+        cycle than a symmetric one, at the price of a nonsymmetric preconditioner -- of no concern to
+        the right-preconditioned GMRES around it, which needs a fixed linear operator, not a symmetric
+        one. Ending on the smoother is the right way round for that one sweep: it damps the
+        high-frequency error the prolongated correction leaves on the fine level; starting with it
+        (``nuPre = 1, nuPost = 0``) leaves that error in the result.
     fineDegree
         Fine Chebyshev polynomial degree.
     coarsePrecond
@@ -177,6 +186,8 @@ class PTwoGridPreconditioner:
         isCorner: np.ndarray,
         edgeEndpoints: np.ndarray,
         nu: int = _DEFAULT_NU,
+        nuPre: int = None,
+        nuPost: int = None,
         fineDegree: int = _DEFAULT_FINE_DEGREE,
         coarsePrecond: dict = None,
         useCoarseNullspace: bool = True,
@@ -202,7 +213,8 @@ class PTwoGridPreconditioner:
         self._fineSpectralRadius = fineSpectralRadius
         self._fineDominantVector = fineDominantVector
         self._params = {
-            "nu": int(nu),
+            "nuPre": int(nu if nuPre is None else nuPre),
+            "nuPost": int(nu if nuPost is None else nuPost),
             "fineDegree": int(fineDegree),
             "fineLower": float(fineLower),
             "fineHigher": float(fineHigher),
