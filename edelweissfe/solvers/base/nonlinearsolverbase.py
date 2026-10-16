@@ -929,8 +929,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         -------
         MultiPointConstraintTransformation | None
             The assembled transformation, or None if the model has no multi-point constraints or
-            none of them constrains a DOF (e.g. an adaptivity's hanging-node constraint before the
-            first refinement).
+            none of them currently constrains a DOF.
         """
 
         if not model.multiPointConstraints:
@@ -946,13 +945,9 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         if stepActions is not None:
             records = self._reconcileMPCDirichletConflicts(records, stepActions)
 
-        # Without a single record T is the identity, but condensing with it is not free: every Newton
-        # iteration would still pay a T^T K T + C product of the full system, and the zero pruning that
-        # follows it (pruneCondensedMatrixZeros) drops whichever entries happen to be exactly zero in
-        # that iteration -- so the sparsity pattern changes every iteration, and a linear solver that
-        # keys reuse on the pattern (blockamg's hierarchies, a direct solver's symbolic factorization)
-        # rebuilds every time. Measured on a 841k dof cylinder with live AMR before its first
-        # refinement: 3.2 s per Newton iteration in the transform, plus a 12.5 s AMG rebuild per solve.
+        # Without a record T is the identity. Condensing with it would still cost a T^T K T + C product
+        # per Newton iteration, and the zero pruning after it changes the sparsity pattern between
+        # iterations, which defeats any pattern-keyed reuse in the linear solver.
         if not records:
             return None
 

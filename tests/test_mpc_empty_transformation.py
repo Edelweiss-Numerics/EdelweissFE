@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""A model whose multi-point constraints constrain no DOF gets no condensation at all.
-
-An adaptivity registers its hanging-node constraint up front, so before the first refinement the
-model has a multi-point constraint without a single record. Condensing with the identity would cost a
-``T^T K T`` product per Newton iteration and, through the zero pruning after it, a sparsity pattern
-that changes every iteration -- so :meth:`buildMPCTransformation` must return None.
+"""A model whose multi-point constraints constrain no DOF gets no condensation:
+:meth:`buildMPCTransformation` returns None, as for a model without multi-point constraints.
 """
 
 import edelweissfe.utils.inputfileparser  # noqa: F401  bootstrap input language
