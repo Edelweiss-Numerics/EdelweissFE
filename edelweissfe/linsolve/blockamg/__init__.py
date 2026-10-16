@@ -62,7 +62,7 @@ def createSolver(opts) -> Callable:
             other four are only used with ``"amgcl_lgmres"``; see
             :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver` for their meaning.
         ``etaMin``, ``etaMax``, ``ewGamma``, ``ewAlpha``, ``residualGrowthFactor``,
-        ``hierarchyStalenessFactor``
+        ``hierarchyStalenessFactor``, ``refreshOnNewIncrement``
             Knobs for the adaptive outer tolerance and the per-field AMG hierarchy reuse across Newton
             iterations -- see :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`.
         ``trueResidualMaxContinuations``

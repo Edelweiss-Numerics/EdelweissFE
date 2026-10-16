@@ -183,6 +183,7 @@ CONFIG_CASTS = {
     "ewAlpha": float,
     "residualGrowthFactor": float,
     "hierarchyStalenessFactor": float,
+    "refreshOnNewIncrement": bool,
     "trueResidualMaxContinuations": int,
     "gapCompensatedTolerance": bool,
     "gapSafetyFactor": float,
@@ -432,6 +433,11 @@ class BlockAMGSolver(LinearSolver):
         Refresh the AMG hierarchies before the *next* solve if this solve's outer GMRES count exceeded
         this factor times the previous solve's -- a growing count is the signal that the reused
         hierarchies are drifting away from the current Jacobian.
+    refreshOnNewIncrement
+        Refresh the AMG hierarchies whenever a residual jump marks a new increment or a cutback
+        (default ``True``). With ``False`` a new increment alone keeps the standing hierarchies -- the
+        first Newton iteration's Jacobian is the converged one of the previous increment -- and only
+        the layout/pattern checks and ``hierarchyStalenessFactor`` decide.
     trueResidualMaxContinuations
         How many times to warm-restart GMRES (``x0`` from the previous attempt, same ``As``/``bs``/``M``
         /``eta``) if the true relative residual still exceeds ``eta`` after GMRES itself reports
@@ -559,6 +565,7 @@ class BlockAMGSolver(LinearSolver):
         ewAlpha: float = 1.618033988749895,
         residualGrowthFactor: float = 4.0,
         hierarchyStalenessFactor: float = 1.5,
+        refreshOnNewIncrement: bool = True,
         gapCompensatedTolerance: bool = False,
         gapSafetyFactor: float = 0.3,
         gapMaxFactor: float = 1e3,
@@ -613,6 +620,7 @@ class BlockAMGSolver(LinearSolver):
         self._ewAlpha = ewAlpha
         self._residualGrowthFactor = residualGrowthFactor
         self._hierarchyStalenessFactor = hierarchyStalenessFactor
+        self._refreshOnNewIncrement = refreshOnNewIncrement
         self._gapCompensatedTolerance = gapCompensatedTolerance
         self._gapSafetyFactor = gapSafetyFactor
         self._gapMaxFactor = gapMaxFactor
@@ -1187,7 +1195,7 @@ class BlockAMGSolver(LinearSolver):
             or blocks != self._blocks
             or n != self._n
             or patternChanged
-            or newIncrement
+            or (newIncrement and self._refreshOnNewIncrement)
             or wasStale
         )
         self._refreshNext = False
@@ -1203,7 +1211,7 @@ class BlockAMGSolver(LinearSolver):
             rebuildReason = "amr"
         elif patternChanged:
             rebuildReason = "pattern"
-        elif newIncrement:
+        elif newIncrement and self._refreshOnNewIncrement:
             rebuildReason = "increment"
         else:
             rebuildReason = "stale"
@@ -1478,7 +1486,9 @@ class BlockAMGSolver(LinearSolver):
             # A x - b = D^-1 (As z - bs) exactly (D = diag(dinv)) -- verified numerically against the
             # direct A @ x - b computation on a real dumped system before use. Rides on the same
             # threaded operator built above; no second, unscaled full-system matvec.
-            trueResidual = np.linalg.norm(system.residual(bs, z) / dinv) / max(np.linalg.norm(b), 1e-300)
+            scaledResidualVector = system.residual(bs, z)
+            trueResidual = np.linalg.norm(scaledResidualVector / dinv) / max(np.linalg.norm(b), 1e-300)
+            scaledResidual = np.linalg.norm(scaledResidualVector) / max(np.linalg.norm(bs), 1e-300)
 
         # GMRES's own stopping check (callback_type="pr_norm") is on the *preconditioned* residual,
         # not the true one -- with an imperfect preconditioner (this one, by design -- a block
@@ -1501,9 +1511,13 @@ class BlockAMGSolver(LinearSolver):
         # Fix: geometrically tighten the *requested* rtol itself by a fixed factor each continuation
         # (0.01x), guaranteeing a strictly smaller, dimensionally-consistent target with no dependency
         # on the callback's residual scale.
-        # INV6: learn the gap from this pass (true residual achieved vs the scaled tolerance it was
-        # given), smoothed so one atypical solve cannot swing the next one's first-pass tolerance.
-        _measuredGap = trueResidual / max(firstPassEta, 1e-300)
+        # INV6: learn the gap from this pass -- the ratio of the true to the scaled relative residual of
+        # the SAME solution, smoothed so one atypical solve cannot swing the next one's first-pass
+        # tolerance. Measured against the scaled residual actually reached, not the tolerance GMRES was
+        # given: on a solve that stops at the iteration cap the two differ, and dividing by the
+        # tolerance inflated the gap by exactly the unreached factor -- every following first pass then
+        # asked for that much more accuracy, which made the next cap hit more likely.
+        _measuredGap = trueResidual / max(scaledResidual, 1e-300)
         if np.isfinite(_measuredGap) and _measuredGap > 0.0:
             # Ceiled at gapMaxFactor too: an unbounded gap from one non-converged solve compounds
             # through the EMA into an ever-tighter, unmeetable tolerance.
@@ -1515,13 +1529,14 @@ class BlockAMGSolver(LinearSolver):
             while trueResidual > eta and continuations < self._trueResidualMaxContinuations:
                 continuations += 1
                 # INV5 (experiment): gap-informed tightening instead of a blunt fixed 0.01x. The pass
-                # just finished converged the *scaled* residual to continuationEta and landed at
-                # trueResidual; both are relative residuals in the same units, so their ratio is the
-                # scaled->true gap g. Landing the next pass on target needs ~eta/g, so tighten by that
-                # (with a safety margin), never looser, and always at least 2x per round so the loop
-                # still terminates.
+                # just finished reached the scaled relative residual scaledResidual and landed at the
+                # true relative residual trueResidual; their ratio is the scaled->true gap g (measured,
+                # not assumed: a pass stopped at the iteration cap did not reach the tolerance it was
+                # given). Landing the next pass on target needs ~eta/g, so tighten by that (with a
+                # safety margin), never looser, and always at least 2x per round so the loop still
+                # terminates.
                 if self._gapCompensatedTolerance:
-                    _gap = trueResidual / max(continuationEta, 1e-300)
+                    _gap = trueResidual / max(scaledResidual, 1e-300)
                     _proposed = self._gapSafetyFactor * eta / max(_gap, 1.0)
                     continuationEta = max(min(_proposed, continuationEta * 0.5), 1e-14)
                 else:
@@ -1553,7 +1568,9 @@ class BlockAMGSolver(LinearSolver):
                     continuationIters = self._lgmresSolver.lastIterations
                     info = 0 if self._lgmresSolver.lastError <= continuationEta else 1
                 x = dinv * z
-                trueResidual = np.linalg.norm(system.residual(bs, z) / dinv) / max(np.linalg.norm(b), 1e-300)
+                scaledResidualVector = system.residual(bs, z)
+                trueResidual = np.linalg.norm(scaledResidualVector / dinv) / max(np.linalg.norm(b), 1e-300)
+                scaledResidual = np.linalg.norm(scaledResidualVector) / max(np.linalg.norm(bs), 1e-300)
                 outerIters += continuationIters
                 self._log(
                     "debug",

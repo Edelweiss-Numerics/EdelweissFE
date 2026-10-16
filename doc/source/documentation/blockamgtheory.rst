@@ -391,7 +391,10 @@ performed twice. A continuation is disproportionately expensive, because restart
 the accumulated Krylov subspace.
 
 With ``gapCompensatedTolerance = true`` the gap is measured on each pass (as the achieved true
-residual over the tolerance that pass was given), smoothed across solves by an exponential moving
+relative residual over the achieved scaled relative residual of the same solution -- not over the
+tolerance the pass was given, which a pass stopped at the iteration cap does not reach; that version
+inflated the gap by the unreached factor and made every following first pass ask for that much more
+accuracy), smoothed across solves by an exponential moving
 average and floored at 1, and used to pre-compensate the *first* pass: it is asked for
 ``gapSafetyFactor``:math:`\cdot\,\eta\,/\,\text{gap}` so that it lands on target in one pass. Any
 continuation that is still needed then tightens by the *measured* gap rather than by the fixed factor
@@ -432,7 +435,8 @@ The hierarchies are rebuilt when
   errs safely, since an unnecessary refresh costs time and never correctness. A pattern change is not
   a graceful degradation: measured on one transition, a hierarchy built for the previous pattern
   needed 494 outer iterations against 94 for a fresh one, an outright wall-clock regression,
-* a residual jump marks a new increment or a cutback (see ``residualGrowthFactor``), or
+* a residual jump marks a new increment or a cutback (see ``residualGrowthFactor``) and
+  ``refreshOnNewIncrement`` is set (the default), or
 * the previous solve's outer iteration count exceeded ``hierarchyStalenessFactor`` times the one
   before it -- a growing count being the signal that the reused hierarchies are drifting away from
   the current Jacobian.
@@ -663,6 +667,11 @@ Hierarchy reuse
       - ``1.5``
       - Refresh the hierarchies before the *next* solve if this solve's outer iteration count
         exceeded this factor times the previous solve's.
+    * - ``refreshOnNewIncrement``
+      - ``True``
+      - Refresh the hierarchies on a residual jump (new increment or cutback). With ``False`` the
+        first Newton iteration of an increment keeps the standing hierarchies; the layout/pattern
+        checks and ``hierarchyStalenessFactor`` still apply.
     * - ``hierarchyDropTol``
       - ``0.0`` (off)
       - Build each field's AMG hierarchy from a *sparsified* copy of its diagonal block: drop
