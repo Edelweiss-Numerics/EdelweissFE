@@ -198,6 +198,11 @@ CONFIG_CASTS = {
     "gapMaxFactor": float,
     "fieldPreconds": dict,
     "p1FieldNames": list,
+    "p1Nu": int,
+    "p1FineDegree": int,
+    "p1FineBlockSize": int,
+    "p1FineSpectralRadiusReuse": bool,
+    "p1CoarsePrecond": dict,
 }
 
 
@@ -323,6 +328,23 @@ class BlockAMGSolver(LinearSolver):
         topology map computed on first need (via :func:`edelweissfe.numerics.p1topology.buildP1Map` on
         ``self._model``) and cached for this instance's lifetime. Ignored for a field also present in
         ``p1Maps`` (that field's map is already known; nothing to compute).
+    p1Nu, p1FineDegree, p1CoarsePrecond
+        The p-two-grid fine Chebyshev sweeps before and after the coarse correction, the fine
+        Chebyshev degree, and the coarse level's AMGCL preconditioner tree. ``None`` (the default)
+        keeps :mod:`~edelweissfe.linsolve.blockamg.ptwogrid`'s own defaults (1, 5, and smoothed
+        aggregation with a degree-4 Chebyshev smoother).
+    p1FineBlockSize
+        Storage of the p-two-grid fine operator: ``1`` (scalar, default) or ``3`` (node-wise 3x3
+        blocks, 3D fields only) -- the same cycle up to summation order, with roughly half the memory
+        traffic in the fine smoother and residual, the dominant cost of the apply.
+    p1FineSpectralRadiusReuse
+        Estimate the p-two-grid fine Chebyshev smoother's spectral radius (300 power iterations, the
+        most expensive stage of its build) only on a field's first build, and reuse it on every later
+        rebuild until the model changes (``setModel``, e.g. after AMR) or a hot reload applies.
+        ``False`` (default) estimates it fresh on every build. The smoother's bounds keep their 10%
+        safety margin above the reused value, but an operator that stiffens beyond that margin
+        during the run can make the smoother diverge -- an opt-in for operators known to change
+        slowly.
     hierarchyDropTol
         Build the AMG hierarchies from a *sparsified* copy of each diagonal block: drop off-diagonal
         ``a_ij`` where ``|a_ij| < hierarchyDropTol * sqrt(|a_ii| |a_jj|)``. Zero (the default) keeps the
@@ -505,6 +527,11 @@ class BlockAMGSolver(LinearSolver):
         useRigidBodyNullspace: bool = True,
         p1Maps: dict = None,
         p1FieldNames: list = None,
+        p1Nu: int = None,
+        p1FineDegree: int = None,
+        p1FineBlockSize: int = 1,
+        p1FineSpectralRadiusReuse: bool = False,
+        p1CoarsePrecond: dict = None,
         etaMin: float = 1.0e-6,
         etaMax: float = 3.0e-4,
         ewGamma: float = 0.9,
@@ -544,9 +571,15 @@ class BlockAMGSolver(LinearSolver):
         self._lazyP1MapNames = set()
         # Per-field node coordinates, derived from self._model; dropped in setModel().
         self._nodeCoordinateCache = {}
-        # Per-field p-two-grid restriction operators, derived from the P1 topology; ditto.
-        self._pNodeCache = {}
+        # Per-field fine spectral radius of the p-two-grid smoother, kept for the next build only with
+        # p1FineSpectralRadiusReuse; dropped in setModel() like the caches above.
+        self._p1FineSpectralRadiusCache = {}
         self._p1FieldNamesRequested = set(p1FieldNames or [])
+        self._p1Nu = p1Nu
+        self._p1FineDegree = p1FineDegree
+        self._p1FineBlockSize = p1FineBlockSize
+        self._p1FineSpectralRadiusReuse = p1FineSpectralRadiusReuse
+        self._p1CoarsePrecond = p1CoarsePrecond
         self._hierarchyDropTol = hierarchyDropTol
         self._hierarchyDropLumping = hierarchyDropLumping
         self._etaMin = etaMin
@@ -723,7 +756,7 @@ class BlockAMGSolver(LinearSolver):
             self._p1Maps.pop(fieldName, None)
         self._lazyP1MapNames.clear()
         self._nodeCoordinateCache.clear()
-        self._pNodeCache.clear()
+        self._p1FineSpectralRadiusCache.clear()
 
     def _getNodeCoordinates(self, fieldName: str) -> "np.ndarray | None":
         """This field's node coordinates, node-major, or ``None`` if unavailable.
@@ -1044,7 +1077,7 @@ class BlockAMGSolver(LinearSolver):
                 self._p1Maps.pop(fieldName, None)
             self._lazyP1MapNames.clear()
             self._nodeCoordinateCache.clear()
-            self._pNodeCache.clear()
+            self._p1FineSpectralRadiusCache.clear()
 
             for _, attribute, _, newValue in pending:
                 setattr(self, attribute, newValue)
@@ -1224,16 +1257,34 @@ class BlockAMGSolver(LinearSolver):
                         )
 
                         isCorner, edgeEndpoints = p1Map
-                        pNode = self._pNodeCache.get(block.name)
-                        solver = PTwoGridPreconditioner(isCorner, edgeEndpoints, pNode=pNode)
-                        if pNode is None:
-                            self._pNodeCache[block.name] = solver.pNode
+                        # Unset keys keep ptwogrid's own defaults.
+                        p1Options = {
+                            key: value
+                            for key, value in (
+                                ("nu", self._p1Nu),
+                                ("fineDegree", self._p1FineDegree),
+                                ("coarsePrecond", self._p1CoarsePrecond),
+                            )
+                            if value is not None
+                        }
+                        fineSpectralRadius = (
+                            self._p1FineSpectralRadiusCache.get(block.name) if self._p1FineSpectralRadiusReuse else None
+                        )
+                        solver = PTwoGridPreconditioner(
+                            isCorner,
+                            edgeEndpoints,
+                            fineBlockSize=self._p1FineBlockSize,
+                            fineSpectralRadius=fineSpectralRadius,
+                            **p1Options,
+                        )
                         # Give p-two-grid's coarse solve the same rigid-body-vs-translations choice
                         # the full field gets below -- None here (useRigidBodyNullspace disabled, or
                         # no coordinates available) makes build() fall back to translations-only
                         # internally, exactly like the non-p1Map path below.
                         coords = self._getNodeCoordinates(block.name) if self._useRigidBodyNullspace else None
                         solver.build(diagBlocks[i], dinv[slices[i]], coords=coords)
+                        if self._p1FineSpectralRadiusReuse:
+                            self._p1FineSpectralRadiusCache[block.name] = solver.fineSpectralRadius
                         preconditioners.append(solver)
                         continue
 

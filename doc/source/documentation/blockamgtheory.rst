@@ -547,6 +547,25 @@ Block preconditioner and per-field hierarchies
       - ``[]``
       - **Experimental, opt-in, not recommended as a default.** Vector fields to precondition with
         the p-multigrid two-grid variant instead of the single-level default; see below.
+    * - ``p1Nu``
+      - ``1``
+      - p-multigrid: fine Chebyshev sweeps before and after the coarse-grid correction.
+    * - ``p1FineDegree``
+      - ``5``
+      - p-multigrid: fine Chebyshev polynomial degree.
+    * - ``p1FineBlockSize``
+      - ``1``
+      - p-multigrid: storage of the fine operator, ``1`` (scalar entries) or ``3`` (node-wise
+        :math:`3\times 3` blocks, 3D fields only); see below.
+    * - ``p1FineSpectralRadiusReuse``
+      - ``false``
+      - p-multigrid: estimate the fine smoother's spectral radius on a field's first build only and
+        reuse it on later rebuilds; see below.
+    * - ``p1CoarsePrecond``
+      - ``null``
+      - p-multigrid: the coarse level's AMGCL preconditioner tree. Unset, it is smoothed
+        aggregation (``eps_strong`` 0.01) with a degree-4 Chebyshev smoother and ``npre`` =
+        ``npost`` = 2.
 
 Overriding a field's parameter tree replaces the default outright, so start from the shipped default
 and change only what is intended. The defaults are
@@ -770,6 +789,23 @@ confirmed it helps on their own model. Enable it per field with ``p1FieldNames``
 computed once, lazily, from the model. A field whose mesh is not entirely quadratic serendipity falls
 back to the single-level default with a warning. Note that the cached map is never rebuilt, including
 across adaptive refinement, which is one more reason to treat this path as experimental.
+
+The whole cycle, and every stage of its build, runs in C++ and is OpenMP-threaded. The Dirichlet
+DOFs of the field's block (rows with a single, diagonal entry) are decoupled exactly rather than
+removed: the fine right-hand side and iterate are kept zero on them, which a Dirichlet row
+preserves under every residual and every smoothing step, and :math:`P` has no rows or columns for
+them. This is the free-submatrix cycle up to floating-point summation order, without extracting the
+free submatrix, and it allows ``p1FineBlockSize = 3``: the fine operator is stored in node-wise
+:math:`3\times 3` blocks even where a node is only partially constrained, which roughly halves the
+memory traffic of the fine smoother and residual -- the dominant cost of the apply.
+
+The fine Chebyshev smoother follows AMGCL's own (same polynomial, ``lower`` 0.01, ``higher`` 1.1
+times the spectral radius), but its spectral-radius estimate -- 300 power iterations, the most
+expensive stage of the build -- starts from a deterministic, thread-count-independent vector, and can
+be skipped: with ``p1FineSpectralRadiusReuse`` the estimate of a field's first build is reused on
+every later rebuild until the model changes (e.g. after adaptive refinement). The 10% margin of
+``higher`` then has to cover the drift of the operator over the run; an operator that stiffens by
+more can make the smoother diverge, so this is an opt-in for operators known to change slowly.
 
 
 Practical guidance

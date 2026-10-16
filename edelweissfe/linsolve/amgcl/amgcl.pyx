@@ -667,3 +667,110 @@ cdef class PyAMGCLSpGEMM:
         self.helper.sum(alpha, A.shape[0], _intData(aPtr), _intData(aCol), _constDoubleData(aVal),
                         beta, B.shape[0], _intData(bPtr), _intData(bCol), _constDoubleData(bVal))
         return self._copyOut()
+
+
+cdef class PyAMGCLPTwoGrid:
+    """The p-two-grid (P1) preconditioner of :mod:`edelweissfe.linsolve.blockamg.ptwogrid`, built and
+    applied entirely in C++: Dirichlet detection, the restricted prolongation ``P``, the Galerkin
+    coarse operator ``P^T A P``, the coarse AMGCL hierarchy, the fine Chebyshev smoother and the
+    whole two-grid cycle, all OpenMP-threaded -- no Python runs inside :meth:`applyPreconditioner`.
+    See ``PTwoGridPreconditionerT`` in ``amgcl-wrapper.hpp`` for the Dirichlet scheme and the
+    fine spectral-radius estimate.
+    """
+    cdef PTwoGridPreconditioner* preconditioner
+
+    def __cinit__(self, dict params):
+        """
+        params: the flat parameter tree, e.g.
+        {"nu": 1, "fineDegree": 5, "fineLower": 0.01, "fineHigher": 1.1, "finePowerIters": 300,
+        "fineScale": false, "fineBlockSize": 1, "coarse": {<AMGCL preconditioner tree>}}
+        """
+        cdef bytes json_bytes = json.dumps(params).encode("utf-8")
+        cdef const char* c_json = json_bytes
+        self.preconditioner = new PTwoGridPreconditioner(c_json)
+
+    def __dealloc__(self):
+        if self.preconditioner != NULL:
+            del self.preconditioner
+
+    def build(self, object A, object isCorner, object edgeEndpoints, object nullspace=None,
+              double spectralRadius=0.0):
+        """
+        Build the preconditioner for A (scipy.sparse csr_matrix, the field's equilibrated diagonal
+        block with its Dirichlet identity rows).
+
+        isCorner: (nNodes,) bool/int8; edgeEndpoints: (nNodes, 2) int, read for midside nodes only.
+        nullspace: (nFreeCoarseDofs, k) float64 coarse near null-space, or None.
+        spectralRadius: > 0 to use this fine spectral radius instead of estimating it.
+        """
+        if not scipy.sparse.isspmatrix_csr(A):
+            A = A.tocsr()
+        if not A.has_sorted_indices:
+            A = A.sorted_indices()
+
+        cdef int n = A.shape[0]
+        cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indptr = np.ascontiguousarray(A.indptr, dtype=np.int32)
+        cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indices = np.ascontiguousarray(A.indices, dtype=np.int32)
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] data = np.ascontiguousarray(A.data, dtype=np.float64)
+        cdef np.ndarray[np.int8_t, ndim=1, mode="c"] corner = np.ascontiguousarray(isCorner, dtype=np.int8)
+        cdef np.ndarray[np.int32_t, ndim=2, mode="c"] endpoints = np.ascontiguousarray(edgeEndpoints, dtype=np.int32)
+        cdef int nNodes = corner.shape[0]
+        if endpoints.shape[0] != nNodes or endpoints.shape[1] != 2:
+            raise ValueError("edgeEndpoints must have shape (nNodes, 2)")
+
+        cdef np.ndarray[np.float64_t, ndim=2, mode="c"] B
+        cdef int nullspaceRows = 0
+        cdef int nullspaceCols = 0
+        cdef const double* nullspacePtr = NULL
+        if nullspace is not None:
+            B = np.ascontiguousarray(nullspace, dtype=np.float64)
+            nullspaceRows = B.shape[0]
+            nullspaceCols = B.shape[1]
+            if nullspaceRows > 0 and nullspaceCols > 0:
+                nullspacePtr = &B[0, 0]
+
+        cdef int[::1] indptr_ = indptr
+        cdef int[::1] indices_ = indices
+        cdef double[::1] data_ = data
+        cdef signed char[::1] corner_ = corner
+        cdef int[:, ::1] endpoints_ = endpoints
+        self.preconditioner.build(n, &indptr_[0], &indices_[0], &data_[0], nNodes, &corner_[0], &endpoints_[0, 0],
+                                  nullspacePtr, nullspaceRows, nullspaceCols, spectralRadius)
+
+    def applyPreconditioner(self, object r):
+        """One two-grid cycle: returns M^-1 r as a new float64 array (Dirichlet entries pass through)."""
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] r_arr = np.ascontiguousarray(r, dtype=np.float64)
+        cdef int n = r_arr.shape[0]
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] x = np.empty(n, dtype=np.float64)
+        cdef double[::1] r_ = r_arr
+        cdef double[::1] x_ = x
+        self.preconditioner.apply(n, &r_[0], &x_[0])
+        return x
+
+    @property
+    def fineSpectralRadius(self):
+        """The fine operator's spectral radius the Chebyshev smoother was built with -- estimated, or
+        the one handed to :meth:`build`."""
+        return self.preconditioner.fineSpectralRadius()
+
+    @property
+    def nCoarseFree(self):
+        """The number of free coarse DOFs (rows of the Galerkin operator)."""
+        return self.preconditioner.nCoarseFree()
+
+    def timings(self):
+        """Cumulative wall time [s] of the build stages (of the last build) and of the apply (fine
+        smoothing incl. the residual, coarse correction incl. restriction and prolongation)."""
+        return {
+            "setup: dirichlet + P": self.preconditioner.setupDirichletAndPSeconds_,
+            "setup: galerkin P^T A P": self.preconditioner.setupGalerkinSeconds_,
+            "setup: coarse hierarchy": self.preconditioner.setupCoarseSeconds_,
+            "setup: fine operator": self.preconditioner.setupFineOperatorSeconds_,
+            "setup: fine spectral radius": self.preconditioner.setupSpectralRadiusSeconds_,
+            "apply: fine": self.preconditioner.applyFineSeconds_,
+            "apply: coarse": self.preconditioner.applyCoarseSeconds_,
+        }
+
+    def report(self):
+        """The coarse level's AMGCL hierarchy report."""
+        return self.preconditioner.report().decode("utf-8")

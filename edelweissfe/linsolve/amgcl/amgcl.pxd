@@ -113,3 +113,23 @@ cdef extern from "amgcl-wrapper.hpp":
         int resultNCols() except +
         int resultNnz() except +
         void copyResult(int* ptrOut, int* colOut, double* valOut) except +
+
+    # The p-two-grid (P1) preconditioner of edelweissfe/linsolve/blockamg/ptwogrid.py, built and
+    # applied entirely in C++ (OpenMP) -- see PTwoGridPreconditionerT's own comment.
+    cdef cppclass PTwoGridPreconditioner:
+        PTwoGridPreconditioner(const char* json_params) except +
+        void build(int n, const int* ptr, const int* col, const double* val,
+                   int nNodes, const signed char* isCorner, const int* edgeEndpoints,
+                   const double* nullspace, int nullspaceRows, int nullspaceCols,
+                   double spectralRadius) except +
+        void apply(int n, const double* r, double* x) except +
+        double fineSpectralRadius()
+        int nCoarseFree()
+        string report() except +
+        double setupDirichletAndPSeconds_
+        double setupGalerkinSeconds_
+        double setupCoarseSeconds_
+        double setupFineOperatorSeconds_
+        double setupSpectralRadiusSeconds_
+        double applyFineSeconds_
+        double applyCoarseSeconds_
