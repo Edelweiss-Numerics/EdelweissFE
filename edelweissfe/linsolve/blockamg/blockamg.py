@@ -1499,7 +1499,9 @@ class BlockAMGSolver(LinearSolver):
                     resetOnce=(newIncrement and self._lgmresResetOnNewIncrement),
                 )
                 outerIters = self._lgmresSolver.lastIterations
-                info = 0 if self._lgmresSolver.lastError <= eta else 1
+                # Non-convergence is a cap hit. lastError is LGMRES's own *scaled* relative residual
+                # (right preconditioning), not comparable with the true-residual target eta.
+                info = 1 if outerIters >= self._outerRestart * self._outerMaxiter else 0
             x = dinv * z
             # A x - b = D^-1 (As z - bs) exactly (D = diag(dinv)) -- verified numerically against the
             # direct A @ x - b computation on a real dumped system before use. Rides on the same
@@ -1584,7 +1586,7 @@ class BlockAMGSolver(LinearSolver):
                         x0=z,
                     )
                     continuationIters = self._lgmresSolver.lastIterations
-                    info = 0 if self._lgmresSolver.lastError <= continuationEta else 1
+                    info = 1 if continuationIters >= self._outerRestart * self._outerMaxiter else 0
                 x = dinv * z
                 scaledResidualVector = system.residual(bs, z)
                 trueResidual = np.linalg.norm(scaledResidualVector / dinv) / max(np.linalg.norm(b), 1e-300)
@@ -1698,9 +1700,10 @@ class BlockAMGSolver(LinearSolver):
         if info != 0:
             self._log(
                 "warning",
-                "⚠ solve #{:} GMRES itself did not converge within outerMaxiter x outerRestart "
-                "iterations. Raise outerMaxiter/outerRestart, or check whether the system is simply "
-                "too hard for this preconditioner at its current settings.".format(self._solveCount),
+                "⚠ solve #{:}: the outer solve stopped at its iteration cap (outerRestart x outerMaxiter "
+                "= {:}) before reaching its own (scaled) tolerance. Raise outerMaxiter/outerRestart, or "
+                "check whether the system is simply too hard for this preconditioner at its current "
+                "settings.".format(self._solveCount, self._outerRestart * self._outerMaxiter),
             )
 
         return x
