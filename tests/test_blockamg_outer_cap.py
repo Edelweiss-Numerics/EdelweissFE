@@ -43,3 +43,41 @@ def test_a_cap_hit_is_reported():
 
 def test_a_converged_solve_is_not_reported():
     assert not _warnings(outerTol=1e-6, outerRestart=200, outerMaxiter=1)
+
+
+def _stale(solver, counts):
+    """Feed outer iteration counts to the staleness gate -- the first one as the rebuild solve -- and return
+    the decisions."""
+    decisions = []
+    for k, count in enumerate(counts):
+        decisions.append(solver._hierarchyIsStale(count, rebuilt=k == 0, capHit=False, etaMissed=False))
+    return decisions
+
+
+def test_a_slow_drift_is_caught_against_the_rebuild_solve():
+    solver = createSolver({"verbosity": "silent", "hierarchyStalenessFactor": 1.5})
+    # every count is below 1.5 times its predecessor; 37 > max(1.5 * 12, 12 + 15)
+    assert _stale(solver, [12, 17, 25, 37]) == [False, False, False, True]
+
+
+def test_small_counts_need_an_absolute_excess():
+    solver = createSolver({"verbosity": "silent", "hierarchyStalenessFactor": 1.5})
+    assert _stale(solver, [4, 8, 12, 19, 20]) == [False, False, False, False, True]
+
+
+def test_a_cap_hit_rebuilds_the_hierarchies_for_the_next_solve():
+    A, b, blocks = _system()
+    solver = createSolver(
+        {
+            "verbosity": "silent",
+            "outerTol": 1e-12,
+            "outerRestart": 2,
+            "outerMaxiter": 1,
+            "trueResidualMaxContinuations": 0,
+        }
+    )
+    solver.setFieldStructure(blocks)
+    solver(A, b)
+    standing = solver._preconditioners
+    solver(A, b)
+    assert solver._preconditioners is not standing

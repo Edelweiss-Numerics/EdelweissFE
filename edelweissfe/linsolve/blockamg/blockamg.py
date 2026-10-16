@@ -157,6 +157,11 @@ _DEFAULT_SCALAR_PRECOND = {
 }
 
 
+#: The least excess over the reference outer iteration count that makes reused hierarchies stale, on top of
+#: ``hierarchyStalenessFactor`` -- see :meth:`BlockAMGSolver._hierarchyIsStale`.
+_STALENESS_MIN_EXCESS = 15
+
+
 def _outerTolFromConfig(value) -> float | None:
     """``outerTol`` unset, ``None``, or the literal string ``"adaptive"`` all select the adaptive forcing."""
     return None if value in (None, "adaptive") else float(value)
@@ -244,7 +249,8 @@ class BlockAMGSolver(LinearSolver):
        single Newton iteration as the active contact/tie set evolves, so in practice this keeps the
        hierarchy fresh every call on such a model -- a safe no-op there, not a win; a model without
        that churn may see a real one), or when the previous solve's outer count grew past
-       ``hierarchyStalenessFactor`` times the one before it.
+       ``hierarchyStalenessFactor`` times (and 15 more than) that of the solve the hierarchies were built
+       for, or hit the iteration cap, or missed its tolerance.
 
     Every solve also enforces the requested tolerance on the *true* (unpreconditioned) residual, not
     just GMRES's own preconditioned stopping check -- see ``trueResidualMaxContinuations``. GMRES's
@@ -435,8 +441,10 @@ class BlockAMGSolver(LinearSolver):
         an ever-tighter, unmeetable tolerance for every solve after it.
     hierarchyStalenessFactor
         Refresh the AMG hierarchies before the *next* solve if this solve's outer GMRES count exceeded
-        this factor times the previous solve's -- a growing count is the signal that the reused
-        hierarchies are drifting away from the current Jacobian.
+        both this factor times, and 15 more than, the count of the solve the hierarchies were built for
+        -- a growing count is the signal that the reused hierarchies are drifting away from the current
+        Jacobian; measured against that reference rather than the previous solve, a slow drift is not
+        missed. A solve that hit the iteration cap or missed its tolerance always refreshes them.
     refreshOnNewIncrement
         Refresh the AMG hierarchies whenever a residual jump marks a new increment or a cutback
         (default ``True``). With ``False`` a new increment alone keeps the standing hierarchies -- the
@@ -675,6 +683,8 @@ class BlockAMGSolver(LinearSolver):
         self._n = None
         self._lastNnz = None
         self._lastOuterIters = None
+        # outer iterations of the solve the standing hierarchies were built for (see _hierarchyIsStale)
+        self._stalenessReferenceIters = None
         self._lastContinuations = None
         # INV6: cached scaled->true relative-residual gap, used to pre-compensate the first pass.
         self._trueResidualGap = 1.0
@@ -710,6 +720,25 @@ class BlockAMGSolver(LinearSolver):
         :attr:`~edelweissfe.linsolve.base.LinearSolver.lastSolveSummary`. ``None`` before the first
         call."""
         return self._lastSolveSummary
+
+    def _hierarchyIsStale(self, outerIters: int, rebuilt: bool, capHit: bool, etaMissed: bool) -> bool:
+        """Whether the standing hierarchies should be rebuilt before the next solve.
+
+        The reference is the outer iteration count of the solve the hierarchies were built for (the first
+        one after the last rebuild), not that of the previous solve: compared with its predecessor only, a
+        slow drift (12, 17, 25, 37, 50) never trips a 1.5 factor. A rebuild needs the count to exceed both
+        ``hierarchyStalenessFactor`` times that reference and the reference plus
+        :data:`_STALENESS_MIN_EXCESS` -- at small counts a factor alone fires on noise (8 -> 13). A solve
+        that hit the iteration cap or missed its tolerance always asks for a rebuild: its count says
+        nothing about how far the hierarchies drifted, only that they no longer do the job.
+        """
+        if rebuilt or self._stalenessReferenceIters is None:
+            self._stalenessReferenceIters = outerIters
+            drifted = False
+        else:
+            reference = self._stalenessReferenceIters
+            drifted = outerIters > max(self._hierarchyStalenessFactor * reference, reference + _STALENESS_MIN_EXCESS)
+        return drifted or capHit or etaMissed
 
     def _log(self, level: str, message: str) -> None:
         """Emit ``message`` through the injected Journal (see ``setJournal``, inherited from
@@ -1544,6 +1573,7 @@ class BlockAMGSolver(LinearSolver):
             self._trueResidualGap = min(max(0.5 * self._trueResidualGap + 0.5 * _measuredGap, 1.0), self._gapMaxFactor)
 
         with performancetiming.timeit("true-residual continuations"):
+            capHit = info != 0
             continuationEta = min(eta, firstPassEta) if self._gapCompensatedTolerance else eta
             continuations = 0
             while trueResidual > eta and continuations < self._trueResidualMaxContinuations:
@@ -1592,6 +1622,7 @@ class BlockAMGSolver(LinearSolver):
                 trueResidual = np.linalg.norm(scaledResidualVector / dinv) / max(np.linalg.norm(b), 1e-300)
                 scaledResidual = np.linalg.norm(scaledResidualVector) / max(np.linalg.norm(bs), 1e-300)
                 outerIters += continuationIters
+                capHit = capHit or info != 0
                 self._log(
                     "debug",
                     "blockamg:   continuation {:}/{:} eta={:.1e} +{:}it res={:.1e}".format(
@@ -1604,7 +1635,7 @@ class BlockAMGSolver(LinearSolver):
                 )
 
         previousOuterIters = self._lastOuterIters
-        if self._lastOuterIters is not None and outerIters > self._hierarchyStalenessFactor * self._lastOuterIters:
+        if self._hierarchyIsStale(outerIters, mustRefresh, capHit, trueResidual > eta):
             self._refreshNext = True
         self._lastOuterIters = outerIters
         self._lastContinuations = continuations

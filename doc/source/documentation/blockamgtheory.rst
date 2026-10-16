@@ -441,9 +441,12 @@ The hierarchies are rebuilt when
   needed 494 outer iterations against 94 for a fresh one, an outright wall-clock regression,
 * a residual jump marks a new increment or a cutback (see ``residualGrowthFactor``) and
   ``refreshOnNewIncrement`` is set (the default), or
-* the previous solve's outer iteration count exceeded ``hierarchyStalenessFactor`` times the one
-  before it -- a growing count being the signal that the reused hierarchies are drifting away from
-  the current Jacobian.
+* the previous solve's outer iteration count exceeded both ``hierarchyStalenessFactor`` times and 15
+  more than the count of the solve the hierarchies were built for -- a growing count being the signal
+  that the reused hierarchies are drifting away from the current Jacobian. The reference is that
+  first solve, not the previous one, so a slow drift (12, 17, 25, 37, 50 iterations) is caught; the
+  absolute margin keeps a factor alone from firing on noise at small counts, or
+* the previous solve hit the outer iteration cap or missed its tolerance.
 
 Note what this means in practice on a model with contact or tie constraints: its active constraint set
 changes almost every Newton iteration, so the sparsity pattern changes too and the hierarchies are in
@@ -671,7 +674,8 @@ Hierarchy reuse
     * - ``hierarchyStalenessFactor``
       - ``1.5``
       - Refresh the hierarchies before the *next* solve if this solve's outer iteration count
-        exceeded this factor times the previous solve's.
+        exceeded both this factor times and 15 more than that of the solve the hierarchies were built
+        for. A cap hit or a missed tolerance always refreshes them.
     * - ``refreshOnNewIncrement``
       - ``True``
       - Refresh the hierarchies on a residual jump (new increment or cutback). With ``False`` the
