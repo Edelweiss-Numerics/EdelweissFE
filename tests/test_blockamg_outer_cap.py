@@ -50,7 +50,7 @@ def _stale(solver, counts):
     the decisions."""
     decisions = []
     for k, count in enumerate(counts):
-        decisions.append(solver._hierarchyIsStale(count, rebuilt=k == 0, capHit=False, etaMissed=False))
+        decisions.append(solver._hierarchyIsStale(count, rebuilt=k == 0, capHit=False))
     return decisions
 
 

@@ -463,7 +463,11 @@ The hierarchies are rebuilt when
   that the reused hierarchies are drifting away from the current Jacobian. The reference is that
   first solve, not the previous one, so a slow drift (12, 17, 25, 37, 50 iterations) is caught; the
   absolute margin keeps a factor alone from firing on noise at small counts, or
-* the previous solve hit the outer iteration cap or missed its tolerance.
+* the previous solve hit the outer iteration cap. A missed tolerance alone does not trigger a
+  rebuild: with continuations off it typically comes from the gap between the scaled residual the
+  outer solve converges and the true one (stiff rows down-weighted by the equilibration, e.g. on a
+  model with multi-point constraints), which a fresh hierarchy cannot close -- measured 18% slower on
+  such a model when it did trigger rebuilds.
 
 On a model with contact or tie constraints the active constraint set can change between Newton
 iterations, and then the sparsity pattern -- and with it the nonzero count -- changes and the
@@ -689,7 +693,7 @@ Hierarchy reuse
       - ``1.5``
       - Refresh the hierarchies before the *next* solve if this solve's outer iteration count
         exceeded both this factor times and 15 more than that of the solve the hierarchies were built
-        for. A cap hit or a missed tolerance always refreshes them.
+        for. A cap hit always refreshes them.
     * - ``refreshOnNewIncrement``
       - ``True``
       - Refresh the hierarchies on a residual jump (new increment or cutback). With ``False`` the

@@ -288,7 +288,7 @@ class BlockAMGSolver(LinearSolver):
        hierarchy fresh every call on such a model -- a safe no-op there, not a win; a model without
        that churn may see a real one), or when the previous solve's outer count grew past
        ``hierarchyStalenessFactor`` times (and 15 more than) that of the solve the hierarchies were built
-       for, or hit the iteration cap, or missed its tolerance.
+       for, or hit the iteration cap.
 
     Every solve also enforces the requested tolerance on the *true* residual, not just the outer solve's
     own stopping test -- see ``trueResidualMaxContinuations``. That test is on the residual of the
@@ -471,7 +471,8 @@ class BlockAMGSolver(LinearSolver):
         both this factor times, and 15 more than, the count of the solve the hierarchies were built for
         -- a growing count is the signal that the reused hierarchies are drifting away from the current
         Jacobian; measured against that reference rather than the previous solve, a slow drift is not
-        missed. A solve that hit the iteration cap or missed its tolerance always refreshes them.
+        missed. A solve that hit the iteration cap always refreshes them (a missed tolerance does not:
+        it reflects the scaled-to-true residual gap, which a rebuild cannot close).
     refreshOnNewIncrement
         Refresh the AMG hierarchies whenever a residual jump marks a new increment or a cutback
         (default ``True``). With ``False`` a new increment alone keeps the standing hierarchies -- the
@@ -750,7 +751,7 @@ class BlockAMGSolver(LinearSolver):
         call."""
         return self._lastSolveSummary
 
-    def _hierarchyIsStale(self, outerIters: int, rebuilt: bool, capHit: bool, etaMissed: bool) -> bool:
+    def _hierarchyIsStale(self, outerIters: int, rebuilt: bool, capHit: bool) -> bool:
         """Whether the standing hierarchies should be rebuilt before the next solve.
 
         The reference is the outer iteration count of the solve the hierarchies were built for (the first
@@ -758,8 +759,11 @@ class BlockAMGSolver(LinearSolver):
         slow drift (12, 17, 25, 37, 50) never trips a 1.5 factor. A rebuild needs the count to exceed both
         ``hierarchyStalenessFactor`` times that reference and the reference plus
         :data:`_STALENESS_MIN_EXCESS` -- at small counts a factor alone fires on noise (8 -> 13). A solve
-        that hit the iteration cap or missed its tolerance always asks for a rebuild: its count says
-        nothing about how far the hierarchies drifted, only that they no longer do the job.
+        that hit the iteration cap always asks for a rebuild: its count says nothing about how far the
+        hierarchies drifted, only that they no longer do the job. A missed tolerance does not: with
+        continuations off, it comes from the gap between the scaled residual the outer solve converges
+        and the true one (stiff rows down-weighted by the equilibration), which a rebuild cannot close --
+        measured +18% on a contact model with multi-point constraints when it did trigger a rebuild.
         """
         if rebuilt or self._stalenessReferenceIters is None:
             self._stalenessReferenceIters = outerIters
@@ -767,7 +771,7 @@ class BlockAMGSolver(LinearSolver):
         else:
             reference = self._stalenessReferenceIters
             drifted = outerIters > max(self._hierarchyStalenessFactor * reference, reference + _STALENESS_MIN_EXCESS)
-        return drifted or capHit or etaMissed
+        return drifted or capHit
 
     def _log(self, level: str, message: str) -> None:
         """Emit ``message`` through the injected Journal (see ``setJournal``, inherited from
@@ -1703,7 +1707,7 @@ class BlockAMGSolver(LinearSolver):
                 )
 
         previousOuterIters = self._lastOuterIters
-        if self._hierarchyIsStale(outerIters, mustRefresh, capHit, trueResidual > eta):
+        if self._hierarchyIsStale(outerIters, mustRefresh, capHit):
             self._refreshNext = True
         self._lastOuterIters = outerIters
         self._lastContinuations = continuations
