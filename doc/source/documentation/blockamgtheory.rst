@@ -280,17 +280,21 @@ The block Gauss--Seidel sweep
 
 The preconditioner :math:`M^{-1}` applied at each outer Krylov iteration is a block Gauss--Seidel
 sweep over the fields. Starting from :math:`x_j = 0` for all fields, each field :math:`i` in turn
-forms its local residual by subtracting the couplings to the *current* estimates of the other fields
-and applies one cycle of its own AMG hierarchy:
+forms its local residual against the *current* estimates of all fields and corrects its own
+estimate by one cycle of its own AMG hierarchy:
 
 .. math::
 
-   x_i \leftarrow M_i^{-1}\Bigl( r_i - \sum_{j \neq i} \hat A_{ij}\, x_j \Bigr),
+   x_i \leftarrow x_i + M_i^{-1}\Bigl( r_i - \sum_{j} \hat A_{ij}\, x_j \Bigr),
 
-where :math:`M_i^{-1}` denotes one AMG cycle on :math:`\hat A_{ii}`. With ``symmetric = true`` (the
-default) each forward sweep is followed by a reverse-order sweep, making the whole sweep symmetric
-and thereby compatible with a symmetric outer Krylov method; ``sweeps`` repeats the (possibly
-symmetrized) sweep.
+where :math:`M_i^{-1}` denotes one AMG cycle on :math:`\hat A_{ii}`. On a field's first visit
+:math:`x_i = 0`, and this is the plain :math:`x_i = M_i^{-1}(r_i - \sum_{j \neq i} \hat A_{ij} x_j)`;
+the correction form matters on revisits, which an inexact :math:`M_i^{-1}` would otherwise throw
+away. With ``symmetric = true`` (the default) each forward sweep is followed by a reverse-order sweep,
+starting one field before the one just updated; ``sweeps`` repeats the (possibly reversed) sweep.
+Neither is needed for the outer solve: right-preconditioned GMRES/LGMRES only needs :math:`M^{-1}`
+to be a fixed linear operator, not a symmetric one -- the measured configurations use
+``sweeps = 1``, ``symmetric = false``.
 
 This is deliberately only an *approximate* inverse of the coupled operator -- which is exactly why
 the true-residual bookkeeping below exists.
@@ -534,7 +538,8 @@ Block preconditioner and per-field hierarchies
       - Block Gauss--Seidel sweeps per preconditioner application.
     * - ``symmetric``
       - ``true``
-      - Follow each sweep by a reverse-order sweep, making the preconditioner symmetric.
+      - Follow each sweep by a reverse-order sweep (starting one field before the one just
+        updated). Not required by the GMRES-type outer solve.
     * - ``useRigidBodyNullspace``
       - ``true``
       - Give every vector field the full six-mode (3D) or three-mode (2D) rigid-body

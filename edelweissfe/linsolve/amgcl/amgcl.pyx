@@ -336,6 +336,19 @@ cdef class PyAMGCLEquilibratedSystem:
         self.system.residual(_constDoubleData(rhsArray), _constDoubleData(xArray), _doubleData(r))
         return r
 
+    def diagonalBlockMatvec(self, int field, object x):
+        """Returns ``As[field, field] @ x`` as a new float64 array of this field's size."""
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] x_arr = np.ascontiguousarray(x, dtype=np.float64)
+        if x_arr.shape[0] != self.system.diagonalBlockSize(field):
+            raise ValueError("x has the wrong length for field {:}".format(field))
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] y = np.empty(x_arr.shape[0], dtype=np.float64)
+        if x_arr.shape[0] == 0:
+            return y
+        cdef double[::1] x_ = x_arr
+        cdef double[::1] y_ = y
+        self.system.diagonalBlockMatvec(field, &x_[0], &y_[0])
+        return y
+
     def couplingMatvec(self, int field, int otherField, object x):
         """Returns ``As[field, otherField] @ x`` (``x`` of the other field's size) as a new float64
         array of this field's size."""

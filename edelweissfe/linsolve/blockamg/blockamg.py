@@ -295,9 +295,13 @@ class BlockAMGSolver(LinearSolver):
         ``lgmresAlwaysReset`` above) measurably does not. Default ``False``: unvalidated, so this
         leaves ``lgmres``'s behaviour identical to always-resetting unless explicitly turned on.
     sweeps
-        Block Gauss-Seidel sweeps per preconditioner application.
+        Block Gauss-Seidel sweeps per preconditioner application, each field correcting its estimate
+        by one cycle of its own hierarchy on its current residual (``x_i += M_i^-1 (r_i - sum_j A_ij
+        x_j)``).
     symmetric
-        If True, each sweep is followed by a reverse-order sweep (symmetric block Gauss-Seidel).
+        If True, each sweep is followed by a reverse-order sweep, starting one field before the one
+        just updated. Not required by the GMRES-type outer solve (right preconditioning only needs a
+        fixed linear operator).
     fieldPreconds
         Optional mapping of field name to an AMGCL preconditioner parameter tree, overriding the
         dimension-based default for that field.
@@ -1388,13 +1392,25 @@ class BlockAMGSolver(LinearSolver):
         nFields = len(slices)
         sizes = [block.stop - block.start for block in blocks]
 
-        def sweepOnce(order, residual, x):
+        def sweepOnce(order, residual, x, visited):
+            # Residual-correction form, x_i += M_i^-1 (r_i - sum_j A_ij x_j), so that a revisit of a field
+            # (sweeps > 1, or the symmetric reverse sweep) improves its x_i instead of discarding it --
+            # the overwrite form x_i = M_i^-1 (r_i - sum_{j != i} A_ij x_j) is only the same for an exact
+            # M_i, which an AMG cycle is not. On a field's first visit x_i = 0, so both forms coincide and
+            # the overwrite is kept: the shipped sweeps = 1, symmetric = False path is unchanged, bitwise
+            # (fields not yet visited, x_j = 0, are skipped instead of multiplied -- equal up to the sign
+            # of a zero).
             for i in order:
                 localResidual = residual[slices[i]].copy()
                 for j in range(nFields):
-                    if j != i:
+                    if j != i and visited[j]:
                         localResidual -= system.couplingMatvec(i, j, x[j])
-                x[i] = preconditioners[i].applyPreconditioner(localResidual)
+                if visited[i]:
+                    localResidual -= system.diagonalBlockMatvec(i, x[i])
+                    x[i] = x[i] + preconditioners[i].applyPreconditioner(localResidual)
+                else:
+                    x[i] = preconditioners[i].applyPreconditioner(localResidual)
+                    visited[i] = True
 
         # A single-field fast path for the apply itself was tried here and **rejected on measurement**,
         # which is worth recording so it is not re-attempted blind. For one field with sweeps=1 and
@@ -1418,10 +1434,12 @@ class BlockAMGSolver(LinearSolver):
 
         def blockGaussSeidel(residual):
             x = [np.zeros(sizes[i]) for i in range(nFields)]
+            visited = [False] * nFields
             for _ in range(self._sweeps):
-                sweepOnce(range(nFields), residual, x)
+                sweepOnce(range(nFields), residual, x, visited)
                 if self._symmetric:
-                    sweepOnce(range(nFields - 1, -1, -1), residual, x)
+                    # the last field was just updated with everything else current: start one before it
+                    sweepOnce(range(nFields - 2, -1, -1), residual, x, visited)
             return np.concatenate(x)
 
         preconditioner = LinearOperator((n, n), matvec=blockGaussSeidel, dtype=np.float64)

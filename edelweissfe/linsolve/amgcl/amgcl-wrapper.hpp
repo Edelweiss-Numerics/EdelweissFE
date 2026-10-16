@@ -711,6 +711,27 @@ public:
     amgcl::backend::residual( rhsRange, *operator_, xRange, rRange );
   }
 
+  /// @brief y (field f) <- As[field f, field f] x (field f), read straight from the operator's rows
+  /// (the diagonal blocks are only materialized for a hierarchy rebuild). Only the block Gauss-Seidel
+  /// sweep's revisits of a field need it -- sweeps > 1 or symmetric.
+  void diagonalBlockMatvec( int f, const double* x, double* y ) const
+  {
+    checkField( f );
+    const int       start = fieldStart_[f];
+    const ptrdiff_t nRows = fieldStop_[f] - fieldStart_[f];
+#pragma omp parallel for
+    for ( ptrdiff_t local = 0; local < nRows; ++local ) {
+      const ptrdiff_t i   = start + local;
+      double          sum = 0.0;
+      for ( int j = operator_->ptr[i]; j < operator_->ptr[i + 1]; ++j ) {
+        const int c = operator_->col[j];
+        if ( fieldOfDof_[c] == f )
+          sum += operator_->val[j] * x[c - start];
+      }
+      y[local] = sum;
+    }
+  }
+
   /// @brief y (field f) <- As[field f, field g] x (field g), f != g
   void couplingMatvec( int f, int g, const double* x, double* y ) const
   {
