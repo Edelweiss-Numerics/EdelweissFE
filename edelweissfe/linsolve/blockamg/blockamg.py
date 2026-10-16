@@ -533,6 +533,12 @@ class BlockAMGSolver(LinearSolver):
         are kept. Nothing about a bad edit can end the run -- which matters precisely because the
         runs worth using this on are the ones that were expensive to reach.
 
+        Values the run could not use -- an unknown ``outerSolver``, a non-positive iteration count, an
+        invalid p-two-grid option, a recycling request, a dump directory that cannot be created -- are
+        rejected and reported the same way. An applied ``outerSolver``/``lgmresM``/``lgmresK`` rebuilds
+        the outer LGMRES solver, ``dumpOnDegradationDir`` is created, and ``dumpOnDegradationContextSolves``
+        resizes the context window.
+
         Unrecognized keys are reported rather than ignored, and so are recognized ones that cannot
         be applied after construction.
     """
@@ -1051,6 +1057,42 @@ class BlockAMGSolver(LinearSolver):
     # The deprecated LGMRES recycling keys have no setting left to change.
     _HOT_RELOAD_IGNORED = ("hotReloadConfigFile", "lgmresAlwaysReset", "lgmresResetOnNewIncrement")
 
+    def _hotReloadRejection(self, name: str, value) -> "str | None":
+        """Why a hot-reloaded value cannot be applied, or ``None``. Checks what the constructor (or a later
+        build) would otherwise only fail on in the middle of a solve -- a bad edit must not end the run.
+
+        The generic apply below still goes through ``hasattr``/``setattr`` on the ``_<name>`` attribute
+        convention; an explicit per-key table is left for the configuration refactor.
+        """
+        if name == "outerSolver" and value not in ("scipy", "amgcl_lgmres"):
+            return "must be 'scipy' or 'amgcl_lgmres'"
+        if name in ("lgmresM", "outerRestart", "outerMaxiter", "sweeps") and value < 1:
+            return "must be at least 1"
+        if name in ("lgmresK", "dumpOnDegradationContextSolves", "p1Nu", "p1NuPre", "p1NuPost") and (
+            value is not None and value < 0
+        ):
+            return "must not be negative"
+        if name == "p1FineBlockSize" and value not in (1, 3):
+            return "must be 1 or 3"
+        if name in ("p1FineValueType", "p1CoarseValueType") and value not in ("double", "float"):
+            return "must be 'double' or 'float'"
+        if name == "dumpOnDegradationDir" and value is not None:
+            try:
+                os.makedirs(value, exist_ok=True)
+            except OSError as error:
+                return "cannot create the directory: {:}".format(error)
+        return None
+
+    def _afterHotReload(self, name: str) -> None:
+        """Whatever an applied setting needs beyond its attribute: objects built from it are rebuilt."""
+        if name in ("outerSolver", "lgmresM", "lgmresK"):
+            # rebuilt with the new settings on the next solve that needs it
+            self._lgmresSolver = None
+        elif name == "dumpOnDegradationContextSolves":
+            self._recentSolveHistory = collections.deque(
+                self._recentSolveHistory, maxlen=max(self._dumpOnDegradationContextSolves, 0)
+            )
+
     def _maybeHotReloadConfig(self) -> bool:
         """Re-read the JSON config if it changed on disk; return whether anything was applied.
 
@@ -1107,6 +1149,13 @@ class BlockAMGSolver(LinearSolver):
         # one), and that needs to know whether there is a change at all.
         pending, rejected, unknown = [], [], []
         for name, value in newOptions.items():
+            if name in _DEPRECATED_LGMRES_KEYS:
+                # nothing left to change, but a value asking for the removed recycling is an error
+                try:
+                    _checkLgmresRecyclingKeys(**{**_DEPRECATED_LGMRES_KEYS, name: CONFIG_CASTS[name](value)})
+                except (TypeError, ValueError) as error:
+                    rejected.append("{:} ({:})".format(name, error))
+                continue
             if name in self._HOT_RELOAD_IGNORED:
                 continue
             if name not in validNames:
@@ -1134,6 +1183,11 @@ class BlockAMGSolver(LinearSolver):
             else:
                 newValue = value
 
+            rejection = self._hotReloadRejection(name, newValue)
+            if rejection is not None:
+                rejected.append("{:} ({:})".format(name, rejection))
+                continue
+
             attribute = self._HOT_RELOAD_ALIASES.get(name, "_" + name)
             if not hasattr(self, attribute):
                 rejected.append("{:} (recognized at construction but not hot-reloadable)".format(name))
@@ -1150,8 +1204,9 @@ class BlockAMGSolver(LinearSolver):
             self._nodeCoordinateCache.clear()
             self._p1FineSpectralRadiusCache.clear()
 
-            for _, attribute, _, newValue in pending:
+            for name, attribute, _, newValue in pending:
                 setattr(self, attribute, newValue)
+                self._afterHotReload(name)
 
             self._refreshNext = True
 

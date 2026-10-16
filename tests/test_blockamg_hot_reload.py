@@ -250,3 +250,57 @@ def test_the_factory_defaults_the_hot_reload_path_to_off():
 
     assert solver._hotReloadConfigFile is None
     assert solver._maybeHotReloadConfig() is False
+
+
+def test_reloaded_lgmres_settings_rebuild_the_outer_solver(configuredSolver):
+    solver, configPath = configuredSolver
+    _reload(solver)
+    solver._lgmresSolver = "standing"
+
+    _write(configPath, {"lgmresM": 50, "hotReloadConfigFile": str(configPath)})
+
+    assert _reload(solver) is True
+    assert solver._lgmresM == 50
+    assert solver._lgmresSolver is None
+
+
+@pytest.mark.parametrize(
+    "name, value",
+    [
+        ("outerSolver", "amgcl-lgmres"),
+        ("lgmresM", 0),
+        ("p1FineBlockSize", 2),
+        ("p1FineValueType", "half"),
+        ("lgmresAlwaysReset", False),
+    ],
+)
+def test_a_value_the_run_could_not_use_is_rejected(configuredSolver, name, value):
+    solver, configPath = configuredSolver
+    _reload(solver)
+    before = dict(vars(solver))
+
+    _write(configPath, {name: value, "hotReloadConfigFile": str(configPath)})
+
+    assert _reload(solver) is False
+    assert solver._refreshNext is False
+    assert solver._outerSolver == before["_outerSolver"]
+    assert solver._lgmresM == before["_lgmresM"]
+
+
+def test_a_reloaded_dump_directory_is_created_and_the_context_window_resized(configuredSolver, tmp_path):
+    solver, configPath = configuredSolver
+    _reload(solver)
+    dumpDir = tmp_path / "dumps"
+
+    _write(
+        configPath,
+        {
+            "dumpOnDegradationDir": str(dumpDir),
+            "dumpOnDegradationContextSolves": 4,
+            "hotReloadConfigFile": str(configPath),
+        },
+    )
+
+    assert _reload(solver) is True
+    assert dumpDir.is_dir()
+    assert solver._recentSolveHistory.maxlen == 4
