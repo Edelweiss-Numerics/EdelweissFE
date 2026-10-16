@@ -201,7 +201,11 @@ value type, and are consumed before the rest of the tree is forwarded verbatim:
     halve the hierarchy's memory traffic, but measured across a full set of captured reference
     systems it inflated outer iteration counts by up to 30% and netted only about 3% in aggregate --
     plausibly because the Chebyshev smoother's own spectral-radius estimate loses accuracy in
-    ``float32``, degrading smoother quality enough to eat the bandwidth saving.
+    ``float32``, degrading smoother quality enough to eat the bandwidth saving. That holds for the
+    scalar backend, which builds the whole hierarchy in single precision. With
+    ``backendBlockSize = 3``, ``"float"`` instead sets the hierarchy up in double -- coarsening,
+    Galerkin products, every spectral-radius estimate, the coarsest direct solve -- and stores only
+    the level matrices the cycle reads in float, with double vectors and double accumulation.
 
 ``backendBlockSize``
     ``1`` (default, scalar) or the field's nodal dimension, for a block-valued backend operating on

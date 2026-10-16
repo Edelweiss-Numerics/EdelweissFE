@@ -95,6 +95,22 @@ cdef extern from "amgcl-wrapper.hpp":
         void applyPreconditioner(int n, const double* rhs, double* x) except +
         string report() except +
 
+    # 3x3 blocks set up in double, stored in float -- see builtin_float_matrices.
+    cdef cppclass LinearSolverBlock3Float:
+        LinearSolverBlock3Float(const char* json_params) except +
+        void solve(int n,
+                   const int* ptr,
+                   const int* col,
+                   const double* val,
+                   const double* rhs,
+                   double* x,
+                   int& iters,
+                   double& error) except +
+        void set_nullspace(const double* B, int rows, int cols) except +
+        void build(int n, const int* ptr, const int* col, const double* val) except +
+        void applyPreconditioner(int n, const double* rhs, double* x) except +
+        string report() except +
+
     # A standalone, OpenMP-threaded relaxation smoother -- e.g. the p-two-grid
     # preconditioner's fine sweep, one level below a full AMG hierarchy. Its own constructor
     # parameter tree is flat ({"type": "chebyshev", ...}), not nested under "precond.relax".

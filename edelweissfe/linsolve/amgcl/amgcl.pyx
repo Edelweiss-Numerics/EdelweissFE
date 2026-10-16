@@ -80,8 +80,10 @@ cdef class PyAMGCLSolver:
     cdef LinearSolverFloat* solverFloat
     cdef LinearSolverBlock2* solverBlock2
     cdef LinearSolverBlock3* solverBlock3
+    cdef LinearSolverBlock3Float* solverBlock3Float
     cdef readonly bint isFloat
-    """True if this instance runs the mixed-precision (builtin<float>) hierarchy."""
+    """True if this instance runs a mixed-precision hierarchy: builtin<float> for the scalar backend, or
+    3x3 blocks set up in double but stored in float (``LinearSolverBlock3Float``) for block size 3."""
     cdef readonly int blockSize
     """1 (scalar, default), 2, or 3 -- the AMGCL backend's block size."""
     cdef readonly int lastIterations
@@ -108,9 +110,12 @@ cdef class PyAMGCLSolver:
         operating on node-major B x B nodal blocks instead of scalar entries -- shrinks the
         CSR index traffic by ~B² and lets block-aware smoothers (block-ILU0, block-GS) invert each
         node's coupling exactly. The matrix still arrives as a plain scalar CSR; the wrapper adapts it
-        internally. Not yet combinable with ``backendPrecision == "float"`` (raises) -- float-block is
-        a follow-up, not implemented in this pass. :meth:`set_nullspace` always raises on a block
-        backend -- AMGCL's own near-null-space path is unimplemented for block value types.
+        internally. With ``backendPrecision == "float"``, block size 3 sets the hierarchy up in double
+        -- coarsening, Galerkin products and every Chebyshev spectral-radius estimate -- and stores
+        only the level matrices the cycle reads in float, with double vectors and double accumulation
+        (``LinearSolverBlock3Float``); block size 2 with float raises. :meth:`set_nullspace` always
+        raises on a block backend -- AMGCL's own near-null-space path is unimplemented for block value
+        types.
 
         Example params:
         {
@@ -139,9 +144,9 @@ cdef class PyAMGCLSolver:
         if blockSize not in (1, 2, 3):
             raise ValueError(f"backendBlockSize must be 1, 2, or 3, got {blockSize!r}")
         self.blockSize = blockSize
-        if self.blockSize > 1 and self.isFloat:
+        if self.blockSize == 2 and self.isFloat:
             raise NotImplementedError(
-                "backendBlockSize > 1 combined with backendPrecision='float' is not implemented."
+                "backendBlockSize 2 combined with backendPrecision='float' is not implemented."
             )
 
         self.lastIterations = -1
@@ -154,8 +159,11 @@ cdef class PyAMGCLSolver:
         self.solverFloat = NULL
         self.solverBlock2 = NULL
         self.solverBlock3 = NULL
+        self.solverBlock3Float = NULL
         if self.blockSize == 2:
             self.solverBlock2 = new LinearSolverBlock2(c_json)
+        elif self.blockSize == 3 and self.isFloat:
+            self.solverBlock3Float = new LinearSolverBlock3Float(c_json)
         elif self.blockSize == 3:
             self.solverBlock3 = new LinearSolverBlock3(c_json)
         elif self.isFloat:
@@ -172,6 +180,8 @@ cdef class PyAMGCLSolver:
             del self.solverBlock2
         if self.solverBlock3 != NULL:
             del self.solverBlock3
+        if self.solverBlock3Float != NULL:
+            del self.solverBlock3Float
 
     def set_nullspace(self, object B):
         """
@@ -196,7 +206,10 @@ cdef class PyAMGCLSolver:
             if self.blockSize == 2:
                 self.solverBlock2.set_nullspace(<const double*> 0, rows, 0)
             elif self.blockSize == 3:
-                self.solverBlock3.set_nullspace(<const double*> 0, rows, 0)
+                if self.solverBlock3Float != NULL:
+                    self.solverBlock3Float.set_nullspace(<const double*> 0, rows, 0)
+                else:
+                    self.solverBlock3.set_nullspace(<const double*> 0, rows, 0)
             elif self.isFloat:
                 self.solverFloat.set_nullspace(<const double*> 0, rows, 0)
             else:
@@ -206,7 +219,10 @@ cdef class PyAMGCLSolver:
         if self.blockSize == 2:
             self.solverBlock2.set_nullspace(&B_view[0, 0], rows, cols)
         elif self.blockSize == 3:
-            self.solverBlock3.set_nullspace(&B_view[0, 0], rows, cols)
+            if self.solverBlock3Float != NULL:
+                self.solverBlock3Float.set_nullspace(&B_view[0, 0], rows, cols)
+            else:
+                self.solverBlock3.set_nullspace(&B_view[0, 0], rows, cols)
         elif self.isFloat:
             self.solverFloat.set_nullspace(&B_view[0, 0], rows, cols)
         else:
@@ -242,7 +258,10 @@ cdef class PyAMGCLSolver:
             if self.blockSize == 2:
                 self.solverBlock2.build(n, &indptr_[0], &indices_[0], &data_[0])
             else:
-                self.solverBlock3.build(n, &indptr_[0], &indices_[0], &data_[0])
+                if self.solverBlock3Float != NULL:
+                    self.solverBlock3Float.build(n, &indptr_[0], &indices_[0], &data_[0])
+                else:
+                    self.solverBlock3.build(n, &indptr_[0], &indices_[0], &data_[0])
         elif self.isFloat:
             dataFloat = np.ascontiguousarray(A.data, dtype=np.float32)
             dataFloat_ = dataFloat
@@ -269,7 +288,10 @@ cdef class PyAMGCLSolver:
         if self.blockSize == 2:
             self.solverBlock2.applyPreconditioner(n, &rhs_[0], &x_[0])
         elif self.blockSize == 3:
-            self.solverBlock3.applyPreconditioner(n, &rhs_[0], &x_[0])
+            if self.solverBlock3Float != NULL:
+                self.solverBlock3Float.applyPreconditioner(n, &rhs_[0], &x_[0])
+            else:
+                self.solverBlock3.applyPreconditioner(n, &rhs_[0], &x_[0])
         elif self.isFloat:
             self.solverFloat.applyPreconditioner(n, &rhs_[0], &x_[0])
         else:
@@ -285,6 +307,8 @@ cdef class PyAMGCLSolver:
         """
         if self.blockSize == 2:
             return self.solverBlock2.report().decode("utf-8")
+        if self.blockSize == 3 and self.isFloat:
+            return self.solverBlock3Float.report().decode("utf-8")
         if self.blockSize == 3:
             return self.solverBlock3.report().decode("utf-8")
         if self.isFloat:
@@ -353,9 +377,14 @@ cdef class PyAMGCLSolver:
                         n, &indptr_[0], &indices_[0], &data_[0], &rhs_[0], &x_[0], iters, error
                     )
             else:
-                self.solverBlock3.solve(
-                        n, &indptr_[0], &indices_[0], &data_[0], &rhs_[0], &x_[0], iters, error
-                    )
+                if self.solverBlock3Float != NULL:
+                    self.solverBlock3Float.solve(
+                            n, &indptr_[0], &indices_[0], &data_[0], &rhs_[0], &x_[0], iters, error
+                        )
+                else:
+                    self.solverBlock3.solve(
+                            n, &indptr_[0], &indices_[0], &data_[0], &rhs_[0], &x_[0], iters, error
+                        )
         elif self.isFloat:
             dataFloat = np.ascontiguousarray(A.data, dtype=np.float32)
             dataFloat_ = dataFloat
