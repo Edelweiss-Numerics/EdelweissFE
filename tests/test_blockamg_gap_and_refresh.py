@@ -46,8 +46,9 @@ def _solver(blocks, **options):
 
 def test_the_gap_is_learned_from_the_residual_actually_reached():
     A, b, blocks = _system()
-    # Two outer iterations cannot reach 1e-10: the solve stops at the cap.
-    solver = _solver(blocks, outerRestart=2, outerMaxiter=1, gapMaxFactor=1e6)
+    # Two outer iterations cannot reach 1e-10: the solve stops at the cap. No continuations, so the returned
+    # solution is the one the gap was learned from.
+    solver = _solver(blocks, outerRestart=2, outerMaxiter=1, gapMaxFactor=1e6, trueResidualMaxContinuations=0)
     x = solver(A, b)
 
     dinv = 1.0 / np.sqrt(np.abs(A.diagonal()))
