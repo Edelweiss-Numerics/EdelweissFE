@@ -335,6 +335,16 @@ def test_a_float_fine_operator_still_accelerates_gmres(problem):
     assert counts["float"] <= counts["double"] + 1
 
 
+def test_a_float_coarse_level_stays_close_to_the_double_one(problem):
+    As, dinv, coords, isCorner, edgeEndpoints, r = problem
+    double = PTwoGridPreconditioner(isCorner, edgeEndpoints, fineBlockSize=3)
+    double.build(As, dinv, coords=coords)
+    single = PTwoGridPreconditioner(isCorner, edgeEndpoints, fineBlockSize=3, coarseValueType="float")
+    single.build(As, dinv, coords=coords)
+    # the coarse hierarchy itself is built in float, its own smoother's spectral radius included
+    assert _relativeDifference(single.applyPreconditioner(r), double.applyPreconditioner(r)) < 1e-3
+
+
 def test_an_orphan_midside_raises():
     coords, isCorner, edgeEndpoints = _lattice(4)
     # an interior midside whose two edge-endpoint corners are fully clamped, while it stays free
@@ -354,3 +364,5 @@ def test_an_unsupported_block_size_or_value_type_raises():
         PTwoGridPreconditioner(isCorner, edgeEndpoints, fineBlockSize=2)
     with pytest.raises(ValueError):
         PTwoGridPreconditioner(isCorner, edgeEndpoints, fineValueType="half")
+    with pytest.raises(ValueError):
+        PTwoGridPreconditioner(isCorner, edgeEndpoints, coarseValueType="half")

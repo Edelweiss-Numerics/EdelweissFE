@@ -1358,12 +1358,14 @@ public:
 // Dirichlet scheme and the spectral-radius reuse.
 class PTwoGridPreconditionerT {
 public:
-  typedef amgcl::backend::builtin< double >               CoarseBackend;
-  typedef amgcl::runtime::preconditioner< CoarseBackend > CoarseSolver;
-  typedef amgcl::backend::crs< double, int, int >         ScalarMatrix;
-  typedef amgcl::static_matrix< double, 3, 3 >            Block3;
-  typedef amgcl::static_matrix< float, 3, 3 >             Block3Float;
-  typedef std::chrono::steady_clock                       Clock;
+  typedef amgcl::backend::builtin< double >                    CoarseBackend;
+  typedef amgcl::runtime::preconditioner< CoarseBackend >      CoarseSolver;
+  typedef amgcl::backend::builtin< float >                     CoarseBackendFloat;
+  typedef amgcl::runtime::preconditioner< CoarseBackendFloat > CoarseSolverFloat;
+  typedef amgcl::backend::crs< double, int, int >              ScalarMatrix;
+  typedef amgcl::static_matrix< double, 3, 3 >                 Block3;
+  typedef amgcl::static_matrix< float, 3, 3 >                  Block3Float;
+  typedef std::chrono::steady_clock                            Clock;
 
   boost::property_tree::ptree prm;
 
@@ -1376,8 +1378,11 @@ public:
   std::vector< int >                              dirichletRows_;
 
   std::shared_ptr< ScalarMatrix > P_, PT_;
-  std::unique_ptr< CoarseSolver > coarse_;
-  std::vector< double >           coarseNullspace_;
+  // the coarse AMGCL hierarchy, in exactly one of the two value types (coarseValueType)
+  std::unique_ptr< CoarseSolver >      coarse_;
+  std::unique_ptr< CoarseSolverFloat > coarseFloat_;
+  std::vector< float >                 coarseRhsFloat_, coarseXFloat_;
+  std::vector< double >                coarseNullspace_;
 
   std::vector< char >   isDirichlet_;
   int                   n_ = 0, nCoarseFree_ = 0, nu_ = 1;
@@ -1510,7 +1515,21 @@ public:
       coarsePrm.put( "coarsening.nullspace.rows", nullspaceRows );
       coarsePrm.put( "coarsening.nullspace.B", coarseNullspace_.data() );
     }
-    coarse_.reset( new CoarseSolver( *A1, coarsePrm ) );
+    // coarseValueType float builds and runs the whole coarse hierarchy -- including its own Chebyshev
+    // smoother's power iteration -- in single precision, AMGCL's own backendPrecision float; the
+    // coarse right-hand side and correction are converted at the boundary.
+    const std::string coarseValueType = prm.get( "coarseValueType", std::string( "double" ) );
+    coarse_.reset();
+    coarseFloat_.reset();
+    if ( coarseValueType == "float" ) {
+      coarseFloat_.reset( new CoarseSolverFloat( *A1, coarsePrm ) );
+      coarseRhsFloat_.assign( nCoarseFree_, 0.0f );
+      coarseXFloat_.assign( nCoarseFree_, 0.0f );
+    }
+    else if ( coarseValueType == "double" )
+      coarse_.reset( new CoarseSolver( *A1, coarsePrm ) );
+    else
+      throw std::runtime_error( "ptwogrid: coarseValueType must be double or float, got " + coarseValueType );
     A1.reset();
     setupCoarseSeconds_ = secondsSince( start );
 
@@ -1763,7 +1782,7 @@ public:
   // and it stays zero on Dirichlet DOFs (zero right-hand side there) until they are set to r_i last.
   void apply( int n, const double* r, double* x )
   {
-    if ( !coarse_ ) {
+    if ( !coarse_ && !coarseFloat_ ) {
       throw std::runtime_error( "apply(): no preconditioner built yet -- call build() first" );
     }
     if ( n != n_ ) {
@@ -1784,7 +1803,20 @@ public:
     auto coarseRhsRange = amgcl::make_iterator_range( coarseRhs_.data(), coarseRhs_.data() + nCoarseFree_ );
     auto coarseXRange   = amgcl::make_iterator_range( coarseX_.data(), coarseX_.data() + nCoarseFree_ );
     amgcl::backend::spmv( 1.0, *PT_, res_, 0.0, coarseRhsRange );
-    coarse_->apply( coarseRhsRange, coarseXRange );
+    if ( coarseFloat_ ) {
+      const ptrdiff_t nc = nCoarseFree_;
+#pragma omp parallel for
+      for ( ptrdiff_t i = 0; i < nc; ++i )
+        coarseRhsFloat_[i] = static_cast< float >( coarseRhs_[i] );
+      auto rhsFloat = amgcl::make_iterator_range( coarseRhsFloat_.data(), coarseRhsFloat_.data() + nc );
+      auto xFloat   = amgcl::make_iterator_range( coarseXFloat_.data(), coarseXFloat_.data() + nc );
+      coarseFloat_->apply( rhsFloat, xFloat );
+#pragma omp parallel for
+      for ( ptrdiff_t i = 0; i < nc; ++i )
+        coarseX_[i] = coarseXFloat_[i];
+    }
+    else
+      coarse_->apply( coarseRhsRange, coarseXRange );
     amgcl::backend::spmv( 1.0, *P_, coarseXRange, 1.0, fineRange );
     applyCoarseSeconds_ += secondsSince( start );
 
@@ -1807,11 +1839,14 @@ public:
   // @brief the coarse level's AMGCL hierarchy report
   std::string report() const
   {
-    if ( !coarse_ ) {
+    if ( !coarse_ && !coarseFloat_ ) {
       throw std::runtime_error( "report(): no preconditioner built yet -- call build() first" );
     }
     std::ostringstream oss;
-    oss << *coarse_;
+    if ( coarseFloat_ )
+      oss << *coarseFloat_;
+    else
+      oss << *coarse_;
     return oss.str();
   }
 };

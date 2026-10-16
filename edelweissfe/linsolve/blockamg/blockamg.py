@@ -202,6 +202,7 @@ CONFIG_CASTS = {
     "p1FineDegree": int,
     "p1FineBlockSize": int,
     "p1FineValueType": str,
+    "p1CoarseValueType": str,
     "p1FineSpectralRadiusReuse": bool,
     "p1CoarsePrecond": dict,
 }
@@ -343,6 +344,9 @@ class BlockAMGSolver(LinearSolver):
         (default) or ``"float"`` -- half the bytes per stored entry in the dominant cost of an outer
         iteration. Vectors and accumulation stay double, and the spectral radius is estimated on the
         double operator; see :class:`~edelweissfe.linsolve.blockamg.ptwogrid.PTwoGridPreconditioner`.
+    p1CoarseValueType
+        Value type of the p-two-grid coarse AMGCL hierarchy: ``"double"`` (default) or ``"float"``
+        (AMGCL's single-precision backend, setup included).
     p1FineSpectralRadiusReuse
         Estimate the p-two-grid fine Chebyshev smoother's spectral radius in full (300 power
         iterations, the most expensive stage of its build) only on a field's first build, and on
@@ -537,6 +541,7 @@ class BlockAMGSolver(LinearSolver):
         p1FineDegree: int = None,
         p1FineBlockSize: int = 1,
         p1FineValueType: str = "double",
+        p1CoarseValueType: str = "double",
         p1FineSpectralRadiusReuse: bool = False,
         p1CoarsePrecond: dict = None,
         etaMin: float = 1.0e-6,
@@ -586,6 +591,7 @@ class BlockAMGSolver(LinearSolver):
         self._p1FineDegree = p1FineDegree
         self._p1FineBlockSize = p1FineBlockSize
         self._p1FineValueType = p1FineValueType
+        self._p1CoarseValueType = p1CoarseValueType
         self._p1FineSpectralRadiusReuse = p1FineSpectralRadiusReuse
         self._p1CoarsePrecond = p1CoarsePrecond
         self._hierarchyDropTol = hierarchyDropTol
@@ -1285,6 +1291,7 @@ class BlockAMGSolver(LinearSolver):
                             edgeEndpoints,
                             fineBlockSize=self._p1FineBlockSize,
                             fineValueType=self._p1FineValueType,
+                            coarseValueType=self._p1CoarseValueType,
                             fineSpectralRadius=fineSpectralRadius,
                             fineDominantVector=fineDominantVector,
                             **p1Options,

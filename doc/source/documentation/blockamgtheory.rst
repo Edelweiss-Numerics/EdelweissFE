@@ -561,6 +561,10 @@ Block preconditioner and per-field hierarchies
       - ``"double"``
       - p-multigrid: value type of the fine operator for the smoother and residual, ``"double"`` or
         ``"float"``; see below.
+    * - ``p1CoarseValueType``
+      - ``"double"``
+      - p-multigrid: value type of the coarse AMGCL hierarchy, ``"double"`` or ``"float"`` (AMGCL's
+        single-precision backend, setup included).
     * - ``p1FineSpectralRadiusReuse``
       - ``false``
       - p-multigrid: estimate the fine smoother's spectral radius in full on a field's first build

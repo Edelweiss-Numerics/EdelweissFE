@@ -162,6 +162,11 @@ class PTwoGridPreconditioner:
         matrix times a double vector, summed in double), and the spectral-radius estimate and its
         re-check run on the double operator before it is rounded, so float only rounds the stored
         entries (relative 6e-8).
+    coarseValueType
+        ``"double"`` (default) or ``"float"``: the value type of the whole coarse AMGCL hierarchy
+        (AMGCL's own single-precision backend, so its setup -- including its Chebyshev smoother's power
+        iteration -- runs in float too); the coarse right-hand side and correction are converted at
+        the boundary.
     fineLower, fineHigher, finePowerIters, fineRecheckIters
         The fine Chebyshev spectral bounds relative to the spectral radius, the power iteration
         count of its full estimate, and that of the re-check of a reused one.
@@ -177,6 +182,7 @@ class PTwoGridPreconditioner:
         useCoarseNullspace: bool = True,
         fineBlockSize: int = 1,
         fineValueType: str = "double",
+        coarseValueType: str = "double",
         fineSpectralRadius: float = None,
         fineDominantVector: np.ndarray = None,
         fineLower: float = _DEFAULT_FINE_LOWER,
@@ -188,6 +194,8 @@ class PTwoGridPreconditioner:
             raise ValueError("ptwogrid: fineBlockSize must be 1 or 3, got {!r}".format(fineBlockSize))
         if fineValueType not in ("double", "float"):
             raise ValueError("ptwogrid: fineValueType must be 'double' or 'float', got {!r}".format(fineValueType))
+        if coarseValueType not in ("double", "float"):
+            raise ValueError("ptwogrid: coarseValueType must be 'double' or 'float', got {!r}".format(coarseValueType))
         self._isCorner = np.ascontiguousarray(isCorner, dtype=np.int8)
         self._edgeEndpoints = np.ascontiguousarray(edgeEndpoints, dtype=np.int32)
         self._useCoarseNullspace = useCoarseNullspace
@@ -202,6 +210,7 @@ class PTwoGridPreconditioner:
             "fineRecheckIters": int(fineRecheckIters),
             "fineBlockSize": int(fineBlockSize),
             "fineValueType": fineValueType,
+            "coarseValueType": coarseValueType,
             "coarse": dict(coarsePrecond) if coarsePrecond is not None else dict(_DEFAULT_COARSE_PRECOND),
         }
         self._preconditioner = None
