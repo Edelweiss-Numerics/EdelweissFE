@@ -319,17 +319,16 @@ steps across all internal restarts with a single ``maxiter``, so their product i
 one total-iteration budget. This is a generous translation, not an attempt to match SciPy's semantics
 exactly.
 
-LGMRES augments each restart with a few vectors recycled from the previous one. ``lgmresK`` sets how
-many, ``lgmresM`` the inner iterations per restart. ``lgmresAlwaysReset`` controls whether the
-recycled vectors are discarded at the start of every solve; it defaults to ``True``, i.e. they are.
-Keeping them alive *across* solves sounds attractive -- a hard solve's converged subspace as a warm
-start for the next -- but measured on captured systems it contributed nothing (bit-identical
-iteration counts), and on a live run it was actively harmful: a solve that had already struggled left
-a poorly conditioned recycled subspace which, unreset, compounded into a following solve needing 428
-instead of 159 iterations, and in one run an outright ``NaN``. ``lgmresResetOnNewIncrement`` is an
-unvalidated middle ground: reset only at an increment or cutback boundary and recycle within an
-increment's own Newton sequence. It defaults to ``False``, leaving behaviour identical to always
-resetting.
+LGMRES augments each restart with a few vectors carried over from the previous restart cycle of the
+same solve. ``lgmresK`` sets how many, ``lgmresM`` the inner iterations per restart. Every solve
+starts from an empty augmentation subspace. Keeping it alive *across* solves ("recycling") sounds
+attractive -- a hard solve's converged subspace as a warm start for the next -- but measured on
+captured systems it contributed nothing (bit-identical iteration counts), and on a live run it was
+actively harmful: a solve that had already struggled left a poorly conditioned subspace which
+compounded into a following solve needing 428 instead of 159 iterations, and in one run an outright
+``NaN``. It was therefore removed; the former keys ``lgmresAlwaysReset`` and
+``lgmresResetOnNewIncrement`` are still accepted at their non-recycling values ``true`` / ``false``,
+with a deprecation note, and rejected otherwise.
 
 
 Adaptive outer tolerance (Eisenstat--Walker forcing)
@@ -513,17 +512,11 @@ Outer Krylov solve
       - ``"amgcl_lgmres"`` only: inner iterations per outer restart.
     * - ``lgmresK``
       - ``3``
-      - ``"amgcl_lgmres"`` only: number of recycled/augmented vectors carried between restarts.
-    * - ``lgmresAlwaysReset``
-      - ``true``
-      - ``"amgcl_lgmres"`` only: discard the recycled Krylov vectors at the start of every solve.
-        Setting this ``false`` recycles across solves, which has been measured to give nothing and
-        to occasionally hurt badly; leave it alone unless investigating that specifically.
-    * - ``lgmresResetOnNewIncrement``
-      - ``false``
-      - ``"amgcl_lgmres"`` only, **unvalidated**: reset the recycled vectors exactly at an
-        increment/cutback boundary and recycle within an increment. Never applied on a
-        true-residual continuation, which is a warm restart of the same solve.
+      - ``"amgcl_lgmres"`` only: number of augmentation vectors carried between the restart cycles of
+        one solve.
+    * - ``lgmresAlwaysReset``, ``lgmresResetOnNewIncrement``
+      - ``true``, ``false``
+      - Deprecated (cross-solve recycling was removed): accepted only at these values.
 
 Block preconditioner and per-field hierarchies
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -777,7 +770,7 @@ will misbehave.
 
 ``dumpOnDegradationContextSolves`` exists because a single snapshot cannot distinguish "this operator
 is intrinsically hard" from "this solve's own carried-over state degraded independently of the
-operator" -- a reused, now-stale hierarchy, or a recycled Krylov subspace. Both look identical from
+operator" -- such as a reused, now-stale hierarchy. Both look identical from
 the matrix alone, and a fresh solver replaying the matrix on its own can converge in a fraction of
 the live iteration count, which is a genuinely misleading result. Capturing the preceding sequence
 lets an offline replay feed one persistent solver instance the same solves in the same order.
@@ -859,8 +852,8 @@ Practical guidance
   hierarchies are thread-count-independent at the shipped Chebyshev power-iteration setting; that is
   what it is there for, and lowering it re-introduces the dependence.
 * Reach for the knobs in roughly this order: ``fieldPreconds`` for a field whose hierarchy is clearly
-  the weak one, then ``sweeps``/``symmetric`` for the sweep itself, then the tolerance keys. The
-  ``lgmres*`` recycling keys and ``p1FieldNames`` are investigation tools, not tuning knobs.
+  the weak one, then ``sweeps``/``symmetric`` for the sweep itself, then the tolerance keys.
+  ``p1FieldNames`` is an alternative per-field preconditioner, see above.
 * When a run degrades reproducibly, capture it with ``dumpOnDegradationDir`` plus a few
   ``dumpOnDegradationContextSolves`` rather than trying to reproduce it by rerunning the simulation.
 

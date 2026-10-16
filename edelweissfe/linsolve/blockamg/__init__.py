@@ -54,13 +54,16 @@ def createSolver(opts) -> Callable:
             pass an actual float to pin a fixed outer GMRES relative tolerance instead. See
             :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver` for the forcing scheme
             itself.
-        ``outerSolver``, ``lgmresM``, ``lgmresK``, ``lgmresAlwaysReset``, ``lgmresResetOnNewIncrement``
+        ``outerSolver``, ``lgmresM``, ``lgmresK``
             ``outerSolver`` selects the outer Krylov solve: ``"amgcl_lgmres"`` (default -- AMGCL's own
             native ``amgcl::solver::lgmres`` in place of ``scipy.sparse.linalg.gmres``, live-gated at
             several thread counts, faster than SciPy at every thread count tested and increasingly so
             as thread count grows) or ``"scipy"`` (the prior default, kept as a fallback/opt-out). The
-            other four are only used with ``"amgcl_lgmres"``; see
+            other two are only used with ``"amgcl_lgmres"``; see
             :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver` for their meaning.
+        ``lgmresAlwaysReset``, ``lgmresResetOnNewIncrement``
+            Deprecated: LGMRES recycling across solves was removed. ``true`` / ``false`` respectively
+            are still accepted, with a deprecation note; a value asking for recycling raises.
         ``etaMin``, ``etaMax``, ``ewGamma``, ``ewAlpha``, ``residualGrowthFactor``,
         ``hierarchyStalenessFactor``, ``refreshOnNewIncrement``
             Knobs for the adaptive outer tolerance and the per-field AMG hierarchy reuse across Newton
@@ -124,7 +127,11 @@ def createSolver(opts) -> Callable:
         A :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`, callable as ``(A, b) -> x``.
     """
 
-    from edelweissfe.linsolve.blockamg.blockamg import CONFIG_CASTS, BlockAMGSolver
+    from edelweissfe.linsolve.blockamg.blockamg import (
+        _DEPRECATED_LGMRES_KEYS,
+        CONFIG_CASTS,
+        BlockAMGSolver,
+    )
 
     optionMap = opts if isinstance(opts, Mapping) else {}
 
@@ -141,4 +148,12 @@ def createSolver(opts) -> Callable:
             )
         )
 
-    return BlockAMGSolver(**kwargs)
+    solver = BlockAMGSolver(**kwargs)
+    deprecated = sorted(set(optionMap) & set(_DEPRECATED_LGMRES_KEYS))
+    if deprecated:
+        solver._log(
+            "warning",
+            "blockamg: {:} deprecated -- LGMRES recycling across solves was removed and these keys no "
+            "longer have an effect; drop them from the configuration.".format(", ".join(deprecated)),
+        )
+    return solver

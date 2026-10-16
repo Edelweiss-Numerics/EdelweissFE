@@ -5,8 +5,6 @@
   "outerMaxiter": 3,
   "lgmresM": 30,
   "lgmresK": 3,
-  "lgmresAlwaysReset": true,
-  "lgmresResetOnNewIncrement": false,
   "sweeps": 1,
   "symmetric": false,
   "fieldPreconds": {},

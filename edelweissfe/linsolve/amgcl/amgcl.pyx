@@ -433,18 +433,10 @@ cdef class PyAMGCLLGMRESSolver:
     PTwoGridPreconditioner` objects) to AMGCL's native ``Precond`` interface via
     :func:`_lgmresPrecondApplyTrampoline`, called once per Arnoldi vector.
 
-    One instance should be constructed once per ``BlockAMGSolver`` and reused for that solver's entire
-    lifetime (see ``blockamg.py``'s construction site), not rebuilt per solve -- this lets tol/maxiter
-    be mutated per call onto the same object without paying construction cost every solve (see
-    :meth:`solve`), independent of ``always_reset``. ``always_reset: false`` would additionally let
-    AMGCL's own recycled/augmented Krylov vectors survive *across* separate :meth:`solve` calls, but
-    an attribution ablation and a live gate found that recycling contributes nothing measurable and
-    can actively compound a struggling solve's poorly-conditioned
-    subspace into a much more expensive (or NaN) subsequent one -- ``blockamg.py`` now defaults
-    ``always_reset=True`` accordingly; this class still earns its keep over plain scipy GMRES from
-    threading and lgmres's own intra-call restart-cycle augmentation alone. The problem size ``n`` is
-    fixed at construction (AMGCL preallocates every scratch vector for it); a field-structure/dof-count
-    change needs a fresh instance.
+    One instance per system size (AMGCL preallocates every scratch vector for it), reused across solves
+    with per-call tolerances. Every call starts from an empty augmentation subspace (``always_reset`` is
+    forced): carrying the augmentation vectors across calls was measured to buy nothing and to turn a
+    struggling solve's subspace into much more expensive or NaN subsequent ones, so it is not offered.
     """
     cdef LGMRESOuterSolver* solver
     cdef readonly int n
@@ -452,8 +444,8 @@ cdef class PyAMGCLLGMRESSolver:
     cdef readonly int lastIterations
     """The iteration count AMGCL's lgmres reported for the most recent solve, -1 before the first."""
     cdef readonly double lastError
-    """The relative (preconditioned) residual AMGCL's lgmres reported for the most recent solve, NaN
-    before the first."""
+    """The relative residual AMGCL's lgmres reported for the most recent solve -- of the *scaled* system,
+    right-preconditioned, so not the true residual -- NaN before the first."""
     cdef object _precondCallable
     cdef object _pendingException
 
@@ -463,7 +455,8 @@ cdef class PyAMGCLLGMRESSolver:
             The fixed problem size this instance is built for.
         params
             AMGCL's own ``lgmres::params`` field names, forwarded verbatim as JSON (``M``, ``K``,
-            ``always_reset``, ``pside``, ``maxiter``, ``tol``, ``abstol``, ``ns_search``, ``verbose``)
+            ``pside``, ``maxiter``, ``tol``, ``abstol``, ``ns_search``, ``verbose``; ``always_reset`` is
+            forced to true)
             -- unlike :class:`PyAMGCLSolver`, there is no ``precond``/``solver`` nesting here, since
             this wraps a single ``amgcl::solver::lgmres`` object directly, not ``amgcl::make_solver``.
             ``maxiter``/``tol`` given here only set the *initial* defaults -- :meth:`solve` overrides
@@ -486,12 +479,10 @@ cdef class PyAMGCLLGMRESSolver:
             del self.solver
 
     def solve(self, PyAMGCLEquilibratedSystem system, object rhs, object applyPreconditioner, double tol,
-              int maxiter, object x0=None, bint resetOnce=False):
+              int maxiter, object x0=None):
         """
         system
-            This solve's equilibrated full coupled operator, built fresh for every solve (its pattern
-            churns every solve; only the recycled Krylov *vectors* persist across calls, never a
-            matrix).
+            This solve's equilibrated full coupled operator.
         rhs
             array-like, converted to 1D float64 (C-contiguous).
         applyPreconditioner
@@ -502,18 +493,11 @@ cdef class PyAMGCLLGMRESSolver:
         tol, maxiter
             This call's relative residual tolerance and maximum total Arnoldi iterations (across every
             internal restart -- AMGCL's own ``maxiter`` semantics differ from scipy's restart x maxiter,
-            see blockamg.py's call site). Mutates the underlying ``amgcl::solver::lgmres`` object's own
-            ``prm`` in place rather than reconstructing it, so the recycled Krylov vectors survive.
+            see blockamg.py's call site), set on the underlying ``amgcl::solver::lgmres`` object's own
+            ``prm`` for this call.
         x0
             Optional initial guess (warm start), e.g. blockamg.py's true-residual continuation retry.
             Defaults to zero.
-        resetOnce
-            Discard this instance's recycled/augmented Krylov vectors for this call only
-            (by temporarily flipping the underlying solver's ``prm.always_reset`` to true and restoring
-            it immediately after -- see ``amgcl-wrapper.hpp``'s ``LGMRESOuterSolverT::solve`` for why
-            this reuses AMGCL's own reset mechanism rather than touching ``outer_v`` directly), without
-            discarding this persistent instance itself. Default ``False`` -- recycling continues
-            uninterrupted unless a caller explicitly asks for a one-shot reset.
         """
         cdef int n = system.n
         if n != self.n:
@@ -547,7 +531,7 @@ cdef class PyAMGCLLGMRESSolver:
         try:
             self.solver.solve(
                 system.system[0], &rhs_[0], &x_[0],
-                tol, maxiter, _lgmresPrecondApplyTrampoline, ctx, iters, error, resetOnce
+                tol, maxiter, _lgmresPrecondApplyTrampoline, ctx, iters, error
             )
         finally:
             self._precondCallable = None

@@ -66,3 +66,12 @@ def test_a_non_mapping_config_still_means_all_defaults():
 )
 def test_the_shipped_configurations_are_accepted(configFile):
     createSolver(json.load(open(_REPO_ROOT / configFile)))
+
+
+def test_the_former_lgmres_recycling_keys_are_accepted_only_at_their_non_recycling_values(capsys):
+    createSolver({"lgmresAlwaysReset": True, "lgmresResetOnNewIncrement": False})
+    assert "deprecated" in capsys.readouterr().out
+    with pytest.raises(ValueError, match="recycling"):
+        createSolver({"lgmresAlwaysReset": False})
+    with pytest.raises(ValueError, match="recycling"):
+        createSolver({"lgmresResetOnNewIncrement": True})

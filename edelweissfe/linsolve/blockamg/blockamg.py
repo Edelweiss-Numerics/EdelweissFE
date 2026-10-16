@@ -162,6 +162,25 @@ _DEFAULT_SCALAR_PRECOND = {
 _STALENESS_MIN_EXCESS = 15
 
 
+#: The deprecated LGMRES recycling keys and the one value each that is still accepted -- the behaviour that
+#: is left (every solve starts from an empty augmentation subspace).
+_DEPRECATED_LGMRES_KEYS = {"lgmresAlwaysReset": True, "lgmresResetOnNewIncrement": False}
+
+
+def _checkLgmresRecyclingKeys(lgmresAlwaysReset: bool, lgmresResetOnNewIncrement: bool) -> None:
+    """Raise for a value of the deprecated LGMRES recycling keys that asks for recycling."""
+    for name, value in (
+        ("lgmresAlwaysReset", lgmresAlwaysReset),
+        ("lgmresResetOnNewIncrement", lgmresResetOnNewIncrement),
+    ):
+        if value != _DEPRECATED_LGMRES_KEYS[name]:
+            raise ValueError(
+                "blockamg: {:}={!r} asks for LGMRES Krylov recycling across solves, which was removed "
+                "(measured to give nothing and to produce NaN on a live run). Drop the key, or set it to "
+                "{!r}.".format(name, value, _DEPRECATED_LGMRES_KEYS[name])
+            )
+
+
 def _outerTolFromConfig(value) -> float | None:
     """``outerTol`` unset, ``None``, or the literal string ``"adaptive"`` all select the adaptive forcing."""
     return None if value in (None, "adaptive") else float(value)
@@ -273,33 +292,22 @@ class BlockAMGSolver(LinearSolver):
         GMRES orchestration (Arnoldi/Gram-Schmidt/restart bookkeeping, all run from Python) was found
         to be the single largest unaddressed cost bucket on the outer loop of a real reference model
         (roughly 38% of solve wall-clock). Live-gated at multiple thread counts: trajectory-identical
-        to the SciPy default, no NaN (once ``lgmresAlwaysReset`` -- see below -- was fixed), and
+        to the SciPy default, no NaN (once cross-solve recycling -- see below -- was removed), and
         increasingly faster than SciPy as thread count grows -- SciPy's own orchestration anti-scales
         past one NUMA node on multi-socket hardware, AMGCL's native implementation does not. ``"scipy"``
         uses ``scipy.sparse.linalg.gmres`` instead, kept as a fallback/opt-out, not removed.
-    lgmresM, lgmresK, lgmresAlwaysReset
+    lgmresM, lgmresK
         Only used when ``outerSolver == "amgcl_lgmres"``: forwarded to AMGCL's own ``lgmres::params``
-        fields ``M`` (inner iterations per outer restart, default ``30``), ``K`` (recycled/augmented
-        vectors carried between restarts, default ``3``), and ``always_reset`` (default ``True`` here,
-        matching AMGCL's own upstream default). ``always_reset=False`` keeps the recycled Krylov
-        vectors alive *across* separate outer solves, on the theory that a hard solve's converged
-        subspace is a useful warm start for the next one; measured on real dumped systems this
-        contributed *nothing* (bit-identical iteration counts whether reset or not), and on a real live
-        run it was actively *harmful* -- a solve that already struggled (125 outer iterations, flagged
-        as "possible preconditioner degradation") left a poorly-conditioned recycled subspace that,
-        left unreset, compounded into a subsequent solve needing 428 iterations (vs. 159 with
-        ``always_reset=True``) and, in the original live run, an outright NaN. There is no evidence
-        recycling ever helps here, and clear evidence it can hurt badly -- so this now defaults to
-        AMGCL's own choice of resetting every solve.
-    lgmresResetOnNewIncrement
-        Only used when ``outerSolver == "amgcl_lgmres"``. When ``True``, the recycled Krylov vectors are
-        discarded (one-shot, via the ``resetOnce`` parameter to ``PyAMGCLLGMRESSolver.solve``) exactly on
-        a solve where ``newIncrement`` is detected -- i.e. at an increment/cutback boundary, never on a
-        true-residual continuation retry of the same solve -- and kept alive across every other call. A
-        candidate middle ground between always resetting and never resetting, for a model where
-        within-increment recycling might help even though cross-increment recycling (see
-        ``lgmresAlwaysReset`` above) measurably does not. Default ``False``: unvalidated, so this
-        leaves ``lgmres``'s behaviour identical to always-resetting unless explicitly turned on.
+        fields ``M`` (inner iterations per outer restart, default ``30``) and ``K`` (augmentation vectors
+        carried from one restart cycle to the next within a solve, default ``3``). Every solve starts
+        from an empty augmentation subspace: carrying it across solves ("recycling") was measured to give
+        nothing on captured systems (bit-identical iteration counts) and, on a live run, to compound a
+        struggling solve's poorly conditioned subspace into a following solve needing 428 instead of 159
+        iterations and once an outright NaN -- so it was removed.
+    lgmresAlwaysReset, lgmresResetOnNewIncrement
+        Deprecated, kept accepted for existing configuration files: ``True`` / ``False`` respectively --
+        the only behaviour left -- are accepted (a configuration file setting them gets a deprecation
+        note); a value asking for recycling raises ``ValueError``.
     sweeps
         Block Gauss-Seidel sweeps per preconditioner application, each field correcting its estimate
         by one cycle of its own hierarchy on its current residual (``x_i += M_i^-1 (r_i - sum_j A_ij
@@ -496,7 +504,7 @@ class BlockAMGSolver(LinearSolver):
         How many of the solves immediately *preceding* a degraded one to also dump (``0``, the
         default, dumps only the triggering solve itself, matching the original behaviour). A single
         ``(A, b)`` snapshot cannot distinguish "this operator is intrinsically hard" from "this
-        solve's own state -- a reused, now-stale AMG hierarchy, or (with ``lgmresAlwaysReset=False``)
+        solve's own state -- a reused, now-stale AMG hierarchy, or (with the former cross-solve recycling)
         a carried-over Krylov subspace -- degraded independently of the operator", because both look
         identical from the matrix alone; a naive offline diagnosis can be fooled by exactly this --
         a fresh solver instance replaying the dumped matrix alone can converge in a fraction of the
@@ -598,8 +606,7 @@ class BlockAMGSolver(LinearSolver):
         self._outerSolver = outerSolver
         self._lgmresM = lgmresM
         self._lgmresK = lgmresK
-        self._lgmresAlwaysReset = lgmresAlwaysReset
-        self._lgmresResetOnNewIncrement = lgmresResetOnNewIncrement
+        _checkLgmresRecyclingKeys(lgmresAlwaysReset, lgmresResetOnNewIncrement)
         self._sweeps = sweeps
         self._symmetric = symmetric
         self._fieldPreconds = fieldPreconds or {}
@@ -692,12 +699,9 @@ class BlockAMGSolver(LinearSolver):
 
         # The persistent AMGCL lgmres outer-solver instance (only used when outerSolver ==
         # "amgcl_lgmres"), and the problem size it was built for. Unlike the per-field AMG
-        # hierarchies above, this is deliberately *not* torn down and rebuilt whenever mustRefresh
-        # fires -- see edelweissfe/linsolve/amgcl/amgcl-wrapper.hpp's LGMRESOuterSolverT for why: its
-        # whole point is to keep its own recycled Krylov vectors alive across every solve over this
-        # BlockAMGSolver's lifetime, regardless of whether the AMG hierarchies themselves were
-        # refreshed that solve. It is only rebuilt on an actual size change (see __call__), the one
-        # condition under which AMGCL's own preallocated scratch vectors are no longer valid.
+        # hierarchies above, it is not rebuilt when mustRefresh fires: it holds no state of a solve,
+        # only AMGCL's scratch vectors preallocated for a fixed size. It is rebuilt on a size change
+        # (see __call__) and when its own settings change (hot reload).
         self._lgmresSolver = None
         self._lgmresN = None
 
@@ -1044,7 +1048,8 @@ class BlockAMGSolver(LinearSolver):
         "p1FieldNames": "_p1FieldNamesRequested",
     }
     # Changing which file is watched, from inside that file, is not a thing worth supporting.
-    _HOT_RELOAD_IGNORED = ("hotReloadConfigFile",)
+    # The deprecated LGMRES recycling keys have no setting left to change.
+    _HOT_RELOAD_IGNORED = ("hotReloadConfigFile", "lgmresAlwaysReset", "lgmresResetOnNewIncrement")
 
     def _maybeHotReloadConfig(self) -> bool:
         """Re-read the JSON config if it changed on disk; return whether anything was applied.
@@ -1192,15 +1197,13 @@ class BlockAMGSolver(LinearSolver):
         if self._outerSolver == "amgcl_lgmres" and (self._lgmresSolver is None or n != self._lgmresN):
             # A size change invalidates AMGCL's own preallocated Arnoldi/augmentation-vector scratch
             # (fixed at construction, see LGMRESOuterSolverT/PyAMGCLLGMRESSolver) -- the same condition
-            # mustRefresh tracks below for the AMG hierarchies (n != self._n), reused here. Note this
-            # constructs independently of mustRefresh: a hierarchy refresh alone (e.g. a residual jump)
-            # must *not* rebuild this object, since keeping its recycled Krylov vectors alive across
-            # exactly those Newton-iteration boundaries is the entire reason to use it.
+            # mustRefresh tracks below for the AMG hierarchies (n != self._n), reused here; a hot
+            # reload of its settings drops it too (None).
             from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLLGMRESSolver
 
             self._lgmresSolver = PyAMGCLLGMRESSolver(
                 n,
-                {"M": self._lgmresM, "K": self._lgmresK, "always_reset": self._lgmresAlwaysReset},
+                {"M": self._lgmresM, "K": self._lgmresK},
             )
             self._lgmresN = n
 
@@ -1511,21 +1514,12 @@ class BlockAMGSolver(LinearSolver):
                 )
                 outerIters = len(history)
             else:
-                # resetOnce (opt-in via lgmresResetOnNewIncrement -- unvalidated, defaults False,
-                # leaving lgmres's behaviour unchanged unless explicitly turned on): discard the
-                # recycled Krylov subspace
-                # exactly at an increment/cutback boundary -- where the previous solve's Jacobian
-                # belongs to a different (possibly harder-or-easier) problem -- and keep recycling
-                # within an increment's own Newton sequence, AMGCL's own intended use case for it.
-                # Never set on the continuation retry below: that call is a warm restart of *this same*
-                # outer solve at a tighter tolerance, not a new increment.
                 z = self._lgmresSolver.solve(
                     system,
                     bs,
                     blockGaussSeidel,
                     firstPassEta,
                     self._outerRestart * self._outerMaxiter,
-                    resetOnce=(newIncrement and self._lgmresResetOnNewIncrement),
                 )
                 outerIters = self._lgmresSolver.lastIterations
                 # Non-convergence is a cap hit. lastError is LGMRES's own *scaled* relative residual
