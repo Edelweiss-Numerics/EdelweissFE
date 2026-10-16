@@ -302,6 +302,39 @@ def test_the_preconditioner_accelerates_gmres(problem):
     assert counts["preconditioned"] < counts["plain"] / 3
 
 
+@pytest.mark.parametrize("fineBlockSize", [1, 3])
+def test_a_float_fine_operator_stays_close_to_the_double_one(problem, fineBlockSize):
+    As, dinv, coords, isCorner, edgeEndpoints, r = problem
+    double = PTwoGridPreconditioner(isCorner, edgeEndpoints, nu=2, fineDegree=8, fineBlockSize=fineBlockSize)
+    double.build(As, dinv, coords=coords)
+    single = PTwoGridPreconditioner(
+        isCorner, edgeEndpoints, nu=2, fineDegree=8, fineBlockSize=fineBlockSize, fineValueType="float"
+    )
+    single.build(As, dinv, coords=coords)
+    # the spectral radius comes from the double operator in both
+    assert single.fineSpectralRadius == double.fineSpectralRadius
+    # only the stored entries are rounded (relative 6e-8); vectors and sums stay double
+    assert _relativeDifference(single.applyPreconditioner(r), double.applyPreconditioner(r)) < 1e-5
+    isDirichlet = np.diff(As.indptr) == 1
+    assert np.array_equal(single.applyPreconditioner(r)[isDirichlet], r[isDirichlet])
+
+
+def test_a_float_fine_operator_still_accelerates_gmres(problem):
+    As, dinv, coords, isCorner, edgeEndpoints, r = problem
+    from scipy.sparse.linalg import LinearOperator, gmres
+
+    counts = {}
+    for valueType in ("double", "float"):
+        preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, fineBlockSize=3, fineValueType=valueType)
+        preconditioner.build(As, dinv, coords=coords)
+        M = LinearOperator(As.shape, matvec=preconditioner.applyPreconditioner)
+        history = []
+        x, _ = gmres(As, r, M=M, rtol=1e-6, restart=400, maxiter=1, callback=history.append, callback_type="pr_norm")
+        assert np.linalg.norm(r - As @ x) < 1e-5 * np.linalg.norm(r)
+        counts[valueType] = len(history)
+    assert counts["float"] <= counts["double"] + 1
+
+
 def test_an_orphan_midside_raises():
     coords, isCorner, edgeEndpoints = _lattice(4)
     # an interior midside whose two edge-endpoint corners are fully clamped, while it stays free
@@ -315,7 +348,9 @@ def test_an_orphan_midside_raises():
         preconditioner.build(As, dinv, coords=coords)
 
 
-def test_an_unsupported_block_size_raises():
+def test_an_unsupported_block_size_or_value_type_raises():
     coords, isCorner, edgeEndpoints = _lattice(3)
     with pytest.raises(ValueError):
         PTwoGridPreconditioner(isCorner, edgeEndpoints, fineBlockSize=2)
+    with pytest.raises(ValueError):
+        PTwoGridPreconditioner(isCorner, edgeEndpoints, fineValueType="half")

@@ -99,9 +99,11 @@ def createSolver(opts) -> Callable:
             lazily by the solver itself, from the live model reference ``setModel`` provides, the
             first time one of these fields' hierarchies is built -- not known at construction time,
             so nothing needs to be pushed in ahead of it.
-        ``p1Nu``, ``p1FineDegree``, ``p1FineBlockSize``, ``p1FineSpectralRadiusReuse``, ``p1CoarsePrecond``
+        ``p1Nu``, ``p1FineDegree``, ``p1FineBlockSize``, ``p1FineValueType``, ``p1FineSpectralRadiusReuse``,
+        ``p1CoarsePrecond``
             Settings of the p-multigrid preconditioner of the ``p1FieldNames`` fields: fine Chebyshev
-            sweeps and degree, the fine operator's storage (``1`` scalar, ``3`` node-wise blocks),
+            sweeps and degree, the fine operator's storage (``1`` scalar, ``3`` node-wise blocks) and
+            value type (``"double"``, ``"float"``),
             whether to reuse the fine spectral-radius estimate across rebuilds, and the coarse
             level's AMGCL tree -- see :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`.
 

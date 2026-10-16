@@ -155,6 +155,13 @@ class PTwoGridPreconditioner:
         estimate more than 1% above the supplied radius replaces it, and one beyond the ``fineHigher`` safety
         margin -- the operator stiffened more than the smoother's bounds cover -- triggers the full
         estimate. A radius without a vector is used as supplied.
+    fineValueType
+        ``"double"`` (default) or ``"float"``: the value type the fine operator is stored in for the
+        smoother and the residual -- about 80 % of an outer iteration is fine smoothing, which is
+        bound by the bytes per entry read. Vectors and every accumulation stay double (a float
+        matrix times a double vector, summed in double), and the spectral-radius estimate and its
+        re-check run on the double operator before it is rounded, so float only rounds the stored
+        entries (relative 6e-8).
     fineLower, fineHigher, finePowerIters, fineRecheckIters
         The fine Chebyshev spectral bounds relative to the spectral radius, the power iteration
         count of its full estimate, and that of the re-check of a reused one.
@@ -169,6 +176,7 @@ class PTwoGridPreconditioner:
         coarsePrecond: dict = None,
         useCoarseNullspace: bool = True,
         fineBlockSize: int = 1,
+        fineValueType: str = "double",
         fineSpectralRadius: float = None,
         fineDominantVector: np.ndarray = None,
         fineLower: float = _DEFAULT_FINE_LOWER,
@@ -178,6 +186,8 @@ class PTwoGridPreconditioner:
     ):
         if fineBlockSize not in (1, 3):
             raise ValueError("ptwogrid: fineBlockSize must be 1 or 3, got {!r}".format(fineBlockSize))
+        if fineValueType not in ("double", "float"):
+            raise ValueError("ptwogrid: fineValueType must be 'double' or 'float', got {!r}".format(fineValueType))
         self._isCorner = np.ascontiguousarray(isCorner, dtype=np.int8)
         self._edgeEndpoints = np.ascontiguousarray(edgeEndpoints, dtype=np.int32)
         self._useCoarseNullspace = useCoarseNullspace
@@ -191,6 +201,7 @@ class PTwoGridPreconditioner:
             "finePowerIters": int(finePowerIters),
             "fineRecheckIters": int(fineRecheckIters),
             "fineBlockSize": int(fineBlockSize),
+            "fineValueType": fineValueType,
             "coarse": dict(coarsePrecond) if coarsePrecond is not None else dict(_DEFAULT_COARSE_PRECOND),
         }
         self._preconditioner = None

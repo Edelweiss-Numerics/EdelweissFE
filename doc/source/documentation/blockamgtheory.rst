@@ -557,6 +557,10 @@ Block preconditioner and per-field hierarchies
       - ``1``
       - p-multigrid: storage of the fine operator, ``1`` (scalar entries) or ``3`` (node-wise
         :math:`3\times 3` blocks, 3D fields only); see below.
+    * - ``p1FineValueType``
+      - ``"double"``
+      - p-multigrid: value type of the fine operator for the smoother and residual, ``"double"`` or
+        ``"float"``; see below.
     * - ``p1FineSpectralRadiusReuse``
       - ``false``
       - p-multigrid: estimate the fine smoother's spectral radius in full on a field's first build
@@ -798,6 +802,10 @@ them. This is the free-submatrix cycle up to floating-point summation order, wit
 free submatrix, and it allows ``p1FineBlockSize = 3``: the fine operator is stored in node-wise
 :math:`3\times 3` blocks even where a node is only partially constrained, which roughly halves the
 memory traffic of the fine smoother and residual -- the dominant cost of the apply.
+``p1FineValueType = "float"`` halves the bytes per stored entry once more. Only the stored entries
+are rounded: vectors and every sum stay double (a float matrix times a double vector), and the
+spectral radius is estimated and re-checked on the double operator before it is rounded -- unlike
+``backendPrecision = "float"``, where AMGCL's own power iteration runs in single precision.
 
 The fine Chebyshev smoother follows AMGCL's own (same polynomial, ``lower`` 0.01, ``higher`` 1.1
 times the spectral radius), but its spectral-radius estimate -- 300 power iterations, the most

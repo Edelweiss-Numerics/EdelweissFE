@@ -1063,13 +1063,86 @@ public:
 // uniform on [-1, 1], one draw per free DOF in order); unlike AMGCL's, the estimate is independent of
 // the thread count and reproducible run to run.
 
-// The fine operator in one storage format (scalar entries, or node-wise BxB blocks), with the
-// Chebyshev smoother acting on it. rhs/x always stay plain scalar vectors -- AMGCL's builtin SpMV
-// reinterprets them for a block matrix itself (amgcl/backend/detail/matrix_ops.hpp).
-template < typename ValueType >
-class PTwoGridFineLevelT {
+// The fine smoother as the two-grid cycle sees it, independent of the operator's storage format
+// (scalar entries or node-wise 3x3 blocks) and value type (double or float). Vectors are always plain
+// double arrays of the field's scalar size.
+class PTwoGridFineSmoother {
 public:
-  typedef amgcl::backend::crs< ValueType, int, int >         Matrix;
+  virtual ~PTwoGridFineSmoother() {}
+
+  // @brief One Chebyshev sweep (degree steps) on A x = b, continuing from x -- or, with xIsZero, from
+  // x = 0 without reading x at all (its content is then irrelevant).
+  virtual void smooth( const double* b, double* x, bool xIsZero ) = 0;
+
+  // @brief r <- b - A x
+  virtual void residual( const double* b, const double* x, double* r ) const = 0;
+};
+
+// @brief r <- b - A x for the fine operator in AMGCL's own formats: double scalar or block entries
+// (AMGCL reinterprets the scalar vectors as node-wise ones for a block matrix,
+// amgcl/backend/detail/matrix_ops.hpp), and float scalar entries, where AMGCL's kernel already
+// accumulates in the vectors' type, double (`sum += float * double`).
+template < typename MatrixValueType >
+inline void ptwogridFineResidual( const amgcl::backend::crs< MatrixValueType, int, int >& A,
+                                  const double*                                           b,
+                                  const double*                                           x,
+                                  double*                                                 r )
+{
+  const size_t n      = A.nrows * amgcl::math::static_rows< MatrixValueType >::value;
+  auto         bRange = amgcl::make_iterator_range( b, b + n );
+  auto         xRange = amgcl::make_iterator_range( x, x + n );
+  auto         rRange = amgcl::make_iterator_range( r, r + n );
+  amgcl::backend::residual( bRange, A, xRange, rRange );
+}
+
+// @brief r <- b - A x for float 3x3 blocks with double vectors. AMGCL has no such kernel: its mixed
+// block product (amgcl/value_type/static_matrix.hpp) returns, and so accumulates in, the *matrix's*
+// value type, float. Here every block row is accumulated in double, in the same order as AMGCL's
+// double block kernel (per block: a_i0 x_0 + a_i1 x_1 + a_i2 x_2, then added to the row sum), so the
+// only difference to the double operator is the rounding of the stored entries.
+inline void ptwogridFineResidual( const amgcl::backend::crs< amgcl::static_matrix< float, 3, 3 >, int, int >& A,
+                                  const double*                                                               b,
+                                  const double*                                                               x,
+                                  double*                                                                     r )
+{
+  const ptrdiff_t nRows = static_cast< ptrdiff_t >( A.nrows );
+#pragma omp parallel for
+  for ( ptrdiff_t i = 0; i < nRows; ++i ) {
+    double sum0 = 0.0, sum1 = 0.0, sum2 = 0.0;
+    for ( int j = A.ptr[i], end = A.ptr[i + 1]; j < end; ++j ) {
+      const float*  a  = A.val[j].data();
+      const double* xj = x + 3 * static_cast< ptrdiff_t >( A.col[j] );
+      double        t0 = 0.0, t1 = 0.0, t2 = 0.0;
+      t0 += a[0] * xj[0];
+      t0 += a[1] * xj[1];
+      t0 += a[2] * xj[2];
+      t1 += a[3] * xj[0];
+      t1 += a[4] * xj[1];
+      t1 += a[5] * xj[2];
+      t2 += a[6] * xj[0];
+      t2 += a[7] * xj[1];
+      t2 += a[8] * xj[2];
+      sum0 += t0;
+      sum1 += t1;
+      sum2 += t2;
+    }
+    r[3 * i]     = b[3 * i] - sum0;
+    r[3 * i + 1] = b[3 * i + 1] - sum1;
+    r[3 * i + 2] = b[3 * i + 2] - sum2;
+  }
+}
+
+// The fine operator in one storage format (scalar entries, or node-wise BxB blocks) and one value
+// type, with the Chebyshev smoother acting on it. ValueType is the double entry type (double, or a
+// double 3x3 block); MatrixValueType is how the operator is stored for the smoother and the residual:
+// ValueType itself, or its float counterpart -- half the bytes per entry, the dominant traffic of
+// the cycle. The spectral-radius estimate and the Jacobi scaling (inverse diagonal) only ever run on,
+// and come from, a double operator: a float level is made from a double one (makeFloatCopy()), which
+// has estimated or re-checked the radius before.
+template < typename ValueType, typename MatrixValueType = ValueType >
+class PTwoGridFineLevelT : public PTwoGridFineSmoother {
+public:
+  typedef amgcl::backend::crs< MatrixValueType, int, int >   Matrix;
   typedef amgcl::backend::numa_vector< ValueType >           Diagonal;
   typedef typename amgcl::math::rhs_of< ValueType >::type    RhsType;
   typedef typename amgcl::math::scalar_of< ValueType >::type ScalarType;
@@ -1093,6 +1166,39 @@ public:
     }
     r_.assign( A_->nrows * BlockSize, 0.0 );
     p_.assign( A_->nrows * BlockSize, 0.0 );
+  }
+
+  // @brief The same level with the operator's entries rounded to float (same structure, same
+  // polynomial, same double inverse diagonal), in one parallel pass.
+  template < typename FloatValueType >
+  std::unique_ptr< PTwoGridFineLevelT< ValueType, FloatValueType > > makeFloatCopy() const
+  {
+    typedef typename PTwoGridFineLevelT< ValueType, FloatValueType >::Matrix FloatMatrix;
+    const Matrix&                                                            A      = *A_;
+    std::shared_ptr< FloatMatrix >                                           Afloat = std::make_shared< FloatMatrix >();
+    Afloat->set_size( A.nrows, A.ncols, false );
+    Afloat->set_nonzeros( A.nnz );
+    Afloat->ptr[0]        = 0;
+    const ptrdiff_t nRows = static_cast< ptrdiff_t >( A.nrows );
+#pragma omp parallel for
+    for ( ptrdiff_t i = 0; i < nRows; ++i ) {
+      Afloat->ptr[i + 1] = A.ptr[i + 1];
+      for ( int j = A.ptr[i]; j < A.ptr[i + 1]; ++j ) {
+        Afloat->col[j] = A.col[j];
+        Afloat->val[j] = A.val[j];
+      }
+    }
+    std::unique_ptr< PTwoGridFineLevelT< ValueType, FloatValueType > > level(
+      new PTwoGridFineLevelT< ValueType, FloatValueType >() );
+    level->A_               = Afloat;
+    level->inverseDiagonal_ = inverseDiagonal_;
+    level->scale_           = scale_;
+    level->degree_          = degree_;
+    level->d_               = d_;
+    level->c_               = c_;
+    level->r_.assign( r_.size(), 0.0 );
+    level->p_.assign( p_.size(), 0.0 );
+    return level;
   }
 
   // @brief Set up the Chebyshev polynomial for the given spectral radius.
@@ -1181,14 +1287,28 @@ public:
   }
 
   // @brief `degree_` Chebyshev steps on A x = b, continuing from the given x -- the recurrence of
-  // amgcl::relaxation::chebyshev::solve(), step for step.
-  void smooth( const std::vector< double >& b, std::vector< double >& x )
+  // amgcl::relaxation::chebyshev::solve(), step for step, with two economies that leave the result
+  // bitwise unchanged:
+  //   * from x = 0 (xIsZero, the pre-smoothing), the first residual is b itself -- b - A 0 is b
+  //     exactly for a finite A -- so its sparse product is skipped, and x = 0 + p is written as p
+  //     (identical, up to the sign of a zero entry);
+  //   * AMGCL's two vector updates, p <- alpha r + beta p and x <- 1 p + 1 x, run as one pass with
+  //     the same arithmetic per entry.
+  void smooth( const double* b, double* x, bool xIsZero ) override
   {
-    double alpha = 0.0, beta = 0.0;
+    const ptrdiff_t n     = static_cast< ptrdiff_t >( r_.size() );
+    double          alpha = 0.0, beta = 0.0;
     for ( unsigned k = 0; k < degree_; ++k ) {
-      amgcl::backend::residual( b, *A_, x, r_ );
-      if ( scale_ )
-        amgcl::backend::vmul( 1.0, *inverseDiagonal_, r_, 0.0, r_ );
+      const bool    fromZero = xIsZero && k == 0;
+      const double* residual = fromZero ? b : r_.data();
+      if ( !fromZero )
+        ptwogridFineResidual( *A_, b, x, r_.data() );
+      if ( scale_ ) {
+        auto residualRange = amgcl::make_iterator_range( residual, residual + n );
+        auto rRange        = amgcl::make_iterator_range( r_.data(), r_.data() + n );
+        amgcl::backend::vmul( 1.0, *inverseDiagonal_, residualRange, 0.0, rRange );
+        residual = r_.data();
+      }
       if ( k == 0 ) {
         alpha = 1.0 / d_;
         beta  = 0.0;
@@ -1201,15 +1321,35 @@ public:
         alpha = 1.0 / ( d_ - 0.25 * alpha * c_ * c_ );
         beta  = alpha * d_ - 1.0;
       }
-      amgcl::backend::axpby( alpha, r_, beta, p_ );
-      amgcl::backend::axpby( 1.0, p_, 1.0, x );
+      double* p = p_.data();
+      if ( fromZero ) {
+#pragma omp parallel for
+        for ( ptrdiff_t i = 0; i < n; ++i ) {
+          p[i] = alpha * residual[i];
+          x[i] = p[i];
+        }
+      }
+      else if ( beta == 0.0 ) {
+#pragma omp parallel for
+        for ( ptrdiff_t i = 0; i < n; ++i ) {
+          p[i] = alpha * residual[i];
+          x[i] = 1.0 * p[i] + 1.0 * x[i];
+        }
+      }
+      else {
+#pragma omp parallel for
+        for ( ptrdiff_t i = 0; i < n; ++i ) {
+          p[i] = alpha * residual[i] + beta * p[i];
+          x[i] = 1.0 * p[i] + 1.0 * x[i];
+        }
+      }
     }
   }
 
   // @brief res <- b - A x
-  void residual( const std::vector< double >& b, const std::vector< double >& x, std::vector< double >& res ) const
+  void residual( const double* b, const double* x, double* res ) const override
   {
-    amgcl::backend::residual( b, *A_, x, res );
+    ptwogridFineResidual( *A_, b, x, res );
   }
 };
 
@@ -1222,13 +1362,18 @@ public:
   typedef amgcl::runtime::preconditioner< CoarseBackend > CoarseSolver;
   typedef amgcl::backend::crs< double, int, int >         ScalarMatrix;
   typedef amgcl::static_matrix< double, 3, 3 >            Block3;
+  typedef amgcl::static_matrix< float, 3, 3 >             Block3Float;
   typedef std::chrono::steady_clock                       Clock;
 
   boost::property_tree::ptree prm;
 
-  // fine level, in exactly one of the two storage formats
+  // fine level, in exactly one of the two storage formats; with fineValueType float, the double one
+  // only lives during build() (for the spectral radius) and fineFloat_ replaces it
   std::unique_ptr< PTwoGridFineLevelT< double > > fineScalar_;
   std::unique_ptr< PTwoGridFineLevelT< Block3 > > fineBlock3_;
+  std::unique_ptr< PTwoGridFineSmoother >         fineFloat_;
+  PTwoGridFineSmoother*                           fine_ = nullptr;
+  std::vector< int >                              dirichletRows_;
 
   std::shared_ptr< ScalarMatrix > P_, PT_;
   std::unique_ptr< CoarseSolver > coarse_;
@@ -1241,7 +1386,7 @@ public:
   // how the last build arrived at its fine spectral radius: 0 estimated in full, 1 supplied and kept,
   // 2 supplied but raised by the re-check, 3 supplied but re-estimated in full by the re-check
   int                   fineSpectralRadiusSource_ = 0;
-  std::vector< double > rhs_, x_, res_, coarseRhs_, coarseX_;
+  std::vector< double > rhs_, res_, coarseRhs_, coarseX_;
 
   // stage timings [s], read by Python for the performance report
   double setupDirichletAndPSeconds_ = 0.0, setupGalerkinSeconds_ = 0.0, setupCoarseSeconds_ = 0.0,
@@ -1378,6 +1523,12 @@ public:
     const bool     scale         = prm.get( "fineScale", false );
     fineScalar_.reset();
     fineBlock3_.reset();
+    fineFloat_.reset();
+    fine_                           = nullptr;
+    const std::string fineValueType = prm.get( "fineValueType", std::string( "double" ) );
+    if ( fineValueType != "double" && fineValueType != "float" ) {
+      throw std::runtime_error( "ptwogrid: fineValueType must be double or float, got " + fineValueType );
+    }
     std::shared_ptr< PTwoGridFineLevelT< Block3 >::Matrix > Ablock;
     if ( fineBlockSize == 3 ) {
       if ( nDim != 3 ) {
@@ -1407,11 +1558,27 @@ public:
       fineBlock3_->setPolynomial( degree, lower, higher, fineSpectralRadius_ );
     else
       fineScalar_->setPolynomial( degree, lower, higher, fineSpectralRadius_ );
+    if ( fineValueType == "float" ) {
+      if ( fineBlock3_ )
+        fineFloat_ = fineBlock3_->makeFloatCopy< Block3Float >();
+      else
+        fineFloat_ = fineScalar_->makeFloatCopy< float >();
+      fineBlock3_.reset();
+      fineScalar_.reset();
+      fine_ = fineFloat_.get();
+    }
+    else if ( fineBlock3_ )
+      fine_ = fineBlock3_.get();
+    else
+      fine_ = fineScalar_.get();
     setupSpectralRadiusSeconds_ = secondsSince( start );
 
     rhs_.assign( n, 0.0 );
-    x_.assign( n, 0.0 );
     res_.assign( n, 0.0 );
+    dirichletRows_.clear();
+    for ( int i = 0; i < n; ++i )
+      if ( isDirichlet_[i] )
+        dirichletRows_.push_back( i );
     coarseRhs_.assign( nCoarseFree_, 0.0 );
     coarseX_.assign( nCoarseFree_, 0.0 );
   }
@@ -1582,18 +1749,18 @@ public:
     PT_ = amgcl::backend::transpose( *P_ );
   }
 
-  // @brief nu fine sweeps on whichever storage format was built
-  void smoothFine( std::vector< double >& x )
+  // @brief nu fine sweeps; the first one from x = 0 if xIsZero
+  void smoothFine( double* x, bool xIsZero )
   {
-    for ( int sweep = 0; sweep < nu_; ++sweep ) {
-      if ( fineBlock3_ )
-        fineBlock3_->smooth( rhs_, x );
-      else
-        fineScalar_->smooth( rhs_, x );
-    }
+    if ( xIsZero && nu_ == 0 )
+      std::fill( x, x + n_, 0.0 );
+    for ( int sweep = 0; sweep < nu_; ++sweep )
+      fine_->smooth( rhs_.data(), x, xIsZero && sweep == 0 );
   }
 
   // @brief x <- M^-1 r: one two-grid cycle on the free DOFs; Dirichlet DOFs pass through, x_i = r_i.
+  // The cycle's fine iterate is x itself: the pre-smoothing writes it from x = 0 without reading it,
+  // and it stays zero on Dirichlet DOFs (zero right-hand side there) until they are set to r_i last.
   void apply( int n, const double* r, double* x )
   {
     if ( !coarse_ ) {
@@ -1605,31 +1772,26 @@ public:
     }
     Clock::time_point start = Clock::now();
 #pragma omp parallel for
-    for ( ptrdiff_t i = 0; i < n; ++i ) {
+    for ( ptrdiff_t i = 0; i < n; ++i )
       rhs_[i] = isDirichlet_[i] ? 0.0 : r[i];
-      x_[i]   = 0.0;
-    }
-    smoothFine( x_ );
-    if ( fineBlock3_ )
-      fineBlock3_->residual( rhs_, x_, res_ );
-    else
-      fineScalar_->residual( rhs_, x_, res_ );
+    smoothFine( x, /*xIsZero=*/true );
+    fine_->residual( rhs_.data(), x, res_.data() );
     applyFineSeconds_ += secondsSince( start );
 
-    start = Clock::now();
-    amgcl::backend::spmv( 1.0, *PT_, res_, 0.0, coarseRhs_ );
-    std::fill( coarseX_.begin(), coarseX_.end(), 0.0 );
+    // the coarse AMG cycle overwrites its x itself (amgcl::amg::apply clears it, or copies rhs)
+    start               = Clock::now();
+    auto fineRange      = amgcl::make_iterator_range( x, x + n );
     auto coarseRhsRange = amgcl::make_iterator_range( coarseRhs_.data(), coarseRhs_.data() + nCoarseFree_ );
     auto coarseXRange   = amgcl::make_iterator_range( coarseX_.data(), coarseX_.data() + nCoarseFree_ );
+    amgcl::backend::spmv( 1.0, *PT_, res_, 0.0, coarseRhsRange );
     coarse_->apply( coarseRhsRange, coarseXRange );
-    amgcl::backend::spmv( 1.0, *P_, coarseX_, 1.0, x_ );
+    amgcl::backend::spmv( 1.0, *P_, coarseXRange, 1.0, fineRange );
     applyCoarseSeconds_ += secondsSince( start );
 
     start = Clock::now();
-    smoothFine( x_ );
-#pragma omp parallel for
-    for ( ptrdiff_t i = 0; i < n; ++i )
-      x[i] = isDirichlet_[i] ? r[i] : x_[i];
+    smoothFine( x, /*xIsZero=*/false );
+    for ( size_t k = 0; k < dirichletRows_.size(); ++k )
+      x[dirichletRows_[k]] = r[dirichletRows_[k]];
     applyFineSeconds_ += secondsSince( start );
   }
 

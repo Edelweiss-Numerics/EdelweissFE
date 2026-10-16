@@ -201,6 +201,7 @@ CONFIG_CASTS = {
     "p1Nu": int,
     "p1FineDegree": int,
     "p1FineBlockSize": int,
+    "p1FineValueType": str,
     "p1FineSpectralRadiusReuse": bool,
     "p1CoarsePrecond": dict,
 }
@@ -337,6 +338,11 @@ class BlockAMGSolver(LinearSolver):
         Storage of the p-two-grid fine operator: ``1`` (scalar, default) or ``3`` (node-wise 3x3
         blocks, 3D fields only) -- the same cycle up to summation order, with roughly half the memory
         traffic in the fine smoother and residual, the dominant cost of the apply.
+    p1FineValueType
+        Value type of the p-two-grid fine operator for the smoother and residual: ``"double"``
+        (default) or ``"float"`` -- half the bytes per stored entry in the dominant cost of an outer
+        iteration. Vectors and accumulation stay double, and the spectral radius is estimated on the
+        double operator; see :class:`~edelweissfe.linsolve.blockamg.ptwogrid.PTwoGridPreconditioner`.
     p1FineSpectralRadiusReuse
         Estimate the p-two-grid fine Chebyshev smoother's spectral radius in full (300 power
         iterations, the most expensive stage of its build) only on a field's first build, and on
@@ -530,6 +536,7 @@ class BlockAMGSolver(LinearSolver):
         p1Nu: int = None,
         p1FineDegree: int = None,
         p1FineBlockSize: int = 1,
+        p1FineValueType: str = "double",
         p1FineSpectralRadiusReuse: bool = False,
         p1CoarsePrecond: dict = None,
         etaMin: float = 1.0e-6,
@@ -578,6 +585,7 @@ class BlockAMGSolver(LinearSolver):
         self._p1Nu = p1Nu
         self._p1FineDegree = p1FineDegree
         self._p1FineBlockSize = p1FineBlockSize
+        self._p1FineValueType = p1FineValueType
         self._p1FineSpectralRadiusReuse = p1FineSpectralRadiusReuse
         self._p1CoarsePrecond = p1CoarsePrecond
         self._hierarchyDropTol = hierarchyDropTol
@@ -1276,6 +1284,7 @@ class BlockAMGSolver(LinearSolver):
                             isCorner,
                             edgeEndpoints,
                             fineBlockSize=self._p1FineBlockSize,
+                            fineValueType=self._p1FineValueType,
                             fineSpectralRadius=fineSpectralRadius,
                             fineDominantVector=fineDominantVector,
                             **p1Options,
