@@ -405,7 +405,7 @@ class BlockAMGSolver(LinearSolver):
         an abnormal one: outer iterations past ``warnOuterIterationsThreshold``, the true-residual
         tolerance still unmet after every continuation, or GMRES itself reporting non-convergence.
         ``"info"`` adds one compact line per solve; ``"debug"`` adds one line per true-residual
-        continuation attempt too. Per-stage wall-clock (equilibration, off-diagonal split, hierarchy
+        continuation attempt too. Per-stage wall-clock (equilibration, equilibrated system, hierarchy
         build, outer GMRES, continuations) is recorded via
         :mod:`edelweissfe.utils.performancetiming` regardless of verbosity, nested under "linear solve"
         in the job's own performance table.
@@ -1072,7 +1072,10 @@ class BlockAMGSolver(LinearSolver):
 
     def __call__(self, A, b):
         solveStartTime = time.time()
-        from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLMatrix, PyAMGCLSolver
+        from edelweissfe.linsolve.amgcl.amgcl import (
+            PyAMGCLEquilibratedSystem,
+            PyAMGCLSolver,
+        )
 
         self._solveCount += 1
         self._maybeHotReloadConfig()
@@ -1146,7 +1149,7 @@ class BlockAMGSolver(LinearSolver):
             if mustRefresh:
                 # Symmetric diagonal equilibration. Solve A x = b as (D A D)(D^-1 x) = D b, i.e.
                 # As z = bs with x = D z; D = diag(dinv), dinv = 1/sqrt(|diag A|).
-                diagonal = np.abs(A.diagonal())
+                diagonal = PyAMGCLEquilibratedSystem.absoluteDiagonal(A)
                 # A zero diagonal entry cannot be equilibrated: 1/sqrt(0) is inf, which would poison
                 # As and bs with non-finite values before the hierarchy build, and the failure would
                 # surface much later as a NaN correction (i.e. as DivergingSolution, which reads like
@@ -1177,53 +1180,29 @@ class BlockAMGSolver(LinearSolver):
                 # wrong answer.
                 dinv = self._dinv
 
-            # INV1: fast in-place diagonal equilibration As = D A D (D = diag(dinv)), vectorized
-            # over the CSR data array -- avoids two full scipy SpGEMMs. Numerically identical.
-            As = A.copy()
-            As.data *= dinv[As.indices]
-            As.data *= np.repeat(dinv, np.diff(As.indptr))
             bs = dinv * b
 
-        # The outer GMRES operator SpMV and the true-residual check both otherwise run through a
-        # plain scipy.sparse CSR matvec on the full coupled system -- not OpenMP-threaded regardless
-        # of OMP_NUM_THREADS, since scipy's own sparse matvec is single-threaded C code (the same
-        # mechanism affects a raw SciPy CSR matvec anywhere in this codebase, not just here; measured
-        # at roughly 15% of this solver's own wall-clock on a real reference model). This conversion is
-        # not amortized across solves -- As's sparsity pattern churns every solve on a model with
-        # contact/tie constraints, so there is no stable pattern to cache a threaded build against --
-        # so it is paid fresh here every call, same as equilibration above.
-        with performancetiming.timeit("threaded operator build"):
-            threadedAs = PyAMGCLMatrix()
-            threadedAs.build(As)
-        outerOperator = LinearOperator((n, n), matvec=threadedAs.matvec, dtype=As.dtype)
-
-        # A single field has no off-diagonal couplings at all: the `i != j` test below can never
-        # fire, but `As[slices[i], :]` still copies the whole matrix to populate a dict that stays
-        # empty -- measured at 12% of this solver's wall clock, and 11.40 s of 225.02 s on one
-        # reference model. Skipping it is not a tuning decision; there is provably nothing to compute.
-        singleField = len(slices) == 1 and blocks[0].start == 0 and blocks[0].stop == n
-
-        # Off-diagonal couplings (for the sweep) are needed every solve regardless of refresh/reuse.
-        with performancetiming.timeit("off-diagonal split"):
-            offBlocks = {}
-            for i in range(len(slices)) if not singleField else ():
-                rowBlock = As[slices[i], :]
-                for j in range(len(slices)):
-                    if i != j:
-                        # INV4: hand the coupling block to AMGCL's OpenMP-threaded matvec instead of
-                        # keeping it as a scipy CSR whose `@` is single-threaded C (measured at 12-16%
-                        # of the whole preconditioner apply). Same operator, same arithmetic.
-                        threadedOffBlock = PyAMGCLMatrix()
-                        threadedOffBlock.buildRect(rowBlock[:, slices[j]].tocsr())
-                        offBlocks[(i, j)] = threadedOffBlock
+        # The equilibrated system As = D A D in one OpenMP-threaded pass over A, in C++: the outer
+        # Krylov operator, and the coupling blocks between fields the sweep needs on every solve,
+        # refresh or reuse. This replaced a chain of serial SciPy operations -- a scaled copy of A,
+        # a threaded copy of that for the operator, and row/column slices for every coupling block --
+        # measured at about 4 s of every solve on 0.8-1.1M DOF systems (and nearly half of every
+        # solve that reuses its hierarchies). Not amortized across solves: A's sparsity pattern
+        # churns every solve on a model with contact/tie constraints. The operator is bitwise the
+        # former SciPy one (each entry is (a_ij * dinv_j) * dinv_i, as the former in-place scaling).
+        with performancetiming.timeit("equilibrated system"):
+            system = PyAMGCLEquilibratedSystem()
+            system.build(A, dinv, [(block.start, block.stop) for block in blocks])
+        outerOperator = LinearOperator((n, n), matvec=system.matvec, dtype=np.float64)
 
         if mustRefresh:
             with performancetiming.timeit("hierarchy build"):
                 # One AMG hierarchy per field, built fresh. A vector field gets its translations as the
                 # near null-space; a scalar field the default constant.
-                diagBlocks = [As[sl, :][:, sl].tocsr() for sl in slices]
-                if self._hierarchyDropTol > 0.0:
-                    diagBlocks = [self._dropSmallEntries(block) for block in diagBlocks]
+                with performancetiming.timeit("diagonal blocks"):
+                    diagBlocks = [system.diagonalBlock(i) for i in range(len(blocks))]
+                    if self._hierarchyDropTol > 0.0:
+                        diagBlocks = [self._dropSmallEntries(block) for block in diagBlocks]
                 preconditioners = []
                 for i, block in enumerate(blocks):
                     isVectorField = block.dimension > 1
@@ -1296,7 +1275,8 @@ class BlockAMGSolver(LinearSolver):
                                 # directly determines how much of it a V-cycle actually removes).
                                 nullspace = translationNullspace(block, dinv[slices[i]])
                         solver.set_nullspace(nullspace)
-                    solver.build(diagBlocks[i])
+                    with performancetiming.timeit("{:} AMG build".format(block.name)):
+                        solver.build(diagBlocks[i])
                     preconditioners.append(solver)
                 self._preconditioners = preconditioners
                 self._dinv = dinv
@@ -1313,7 +1293,7 @@ class BlockAMGSolver(LinearSolver):
                 localResidual = residual[slices[i]].copy()
                 for j in range(nFields):
                     if j != i:
-                        localResidual -= offBlocks[(i, j)].matvecRect(x[j])  # INV4: threaded
+                        localResidual -= system.couplingMatvec(i, j, x[j])
                 x[i] = preconditioners[i].applyPreconditioner(localResidual)
 
         # A single-field fast path for the apply itself was tried here and **rejected on measurement**,
@@ -1332,8 +1312,9 @@ class BlockAMGSolver(LinearSolver):
         # mechanism has been identified. 2.5% is not worth an unexplained numerical footprint in a
         # preconditioner, where the failure mode is a slightly different answer rather than a crash.
         #
-        # The off-diagonal split elimination above is a separate change and is clean: iterations inside
-        # the floor, 5.8% faster on its own.
+        # The "off-diagonal split only" row is a separate change (skipping the coupling-block split for
+        # a single field, now subsumed by the equilibrated system's one-pass build) and was clean:
+        # iterations inside the floor, 5.8% faster on its own.
 
         def blockGaussSeidel(residual):
             x = [np.zeros(sizes[i]) for i in range(nFields)]
@@ -1343,7 +1324,7 @@ class BlockAMGSolver(LinearSolver):
                     sweepOnce(range(nFields - 1, -1, -1), residual, x)
             return np.concatenate(x)
 
-        preconditioner = LinearOperator((n, n), matvec=blockGaussSeidel, dtype=As.dtype)
+        preconditioner = LinearOperator((n, n), matvec=blockGaussSeidel, dtype=np.float64)
 
         if self._outerTol is not None:
             eta = self._outerTol
@@ -1392,7 +1373,7 @@ class BlockAMGSolver(LinearSolver):
                 # Never set on the continuation retry below: that call is a warm restart of *this same*
                 # outer solve at a tighter tolerance, not a new increment.
                 z = self._lgmresSolver.solve(
-                    As,
+                    system,
                     bs,
                     blockGaussSeidel,
                     firstPassEta,
@@ -1405,7 +1386,7 @@ class BlockAMGSolver(LinearSolver):
             # A x - b = D^-1 (As z - bs) exactly (D = diag(dinv)) -- verified numerically against the
             # direct A @ x - b computation on a real dumped system before use. Rides on the same
             # threaded operator built above; no second, unscaled full-system matvec.
-            trueResidual = np.linalg.norm(threadedAs.residual(bs, z) / dinv) / max(np.linalg.norm(b), 1e-300)
+            trueResidual = np.linalg.norm(system.residual(bs, z) / dinv) / max(np.linalg.norm(b), 1e-300)
 
         # GMRES's own stopping check (callback_type="pr_norm") is on the *preconditioned* residual,
         # not the true one -- with an imperfect preconditioner (this one, by design -- a block
@@ -1470,7 +1451,7 @@ class BlockAMGSolver(LinearSolver):
                     continuationIters = len(continuationHistory)
                 else:
                     z = self._lgmresSolver.solve(
-                        As,
+                        system,
                         bs,
                         blockGaussSeidel,
                         continuationEta,
@@ -1480,7 +1461,7 @@ class BlockAMGSolver(LinearSolver):
                     continuationIters = self._lgmresSolver.lastIterations
                     info = 0 if self._lgmresSolver.lastError <= continuationEta else 1
                 x = dinv * z
-                trueResidual = np.linalg.norm(threadedAs.residual(bs, z) / dinv) / max(np.linalg.norm(b), 1e-300)
+                trueResidual = np.linalg.norm(system.residual(bs, z) / dinv) / max(np.linalg.norm(b), 1e-300)
                 outerIters += continuationIters
                 self._log(
                     "debug",

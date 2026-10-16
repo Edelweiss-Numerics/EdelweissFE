@@ -12,6 +12,7 @@
 #include <amgcl/value_type/static_matrix.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
+#include <cmath>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -400,96 +401,232 @@ public:
   }
 };
 
-// A plain OpenMP-threaded matrix wrapper, no smoother attached: the shipped default's outer GMRES
-// operator SpMV (`gmres(As, bs, ...)` in blockamg.py) is a scipy CSR matvec on the *full* coupled
-// system, flat against `OMP_NUM_THREADS` for the same reason any raw scipy sparse matvec is (scipy
-// sparse matvec is single-threaded C code). Measured at roughly 14.6% of the shipped arm's total
-// wall-clock across a range of real reference systems -- large enough on its own to be worth
-// threading independently of anything else.
+// The equilibrated, field-split system of blockamg.py's outer solve, built in one OpenMP-threaded
+// pass over A's CSR arrays instead of a chain of serial SciPy copies and slices.
 //
-// Deliberately a separate class from RelaxationSmootherT, not a reuse of it: RelaxationSmootherT's
-// constructor runs a smoother build (chebyshev's power iteration for the spectral radius, etc.) --
-// pure waste for something that only ever needs matvec()/residual(). This class never constructs a
-// relaxation object, so RelaxationSmootherT's own ADL/crs_tuple pitfall (see its own comment) does
-// not apply here; build() still converts through Backend::matrix regardless, matching the proven
-// pattern rather than relying on the raw crs_tuple adapter's own (narrower) spmv/residual
-// specializations.
-class ThreadedMatrixT {
+// blockamg solves A x = b as (D A D)(D^-1 x) = D b, D = diag(dinv), and its block Gauss-Seidel
+// sweep needs every field's equilibrated diagonal block (for the per-field preconditioners, on a
+// hierarchy rebuild) and the equilibrated coupling blocks between fields (on every solve). This
+// class holds
+//
+//   * the equilibrated operator As = D A D, the outer Krylov operator: matvec(), residual(), and the
+//     operator LGMRESOuterSolverT::solve() iterates on. Each entry is formed exactly as SciPy's
+//     former `As.data *= dinv[As.indices]; As.data *= dinv[rows]` did, (a_ij * dinv_j) * dinv_i, so
+//     the operator is bitwise the former one;
+//   * the coupling blocks As[field i, field j], i != j, rectangular, with field-local column
+//     indices: couplingMatvec();
+//   * the per-row, per-field entry counts that let a diagonal block As[field i, field i] be written
+//     straight into caller-owned (NumPy) arrays on demand: diagonalBlockNnz() / fillDiagonalBlock().
+//
+// The copy is a parallel first touch, so the operator is spread over the NUMA nodes like every other
+// AMGCL matrix (the input arrays come from a single-threaded SciPy allocation). Columns are stored as
+// int, as in the input: 12 instead of 16 bytes per entry in every outer matrix-vector product.
+class EquilibratedSystemT {
 public:
-  typedef amgcl::backend::builtin< double > Backend;
-  typedef Backend::matrix                   BackendMatrix;
+  typedef amgcl::backend::crs< double, int, int > Matrix;
 
-  std::shared_ptr< BackendMatrix > A_;
+  std::shared_ptr< Matrix >                operator_;
+  std::vector< std::shared_ptr< Matrix > > couplings_;   // nFields x nFields, row-major; null on the diagonal
+  std::vector< int >                       fieldStart_, fieldStop_;
+  std::vector< signed char >               fieldOfDof_;  // -1 for a DOF in no field
+  std::vector< int >                       diagonalPtr_; // per field, concatenated: local row pointers
+  std::vector< size_t >                    diagonalPtrOffset_;
+  int                                      n_ = 0, nFields_ = 0;
 
-  // Build (convert) the matrix once per solve -- this pattern churns every solve on a model with
-  // contact/tie constraints, so there is no build-once/apply-many amortization across solves the way
-  // LinearSolverT's hierarchy gets; the conversion cost is paid fresh here every time and must be
-  // measured, not assumed free.
-  void build( int n, const int* ptr, const int* col, const double* val )
+  // @brief |a_ii| for every row (0 where no diagonal entry is stored), the basis of the equilibration.
+  static void absoluteDiagonal( int n, const int* ptr, const int* col, const double* val, double* out )
   {
-    int  nnz = ptr[n];
-    auto A   = std::make_tuple( n,
-                              amgcl::make_iterator_range( ptr, ptr + n + 1 ),
-                              amgcl::make_iterator_range( col, col + nnz ),
-                              amgcl::make_iterator_range( val, val + nnz ) );
-    A_       = std::make_shared< BackendMatrix >( A );
-  }
-
-  // y <- A*x
-  void matvec( int n, const double* x, double* y )
-  {
-    if ( !A_ ) {
-      throw std::runtime_error( "matvec(): no matrix built yet -- call build() first" );
+#pragma omp parallel for
+    for ( ptrdiff_t i = 0; i < n; ++i ) {
+      double d = 0.0;
+      for ( int j = ptr[i]; j < ptr[i + 1]; ++j )
+        if ( col[j] == i )
+          d += val[j];
+      out[i] = std::abs( d );
     }
-    auto x_rng = amgcl::make_iterator_range( x, x + n );
-    auto y_rng = amgcl::make_iterator_range( y, y + n );
-    amgcl::backend::spmv( 1.0, *A_, x_rng, 0.0, y_rng );
   }
 
-  // r <- rhs - A*x
-  void residual( int n, const double* rhs, const double* x, double* r )
+  // @brief Build As = D A D and the coupling blocks.
+  // @param n, ptr, col, val A, square CSR (columns need not be sorted; duplicates are kept as given).
+  // @param dinv the equilibration, D = diag(dinv).
+  // @param nFields, fieldBounds the fields' DOF ranges, [fieldBounds[2k], fieldBounds[2k+1]),
+  // disjoint.
+  void build( int           n,
+              const int*    ptr,
+              const int*    col,
+              const double* val,
+              const double* dinv,
+              int           nFields,
+              const int*    fieldBounds )
   {
-    if ( !A_ ) {
-      throw std::runtime_error( "residual(): no matrix built yet -- call build() first" );
+    n_       = n;
+    nFields_ = nFields;
+    fieldStart_.assign( nFields, 0 );
+    fieldStop_.assign( nFields, 0 );
+    fieldOfDof_.assign( n, -1 );
+    for ( int f = 0; f < nFields; ++f ) {
+      fieldStart_[f] = fieldBounds[2 * f];
+      fieldStop_[f]  = fieldBounds[2 * f + 1];
+      if ( fieldStart_[f] < 0 || fieldStop_[f] > n || fieldStart_[f] > fieldStop_[f] ) {
+        throw std::runtime_error( "EquilibratedSystemT: field " + std::to_string( f ) + " has invalid bounds." );
+      }
+      for ( int i = fieldStart_[f]; i < fieldStop_[f]; ++i ) {
+        if ( fieldOfDof_[i] != -1 ) {
+          throw std::runtime_error( "EquilibratedSystemT: fields overlap at DOF " + std::to_string( i ) + "." );
+        }
+        fieldOfDof_[i] = static_cast< signed char >( f );
+      }
     }
-    auto rhs_rng = amgcl::make_iterator_range( rhs, rhs + n );
-    auto x_rng   = amgcl::make_iterator_range( x, x + n );
-    auto r_rng   = amgcl::make_iterator_range( r, r + n );
-    amgcl::backend::residual( rhs_rng, *A_, x_rng, r_rng );
-  }
 
-  // --- rectangular support -------------------------------------------------------------------
-  // An off-diagonal field-coupling block (blockamg.py's block Gauss-Seidel sweep) is nrows x ncols
-  // with nrows != ncols. build()/matvec() above size the input and output ranges by the same n,
-  // which for a rectangular operator writes past the end of the output buffer, so rectangular
-  // blocks carry their own dimension bookkeeping. Dimensions are taken from buildRect(), not from
-  // the caller, so the output length can never be inferred from the input length again.
-  int nrows_ = 0;
-  int ncols_ = 0;
-
-  void buildRect( int nrows, int ncols, const int* ptr, const int* col, const double* val )
-  {
-    int nnz = ptr[nrows];
-    // crs has a dedicated rectangular constructor (nrows, ncols, ptr, col, val); the crs_tuple
-    // adapter only understands the square 4-element form, so build the backend matrix directly.
-    A_     = std::make_shared< BackendMatrix >( static_cast< size_t >( nrows ),
-                                            static_cast< size_t >( ncols ),
-                                            amgcl::make_iterator_range( ptr, ptr + nrows + 1 ),
-                                            amgcl::make_iterator_range( col, col + nnz ),
-                                            amgcl::make_iterator_range( val, val + nnz ) );
-    nrows_ = nrows;
-    ncols_ = ncols;
-  }
-
-  // y (length nrows_) <- A (nrows_ x ncols_) * x (length ncols_)
-  void matvecRect( const double* x, double* y )
-  {
-    if ( !A_ ) {
-      throw std::runtime_error( "matvecRect(): no matrix built yet -- call buildRect() first" );
+    // As = D A D, with the same rounding as SciPy's two in-place scalings
+    const int nnz = ptr[n];
+    operator_     = std::make_shared< Matrix >();
+    operator_->set_size( n, n, false );
+    operator_->set_nonzeros( nnz );
+    operator_->ptr[0] = 0;
+#pragma omp parallel for
+    for ( ptrdiff_t i = 0; i < n; ++i ) {
+      operator_->ptr[i + 1] = ptr[i + 1];
+      for ( int j = ptr[i]; j < ptr[i + 1]; ++j ) {
+        operator_->col[j] = col[j];
+        operator_->val[j] = ( val[j] * dinv[col[j]] ) * dinv[i];
+      }
     }
-    auto x_rng = amgcl::make_iterator_range( x, x + ncols_ );
-    auto y_rng = amgcl::make_iterator_range( y, y + nrows_ );
-    amgcl::backend::spmv( 1.0, *A_, x_rng, 0.0, y_rng );
+
+    // per row, the number of entries in each field's columns: row pointers of the diagonal blocks
+    // (kept) and of the coupling blocks (consumed below)
+    std::vector< std::vector< int > > rowCounts( static_cast< size_t >( nFields ) * nFields );
+    for ( int f = 0; f < nFields; ++f )
+      for ( int g = 0; g < nFields; ++g )
+        rowCounts[f * nFields + g].assign( fieldStop_[f] - fieldStart_[f] + 1, 0 );
+#pragma omp parallel for
+    for ( ptrdiff_t i = 0; i < n; ++i ) {
+      const int f = fieldOfDof_[i];
+      if ( f < 0 )
+        continue;
+      const int local = static_cast< int >( i ) - fieldStart_[f];
+      for ( int j = ptr[i]; j < ptr[i + 1]; ++j ) {
+        const int g = fieldOfDof_[col[j]];
+        if ( g >= 0 )
+          ++rowCounts[f * nFields + g][local + 1];
+      }
+    }
+    for ( auto& counts : rowCounts )
+      std::partial_sum( counts.begin(), counts.end(), counts.begin() );
+
+    diagonalPtrOffset_.assign( nFields + 1, 0 );
+    for ( int f = 0; f < nFields; ++f )
+      diagonalPtrOffset_[f + 1] = diagonalPtrOffset_[f] + rowCounts[f * nFields + f].size();
+    diagonalPtr_.resize( diagonalPtrOffset_[nFields] );
+    for ( int f = 0; f < nFields; ++f )
+      std::copy( rowCounts[f * nFields + f].begin(),
+                 rowCounts[f * nFields + f].end(),
+                 diagonalPtr_.begin() + diagonalPtrOffset_[f] );
+
+    couplings_.assign( static_cast< size_t >( nFields ) * nFields, nullptr );
+    for ( int f = 0; f < nFields; ++f ) {
+      for ( int g = 0; g < nFields; ++g ) {
+        if ( f == g )
+          continue;
+        const std::vector< int >& counts   = rowCounts[f * nFields + g];
+        const int                 nRows    = fieldStop_[f] - fieldStart_[f];
+        std::shared_ptr< Matrix > coupling = std::make_shared< Matrix >();
+        coupling->set_size( nRows, fieldStop_[g] - fieldStart_[g], false );
+        std::copy( counts.begin(), counts.end(), coupling->ptr );
+        coupling->set_nonzeros( counts.back() );
+        fillBlock( f, g, coupling->ptr, coupling->col, coupling->val );
+        couplings_[f * nFields + g] = coupling;
+      }
+    }
+  }
+
+  // @brief Write As[field f, field g] (field-local columns) into ptr/col/val -- ptr already holding
+  // the block's row pointers.
+  void fillBlock( int f, int g, const int* blockPtr, int* blockCol, double* blockVal ) const
+  {
+    const int start = fieldStart_[f], nRows = fieldStop_[f] - fieldStart_[f], columnStart = fieldStart_[g];
+#pragma omp parallel for
+    for ( ptrdiff_t local = 0; local < nRows; ++local ) {
+      const ptrdiff_t i    = start + local;
+      int             head = blockPtr[local];
+      for ( int j = operator_->ptr[i]; j < operator_->ptr[i + 1]; ++j ) {
+        const int c = operator_->col[j];
+        if ( fieldOfDof_[c] == g ) {
+          blockCol[head]   = c - columnStart;
+          blockVal[head++] = operator_->val[j];
+        }
+      }
+    }
+  }
+
+  void checkBuilt() const
+  {
+    if ( !operator_ ) {
+      throw std::runtime_error( "EquilibratedSystemT: nothing built yet -- call build() first" );
+    }
+  }
+
+  void checkField( int f ) const
+  {
+    checkBuilt();
+    if ( f < 0 || f >= nFields_ ) {
+      throw std::runtime_error( "EquilibratedSystemT: no field " + std::to_string( f ) );
+    }
+  }
+
+  int diagonalBlockSize( int f ) const
+  {
+    checkField( f );
+    return fieldStop_[f] - fieldStart_[f];
+  }
+
+  int diagonalBlockNnz( int f ) const
+  {
+    checkField( f );
+    return diagonalPtr_[diagonalPtrOffset_[f + 1] - 1];
+  }
+
+  // @brief As[field f, field f] into caller-owned arrays of diagonalBlockSize(f) + 1 and
+  // diagonalBlockNnz(f) entries -- written in parallel, so freshly allocated (untouched) arrays get
+  // the same NUMA spread as the operator.
+  void fillDiagonalBlock( int f, int* ptr, int* col, double* val ) const
+  {
+    checkField( f );
+    std::copy( diagonalPtr_.begin() + diagonalPtrOffset_[f], diagonalPtr_.begin() + diagonalPtrOffset_[f + 1], ptr );
+    fillBlock( f, f, ptr, col, val );
+  }
+
+  // @brief y <- As x
+  void matvec( const double* x, double* y ) const
+  {
+    checkBuilt();
+    auto xRange = amgcl::make_iterator_range( x, x + n_ );
+    auto yRange = amgcl::make_iterator_range( y, y + n_ );
+    amgcl::backend::spmv( 1.0, *operator_, xRange, 0.0, yRange );
+  }
+
+  // @brief r <- rhs - As x
+  void residual( const double* rhs, const double* x, double* r ) const
+  {
+    checkBuilt();
+    auto rhsRange = amgcl::make_iterator_range( rhs, rhs + n_ );
+    auto xRange   = amgcl::make_iterator_range( x, x + n_ );
+    auto rRange   = amgcl::make_iterator_range( r, r + n_ );
+    amgcl::backend::residual( rhsRange, *operator_, xRange, rRange );
+  }
+
+  // @brief y (field f) <- As[field f, field g] x (field g), f != g
+  void couplingMatvec( int f, int g, const double* x, double* y ) const
+  {
+    checkField( f );
+    checkField( g );
+    if ( f == g ) {
+      throw std::runtime_error( "EquilibratedSystemT::couplingMatvec(): a coupling block needs two different fields." );
+    }
+    const Matrix& coupling = *couplings_[f * nFields_ + g];
+    auto          xRange   = amgcl::make_iterator_range( x, x + coupling.ncols );
+    auto          yRange   = amgcl::make_iterator_range( y, y + coupling.nrows );
+    amgcl::backend::spmv( 1.0, coupling, xRange, 0.0, yRange );
   }
 };
 
@@ -499,7 +636,7 @@ public:
 // and so does sum()). Wired into edelweissfe/numerics/mpctransformation.py's `T^T @ K @ T + C`
 // condensation as an opt-in alternative (`useAmgclSpgemm`/`useAmgclMPCCondensation`, default False
 // pending a live gate at more thread counts) to the plain expression's scipy CSR sparse routines --
-// the same class of gap ThreadedMatrixT (above) closed for the outer GMRES matvec and
+// the same class of gap EquilibratedSystemT (above) closed for the outer GMRES operator and
 // RelaxationSmootherT closed for AMG relaxation. Deliberately generic (two raw CSR matrices in, one
 // CSR matrix out) rather than
 // specific to the T^T K T + C expression itself: the caller composes `product()`/`sum()` calls
@@ -604,7 +741,7 @@ public:
 // (the same closure the shipped scipy.sparse.linalg.gmres path already uses), via a plain C
 // function-pointer callback + opaque context set from Cython.
 //
-// Motivation: with the outer operator SpMV already threaded (ThreadedMatrixT above), the single
+// Motivation: with the outer operator SpMV already threaded (EquilibratedSystemT above), the single
 // largest remaining bucket in the shipped arm's own solve wall (measured at roughly 38% of total
 // wall-clock on a real reference model) is scipy's *own* GMRES orchestration -- Arnoldi/Gram-Schmidt/
 // restart bookkeeping -- which is unavoidably serial CPython regardless of any matvec/preconditioner
@@ -670,9 +807,9 @@ private:
 // earns its keep over plain scipy GMRES from threading and lgmres's own intra-call restart-cycle
 // augmentation alone (independent of `always_reset`, see the ablation), not from cross-call memory.
 //
-// The system matrix itself is *not* cached across calls the way the AMG hierarchies are -- it is
-// rebuilt fresh in every solve() call from the raw CSR arrays, exactly like ThreadedMatrixT above
-// (the pattern churns every solve regardless on a model with contact/tie constraints, so there is
+// The system matrix itself is *not* cached across calls the way the AMG hierarchies are -- every
+// solve() call iterates on the EquilibratedSystemT it is given, built fresh for that solve (the
+// pattern churns every solve regardless on a model with contact/tie constraints, so there is
 // nothing to amortize). lgmres's
 // own header comment explicitly names this usage pattern too: "The system matrix may differ from the
 // matrix used during initialization[...] used for the solution of non-stationary problems with
@@ -696,7 +833,6 @@ class LGMRESOuterSolverT {
 public:
   typedef amgcl::backend::builtin< double > Backend;
   typedef amgcl::solver::lgmres< Backend >  Solver;
-  typedef Backend::matrix                   BackendMatrix;
 
   std::unique_ptr< Solver > solver_;
   int                       n_;
@@ -729,20 +865,19 @@ public:
   // until next changed) by mutating the underlying solver's own public `prm` member in place -- see
   // the class comment above for why this, rather than reconstructing the object, is required to keep
   // both per-call tolerances and cross-call Krylov-vector recycling at the same time.
-  void solve( int              n,
-              const int*       ptr,
-              const int*       col,
-              const double*    val,
-              const double*    rhs,
-              double*          x,
-              double           tol,
-              int              maxiter,
-              PyPrecondApplyFn applyFn,
-              void*            ctx,
-              int&             iters,
-              double&          error,
-              bool             resetOnce = false )
+  void solve( const EquilibratedSystemT& system,
+              const double*              rhs,
+              double*                    x,
+              double                     tol,
+              int                        maxiter,
+              PyPrecondApplyFn           applyFn,
+              void*                      ctx,
+              int&                       iters,
+              double&                    error,
+              bool                       resetOnce = false )
   {
+    system.checkBuilt();
+    const int n = system.n_;
     if ( n != n_ ) {
       throw std::runtime_error( "LGMRESOuterSolverT::solve(): n=" + std::to_string( n ) + " does not match the size " +
                                 std::to_string( n_ ) +
@@ -783,19 +918,6 @@ public:
       ~AlwaysResetGuard() { prm_.always_reset = saved_; }
     } alwaysResetGuard( solver_->prm, resetOnce );
 
-    int  nnz = ptr[n];
-    auto A   = std::make_tuple( n,
-                              amgcl::make_iterator_range( ptr, ptr + n + 1 ),
-                              amgcl::make_iterator_range( col, col + nnz ),
-                              amgcl::make_iterator_range( val, val + nnz ) );
-    // Converted through Backend::matrix, not passed as the raw adapter tuple -- the same ADL trap
-    // RelaxationSmootherT and ThreadedMatrixT above already found and documented: amgcl::solver::
-    // lgmres's operator() calls
-    // backend::residual()/backend::spmv() on A via ADL-found amgcl::backend overloads that only
-    // resolve against amgcl::backend::crs<...>, not the raw std::tuple adapter (amgcl/adapter/
-    // crs_tuple.hpp).
-    BackendMatrix Amat( A );
-
     PyLGMRESPrecondT precond( applyFn, ctx, n );
 
     auto rhs_rng = amgcl::make_iterator_range( rhs, rhs + n );
@@ -803,7 +925,7 @@ public:
 
     size_t itersOut;
     double errorOut;
-    std::tie( itersOut, errorOut ) = ( *solver_ )( Amat, precond, rhs_rng, x_rng );
+    std::tie( itersOut, errorOut ) = ( *solver_ )( *system.operator_, precond, rhs_rng, x_rng );
     iters                          = static_cast< int >( itersOut );
     error                          = errorOut;
   }
@@ -821,8 +943,8 @@ typedef LinearSolverBlockT< amgcl::static_matrix< double, 3, 3 > > LinearSolverB
 // Standalone OpenMP-threaded relaxation smoother, see RelaxationSmootherT above.
 typedef RelaxationSmootherT RelaxationSmoother;
 
-// Standalone OpenMP-threaded matvec/residual, see ThreadedMatrixT above.
-typedef ThreadedMatrixT ThreadedMatrix;
+// blockamg's equilibrated, field-split system, see EquilibratedSystemT above.
+typedef EquilibratedSystemT EquilibratedSystem;
 
 // AMGCL's own native outer Krylov solve (lgmres), see LGMRESOuterSolverT above.
 typedef LGMRESOuterSolverT LGMRESOuterSolver;

@@ -104,14 +104,22 @@ cdef extern from "amgcl-wrapper.hpp":
         void applyStep(int n, const double* rhs, double* x) except +
         void residual(int n, const double* rhs, const double* x, double* r) except +
 
-    # A plain OpenMP-threaded matvec/residual, no smoother -- the outer GMRES operator.
-    cdef cppclass ThreadedMatrix:
-        ThreadedMatrix() except +
-        void build(int n, const int* ptr, const int* col, const double* val) except +
-        void matvec(int n, const double* x, double* y) except +
-        void residual(int n, const double* rhs, const double* x, double* r) except +
-        void buildRect(int nrows, int ncols, const int* ptr, const int* col, const double* val) except +
-        void matvecRect(const double* x, double* y) except +
+    # blockamg's equilibrated, field-split system As = D A D: the outer Krylov operator, the
+    # coupling blocks between fields and, on demand, the diagonal blocks -- built in one threaded
+    # pass, see EquilibratedSystemT's own comment.
+    cdef cppclass EquilibratedSystem:
+        EquilibratedSystem() except +
+
+        @staticmethod
+        void absoluteDiagonal(int n, const int* ptr, const int* col, const double* val, double* out) except +
+        void build(int n, const int* ptr, const int* col, const double* val, const double* dinv,
+                   int nFields, const int* fieldBounds) except +
+        int diagonalBlockSize(int f) except +
+        int diagonalBlockNnz(int f) except +
+        void fillDiagonalBlock(int f, int* ptr, int* col, double* val) except +
+        void matvec(const double* x, double* y) except +
+        void residual(const double* rhs, const double* x, double* r) except +
+        void couplingMatvec(int f, int g, const double* x, double* y) except +
 
     # Callback signature bridging AMGCL's native lgmres Krylov loop back into a Python-level
     # preconditioner -- see amgcl-wrapper.hpp's own comment on PyPrecondApplyFn/
@@ -125,10 +133,7 @@ cdef extern from "amgcl-wrapper.hpp":
     # comment for why this class is meant to be built once per BlockAMGSolver, not once per solve.
     cdef cppclass LGMRESOuterSolver:
         LGMRESOuterSolver(int n, const char* json_params) except +
-        void solve(int n,
-                   const int* ptr,
-                   const int* col,
-                   const double* val,
+        void solve(const EquilibratedSystem& system,
                    const double* rhs,
                    double* x,
                    double tol,
