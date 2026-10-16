@@ -1,0 +1,172 @@
+# Builds the `edelweissfe` conda package (conda/edelweissfe) on every platform, for PRs and pushes to a development
+# branch that touch what it is built from, and uploads it to the prefix.dev channel matthiasneuner/edelweiss for a
+# release tag (v26.11 -> 26.11).
+#
+# Versions come from `version` in pyproject.toml, the single place to bump after a release: a tag must match it, and
+# untagged builds are development snapshots <that version>.dev<commit time>, which conda orders before the release.
+#
+# Marmot: a release tag builds against the Marmot release of the same version, from the channel (tag and publish
+# Marmot first; for an EdelweissFE patch release without a matching Marmot one, run this workflow on the tag with
+# `marmot_version`). Otherwise Marmot's own recipe (conda/recipe.yaml) is built from the Marmot branch resolved as for
+# the other workflows (.github/actions/resolve-marmot), cached per Marmot commit.
+#
+# Uploading uses trusted publishing (no secret), see the upload job. An upload never overwrites: to republish a fixed
+# build of a release, run this workflow on the tag with a higher build number.
+name: conda
+
+on:
+  push:
+    branches: [master, "next_v*"]
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "setup.py"
+      - "pyproject.toml"
+      - "**.pyx"
+      - "**.pxd"
+      - "edelweissfe/**.h"
+      - "edelweissfe/**.c"
+      - "edelweissfe/**.cpp"
+      - "edelweissfe/_cli/**"
+      - "conda/edelweissfe/**"
+      - ".github/workflows/conda.yml"
+      - ".github/actions/resolve-marmot/**"
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: "Build number (raise it to republish a fixed build of a release tag)"
+        default: "0"
+      marmot_version:
+        description: "Marmot release to build a release tag against (default: the same version)"
+        default: ""
+
+env:
+  CHANNEL: matthiasneuner/edelweiss
+  # Pinned like the actions, so that a new release cannot change what a tag builds or uploads; bump deliberately.
+  RATTLER_BUILD_VERSION: "0.76.1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.subdir }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { subdir: linux-64, os: ubuntu-24.04 }
+          - { subdir: osx-arm64, os: macos-15 }
+          - { subdir: osx-64, os: macos-15-intel }
+          - { subdir: win-64, os: windows-2022 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: prefix-dev/setup-pixi@194d461b21b6c5717c722ffc597fa91ed2ff29fa # v0.9.1
+        with:
+          run-install: false
+
+      - name: Install rattler-build
+        run: pixi global install "rattler-build==$RATTLER_BUILD_VERSION"
+
+      - name: Version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          BUILD_NUMBER: ${{ inputs.build_number || '0' }}
+          MARMOT_VERSION: ${{ inputs.marmot_version }}
+        run: |
+          release=$(sed -nE 's/^version = "([0-9]+\.[0-9]+(\.[0-9]+)?)"$/\1/p' pyproject.toml)
+          [ -n "$release" ] || { echo "::error::No version = \"<YY>.<MM>[.<patch>]\" in pyproject.toml."; exit 1; }
+          if [ "$REF_TYPE" = tag ]; then
+            if ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+              echo "::error::Tag $GITHUB_REF_NAME is not a release tag v<YY>.<MM>[.<patch>]."; exit 1
+            fi
+            version=${GITHUB_REF_NAME#v}
+            if [ "$version" != "$release" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match version = \"$release\" in pyproject.toml."; exit 1
+            fi
+            echo "EDELWEISSFE_MARMOT_VERSION=${MARMOT_VERSION:-$version}" >> "$GITHUB_ENV"
+          else
+            version="$release.dev$(git log -1 --format=%cd --date=format:%Y%m%d%H%M)"
+          fi
+          [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || { echo "::error::build_number must be a number."; exit 1; }
+          echo "EDELWEISSFE_CONDA_VERSION=$version" >> "$GITHUB_ENV"
+          echo "EDELWEISSFE_CONDA_BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "version: $version, build number: $BUILD_NUMBER"
+
+      - name: Resolve the Marmot branch
+        if: github.ref_type != 'tag'
+        id: marmot
+        uses: ./.github/actions/resolve-marmot
+
+      # Marmot's recipe lives in the Marmot commit, so the commit identifies the package.
+      - name: Restore the Marmot package
+        if: github.ref_type != 'tag'
+        id: marmot-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/marmot-output
+          key: marmot-conda-${{ matrix.subdir }}-${{ steps.marmot.outputs.sha }}-${{ env.RATTLER_BUILD_VERSION }}
+
+      # Into the parent directory, never into the checkout (see .github/actions/build-marmot); the branch through the
+      # environment, as branch names come from (fork) pull requests.
+      - name: Build Marmot
+        if: github.ref_type != 'tag' && steps.marmot-cache.outputs.cache-hit != 'true'
+        env:
+          MARMOT_BRANCH: ${{ steps.marmot.outputs.branch }}
+          MARMOT_SHA: ${{ steps.marmot.outputs.sha }}
+        run: |
+          git clone --branch "$MARMOT_BRANCH" https://github.com/MAteRialMOdelingToolbox/Marmot.git ../Marmot
+          git -C ../Marmot checkout --detach "$MARMOT_SHA"
+          cmake_version=$(sed -nE 's/^project\(Marmot VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' ../Marmot/CMakeLists.txt)
+          MARMOT_CONDA_VERSION="${cmake_version%.0}.dev$(git -C ../Marmot log -1 --format=%cd --date=format:%Y%m%d%H%M)" \
+            rattler-build build --recipe ../Marmot/conda -c "https://repo.prefix.dev/$CHANNEL" -c conda-forge \
+            --output-dir "$RUNNER_TEMP/marmot-output" --log-style plain
+
+      # The package tests run as part of the build: every expected extension imports, the GIL stays off, and one
+      # test case with and one without Marmot passes. Outside the checkout, which the recipe copies as its source.
+      - name: Build EdelweissFE
+        run: |
+          channels=(-c "https://repo.prefix.dev/$CHANNEL" -c conda-forge)
+          if [ -d "$RUNNER_TEMP/marmot-output" ]; then channels=(-c "$RUNNER_TEMP/marmot-output" "${channels[@]}"); fi
+          rattler-build build --recipe conda/edelweissfe -m conda/edelweissfe/variants.yaml "${channels[@]}" \
+            --output-dir "$RUNNER_TEMP/output" --log-style plain
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: conda-${{ matrix.subdir }}
+          path: ${{ runner.temp }}/output/${{ matrix.subdir }}/edelweissfe-*.conda
+
+  upload:
+    name: upload
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    # Trusted publishing: prefix.dev accepts this workflow's GitHub identity token (registered in the channel's
+    # settings), so no API key is stored. The `release` environment can require an approval before uploading.
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: conda-*
+          path: output
+
+      - uses: prefix-dev/setup-pixi@194d461b21b6c5717c722ffc597fa91ed2ff29fa # v0.9.1
+        with:
+          run-install: false
+
+      # No --skip-existing: a package that is already on the channel fails the upload instead of being skipped
+      # silently, so a fixed rebuild is never mistaken for a published one (raise the build number instead).
+      - name: Upload to prefix.dev
+        run: |
+          pixi global install "rattler-build==$RATTLER_BUILD_VERSION"
+          find output -name '*.conda' -print0 | xargs -0 rattler-build upload prefix --channel "$CHANNEL"

@@ -1,0 +1,37 @@
+** Regression test for the rigid body constraint with a Dirichlet BC on the reference point.
+**
+** One linear-elastic C3D20R element. The x=0 face is fully fixed. The x=1 face is tied by a
+** rigidbody constraint to reference point 999, which is pulled u_x = 0.01 with all rotations
+** prescribed to zero. The tied face must therefore move by exactly 0.01.
+**
+** This exercises the case where the reference point belongs to NO element, so the constraint is
+** the only entity that can declare the reference point's diagonal in the VIJ sparsity pattern.
+** Without that diagonal the Dirichlet BC on the reference point cannot be imposed on the CSR
+** matrix and the constraint is silently not enforced (the face moved 3.5e7 times too far).
+*include, input=mesh.inp
+
+*node
+999, 1.0, 0.25, 0.25
+*nSet, nSet=RP
+999
+
+*material, name=LinearElastic, id=mat
+210000.0, 0.3
+*section, name=sec, material=mat, type=solid
+all
+
+*constraint, type=rigidbody, name=rb
+nSet=load
+referencePoint=RP
+
+*job, name=rbDirichletOnRP, domain=3d
+*solver, solver=NISTParallel, name=theSolver
+
+*fieldOutput
+>>perNode, name=U, elSet=all, field=displacement, result=U
+
+*step, solver=theSolver
+maxInc=1.0, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1.0
+>>dirichlet, name=fix,     nSet=fix, field=displacement, 1=0, 2=0, 3=0
+>>dirichlet, name=pull,    nSet=RP,  field=displacement, 1=0.01, 2=0, 3=0
+>>dirichlet, name=pullrot, nSet=RP,  field=rotation,     1=0, 2=0, 3=0

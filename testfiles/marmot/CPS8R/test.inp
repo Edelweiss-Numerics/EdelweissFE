@@ -23,7 +23,7 @@ fieldOutput=RFRight, f(x)='sum(x[:,1])'
 
 *step, solver=theSolver
 maxInc=1e-2, minInc=1e-8, maxNumInc=1000, maxIter=25,
->>options, category=NISTSolver, extrapolation=linear
+>>options, name=theSolver, extrapolation=linear
 >>dirichlet, name=left,  nSet=left,   field=displacement, 1=0.0, 2=0.0
 >>dirichlet, name=right, nSet=right,  field=displacement, 1=-1
 

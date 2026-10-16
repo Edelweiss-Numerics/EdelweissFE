@@ -39,12 +39,12 @@ referencePoint=RP
 
 *step, solver=theSolver
 maxInc=1e-1, minInc=1e-4, maxNumInc=1000, maxIter=4
->>options, category=NISTSolver, extrapolation=linear
+>>options, name=theSolver, extrapolation=linear
 >>dirichlet, name=rotFixedSupport,  nSet=gen_leftTop,   field=rotation, 1=0
 >>dirichlet, name=movFixedSupport,  nSet=gen_leftTop,   field=displacement, 1=0, 2=0
 >>dirichlet, name=movPinnedSupport,  nSet=RP,   field=displacement, 1=0, 2=0
 
 *step, solver=theSolver
 maxInc=1e-1, minInc=1e-4, maxNumInc=1000, maxIter=4
->>options, category=NISTSolver, extrapolation=linear
+>>options, name=theSolver, extrapolation=linear
 >>distributedload, name=loadTop, surface=gen_top, type=pressure,  magnitude=10.0, f(t)=1

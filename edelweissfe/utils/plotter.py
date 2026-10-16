@@ -114,8 +114,9 @@ class Plotter:
         self.exportJobs = exportJobs
 
         latexAvailable = False
-        if shutil.which("latex"):
+        if shutil.which("pdflatex"):
             latexAvailable = True
+        self._latexAvailable = latexAvailable
 
         self.rcParams = {
             "pgf.texsystem": "pdflatex",  # change this if using xetex or lautex
@@ -326,7 +327,11 @@ class Plotter:
         fig, ax = self.figsWithAxes[figureID]
         fig.set_size_inches(self._fancyFigSize(scale, width, heightRatio))
         fig.tight_layout(pad=0.15)
-        fig.savefig("{}.pgf".format(fileName))
+        # Saving a .pgf figure invokes pdflatex to compute text metrics, regardless of
+        # text.usetex (which only controls whether LaTeX renders the text *content*) -- so this
+        # must be gated the same way, not attempted unconditionally.
+        if self._latexAvailable:
+            fig.savefig("{}.pgf".format(fileName))
         fig.savefig("{}.pdf".format(fileName))
         if png:
             fig.savefig("{}.png".format(fileName), dpi=400)
