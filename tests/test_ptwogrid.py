@@ -239,6 +239,51 @@ def test_a_reused_spectral_radius_reproduces_the_estimated_one(problem):
     assert _relativeDifference(reused.applyPreconditioner(r), estimated.applyPreconditioner(r)) < 1e-12
 
 
+def _reusing(estimated, isCorner, edgeEndpoints):
+    return PTwoGridPreconditioner(
+        isCorner,
+        edgeEndpoints,
+        fineSpectralRadius=estimated.fineSpectralRadius,
+        fineDominantVector=estimated.fineDominantVector,
+    )
+
+
+def test_the_recheck_keeps_a_reused_spectral_radius_on_an_unchanged_operator(problem):
+    As, dinv, coords, isCorner, edgeEndpoints, r = problem
+    estimated = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+    estimated.build(As, dinv, coords=coords)
+    assert estimated.fineSpectralRadiusSource == "estimated"
+    reused = _reusing(estimated, isCorner, edgeEndpoints)
+    reused.build(As, dinv, coords=coords)
+    # the continued power iteration still creeps up a little, below the re-check's 1% tolerance
+    assert reused.fineSpectralRadiusSource == "supplied"
+    assert reused.fineSpectralRadius == estimated.fineSpectralRadius
+    assert _relativeDifference(reused.applyPreconditioner(r), estimated.applyPreconditioner(r)) < 1e-12
+
+
+def test_the_recheck_raises_a_reused_spectral_radius_within_the_margin(problem):
+    As, dinv, coords, isCorner, edgeEndpoints, r = problem
+    estimated = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+    estimated.build(As, dinv, coords=coords)
+    reused = _reusing(estimated, isCorner, edgeEndpoints)
+    reused.build((1.05 * As).tocsr(), dinv, coords=coords)
+    assert reused.fineSpectralRadiusSource == "raised"
+    assert abs(reused.fineSpectralRadius - 1.05 * estimated.fineSpectralRadius) < 1e-4 * estimated.fineSpectralRadius
+
+
+def test_the_recheck_re_estimates_a_stiffened_operator_in_full(problem):
+    As, dinv, coords, isCorner, edgeEndpoints, r = problem
+    estimated = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+    estimated.build(As, dinv, coords=coords)
+    stiffened = (1.5 * As).tocsr()
+    fresh = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+    fresh.build(stiffened, dinv, coords=coords)
+    reused = _reusing(estimated, isCorner, edgeEndpoints)
+    reused.build(stiffened, dinv, coords=coords)
+    assert reused.fineSpectralRadiusSource == "re-estimated"
+    assert reused.fineSpectralRadius == fresh.fineSpectralRadius
+
+
 def test_the_preconditioner_accelerates_gmres(problem):
     As, dinv, coords, isCorner, edgeEndpoints, r = problem
     from scipy.sparse.linalg import LinearOperator, gmres

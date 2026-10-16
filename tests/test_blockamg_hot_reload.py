@@ -186,7 +186,7 @@ def test_a_reload_drops_caches_derived_from_the_old_settings(configuredSolver):
     _reload(solver)
 
     solver._nodeCoordinateCache["displacement"] = "stale"
-    solver._p1FineSpectralRadiusCache["displacement"] = 1.0
+    solver._p1FineSpectralRadiusCache["displacement"] = (1.0, None)
     solver._p1Maps["displacement"] = "stale"
     solver._lazyP1MapNames.add("displacement")
 

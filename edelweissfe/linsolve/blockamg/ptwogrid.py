@@ -111,6 +111,9 @@ _DEFAULT_FINE_DEGREE = 5
 _DEFAULT_FINE_LOWER = 0.01
 _DEFAULT_FINE_HIGHER = 1.1
 _DEFAULT_FINE_POWER_ITERS = 300
+#: Power iterations of the re-check of a reused fine spectral radius, from the previous build's dominant
+#: vector -- a few sparse products instead of the full estimate's 300.
+_DEFAULT_FINE_RECHECK_ITERS = 15
 
 
 class PTwoGridPreconditioner:
@@ -142,15 +145,19 @@ class PTwoGridPreconditioner:
         ``1`` (scalar entries) or ``3`` (node-wise 3x3 blocks, a 3D field only) -- roughly half the
         memory traffic per product, the dominant cost of the apply. Both give the same cycle up to
         floating-point summation order.
-    fineSpectralRadius
+    fineSpectralRadius, fineDominantVector
         The fine operator's spectral radius for the Chebyshev bounds, or ``None`` to estimate it by
         ``finePowerIters`` power iterations from a deterministic start vector -- the single most
         expensive stage of :meth:`build`. A caller rebuilding on a slowly changing operator can hand
-        back a previous build's :attr:`fineSpectralRadius` (see blockamg's
-        ``p1FineSpectralRadiusReuse``); ``fineHigher`` is the safety margin above it.
-    fineLower, fineHigher, finePowerIters
-        The fine Chebyshev spectral bounds relative to the spectral radius, and the power iteration
-        count of its estimate.
+        back a previous build's :attr:`fineSpectralRadius` and :attr:`fineDominantVector` (see
+        blockamg's ``p1FineSpectralRadiusReuse``). The radius is then not reused blindly but
+        re-checked by ``fineRecheckIters`` power iterations continued from that vector: a re-check
+        estimate more than 1% above the supplied radius replaces it, and one beyond the ``fineHigher`` safety
+        margin -- the operator stiffened more than the smoother's bounds cover -- triggers the full
+        estimate. A radius without a vector is used as supplied.
+    fineLower, fineHigher, finePowerIters, fineRecheckIters
+        The fine Chebyshev spectral bounds relative to the spectral radius, the power iteration
+        count of its full estimate, and that of the re-check of a reused one.
     """
 
     def __init__(
@@ -163,9 +170,11 @@ class PTwoGridPreconditioner:
         useCoarseNullspace: bool = True,
         fineBlockSize: int = 1,
         fineSpectralRadius: float = None,
+        fineDominantVector: np.ndarray = None,
         fineLower: float = _DEFAULT_FINE_LOWER,
         fineHigher: float = _DEFAULT_FINE_HIGHER,
         finePowerIters: int = _DEFAULT_FINE_POWER_ITERS,
+        fineRecheckIters: int = _DEFAULT_FINE_RECHECK_ITERS,
     ):
         if fineBlockSize not in (1, 3):
             raise ValueError("ptwogrid: fineBlockSize must be 1 or 3, got {!r}".format(fineBlockSize))
@@ -173,12 +182,14 @@ class PTwoGridPreconditioner:
         self._edgeEndpoints = np.ascontiguousarray(edgeEndpoints, dtype=np.int32)
         self._useCoarseNullspace = useCoarseNullspace
         self._fineSpectralRadius = fineSpectralRadius
+        self._fineDominantVector = fineDominantVector
         self._params = {
             "nu": int(nu),
             "fineDegree": int(fineDegree),
             "fineLower": float(fineLower),
             "fineHigher": float(fineHigher),
             "finePowerIters": int(finePowerIters),
+            "fineRecheckIters": int(fineRecheckIters),
             "fineBlockSize": int(fineBlockSize),
             "coarse": dict(coarsePrecond) if coarsePrecond is not None else dict(_DEFAULT_COARSE_PRECOND),
         }
@@ -192,6 +203,18 @@ class PTwoGridPreconditioner:
         the ``fineSpectralRadius`` constructor argument instead of paying for the estimate again.
         """
         return self._preconditioner.fineSpectralRadius
+
+    @property
+    def fineDominantVector(self) -> np.ndarray:
+        """The estimate of the fine operator's dominant eigenvector, to hand back together with
+        :attr:`fineSpectralRadius` for the re-check of a reused radius."""
+        return self._preconditioner.fineDominantVector
+
+    @property
+    def fineSpectralRadiusSource(self) -> str:
+        """``"estimated"``, ``"supplied"``, ``"raised"`` or ``"re-estimated"`` -- see the
+        ``fineSpectralRadius`` parameter."""
+        return self._preconditioner.fineSpectralRadiusSource
 
     def build(self, A, dinv: np.ndarray, coords: np.ndarray = None) -> None:
         """Build the restricted ``P``, the Galerkin coarse operator, its AMGCL hierarchy, and the fine
@@ -251,6 +274,7 @@ class PTwoGridPreconditioner:
             self._edgeEndpoints,
             nullspace,
             self._fineSpectralRadius if self._fineSpectralRadius is not None else 0.0,
+            self._fineDominantVector,
         )
 
     def applyPreconditioner(self, r: np.ndarray) -> np.ndarray:

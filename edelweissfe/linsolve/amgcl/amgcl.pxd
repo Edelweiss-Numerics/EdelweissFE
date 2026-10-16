@@ -121,9 +121,12 @@ cdef extern from "amgcl-wrapper.hpp":
         void build(int n, const int* ptr, const int* col, const double* val,
                    int nNodes, const signed char* isCorner, const int* edgeEndpoints,
                    const double* nullspace, int nullspaceRows, int nullspaceCols,
-                   double spectralRadius) except +
+                   double spectralRadius, const double* dominantVector, int dominantVectorSize) except +
         void apply(int n, const double* r, double* x) except +
         double fineSpectralRadius()
+        int fineSpectralRadiusSource()
+        int fineDominantVectorSize()
+        void copyFineDominantVector(double* out)
         int nCoarseFree()
         string report() except +
         double setupDirichletAndPSeconds_

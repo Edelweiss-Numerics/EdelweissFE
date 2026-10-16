@@ -559,8 +559,8 @@ Block preconditioner and per-field hierarchies
         :math:`3\times 3` blocks, 3D fields only); see below.
     * - ``p1FineSpectralRadiusReuse``
       - ``false``
-      - p-multigrid: estimate the fine smoother's spectral radius on a field's first build only and
-        reuse it on later rebuilds; see below.
+      - p-multigrid: estimate the fine smoother's spectral radius in full on a field's first build
+        only, and only re-check it on later rebuilds; see below.
     * - ``p1CoarsePrecond``
       - ``null``
       - p-multigrid: the coarse level's AMGCL preconditioner tree. Unset, it is smoothed
@@ -802,10 +802,12 @@ memory traffic of the fine smoother and residual -- the dominant cost of the app
 The fine Chebyshev smoother follows AMGCL's own (same polynomial, ``lower`` 0.01, ``higher`` 1.1
 times the spectral radius), but its spectral-radius estimate -- 300 power iterations, the most
 expensive stage of the build -- starts from a deterministic, thread-count-independent vector, and can
-be skipped: with ``p1FineSpectralRadiusReuse`` the estimate of a field's first build is reused on
-every later rebuild until the model changes (e.g. after adaptive refinement). The 10% margin of
-``higher`` then has to cover the drift of the operator over the run; an operator that stiffens by
-more can make the smoother diverge, so this is an opt-in for operators known to change slowly.
+be reduced to a re-check: with ``p1FineSpectralRadiusReuse`` a field's first build estimates it in
+full, and every later rebuild continues the power iteration for 15 steps from the previous build's
+dominant vector. A re-check estimate up to 1% above the previous radius keeps it (the full estimate is
+itself converged only to about 1e-5); one further above replaces it; and one above it by more than the 10% margin of ``higher`` -- an operator that stiffened more than
+the smoother's bounds cover -- triggers the full estimate again. The cache is dropped when the model
+changes (e.g. after adaptive refinement).
 
 
 Practical guidance

@@ -694,14 +694,17 @@ cdef class PyAMGCLPTwoGrid:
             del self.preconditioner
 
     def build(self, object A, object isCorner, object edgeEndpoints, object nullspace=None,
-              double spectralRadius=0.0):
+              double spectralRadius=0.0, object dominantVector=None):
         """
         Build the preconditioner for A (scipy.sparse csr_matrix, the field's equilibrated diagonal
         block with its Dirichlet identity rows).
 
         isCorner: (nNodes,) bool/int8; edgeEndpoints: (nNodes, 2) int, read for midside nodes only.
         nullspace: (nFreeCoarseDofs, k) float64 coarse near null-space, or None.
-        spectralRadius: > 0 to use this fine spectral radius instead of estimating it.
+        spectralRadius: > 0 to start from this fine spectral radius instead of estimating it in full.
+        dominantVector: with spectralRadius, the previous build's :attr:`fineDominantVector`; the
+        radius is then re-checked by a few power iterations from it (``fineRecheckIters``) and
+        raised, or re-estimated in full, if the operator has stiffened.
         """
         if not scipy.sparse.isspmatrix_csr(A):
             A = A.tocsr()
@@ -729,13 +732,22 @@ cdef class PyAMGCLPTwoGrid:
             if nullspaceRows > 0 and nullspaceCols > 0:
                 nullspacePtr = &B[0, 0]
 
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] dominant
+        cdef const double* dominantPtr = NULL
+        cdef int dominantSize = 0
+        if dominantVector is not None:
+            dominant = np.ascontiguousarray(dominantVector, dtype=np.float64)
+            dominantSize = dominant.shape[0]
+            if dominantSize > 0:
+                dominantPtr = &dominant[0]
+
         cdef int[::1] indptr_ = indptr
         cdef int[::1] indices_ = indices
         cdef double[::1] data_ = data
         cdef signed char[::1] corner_ = corner
         cdef int[:, ::1] endpoints_ = endpoints
         self.preconditioner.build(n, &indptr_[0], &indices_[0], &data_[0], nNodes, &corner_[0], &endpoints_[0, 0],
-                                  nullspacePtr, nullspaceRows, nullspaceCols, spectralRadius)
+                                  nullspacePtr, nullspaceRows, nullspaceCols, spectralRadius, dominantPtr, dominantSize)
 
     def applyPreconditioner(self, object r):
         """One two-grid cycle: returns M^-1 r as a new float64 array (Dirichlet entries pass through)."""
@@ -752,6 +764,26 @@ cdef class PyAMGCLPTwoGrid:
         """The fine operator's spectral radius the Chebyshev smoother was built with -- estimated, or
         the one handed to :meth:`build`."""
         return self.preconditioner.fineSpectralRadius()
+
+    @property
+    def fineDominantVector(self):
+        """The power iteration's last iterate, the estimate of the fine operator's dominant
+        eigenvector -- hand it back to the next :meth:`build` with :attr:`fineSpectralRadius`. Empty
+        if the radius was used as supplied, without a re-check."""
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] v = np.empty(
+            self.preconditioner.fineDominantVectorSize(), dtype=np.float64
+        )
+        cdef double[::1] v_ = v
+        if v.shape[0] > 0:
+            self.preconditioner.copyFineDominantVector(&v_[0])
+        return v
+
+    @property
+    def fineSpectralRadiusSource(self):
+        """How the last build arrived at its fine spectral radius: ``"estimated"`` in full,
+        ``"supplied"`` and kept, ``"raised"`` by the re-check, or ``"re-estimated"`` in full because
+        the re-check found the operator stiffened beyond the smoother's margin."""
+        return ("estimated", "supplied", "raised", "re-estimated")[self.preconditioner.fineSpectralRadiusSource()]
 
     @property
     def nCoarseFree(self):

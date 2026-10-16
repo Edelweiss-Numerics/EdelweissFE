@@ -338,13 +338,13 @@ class BlockAMGSolver(LinearSolver):
         blocks, 3D fields only) -- the same cycle up to summation order, with roughly half the memory
         traffic in the fine smoother and residual, the dominant cost of the apply.
     p1FineSpectralRadiusReuse
-        Estimate the p-two-grid fine Chebyshev smoother's spectral radius (300 power iterations, the
-        most expensive stage of its build) only on a field's first build, and reuse it on every later
-        rebuild until the model changes (``setModel``, e.g. after AMR) or a hot reload applies.
-        ``False`` (default) estimates it fresh on every build. The smoother's bounds keep their 10%
-        safety margin above the reused value, but an operator that stiffens beyond that margin
-        during the run can make the smoother diverge -- an opt-in for operators known to change
-        slowly.
+        Estimate the p-two-grid fine Chebyshev smoother's spectral radius in full (300 power
+        iterations, the most expensive stage of its build) only on a field's first build, and on
+        every later rebuild only re-check it: 15 power iterations continued from the previous
+        build's dominant vector, raising the radius if the operator stiffened by more than 1%, and re-estimating it
+        in full if it stiffened beyond the smoother's 10% safety margin. The cache is dropped when
+        the model changes (``setModel``, e.g. after AMR) or a hot reload applies. ``False``
+        (default) estimates it in full on every build.
     hierarchyDropTol
         Build the AMG hierarchies from a *sparsified* copy of each diagonal block: drop off-diagonal
         ``a_ij`` where ``|a_ij| < hierarchyDropTol * sqrt(|a_ii| |a_jj|)``. Zero (the default) keeps the
@@ -571,7 +571,7 @@ class BlockAMGSolver(LinearSolver):
         self._lazyP1MapNames = set()
         # Per-field node coordinates, derived from self._model; dropped in setModel().
         self._nodeCoordinateCache = {}
-        # Per-field fine spectral radius of the p-two-grid smoother, kept for the next build only with
+        # Per-field fine spectral radius and dominant vector of the p-two-grid smoother, kept for the next build only with
         # p1FineSpectralRadiusReuse; dropped in setModel() like the caches above.
         self._p1FineSpectralRadiusCache = {}
         self._p1FieldNamesRequested = set(p1FieldNames or [])
@@ -1267,14 +1267,17 @@ class BlockAMGSolver(LinearSolver):
                             )
                             if value is not None
                         }
-                        fineSpectralRadius = (
-                            self._p1FineSpectralRadiusCache.get(block.name) if self._p1FineSpectralRadiusReuse else None
+                        fineSpectralRadius, fineDominantVector = (
+                            self._p1FineSpectralRadiusCache.get(block.name, (None, None))
+                            if self._p1FineSpectralRadiusReuse
+                            else (None, None)
                         )
                         solver = PTwoGridPreconditioner(
                             isCorner,
                             edgeEndpoints,
                             fineBlockSize=self._p1FineBlockSize,
                             fineSpectralRadius=fineSpectralRadius,
+                            fineDominantVector=fineDominantVector,
                             **p1Options,
                         )
                         # Give p-two-grid's coarse solve the same rigid-body-vs-translations choice
@@ -1284,7 +1287,10 @@ class BlockAMGSolver(LinearSolver):
                         coords = self._getNodeCoordinates(block.name) if self._useRigidBodyNullspace else None
                         solver.build(diagBlocks[i], dinv[slices[i]], coords=coords)
                         if self._p1FineSpectralRadiusReuse:
-                            self._p1FineSpectralRadiusCache[block.name] = solver.fineSpectralRadius
+                            self._p1FineSpectralRadiusCache[block.name] = (
+                                solver.fineSpectralRadius,
+                                solver.fineDominantVector,
+                            )
                         preconditioners.append(solver)
                         continue
 

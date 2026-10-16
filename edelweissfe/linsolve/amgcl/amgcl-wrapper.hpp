@@ -1200,35 +1200,30 @@ public:
   bool                        scale_  = false;
   double                      d_ = 0.0, c_ = 0.0;
 
-  // @brief Take over the operator A (already in this storage format) and set up the Chebyshev
-  // polynomial. If spectralRadius <= 0, estimate it by powerIters power iterations from the given
-  // scalar start vector (zero on Dirichlet DOFs), and return the estimate either way.
-  // @param lower, higher amgcl::relaxation::chebyshev's own `float` parameters, kept as `float` so
-  // the ellipse bounds round exactly as AMGCL's do.
-  double setup( std::shared_ptr< Matrix >    A,
-                unsigned                     degree,
-                float                        lower,
-                float                        higher,
-                bool                         scale,
-                int                          powerIters,
-                const std::vector< double >& startVector,
-                double                       spectralRadius )
+  // @brief Take over the operator A (already in this storage format); with scale, Jacobi-scale the
+  // smoother (and the spectral-radius estimate) by its inverse diagonal.
+  void setOperator( std::shared_ptr< Matrix > A, bool scale )
   {
-    A_      = A;
-    degree_ = degree;
-    scale_  = scale;
+    A_     = A;
+    scale_ = scale;
     if ( scale_ ) {
       inverseDiagonal_ = amgcl::backend::diagonal( *A_, /*invert=*/true );
     }
-    double       hi     = spectralRadius > 0.0 ? spectralRadius : estimateSpectralRadius( powerIters, startVector );
-    const double radius = hi;
-    double       lo     = hi * lower;
+    r_.assign( A_->nrows * BlockSize, 0.0 );
+    p_.assign( A_->nrows * BlockSize, 0.0 );
+  }
+
+  // @brief Set up the Chebyshev polynomial for the given spectral radius.
+  // @param lower, higher amgcl::relaxation::chebyshev's own `float` parameters, kept as `float` so
+  // the ellipse bounds round exactly as AMGCL's do.
+  void setPolynomial( unsigned degree, float lower, float higher, double spectralRadius )
+  {
+    degree_   = degree;
+    double hi = spectralRadius;
+    double lo = hi * lower;
     hi *= higher;
     d_ = 0.5 * ( hi + lo );
     c_ = 0.5 * ( hi - lo );
-    r_.assign( startVector.size(), 0.0 );
-    p_.assign( startVector.size(), 0.0 );
-    return radius;
   }
 
   // @brief Power iteration for the spectral radius of A (of D^-1 A if scaled): the loop of
@@ -1237,8 +1232,11 @@ public:
   // start vector is the caller's instead of per-thread random numbers, and the reductions run over a
   // fixed partition of the rows, summed in order, instead of whichever order the threads finish in.
   // Accumulating per scalar component also makes a block operator's estimate the scalar one's, up to
-  // summation order.
-  double estimateSpectralRadius( int powerIters, const std::vector< double >& startVector ) const
+  // summation order. The last normalized iterate -- the estimate of the dominant eigenvector -- is
+  // returned in dominantVector, as the start of a later, short re-check of the estimate.
+  double estimateSpectralRadius( int                          powerIters,
+                                 const std::vector< double >& startVector,
+                                 std::vector< double >&       dominantVector ) const
   {
     const Matrix&   A       = *A_;
     const ptrdiff_t n       = static_cast< ptrdiff_t >( A.nrows );
@@ -1290,13 +1288,13 @@ public:
         b1NormSquared += chunkNorm[k];
         radius += chunkRadius[k];
       }
-      if ( ++iter < powerIters ) {
-        const double b1Scale = 1.0 / std::sqrt( b1NormSquared );
+      const double b1Scale = 1.0 / std::sqrt( b1NormSquared );
 #pragma omp parallel for
-        for ( ptrdiff_t i = 0; i < n; ++i )
-          b0[i] = b1Scale * b1[i];
-      }
+      for ( ptrdiff_t i = 0; i < n; ++i )
+        b0[i] = b1Scale * b1[i];
+      ++iter;
     }
+    dominantVector.swap( b0Scalar );
     return radius < 0 ? 2.0 : radius;
   }
 
@@ -1357,6 +1355,10 @@ public:
   std::vector< char >   isDirichlet_;
   int                   n_ = 0, nCoarseFree_ = 0, nu_ = 1;
   double                fineSpectralRadius_ = 0.0;
+  std::vector< double > fineDominantVector_;
+  // how the last build arrived at its fine spectral radius: 0 estimated in full, 1 supplied and kept,
+  // 2 supplied but raised by the re-check, 3 supplied but re-estimated in full by the re-check
+  int                   fineSpectralRadiusSource_ = 0;
   std::vector< double > rhs_, x_, res_, coarseRhs_, coarseX_;
 
   // stage timings [s], read by Python for the performance report
@@ -1387,7 +1389,14 @@ public:
   // row-major; read for midside nodes only).
   // @param nullspace, nullspaceCols the coarse near null-space, rows = free coarse DOFs in coarse
   // order (corner order, then DOF), row-major; nullspaceCols == 0 for none.
-  // @param spectralRadius > 0: use this fine spectral radius instead of estimating it.
+  // @param spectralRadius > 0: start from this fine spectral radius (typically a previous build's)
+  // instead of estimating it from scratch. With a dominantVector (n entries, the previous build's
+  // fineDominantVector()) it is re-checked first by fineRecheckIters power iterations from that
+  // vector, which cost a few sparse products instead of the full estimate's finePowerIters: a
+  // re-check estimate up to 1% above the supplied radius keeps it, one above that but within the smoother's
+  // `fineHigher` margin replaces it, and one beyond that margin -- the operator stiffened more than
+  // the margin covers -- triggers the full estimate. Without a dominantVector the radius is used as
+  // supplied.
   void build( int                n,
               const int*         ptr,
               const int*         col,
@@ -1398,7 +1407,9 @@ public:
               const double*      nullspace,
               int                nullspaceRows,
               int                nullspaceCols,
-              double             spectralRadius )
+              double             spectralRadius,
+              const double*      dominantVector,
+              int                dominantVectorSize )
   {
     Clock::time_point start = Clock::now();
     if ( nNodes <= 0 || n % nNodes != 0 ) {
@@ -1483,7 +1494,6 @@ public:
     const float    lower         = prm.get( "fineLower", 0.01f );
     const float    higher        = prm.get( "fineHigher", 1.1f );
     const bool     scale         = prm.get( "fineScale", false );
-    const int      iters         = prm.get( "finePowerIters", 300 );
     fineScalar_.reset();
     fineBlock3_.reset();
     std::shared_ptr< PTwoGridFineLevelT< Block3 >::Matrix > Ablock;
@@ -1502,28 +1512,19 @@ public:
     setupFineOperatorSeconds_ += secondsSince( start );
 
     start = Clock::now();
-    std::vector< double > startVector( n, 0.0 );
-    if ( spectralRadius <= 0.0 ) {
-      if ( iters <= 0 ) {
-        throw std::runtime_error(
-          "ptwogrid: finePowerIters must be positive when no fine spectral radius is supplied." );
-      }
-      std::mt19937                             rng( 0 );
-      std::uniform_real_distribution< double > rnd( -1, 1 );
-      for ( int i = 0; i < n; ++i )
-        if ( !isDirichlet_[i] )
-          startVector[i] = rnd( rng );
-    }
     if ( Ablock ) {
       fineBlock3_.reset( new PTwoGridFineLevelT< Block3 >() );
-      fineSpectralRadius_ = fineBlock3_
-                              ->setup( Ablock, degree, lower, higher, scale, iters, startVector, spectralRadius );
+      fineBlock3_->setOperator( Ablock, scale );
     }
     else {
       fineScalar_.reset( new PTwoGridFineLevelT< double >() );
-      fineSpectralRadius_ = fineScalar_
-                              ->setup( Afine, degree, lower, higher, scale, iters, startVector, spectralRadius );
+      fineScalar_->setOperator( Afine, scale );
     }
+    fineSpectralRadius_ = chooseFineSpectralRadius( spectralRadius, dominantVector, dominantVectorSize, higher );
+    if ( fineBlock3_ )
+      fineBlock3_->setPolynomial( degree, lower, higher, fineSpectralRadius_ );
+    else
+      fineScalar_->setPolynomial( degree, lower, higher, fineSpectralRadius_ );
     setupSpectralRadiusSeconds_ = secondsSince( start );
 
     rhs_.assign( n, 0.0 );
@@ -1531,6 +1532,81 @@ public:
     res_.assign( n, 0.0 );
     coarseRhs_.assign( nCoarseFree_, 0.0 );
     coarseX_.assign( nCoarseFree_, 0.0 );
+  }
+
+  // @brief powerIters power iterations on the fine operator from startVector (see
+  // PTwoGridFineLevelT::estimateSpectralRadius); the final iterate goes to fineDominantVector_.
+  double estimateFineSpectralRadius( int powerIters, const std::vector< double >& startVector )
+  {
+    if ( fineBlock3_ )
+      return fineBlock3_->estimateSpectralRadius( powerIters, startVector, fineDominantVector_ );
+    return fineScalar_->estimateSpectralRadius( powerIters, startVector, fineDominantVector_ );
+  }
+
+  // @brief The full estimate, from the deterministic start vector: AMGCL's single-thread one,
+  // mt19937 seeded 0, uniform on [-1, 1], one draw per free DOF in order.
+  double estimateFineSpectralRadiusInFull()
+  {
+    const int iters = prm.get( "finePowerIters", 300 );
+    if ( iters <= 0 ) {
+      throw std::runtime_error( "ptwogrid: finePowerIters must be positive when the fine spectral radius is "
+                                "estimated." );
+    }
+    std::vector< double >                    startVector( n_, 0.0 );
+    std::mt19937                             rng( 0 );
+    std::uniform_real_distribution< double > rnd( -1, 1 );
+    for ( int i = 0; i < n_; ++i )
+      if ( !isDirichlet_[i] )
+        startVector[i] = rnd( rng );
+    return estimateFineSpectralRadius( iters, startVector );
+  }
+
+  // @brief The fine spectral radius for this build -- see build()'s `spectralRadius` parameter.
+  double chooseFineSpectralRadius( double        suppliedRadius,
+                                   const double* dominantVector,
+                                   int           dominantVectorSize,
+                                   float         higher )
+  {
+    if ( suppliedRadius <= 0.0 ) {
+      fineSpectralRadiusSource_ = 0;
+      return estimateFineSpectralRadiusInFull();
+    }
+    const int recheckIters = prm.get( "fineRecheckIters", 15 );
+    if ( dominantVector == nullptr || recheckIters <= 0 ) {
+      fineDominantVector_.clear();
+      fineSpectralRadiusSource_ = 1;
+      return suppliedRadius;
+    }
+    // a dominant vector of a different layout, or one living entirely on DOFs that are Dirichlet
+    // now, cannot be continued from -- estimate in full
+    std::vector< double > startVector( n_, 0.0 );
+    double                startNormSquared = 0.0;
+    if ( dominantVectorSize == n_ ) {
+      for ( int i = 0; i < n_; ++i ) {
+        startVector[i] = isDirichlet_[i] ? 0.0 : dominantVector[i];
+        startNormSquared += startVector[i] * startVector[i];
+      }
+    }
+    if ( startNormSquared == 0.0 ) {
+      fineSpectralRadiusSource_ = 3;
+      return estimateFineSpectralRadiusInFull();
+    }
+    const double recheck = estimateFineSpectralRadius( recheckIters, startVector );
+    // The full estimate itself is converged only to some 1e-5 relative after its 300 iterations, so
+    // continuing it on an unchanged operator still creeps up a little; a rise below
+    // fineRecheckTolerance (1%, well inside the 10% margin of `higher`) keeps the supplied radius, so
+    // that an unchanged operator gives the same smoother as before.
+    const double tolerance = prm.get( "fineRecheckTolerance", 0.01 );
+    if ( recheck <= suppliedRadius * ( 1.0 + tolerance ) ) {
+      fineSpectralRadiusSource_ = 1;
+      return suppliedRadius;
+    }
+    if ( recheck <= suppliedRadius * higher ) {
+      fineSpectralRadiusSource_ = 2;
+      return recheck;
+    }
+    fineSpectralRadiusSource_ = 3;
+    return estimateFineSpectralRadiusInFull();
   }
 
   // @brief P on the free DOFs: identity on corners, 1/2, 1/2 on each midside from its two
@@ -1676,7 +1752,13 @@ public:
   }
 
   double fineSpectralRadius() const { return fineSpectralRadius_; }
-  int    nCoarseFree() const { return nCoarseFree_; }
+  int    fineSpectralRadiusSource() const { return fineSpectralRadiusSource_; }
+  int    fineDominantVectorSize() const { return static_cast< int >( fineDominantVector_.size() ); }
+  void   copyFineDominantVector( double* out ) const
+  {
+    std::copy( fineDominantVector_.begin(), fineDominantVector_.end(), out );
+  }
+  int nCoarseFree() const { return nCoarseFree_; }
 
   // @brief the coarse level's AMGCL hierarchy report
   std::string report() const
