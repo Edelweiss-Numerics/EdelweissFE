@@ -58,9 +58,7 @@ Two criteria are available, selected by the solver option ``convergenceCriterion
     :math:`\\tilde{q}^0` (Abaqus' "initial value of time average force", ``1e-2``).
 
     A field whose current spatial average flux is below :math:`\\varepsilon \\, \\tilde{q}` carries no flux; it is
-    converged if :math:`c_{\\max} \\leq C_\\varepsilon \\, \\Delta u_{\\max}`. Without :math:`\\tilde{q}^0`, a field
-    that has not carried flux yet (e.g., a nonlocal damage field before the onset of damage) would compare its
-    round-off flux against a reference of zero, count as carrying flux, and never converge. A field with
+    converged if :math:`c_{\\max} \\leq C_\\varepsilon \\, \\Delta u_{\\max}`. A field with
     :math:`r_{\\max} \\leq R_l \\, \\tilde{q}` is converged irrespective of the correction (linear case).
 
     Not implemented: the estimate of the next correction from the convergence rate (Abaqus accepts an increment
