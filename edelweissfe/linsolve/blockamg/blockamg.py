@@ -1814,6 +1814,9 @@ class BlockAMGSolver(LinearSolver):
             """The solution x of the Krylov iterate z, its true relative residual (the one the solve is
             accepted on) and, on the scaled system, its scaled relative residual (NaN otherwise)."""
             if not onScaledSystem:
+                if self._outerSolver == "amgcl_lgmres":
+                    # LGMRES iterated on A itself and recomputed b - A x at its exit: its residual is the true one
+                    return z, self._lgmresSolver.lastError, float("nan")
                 return (
                     z,
                     np.linalg.norm(system.residual(b, z, unscaled=True)) / max(np.linalg.norm(b), 1e-300),
