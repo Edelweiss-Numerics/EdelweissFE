@@ -135,7 +135,13 @@ def createSolver(opts) -> Callable:
 
     optionMap = opts if isinstance(opts, Mapping) else {}
 
-    kwargs = {key: CONFIG_CASTS[key](value) for key, value in optionMap.items() if key in CONFIG_CASTS}
+    kwargs = {}
+    for key, value in optionMap.items():
+        if key in CONFIG_CASTS:
+            try:
+                kwargs[key] = CONFIG_CASTS[key](value)
+            except (TypeError, ValueError) as error:
+                raise ValueError("blockamg: configuration key {:}: {:}".format(key, error)) from error
     recognized = set(CONFIG_CASTS)
 
     # A key this factory does not know would otherwise be dropped without a word -- a typo, or a

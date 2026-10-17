@@ -205,6 +205,13 @@ def _fieldNamesFromConfig(value) -> list | None:
     raise ValueError("expected a field name or a list of field names, got {!r}".format(value))
 
 
+def _mappingFromConfig(value) -> dict | None:
+    """A JSON object, or ``null`` for unset -- not anything ``dict()`` happens to accept (``[]`` is no tree)."""
+    if value is None or isinstance(value, dict):
+        return value
+    raise ValueError("expected a JSON object or null, got {!r}".format(value))
+
+
 def _outerTolFromConfig(value) -> float | None:
     """``outerTol`` unset, ``None``, or the literal string ``"adaptive"`` all select the adaptive forcing."""
     return None if value in (None, "adaptive") else float(value)
@@ -245,7 +252,7 @@ CONFIG_CASTS = {
     "hierarchyDropTol": float,
     "hierarchyDropLumping": _boolFromConfig,
     "gapMaxFactor": float,
-    "fieldPreconds": dict,
+    "fieldPreconds": _mappingFromConfig,
     "p1FieldNames": _fieldNamesFromConfig,
     "p1Nu": int,
     "p1NuPre": int,
@@ -255,7 +262,7 @@ CONFIG_CASTS = {
     "p1FineValueType": str,
     "p1CoarseValueType": str,
     "p1FineSpectralRadiusReuse": _boolFromConfig,
-    "p1CoarsePrecond": dict,
+    "p1CoarsePrecond": _mappingFromConfig,
 }
 
 
