@@ -801,6 +801,18 @@ class BlockAMGSolver(LinearSolver):
             drifted = outerIters > max(self._hierarchyStalenessFactor * reference, reference + _STALENESS_MIN_EXCESS)
         return drifted or capHit
 
+    def _lgmresCapHit(self, iterations: int, tolerance: float) -> int:
+        """``1`` if the last AMGCL LGMRES pass stopped at the iteration cap short of its own tolerance, else ``0``
+        (SciPy's ``info`` convention).
+
+        LGMRES stops on its own convergence test, its relative residual (``lastError``, recomputed at its exit,
+        of the operator it iterated on -- the scaled one, not the true residual eta is accepted on) below the
+        tolerance of that pass, or at the cap. Reaching the cap is not failure by itself: a pass may converge on
+        exactly its last allowed iteration. Neither is comparing ``lastError`` with eta, the true-residual target.
+        """
+        capped = iterations >= self._outerRestart * self._outerMaxiter
+        return 1 if capped and not self._lgmresSolver.lastError < tolerance else 0
+
     def _log(self, level: str, message: str) -> None:
         """Emit ``message`` through the injected Journal (see ``setJournal``, inherited from
         :class:`~edelweissfe.linsolve.base.LinearSolver`) if this instance's verbosity is at least
@@ -1645,49 +1657,59 @@ class BlockAMGSolver(LinearSolver):
         else:
             firstPassEta = eta
 
-        # outerSolver == "amgcl_lgmres" (the default): both outer-solve call sites below (this one and
-        # the true-residual continuation retry) dispatch to AMGCL's own native amgcl::solver::lgmres
-        # (self._lgmresSolver, built/reused above) instead of scipy.sparse.linalg.gmres. lgmres's own
-        # `maxiter` bounds *all* Arnoldi steps across every internal restart, unlike scipy's separate
-        # restart/maxiter (restart cycles) knobs -- passing outerRestart * outerMaxiter through as a
-        # single total-iteration budget is a generous translation between the two, not an attempt at
-        # matching scipy's semantics bit-for-bit. blockGaussSeidel itself
-        # is reused unchanged for both paths -- it already has exactly the "1D array in, 1D array out"
-        # shape AMGCL's callback needs, with no LinearOperator indirection required.
-        with performancetiming.timeit("outer GMRES"):
-            history = []
+        # outerSolver == "amgcl_lgmres" (the default): every outer pass (the first one and the
+        # true-residual continuations) runs AMGCL's own native amgcl::solver::lgmres (self._lgmresSolver,
+        # built/reused above) instead of scipy.sparse.linalg.gmres. lgmres's own `maxiter` bounds *all*
+        # Arnoldi steps across every internal restart, unlike scipy's separate restart/maxiter (restart
+        # cycles) knobs -- passing outerRestart * outerMaxiter through as a single total-iteration budget
+        # is a generous translation between the two, not an attempt at matching scipy's semantics
+        # bit-for-bit. The preconditioner closure is reused unchanged for both paths -- it already has
+        # exactly the "1D array in, 1D array out" shape AMGCL's callback needs.
+        def outerPass(tolerance: float, x0: np.ndarray = None) -> tuple:
+            """One outer Krylov pass from x0 (zero if None): the Krylov iterate, the iteration count, and
+            SciPy's ``info`` (non-zero: stopped at the iteration cap short of ``tolerance``)."""
             if self._outerSolver == "scipy":
+                residualHistory = []
                 z, info = gmres(
                     outerOperator,
                     bs,
+                    x0=x0,
                     M=preconditioner,
-                    rtol=firstPassEta,
+                    rtol=tolerance,
                     atol=0.0,
                     restart=self._outerRestart,
                     maxiter=self._outerMaxiter,
-                    callback=lambda residualNorm: history.append(residualNorm),
+                    callback=lambda residualNorm: residualHistory.append(residualNorm),
                     callback_type="pr_norm",
                 )
-                outerIters = len(history)
-            else:
-                z = self._lgmresSolver.solve(
-                    system,
-                    bs,
-                    blockGaussSeidel,
-                    firstPassEta,
-                    self._outerRestart * self._outerMaxiter,
-                )
-                outerIters = self._lgmresSolver.lastIterations
-                # Non-convergence is a cap hit. lastError is LGMRES's own *scaled* relative residual
-                # (right preconditioning), not comparable with the true-residual target eta.
-                info = 1 if outerIters >= self._outerRestart * self._outerMaxiter else 0
-            x = dinv * z
+                return z, len(residualHistory), info
+            z = self._lgmresSolver.solve(
+                system,
+                bs,
+                blockGaussSeidel,
+                tolerance,
+                self._outerRestart * self._outerMaxiter,
+                x0=x0,
+            )
+            iterations = self._lgmresSolver.lastIterations
+            return z, iterations, self._lgmresCapHit(iterations, tolerance)
+
+        def solutionAndResiduals(z: np.ndarray) -> tuple:
+            """The solution x of the Krylov iterate z, its true relative residual (the one the solve is
+            accepted on) and its scaled relative residual (the equilibrated system's)."""
             # A x - b = D^-1 (As z - bs) exactly (D = diag(dinv)) -- verified numerically against the
             # direct A @ x - b computation on a real dumped system before use. Rides on the same
             # threaded operator built above; no second, unscaled full-system matvec.
             scaledResidualVector = system.residual(bs, z)
-            trueResidual = np.linalg.norm(scaledResidualVector / dinv) / max(np.linalg.norm(b), 1e-300)
-            scaledResidual = np.linalg.norm(scaledResidualVector) / max(np.linalg.norm(bs), 1e-300)
+            return (
+                dinv * z,
+                np.linalg.norm(scaledResidualVector / dinv) / max(np.linalg.norm(b), 1e-300),
+                np.linalg.norm(scaledResidualVector) / max(np.linalg.norm(bs), 1e-300),
+            )
+
+        with performancetiming.timeit("outer GMRES"):
+            z, outerIters, info = outerPass(firstPassEta)
+            x, trueResidual, scaledResidual = solutionAndResiduals(z)
 
         # GMRES's own stopping check (callback_type="pr_norm") is on the *preconditioned* residual,
         # not the true one -- with an imperfect preconditioner (this one, by design -- a block
@@ -1741,36 +1763,8 @@ class BlockAMGSolver(LinearSolver):
                     continuationEta = max(min(_proposed, continuationEta * 0.5), 1e-14)
                 else:
                     continuationEta *= 0.01
-                if self._outerSolver == "scipy":
-                    continuationHistory = []
-                    z, info = gmres(
-                        outerOperator,
-                        bs,
-                        x0=z,
-                        M=preconditioner,
-                        rtol=continuationEta,
-                        atol=0.0,
-                        restart=self._outerRestart,
-                        maxiter=self._outerMaxiter,
-                        callback=lambda residualNorm: continuationHistory.append(residualNorm),
-                        callback_type="pr_norm",
-                    )
-                    continuationIters = len(continuationHistory)
-                else:
-                    z = self._lgmresSolver.solve(
-                        system,
-                        bs,
-                        blockGaussSeidel,
-                        continuationEta,
-                        self._outerRestart * self._outerMaxiter,
-                        x0=z,
-                    )
-                    continuationIters = self._lgmresSolver.lastIterations
-                    info = 1 if continuationIters >= self._outerRestart * self._outerMaxiter else 0
-                x = dinv * z
-                scaledResidualVector = system.residual(bs, z)
-                trueResidual = np.linalg.norm(scaledResidualVector / dinv) / max(np.linalg.norm(b), 1e-300)
-                scaledResidual = np.linalg.norm(scaledResidualVector) / max(np.linalg.norm(bs), 1e-300)
+                z, continuationIters, info = outerPass(continuationEta, x0=z)
+                x, trueResidual, scaledResidual = solutionAndResiduals(z)
                 outerIters += continuationIters
                 capHit = capHit or info != 0
                 self._log(
@@ -1881,8 +1875,8 @@ class BlockAMGSolver(LinearSolver):
         if info != 0:
             self._log(
                 "warning",
-                "⚠ solve #{:}: the outer solve stopped at its iteration cap (outerRestart x outerMaxiter "
-                "= {:}) before reaching its own (scaled) tolerance. Raise outerMaxiter/outerRestart, or "
+                "⚠ solve #{:}: the outer solve did not reach its own tolerance within its iteration cap "
+                "(outerRestart x outerMaxiter = {:}). Raise outerMaxiter/outerRestart, or "
                 "check whether the system is simply too hard for this preconditioner at its current "
                 "settings.".format(self._solveCount, self._outerRestart * self._outerMaxiter),
             )

@@ -400,8 +400,9 @@ cdef void _lgmresPrecondApplyTrampoline(void* ctx, int n, const double* rhs, dou
     # rhs arrives as a `const double*` (it is AMGCL's own internal Arnoldi-vector storage, never meant
     # to be written through) -- copied element-by-element into a fresh, ordinary (non-const) numpy
     # array rather than wrapped in a zero-copy memoryview, which would need casting away the pointer's
-    # constness. n is at most the outer Krylov restart length, so this copy is not the cost driver
-    # here -- the Python-level preconditioner call below is.
+    # constness. n is the system size, so this is one pass over a vector per preconditioner
+    # application -- small against the application itself (a block Gauss-Seidel sweep of AMG cycles),
+    # which reads every matrix entry at least once.
     cdef np.ndarray[np.float64_t, ndim=1, mode="c"] rhsArr
     cdef double[::1] xView
     if self._pendingException is not None:
@@ -451,8 +452,10 @@ cdef class PyAMGCLLGMRESSolver:
     cdef readonly int lastIterations
     """The iteration count AMGCL's lgmres reported for the most recent solve, -1 before the first."""
     cdef readonly double lastError
-    """The relative residual AMGCL's lgmres reported for the most recent solve -- of the *scaled* system,
-    right-preconditioned, so not the true residual -- NaN before the first."""
+    """The relative residual ``||rhs - Op x|| / ||rhs||`` AMGCL's lgmres reached in the most recent solve,
+    recomputed at its exit, of the operator it iterated on: the equilibrated system, so not the true
+    residual, or with ``onUnscaledOperator`` the unscaled one. lgmres's own convergence test is this
+    value below ``tol``. NaN before the first solve."""
     cdef object _precondCallable
     cdef object _pendingException
 
