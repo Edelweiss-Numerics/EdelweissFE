@@ -248,10 +248,10 @@ std::shared_ptr< amgcl::backend::crs< StoredType, Col, Ptr > > convertedCopy(
 
 namespace amgcl {
 
-  // @brief A float-stored 3x3 block times a double vector block, accumulated in double. Without it,
-  // AMGCL's generic static_matrix product would return -- and accumulate in -- the matrix's value
-  // type, float; with it, every sparse product of the cycle accumulates in double (a non-template
-  // overload is preferred over the generic template).
+  /// @brief A float-stored 3x3 block times a double vector block, accumulated in double. Without it,
+  /// AMGCL's generic static_matrix product would return -- and accumulate in -- the matrix's value
+  /// type, float; with it, every sparse product of the cycle accumulates in double (a non-template
+  /// overload is preferred over the generic template).
   inline static_matrix< double, 3, 1 > operator*( const static_matrix< float, 3, 3 >&  a,
                                                   const static_matrix< double, 3, 1 >& b )
   {
@@ -267,7 +267,7 @@ namespace amgcl {
 
   namespace backend {
 
-    // @brief The builtin backend over double blocks, with the level matrices stored in float blocks.
+    /// @brief The builtin backend over double blocks, with the level matrices stored in float blocks.
     template < typename BlockType >
     struct builtin_float_matrices : public builtin< BlockType > {
       typedef builtin< BlockType >                                    Base;
