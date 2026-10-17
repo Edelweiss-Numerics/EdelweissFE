@@ -98,3 +98,19 @@ def test_the_float_block_cycle_preconditions_gmres_as_well(system):
 def test_float_with_block_size_2_is_still_refused():
     with pytest.raises(NotImplementedError):
         PyAMGCLSolver({"precond": dict(_PRECOND), "backendBlockSize": 2, "backendPrecision": "float"})
+
+
+def test_the_scalar_float_backend_rounds_the_values_as_numpy_does(system):
+    # the double values cross the wrapper and are rounded to float in C++: the same hierarchy as from values
+    # rounded beforehand. spai0 and plain smoothed aggregation are deterministic, so the two applications
+    # compare bit for bit.
+    A, b = system
+    rounded = A.copy()
+    rounded.data = rounded.data.astype(np.float32).astype(np.float64)
+    precond = {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": "spai0"}}
+    applications = []
+    for matrix in (A, rounded):
+        solver = PyAMGCLSolver({"precond": precond, "backendPrecision": "float"})
+        solver.build(matrix)
+        applications.append(solver.applyPreconditioner(b))
+    assert np.array_equal(applications[0], applications[1])

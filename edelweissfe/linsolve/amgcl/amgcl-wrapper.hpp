@@ -57,6 +57,30 @@ public:
                       double&       error ) = 0;
 };
 
+/// @brief A JSON parameter tree as a boost property tree (empty for an empty string).
+inline boost::property_tree::ptree parseJsonParameters( const char* jsonParameters )
+{
+  boost::property_tree::ptree parameters;
+  const std::string           json( jsonParameters );
+  if ( !json.empty() ) {
+    std::stringstream stream( json );
+    boost::property_tree::read_json( stream, parameters );
+  }
+  return parameters;
+}
+
+/// @brief The human-readable report of an AMGCL solver (levels, operator complexity, coarse size).
+template < typename Solver >
+std::string hierarchyReport( const std::unique_ptr< Solver >& solver )
+{
+  if ( !solver ) {
+    throw std::runtime_error( "report(): no hierarchy built yet -- call build() or solve() first" );
+  }
+  std::ostringstream report;
+  report << *solver;
+  return report.str();
+}
+
 /// @brief The matrix values in the backend's value type: the caller's own array for double, a
 /// rounded copy (kept in storage) for float.
 inline const double* valuesAs( const double* val, int, std::vector< double >& )
@@ -99,14 +123,7 @@ public:
   std::vector< double > nullspace_;
 
   // Constructor: Just stores the parameters
-  LinearSolverT( const char* json_params ) : solver_()
-  {
-    std::string json_str( json_params );
-    if ( !json_str.empty() ) {
-      std::stringstream ss( json_str );
-      boost::property_tree::read_json( ss, prm );
-    }
-  }
+  LinearSolverT( const char* json_params ) : prm( parseJsonParameters( json_params ) ), solver_() {}
 
   // Supply near null-space vectors for smoothed-aggregation coarsening. B is a rows-by-cols matrix in
   // row-major order (column j is the j-th near null-space vector). AMGCL takes these as a raw pointer
@@ -165,15 +182,7 @@ public:
   // Human-readable hierarchy report (levels, operator complexity, coarse size) for the AMG built by
   // build() or solve(). Streams AMGCL's own operator<< for the preconditioner + solver. Must be
   // called after a successful build()/solve() -- throws otherwise.
-  std::string report() const override
-  {
-    if ( !solver_ ) {
-      throw std::runtime_error( "report(): no hierarchy built yet -- call build() or solve() first" );
-    }
-    std::ostringstream oss;
-    oss << *solver_;
-    return oss.str();
-  }
+  std::string report() const override { return hierarchyReport( solver_ ); }
 
   void solve( int           n,
               const int*    ptr,
@@ -332,14 +341,7 @@ public:
   boost::property_tree::ptree prm;
   std::unique_ptr< Solver >   solver_;
 
-  LinearSolverBlockT( const char* json_params ) : solver_()
-  {
-    std::string json_str( json_params );
-    if ( !json_str.empty() ) {
-      std::stringstream ss( json_str );
-      boost::property_tree::read_json( ss, prm );
-    }
-  }
+  LinearSolverBlockT( const char* json_params ) : prm( parseJsonParameters( json_params ) ), solver_() {}
 
   void set_nullspace( const double*, int, int ) override
   {
@@ -385,15 +387,7 @@ public:
     std::copy( x_v.begin(), x_v.end(), x );
   }
 
-  std::string report() const override
-  {
-    if ( !solver_ ) {
-      throw std::runtime_error( "report(): no hierarchy built yet -- call build() or solve() first" );
-    }
-    std::ostringstream oss;
-    oss << *solver_;
-    return oss.str();
-  }
+  std::string report() const override { return hierarchyReport( solver_ ); }
 
   void solve( int           n,
               const int*    ptr,
