@@ -117,11 +117,19 @@ def test_without_reuse_every_rebuild_estimates_in_full(problem):
     assert not solver._p1FineSpectralRadiusCache
 
 
+class _Node:
+    """A node as the topology map reads it: hashable (a dictionary key), with coordinates and fields."""
+
+    def __init__(self, coordinates):
+        self.coordinates = coordinates
+        self.fields = {"displacement": None}
+
+
 def _hexa20Model():
     """One Hexa20 element as a model and DOF manager with what ``setModel`` and the topology map read, and a
     vector operator on its nodes (a graph Laplacian over its edges, coupled per node)."""
     coordinates = np.array(_hexa20Coordinates(0.0))
-    nodes = [SimpleNamespace(coordinates=c, fields={"displacement": None}) for c in coordinates]
+    nodes = [_Node(c) for c in coordinates]
     element = SimpleNamespace(nodes=nodes, nSpatialDimensions=3, fields=[["displacement"]] * len(nodes))
     model = SimpleNamespace(
         nodeFields={"displacement": SimpleNamespace(dimension=3, nodes=nodes)}, elements={1: element}
