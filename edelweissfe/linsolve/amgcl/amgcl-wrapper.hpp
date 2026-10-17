@@ -102,10 +102,10 @@ inline const float* valuesAs( const double* val, int nnz, std::vector< float >& 
 // arithmetic narrow. The matrix values and rhs/x at the build()/applyPreconditioner()/solve()
 // boundary are always double -- the value-type-dependent conversion happens inside this class, not at
 // the Cython/Python boundary.
-template < typename ValueType >
+template < typename ValueType, typename BackendType = amgcl::backend::builtin< ValueType > >
 class LinearSolverT : public AMGCLSolverInterface {
 public:
-  typedef amgcl::backend::builtin< ValueType > Backend;
+  typedef BackendType Backend;
   typedef amgcl::make_solver< amgcl::runtime::preconditioner< Backend >, amgcl::runtime::solver::wrapper< Backend > >
     Solver;
 
@@ -233,24 +233,30 @@ public:
 // copy_matrix(), the same hook AMGCL's own builtin_hybrid backend uses to store a scalar-built
 // hierarchy in block form. Vectors stay double.
 
-/// @brief A copy of A with every entry converted to StoredType -- double to float, or a double 3x3
-/// block to a float one -- and the same structure, in one OpenMP-parallel pass (a parallel first touch,
-/// so the copy is spread over the NUMA nodes like A).
+/// @brief A copy of A with every entry converted to StoredType -- double to float, a double 3x3 block to a
+/// float one, or unchanged -- and the same structure with 32-bit indices, in one OpenMP-parallel pass (a
+/// parallel first touch, so the copy is spread over the NUMA nodes like A). The index type never enters the
+/// arithmetic: a product with the copy is bitwise the one with A's own indices.
 template < typename StoredType, typename ValueType, typename Col, typename Ptr >
-std::shared_ptr< amgcl::backend::crs< StoredType, Col, Ptr > > convertedCopy(
+std::shared_ptr< amgcl::backend::crs< StoredType, int, int > > convertedCopy(
   const amgcl::backend::crs< ValueType, Col, Ptr >& A )
 {
-  std::shared_ptr< amgcl::backend::crs< StoredType, Col, Ptr > >
-    stored = std::make_shared< amgcl::backend::crs< StoredType, Col, Ptr > >();
+  const size_t maxIndex = static_cast< size_t >( std::numeric_limits< int >::max() );
+  if ( A.nnz > maxIndex || A.ncols > maxIndex ) {
+    throw std::overflow_error( "convertedCopy: a matrix of " + std::to_string( A.nnz ) +
+                               " entries does not fit 32-bit indices" );
+  }
+  std::shared_ptr< amgcl::backend::crs< StoredType, int, int > >
+    stored = std::make_shared< amgcl::backend::crs< StoredType, int, int > >();
   stored->set_size( A.nrows, A.ncols, false );
   stored->set_nonzeros( A.nnz );
   stored->ptr[0]        = 0;
   const ptrdiff_t nRows = static_cast< ptrdiff_t >( A.nrows );
 #pragma omp parallel for
   for ( ptrdiff_t i = 0; i < nRows; ++i ) {
-    stored->ptr[i + 1] = A.ptr[i + 1];
+    stored->ptr[i + 1] = static_cast< int >( A.ptr[i + 1] );
     for ( Ptr j = A.ptr[i]; j < A.ptr[i + 1]; ++j ) {
-      stored->col[j] = A.col[j];
+      stored->col[j] = static_cast< int >( A.col[j] );
       stored->val[j] = A.val[j];
     }
   }
@@ -283,16 +289,23 @@ namespace amgcl {
 
   namespace backend {
 
-    /// @brief The builtin backend over double blocks, with the level matrices stored in float blocks.
-    template < typename BlockType >
-    struct builtin_float_matrices : public builtin< BlockType > {
-      typedef builtin< BlockType >                                    Base;
-      typedef typename math::replace_scalar< BlockType, float >::type StoredType;
-      typedef crs< StoredType, ptrdiff_t, ptrdiff_t >                 matrix;
+    /// @brief The builtin backend over BlockType (double, or a double block), with the level matrices the cycle
+    /// reads -- operators, prolongations, restrictions -- stored with StoredScalar entries and 32-bit indices.
+    /// The hierarchy is set up as builtin< BlockType > sets it up; builtin< BlockType > itself would store every
+    /// level with 64-bit indices (its default ptrdiff_t), 16 instead of 12 bytes per scalar double entry.
+    template < typename BlockType, typename StoredScalar >
+    struct builtin_stored_matrices : public builtin< BlockType > {
+      /// @brief The backend this one stores the level matrices of.
+      typedef builtin< BlockType > Base;
+      /// @brief BlockType with StoredScalar entries.
+      typedef typename math::replace_scalar< BlockType, StoredScalar >::type StoredType;
+      /// @brief A level matrix as the cycle reads it.
+      typedef crs< StoredType, int, int > matrix;
 
+      /// @brief No row iterator over the stored matrices (they differ from the build matrices).
       struct provides_row_iterator : std::false_type {};
 
-      /// @brief The level matrix as the cycle reads it: A's entries rounded to float.
+      /// @brief The level matrix as the cycle reads it: A's entries as StoredType, its indices as int.
       static std::shared_ptr< matrix > copy_matrix( std::shared_ptr< typename Base::matrix > A,
                                                     const typename Base::params& )
       {
@@ -300,8 +313,18 @@ namespace amgcl {
       }
     };
 
-    template < typename B1, typename B2 >
-    struct backends_compatible< builtin_float_matrices< B1 >, builtin_float_matrices< B2 > > : std::true_type {};
+    /// @brief The builtin backend over double blocks, with the level matrices stored in float blocks.
+    template < typename BlockType >
+    using builtin_float_matrices = builtin_stored_matrices< BlockType, float >;
+
+    /// @brief The builtin backend with the level matrices stored with 32-bit indices, values unchanged.
+    template < typename ValueType >
+    using builtin_int_indexed_matrices = builtin_stored_matrices< ValueType,
+                                                                  typename math::scalar_of< ValueType >::type >;
+
+    template < typename B1, typename S1, typename B2, typename S2 >
+    struct backends_compatible< builtin_stored_matrices< B1, S1 >, builtin_stored_matrices< B2, S2 > >
+      : std::true_type {};
 
   } // namespace backend
 } // namespace amgcl
@@ -1117,14 +1140,20 @@ public:
   }
 };
 
-// The default, unchanged double-precision wrapper, and a float32 one for a mixed-precision backend.
-typedef LinearSolverT< double > LinearSolver;
-typedef LinearSolverT< float >  LinearSolverFloat;
+// The default double-precision wrapper, and a float32 one for a mixed-precision backend. Every instantiation
+// stores its level matrices with 32-bit indices (builtin_stored_matrices above): the same hierarchy and the same
+// arithmetic as AMGCL's builtin backend, with fewer bytes per entry for the cycle to read.
+typedef LinearSolverT< double, amgcl::backend::builtin_int_indexed_matrices< double > > LinearSolver;
+typedef LinearSolverT< float, amgcl::backend::builtin_int_indexed_matrices< float > >   LinearSolverFloat;
 
 // Block-valued instantiations: 3×3 for a 3D displacement field, 2×2 for a 2D one -- one template
 // parameter apart.
-typedef LinearSolverBlockT< amgcl::static_matrix< double, 2, 2 > > LinearSolverBlock2;
-typedef LinearSolverBlockT< amgcl::static_matrix< double, 3, 3 > > LinearSolverBlock3;
+typedef LinearSolverBlockT< amgcl::static_matrix< double, 2, 2 >,
+                            amgcl::backend::builtin_int_indexed_matrices< amgcl::static_matrix< double, 2, 2 > > >
+  LinearSolverBlock2;
+typedef LinearSolverBlockT< amgcl::static_matrix< double, 3, 3 >,
+                            amgcl::backend::builtin_int_indexed_matrices< amgcl::static_matrix< double, 3, 3 > > >
+  LinearSolverBlock3;
 
 // 3×3 blocks set up in double but stored -- and read in the cycle -- in float, see
 // builtin_float_matrices above.
