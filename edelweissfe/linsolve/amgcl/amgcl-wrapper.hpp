@@ -1055,7 +1055,7 @@ public:
 // tests/test_ptwogrid.py).
 //
 // The fine Chebyshev smoother reimplements amgcl::relaxation::chebyshev's polynomial (same degree,
-// lower/higher conventions, same recurrence, optional Jacobi scaling) rather than wrapping it,
+// lower/higher conventions, same recurrence; no Jacobi scaling) rather than wrapping it,
 // because AMGCL estimates the spectral radius inside its constructor and offers no way to supply
 // one. Here the estimate is either computed by power iteration -- from a deterministic, thread-count
 // independent start vector -- or handed in, e.g. the value of a previous build on the same field,
@@ -1137,34 +1137,25 @@ inline void ptwogridFineResidual( const amgcl::backend::crs< amgcl::static_matri
 // type, with the Chebyshev smoother acting on it. ValueType is the double entry type (double, or a
 // double 3x3 block); MatrixValueType is how the operator is stored for the smoother and the residual:
 // ValueType itself, or its float counterpart -- half the bytes per entry, the dominant traffic of
-// the cycle. The spectral-radius estimate and the Jacobi scaling (inverse diagonal) only ever run on,
-// and come from, a double operator: a float level is made from a double one (makeFloatCopy()), which
-// has estimated or re-checked the radius before.
+// the cycle. The spectral-radius estimate only ever runs on a double operator: a float level is made
+// from a double one (makeFloatCopy()), which has estimated or re-checked the radius before.
 template < typename ValueType, typename MatrixValueType = ValueType >
 class PTwoGridFineLevelT : public PTwoGridFineSmoother {
 public:
   typedef amgcl::backend::crs< MatrixValueType, int, int >   Matrix;
-  typedef amgcl::backend::numa_vector< ValueType >           Diagonal;
   typedef typename amgcl::math::rhs_of< ValueType >::type    RhsType;
   typedef typename amgcl::math::scalar_of< ValueType >::type ScalarType;
   static const int                                           BlockSize = amgcl::math::static_rows< ValueType >::value;
 
-  std::shared_ptr< Matrix >   A_;
-  std::shared_ptr< Diagonal > inverseDiagonal_;
-  std::vector< double >       r_, p_;
-  unsigned                    degree_ = 0;
-  bool                        scale_  = false;
-  double                      d_ = 0.0, c_ = 0.0;
+  std::shared_ptr< Matrix > A_;
+  std::vector< double >     r_, p_;
+  unsigned                  degree_ = 0;
+  double                    d_ = 0.0, c_ = 0.0;
 
-  // @brief Take over the operator A (already in this storage format); with scale, Jacobi-scale the
-  // smoother (and the spectral-radius estimate) by its inverse diagonal.
-  void setOperator( std::shared_ptr< Matrix > A, bool scale )
+  /// @brief Take over the operator A (already in this storage format).
+  void setOperator( std::shared_ptr< Matrix > A )
   {
-    A_     = A;
-    scale_ = scale;
-    if ( scale_ ) {
-      inverseDiagonal_ = amgcl::backend::diagonal( *A_, /*invert=*/true );
-    }
+    A_ = A;
     r_.assign( A_->nrows * BlockSize, 0.0 );
     p_.assign( A_->nrows * BlockSize, 0.0 );
   }
@@ -1191,12 +1182,10 @@ public:
     }
     std::unique_ptr< PTwoGridFineLevelT< ValueType, FloatValueType > > level(
       new PTwoGridFineLevelT< ValueType, FloatValueType >() );
-    level->A_               = Afloat;
-    level->inverseDiagonal_ = inverseDiagonal_;
-    level->scale_           = scale_;
-    level->degree_          = degree_;
-    level->d_               = d_;
-    level->c_               = c_;
+    level->A_      = Afloat;
+    level->degree_ = degree_;
+    level->d_      = d_;
+    level->c_      = c_;
     level->r_.assign( r_.size(), 0.0 );
     level->p_.assign( p_.size(), 0.0 );
     return level;
@@ -1215,7 +1204,7 @@ public:
     c_ = 0.5 * ( hi - lo );
   }
 
-  // @brief Power iteration for the spectral radius of A (of D^-1 A if scaled): the loop of
+  // @brief Power iteration for the spectral radius of A: the loop of
   // amgcl::backend::spectral_radius (estimate sum_i |(A b)_i b_i| per scalar component, b normalized),
   // with two differences that make the estimate a deterministic function of the matrix alone: the
   // start vector is the caller's instead of per-thread random numbers, and the reductions run over a
@@ -1249,17 +1238,11 @@ public:
     for ( int iter = 0; iter < powerIters; ) {
 #pragma omp parallel for schedule( static )
       for ( ptrdiff_t k = 0; k < nChunks; ++k ) {
-        double    localNorm = 0.0, localRadius = 0.0;
-        ValueType diagonalValue = amgcl::math::identity< ValueType >();
+        double localNorm = 0.0, localRadius = 0.0;
         for ( ptrdiff_t i = k * chunk, e = std::min( n, ( k + 1 ) * chunk ); i < e; ++i ) {
           RhsType s = amgcl::math::zero< RhsType >();
-          for ( int j = A.ptr[i], end = A.ptr[i + 1]; j < end; ++j ) {
-            if ( scale_ && A.col[j] == i )
-              diagonalValue = A.val[j];
+          for ( int j = A.ptr[i], end = A.ptr[i + 1]; j < end; ++j )
             s += A.val[j] * b0[A.col[j]];
-          }
-          if ( scale_ )
-            s = amgcl::math::inverse( diagonalValue ) * s;
           const double* sScalar  = reinterpret_cast< const double* >( &s );
           const double* b0Scalar = reinterpret_cast< const double* >( &b0[i] );
           for ( int component = 0; component < BlockSize; ++component ) {
@@ -1304,12 +1287,6 @@ public:
       const double* residual = fromZero ? b : r_.data();
       if ( !fromZero )
         ptwogridFineResidual( *A_, b, x, r_.data() );
-      if ( scale_ ) {
-        auto residualRange = amgcl::make_iterator_range( residual, residual + n );
-        auto rRange        = amgcl::make_iterator_range( r_.data(), r_.data() + n );
-        amgcl::backend::vmul( 1.0, *inverseDiagonal_, residualRange, 0.0, rRange );
-        residual = r_.data();
-      }
       if ( k == 0 ) {
         alpha = 1.0 / d_;
         beta  = 0.0;
@@ -1399,8 +1376,9 @@ public:
          setupFineOperatorSeconds_ = 0.0, setupSpectralRadiusSeconds_ = 0.0;
   double applyFineSeconds_ = 0.0, applyCoarseSeconds_ = 0.0;
 
-  // @brief Parse the flat parameter tree: nu, fineDegree, fineLower, fineHigher, finePowerIters,
-  // fineScale, fineBlockSize, and the coarse level's AMGCL preconditioner tree under "coarse".
+  // @brief Parse the flat parameter tree: nuPre, nuPost, fineDegree, fineLower, fineHigher,
+  // finePowerIters, fineRecheckIters, fineRecheckTolerance, fineBlockSize, fineValueType,
+  // coarseValueType, and the coarse level's AMGCL preconditioner tree under "coarse".
   PTwoGridPreconditionerT( const char* json_params )
   {
     std::string json_str( json_params );
@@ -1528,7 +1506,6 @@ public:
     const unsigned degree        = prm.get( "fineDegree", 5u );
     const float    lower         = prm.get( "fineLower", 0.01f );
     const float    higher        = prm.get( "fineHigher", 1.1f );
-    const bool     scale         = prm.get( "fineScale", false );
     fineScalar_.reset();
     fineBlock3_.reset();
     fineFloat_.reset();
@@ -1555,11 +1532,11 @@ public:
     start = Clock::now();
     if ( Ablock ) {
       fineBlock3_.reset( new PTwoGridFineLevelT< Block3 >() );
-      fineBlock3_->setOperator( Ablock, scale );
+      fineBlock3_->setOperator( Ablock );
     }
     else {
       fineScalar_.reset( new PTwoGridFineLevelT< double >() );
-      fineScalar_->setOperator( Afine, scale );
+      fineScalar_->setOperator( Afine );
     }
     fineSpectralRadius_ = chooseFineSpectralRadius( spectralRadius, dominantVector, dominantVectorSize, higher );
     if ( fineBlock3_ )
