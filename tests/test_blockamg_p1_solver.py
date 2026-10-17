@@ -27,7 +27,8 @@
 #  ---------------------------------------------------------------------
 """The p-two-grid preconditioner driven through :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`
 itself, not built directly: a solve through it, the topology map computed from the model (``p1FieldNames``),
-and the fine spectral radius cached across hierarchy rebuilds (``p1FineSpectralRadiusReuse``).
+the fine spectral radius cached across hierarchy rebuilds (``p1FineSpectralRadiusReuse``) and its invalidation
+by ``setModel``.
 """
 
 from types import SimpleNamespace
@@ -80,6 +81,14 @@ def _relativeResidual(A, x, b):
     return np.linalg.norm(b - A @ x) / np.linalg.norm(b)
 
 
+def _stubModel(coords):
+    """A model and DOF manager with exactly what ``setModel`` reads: one 3D field with its node coordinates."""
+    nodes = [SimpleNamespace(coordinates=c) for c in coords]
+    model = SimpleNamespace(nodeFields={"displacement": SimpleNamespace(dimension=3, nodes=nodes)})
+    dofManager = SimpleNamespace(idcsOfFieldsInDofVector={"displacement": slice(0, 3 * len(coords))})
+    return model, dofManager
+
+
 def test_the_p1_path_solves_through_the_solver(problem):
     A, b, coords, isCorner, edgeEndpoints = problem
     solver = _solver(isCorner, edgeEndpoints)
@@ -115,6 +124,21 @@ def test_without_reuse_every_rebuild_estimates_in_full(problem):
     solver(A, b)
     assert solver._preconditioners[0].fineSpectralRadiusSource == "estimated"
     assert not solver._p1FineSpectralRadiusCache
+
+
+def test_setModel_drops_the_cached_radius_and_rebuilds(problem):
+    A, b, coords, isCorner, edgeEndpoints = problem
+    solver = _solver(isCorner, edgeEndpoints, p1FineSpectralRadiusReuse=True)
+    solver(A, b)
+    standing = solver._preconditioners
+
+    # the same layout and sparsity pattern: only setModel can ask for the rebuild
+    solver.setModel(*_stubModel(coords))
+    assert not solver._p1FineSpectralRadiusCache
+    x = solver(A, b)
+    assert solver._preconditioners is not standing
+    assert solver._preconditioners[0].fineSpectralRadiusSource == "estimated"
+    assert _relativeResidual(A, x, b) <= _TOLERANCE
 
 
 class _Node:

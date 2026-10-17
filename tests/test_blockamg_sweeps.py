@@ -16,8 +16,8 @@ from edelweissfe.linsolve.blockamg import createSolver
 
 
 def _system(n=18, nFields=3):
-    """Three scalar fields on an n^3 grid Laplacian each, in a chain coupled both ways -- or the first one
-    alone. n^3 above AMGCL's coarse_enough (3000), so that no field is solved directly."""
+    """Three scalar fields on an n^3 grid Laplacian each, in a chain coupled both ways -- or the first one or
+    two of them. n^3 above AMGCL's coarse_enough (3000), so that no field is solved directly."""
     lap1 = sp.diags([-1.0, 2.0, -1.0], [-1, 0, 1], shape=(n, n))
     eye = sp.identity(n)
     lap3 = sp.kron(sp.kron(lap1, eye), eye) + sp.kron(sp.kron(eye, lap1), eye) + sp.kron(sp.kron(eye, eye), lap1)
@@ -32,6 +32,8 @@ def _system(n=18, nFields=3):
     ]
     if nFields == 1:
         A, blocks = K, blocks[:1]
+    elif nFields == 2:
+        A, blocks = A[: 2 * nodes, : 2 * nodes].tocsr(), blocks[:2]
     b = np.random.default_rng(0).standard_normal(A.shape[0])
     return A, b, blocks
 
@@ -73,3 +75,11 @@ def test_further_and_reverse_sweeps_reduce_the_outer_iterations_of_a_coupled_sys
     once = _outerIterations(sweeps=1, symmetric=False)
     assert _outerIterations(sweeps=2, symmetric=False) < 0.8 * once
     assert _outerIterations(sweeps=1, symmetric=True) < 0.8 * once
+
+
+def test_the_reverse_sweep_of_the_default_symmetric_sweep_improves_two_fields():
+    # with two fields the reverse sweep revisits only the first one: the overwrite form recomputed it from the
+    # second field's estimate alone, the correction form improves it -- the code default symmetric = true is
+    # therefore the one setting whose numerics the correction form changed on a two-field system
+    once = _outerIterations(nFields=2, sweeps=1, symmetric=False)
+    assert _outerIterations(nFields=2, sweeps=1, symmetric=True) < 0.8 * once

@@ -90,3 +90,27 @@ def test_a_single_field_name_is_not_split_into_characters():
     assert createSolver({"p1FieldNames": "displacement"})._p1FieldNamesRequested == {"displacement"}
     with pytest.raises(ValueError):
         createSolver({"p1FieldNames": 3})
+
+
+def test_null_field_names_and_trees_are_unset():
+    solver = createSolver({"p1FieldNames": None, "p1CoarsePrecond": None, "fieldPreconds": None})
+    assert solver._p1FieldNamesRequested == set()
+    assert solver._p1CoarsePrecond is None
+    assert solver._fieldPreconds == {}
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"p1FineDegree": 0},
+        {"p1NuPre": -1},
+        {"p1FineBlockSize": 2},
+        {"p1CoarsePrecond": []},
+        {"fieldPreconds": {"displacement": {"backendPrecision": "half"}}},
+        {"sweeps": 0},
+    ],
+    ids=lambda options: next(iter(options)),
+)
+def test_a_setting_the_run_could_not_use_raises_at_construction(options):
+    with pytest.raises(ValueError, match=next(iter(options))):
+        createSolver(options)

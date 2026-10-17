@@ -28,6 +28,7 @@ import json
 
 import pytest
 
+from edelweissfe.linsolve.base import FieldBlock
 from edelweissfe.linsolve.blockamg.blockamg import BlockAMGSolver
 
 
@@ -271,6 +272,10 @@ def test_reloaded_lgmres_settings_rebuild_the_outer_solver(configuredSolver):
         ("lgmresM", 0),
         ("p1FineBlockSize", 2),
         ("p1FineValueType", "half"),
+        ("p1FineDegree", 0),
+        ("p1CoarsePrecond", 3),
+        ("fieldPreconds", {"displacement": 3}),
+        ("fieldPreconds", {"displacement": {"backendBlockSize": 2, "backendPrecision": "float"}}),
         ("lgmresAlwaysReset", False),
     ],
 )
@@ -304,3 +309,44 @@ def test_a_reloaded_dump_directory_is_created_and_the_context_window_resized(con
     assert _reload(solver) is True
     assert dumpDir.is_dir()
     assert solver._recentSolveHistory.maxlen == 4
+
+
+def _withFields(solver):
+    """The solver after a solve on a 3D displacement and a scalar nonlocal damage field."""
+    solver._blocks = [
+        FieldBlock("displacement", 0, 30, 3),
+        FieldBlock("nonlocal damage", 30, 40, 1),
+    ]
+    return solver
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"fieldPreconds": {"nonlocal damage": {"backendBlockSize": 3}}},
+        {"p1FieldNames": ["nonlocal damage"], "p1FineBlockSize": 3},
+    ],
+    ids=["block size", "p1 block size"],
+)
+def test_a_block_size_that_does_not_match_the_field_is_rejected(configuredSolver, options):
+    solver, configPath = configuredSolver
+    _reload(_withFields(solver))
+    if "p1FineBlockSize" in options:
+        solver._p1FineBlockSize = 3
+
+    _write(configPath, {**options, "hotReloadConfigFile": str(configPath)})
+
+    assert _reload(solver) is False
+    assert solver._fieldPreconds == {}
+    assert solver._p1FieldNamesRequested == set()
+
+
+def test_a_field_precond_for_a_field_the_system_lacks_is_accepted(configuredSolver):
+    solver, configPath = configuredSolver
+    _reload(_withFields(solver))
+    fieldPreconds = {"temperature": {"backendBlockSize": 1}, "displacement": {"backendBlockSize": 3}}
+
+    _write(configPath, {"fieldPreconds": fieldPreconds, "hotReloadConfigFile": str(configPath)})
+
+    assert _reload(solver) is True
+    assert solver._fieldPreconds == fieldPreconds

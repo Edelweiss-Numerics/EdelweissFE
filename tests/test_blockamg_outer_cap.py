@@ -3,9 +3,12 @@
 """BlockAMGSolver's outer-solve non-convergence report: a cap hit, not a residual comparison.
 
 The AMGCL LGMRES outer solve reports its own *scaled*, right-preconditioned relative residual; comparing that
-with the true-residual target eta flagged converged solves as failures and missed real cap hits. Its iteration
-count reaching the cap is the outer solve's own non-convergence.
+with the true-residual target eta flagged converged solves as failures and missed real cap hits. The outer
+solve's own non-convergence is its iteration count at the cap with its own convergence test failed -- a pass
+may converge on exactly its last allowed iteration.
 """
+
+from types import SimpleNamespace
 
 import numpy as np
 import scipy.sparse as sp
@@ -43,6 +46,26 @@ def test_a_cap_hit_is_reported():
 
 def test_a_converged_solve_is_not_reported():
     assert not _warnings(outerTol=1e-6, outerRestart=200, outerMaxiter=1)
+
+
+def _capHit(iterations, lastError, tolerance=1e-4):
+    solver = createSolver({"verbosity": "silent", "outerRestart": 50, "outerMaxiter": 1})
+    solver._lgmresSolver = SimpleNamespace(lastError=lastError)
+    return solver._lgmresCapHit(iterations, tolerance)
+
+
+def test_a_pass_converged_on_its_last_allowed_iteration_is_no_cap_hit():
+    assert _capHit(50, lastError=9e-5) == 0
+
+
+def test_a_pass_at_the_cap_short_of_its_tolerance_is_a_cap_hit():
+    assert _capHit(50, lastError=2e-4) == 1
+    assert _capHit(50, lastError=float("nan")) == 1
+
+
+def test_a_pass_below_the_cap_is_no_cap_hit_whatever_its_residual():
+    # LGMRES only stops early on its own convergence test; lastError is never compared with eta
+    assert _capHit(49, lastError=2e-4) == 0
 
 
 def _stale(solver, counts):
