@@ -355,8 +355,8 @@ def test_a_field_precond_for_a_field_the_system_lacks_is_accepted(configuredSolv
 
 @pytest.mark.parametrize(
     "alongside",
-    [{}, {"lgmresM": 40}, {"outerMaxiter": 5}],
-    ids=["alone", "with lgmresM", "with outerMaxiter"],
+    [{}, {"lgmresM": 40}, {"outerMaxiter": 5}, {"krylovOnScaledSystem": False}],
+    ids=["alone", "with lgmresM", "with outerMaxiter", "with krylovOnScaledSystem"],
 )
 def test_settings_the_build_fails_with_are_rolled_back(configuredSolver, alongside):
     from _blockamgsystems import displacementDamageSystem
@@ -376,6 +376,7 @@ def test_settings_the_build_fails_with_are_rolled_back(configuredSolver, alongsi
 
     assert np.linalg.norm(b - A @ x) <= 1e-2 * np.linalg.norm(b)
     assert solver._fieldPreconds == {} and solver._lgmresM == 30 and solver._outerSolver == "amgcl_lgmres"
+    assert solver._krylovOnScaledSystem is True
     assert any("ROLLED BACK" in message for message in messages)
     # the file is recorded as seen: the next solve does not try it again
     messages.clear()

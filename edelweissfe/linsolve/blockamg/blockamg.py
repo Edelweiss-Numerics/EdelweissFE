@@ -257,6 +257,7 @@ CONFIG_CASTS = {
     "residualGrowthFactor": float,
     "hierarchyStalenessFactor": float,
     "refreshOnNewIncrement": _boolFromConfig,
+    "krylovOnScaledSystem": _boolFromConfig,
     "trueResidualMaxContinuations": int,
     "gapCompensatedTolerance": _boolFromConfig,
     "gapSafetyFactor": float,
@@ -528,6 +529,15 @@ class BlockAMGSolver(LinearSolver):
         ``c`` and no continuations, a solve can exceed ``f`` times the reference only while the reference is
         below ``c / f``: with the recommended cap of 50 and factor 3, a reference of 17 or more leaves the cap
         hits as the only rebuild trigger of this kind.
+    krylovOnScaledSystem
+        ``True`` (default): the outer Krylov solve runs on the equilibrated system ``D A D``, which it
+        converges in its own (scaled) norm while the solve is accepted on the true residual -- hence the
+        gap compensation and continuations. ``False`` (recommended, see the theory page): it runs on ``A`` itself,
+        right-preconditioned by ``x = D M^-1 (D r)`` with the same block preconditioner ``M`` on
+        ``D A D``, so its convergence norm is the acceptance norm; the gap compensation is bypassed, and
+        so are the continuations: AMGCL's LGMRES is right-preconditioned, so a pass that misses the
+        true-residual target has already hit its iteration cap, and a warm restart would not fix that. At
+        the same requested tolerance this asks for the true residual directly, i.e. no implicit over-solving.
     refreshOnNewIncrement
         Refresh the AMG hierarchies whenever a residual jump marks a new increment
         (default ``True``). With ``False`` a new increment alone keeps the standing hierarchies -- the
@@ -669,6 +679,7 @@ class BlockAMGSolver(LinearSolver):
         residualGrowthFactor: float = 4.0,
         hierarchyStalenessFactor: float = 1.5,
         refreshOnNewIncrement: bool = True,
+        krylovOnScaledSystem: bool = True,
         gapCompensatedTolerance: bool = False,
         gapSafetyFactor: float = 0.3,
         gapMaxFactor: float = 1e3,
@@ -722,6 +733,7 @@ class BlockAMGSolver(LinearSolver):
         self._residualGrowthFactor = residualGrowthFactor
         self._hierarchyStalenessFactor = hierarchyStalenessFactor
         self._refreshOnNewIncrement = refreshOnNewIncrement
+        self._krylovOnScaledSystem = krylovOnScaledSystem
         self._gapCompensatedTolerance = gapCompensatedTolerance
         self._gapSafetyFactor = gapSafetyFactor
         self._gapMaxFactor = gapMaxFactor
@@ -1678,9 +1690,11 @@ class BlockAMGSolver(LinearSolver):
         # (3) Field split: A_scaled and its blocks A_scaled_ij in one threaded pass over A -- the outer Krylov
         #     operator, the couplings the sweep needs on every solve, and on a rebuild the diagonal blocks the
         #     hierarchies are built from.
+        fieldBounds = [(block.start, block.stop) for block in blocks]
+        keptUnscaled = not self._krylovOnScaledSystem
         with performancetiming.timeit("equilibrated system"):
             system = PyAMGCLEquilibratedSystem()
-            system.build(A, scaling, [(block.start, block.stop) for block in blocks])
+            system.build(A, scaling, fieldBounds, keepUnscaled=keptUnscaled)
 
         # (4) Hierarchies: one per field, rebuilt or reused (see mustRefresh above)
         if mustRefresh:
@@ -1701,6 +1715,13 @@ class BlockAMGSolver(LinearSolver):
                 self._n = n
                 self._lastNnz = A.nnz
         preconditioners = self._preconditioners
+
+        # The outer solve runs on the system the settings in force ask for, read once for this solve: a hot reload
+        # rolled back above may have changed krylovOnScaledSystem since the system was built.
+        onScaledSystem = self._krylovOnScaledSystem
+        if not onScaledSystem and not keptUnscaled:
+            with performancetiming.timeit("equilibrated system"):
+                system.build(A, scaling, fieldBounds, keepUnscaled=True)
 
         nFields = len(slices)
         sizes = [block.stop - block.start for block in blocks]
@@ -1734,6 +1755,18 @@ class BlockAMGSolver(LinearSolver):
                     sweepOnce(range(nFields - 2, -1, -1), residual, v, visited)
             return np.concatenate(v)
 
+        # krylovOnScaledSystem = False: the outer solve runs on A itself, right-preconditioned by
+        # x = D M^-1 (D r) -- M built on D A D as always -- so that its own convergence norm is the
+        # true residual the solve is accepted on.
+        if onScaledSystem:
+            outerRightHandSide, outerPreconditioner = b_scaled, blockGaussSeidel
+        else:
+
+            def outerPreconditioner(residual):
+                return scaling * blockGaussSeidel(scaling * residual)
+
+            outerRightHandSide = b
+
         if self._outerTol is not None:
             eta = self._outerTol
         else:
@@ -1742,32 +1775,40 @@ class BlockAMGSolver(LinearSolver):
         # the outer Krylov converges the *scaled* residual, but acceptance is on the *true*
         # residual; ask the first pass for gapSafetyFactor * eta / gap (gap learned from previous solves) so
         # that it lands on target in one pass instead of paying a warm-restart continuation.
-        if self._gapCompensatedTolerance:
+        # On the unscaled system there is no gap to compensate: the outer solve converges the true residual.
+        if self._gapCompensatedTolerance and onScaledSystem:
             firstPassEta = max(self._gapSafetyFactor * eta / max(self._trueResidualGap, 1.0), 1e-14)
         else:
             firstPassEta = eta
 
-        # (5b) The outer Krylov solve on A_scaled z = b_scaled, preconditioned by the sweep: AMGCL's LGMRES
-        #      (right-preconditioned), which converges the residual of A_scaled z = b_scaled directly.
-        #      outerRestart x outerMaxiter is the iteration cap of a pass.
+        # (5b) The outer Krylov solve, preconditioned by the sweep, on A_scaled z = b_scaled (krylovOnScaledSystem,
+        #      the default) or on A x = b: AMGCL's LGMRES (right-preconditioned), which converges the residual of
+        #      the system it is given directly. outerRestart x outerMaxiter is the iteration cap of a pass.
         def outerPass(tolerance: float, x0: np.ndarray = None) -> tuple:
             """One outer Krylov pass from x0 (zero if None): the Krylov iterate, the iteration count, and 1 if the
             pass stopped at the iteration cap short of ``tolerance``, 0 otherwise."""
             lgmres = self._outerLgmres(n)
             z = lgmres.solve(
                 system,
-                b_scaled,
-                blockGaussSeidel,
+                outerRightHandSide,
+                outerPreconditioner,
                 tolerance,
                 self._outerRestart * self._outerMaxiter,
                 x0=x0,
+                onUnscaledOperator=not onScaledSystem,
             )
             iterations = lgmres.lastIterations
             return z, iterations, self._lgmresCapHit(iterations, tolerance)
 
         def solutionAndResiduals(z: np.ndarray) -> tuple:
             """The solution x of the Krylov iterate z, its true relative residual (the one the solve is
-            accepted on) and its scaled relative residual (the equilibrated system's)."""
+            accepted on) and, on the scaled system, its scaled relative residual (NaN otherwise)."""
+            if not onScaledSystem:
+                return (
+                    z,
+                    np.linalg.norm(system.residual(b, z, unscaled=True)) / max(np.linalg.norm(b), 1e-300),
+                    float("nan"),
+                )
             # A x - b = D^-1 (A_scaled z - b_scaled) exactly: the true residual from the scaled one, without a
             # product with A
             scaledResidualVector = system.residual(b_scaled, z)
@@ -1781,13 +1822,14 @@ class BlockAMGSolver(LinearSolver):
             z, outerIters, info = outerPass(firstPassEta)
             x, trueResidual, scaledResidual = solutionAndResiduals(z)
 
-        # (6) True-residual check. The outer solve converges the scaled residual, while the solve is accepted on
-        #     the true relative residual ||b - A x|| / ||b||, which can be larger (stiff rows are down-weighted
-        #     by D). A pass that misses eta is continued from its iterate with a tighter tolerance; the tolerance
-        #     is tightened in its own units (0.01x), since a warm restart at the same tolerance stops at once. The
-        #     ratio of the true to the scaled residual of the same iterate -- the gap -- is learned for
-        #     gapCompensatedTolerance, smoothed and bounded by gapMaxFactor.
-        measuredGap = trueResidual / max(scaledResidual, 1e-300)
+        # (6) True-residual check, needed on the scaled system only. The outer solve converges the scaled
+        #     residual there, while the solve is accepted on the true relative residual ||b - A x|| / ||b||,
+        #     which can be larger (stiff rows are down-weighted by D). A pass that misses eta is continued from
+        #     its iterate with a tighter tolerance; the tolerance is tightened in its own units (0.01x), since a
+        #     warm restart at the same tolerance stops at once. The ratio of the true to the scaled residual of
+        #     the same iterate -- the gap -- is learned for gapCompensatedTolerance, smoothed and bounded by
+        #     gapMaxFactor.
+        measuredGap = trueResidual / max(scaledResidual, 1e-300) if onScaledSystem else float("nan")
         if np.isfinite(measuredGap) and measuredGap > 0.0:
             # Ceiled at gapMaxFactor too: an unbounded gap from one non-converged solve compounds
             # through the EMA into an ever-tighter, unmeetable tolerance.
@@ -1797,7 +1839,10 @@ class BlockAMGSolver(LinearSolver):
             capHit = info != 0
             continuationEta = min(eta, firstPassEta) if self._gapCompensatedTolerance else eta
             continuations = 0
-            while trueResidual > eta and continuations < self._trueResidualMaxContinuations:
+            # On the unscaled system AMGCL's (right-preconditioned) LGMRES already converged the true
+            # residual: a miss is a cap hit, and a warm restart with the same preconditioner would only
+            # extend the cap.
+            while onScaledSystem and trueResidual > eta and continuations < self._trueResidualMaxContinuations:
                 continuations += 1
                 # with gapCompensatedTolerance: aim at eta / gap (with a safety factor), at least 2x tighter
                 # per round so that the loop terminates

@@ -28,7 +28,8 @@
 """The p-two-grid preconditioner driven through :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`
 itself, not built directly: a solve through it, the topology map computed from the model (``p1FieldNames``),
 the fine spectral radius cached across hierarchy rebuilds (``p1FineSpectralRadiusReuse``) and its invalidation
-by ``setModel``.
+by ``setModel``, and the outer solve on the unscaled system (``krylovOnScaledSystem = false``) on a block with
+Dirichlet rows.
 """
 
 from types import SimpleNamespace
@@ -182,3 +183,20 @@ def test_the_topology_map_is_computed_from_the_model_and_dropped_with_it():
 
     solver.setModel(model, dofManager)
     assert "displacement" not in solver._p1Maps
+
+
+@pytest.mark.parametrize("p1", [True, False], ids=["p1", "single-level"])
+def test_the_unscaled_outer_solve_converges_on_a_block_with_dirichlet_rows(problem, p1):
+    A, b, coords, isCorner, edgeEndpoints = problem
+    options = {"krylovOnScaledSystem": False}
+    if not p1:
+        options["p1Maps"] = None
+    solver = _solver(isCorner, edgeEndpoints, **options)
+    x = solver(A, b)
+    assert _relativeResidual(A, x, b) <= 1.0001 * _TOLERANCE
+    # right-preconditioned: its own stopping test is on the true residual, nothing to continue
+    assert solver._lastContinuations == 0
+
+    # the same solution as on the scaled system, within what a 1e-8 residual bounds on this small lattice
+    reference = _solver(isCorner, edgeEndpoints, **{**options, "krylovOnScaledSystem": True})(A, b)
+    assert np.linalg.norm(x - reference) <= 1e-5 * np.linalg.norm(reference)

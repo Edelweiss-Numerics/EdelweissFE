@@ -8,10 +8,7 @@
   "etaMin": 1e-4,
   "etaMax": 1e-3,
   "hierarchyStalenessFactor": 3,
-  "trueResidualMaxContinuations": 0,
-  "gapCompensatedTolerance": true,
-  "gapSafetyFactor": 0.3,
-  "gapMaxFactor": 10.0,
+  "krylovOnScaledSystem": false,
   "fieldPreconds": {
     "displacement": {
       "backendPrecision": "float",

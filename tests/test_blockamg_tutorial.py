@@ -103,6 +103,15 @@ def test_the_algorithm_step_by_step():
     #     relative to b: here 100 (sqrt of the 1e4 spread of the diagonal), hence 1e-8 after a 1e-10 solve.
     assert info == 0 and np.linalg.norm(b - A @ x) <= 1e-8 * np.linalg.norm(b)
 
+    # (5b) on the unscaled system, with the same preconditioner between two scalings (krylovOnScaledSystem = false,
+    #      the recommended setting): GMRES solves (A D M^-1 D) y = b for y, and x = D M^-1 D y. The residual it
+    #      converges, b - A D M^-1 D y = b - A x, is then the true one, and step (6) has nothing left to check.
+    A_DMinvD = LinearOperator(A.shape, matvec=lambda y: A @ (scaling * blockGaussSeidel(scaling * y)))
+    y, info = gmres(A_DMinvD, b, rtol=1e-10, atol=0.0, restart=200, maxiter=1)
+    x_unscaled = scaling * blockGaussSeidel(scaling * y)
+    assert info == 0 and np.linalg.norm(b - A @ x_unscaled) <= 1.0001e-10 * np.linalg.norm(b)
+    assert np.linalg.norm(x_unscaled - x) <= 1e-6 * np.linalg.norm(x)
+
     # What the preconditioner buys: GMRES iterations to the same 1e-10, without a preconditioner, with the sweep
     # (AMG cycles), and with exact field solves, block Jacobi against block Gauss-Seidel. Measured: 76; 7 (block
     # Jacobi 7 too: the coupling is weak, and the AMG cycles' own error dominates); exact 5 and 3 -- the coupling
@@ -127,17 +136,20 @@ def test_the_algorithm_step_by_step():
     assert iterations(lambda y: blockGaussSeidel(y, exact)) < iterations(lambda y: blockGaussSeidel(y, exact, False))
 
     # The same solve with BlockAMGSolver: the same method in threaded C++, with AMGCL's right-preconditioned LGMRES
-    # as the outer solver. It adds the reuse of the hierarchies across Newton iterations, an adaptive
+    # as the outer solver, on the scaled system (step 4) by default and on the unscaled one (step 4b) with
+    # krylovOnScaledSystem = false. It adds the reuse of the hierarchies across Newton iterations, an adaptive
     # (Eisenstat--Walker) tolerance when outerTol is unset, and a near null-space for the displacement field: its
     # translations here, given only the field layout, and all rigid-body modes given the model (setModel).
-    solver = createSolver(
-        {
-            "outerTol": 1e-10,
-            "sweeps": 1,
-            "symmetric": False,
-            "fieldPreconds": {"displacement": FIELD_AMG, "nonlocal damage": FIELD_AMG},
-            "verbosity": "silent",
-        }
-    )
+    settings = {
+        "outerTol": 1e-10,
+        "sweeps": 1,
+        "symmetric": False,
+        "fieldPreconds": {"displacement": FIELD_AMG, "nonlocal damage": FIELD_AMG},
+        "verbosity": "silent",
+    }
+    solver = createSolver(settings)
+    solver.setFieldStructure(fieldBlocks)
+    assert np.linalg.norm(solver(A, b) - x) <= 1e-6 * np.linalg.norm(x)
+    solver = createSolver({**settings, "krylovOnScaledSystem": False})
     solver.setFieldStructure(fieldBlocks)
     assert np.linalg.norm(solver(A, b) - x) <= 1e-6 * np.linalg.norm(x)

@@ -179,10 +179,12 @@ The symbols of this page and their names in the code (``blockamg.py``, and the w
           (5a)  preconditioner    M = block Gauss-Seidel sweep over the fields,
                                   one AMG cycle per diagonal block
                 |
-          (5b)  outer Krylov solve on Ahat, preconditioned by M
+          (5b)  outer Krylov solve, preconditioned by M
+                    krylovOnScaledSystem = true:  on Ahat z = bhat, x = D z
+                    krylovOnScaledSystem = false: on A x = b, with D M^-1 D as the preconditioner
                 |
-          (6)   unscale  x = D z    and measure the TRUE residual  ||A x - b|| / ||b||
-                    > eta and continuations left?
+          (6)   measure the TRUE residual  ||A x - b|| / ||b||
+                    > eta and continuations left (scaled system only)?
                         yes -> warm restart at a tighter tolerance, back to (5b)
                         no  -> done
                 |
@@ -217,8 +219,16 @@ unknown :math:`y`,
    \hat A M^{-1} y = \hat b, \qquad z = M^{-1} y, \qquad x = D z,
 
 whose residual :math:`\hat b - \hat A M^{-1} y = \hat b - \hat A z = D (b - A x)` is the scaled one --
-hence the true-residual check of step (6). The numbers
-(1)--(7) reappear as comments in ``BlockAMGSolver.__call__``.
+hence the true-residual check of step (6). With
+``krylovOnScaledSystem = false`` (the recommended configuration) the outer method solves the unscaled
+system instead, with the same :math:`M` between two scalings,
+
+.. math::
+
+   A \, (D M^{-1} D) \, y = b, \qquad x = D M^{-1} D \, y,
+
+and its own (right-preconditioned) residual :math:`b - A x` is the true one. The numbers (1)--(7)
+reappear as comments in ``BlockAMGSolver.__call__``.
 
 
 Anatomy of one solve
@@ -557,9 +567,9 @@ continuation that is still needed then tightens by the *measured* gap rather tha
 (never looser, and always at least a factor of two per round so the loop still terminates).
 
 .. note::
-   **Why this is not the shipped default** (it is part of the recommended configuration below,
-   together with ``trueResidualMaxContinuations = 0`` and ``gapMaxFactor = 10``). Per increment it is
-   a clear win: on a live
+   **Why this is not the shipped default** (the recommended configuration below does not need it
+   either: it runs the outer solve on the unscaled system, ``krylovOnScaledSystem = false``, where there
+   is no gap to compensate). Per increment it is a clear win: on a live
    12-increment window of a reference model, continuations dropped from 126 to 1 and outer iterations
    from 8943 to 7124 (-20%), with no cutbacks or material return-mapping failures. But the default
    path happens to over-solve every system by roughly 30x, and the Newton iteration quietly relies on
@@ -805,6 +815,12 @@ Adaptive tolerance and true-residual enforcement
       - ``2``
       - How many warm-restart continuations may be spent enforcing the requested tolerance on the
         true residual. ``0`` disables enforcement.
+    * - ``krylovOnScaledSystem``
+      - ``true``
+      - ``false`` (recommended) runs the outer Krylov solve on the unscaled system, right-
+        preconditioned by :math:`x = D M^{-1} (D r)` with the same block preconditioner on
+        :math:`D A D`: its convergence norm is then the true residual, and the gap compensation and
+        the continuations are bypassed. At the same requested tolerance it does not over-solve.
     * - ``gapCompensatedTolerance``
       - ``false``
       - **Opt-in.** Pre-compensate the first pass for the scaled-to-true residual gap so that it
@@ -1054,16 +1070,20 @@ needs linear solves about ten times tighter than the Eisenstat--Walker forcing a
 ``etaMax``. ``etaMin = 1e-4`` was measured against ``1e-3`` on the cylinder, with an earlier candidate of this
 configuration: the looser solves cost Newton iterations already before the damage onset (74 instead of
 64 Newton iterations over the same eight increments, 1773 s instead of 1483 s).
+``krylovOnScaledSystem = false`` converges the true residual directly, so the gap compensation and the
+continuations of the scaled system have nothing to do and are left at their defaults.
 On a model with multi-point constraints, also set ``pruneCondensedMatrixZeros = False`` in the
 nonlinear solver, so that the hierarchies can be reused at all (see the reuse rules above).
 
 Measured live, from the same checkpoints, against the shipped defaults: the contact model's six
 increments in 676 s instead of 1328 s (-49%), and the damage cylinder at about 10.3 s instead of
-25.5 s per Newton iteration (-60%), both with ``etaMax = 1e-2``. On the cylinder that setting took
-five Newton iterations per increment before the damage onset instead of three and failed the onset
-increment (a cutback); ``etaMax = 1e-3`` restores three, converges the onset increment and reaches the
-same load (t = 0.28) in 907 s, and is neutral on the contact model (19.4 against 19.3 s per Newton
-iteration). Offline, on 13 / 12 captured consecutive systems, the same
+25.5 s per Newton iteration (-60%), both with ``etaMax = 1e-2`` and on the scaled system. On the
+cylinder that setting took five Newton iterations per increment before the damage onset instead of
+three and failed the onset increment (a cutback); ``etaMax = 1e-3`` restores three, converges the
+onset increment and reaches the same load (t = 0.28) in 907 s, and is neutral on the contact model
+(19.4 against 19.3 s per Newton iteration). ``krylovOnScaledSystem = false`` then saves another 4.5%
+on the cylinder (869 s, 61 instead of 63 Newton iterations) and 19.4 -> 18.4 s per Newton iteration on
+the contact model. Offline, on 13 / 12 captured consecutive systems, the same
 configuration with a 200-iteration cap took 91--93 s / 60--61 s against 107--112 s / 72--73 s with
 the displacement blocks stored in double, at identical outer iteration counts.
 

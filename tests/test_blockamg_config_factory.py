@@ -144,8 +144,8 @@ def test_the_recommended_configuration_solves_a_displacement_damage_system():
     displacement = solver._preconditioners[0]
     assert displacement.blockSize == 3 and displacement.isFloat
     assert hierarchyLevels(displacement) > 1
-    # the first solve asks for etaMax = 1e-3, compensated for the scaled-to-true residual gap
-    assert np.linalg.norm(b - A @ x) <= 3e-3 * np.linalg.norm(b)
+    # the first solve asks for etaMax = 1e-3 on the unscaled system: the true residual itself
+    assert np.linalg.norm(b - A @ x) <= 1.0001e-3 * np.linalg.norm(b)
 
 
 def test_null_is_unset_for_every_key_whose_default_is_unset():

@@ -176,3 +176,17 @@ def test_the_outer_solver_rejects_a_right_hand_side_of_the_wrong_length(system):
     solver = PyAMGCLLGMRESSolver(A.shape[0], {"M": 10})
     with pytest.raises(ValueError, match="length"):
         solver.solve(equilibrated, np.ones(A.shape[0] - 1), lambda r: r, 1e-8, 20)
+
+
+def test_the_unscaled_operator_is_scipys_bit_for_bit(system):
+    A, As, dinv, equilibrated = system
+    kept = PyAMGCLEquilibratedSystem()
+    kept.build(A, dinv, _FIELDS, keepUnscaled=True)
+    x = np.random.default_rng(7).standard_normal(A.shape[0])
+    rhs = np.random.default_rng(8).standard_normal(A.shape[0])
+    assert np.array_equal(kept.matvec(x, unscaled=True), A @ x)
+    assert np.array_equal(kept.residual(rhs, x, unscaled=True), rhs - A @ x)
+    # the scaled operator is unchanged by keeping the unscaled one
+    assert np.array_equal(kept.matvec(x), equilibrated.matvec(x))
+    with pytest.raises(RuntimeError, match="not kept"):
+        equilibrated.matvec(x, unscaled=True)
