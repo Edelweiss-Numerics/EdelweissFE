@@ -585,7 +585,9 @@ The hierarchies are rebuilt when
   rebuild: with continuations off it typically comes from the gap between the scaled residual the
   outer solve converges and the true one (stiff rows down-weighted by the equilibration, e.g. on a
   model with multi-point constraints), which a fresh hierarchy cannot close -- measured 18% slower on
-  such a model when it did trigger rebuilds.
+  such a model when it did trigger rebuilds. A cap hit asks for a rebuild even when the capped solve had
+  just rebuilt its hierarchies: not rebuilding again was measured neutral (live cylinder, increments 50--57: 828 s
+  against 826 s, the same Newton path, 19 more outer iterations), so the simpler rule stays.
 
 On a model with contact or tie constraints the active constraint set can change between Newton
 iterations, and then the sparsity pattern -- and with it the nonzero count -- changes and the

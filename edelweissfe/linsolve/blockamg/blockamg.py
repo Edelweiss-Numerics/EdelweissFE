@@ -813,7 +813,8 @@ class BlockAMGSolver(LinearSolver):
         ``hierarchyStalenessFactor`` times that reference and the reference plus
         :data:`_STALENESS_MIN_EXCESS` -- at small counts a factor alone fires on noise (8 -> 13). A solve
         that hit the iteration cap always asks for a rebuild: its count says nothing about how far the
-        hierarchies drifted, only that they no longer do the job. A missed tolerance does not: with
+        hierarchies drifted, only that they no longer do the job -- also when that solve had just rebuilt them
+        (not rebuilding again was measured neutral, see the theory page). A missed tolerance does not: with
         continuations off, it comes from the gap between the scaled residual the outer solve converges
         and the true one (stiff rows down-weighted by the equilibration), which a rebuild cannot close --
         measured +18% on a contact model with multi-point constraints when it did trigger a rebuild.
