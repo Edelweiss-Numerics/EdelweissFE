@@ -28,7 +28,9 @@
 """Tests for blockamg's configuration factory (createSolver): every documented key reaches the
 solver, and an unknown key is an error instead of being silently dropped."""
 
+import inspect
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -209,3 +211,38 @@ def test_every_configuration_key_is_documented_on_the_theory_page():
 
     page = (_REPO_ROOT / "doc/source/documentation/blockamgtheory.rst").read_text()
     assert [key for key in CONFIG_CASTS if "``{:}``".format(key) not in page] == []
+
+
+def test_the_default_column_of_the_key_tables_is_the_code_default():
+    from edelweissfe.linsolve.blockamg.blockamg import _P1_OPTIONS, BlockAMGSolver
+    from edelweissfe.linsolve.blockamg.ptwogrid import PTwoGridPreconditioner
+
+    codeDefaults = {key: p.default for key, p in inspect.signature(BlockAMGSolver.__init__).parameters.items()}
+    # a p-two-grid key left unset takes PTwoGridPreconditioner's own default
+    p1Defaults = inspect.signature(PTwoGridPreconditioner.__init__).parameters
+    for key, option in _P1_OPTIONS.items():
+        if codeDefaults[key] is None:
+            codeDefaults[key] = p1Defaults[option].default
+
+    page = (_REPO_ROOT / "doc/source/documentation/blockamgtheory.rst").read_text()
+    unset = re.findall(r"^    \* - ``(\w+)``\n      - unset$", page, re.M)
+    assert [key for key in unset if codeDefaults[key] is not None] == []
+
+    documented = re.findall(r"^    \* - ``(\w+)``\n      - ``([^`]+)``", page, re.M)
+    assert len(documented) > 30
+    mismatches = []
+    for key, cell in documented:
+        try:
+            value = json.loads(cell)
+        except json.JSONDecodeError:
+            # a reference to another key's value, resolved at run time from None
+            if cell in codeDefaults and codeDefaults[key] is None:
+                continue
+            mismatches.append((key, cell))
+            continue
+        if codeDefaults[key] is None and value in ({}, [], None):
+            continue  # None stands for empty in the code
+        # True == 1 in Python: a flag must also be documented as a flag
+        if value != codeDefaults[key] or isinstance(value, bool) != isinstance(codeDefaults[key], bool):
+            mismatches.append((key, cell))
+    assert mismatches == []
