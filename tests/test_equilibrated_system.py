@@ -117,3 +117,20 @@ def test_explicitly_stored_zeros_are_dropped_without_changing_any_product(system
         block = a.diagonalBlock(field)
         assert not np.any(block.data == 0.0)
         assert np.array_equal(block.indices, b.diagonalBlock(field).indices)
+
+
+def test_a_rejected_build_keeps_the_previous_system(system):
+    A, As, dinv, equilibrated = system
+    x = np.random.default_rng(5).standard_normal(A.shape[0])
+    before = equilibrated.matvec(x)
+    with pytest.raises(RuntimeError, match="overlap"):
+        equilibrated.build(A, dinv, [(0, 100), (90, 200)])
+    assert np.array_equal(equilibrated.matvec(x), before)
+
+
+def test_a_vector_of_the_wrong_length_raises(system):
+    A, As, dinv, equilibrated = system
+    with pytest.raises(ValueError, match="length"):
+        equilibrated.matvec(np.zeros(A.shape[0] + 1))
+    with pytest.raises(ValueError, match="length"):
+        equilibrated.residual(np.zeros(A.shape[0]), np.zeros(A.shape[0] - 3))

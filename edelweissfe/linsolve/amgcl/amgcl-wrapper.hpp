@@ -13,7 +13,9 @@
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <cmath>
+#include <limits>
 #include <memory>
+#include <numeric>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -459,23 +461,33 @@ public:
               int           nFields,
               const int*    fieldBounds )
   {
+    // the field layout is validated completely before any member changes, so that a rejected build
+    // leaves the previous system intact
+    if ( nFields > std::numeric_limits< signed char >::max() ) {
+      throw std::runtime_error( "EquilibratedSystemT: at most " +
+                                std::to_string( std::numeric_limits< signed char >::max() ) + " fields." );
+    }
+    std::vector< signed char > fieldOfDof( n, -1 );
+    for ( int f = 0; f < nFields; ++f ) {
+      const int start = fieldBounds[2 * f], stop = fieldBounds[2 * f + 1];
+      if ( start < 0 || stop > n || start > stop ) {
+        throw std::runtime_error( "EquilibratedSystemT: field " + std::to_string( f ) + " has invalid bounds." );
+      }
+      for ( int i = start; i < stop; ++i ) {
+        if ( fieldOfDof[i] != -1 ) {
+          throw std::runtime_error( "EquilibratedSystemT: fields overlap at DOF " + std::to_string( i ) + "." );
+        }
+        fieldOfDof[i] = static_cast< signed char >( f );
+      }
+    }
     n_       = n;
     nFields_ = nFields;
+    fieldOfDof_.swap( fieldOfDof );
     fieldStart_.assign( nFields, 0 );
     fieldStop_.assign( nFields, 0 );
-    fieldOfDof_.assign( n, -1 );
     for ( int f = 0; f < nFields; ++f ) {
       fieldStart_[f] = fieldBounds[2 * f];
       fieldStop_[f]  = fieldBounds[2 * f + 1];
-      if ( fieldStart_[f] < 0 || fieldStop_[f] > n || fieldStart_[f] > fieldStop_[f] ) {
-        throw std::runtime_error( "EquilibratedSystemT: field " + std::to_string( f ) + " has invalid bounds." );
-      }
-      for ( int i = fieldStart_[f]; i < fieldStop_[f]; ++i ) {
-        if ( fieldOfDof_[i] != -1 ) {
-          throw std::runtime_error( "EquilibratedSystemT: fields overlap at DOF " + std::to_string( i ) + "." );
-        }
-        fieldOfDof_[i] = static_cast< signed char >( f );
-      }
     }
 
     // As = D A D, with the same rounding as SciPy's two in-place scalings, and without A's explicitly
