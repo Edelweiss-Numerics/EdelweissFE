@@ -1448,6 +1448,28 @@ public:
       return;
     }
 
+    // Every free row needs a nonzero diagonal (blockamg's equilibration makes it 1): without one -- a
+    // zero block -- the coarse operator is singular and the Chebyshev bounds, relative to the fine
+    // spectral radius, divide by zero. Checked before anything is built.
+    ptrdiff_t rowWithoutDiagonal = -1;
+#pragma omp parallel for
+    for ( ptrdiff_t i = 0; i < n; ++i ) {
+      if ( isDirichlet_[i] )
+        continue;
+      bool diagonal = false;
+      for ( int j = ptr[i]; j < ptr[i + 1]; ++j )
+        if ( col[j] == i && val[j] != 0.0 )
+          diagonal = true;
+      if ( !diagonal ) {
+#pragma omp critical
+        rowWithoutDiagonal = i;
+      }
+    }
+    if ( rowWithoutDiagonal >= 0 ) {
+      throw std::runtime_error( "ptwogrid: free row " + std::to_string( rowWithoutDiagonal ) +
+                                " (one of) has no nonzero diagonal entry -- is the field's block zero?" );
+    }
+
     buildProlongation( nNodes, nDim, isCorner, edgeEndpoints );
     setupDirichletAndPSeconds_ = secondsSince( start );
 

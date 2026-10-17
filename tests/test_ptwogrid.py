@@ -37,7 +37,7 @@ extracted free submatrix, with the fine spectral radius taken from the C++ build
 import numpy as np
 import pytest
 import scipy.sparse as sp
-from scipy.spatial import cKDTree
+from _p1lattice import dirichletDofs, lattice, latticeSystem
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
@@ -50,66 +50,10 @@ from edelweissfe.linsolve.blockamg.ptwogrid import (  # noqa: E402
 from edelweissfe.linsolve.nullspace import rigidBodyNullspace  # noqa: E402
 
 
-def _lattice(nCornersPerAxis: int, seed: int = 0):
-    """Corner and midside nodes of a cubic lattice, in a shuffled node order."""
-    axis = np.arange(nCornersPerAxis, dtype=float)
-    corners = np.array(np.meshgrid(axis, axis, axis, indexing="ij")).reshape(3, -1).T
-    cornerIndex = {tuple(c): i for i, c in enumerate(corners)}
-    midsides, endpoints = [], []
-    for i, corner in enumerate(corners):
-        for direction in range(3):
-            neighbour = corner.copy()
-            neighbour[direction] += 1.0
-            j = cornerIndex.get(tuple(neighbour))
-            if j is not None:
-                midsides.append(0.5 * (corner + neighbour))
-                endpoints.append((i, j))
-    coords = np.vstack([corners, midsides])
-    isCorner = np.r_[np.ones(len(corners), dtype=bool), np.zeros(len(midsides), dtype=bool)]
-    edgeEndpoints = np.vstack([-np.ones((len(corners), 2), dtype=int), np.array(endpoints)])
-
-    order = np.random.default_rng(seed).permutation(len(coords))
-    newIndexOfOld = np.empty_like(order)
-    newIndexOfOld[order] = np.arange(len(order))
-    edgeEndpoints = edgeEndpoints[order]
-    edgeEndpoints[~isCorner[order]] = newIndexOfOld[edgeEndpoints[~isCorner[order]]]
-    return coords[order], isCorner[order], edgeEndpoints
-
-
-def _system(coords, dirichletDofs, seed: int = 1):
-    """The equilibrated, Dirichlet-eliminated block and its equilibration vector."""
-    nNodes = len(coords)
-    pairs = cKDTree(coords).query_pairs(1.0 + 1e-9, output_type="ndarray")
-    W = sp.coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(nNodes, nNodes))
-    W = (W + W.T).tocsr()
-    laplacian = sp.diags(np.asarray(W.sum(axis=1)).ravel() + 0.05) - W
-    coupling = np.array([[2.0, 0.3, 0.1], [0.3, 1.5, 0.2], [0.1, 0.2, 1.8]])
-    skew = np.random.default_rng(seed).uniform(-1.0, 1.0, (3, 3))
-    A = sp.kron(laplacian, coupling) + 0.02 * sp.kron(sp.triu(W, 1) - sp.tril(W, -1), skew)
-    A = A.tolil()
-    A[dirichletDofs, :] = 0.0
-    A[:, dirichletDofs] = 0.0
-    A[dirichletDofs, dirichletDofs] = 1.0
-    A = A.tocsr()
-    A.eliminate_zeros()
-    dinv = 1.0 / np.sqrt(np.abs(A.diagonal()))
-    As = sp.diags(dinv) @ A @ sp.diags(dinv)
-    As = As.tocsr()
-    As.sort_indices()
-    return As, dinv
-
-
-def _dirichletDofs(coords):
-    """All components on the x = 0 face, only the z component on the rest of the y = 0 face."""
-    clamped = np.nonzero(coords[:, 0] == 0.0)[0]
-    sliding = np.nonzero((coords[:, 1] == 0.0) & (coords[:, 0] > 0.0))[0]
-    return np.sort(np.r_[(3 * clamped[:, None] + np.arange(3)).ravel(), 3 * sliding + 2])
-
-
 @pytest.fixture(scope="module")
 def problem():
-    coords, isCorner, edgeEndpoints = _lattice(5)
-    As, dinv = _system(coords, _dirichletDofs(coords))
+    coords, isCorner, edgeEndpoints = lattice(5)
+    As, dinv = latticeSystem(coords, dirichletDofs(coords))
     r = np.random.default_rng(2).standard_normal(As.shape[0])
     return As, dinv, coords, isCorner, edgeEndpoints, r
 
@@ -352,13 +296,13 @@ class _DirichletStub:
         self.constrainedDofIndices = np.asarray(dofs, dtype=np.int64)
 
 
-def _systemWithStoredZeros(coords, dirichletDofs):
-    """The same block as :func:`_system`, but constrained by the solvers' own Dirichlet elimination,
+def _systemWithStoredZeros(coords, constrainedDofs):
+    """The same block as :func:`latticeSystem`, but constrained by the solvers' own Dirichlet elimination,
     which keeps the eliminated entries as explicitly stored zeros, and equilibrated in place."""
     from edelweissfe.solvers.base.dirichlet import applyDirichletToStiffness
 
-    K, _ = _system(coords, [])
-    K = applyDirichletToStiffness(K, [_DirichletStub(dirichletDofs)], np.zeros(K.shape[0]))
+    K, _ = latticeSystem(coords, [])
+    K = applyDirichletToStiffness(K, [_DirichletStub(constrainedDofs)], np.zeros(K.shape[0]))
     dinv = 1.0 / np.sqrt(np.abs(K.diagonal()))
     As = K.copy()
     As.data *= dinv[As.indices]
@@ -367,8 +311,8 @@ def _systemWithStoredZeros(coords, dirichletDofs):
 
 
 def test_dirichlet_rows_with_stored_zeros_are_recognized():
-    coords, isCorner, edgeEndpoints = _lattice(5)
-    dofs = _dirichletDofs(coords)
+    coords, isCorner, edgeEndpoints = lattice(5)
+    dofs = dirichletDofs(coords)
     withZeros, dinv = _systemWithStoredZeros(coords, dofs)
     assert np.any(withZeros.data == 0.0), "the Dirichlet elimination must leave stored zeros for this test"
     withoutZeros = withZeros.copy()
@@ -390,23 +334,61 @@ def test_dirichlet_rows_with_stored_zeros_are_recognized():
 
 
 def test_an_orphan_midside_raises():
-    coords, isCorner, edgeEndpoints = _lattice(4)
+    coords, isCorner, edgeEndpoints = lattice(4)
     # an interior midside whose two edge-endpoint corners are fully clamped, while it stays free
     interior = np.all((coords > 0.0) & (coords < 3.0), axis=1)
     orphan = np.nonzero(~isCorner & interior)[0][0]
     clampedCorners = edgeEndpoints[orphan]
     dofs = np.sort((3 * clampedCorners[:, None] + np.arange(3)).ravel())
-    As, dinv = _system(coords, dofs)
+    As, dinv = latticeSystem(coords, dofs)
     preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints)
     with pytest.raises(RuntimeError, match="orphan"):
         preconditioner.build(As, dinv, coords=coords)
 
 
 def test_an_unsupported_block_size_or_value_type_raises():
-    coords, isCorner, edgeEndpoints = _lattice(3)
+    coords, isCorner, edgeEndpoints = lattice(3)
     with pytest.raises(ValueError):
         PTwoGridPreconditioner(isCorner, edgeEndpoints, fineBlockSize=2)
     with pytest.raises(ValueError):
         PTwoGridPreconditioner(isCorner, edgeEndpoints, fineValueType="half")
     with pytest.raises(ValueError):
         PTwoGridPreconditioner(isCorner, edgeEndpoints, coarseValueType="half")
+
+
+def test_an_invalid_sweep_count_or_degree_raises_before_any_build():
+    coords, isCorner, edgeEndpoints = lattice(3)
+    with pytest.raises(ValueError):
+        PTwoGridPreconditioner(isCorner, edgeEndpoints, fineDegree=0)
+    with pytest.raises(ValueError):
+        PTwoGridPreconditioner(isCorner, edgeEndpoints, nuPre=-1)
+    # the C++ class checks them itself, in its constructor
+    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLPTwoGrid
+
+    for params in ({"fineDegree": 0}, {"nuPost": -1}, {"fineBlockSize": 2}, {"coarseValueType": "half"}):
+        with pytest.raises(RuntimeError):
+            PyAMGCLPTwoGrid(params)
+
+
+def test_a_fully_constrained_field_is_the_identity():
+    coords, isCorner, edgeEndpoints = lattice(3)
+    n = 3 * len(coords)
+    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+    preconditioner.build(sp.identity(n, format="csr"), np.ones(n), coords=coords)
+    r = np.random.default_rng(4).standard_normal(n)
+    assert np.array_equal(preconditioner.applyPreconditioner(r), r)
+    assert "identity" in preconditioner.report()
+
+
+def test_an_empty_field_builds_and_applies():
+    preconditioner = PTwoGridPreconditioner(np.zeros(0, dtype=bool), np.zeros((0, 2), dtype=int))
+    preconditioner.build(sp.csr_matrix((0, 0)), np.zeros(0))
+    assert preconditioner.applyPreconditioner(np.zeros(0)).shape == (0,)
+
+
+def test_a_zero_block_raises_instead_of_dividing_by_zero():
+    coords, isCorner, edgeEndpoints = lattice(3)
+    n = 3 * len(coords)
+    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, useCoarseNullspace=False)
+    with pytest.raises(RuntimeError, match="no nonzero diagonal"):
+        preconditioner.build(sp.csr_matrix((n, n)), np.ones(n))
