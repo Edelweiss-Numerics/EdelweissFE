@@ -45,22 +45,23 @@ import numpy as np
 from edelweissfe.linsolve.base import FieldBlock
 
 
-def translationNullspace(block: FieldBlock, blockDinv: np.ndarray) -> np.ndarray:
+def translationNullspace(block: FieldBlock, blockScaling: np.ndarray) -> np.ndarray:
     """The rigid-body translations of a vector field, transformed for the scaled operator.
 
     Translations are 1 on each of the ``dimension`` components (node-major). The near null-space of
     the scaled block :math:`D^{-1/2} A D^{-1/2}` is :math:`D^{1/2}` times that of :math:`A`, i.e.
-    the raw translations divided by ``blockDinv``.
+    the raw translations divided by ``blockScaling``, this block's slice of the diagonal of
+    :math:`D^{-1/2}` (the scaling vector).
     """
     size = block.stop - block.start
     components = block.dimension
     B = np.zeros((size, components))
     rows = np.arange(size)
     B[rows, rows % components] = 1.0
-    return B / blockDinv[:, None]
+    return B / blockScaling[:, None]
 
 
-def rigidBodyNullspace(block: FieldBlock, coords: np.ndarray, blockDinv: np.ndarray) -> np.ndarray:
+def rigidBodyNullspace(block: FieldBlock, coords: np.ndarray, blockScaling: np.ndarray) -> np.ndarray:
     """The full rigid-body near-null-space (translations *and* rotations) of a vector field,
     transformed for the scaled operator -- see :func:`translationNullspace` for the equilibration
     transform this mirrors exactly.
@@ -95,7 +96,7 @@ def rigidBodyNullspace(block: FieldBlock, coords: np.ndarray, blockDinv: np.ndar
     else:
         # No rigid-body rotation exists for any other nodal dimension -- translations are already
         # the full rigid-body space there.
-        return translationNullspace(block, blockDinv)
+        return translationNullspace(block, blockScaling)
 
     B = np.zeros((nNodes, components, components + numRotations))
     for c in range(components):
@@ -110,4 +111,4 @@ def rigidBodyNullspace(block: FieldBlock, coords: np.ndarray, blockDinv: np.ndar
         x, y = centered[:, 0], centered[:, 1]
         B[:, 0, 2], B[:, 1, 2] = -y, x  # in-plane rotation: (-y, x)
 
-    return B.reshape(size, components + numRotations) / blockDinv[:, None]
+    return B.reshape(size, components + numRotations) / blockScaling[:, None]

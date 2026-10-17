@@ -97,7 +97,7 @@ Bdisp[np.arange(d), np.arange(d) % 3] = 1.0
 # D^-1/2 A v ~ 0). Without this the AMG is handed the wrong near-null-space on the scaled operator.
 if scale == "on":
     # Divide by the *pre-equilibration* scaling, matching what the production path does
-    # (edelweissfe.linsolve.nullspace: `B / blockDinv[:, None]`). Scaling by Add.diagonal() here
+    # (edelweissfe.linsolve.nullspace: `B / blockScaling[:, None]`). Scaling by Add.diagonal() here
     # would be a near no-op: Add is sliced from the already-equilibrated A, whose diagonal is ~1,
     # so the basis would stay effectively unscaled and this prototype would benchmark a different
     # near-null-space than production.

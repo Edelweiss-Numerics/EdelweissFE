@@ -289,12 +289,12 @@ class PTwoGridPreconditioner:
                 fullDofRowsForCorners = np.repeat(cornerNodeRows, nDim) * nDim + np.tile(np.arange(nDim), nCorners)
                 freeCoarseCols = np.nonzero(~isDirichlet[fullDofRowsForCorners])[0]
                 coarseBlock = FieldBlock("coarse", 0, nCorners * nDim, nDim)
-                fullCornerDinv = dinv[fullDofRowsForCorners]
+                cornerScaling = dinv[fullDofRowsForCorners]
                 if coords is not None:
                     cornerCoords = np.asarray(coords, dtype=float)[cornerNodeRows]
-                    fullNullspace = rigidBodyNullspace(coarseBlock, cornerCoords, fullCornerDinv)
+                    fullNullspace = rigidBodyNullspace(coarseBlock, cornerCoords, cornerScaling)
                 else:
-                    fullNullspace = translationNullspace(coarseBlock, fullCornerDinv)
+                    fullNullspace = translationNullspace(coarseBlock, cornerScaling)
                 nullspace = fullNullspace[freeCoarseCols, :]
 
         with performancetiming.timeit("C++ build"):
