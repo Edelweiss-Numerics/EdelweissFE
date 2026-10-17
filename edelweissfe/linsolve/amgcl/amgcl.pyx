@@ -628,7 +628,8 @@ cdef class PyAMGCLPTwoGrid:
     def dirichletRows(object A):
         """The rows of a scipy.sparse CSR matrix this preconditioner treats as Dirichlet rows: a nonzero
         diagonal and no nonzero off-diagonal entry (explicitly stored zeros, which the Dirichlet
-        elimination keeps, do not count). Returns a bool array."""
+        elimination keeps, do not count) -- the identity slave rows of the multi-point-constraint
+        condensation included. Returns a bool array."""
         if not scipy.sparse.isspmatrix_csr(A):
             A = A.tocsr()
         cdef int n = A.shape[0]

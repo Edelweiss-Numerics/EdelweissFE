@@ -55,7 +55,8 @@ least one real reference model in the regime tested, so it should not be assumed
 checking on the model at hand.
 
 **Dirichlet handling is load-bearing, do not simplify away.** A field's diagonal block still carries
-its Dirichlet identity rows (production applies Dirichlet elimination upstream of blockamg). Both
+its Dirichlet identity rows (production applies Dirichlet elimination upstream of blockamg), and
+the identity rows of multi-point-constraint slaves, which are treated alike. Both
 the fine smoothing and the Galerkin projection must act on the *free* DOFs only, with the Dirichlet
 DOFs decoupled entirely, not merely masked in place -- masking in place for the fine smoother
 alone was tried and diverged outright (17-80x residual growth). The mechanism is not a genuine

@@ -803,8 +803,9 @@ back to the single-level default with a warning. Note that the cached map is nev
 across adaptive refinement, which is one more reason to treat this path as experimental.
 
 The whole cycle, and every stage of its build, runs in C++ and is OpenMP-threaded. The Dirichlet
-DOFs of the field's block (rows with a single, diagonal entry) are decoupled exactly rather than
-removed: the fine right-hand side and iterate are kept zero on them, which a Dirichlet row
+DOFs of the field's block -- rows whose only nonzero is the diagonal, which includes the identity
+slave rows of the multi-point-constraint condensation -- are decoupled exactly rather than removed:
+the fine right-hand side and iterate are kept zero on them, which a Dirichlet row
 preserves under every residual and every smoothing step, and :math:`P` has no rows or columns for
 them. This is the free-submatrix cycle up to floating-point summation order, without extracting the
 free submatrix, and it allows ``p1FineBlockSize = 3``: the fine operator is stored in node-wise

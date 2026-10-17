@@ -1034,7 +1034,9 @@ public:
 //
 // Dirichlet handling: the field's diagonal block arrives *with* its Dirichlet identity rows (a row
 // whose only nonzero is its diagonal; stored zeros, which the Dirichlet elimination keeps, do not
-// count).
+// count). The multi-point-constraint condensation fills its slave rows and columns with the identity
+// as well (the slaves are recovered from their masters after the solve); such a row is the same row
+// to this class, so "Dirichlet" below means either.
 // The former path extracted the free submatrix A_FF (Dirichlet rows *and* columns removed) and
 // smoothed on that. This class keeps the full block layout instead and makes the Dirichlet DOFs
 // decouple exactly:
