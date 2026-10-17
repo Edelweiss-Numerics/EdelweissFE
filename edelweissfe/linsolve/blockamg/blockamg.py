@@ -193,8 +193,11 @@ def _boolFromConfig(value) -> bool:
     raise ValueError("expected true or false, got {!r}".format(value))
 
 
-def _fieldNamesFromConfig(value) -> list:
-    """A list of field names; a single name given as a plain string is that one name, not its characters."""
+def _fieldNamesFromConfig(value) -> list | None:
+    """A list of field names; a single name given as a plain string is that one name, not its characters, and
+    ``null`` is ``None`` (unset)."""
+    if value is None:
+        return None
     if isinstance(value, str):
         return [value]
     if isinstance(value, (list, tuple)) and all(isinstance(name, str) for name in value):
@@ -649,7 +652,7 @@ class BlockAMGSolver(LinearSolver):
         # Per-field fine spectral radius and dominant vector of the p-two-grid smoother, kept for the next build only with
         # p1FineSpectralRadiusReuse; dropped in setModel() like the caches above.
         self._p1FineSpectralRadiusCache = {}
-        self._p1FieldNamesRequested = set(_fieldNamesFromConfig(p1FieldNames) if p1FieldNames is not None else [])
+        self._p1FieldNamesRequested = set(_fieldNamesFromConfig(p1FieldNames) or [])
         self._p1Nu = p1Nu
         self._p1NuPre = p1NuPre
         self._p1NuPost = p1NuPost
@@ -734,6 +737,29 @@ class BlockAMGSolver(LinearSolver):
         self._lgmresN = None
 
         self._lastSolveSummary = None
+
+        # The checks a hot reload applies (see _settingRejection), so that a value the run cannot use fails
+        # here rather than in the first solve or, for the p-two-grid options, in the first hierarchy build.
+        for name, value in (
+            ("outerRestart", outerRestart),
+            ("outerMaxiter", outerMaxiter),
+            ("lgmresM", lgmresM),
+            ("lgmresK", lgmresK),
+            ("sweeps", sweeps),
+            ("dumpOnDegradationContextSolves", dumpOnDegradationContextSolves),
+            ("fieldPreconds", self._fieldPreconds),
+            ("p1Nu", p1Nu),
+            ("p1NuPre", p1NuPre),
+            ("p1NuPost", p1NuPost),
+            ("p1FineDegree", p1FineDegree),
+            ("p1FineBlockSize", p1FineBlockSize),
+            ("p1FineValueType", p1FineValueType),
+            ("p1CoarseValueType", p1CoarseValueType),
+            ("p1CoarsePrecond", p1CoarsePrecond),
+        ):
+            rejection = self._settingRejection(name, value)
+            if rejection is not None:
+                raise ValueError("blockamg: {:} {:}, got {!r}".format(name, rejection, value))
 
     @property
     def reportsSolveSummary(self) -> bool:
@@ -851,6 +877,10 @@ class BlockAMGSolver(LinearSolver):
         fail :meth:`~edelweissfe.linsolve.blockamg.ptwogrid.PTwoGridPreconditioner.build`'s size
         check or, worse, silently build the wrong prolongation if the sizes happened to agree.
         Explicitly supplied ``p1Maps`` are kept -- they were never derived from this model.
+
+        The standing hierarchies are rebuilt on the next solve: they were built from the dropped caches
+        (node coordinates for the near null-space, P1 maps), and a new model with an unchanged field
+        layout and sparsity pattern would otherwise keep them.
         """
         super().setModel(model, dofManager)
         for fieldName in self._lazyP1MapNames:
@@ -858,6 +888,7 @@ class BlockAMGSolver(LinearSolver):
         self._lazyP1MapNames.clear()
         self._nodeCoordinateCache.clear()
         self._p1FineSpectralRadiusCache.clear()
+        self._refreshNext = True
 
     def _getNodeCoordinates(self, fieldName: str) -> "np.ndarray | None":
         """This field's node coordinates, node-major, or ``None`` if unavailable.
@@ -1081,13 +1112,19 @@ class BlockAMGSolver(LinearSolver):
     # The deprecated LGMRES recycling keys have no setting left to change.
     _HOT_RELOAD_IGNORED = ("hotReloadConfigFile", "lgmresAlwaysReset", "lgmresResetOnNewIncrement")
 
-    def _hotReloadRejection(self, name: str, value) -> "str | None":
-        """Why a hot-reloaded value cannot be applied, or ``None``. Checks what the constructor (or a later
-        build) would otherwise only fail on in the middle of a solve -- a bad edit must not end the run.
+    def _fieldDimensions(self) -> dict:
+        """The nodal dimension of every field of the last solve, by name; empty before the first."""
+        return {block.name: block.dimension for block in self._blocks or []}
 
-        The generic apply below still goes through ``hasattr``/``setattr`` on the ``_<name>`` attribute
-        convention; an explicit per-key table is left for the configuration refactor.
+    def _settingRejection(self, name: str, value) -> "str | None":
+        """Why a setting cannot be used, or ``None``: checked at construction and on every hot reload, for what
+        would otherwise only fail in the middle of a solve or a hierarchy build -- on a hot reload, a bad edit
+        must not end the run. The checks against the fields' dimensions apply once a solve has seen the fields.
+
+        The generic apply of a hot reload still goes through ``hasattr``/``setattr`` on the ``_<name>``
+        attribute convention; an explicit per-key table is left for the configuration refactor.
         """
+        dimensions = self._fieldDimensions()
         if name == "outerSolver" and value not in ("scipy", "amgcl_lgmres"):
             return "must be 'scipy' or 'amgcl_lgmres'"
         if name in ("lgmresM", "outerRestart", "outerMaxiter", "sweeps") and value < 1:
@@ -1096,15 +1133,54 @@ class BlockAMGSolver(LinearSolver):
             value is not None and value < 0
         ):
             return "must not be negative"
-        if name == "p1FineBlockSize" and value not in (1, 3):
-            return "must be 1 or 3"
+        if name == "p1FineDegree" and value is not None and value < 1:
+            return "must be at least 1"
+        if name == "p1FineBlockSize":
+            if value not in (1, 3):
+                return "must be 1 or 3"
+            notThreeDimensional = [
+                fieldName for fieldName in self._p1FieldNamesRequested if dimensions.get(fieldName, 3) != 3
+            ]
+            if value == 3 and notThreeDimensional:
+                return "3 needs 3D fields, but the p-two-grid fields {:} are not".format(sorted(notThreeDimensional))
+        if name == "p1FieldNames" and self._p1FineBlockSize == 3:
+            notThreeDimensional = [fieldName for fieldName in value if dimensions.get(fieldName, 3) != 3]
+            if notThreeDimensional:
+                return "names {:}, which are not 3D, with p1FineBlockSize 3".format(sorted(notThreeDimensional))
         if name in ("p1FineValueType", "p1CoarseValueType") and value not in ("double", "float"):
             return "must be 'double' or 'float'"
+        if name == "p1CoarsePrecond" and value is not None and not isinstance(value, dict):
+            return "must be an AMGCL preconditioner tree (a JSON object) or null"
+        if name == "fieldPreconds":
+            return self._fieldPrecondsRejection(value, dimensions)
         if name == "dumpOnDegradationDir" and value is not None:
             try:
                 os.makedirs(value, exist_ok=True)
             except OSError as error:
                 return "cannot create the directory: {:}".format(error)
+        return None
+
+    @staticmethod
+    def _fieldPrecondsRejection(fieldPreconds, dimensions: dict) -> "str | None":
+        """Why a ``fieldPreconds`` mapping cannot be used, or ``None`` -- see :meth:`_settingRejection`. Each
+        entry is checked for what the hierarchy build would fail on: the backend keys, and, once the fields are
+        known, a block size that matches the field's nodal dimension. An entry for a field the system does not
+        have is unused, not an error: one configuration file may serve several models."""
+        if not isinstance(fieldPreconds, dict):
+            return "must map field names to AMGCL preconditioner trees"
+        for fieldName, precond in fieldPreconds.items():
+            if not isinstance(precond, dict):
+                return "entry '{:}' must be an AMGCL preconditioner tree (a JSON object)".format(fieldName)
+            precision = precond.get("backendPrecision", "double")
+            blockSize = precond.get("backendBlockSize", 1)
+            if precision not in ("double", "float"):
+                return "entry '{:}': backendPrecision must be 'double' or 'float'".format(fieldName)
+            if blockSize not in (1, 2, 3) or (blockSize == 2 and precision == "float"):
+                return "entry '{:}': backendBlockSize must be 1, 2 or 3 (2 only in double)".format(fieldName)
+            if blockSize > 1 and fieldName in dimensions and dimensions[fieldName] != blockSize:
+                return "entry '{:}': backendBlockSize {:} does not match the field's dimension {:}".format(
+                    fieldName, blockSize, dimensions[fieldName]
+                )
         return None
 
     def _afterHotReload(self, name: str) -> None:
@@ -1207,7 +1283,7 @@ class BlockAMGSolver(LinearSolver):
             else:
                 newValue = value
 
-            rejection = self._hotReloadRejection(name, newValue)
+            rejection = self._settingRejection(name, newValue)
             if rejection is not None:
                 rejected.append("{:} ({:})".format(name, rejection))
                 continue
