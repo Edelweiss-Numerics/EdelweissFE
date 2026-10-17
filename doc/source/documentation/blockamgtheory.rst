@@ -189,8 +189,8 @@ they are rebuilt every call.
 Per-field AMG hierarchies
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Each diagonal block gets its own AMGCL hierarchy, built once per solve and applied many times (one
-cycle per outer Krylov iteration). The defaults differ by nodal dimension: a **vector** field
+Each diagonal block gets its own AMGCL hierarchy, applied once per outer Krylov iteration and reused
+across Newton iterations while it still fits the Jacobian (see the reuse rules below). The defaults differ by nodal dimension: a **vector** field
 (dimension > 1) is coarsened by smoothed aggregation with a strong-connection threshold of 0.01 and
 smoothed by a degree-5 Chebyshev polynomial; a **scalar** field takes smoothed aggregation and
 Chebyshev at AMGCL's own defaults. Both can be overridden per field with ``fieldPreconds``.
@@ -863,6 +863,17 @@ the full estimate again. The cache is dropped when the model
 changes (e.g. after adaptive refinement).
 
 
+A worked example
+----------------
+
+The whole method, written out with NumPy, SciPy and one AMGCL hierarchy per field on a small
+displacement / damage system -- equilibration, field split, per-field AMG, one block Gauss--Seidel sweep as
+the preconditioner, and the outer Krylov solve -- and the same solve with ``BlockAMGSolver``:
+
+.. literalinclude:: ../../../tests/test_blockamg_tutorial.py
+   :pyobject: test_the_algorithm_step_by_step
+
+
 Recommended configuration
 -------------------------
 
@@ -871,38 +882,8 @@ systematic comparison on two captured models (a 0.84M-DOF gradient-enhanced dama
 its damage onset, and a 1.07M-DOF contact anchor model with 53,701 multi-point constraint slaves) --
 is the recommended starting point for 3D displacement problems:
 
-.. code-block:: json
-
-    {
-        "outerSolver": "amgcl_lgmres",
-        "outerRestart": 50,
-        "outerMaxiter": 1,
-        "lgmresM": 50,
-        "sweeps": 1,
-        "symmetric": false,
-        "etaMin": 1e-4,
-        "etaMax": 1e-3,
-        "hierarchyStalenessFactor": 3,
-        "trueResidualMaxContinuations": 0,
-        "gapCompensatedTolerance": true,
-        "gapSafetyFactor": 0.3,
-        "gapMaxFactor": 10.0,
-        "fieldPreconds": {
-            "displacement": {
-                "backendPrecision": "float",
-                "backendBlockSize": 3,
-                "coarsening": {
-                    "type": "smoothed_aggregation",
-                    "aggr": {"eps_strong": 0.01},
-                    "estimate_spectral_radius": true,
-                    "power_iters": 20
-                },
-                "relax": {"type": "chebyshev", "degree": 16, "power_iters": 300, "lower": 0.01, "higher": 1.1},
-                "npre": 0,
-                "npost": 1
-            }
-        }
-    }
+.. literalinclude:: blockamg_recommended.json
+   :language: json
 
 What each part buys: 3x3 blocks stored in float (set up in double, see ``backendPrecision``) cut the
 cost per outer iteration; one high-degree post-smoothing sweep instead of a symmetric V(1,1) cycle,
