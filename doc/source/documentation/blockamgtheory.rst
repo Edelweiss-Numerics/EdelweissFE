@@ -176,12 +176,14 @@ The symbols of this page and their names in the code (``blockamg.py``, and the w
                                       per-field near-null-space)
                                   otherwise -> reuse the standing ones
                 |
-          (5)   outer Krylov solve on Ahat, preconditioned by
-                    M = block Gauss-Seidel sweep, one AMG cycle per diagonal block
+          (5a)  preconditioner    M = block Gauss-Seidel sweep over the fields,
+                                  one AMG cycle per diagonal block
+                |
+          (5b)  outer Krylov solve on Ahat, preconditioned by M
                 |
           (6)   unscale  x = D z    and measure the TRUE residual  ||A x - b|| / ||b||
                     > eta and continuations left?
-                        yes -> warm restart at a tighter tolerance, back to (5)
+                        yes -> warm restart at a tighter tolerance, back to (5b)
                         no  -> done
                 |
           (7)   record ||b||, eta and the outer iteration count for the next solve
@@ -197,7 +199,7 @@ In matrix form
 ~~~~~~~~~~~~~~
 
 With the fields numbered in DOF order, :math:`\hat A` splits into blocks :math:`\hat A_{ij}`. The
-preconditioner of step (5), :math:`v = M^{-1} r`, is one forward block Gauss--Seidel sweep with the
+preconditioner of step (5a), :math:`v = M^{-1} r`, is one forward block Gauss--Seidel sweep with the
 per-field AMG cycles :math:`M_i^{-1}` in place of exact block solves,
 
 .. math::
@@ -287,8 +289,11 @@ value type, and are consumed before the rest of the tree is forwarded verbatim:
     configuration below, measured faster per outer iteration (less index traffic) and validated
     inside the block Gauss--Seidel sweep on captured and live runs. Note that AMGCL's near-null-space
     path is unimplemented for block value types: a block hierarchy gets the identity block as its
-    only near-null-space -- the translations -- and gives up the **rotational** rigid-body modes
-    described next.
+    only near-null-space, i.e. constants per component *in the equilibrated variables*. Those are
+    :math:`D`-weighted translations, :math:`D` times a constant, not the translations :math:`D^{-1} t`
+    of :math:`\hat A` (see below); the two agree only where the diagonal is uniform, which it is not on
+    quadratic elements (corner and midside nodes) or across a damage band. A block hierarchy also
+    gives up the **rotational** rigid-body modes described next.
 
 Near-null-space and the Chebyshev smoother
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -403,17 +408,37 @@ where :math:`M_i^{-1}` denotes one AMG cycle on :math:`\hat A_{ii}`. On a field'
 the correction form matters on revisits, which an inexact :math:`M_i^{-1}` would otherwise throw
 away. With ``symmetric = true`` (the default) each forward sweep is followed by a reverse-order sweep
 of the same correction form, :math:`i = n-1, \dots, 1` -- starting one field before the one just
-updated, which has nothing to correct yet. With exact :math:`M_i = \hat A_{ii}` this is the classic block
+updated. With exact field solves that field has nothing left to correct; with AMG cycles it has, and
+skipping it saves one cycle of that field. With exact :math:`M_i = \hat A_{ii}` this is the classic block
 symmetric Gauss--Seidel preconditioner,
 
 .. math::
 
-   M_\mathrm{SGS}^{-1} = (B + U)^{-1}\, B\, (B + L)^{-1}, \qquad U = \text{the blocks } \hat A_{ij},\ i < j.
+   M_\mathrm{SGS}^{-1} = (B + U)^{-1}\, B\, (B + L)^{-1}, \qquad U = \text{the blocks } \hat A_{ij},\ i < j;
+
+with inexact :math:`M_i`, a reverse sweep in correction form over *all* fields would give
+:math:`(B + U)^{-1} (2B - \hat D) (B + L)^{-1}`, :math:`\hat D = \operatorname{blockdiag}(\hat A_{ii})`,
+the classic operator for :math:`B = \hat D`; skipping the last field changes its last block row.
 
 ``sweeps`` repeats the (possibly reversed) sweep.
 Neither is needed for the outer solve: right-preconditioned GMRES/LGMRES only needs :math:`M^{-1}`
 to be a fixed linear operator, not a symmetric one -- the measured configurations use
 ``sweeps = 1``, ``symmetric = false``.
+
+What that one forward sweep does depends on how the fields couple. On the gradient-enhanced damage
+model of the reference runs the coupling is one-sided: :math:`K_{ud}` (displacement rows, damage
+columns) is about 9% of :math:`K_{uu}`, while :math:`K_{du}` is about :math:`10^{-7}` of :math:`K_{dd}`.
+With the displacement field first in DOF order, the only coupling product the forward sweep forms is
+:math:`\hat A_{du} v_u`, which is numerically zero there: on that model the recommended sweep acts as
+block Jacobi, and still pays that product on every outer iteration. Sweeping the damage field first
+would instead make it the exact block back substitution of the (then block upper triangular) system,
+up to the inexact field solves.
+
+.. admonition:: Measured
+
+   Damage first against displacement first, offline on the captured systems of the damage cylinder and
+   the contact model: identical outer iteration counts, and 5--7% more time per outer iteration. On these
+   models the preconditioner's strength is its per-field AMG cycles, not the coupling.
 
 This is deliberately only an *approximate* inverse of the coupled operator -- which is exactly why
 the true-residual bookkeeping below exists.

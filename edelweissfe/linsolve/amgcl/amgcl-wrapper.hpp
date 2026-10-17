@@ -1070,15 +1070,23 @@ inline void ptwogridFineResidual( const amgcl::backend::crs< MatrixValueType, in
 template < typename ValueType, typename MatrixValueType = ValueType >
 class PTwoGridFineLevelT : public PTwoGridFineSmoother {
 public:
-  typedef amgcl::backend::crs< MatrixValueType, int, int >   Matrix;
-  typedef typename amgcl::math::rhs_of< ValueType >::type    RhsType;
+  /// @brief The fine operator's storage: CSR with 32-bit indices and MatrixValueType entries.
+  typedef amgcl::backend::crs< MatrixValueType, int, int > Matrix;
+  /// @brief The vector entry type matching ValueType (double, or a double 3-vector).
+  typedef typename amgcl::math::rhs_of< ValueType >::type RhsType;
+  /// @brief The scalar type of ValueType (double).
   typedef typename amgcl::math::scalar_of< ValueType >::type ScalarType;
-  static const int                                           BlockSize = amgcl::math::static_rows< ValueType >::value;
+  /// @brief Scalar rows per stored row: 1 for scalar entries, B for BxB blocks.
+  static const int BlockSize = amgcl::math::static_rows< ValueType >::value;
 
+  /// @brief The fine operator the smoother and the residual act on.
   std::shared_ptr< Matrix > A_;
-  std::vector< double >     r_, p_;
-  unsigned                  degree_ = 0;
-  double                    d_ = 0.0, c_ = 0.0;
+  /// @brief Work vectors of the Chebyshev iteration (residual r and search direction p), one entry per scalar row.
+  std::vector< double > r_, p_;
+  /// @brief Chebyshev polynomial degree, i.e. matrix products per smoothing sweep.
+  unsigned degree_ = 0;
+  /// @brief Centre d and half-width c of the Chebyshev interval [d - c, d + c] (setPolynomial()).
+  double d_ = 0.0, c_ = 0.0;
 
   /// @brief Take over the operator A (already in this storage format).
   void setOperator( std::shared_ptr< Matrix > A )

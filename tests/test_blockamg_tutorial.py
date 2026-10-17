@@ -50,15 +50,17 @@ def test_the_algorithm_step_by_step():
     # rigid-body modes.
     A, b, fieldBlocks = displacementDamageSystem(15, coupling="symmetric", rowScaling=True)
     fields = [slice(block.start, block.stop) for block in fieldBlocks]
+    # The steps are numbered as on the theory page and in BlockAMGSolver.__call__. Steps (1) and (7) carry state from
+    # one Newton iteration to the next and have no part in a single solve.
 
-    # 1. Equilibrate: solve (D A D) z = D b with D = diag(scaling), scaling = 1 / sqrt|a_ii|, then x = D z.
+    # (2) Equilibrate: solve (D A D) z = D b with D = diag(scaling), scaling = 1 / sqrt|a_ii|, then x = D z.
     scaling = 1.0 / np.sqrt(np.abs(A.diagonal()))
     D = sp.diags(scaling)
     A_scaled = (D @ A @ D).tocsr()
     b_scaled = scaling * b
 
-    # 2. Split by field into the blocks A_ij, and build one AMG hierarchy per diagonal block A_ii, with AMGCL (an
-    #    optional extension of EdelweissFE, hence imported here).
+    # (3) Split by field into the blocks A_ij, and (4) build one AMG hierarchy per diagonal block A_ii, with AMGCL
+    #     (an optional extension of EdelweissFE, hence imported here).
     A_blocks = [[A_scaled[row, column] for column in fields] for row in fields]
 
     from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver
@@ -70,9 +72,9 @@ def test_the_algorithm_step_by_step():
         assert hierarchyLevels(amg) > 1  # a real hierarchy, not a direct solve of a small block
         fieldAMG.append(amg)
 
-    # 3. The preconditioner v = M^-1 r: one forward block Gauss-Seidel sweep over the fields, each field's part of
-    #    v from one AMG cycle on its own residual, v_i = M_i^-1 (r_i - sum_{j < i} A_ij v_j). Without the coupling
-    #    sum it is block Jacobi.
+    # (5a) The preconditioner v = M^-1 r: one forward block Gauss-Seidel sweep over the fields, each field's part of
+    #      v from one AMG cycle on its own residual, v_i = M_i^-1 (r_i - sum_{j < i} A_ij v_j). Without the coupling
+    #      sum it is block Jacobi.
     def blockGaussSeidel(r, fieldSolves=fieldAMG, coupled=True):
         v = np.zeros_like(r)
         for i, field in enumerate(fields):
@@ -83,28 +85,28 @@ def test_the_algorithm_step_by_step():
             v[field] = fieldSolves[i].applyPreconditioner(residual)
         return v
 
-    #    With exact field solves, the sweep is the block lower triangular solve M^-1 = (B + L)^-1, B the
-    #    diagonal blocks and L the blocks below them: what the AMG cycles approximate. Check: (B + L) v = r.
+    #      With exact field solves, the sweep is the block lower triangular solve M^-1 = (B + L)^-1, B the
+    #      diagonal blocks and L the blocks below them: what the AMG cycles approximate. Check: (B + L) v = r.
     exact = [ExactFieldSolve(A_blocks[i][i]) for i in range(len(fields))]
     B_plus_L = sp.bmat([[A_blocks[i][j] if j <= i else None for j in range(len(fields))] for i in range(len(fields))])
     r = np.random.default_rng(1).standard_normal(A.shape[0])
     assert np.linalg.norm(B_plus_L @ blockGaussSeidel(r, exact) - r) <= 1e-10 * np.linalg.norm(r)
 
-    # 4. The outer Krylov solve on the coupled system, right-preconditioned by the sweep: GMRES solves
-    #    (A_scaled M^-1) y = b_scaled for y, and z = M^-1 y. GMRES converges the residual of the operator it is
-    #    given, b_scaled - A_scaled M^-1 y = b_scaled - A_scaled z, the scaled residual D (b - A x).
+    # (5b) The outer Krylov solve on the coupled system, right-preconditioned by the sweep: GMRES solves
+    #      (A_scaled M^-1) y = b_scaled for y, and z = M^-1 y. GMRES converges the residual of the operator it is
+    #      given, b_scaled - A_scaled M^-1 y = b_scaled - A_scaled z, the scaled residual D (b - A x).
     A_scaled_Minv = LinearOperator(A.shape, matvec=lambda y: A_scaled @ blockGaussSeidel(y))
     y, info = gmres(A_scaled_Minv, b_scaled, rtol=1e-10, atol=0.0, restart=200, maxiter=1)
     z = blockGaussSeidel(y)
     x = scaling * z
-    #    The true residual b - A x = D^-1 (b_scaled - A_scaled z) is then at most max(D) / min(D) times larger,
-    #    relative to b: here 100 (sqrt of the 1e4 spread of the diagonal), hence 1e-8 after a 1e-10 solve.
+    # (6) The true residual b - A x = D^-1 (b_scaled - A_scaled z) is then at most max(D) / min(D) times larger,
+    #     relative to b: here 100 (sqrt of the 1e4 spread of the diagonal), hence 1e-8 after a 1e-10 solve.
     assert info == 0 and np.linalg.norm(b - A @ x) <= 1e-8 * np.linalg.norm(b)
 
-    # 5. What the preconditioner buys: GMRES iterations to the same 1e-10, without a preconditioner, with the sweep
-    #    (AMG cycles), and with exact field solves, block Jacobi against block Gauss-Seidel. Measured: 76; 7 (block
-    #    Jacobi 7 too: the coupling is weak, and the AMG cycles' own error dominates); exact 5 and 3 -- the coupling
-    #    term of the sweep shows once the field solves are exact.
+    # What the preconditioner buys: GMRES iterations to the same 1e-10, without a preconditioner, with the sweep
+    # (AMG cycles), and with exact field solves, block Jacobi against block Gauss-Seidel. Measured: 76; 7 (block
+    # Jacobi 7 too: the coupling is weak, and the AMG cycles' own error dominates); exact 5 and 3 -- the coupling
+    # term of the sweep shows once the field solves are exact.
     def iterations(preconditioner):
         history = []
         A_scaled_Minv = LinearOperator(A.shape, matvec=lambda y: A_scaled @ preconditioner(y))

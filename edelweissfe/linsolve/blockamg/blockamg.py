@@ -65,7 +65,8 @@ What it does per solve
    near-null-space -- 3 translations plus 3 infinitesimal rotations, the standard basis for 3D
    elasticity AMG, since both are directions in which the discretized operator has essentially zero
    stiffness -- when node coordinates are available, translations alone otherwise; a scalar field
-   takes the default constant.
+   takes the default constant. A block backend (``backendBlockSize > 1``, part of the recommended
+   configuration) cannot take a near-null-space and uses AMGCL's constant blocks instead.
 #. **Precondition GMRES** with a block Gauss-Seidel sweep over the fields, each field's correction
    coming from one AMG V-cycle on its block, the couplings folded in between fields.
 
@@ -126,7 +127,9 @@ _IDENTIFICATION = "BlockAMGSolver"
 # backendBlockSize defaults to 1 (scalar). A vector field of nodal dimension d maps to
 # backendBlockSize: d (3 for a 3D displacement field, 2 for a 2D one). Setting it > 1 skips
 # set_nullspace (see __call__) -- AMGCL's near-null-space path is unimplemented for block value
-# types, so the rotational modes are lost. Inside this block Gauss-Seidel preconditioner, 3x3 blocks
+# types, so the hierarchy gets AMGCL's identity blocks: constants per component in the equilibrated
+# variables, i.e. D-weighted translations rather than the translations D^-1 t of the scaled block
+# (nullspace.py), and no rotational modes. Inside this block Gauss-Seidel preconditioner, 3x3 blocks
 # stored in float with a smoothed-aggregation spectral-radius estimate are nevertheless the measured
 # winner on the reference models (less index and value traffic per cycle), the recommended
 # configuration of doc/source/documentation/blockamgtheory.rst -- the shipped default is unchanged.
@@ -285,7 +288,7 @@ _P1_OPTIONS = {
 
 
 class BlockAMGSolver(LinearSolver):
-    """Field-split block-AMG preconditioned GMRES. Callable as ``(A, b) -> x``.
+    """Field-split block-AMG preconditioned Krylov solve (LGMRES by default). Callable as ``(A, b) -> x``.
 
     The block structure is not configured here -- it is derived by the base class from the model and
     DOF manager the nonlinear solver hands over via
@@ -367,7 +370,8 @@ class BlockAMGSolver(LinearSolver):
         A_ij v_j)``).
     symmetric
         If True, each sweep is followed by a reverse-order sweep, starting one field before the one
-        just updated. Not required by the GMRES-type outer solve (right preconditioning only needs a
+        just updated (with exact field solves it has nothing left to correct; with AMG cycles the skip saves
+        one cycle of that field). Not required by the GMRES-type outer solve (right preconditioning only needs a
         fixed linear operator).
     fieldPreconds
         Optional mapping of field name to an AMGCL preconditioner parameter tree, overriding the
@@ -1682,8 +1686,8 @@ class BlockAMGSolver(LinearSolver):
         nFields = len(slices)
         sizes = [block.stop - block.start for block in blocks]
 
-        # (5) The preconditioner v = M^-1 r: block Gauss-Seidel sweeps over the fields, M^-1 = (B + L)^-1 for one
-        #     forward sweep, B = blockdiag(M_i), M_i one AMG cycle on A_scaled_ii.
+        # (5a) The preconditioner v = M^-1 r: block Gauss-Seidel sweeps over the fields, M^-1 = (B + L)^-1 for one
+        #      forward sweep, B = blockdiag(M_i), M_i one AMG cycle on A_scaled_ii.
         def sweepOnce(order, residual, v, visited):
             # Residual-correction form, v_i += M_i^-1 (r_i - sum_j A_scaled_ij v_j): a revisit of a field (sweeps > 1,
             # or the symmetric reverse sweep) improves its v_i. On a first visit v_i = 0, and only the fields
@@ -1706,7 +1710,8 @@ class BlockAMGSolver(LinearSolver):
             for _ in range(self._sweeps):
                 sweepOnce(range(nFields), residual, v, visited)
                 if self._symmetric:
-                    # the last field was just updated with everything else current: start one before it
+                    # the last field was just updated with everything else current: start one before it (with an
+                    # AMG cycle it still has a residual left, but a cycle on it is saved)
                     sweepOnce(range(nFields - 2, -1, -1), residual, v, visited)
             return np.concatenate(v)
 
@@ -1725,9 +1730,9 @@ class BlockAMGSolver(LinearSolver):
         else:
             firstPassEta = eta
 
-        # (5) The outer Krylov solve on A_scaled z = b_scaled, preconditioned by the sweep: AMGCL's LGMRES (the
-        #     default, right-preconditioned) or SciPy's GMRES (left-preconditioned); both converge the residual of
-        #     A_scaled z = b_scaled. For LGMRES, outerRestart x outerMaxiter is the iteration cap of a pass.
+        # (5b) The outer Krylov solve on A_scaled z = b_scaled, preconditioned by the sweep: AMGCL's LGMRES (the
+        #      default, right-preconditioned) or SciPy's GMRES (left-preconditioned); both converge the residual of
+        #      A_scaled z = b_scaled. For LGMRES, outerRestart x outerMaxiter is the iteration cap of a pass.
         def outerPass(tolerance: float, x0: np.ndarray = None) -> tuple:
             """One outer Krylov pass from x0 (zero if None): the Krylov iterate, the iteration count, and
             SciPy's ``info`` (non-zero: stopped at the iteration cap short of ``tolerance``)."""
