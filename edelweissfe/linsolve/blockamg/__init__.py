@@ -35,7 +35,7 @@ from collections.abc import Callable, Mapping
 
 
 def createSolver(opts) -> Callable:
-    """Create a field-split block-AMG linear solver.
+    """Create a field-split block-AMG linear solver from a ``linsolverConfigFile``'s options.
 
     The factory the ``linsolver`` registry category resolves for the name ``blockamg``. No field
     structure is configured here: it is discovered from the model and pushed in by the nonlinear
@@ -44,82 +44,13 @@ def createSolver(opts) -> Callable:
     Parameters
     ----------
     opts
-        The linear-solver options parsed from the solver's ``linsolverConfigFile``. All optional (see
-        :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`):
-
-        ``outerTol``, ``outerRestart``, ``outerMaxiter``, ``sweeps``, ``symmetric``
-            The outer GMRES and block Gauss-Seidel knobs. ``outerTol`` unset, ``None``, or the literal
-            string ``"adaptive"`` (JSON has no bare ``null`` in this cast pipeline) all mean the same
-            thing: use Eisenstat--Walker adaptive forcing (the default) instead of a fixed tolerance --
-            pass an actual float to pin a fixed outer GMRES relative tolerance instead. See
-            :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver` for the forcing scheme
-            itself.
-        ``outerSolver``, ``lgmresM``, ``lgmresK``
-            ``outerSolver`` selects the outer Krylov solve: ``"amgcl_lgmres"`` (default -- AMGCL's own
-            native ``amgcl::solver::lgmres`` in place of ``scipy.sparse.linalg.gmres``, live-gated at
-            several thread counts, faster than SciPy at every thread count tested and increasingly so
-            as thread count grows) or ``"scipy"`` (the prior default, kept as a fallback/opt-out). The
-            other two are only used with ``"amgcl_lgmres"``; see
-            :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver` for their meaning.
-        ``lgmresAlwaysReset``, ``lgmresResetOnNewIncrement``
-            Deprecated: LGMRES recycling across solves was removed. ``true`` / ``false`` respectively
-            are still accepted, with a deprecation note; a value asking for recycling raises.
-        ``etaMin``, ``etaMax``, ``ewGamma``, ``ewAlpha``, ``residualGrowthFactor``,
-        ``hierarchyStalenessFactor``, ``refreshOnNewIncrement``
-            Knobs for the adaptive outer tolerance and the per-field AMG hierarchy reuse across Newton
-            iterations -- see :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`.
-        ``trueResidualMaxContinuations``
-            How many warm-restart continuations enforce the requested tolerance on the true residual,
-            not just GMRES's own preconditioned stopping check. Defaults to ``2``; ``0`` restores the
-            original preconditioned-residual-only behaviour.
-        ``verbosity``
-            ``"silent"``, ``"warning"`` (default), ``"info"``, or ``"debug"`` -- see
-            :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`. Replaces the old boolean
-            ``verbose`` option entirely; existing configs setting ``verbose`` should switch to this.
-        ``warnOuterIterationsThreshold``
-            Outer-iteration count past which a solve prints a ``"warning"``-level message even at the
-            default verbosity.
-        ``dumpOnDegradationDir``, ``dumpOnDegradationThreshold``, ``dumpOnDegradationMaxDumps``,
-        ``dumpOnDegradationContextSolves``
-            Capture the raw ``(A, b)`` and field-block layout of solves that degrade (outer-iteration
-            count past a threshold), plus optionally a window of preceding solves and per-solve
-            solver-state bookkeeping, for offline diagnosis -- see
-            :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`. ``dumpOnDegradationDir``
-            unset (the default) disables this entirely.
-        ``fieldPreconds``
-            Optional mapping of field name (e.g. ``"displacement"``) to an AMGCL preconditioner
-            parameter tree, overriding the dimension-based default for that field.
-        ``useRigidBodyNullspace``
-            ``True`` (default) builds a vector field's near null-space as the full rigid-body basis
-            (translations + rotations) once nodal coordinates arrive, instead of translations alone --
-            see :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`. Set ``False`` to force
-            translations-only unconditionally.
-        ``p1FieldNames``
-            Optional list of vector field names (e.g. ``["displacement"]``) to precondition with
-            p-multigrid instead of the single-level AMGCL default -- an opt-in variant, not the
-            recommended configuration (see the module docstring of
-            :mod:`edelweissfe.linsolve.blockamg.ptwogrid`). The actual topology map is computed
-            lazily by the solver itself, from the live model reference ``setModel`` provides, the
-            first time one of these fields' hierarchies is built -- not known at construction time,
-            so nothing needs to be pushed in ahead of it.
-        ``p1Nu``, ``p1NuPre``, ``p1NuPost``, ``p1FineDegree``, ``p1FineBlockSize``, ``p1FineValueType``,
-        ``p1CoarseValueType``, ``p1FineSpectralRadiusReuse``, ``p1CoarsePrecond``
-            Settings of the p-multigrid preconditioner of the ``p1FieldNames`` fields: fine Chebyshev
-            sweeps (both, or pre and post separately) and degree, the fine operator's storage (``1`` scalar, ``3`` node-wise blocks) and
-            value type (``"double"``, ``"float"``), the coarse hierarchy's value type,
-            whether to reuse the fine spectral-radius estimate across rebuilds, and the coarse
-            level's AMGCL tree -- see :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`.
-
-        ``hierarchyDropTol``, ``hierarchyDropLumping``
-            Sparsification of each field's diagonal block before its AMG hierarchy is built -- see
-            :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`.
-        ``gapMaxFactor``
-            Upper bound of the gap factor ``gapCompensatedTolerance`` applies.
-
-        A key not listed here raises a ``ValueError`` instead of being ignored.
-
-        As with the other factories, a non-mapping ``opts`` is tolerated (the implicit-static solver
-        passes ``""`` when no configuration file is given), in which case every default applies.
+        The options, one per keyword argument of
+        :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver` (documented there, and in the key
+        tables of the theory page), each converted from its JSON value by
+        :data:`~edelweissfe.linsolve.blockamg.blockamg.CONFIG_CASTS`. A key that is not one of them raises a
+        ``ValueError`` instead of being ignored, and so does a value that cannot be converted. A non-mapping
+        ``opts`` is tolerated (the implicit-static solver passes ``""`` when no configuration file is given),
+        in which case every default applies.
 
     Returns
     -------

@@ -97,7 +97,8 @@ _DEFAULT_COARSE_PRECOND = {
     "npre": 2,
     "npost": 2,
 }
-#: R2's winning fine-smoother configuration: nu=1 sweeps, Chebyshev degree 5.
+#: The fine smoother's defaults, the best of a sweep over sweep counts and degrees on a coupled system: one sweep
+#: of a degree-5 Chebyshev polynomial.
 _DEFAULT_NU = 1
 _DEFAULT_FINE_DEGREE = 5
 #: The fine Chebyshev smoother's spectral bounds and power iteration: ``higher`` = 1.1 is a safety
@@ -322,3 +323,14 @@ class PTwoGridPreconditioner:
     def report(self) -> str:
         """The coarse level's AMGCL hierarchy report (context/diagnostics only, not a convergence gate)."""
         return self._preconditioner.report()
+
+
+def parameterRejection(**parameters) -> "str | None":
+    """Why these p-two-grid settings -- :class:`PTwoGridPreconditioner` keywords -- cannot be used, or ``None``.
+    The C++ class validates them in its constructor, the one place they are checked; this asks it, without a
+    topology map."""
+    try:
+        PTwoGridPreconditioner(np.zeros(0, dtype=bool), np.zeros((0, 2), dtype=int), **parameters)
+    except (TypeError, ValueError) as error:
+        return str(error)
+    return None

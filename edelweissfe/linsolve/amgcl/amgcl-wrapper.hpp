@@ -940,6 +940,10 @@ public:
       boost::property_tree::read_json( ss, prm );
     }
     prm.put( "always_reset", true );
+    // right preconditioning, whatever the caller's tree says: lgmres's own convergence test is then on the
+    // residual of the operator it iterates on, which blockamg relies on (see its cap-hit and true-residual
+    // logic); left preconditioning would test the preconditioned residual instead
+    prm.put( "pside", "right" );
     Solver::params p( prm );
     solver_.reset( new Solver( static_cast< size_t >( n ), p ) );
   }

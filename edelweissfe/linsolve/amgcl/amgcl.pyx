@@ -411,8 +411,10 @@ cdef void _lgmresPrecondApplyTrampoline(void* ctx, int n, const double* rhs, dou
         for i in range(n):
             x[i] = 0.0
         return
-    rhsArr = np.empty(n, dtype=np.float64)
     try:
+        # inside the try: a MemoryError here must be stashed and re-raised like any other failure, not
+        # swallowed by this noexcept function, which would leave x stale and the solve "successful"
+        rhsArr = np.empty(n, dtype=np.float64)
         for i in range(n):
             rhsArr[i] = rhs[i]
         result = self._precondCallable(rhsArr)
@@ -464,8 +466,8 @@ cdef class PyAMGCLLGMRESSolver:
             The fixed problem size this instance is built for.
         params
             AMGCL's own ``lgmres::params`` field names, forwarded verbatim as JSON (``M``, ``K``,
-            ``pside``, ``maxiter``, ``tol``, ``abstol``, ``ns_search``, ``verbose``; ``always_reset`` is
-            forced to true)
+            ``maxiter``, ``tol``, ``abstol``, ``ns_search``, ``verbose``; ``always_reset`` is forced to true
+            and ``pside`` to right preconditioning)
             -- unlike :class:`PyAMGCLSolver`, there is no ``precond``/``solver`` nesting here, since
             this wraps a single ``amgcl::solver::lgmres`` object directly, not ``amgcl::make_solver``.
             ``maxiter``/``tol`` given here only set the *initial* defaults -- :meth:`solve` overrides
@@ -516,13 +518,13 @@ cdef class PyAMGCLLGMRESSolver:
                 "change.".format(n, self.n)
             )
 
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] rhs_arr = np.ascontiguousarray(rhs, dtype=np.float64)
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] rhs_arr = _vector(rhs, n, "rhs")
 
         cdef np.ndarray[np.float64_t, ndim=1, mode="c"] x
         if x0 is None:
             x = np.zeros(n, dtype=np.float64)
         else:
-            x = np.ascontiguousarray(x0, dtype=np.float64).copy()
+            x = _vector(x0, n, "x0").copy()
 
         cdef double[::1] rhs_ = rhs_arr
         cdef double[::1] x_ = x
