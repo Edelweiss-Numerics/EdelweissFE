@@ -75,6 +75,11 @@ cdef inline double* _doubleData(double[::1] values):
     return &values[0] if values.shape[0] > 0 else NULL
 
 
+cdef inline const signed char* _byteData(const signed char[::1] values):
+    """See :func:`_intData`."""
+    return &values[0] if values.shape[0] > 0 else NULL
+
+
 cdef class PyAMGCLSolver:
     cdef AMGCLSolverInterface* solver
     cdef readonly bint isFloat
@@ -630,20 +635,10 @@ cdef class PyAMGCLPTwoGrid:
         diagonal and no nonzero off-diagonal entry (explicitly stored zeros, which the Dirichlet
         elimination keeps, do not count) -- the identity slave rows of the multi-point-constraint
         condensation included. Returns a bool array."""
-        if not scipy.sparse.isspmatrix_csr(A):
-            A = A.tocsr()
-        cdef int n = A.shape[0]
-        cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indptr = np.ascontiguousarray(A.indptr, dtype=np.int32)
-        cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indices = np.ascontiguousarray(A.indices, dtype=np.int32)
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] data = np.ascontiguousarray(A.data, dtype=np.float64)
-        cdef np.ndarray[np.int8_t, ndim=1, mode="c"] mask = np.zeros(n, dtype=np.int8)
-        if n == 0 or A.nnz == 0:
-            return mask.astype(bool)
-        cdef int[::1] indptr_ = indptr
-        cdef int[::1] indices_ = indices
-        cdef double[::1] data_ = data
-        cdef signed char[::1] mask_ = mask
-        PTwoGridPreconditioner.dirichletRowMask(n, &indptr_[0], &indices_[0], &data_[0], <char*> &mask_[0])
+        A, indptr, indices, data = _csrArrays(A)
+        mask = np.zeros(A.shape[0], dtype=np.int8)
+        PTwoGridPreconditioner.dirichletRowMask(A.shape[0], _intData(indptr), _intData(indices), _constDoubleData(data),
+                                                <char*> _byteData(mask))
         return mask.astype(bool)
 
     def build(self, object A, object isCorner, object edgeEndpoints, object nullspace=None,
@@ -663,66 +658,27 @@ cdef class PyAMGCLPTwoGrid:
             A = A.tocsr()
         if not A.has_sorted_indices:
             A = A.sorted_indices()
-
-        cdef int n = A.shape[0]
-        cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indptr = np.ascontiguousarray(A.indptr, dtype=np.int32)
-        cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indices = np.ascontiguousarray(A.indices, dtype=np.int32)
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] data = np.ascontiguousarray(A.data, dtype=np.float64)
-        cdef np.ndarray[np.int8_t, ndim=1, mode="c"] corner = np.ascontiguousarray(isCorner, dtype=np.int8)
-        endpointsArray = np.asarray(edgeEndpoints, dtype=np.int32)
-        if endpointsArray.size == 0:
-            endpointsArray = endpointsArray.reshape(0, 2)
+        A, indptr, indices, data = _csrArrays(A)
+        corner = np.ascontiguousarray(isCorner, dtype=np.int8)
+        endpoints = np.ascontiguousarray(np.asarray(edgeEndpoints, dtype=np.int32).reshape(-1))
         cdef int nNodes = corner.shape[0]
-        if endpointsArray.ndim != 2 or endpointsArray.shape[0] != nNodes or endpointsArray.shape[1] != 2:
+        if endpoints.shape[0] != 2 * nNodes or (nNodes > 0 and np.ndim(edgeEndpoints) != 2):
             raise ValueError("edgeEndpoints must have shape (nNodes, 2)")
-        cdef np.ndarray[np.int32_t, ndim=2, mode="c"] endpoints = np.ascontiguousarray(endpointsArray)
-
-        cdef np.ndarray[np.float64_t, ndim=2, mode="c"] B
-        cdef int nullspaceRows = 0
-        cdef int nullspaceCols = 0
-        cdef const double* nullspacePtr = NULL
-        if nullspace is not None:
-            B = np.ascontiguousarray(nullspace, dtype=np.float64)
-            nullspaceRows = B.shape[0]
-            nullspaceCols = B.shape[1]
-            if nullspaceRows > 0 and nullspaceCols > 0:
-                nullspacePtr = &B[0, 0]
-
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] dominant
-        cdef const double* dominantPtr = NULL
-        cdef int dominantSize = 0
-        if dominantVector is not None:
-            dominant = np.ascontiguousarray(dominantVector, dtype=np.float64)
-            dominantSize = dominant.shape[0]
-            if dominantSize > 0:
-                dominantPtr = &dominant[0]
-
-        # an empty field (n = 0, nNodes = 0) or a zero block (nnz = 0) has empty arrays, which have no
-        # first element to point at -- passed as NULL, never read
-        cdef int[::1] indptr_ = indptr
-        cdef int[::1] indices_ = indices
-        cdef double[::1] data_ = data
-        cdef signed char[::1] corner_ = corner
-        cdef int[:, ::1] endpoints_ = endpoints
-        self.preconditioner.build(n, &indptr_[0],
-                                  &indices_[0] if indices.shape[0] > 0 else NULL,
-                                  &data_[0] if data.shape[0] > 0 else NULL,
-                                  nNodes,
-                                  &corner_[0] if nNodes > 0 else NULL,
-                                  &endpoints_[0, 0] if nNodes > 0 else NULL,
-                                  nullspacePtr, nullspaceRows, nullspaceCols, spectralRadius, dominantPtr, dominantSize)
+        B = np.zeros((0, 0)) if nullspace is None else np.ascontiguousarray(nullspace, dtype=np.float64)
+        if B.ndim != 2:
+            raise ValueError("the coarse near null-space must be a 2D array")
+        dominant = np.zeros(0) if dominantVector is None else np.ascontiguousarray(dominantVector, dtype=np.float64)
+        self.preconditioner.build(A.shape[0], _intData(indptr), _intData(indices), _constDoubleData(data),
+                                  nNodes, _byteData(corner), _intData(endpoints),
+                                  _constDoubleData(B.reshape(-1)), B.shape[0], B.shape[1],
+                                  spectralRadius, _constDoubleData(dominant), dominant.shape[0])
 
     def applyPreconditioner(self, object r):
-        """One two-grid cycle: returns M^-1 r as a new float64 array (Dirichlet entries pass through)."""
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] r_arr = np.ascontiguousarray(r, dtype=np.float64)
-        cdef int n = r_arr.shape[0]
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] x = np.empty(n, dtype=np.float64)
-        cdef double[::1] r_ = r_arr
-        cdef double[::1] x_ = x
-        if n == 0:
-            self.preconditioner.apply(0, NULL, NULL)
-            return x
-        self.preconditioner.apply(n, &r_[0], &x_[0])
+        """One two-grid cycle: returns M^-1 r as a new float64 array (Dirichlet rows solved exactly)."""
+        rArray = np.ascontiguousarray(r, dtype=np.float64).reshape(-1)
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] x = np.empty(rArray.shape[0], dtype=np.float64)
+        # the C++ apply checks the length against the built size
+        self.preconditioner.apply(rArray.shape[0], _constDoubleData(rArray), _doubleData(x))
         return x
 
     @property

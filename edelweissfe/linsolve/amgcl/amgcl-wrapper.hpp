@@ -1306,6 +1306,8 @@ public:
   std::unique_ptr< PTwoGridFineSmoother >         fineFloat_;
   PTwoGridFineSmoother*                           fine_ = nullptr;
   std::vector< int >                              dirichletRows_;
+  /// the diagonal entry of each of dirichletRows_: its exact local solve is x_i = r_i / a_ii
+  std::vector< double > dirichletDiagonal_;
 
   std::shared_ptr< ScalarMatrix > P_, PT_;
   // the coarse AMGCL hierarchy, in exactly one of the two value types (coarseValueType)
@@ -1317,8 +1319,11 @@ public:
   std::vector< char > isDirichlet_;
   int                 n_ = 0, nCoarseFree_ = 0;
   /// true after a build() of a field without a free DOF (empty, or entirely Dirichlet-constrained):
-  /// apply() is then the identity, x = r
+  /// apply() is then the exact (diagonal) inverse
   bool trivial_ = false;
+  /// true once build() has completed; a build that throws leaves it false, so that apply() raises instead
+  /// of using a half-built preconditioner
+  bool built_ = false;
 
   // parameters, parsed and validated in the constructor (see there)
   int         nuPre_ = 1, nuPost_ = 1, fineBlockSize_ = 1;
@@ -1422,15 +1427,28 @@ public:
       throw std::runtime_error( "ptwogrid: fineBlockSize 3 needs a 3-dimensional field, got " + std::to_string( nDim ) +
                                 " DOFs per node." );
     }
-    n_ = n;
+    built_ = false;
+    n_     = n;
 
     isDirichlet_.assign( n, 0 );
     if ( n > 0 )
       dirichletRowMask( n, ptr, col, val, isDirichlet_.data() );
+    dirichletRows_.clear();
+    dirichletDiagonal_.clear();
+    for ( int i = 0; i < n; ++i ) {
+      if ( isDirichlet_[i] ) {
+        dirichletRows_.push_back( i );
+        double diagonal = 0.0;
+        for ( int j = ptr[i]; j < ptr[i + 1]; ++j )
+          if ( col[j] == i )
+            diagonal += val[j];
+        dirichletDiagonal_.push_back( diagonal );
+      }
+    }
 
     // A field without a free DOF -- empty, or every DOF Dirichlet-constrained -- has nothing to smooth
-    // or to coarsen (and no coarse operator to build a hierarchy on): its exact inverse is the
-    // identity, which apply() then is.
+    // or to coarsen (and no coarse operator to build a hierarchy on): its exact inverse is diagonal,
+    // which apply() then is.
     trivial_ = std::find( isDirichlet_.begin(), isDirichlet_.end(), 0 ) == isDirichlet_.end();
     coarse_.reset();
     coarseFloat_.reset();
@@ -1445,6 +1463,7 @@ public:
     if ( trivial_ ) {
       setupDirichletAndPSeconds_ = secondsSince( start );
       setupGalerkinSeconds_ = setupCoarseSeconds_ = setupFineOperatorSeconds_ = setupSpectralRadiusSeconds_ = 0.0;
+      built_                                                                                                = true;
       return;
     }
 
@@ -1573,12 +1592,9 @@ public:
 
     rhs_.assign( n, 0.0 );
     res_.assign( n, 0.0 );
-    dirichletRows_.clear();
-    for ( int i = 0; i < n; ++i )
-      if ( isDirichlet_[i] )
-        dirichletRows_.push_back( i );
     coarseRhs_.assign( nCoarseFree_, 0.0 );
     coarseX_.assign( nCoarseFree_, 0.0 );
+    built_ = true;
   }
 
   /// @brief powerIters power iterations on the fine operator from startVector (see
@@ -1775,10 +1791,10 @@ public:
   }
 
   /// @brief x <- M^-1 r: one two-grid cycle on the free DOFs -- nuPre fine sweeps, coarse-grid
-  /// correction, nuPost fine sweeps; Dirichlet DOFs pass through, x_i = r_i. The cycle's fine iterate
+  /// correction, nuPost fine sweeps; Dirichlet DOFs are solved exactly, x_i = r_i / a_ii. The cycle's fine iterate
   /// is x itself: written from x = 0 without reading it (by the first pre-sweep, or, with no
   /// pre-sweeps, by the prolongated coarse correction itself), it stays zero on Dirichlet DOFs (zero
-  /// right-hand side there, no rows of P) until they are set to r_i last. Without pre-sweeps the
+  /// right-hand side there, no rows of P) until they are set to r_i / a_ii last. Without pre-sweeps the
   /// fine residual of x = 0 is the right-hand side itself, so no product is needed for it.
   void apply( int n, const double* r, double* x )
   {
@@ -1788,7 +1804,7 @@ public:
                                 std::to_string( n_ ) );
     }
     if ( trivial_ ) {
-      std::copy( r, r + n, x );
+      solveDirichletRows( r, x );
       return;
     }
     Clock::time_point start = Clock::now();
@@ -1828,16 +1844,23 @@ public:
 
     start = Clock::now();
     smoothFine( x, nuPost_, /*xIsZero=*/false );
-    for ( size_t k = 0; k < dirichletRows_.size(); ++k )
-      x[dirichletRows_[k]] = r[dirichletRows_[k]];
+    solveDirichletRows( r, x );
     applyFineSeconds_ += secondsSince( start );
   }
 
-  /// @brief Throw unless build() has run.
+  /// @brief x_i <- r_i / a_ii on the Dirichlet rows, their exact local solve (bitwise r_i for the unit
+  /// diagonal of an equilibrated block).
+  void solveDirichletRows( const double* r, double* x ) const
+  {
+    for ( size_t k = 0; k < dirichletRows_.size(); ++k )
+      x[dirichletRows_[k]] = r[dirichletRows_[k]] / dirichletDiagonal_[k];
+  }
+
+  /// @brief Throw unless the last build() has completed.
   void checkBuilt() const
   {
-    if ( !trivial_ && !coarse_ && !coarseFloat_ ) {
-      throw std::runtime_error( "ptwogrid: no preconditioner built yet -- call build() first" );
+    if ( !built_ ) {
+      throw std::runtime_error( "ptwogrid: no preconditioner built -- call build() first (the last one failed?)" );
     }
   }
 

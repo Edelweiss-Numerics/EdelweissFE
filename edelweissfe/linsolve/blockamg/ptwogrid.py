@@ -197,17 +197,6 @@ class PTwoGridPreconditioner:
         finePowerIters: int = _DEFAULT_FINE_POWER_ITERS,
         fineRecheckIters: int = _DEFAULT_FINE_RECHECK_ITERS,
     ):
-        for name, count in (("nu", nu), ("nuPre", nuPre), ("nuPost", nuPost)):
-            if count is not None and count < 0:
-                raise ValueError("ptwogrid: {:} must not be negative, got {!r}".format(name, count))
-        if fineDegree < 1:
-            raise ValueError("ptwogrid: fineDegree must be at least 1, got {!r}".format(fineDegree))
-        if fineBlockSize not in (1, 3):
-            raise ValueError("ptwogrid: fineBlockSize must be 1 or 3, got {!r}".format(fineBlockSize))
-        if fineValueType not in ("double", "float"):
-            raise ValueError("ptwogrid: fineValueType must be 'double' or 'float', got {!r}".format(fineValueType))
-        if coarseValueType not in ("double", "float"):
-            raise ValueError("ptwogrid: coarseValueType must be 'double' or 'float', got {!r}".format(coarseValueType))
         self._isCorner = np.ascontiguousarray(isCorner, dtype=np.int8)
         self._edgeEndpoints = np.ascontiguousarray(edgeEndpoints, dtype=np.int32)
         self._useCoarseNullspace = useCoarseNullspace
@@ -226,7 +215,14 @@ class PTwoGridPreconditioner:
             "coarseValueType": coarseValueType,
             "coarse": dict(coarsePrecond) if coarsePrecond is not None else dict(_DEFAULT_COARSE_PRECOND),
         }
-        self._preconditioner = None
+        from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLPTwoGrid
+
+        # The C++ class parses and validates every parameter in its constructor -- the one place they are
+        # checked -- so a bad value fails here, before anything is built.
+        try:
+            self._preconditioner = PyAMGCLPTwoGrid(self._params)
+        except RuntimeError as error:
+            raise ValueError(str(error)) from error
 
     @property
     def fineSpectralRadius(self) -> float:
@@ -302,7 +298,7 @@ class PTwoGridPreconditioner:
                 nullspace = fullNullspace[freeCoarseCols, :]
 
         with performancetiming.timeit("C++ build"):
-            self._preconditioner = PyAMGCLPTwoGrid(self._params)
+            # a build that throws leaves the C++ object unbuilt: applyPreconditioner then raises
             self._preconditioner.build(
                 A,
                 self._isCorner,
@@ -314,8 +310,8 @@ class PTwoGridPreconditioner:
 
     def applyPreconditioner(self, r: np.ndarray) -> np.ndarray:
         """One two-grid V-cycle: pre-smooth, coarse-grid correction, post-smooth, on the free DOFs;
-        Dirichlet rows pass through unchanged (``A[i, i] = 1`` there by construction, so the exact
-        local solve is ``x[i] = r[i]``)."""
+        Dirichlet rows are solved exactly, ``x[i] = r[i] / A[i, i]`` (``r[i]`` itself for the unit diagonal of
+        an equilibrated block)."""
         return self._preconditioner.applyPreconditioner(r)
 
     def timings(self) -> dict:

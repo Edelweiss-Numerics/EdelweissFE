@@ -26,13 +26,19 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """The p-two-grid preconditioner driven through :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`
-itself, not built directly: a solve through it, and the fine spectral radius cached across hierarchy rebuilds
-(``p1FineSpectralRadiusReuse``).
+itself, not built directly: a solve through it, the topology map computed from the model (``p1FieldNames``),
+and the fine spectral radius cached across hierarchy rebuilds (``p1FineSpectralRadiusReuse``).
 """
+
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
+import scipy.sparse as sp
+from _blockamgsystems import NODAL_COUPLING
+from _hexa20cube import _hexa20Coordinates
 from _p1lattice import dirichletDofs, lattice, latticeSystem
+from scipy.spatial import cKDTree
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
@@ -109,3 +115,36 @@ def test_without_reuse_every_rebuild_estimates_in_full(problem):
     solver(A, b)
     assert solver._preconditioners[0].fineSpectralRadiusSource == "estimated"
     assert not solver._p1FineSpectralRadiusCache
+
+
+def _hexa20Model():
+    """One Hexa20 element as a model and DOF manager with what ``setModel`` and the topology map read, and a
+    vector operator on its nodes (a graph Laplacian over its edges, coupled per node)."""
+    coordinates = np.array(_hexa20Coordinates(0.0))
+    nodes = [SimpleNamespace(coordinates=c, fields={"displacement": None}) for c in coordinates]
+    element = SimpleNamespace(nodes=nodes, nSpatialDimensions=3, fields=[["displacement"]] * len(nodes))
+    model = SimpleNamespace(
+        nodeFields={"displacement": SimpleNamespace(dimension=3, nodes=nodes)}, elements={1: element}
+    )
+    dofManager = SimpleNamespace(idcsOfFieldsInDofVector={"displacement": slice(0, 3 * len(nodes))})
+    pairs = cKDTree(coordinates).query_pairs(1.0 + 1e-9, output_type="ndarray")
+    W = sp.coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(len(nodes), len(nodes)))
+    W = (W + W.T).tocsr()
+    laplacian = sp.diags(np.asarray(W.sum(axis=1)).ravel() + 0.05) - W
+    A = sp.kron(laplacian, NODAL_COUPLING).tocsr()
+    b = np.random.default_rng(6).standard_normal(A.shape[0])
+    return model, dofManager, A, b
+
+
+def test_the_topology_map_is_computed_from_the_model_and_dropped_with_it():
+    model, dofManager, A, b = _hexa20Model()
+    solver = BlockAMGSolver(outerTol=_TOLERANCE, verbosity="silent", p1FieldNames=["displacement"])
+    solver.setModel(model, dofManager)
+    x = solver(A, b)
+    assert _relativeResidual(A, x, b) <= _TOLERANCE
+    assert type(solver._preconditioners[0]).__name__ == "PTwoGridPreconditioner"
+    isCorner, edgeEndpoints = solver._p1Maps["displacement"]
+    assert isCorner.sum() == 8 and np.all(edgeEndpoints[~isCorner] >= 0)
+
+    solver.setModel(model, dofManager)
+    assert "displacement" not in solver._p1Maps

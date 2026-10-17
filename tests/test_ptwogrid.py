@@ -392,3 +392,24 @@ def test_a_zero_block_raises_instead_of_dividing_by_zero():
     preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, useCoarseNullspace=False)
     with pytest.raises(RuntimeError, match="no nonzero diagonal"):
         preconditioner.build(sp.csr_matrix((n, n)), np.ones(n))
+
+
+def test_a_failed_build_leaves_nothing_to_apply():
+    coords, isCorner, edgeEndpoints = lattice(3)
+    As, dinv = latticeSystem(coords, dirichletDofs(coords))
+    # the full spectral-radius estimate is the last stage of the build: everything before it is built
+    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, finePowerIters=0)
+    with pytest.raises(RuntimeError, match="finePowerIters"):
+        preconditioner.build(As, dinv, coords=coords)
+    with pytest.raises(RuntimeError, match="no preconditioner built"):
+        preconditioner.applyPreconditioner(np.ones(As.shape[0]))
+
+
+def test_dirichlet_rows_are_solved_exactly_whatever_their_diagonal(problem):
+    As, dinv, coords, isCorner, edgeEndpoints, r = problem
+    dofs = dirichletDofs(coords)
+    scaled = As.tolil()
+    scaled[dofs, dofs] = 2.0
+    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+    preconditioner.build(scaled.tocsr(), dinv, coords=coords)
+    assert np.array_equal(preconditioner.applyPreconditioner(r)[dofs], r[dofs] / 2.0)

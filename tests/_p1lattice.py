@@ -32,6 +32,7 @@ one face and a single constrained component on another (partially constrained no
 
 import numpy as np
 import scipy.sparse as sp
+from _blockamgsystems import NODAL_COUPLING
 from scipy.spatial import cKDTree
 
 
@@ -68,9 +69,8 @@ def latticeSystem(coords, dirichletDofs, seed: int = 1):
     W = sp.coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(nNodes, nNodes))
     W = (W + W.T).tocsr()
     laplacian = sp.diags(np.asarray(W.sum(axis=1)).ravel() + 0.05) - W
-    coupling = np.array([[2.0, 0.3, 0.1], [0.3, 1.5, 0.2], [0.1, 0.2, 1.8]])
     skew = np.random.default_rng(seed).uniform(-1.0, 1.0, (3, 3))
-    A = sp.kron(laplacian, coupling) + 0.02 * sp.kron(sp.triu(W, 1) - sp.tril(W, -1), skew)
+    A = sp.kron(laplacian, NODAL_COUPLING) + 0.02 * sp.kron(sp.triu(W, 1) - sp.tril(W, -1), skew)
     A = A.tolil()
     A[dirichletDofs, :] = 0.0
     A[:, dirichletDofs] = 0.0
