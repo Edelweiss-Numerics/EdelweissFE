@@ -1314,7 +1314,8 @@ class BlockAMGSolver(LinearSolver):
                         # no coordinates available) makes build() fall back to translations-only
                         # internally, exactly like the non-p1Map path below.
                         coords = self._getNodeCoordinates(block.name) if self._useRigidBodyNullspace else None
-                        solver.build(diagBlocks[i], dinv[slices[i]], coords=coords)
+                        with performancetiming.timeit("{:} p-two-grid build".format(block.name)):
+                            solver.build(diagBlocks[i], dinv[slices[i]], coords=coords)
                         if self._p1FineSpectralRadiusReuse:
                             self._p1FineSpectralRadiusCache[block.name] = (
                                 solver.fineSpectralRadius,

@@ -740,8 +740,8 @@ is shown.
     Adds one line per true-residual continuation attempt.
 
 Per-stage wall-clock -- equilibration, the equilibrated system (the scaled operator and the coupling
-blocks between fields, built in one threaded pass), hierarchy build (per field), near-null-space
-construction, outer solve, and continuations -- is recorded through
+blocks between fields, built in one threaded pass), hierarchy build (per field, and per stage of a
+p-multigrid build), near-null-space construction, outer solve, and continuations -- is recorded through
 :mod:`~edelweissfe.utils.performancetiming` regardless of verbosity, and appears nested under "linear
 solve" in the job's performance table. That table, not the log, is the first place to look when
 deciding whether a run is dominated by hierarchy builds or by outer iterations.

@@ -621,6 +621,27 @@ cdef class PyAMGCLPTwoGrid:
         if self.preconditioner != NULL:
             del self.preconditioner
 
+    @staticmethod
+    def dirichletRows(object A):
+        """The rows of a scipy.sparse CSR matrix this preconditioner treats as Dirichlet rows: a nonzero
+        diagonal and no nonzero off-diagonal entry (explicitly stored zeros, which the Dirichlet
+        elimination keeps, do not count). Returns a bool array."""
+        if not scipy.sparse.isspmatrix_csr(A):
+            A = A.tocsr()
+        cdef int n = A.shape[0]
+        cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indptr = np.ascontiguousarray(A.indptr, dtype=np.int32)
+        cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indices = np.ascontiguousarray(A.indices, dtype=np.int32)
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] data = np.ascontiguousarray(A.data, dtype=np.float64)
+        cdef np.ndarray[np.int8_t, ndim=1, mode="c"] mask = np.zeros(n, dtype=np.int8)
+        if n == 0 or A.nnz == 0:
+            return mask.astype(bool)
+        cdef int[::1] indptr_ = indptr
+        cdef int[::1] indices_ = indices
+        cdef double[::1] data_ = data
+        cdef signed char[::1] mask_ = mask
+        PTwoGridPreconditioner.dirichletRowMask(n, &indptr_[0], &indices_[0], &data_[0], <char*> &mask_[0])
+        return mask.astype(bool)
+
     def build(self, object A, object isCorner, object edgeEndpoints, object nullspace=None,
               double spectralRadius=0.0, object dominantVector=None):
         """

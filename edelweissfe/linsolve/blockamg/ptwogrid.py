@@ -79,6 +79,7 @@ import numpy as np
 
 from edelweissfe.linsolve.base import FieldBlock
 from edelweissfe.linsolve.nullspace import rigidBodyNullspace, translationNullspace
+from edelweissfe.utils import performancetiming
 
 #: Coarse-level Chebyshev degree/sweep-count configuration, from a config sweep across degree and
 #: npre/npost on a real coupled system: halving the Chebyshev degree (8 -> 4) at npre=2/npost=2
@@ -278,36 +279,38 @@ class PTwoGridPreconditioner:
             )
         nDim = n // nNodes
 
-        nullspace = None
-        if self._useCoarseNullspace:
-            # Build the full (unrestricted) coarse-DOF near null-space first, then restrict to the
-            # free coarse DOFs -- same two-step shape as the rest of blockamg's null-space
-            # construction, just applied to the corner-node subset's own synthetic block instead of
-            # the full field. The coarse DOFs are the corners' DOFs in node order, a Dirichlet row
-            # being one with exactly one stored entry -- the same convention the C++ build uses.
-            isDirichlet = np.diff(A.indptr) == 1
-            cornerNodeRows = np.nonzero(self._isCorner)[0]
-            nCorners = len(cornerNodeRows)
-            fullDofRowsForCorners = np.repeat(cornerNodeRows, nDim) * nDim + np.tile(np.arange(nDim), nCorners)
-            freeCoarseCols = np.nonzero(~isDirichlet[fullDofRowsForCorners])[0]
-            coarseBlock = FieldBlock("coarse", 0, nCorners * nDim, nDim)
-            fullCornerDinv = dinv[fullDofRowsForCorners]
-            if coords is not None:
-                cornerCoords = np.asarray(coords, dtype=float)[cornerNodeRows]
-                fullNullspace = rigidBodyNullspace(coarseBlock, cornerCoords, fullCornerDinv)
-            else:
-                fullNullspace = translationNullspace(coarseBlock, fullCornerDinv)
-            nullspace = fullNullspace[freeCoarseCols, :]
+        with performancetiming.timeit("coarse nullspace"):
+            nullspace = None
+            if self._useCoarseNullspace:
+                # Build the full (unrestricted) coarse-DOF near null-space first, then restrict to the
+                # free coarse DOFs -- same two-step shape as the rest of blockamg's null-space
+                # construction, just applied to the corner-node subset's own synthetic block instead of
+                # the full field. The coarse DOFs are the corners' DOFs in node order; the Dirichlet rows
+                # are the C++ build's own (a nonzero diagonal and no nonzero off-diagonal entry).
+                isDirichlet = PyAMGCLPTwoGrid.dirichletRows(A)
+                cornerNodeRows = np.nonzero(self._isCorner)[0]
+                nCorners = len(cornerNodeRows)
+                fullDofRowsForCorners = np.repeat(cornerNodeRows, nDim) * nDim + np.tile(np.arange(nDim), nCorners)
+                freeCoarseCols = np.nonzero(~isDirichlet[fullDofRowsForCorners])[0]
+                coarseBlock = FieldBlock("coarse", 0, nCorners * nDim, nDim)
+                fullCornerDinv = dinv[fullDofRowsForCorners]
+                if coords is not None:
+                    cornerCoords = np.asarray(coords, dtype=float)[cornerNodeRows]
+                    fullNullspace = rigidBodyNullspace(coarseBlock, cornerCoords, fullCornerDinv)
+                else:
+                    fullNullspace = translationNullspace(coarseBlock, fullCornerDinv)
+                nullspace = fullNullspace[freeCoarseCols, :]
 
-        self._preconditioner = PyAMGCLPTwoGrid(self._params)
-        self._preconditioner.build(
-            A,
-            self._isCorner,
-            self._edgeEndpoints,
-            nullspace,
-            self._fineSpectralRadius if self._fineSpectralRadius is not None else 0.0,
-            self._fineDominantVector,
-        )
+        with performancetiming.timeit("C++ build"):
+            self._preconditioner = PyAMGCLPTwoGrid(self._params)
+            self._preconditioner.build(
+                A,
+                self._isCorner,
+                self._edgeEndpoints,
+                nullspace,
+                self._fineSpectralRadius if self._fineSpectralRadius is not None else 0.0,
+                self._fineDominantVector,
+            )
 
     def applyPreconditioner(self, r: np.ndarray) -> np.ndarray:
         """One two-grid V-cycle: pre-smooth, coarse-grid correction, post-smooth, on the free DOFs;

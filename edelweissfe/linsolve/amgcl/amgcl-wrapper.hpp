@@ -1033,7 +1033,8 @@ public:
 // stage of build() and apply() is OpenMP-threaded; apply() runs without any Python in between.
 //
 // Dirichlet handling: the field's diagonal block arrives *with* its Dirichlet identity rows (a row
-// with exactly one stored entry, on the diagonal -- the same detection as the former Python path).
+// whose only nonzero is its diagonal; stored zeros, which the Dirichlet elimination keeps, do not
+// count).
 // The former path extracted the free submatrix A_FF (Dirichlet rows *and* columns removed) and
 // smoothed on that. This class keeps the full block layout instead and makes the Dirichlet DOFs
 // decouple exactly:
@@ -1457,24 +1458,8 @@ public:
       throw std::runtime_error( "ptwogrid: negative fine sweep counts" );
     }
 
-    // Dirichlet rows: exactly one stored entry, which must be the diagonal (see the class comment:
-    // the exact decoupling relies on it).
     isDirichlet_.assign( n, 0 );
-    int badRow = -1;
-#pragma omp parallel for
-    for ( ptrdiff_t i = 0; i < n; ++i ) {
-      if ( ptr[i + 1] - ptr[i] == 1 ) {
-        isDirichlet_[i] = 1;
-        if ( col[ptr[i]] != i ) {
-#pragma omp critical
-          badRow = static_cast< int >( i );
-        }
-      }
-    }
-    if ( badRow >= 0 ) {
-      throw std::runtime_error( "ptwogrid: row " + std::to_string( badRow ) +
-                                " has a single stored entry off the diagonal -- not a Dirichlet identity row." );
-    }
+    dirichletRowMask( n, ptr, col, val, isDirichlet_.data() );
 
     buildProlongation( nNodes, nDim, isCorner, edgeEndpoints );
     setupDirichletAndPSeconds_ = secondsSince( start );
@@ -1679,6 +1664,26 @@ public:
     }
     fineSpectralRadiusSource_ = 3;
     return estimateFineSpectralRadiusInFull();
+  }
+
+  /// Dirichlet rows: a nonzero diagonal and no nonzero off-diagonal entry -- explicitly stored zeros,
+  /// which the Dirichlet elimination (solvers/base/dirichlet.pyx) keeps, do not count. The exact
+  /// decoupling of the class comment relies on nothing but that (a stored zero contributes 0 * x).
+  static void dirichletRowMask( int n, const int* ptr, const int* col, const double* val, char* isDirichlet )
+  {
+#pragma omp parallel for
+    for ( ptrdiff_t i = 0; i < n; ++i ) {
+      bool diagonal = false, offDiagonal = false;
+      for ( int j = ptr[i]; j < ptr[i + 1]; ++j ) {
+        if ( val[j] == 0.0 )
+          continue;
+        if ( col[j] == i )
+          diagonal = true;
+        else
+          offDiagonal = true;
+      }
+      isDirichlet[i] = diagonal && !offDiagonal;
+    }
   }
 
   // @brief P on the free DOFs: identity on corners, 1/2, 1/2 on each midside from its two

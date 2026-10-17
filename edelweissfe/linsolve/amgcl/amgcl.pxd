@@ -109,6 +109,9 @@ cdef extern from "amgcl-wrapper.hpp":
     # applied entirely in C++ (OpenMP) -- see PTwoGridPreconditionerT's own comment.
     cdef cppclass PTwoGridPreconditioner:
         PTwoGridPreconditioner(const char* json_params) except +
+
+        @staticmethod
+        void dirichletRowMask(int n, const int* ptr, const int* col, const double* val, char* isDirichlet) except +
         void build(int n, const int* ptr, const int* col, const double* val,
                    int nNodes, const signed char* isCorner, const int* edgeEndpoints,
                    const double* nullspace, int nullspaceRows, int nullspaceCols,

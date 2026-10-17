@@ -345,6 +345,50 @@ def test_a_float_coarse_level_stays_close_to_the_double_one(problem):
     assert _relativeDifference(single.applyPreconditioner(r), double.applyPreconditioner(r)) < 1e-3
 
 
+class _DirichletStub:
+    """What ``applyDirichletToStiffness`` reads from a boundary condition."""
+
+    def __init__(self, dofs):
+        self.constrainedDofIndices = np.asarray(dofs, dtype=np.int64)
+
+
+def _systemWithStoredZeros(coords, dirichletDofs):
+    """The same block as :func:`_system`, but constrained by the solvers' own Dirichlet elimination,
+    which keeps the eliminated entries as explicitly stored zeros, and equilibrated in place."""
+    from edelweissfe.solvers.base.dirichlet import applyDirichletToStiffness
+
+    K, _ = _system(coords, [])
+    K = applyDirichletToStiffness(K, [_DirichletStub(dirichletDofs)], np.zeros(K.shape[0]))
+    dinv = 1.0 / np.sqrt(np.abs(K.diagonal()))
+    As = K.copy()
+    As.data *= dinv[As.indices]
+    As.data *= np.repeat(dinv, np.diff(As.indptr))
+    return As, dinv
+
+
+def test_dirichlet_rows_with_stored_zeros_are_recognized():
+    coords, isCorner, edgeEndpoints = _lattice(5)
+    dofs = _dirichletDofs(coords)
+    withZeros, dinv = _systemWithStoredZeros(coords, dofs)
+    assert np.any(withZeros.data == 0.0), "the Dirichlet elimination must leave stored zeros for this test"
+    withoutZeros = withZeros.copy()
+    withoutZeros.eliminate_zeros()
+
+    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLPTwoGrid
+
+    isDirichlet = PyAMGCLPTwoGrid.dirichletRows(withZeros)
+    assert np.array_equal(np.nonzero(isDirichlet)[0], dofs)
+
+    r = np.random.default_rng(2).standard_normal(withZeros.shape[0])
+    results = []
+    for A in (withZeros, withoutZeros):
+        preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, fineBlockSize=3)
+        preconditioner.build(A, dinv, coords=coords)
+        results.append(preconditioner.applyPreconditioner(r))
+    assert np.array_equal(results[0][dofs], r[dofs])
+    assert _relativeDifference(results[0], results[1]) < 1e-12
+
+
 def test_an_orphan_midside_raises():
     coords, isCorner, edgeEndpoints = _lattice(4)
     # an interior midside whose two edge-endpoint corners are fully clamped, while it stays free
