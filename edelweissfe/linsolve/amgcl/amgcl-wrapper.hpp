@@ -460,14 +460,14 @@ inline double rowDiagonal( const int* ptr, const int* col, const double* val, pt
 /// The equilibrated, field-split system of blockamg.py's outer solve, built in one OpenMP-threaded
 /// pass over A's CSR arrays instead of a chain of serial SciPy copies and slices.
 ///
-/// blockamg solves A x = b as (D A D)(D^-1 x) = D b, D = diag(dinv), and its block Gauss-Seidel
+/// blockamg solves A x = b as (D A D)(D^-1 x) = D b, D = diag(scaling), and its block Gauss-Seidel
 /// sweep needs every field's equilibrated diagonal block (for the per-field preconditioners, on a
 /// hierarchy rebuild) and the equilibrated coupling blocks between fields (on every solve). This
 /// class holds
 ///
 ///   * the equilibrated operator As = D A D, the outer Krylov operator: matvec(), residual(), and the
 ///     operator LGMRESOuterSolverT::solve() iterates on. Each entry is formed exactly as SciPy's
-///     former `As.data *= dinv[As.indices]; As.data *= dinv[rows]` did, (a_ij * dinv_j) * dinv_i, so
+///     former `As.data *= scaling[As.indices]; As.data *= scaling[rows]` did, (a_ij * s_j) * s_i, s = scaling, so
 ///     the operator is bitwise the former one;
 ///   * the coupling blocks As[field i, field j], i != j, rectangular, with field-local column
 ///     indices: couplingMatvec();
@@ -502,19 +502,19 @@ public:
   /// previous system intact.
   /// @param n, ptr, col, val A, square CSR in canonical form: sorted columns, no duplicates -- the diagonal
   /// blocks inherit its column order, and AMGCL's block backends require it sorted.
-  /// @param dinv the equilibration, D = diag(dinv).
+  /// @param scaling the equilibration, D = diag(scaling).
   /// @param nFields, fieldBounds the fields' DOF ranges, [fieldBounds[2k], fieldBounds[2k+1]),
   /// disjoint.
   void build( int           n,
               const int*    ptr,
               const int*    col,
               const double* val,
-              const double* dinv,
+              const double* scaling,
               int           nFields,
               const int*    fieldBounds )
   {
     EquilibratedSystemT assembled;
-    assembled.assemble( n, ptr, col, val, dinv, nFields, fieldBounds );
+    assembled.assemble( n, ptr, col, val, scaling, nFields, fieldBounds );
     *this = std::move( assembled );
   }
 
@@ -523,7 +523,7 @@ public:
                  const int*    ptr,
                  const int*    col,
                  const double* val,
-                 const double* dinv,
+                 const double* scaling,
                  int           nFields,
                  const int*    fieldBounds )
   {
@@ -578,7 +578,7 @@ public:
       for ( int j = ptr[i]; j < ptr[i + 1]; ++j ) {
         if ( val[j] != 0.0 ) {
           operator_->col[head]   = col[j];
-          operator_->val[head++] = ( val[j] * dinv[col[j]] ) * dinv[i];
+          operator_->val[head++] = ( val[j] * scaling[col[j]] ) * scaling[i];
         }
       }
     }
@@ -933,12 +933,7 @@ public:
   /// always_reset is forced to true (see the class comment).
   LGMRESOuterSolverT( int n, const char* json_params ) : n_( n )
   {
-    boost::property_tree::ptree prm;
-    std::string                 json_str( json_params );
-    if ( !json_str.empty() ) {
-      std::stringstream ss( json_str );
-      boost::property_tree::read_json( ss, prm );
-    }
+    boost::property_tree::ptree prm = parseJsonParameters( json_params );
     prm.put( "always_reset", true );
     // right preconditioning, whatever the caller's tree says: lgmres's own convergence test is then on the
     // residual of the operator it iterates on, which blockamg relies on (see its cap-hit and true-residual

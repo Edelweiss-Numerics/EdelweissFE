@@ -246,7 +246,7 @@ class PTwoGridPreconditioner:
         ``fineSpectralRadius`` parameter."""
         return self._preconditioner.fineSpectralRadiusSource
 
-    def build(self, A, dinv: np.ndarray, coords: np.ndarray = None) -> None:
+    def build(self, A, scaling: np.ndarray, coords: np.ndarray = None) -> None:
         """Build the restricted ``P``, the Galerkin coarse operator, its AMGCL hierarchy, and the fine
         Chebyshev smoother -- everything :meth:`applyPreconditioner` needs, all in C++.
 
@@ -255,8 +255,8 @@ class PTwoGridPreconditioner:
         A
             This field's equilibrated diagonal block (``As[slice, slice]``, scipy CSR), still carrying
             its Dirichlet identity rows.
-        dinv
-            This field's own slice of the global equilibration vector (``dinv[block.start:block.stop]``),
+        scaling
+            This field's own slice of the global equilibration vector (``scaling[block.start:block.stop]``),
             needed to scale the coarse near-null-space consistently with ``A``'s own scaling
             (:func:`~edelweissfe.linsolve.nullspace.translationNullspace`'s convention).
         coords
@@ -290,7 +290,7 @@ class PTwoGridPreconditioner:
                 fullDofRowsForCorners = np.repeat(cornerNodeRows, nDim) * nDim + np.tile(np.arange(nDim), nCorners)
                 freeCoarseCols = np.nonzero(~isDirichlet[fullDofRowsForCorners])[0]
                 coarseBlock = FieldBlock("coarse", 0, nCorners * nDim, nDim)
-                cornerScaling = dinv[fullDofRowsForCorners]
+                cornerScaling = scaling[fullDofRowsForCorners]
                 if coords is not None:
                     cornerCoords = np.asarray(coords, dtype=float)[cornerNodeRows]
                     fullNullspace = rigidBodyNullspace(coarseBlock, cornerCoords, cornerScaling)

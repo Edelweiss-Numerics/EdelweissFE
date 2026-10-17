@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from _blockamgsystems import displacementDamageSystem
 
 from edelweissfe.linsolve.blockamg import createSolver
+from edelweissfe.linsolve.blockamg.blockamg import BlockAMGSolver
 
 
 def _system(n=12):
@@ -97,7 +98,9 @@ def test_a_cap_hit_rebuilds_the_hierarchies_for_the_next_solve():
     assert solver._preconditioners is not standing
 
 
-def test_a_cap_hit_is_dumped_whatever_the_threshold(tmp_path):
+def test_a_cap_hit_is_dumped_whatever_the_threshold(tmp_path, monkeypatch):
+    # the dump budget is process-wide: start from none spent, whatever ran before
+    monkeypatch.setattr(BlockAMGSolver, "_degradationDumpsWritten", 0)
     A, b, blocks = _system()
     solver = createSolver(
         {

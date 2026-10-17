@@ -42,8 +42,9 @@ field, a screened-Poisson (Helmholtz) operator for a gradient-enhanced damage fi
 On the reference models AMGCL's smoothed aggregation converges, but not tightly, on the
 non-symmetric (contact-condensed) displacement block, so the outer Krylov solve needs
 many iterations -- with the shipped defaults typically :math:`O(100)`; with the recommended
-configuration below, mostly 5--60, and on the hardest damage-onset systems around 100. That is an
-acceptable price where the alternative is not fitting in memory at all; at problem sizes a direct
+configuration below, mostly 5--60, while the hardest damage-onset systems reach its deliberate cap
+of 50 iterations (``outerRestart`` x ``outerMaxiter`` = 50 x 1): beyond it, more iterations only mean
+worse preconditioning. That is an acceptable price where the alternative is not fitting in memory at all; at problem sizes a direct
 factorization still handles comfortably, a direct solver (e.g. ``pardiso``) can be competitive or
 faster. Which one wins depends on problem size, conditioning, and
 how severely damage and contact nonlinearity degrade the per-field hierarchies on a given increment.
@@ -150,6 +151,29 @@ every registered linear solver it is called as ``(A, b) -> x``. Both of its stat
                 v
               the Newton correction
 
+In matrix form
+~~~~~~~~~~~~~~
+
+With the fields numbered in DOF order, :math:`\hat A` splits into blocks :math:`\hat A_{ij}`. The
+preconditioner of step (5) is one forward block Gauss--Seidel sweep with the per-field AMG cycles
+:math:`M_i^{-1}` in place of exact block solves,
+
+.. math::
+
+   M^{-1} = (B + L)^{-1}, \qquad B = \operatorname{blockdiag}(M_1, \dots, M_n), \qquad
+   L = \text{the blocks } \hat A_{ij},\ i > j,
+
+applied by forward substitution, :math:`x_i = M_i^{-1} \bigl( r_i - \sum_{j < i} \hat A_{ij} x_j \bigr)`.
+With exact :math:`M_i = \hat A_{ii}` and a block lower triangular :math:`\hat A`, it is :math:`\hat A^{-1}`.
+The outer Krylov method solves the right-preconditioned system
+
+.. math::
+
+   \hat A M^{-1} y = \hat b, \qquad z = M^{-1} y, \qquad x = D z,
+
+whose residual :math:`\hat b - \hat A z = D (b - A x)` is the scaled one -- hence the true-residual
+check of step (6). The numbers (1)--(7) reappear as comments in ``BlockAMGSolver.__call__``.
+
 
 Anatomy of one solve
 --------------------
@@ -167,7 +191,8 @@ scale-sensitive, so every solve begins with a symmetric diagonal (Jacobi) equili
    \hat A = D A D, \qquad \hat b = D b, \qquad x = D z,
    \qquad D = \operatorname{diag}\!\left( \lvert A_{ii} \rvert^{-1/2} \right),
 
-which is an exact diagonal similarity scaling: solving :math:`\hat A z = \hat b` and unscaling gives
+(in the code, the diagonal of :math:`D` is the vector ``scaling``), which is an exact diagonal similarity
+scaling: solving :math:`\hat A z = \hat b` and unscaling gives
 the solution of :math:`A x = b`, whatever :math:`D` is. That is what makes it safe to *reuse* an
 older :math:`D` together with a reused hierarchy (see below) -- a stale scaling can cost outer
 iterations, never correctness.
@@ -443,7 +468,8 @@ Jacobian has barely moved since the last one. ``blockamg`` therefore keeps its h
 equilibration they were built for) standing across solves by default.
 
 This is safe in a way the adaptive tolerance is not. The outer Krylov solve always operates on the
-current, freshly equilibrated matrix; only the preconditioner may be stale. A stale preconditioner
+current matrix (equilibrated with the scaling the standing hierarchies were built for, which is exact
+whatever the scaling); only the preconditioner may be stale. A stale preconditioner
 costs a few extra outer iterations at the *same* requested tolerance and cannot by itself change the
 converged solution or the Newton path.
 
@@ -500,7 +526,7 @@ optional. A key that is not listed in the tables below raises an error rather th
     {
         "outerSolver": "amgcl_lgmres",
         "sweeps": 1,
-        "symmetric": true,
+        "symmetric": false,
         "verbosity": "info"
     }
 
@@ -526,8 +552,8 @@ Outer Krylov solve
         tolerance.
     * - ``outerRestart``
       - ``100``
-      - Restart length. With ``"scipy"`` this is the GMRES restart parameter; with
-        ``"amgcl_lgmres"`` its product with ``outerMaxiter`` becomes one total Arnoldi-step budget.
+      - With ``"scipy"``, the GMRES restart length. With ``"amgcl_lgmres"`` only a factor: its product
+        with ``outerMaxiter`` is the iteration cap of a pass (the restart length is ``lgmresM``).
     * - ``outerMaxiter``
       - ``8``
       - Maximum number of restart cycles (``"scipy"``), or a factor of the total iteration budget
@@ -672,6 +698,10 @@ Adaptive tolerance and true-residual enforcement
       - ``0.3``
       - Safety factor on the gap-compensated tolerance; only used when the above is enabled. Smaller
         values solve more accurately and behave more like the default configuration.
+    * - ``gapMaxFactor``
+      - ``1e3``
+      - Upper bound on the learned scaled-to-true residual gap, so that one non-converged solve cannot
+        drive every following first pass to an unmeetable tolerance.
 
 Hierarchy reuse
 ~~~~~~~~~~~~~~~
@@ -695,8 +725,8 @@ Hierarchy reuse
         exceeded both this factor times and 15 more than that of the solve the hierarchies were built
         for. A cap hit always refreshes them.
     * - ``refreshOnNewIncrement``
-      - ``True``
-      - Refresh the hierarchies on a residual jump (new increment or cutback). With ``False`` the
+      - ``true``
+      - Refresh the hierarchies on a residual jump (new increment or cutback). With ``false`` the
         first Newton iteration of an increment keeps the standing hierarchies; the layout/pattern
         checks and ``hierarchyStalenessFactor`` still apply.
     * - ``hierarchyDropTol``
@@ -731,6 +761,11 @@ Diagnostics
     * - ``verbosity``
       - ``"warning"``
       - One of ``"silent"``, ``"warning"``, ``"info"``, ``"debug"``; see below.
+    * - ``hotReloadConfigFile``
+      - unset
+      - Path of this very configuration file: every solve rereads it when it changed and applies its
+        settings (validated as a whole; rolled back if the next hierarchy build fails with them), to try
+        settings on a running analysis.
     * - ``warnOuterIterationsThreshold``
       - ``100``
       - Outer iteration count past which a solve emits a warning even at the default verbosity --

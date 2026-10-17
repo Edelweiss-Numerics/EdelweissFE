@@ -260,7 +260,7 @@ cdef class PyAMGCLSolver:
 
 
 cdef class PyAMGCLEquilibratedSystem:
-    """blockamg's equilibrated, field-split system ``As = D A D`` (``D = diag(dinv)``), built in one
+    """blockamg's equilibrated, field-split system ``As = D A D`` (``D = diag(scaling)``), built in one
     OpenMP-threaded pass over ``A``: the outer Krylov operator (:meth:`matvec`, :meth:`residual`, and
     the operator :meth:`PyAMGCLLGMRESSolver.solve` iterates on), the coupling blocks between fields
     (:meth:`couplingMatvec`) and, on demand, a field's diagonal block (:meth:`diagonalBlock`).
@@ -292,21 +292,21 @@ cdef class PyAMGCLEquilibratedSystem:
                                             _doubleData(out))
         return out
 
-    def build(self, object A, object dinv, object fieldBounds):
+    def build(self, object A, object scaling, object fieldBounds):
         """
-        A: scipy.sparse csr_matrix (square); dinv: the equilibration, length n; fieldBounds: a
+        A: scipy.sparse csr_matrix (square); scaling: the equilibration, length n; fieldBounds: a
         sequence of ``(start, stop)`` DOF ranges, one per field, disjoint.
         """
         if A.shape[0] != A.shape[1]:
             raise ValueError("A must be square, got shape {:}".format(A.shape))
         A, indptr, indices, data = _csrArrays(A)
         cdef int n = A.shape[0]
-        dinvArray = _vector(dinv, n, "dinv")
+        scalingArray = _vector(scaling, n, "scaling")
         bounds = np.ascontiguousarray(np.asarray(fieldBounds, dtype=np.int32).reshape(-1))
         if bounds.shape[0] % 2:
             raise ValueError("fieldBounds must be (start, stop) pairs, got {:} numbers".format(bounds.shape[0]))
-        self.system.build(n, _intData(indptr), _intData(indices), _constDoubleData(data), _constDoubleData(dinvArray),
-                          bounds.shape[0] // 2, _intData(bounds))
+        self.system.build(n, _intData(indptr), _intData(indices), _constDoubleData(data),
+                          _constDoubleData(scalingArray), bounds.shape[0] // 2, _intData(bounds))
         self.n = n
 
     def diagonalBlock(self, int field):

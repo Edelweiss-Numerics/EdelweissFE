@@ -16,12 +16,6 @@ from _blockamgsystems import displacementDamageSystem
 from edelweissfe.linsolve.blockamg import createSolver
 
 
-def _system(n=12):
-    """A one-way coupled displacement / damage system with displacement rows scaled over two orders of magnitude,
-    so that the equilibration matters."""
-    return displacementDamageSystem(n, coupling="one-way", rowScaling=True)
-
-
 def _solver(blocks, **options):
     config = {"outerTol": 1e-10, "verbosity": "silent", "gapCompensatedTolerance": True}
     config.update(options)
@@ -31,7 +25,7 @@ def _solver(blocks, **options):
 
 
 def test_the_gap_is_learned_from_the_residual_actually_reached():
-    A, b, blocks = _system()
+    A, b, blocks = displacementDamageSystem(12, coupling="one-way", rowScaling=True)
     # Two outer iterations cannot reach 1e-10: the solve stops at the cap. No continuations, so the returned
     # solution is the one the gap was learned from.
     solver = _solver(blocks, outerRestart=2, outerMaxiter=1, gapMaxFactor=1e6, trueResidualMaxContinuations=0)
@@ -49,7 +43,7 @@ def test_the_gap_is_learned_from_the_residual_actually_reached():
 
 @pytest.mark.parametrize("refresh", [True, False])
 def test_a_new_increment_rebuilds_the_hierarchies_only_if_asked(refresh):
-    A, b, blocks = _system()
+    A, b, blocks = displacementDamageSystem(12, coupling="one-way", rowScaling=True)
     solver = _solver(blocks, outerTol=1e-6, refreshOnNewIncrement=refresh, hierarchyStalenessFactor=1e9)
     solver(A, b)
     standing = solver._preconditioners

@@ -352,7 +352,12 @@ def test_a_field_precond_for_a_field_the_system_lacks_is_accepted(configuredSolv
     assert solver._fieldPreconds == fieldPreconds
 
 
-def test_settings_the_build_fails_with_are_rolled_back(configuredSolver):
+@pytest.mark.parametrize(
+    "alongside",
+    [{}, {"lgmresM": 40}, {"outerSolver": "scipy"}],
+    ids=["alone", "with lgmresM", "with outerSolver"],
+)
+def test_settings_the_build_fails_with_are_rolled_back(configuredSolver, alongside):
     from _blockamgsystems import displacementDamageSystem
 
     solver, configPath = configuredSolver
@@ -365,13 +370,22 @@ def test_settings_the_build_fails_with_are_rolled_back(configuredSolver):
 
     # valid as far as the checks see, but AMGCL knows no smoother of that name
     badTree = {"displacement": {"relax": {"type": "chebychev"}}}
-    _write(configPath, {"fieldPreconds": badTree, "hotReloadConfigFile": str(configPath)})
+    _write(configPath, {"fieldPreconds": badTree, **alongside, "hotReloadConfigFile": str(configPath)})
     x = solver(A, b)
 
     assert np.linalg.norm(b - A @ x) <= 1e-2 * np.linalg.norm(b)
-    assert solver._fieldPreconds == {}
+    assert solver._fieldPreconds == {} and solver._lgmresM == 30 and solver._outerSolver == "amgcl_lgmres"
     assert any("ROLLED BACK" in message for message in messages)
     # the file is recorded as seen: the next solve does not try it again
     messages.clear()
     solver(A, b)
     assert not any("hot reload" in message for message in messages)
+
+
+def test_a_null_dump_threshold_reloaded_means_the_warning_threshold(tmp_path):
+    configPath = tmp_path / "blockamg.json"
+    options = {"dumpOnDegradationDir": str(tmp_path / "dumps"), "dumpOnDegradationThreshold": None}
+    _write(configPath, {**options, "hotReloadConfigFile": str(configPath)})
+    solver = BlockAMGSolver(**options, hotReloadConfigFile=str(configPath))
+    _reload(solver)
+    assert solver._degradationThreshold() == solver._warnOuterIterationsThreshold

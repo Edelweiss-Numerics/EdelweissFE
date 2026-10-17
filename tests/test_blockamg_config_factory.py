@@ -29,6 +29,7 @@
 solver, and an unknown key is an error instead of being silently dropped."""
 
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -123,15 +124,16 @@ def test_a_setting_the_run_could_not_use_raises_at_construction(options):
 
 
 def test_the_recommended_configuration_solves_a_displacement_damage_system():
-    A, b, blocks = displacementDamageSystem(10, coupling="one-way", rowScaling=True)
+    A, b, blocks = displacementDamageSystem(12, coupling="symmetric", rowScaling=True)
     solver = createSolver({**json.load(open(_REPO_ROOT / _RECOMMENDED)), "verbosity": "silent"})
     solver.setFieldStructure(blocks)
     x = solver(A, b)
-    # the displacement field runs on the float-stored 3x3 block hierarchy (which takes no near null-space)
+    # the displacement field runs on a multi-level float-stored 3x3 block hierarchy
     displacement = solver._preconditioners[0]
     assert displacement.blockSize == 3 and displacement.isFloat
-    # the first solve asks for etaMax = 1e-3 on the scaled residual; the true one lands near it
-    assert np.linalg.norm(b - A @ x) <= 1e-2 * np.linalg.norm(b)
+    assert int(re.search(r"Number of levels:\s+(\d+)", displacement.report()).group(1)) > 1
+    # the first solve asks for etaMax = 1e-3, compensated for the scaled-to-true residual gap
+    assert np.linalg.norm(b - A @ x) <= 3e-3 * np.linalg.norm(b)
 
 
 def test_null_is_unset_for_every_key_whose_default_is_unset():
@@ -166,3 +168,10 @@ def test_a_block_size_that_does_not_fit_its_field_raises_at_the_first_build():
     solver.setFieldStructure(blocks)
     with pytest.raises(ValueError, match="do not fit the fields"):
         solver(A, b)
+
+
+def test_every_configuration_key_is_documented_on_the_theory_page():
+    from edelweissfe.linsolve.blockamg.blockamg import CONFIG_CASTS
+
+    page = (_REPO_ROOT / "doc/source/documentation/blockamgtheory.rst").read_text()
+    assert [key for key in CONFIG_CASTS if "``{:}``".format(key) not in page] == []
