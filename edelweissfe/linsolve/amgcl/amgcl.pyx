@@ -80,6 +80,11 @@ cdef inline const signed char* _byteData(const signed char[::1] values):
     return &values[0] if values.shape[0] > 0 else NULL
 
 
+cdef inline char* _writableByteData(signed char[::1] values):
+    """See :func:`_intData` -- for an output array the C++ side writes."""
+    return <char*> &values[0] if values.shape[0] > 0 else NULL
+
+
 cdef class PyAMGCLSolver:
     cdef AMGCLSolverInterface* solver
     cdef readonly bint isFloat
@@ -638,7 +643,7 @@ cdef class PyAMGCLPTwoGrid:
         A, indptr, indices, data = _csrArrays(A)
         mask = np.zeros(A.shape[0], dtype=np.int8)
         PTwoGridPreconditioner.dirichletRowMask(A.shape[0], _intData(indptr), _intData(indices), _constDoubleData(data),
-                                                <char*> _byteData(mask))
+                                                _writableByteData(mask))
         return mask.astype(bool)
 
     def build(self, object A, object isCorner, object edgeEndpoints, object nullspace=None,

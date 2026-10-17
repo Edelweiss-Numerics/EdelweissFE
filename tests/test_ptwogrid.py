@@ -365,7 +365,15 @@ def test_an_invalid_sweep_count_or_degree_raises_before_any_build():
     # the C++ class checks them itself, in its constructor
     from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLPTwoGrid
 
-    for params in ({"fineDegree": 0}, {"nuPost": -1}, {"fineBlockSize": 2}, {"coarseValueType": "half"}):
+    for params in (
+        {"fineDegree": 0},
+        {"nuPost": -1},
+        {"fineBlockSize": 2},
+        {"coarseValueType": "half"},
+        {"finePowerIters": 0},
+        {"fineHigher": 0.9},
+        {"fineLower": 0.0},
+    ):
         with pytest.raises(RuntimeError):
             PyAMGCLPTwoGrid(params)
 
@@ -397,9 +405,10 @@ def test_a_zero_block_raises_instead_of_dividing_by_zero():
 def test_a_failed_build_leaves_nothing_to_apply():
     coords, isCorner, edgeEndpoints = lattice(3)
     As, dinv = latticeSystem(coords, dirichletDofs(coords))
-    # the full spectral-radius estimate is the last stage of the build: everything before it is built
-    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, finePowerIters=0)
-    with pytest.raises(RuntimeError, match="finePowerIters"):
+    # the fine spectral radius is checked after the prolongation, the Galerkin product and the coarse
+    # hierarchy are built: a supplied infinite one fails the build that late
+    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, fineSpectralRadius=np.inf)
+    with pytest.raises(RuntimeError, match="spectral radius"):
         preconditioner.build(As, dinv, coords=coords)
     with pytest.raises(RuntimeError, match="no preconditioner built"):
         preconditioner.applyPreconditioner(np.ones(As.shape[0]))

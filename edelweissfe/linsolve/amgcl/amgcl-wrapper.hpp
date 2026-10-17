@@ -1330,6 +1330,8 @@ public:
   unsigned    fineDegree_ = 5;
   float       fineLower_ = 0.01f, fineHigher_ = 1.1f;
   std::string fineValueType_, coarseValueType_;
+  int         finePowerIters_ = 300, fineRecheckIters_ = 15;
+  double      fineRecheckTolerance_ = 0.01;
 
   double                fineSpectralRadius_ = 0.0;
   std::vector< double > fineDominantVector_;
@@ -1348,21 +1350,19 @@ public:
   /// coarseValueType, and the coarse level's AMGCL preconditioner tree under "coarse". The sweep counts,
   /// the fine degree, the block size and the value types are validated here, so that a bad value fails
   /// before build() has spent anything on the prolongation, the Galerkin product or the coarse hierarchy.
-  PTwoGridPreconditionerT( const char* json_params )
+  PTwoGridPreconditionerT( const char* json_params ) : prm( parseJsonParameters( json_params ) )
   {
-    std::string json_str( json_params );
-    if ( !json_str.empty() ) {
-      std::stringstream ss( json_str );
-      boost::property_tree::read_json( ss, prm );
-    }
-    nuPre_               = prm.get( "nuPre", prm.get( "nu", 1 ) );
-    nuPost_              = prm.get( "nuPost", prm.get( "nu", 1 ) );
-    const int fineDegree = prm.get( "fineDegree", 5 );
-    fineLower_           = prm.get( "fineLower", 0.01f );
-    fineHigher_          = prm.get( "fineHigher", 1.1f );
-    fineBlockSize_       = prm.get( "fineBlockSize", 1 );
-    fineValueType_       = prm.get( "fineValueType", std::string( "double" ) );
-    coarseValueType_     = prm.get( "coarseValueType", std::string( "double" ) );
+    nuPre_                = prm.get( "nuPre", prm.get( "nu", 1 ) );
+    nuPost_               = prm.get( "nuPost", prm.get( "nu", 1 ) );
+    const int fineDegree  = prm.get( "fineDegree", 5 );
+    fineLower_            = prm.get( "fineLower", 0.01f );
+    fineHigher_           = prm.get( "fineHigher", 1.1f );
+    fineBlockSize_        = prm.get( "fineBlockSize", 1 );
+    fineValueType_        = prm.get( "fineValueType", std::string( "double" ) );
+    coarseValueType_      = prm.get( "coarseValueType", std::string( "double" ) );
+    finePowerIters_       = prm.get( "finePowerIters", 300 );
+    fineRecheckIters_     = prm.get( "fineRecheckIters", 15 );
+    fineRecheckTolerance_ = prm.get( "fineRecheckTolerance", 0.01 );
     if ( nuPre_ < 0 || nuPost_ < 0 ) {
       throw std::runtime_error( "ptwogrid: negative fine sweep counts" );
     }
@@ -1378,6 +1378,16 @@ public:
     }
     if ( coarseValueType_ != "double" && coarseValueType_ != "float" ) {
       throw std::runtime_error( "ptwogrid: coarseValueType must be double or float, got " + coarseValueType_ );
+    }
+    // the Chebyshev interval is [fineLower, fineHigher] times the spectral radius: it must start above zero
+    // and reach at least the radius itself, or the smoother amplifies the highest modes
+    if ( !( fineLower_ > 0.0f && fineLower_ < 1.0f ) || !( fineHigher_ >= 1.0f ) ) {
+      throw std::runtime_error( "ptwogrid: needs 0 < fineLower < 1 <= fineHigher, got fineLower " +
+                                std::to_string( fineLower_ ) + ", fineHigher " + std::to_string( fineHigher_ ) );
+    }
+    if ( finePowerIters_ < 1 || fineRecheckIters_ < 0 || !( fineRecheckTolerance_ >= 0.0 ) ) {
+      throw std::runtime_error( "ptwogrid: needs finePowerIters >= 1, fineRecheckIters >= 0 and "
+                                "fineRecheckTolerance >= 0" );
     }
   }
 
@@ -1438,11 +1448,7 @@ public:
     for ( int i = 0; i < n; ++i ) {
       if ( isDirichlet_[i] ) {
         dirichletRows_.push_back( i );
-        double diagonal = 0.0;
-        for ( int j = ptr[i]; j < ptr[i + 1]; ++j )
-          if ( col[j] == i )
-            diagonal += val[j];
-        dirichletDiagonal_.push_back( diagonal );
+        dirichletDiagonal_.push_back( rowDiagonal( ptr, col, val, i ) );
       }
     }
 
@@ -1475,11 +1481,7 @@ public:
     for ( ptrdiff_t i = 0; i < n; ++i ) {
       if ( isDirichlet_[i] )
         continue;
-      bool diagonal = false;
-      for ( int j = ptr[i]; j < ptr[i + 1]; ++j )
-        if ( col[j] == i && val[j] != 0.0 )
-          diagonal = true;
-      if ( !diagonal ) {
+      if ( rowDiagonal( ptr, col, val, i ) == 0.0 ) {
 #pragma omp critical
         rowWithoutDiagonal = i;
       }
@@ -1610,11 +1612,7 @@ public:
   /// mt19937 seeded 0, uniform on [-1, 1], one draw per free DOF in order.
   double estimateFineSpectralRadiusInFull()
   {
-    const int iters = prm.get( "finePowerIters", 300 );
-    if ( iters <= 0 ) {
-      throw std::runtime_error( "ptwogrid: finePowerIters must be positive when the fine spectral radius is "
-                                "estimated." );
-    }
+    const int                                iters = finePowerIters_;
     std::vector< double >                    startVector( n_, 0.0 );
     std::mt19937                             rng( 0 );
     std::uniform_real_distribution< double > rnd( -1, 1 );
@@ -1634,7 +1632,7 @@ public:
       fineSpectralRadiusSource_ = 0;
       return estimateFineSpectralRadiusInFull();
     }
-    const int recheckIters = prm.get( "fineRecheckIters", 15 );
+    const int recheckIters = fineRecheckIters_;
     if ( dominantVector == nullptr || recheckIters <= 0 ) {
       fineDominantVector_.clear();
       fineSpectralRadiusSource_ = 1;
@@ -1659,7 +1657,7 @@ public:
     // continuing it on an unchanged operator still creeps up a little; a rise below
     // fineRecheckTolerance (1%, well inside the 10% margin of `higher`) keeps the supplied radius, so
     // that an unchanged operator gives the same smoother as before.
-    const double tolerance = prm.get( "fineRecheckTolerance", 0.01 );
+    const double tolerance = fineRecheckTolerance_;
     if ( recheck <= suppliedRadius * ( 1.0 + tolerance ) ) {
       fineSpectralRadiusSource_ = 1;
       return suppliedRadius;
