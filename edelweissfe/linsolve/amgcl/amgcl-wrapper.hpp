@@ -1066,18 +1066,18 @@ public:
 // uniform on [-1, 1], one draw per free DOF in order); unlike AMGCL's, the estimate is independent of
 // the thread count and reproducible run to run.
 
-// The fine smoother as the two-grid cycle sees it, independent of the operator's storage format
-// (scalar entries or node-wise 3x3 blocks) and value type (double or float). Vectors are always plain
-// double arrays of the field's scalar size.
+/// The fine smoother as the two-grid cycle sees it, independent of the operator's storage format
+/// (scalar entries or node-wise 3x3 blocks) and value type (double or float). Vectors are always plain
+/// double arrays of the field's scalar size.
 class PTwoGridFineSmoother {
 public:
   virtual ~PTwoGridFineSmoother() {}
 
-  // @brief One Chebyshev sweep (degree steps) on A x = b, continuing from x -- or, with xIsZero, from
-  // x = 0 without reading x at all (its content is then irrelevant).
+  /// @brief One Chebyshev sweep (degree steps) on A x = b, continuing from x -- or, with xIsZero, from
+  /// x = 0 without reading x at all (its content is then irrelevant).
   virtual void smooth( const double* b, double* x, bool xIsZero ) = 0;
 
-  // @brief r <- b - A x
+  /// @brief r <- b - A x
   virtual void residual( const double* b, const double* x, double* r ) const = 0;
 };
 
@@ -1127,8 +1127,8 @@ public:
     p_.assign( A_->nrows * BlockSize, 0.0 );
   }
 
-  // @brief The same level with the operator's entries rounded to float (same structure, same
-  // polynomial, same double inverse diagonal), in one parallel pass.
+  /// @brief The same level with the operator's entries rounded to float (same structure, same
+  /// polynomial, same double inverse diagonal), in one parallel pass.
   template < typename FloatValueType >
   std::unique_ptr< PTwoGridFineLevelT< ValueType, FloatValueType > > makeFloatCopy() const
   {
@@ -1143,9 +1143,9 @@ public:
     return level;
   }
 
-  // @brief Set up the Chebyshev polynomial for the given spectral radius.
-  // @param lower, higher amgcl::relaxation::chebyshev's own `float` parameters, kept as `float` so
-  // the ellipse bounds round exactly as AMGCL's do.
+  /// @brief Set up the Chebyshev polynomial for the given spectral radius.
+  /// @param lower, higher amgcl::relaxation::chebyshev's own `float` parameters, kept as `float` so
+  /// the ellipse bounds round exactly as AMGCL's do.
   void setPolynomial( unsigned degree, float lower, float higher, double spectralRadius )
   {
     degree_   = degree;
@@ -1156,14 +1156,14 @@ public:
     c_ = 0.5 * ( hi - lo );
   }
 
-  // @brief Power iteration for the spectral radius of A: the loop of
-  // amgcl::backend::spectral_radius (estimate sum_i |(A b)_i b_i| per scalar component, b normalized),
-  // with two differences that make the estimate a deterministic function of the matrix alone: the
-  // start vector is the caller's instead of per-thread random numbers, and the reductions run over a
-  // fixed partition of the rows, summed in order, instead of whichever order the threads finish in.
-  // Accumulating per scalar component also makes a block operator's estimate the scalar one's, up to
-  // summation order. The last normalized iterate -- the estimate of the dominant eigenvector -- is
-  // returned in dominantVector, as the start of a later, short re-check of the estimate.
+  /// @brief Power iteration for the spectral radius of A: the loop of
+  /// amgcl::backend::spectral_radius (estimate sum_i |(A b)_i b_i| per scalar component, b normalized),
+  /// with two differences that make the estimate a deterministic function of the matrix alone: the
+  /// start vector is the caller's instead of per-thread random numbers, and the reductions run over a
+  /// fixed partition of the rows, summed in order, instead of whichever order the threads finish in.
+  /// Accumulating per scalar component also makes a block operator's estimate the scalar one's, up to
+  /// summation order. The last normalized iterate -- the estimate of the dominant eigenvector -- is
+  /// returned in dominantVector, as the start of a later, short re-check of the estimate.
   double estimateSpectralRadius( int                          powerIters,
                                  const std::vector< double >& startVector,
                                  std::vector< double >&       dominantVector ) const
@@ -1222,14 +1222,14 @@ public:
     return radius < 0 ? 2.0 : radius;
   }
 
-  // @brief `degree_` Chebyshev steps on A x = b, continuing from the given x -- the recurrence of
-  // amgcl::relaxation::chebyshev::solve(), step for step, with two economies that leave the result
-  // bitwise unchanged:
-  //   * from x = 0 (xIsZero, the pre-smoothing), the first residual is b itself -- b - A 0 is b
-  //     exactly for a finite A -- so its sparse product is skipped, and x = 0 + p is written as p
-  //     (identical, up to the sign of a zero entry);
-  //   * AMGCL's two vector updates, p <- alpha r + beta p and x <- 1 p + 1 x, run as one pass with
-  //     the same arithmetic per entry.
+  /// @brief `degree_` Chebyshev steps on A x = b, continuing from the given x -- the recurrence of
+  /// amgcl::relaxation::chebyshev::solve(), step for step, with two economies that leave the result
+  /// bitwise unchanged:
+  ///   * from x = 0 (xIsZero, the pre-smoothing), the first residual is b itself -- b - A 0 is b
+  ///     exactly for a finite A -- so its sparse product is skipped, and x = 0 + p is written as p
+  ///     (identical, up to the sign of a zero entry);
+  ///   * AMGCL's two vector updates, p <- alpha r + beta p and x <- 1 p + 1 x, run as one pass with
+  ///     the same arithmetic per entry.
   void smooth( const double* b, double* x, bool xIsZero ) override
   {
     const ptrdiff_t n     = static_cast< ptrdiff_t >( r_.size() );
@@ -1276,16 +1276,16 @@ public:
     }
   }
 
-  // @brief res <- b - A x
+  /// @brief res <- b - A x
   void residual( const double* b, const double* x, double* res ) const override
   {
     ptwogridFineResidual( *A_, b, x, res );
   }
 };
 
-// @brief The p-two-grid preconditioner for one vector field's diagonal block: build() once per
-// hierarchy refresh, apply() once per outer Krylov iteration. See the comment block above for the
-// Dirichlet scheme and the spectral-radius reuse.
+/// @brief The p-two-grid preconditioner for one vector field's diagonal block: build() once per
+/// hierarchy refresh, apply() once per outer Krylov iteration. See the comment block above for the
+/// Dirichlet scheme and the spectral-radius reuse.
 class PTwoGridPreconditionerT {
 public:
   typedef amgcl::backend::builtin< double >                    CoarseBackend;
@@ -1382,21 +1382,21 @@ public:
     return std::chrono::duration< double >( Clock::now() - start ).count();
   }
 
-  // @brief Build everything apply() needs.
-  // @param n, ptr, col, val the field's equilibrated diagonal block (scalar CSR, sorted columns,
-  // Dirichlet identity rows included). Copied; the caller's arrays are not referenced after build().
-  // @param nNodes, isCorner, edgeEndpoints the P1 topology map (edgeEndpoints: nNodes x 2,
-  // row-major; read for midside nodes only).
-  // @param nullspace, nullspaceCols the coarse near null-space, rows = free coarse DOFs in coarse
-  // order (corner order, then DOF), row-major; nullspaceCols == 0 for none.
-  // @param spectralRadius > 0: start from this fine spectral radius (typically a previous build's)
-  // instead of estimating it from scratch. With a dominantVector (n entries, the previous build's
-  // fineDominantVector()) it is re-checked first by fineRecheckIters power iterations from that
-  // vector, which cost a few sparse products instead of the full estimate's finePowerIters: a
-  // re-check estimate up to 1% above the supplied radius keeps it, one above that but within the smoother's
-  // `fineHigher` margin replaces it, and one beyond that margin -- the operator stiffened more than
-  // the margin covers -- triggers the full estimate. Without a dominantVector the radius is used as
-  // supplied.
+  /// @brief Build everything apply() needs.
+  /// @param n, ptr, col, val the field's equilibrated diagonal block (scalar CSR, sorted columns,
+  /// Dirichlet identity rows included). Copied; the caller's arrays are not referenced after build().
+  /// @param nNodes, isCorner, edgeEndpoints the P1 topology map (edgeEndpoints: nNodes x 2,
+  /// row-major; read for midside nodes only).
+  /// @param nullspace, nullspaceCols the coarse near null-space, rows = free coarse DOFs in coarse
+  /// order (corner order, then DOF), row-major; nullspaceCols == 0 for none.
+  /// @param spectralRadius > 0: start from this fine spectral radius (typically a previous build's)
+  /// instead of estimating it from scratch. With a dominantVector (n entries, the previous build's
+  /// fineDominantVector()) it is re-checked first by fineRecheckIters power iterations from that
+  /// vector, which cost a few sparse products instead of the full estimate's finePowerIters: a
+  /// re-check estimate up to 1% above the supplied radius keeps it, one above that but within the smoother's
+  /// `fineHigher` margin replaces it, and one beyond that margin -- the operator stiffened more than
+  /// the margin covers -- triggers the full estimate. Without a dominantVector the radius is used as
+  /// supplied.
   void build( int                n,
               const int*         ptr,
               const int*         col,
@@ -1581,8 +1581,8 @@ public:
     coarseX_.assign( nCoarseFree_, 0.0 );
   }
 
-  // @brief powerIters power iterations on the fine operator from startVector (see
-  // PTwoGridFineLevelT::estimateSpectralRadius); the final iterate goes to fineDominantVector_.
+  /// @brief powerIters power iterations on the fine operator from startVector (see
+  /// PTwoGridFineLevelT::estimateSpectralRadius); the final iterate goes to fineDominantVector_.
   double estimateFineSpectralRadius( int powerIters, const std::vector< double >& startVector )
   {
     if ( fineBlock3_ )
@@ -1590,8 +1590,8 @@ public:
     return fineScalar_->estimateSpectralRadius( powerIters, startVector, fineDominantVector_ );
   }
 
-  // @brief The full estimate, from the deterministic start vector: AMGCL's single-thread one,
-  // mt19937 seeded 0, uniform on [-1, 1], one draw per free DOF in order.
+  /// @brief The full estimate, from the deterministic start vector: AMGCL's single-thread one,
+  /// mt19937 seeded 0, uniform on [-1, 1], one draw per free DOF in order.
   double estimateFineSpectralRadiusInFull()
   {
     const int iters = prm.get( "finePowerIters", 300 );
@@ -1608,7 +1608,7 @@ public:
     return estimateFineSpectralRadius( iters, startVector );
   }
 
-  // @brief The fine spectral radius for this build -- see build()'s `spectralRadius` parameter.
+  /// @brief The fine spectral radius for this build -- see build()'s `spectralRadius` parameter.
   double chooseFineSpectralRadius( double        suppliedRadius,
                                    const double* dominantVector,
                                    int           dominantVectorSize,
@@ -1676,11 +1676,11 @@ public:
     }
   }
 
-  // @brief P on the free DOFs: identity on corners, 1/2, 1/2 on each midside from its two
-  // edge-endpoint corners, per DOF; no rows for Dirichlet fine DOFs, no columns for Dirichlet coarse
-  // DOFs, and the weight of a dropped column is *not* redistributed (a constrained corner contributes
-  // exactly zero to a homogeneous Newton correction). A free midside DOF whose both endpoint DOFs are
-  // constrained is an orphan and raises.
+  /// @brief P on the free DOFs: identity on corners, 1/2, 1/2 on each midside from its two
+  /// edge-endpoint corners, per DOF; no rows for Dirichlet fine DOFs, no columns for Dirichlet coarse
+  /// DOFs, and the weight of a dropped column is *not* redistributed (a constrained corner contributes
+  /// exactly zero to a homogeneous Newton correction). A free midside DOF whose both endpoint DOFs are
+  /// constrained is an orphan and raises.
   void buildProlongation( int nNodes, int nDim, const signed char* isCorner, const int* edgeEndpoints )
   {
     // coarse numbering: corners in node order, nDim DOFs each; free coarse DOFs renumbered densely
@@ -1767,19 +1767,19 @@ public:
     PT_ = amgcl::backend::transpose( *P_ );
   }
 
-  // @brief `sweeps` fine sweeps; the first one from x = 0 if xIsZero
+  /// @brief `sweeps` fine sweeps; the first one from x = 0 if xIsZero
   void smoothFine( double* x, int sweeps, bool xIsZero )
   {
     for ( int sweep = 0; sweep < sweeps; ++sweep )
       fine_->smooth( rhs_.data(), x, xIsZero && sweep == 0 );
   }
 
-  // @brief x <- M^-1 r: one two-grid cycle on the free DOFs -- nuPre fine sweeps, coarse-grid
-  // correction, nuPost fine sweeps; Dirichlet DOFs pass through, x_i = r_i. The cycle's fine iterate
-  // is x itself: written from x = 0 without reading it (by the first pre-sweep, or, with no
-  // pre-sweeps, by the prolongated coarse correction itself), it stays zero on Dirichlet DOFs (zero
-  // right-hand side there, no rows of P) until they are set to r_i last. Without pre-sweeps the
-  // fine residual of x = 0 is the right-hand side itself, so no product is needed for it.
+  /// @brief x <- M^-1 r: one two-grid cycle on the free DOFs -- nuPre fine sweeps, coarse-grid
+  /// correction, nuPost fine sweeps; Dirichlet DOFs pass through, x_i = r_i. The cycle's fine iterate
+  /// is x itself: written from x = 0 without reading it (by the first pre-sweep, or, with no
+  /// pre-sweeps, by the prolongated coarse correction itself), it stays zero on Dirichlet DOFs (zero
+  /// right-hand side there, no rows of P) until they are set to r_i last. Without pre-sweeps the
+  /// fine residual of x = 0 is the right-hand side itself, so no product is needed for it.
   void apply( int n, const double* r, double* x )
   {
     checkBuilt();
@@ -1855,7 +1855,7 @@ public:
   /// @brief The number of free coarse DOFs, the size of the Galerkin operator.
   int nCoarseFree() const { return nCoarseFree_; }
 
-  // @brief the coarse level's AMGCL hierarchy report
+  /// @brief the coarse level's AMGCL hierarchy report
   std::string report() const
   {
     checkBuilt();

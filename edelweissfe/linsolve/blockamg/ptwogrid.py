@@ -40,19 +40,13 @@ The whole cycle -- and every stage of its build -- runs in C++ (``PTwoGridPrecon
 :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLPTwoGrid`), OpenMP-threaded throughout; this module
 only chooses the parameters and builds the coarse near null-space, which is cheap.
 
-This is an **opt-in, experimental variant of the field-split AMG preconditioner**, not the shipped
-default. The underlying two-grid algorithm converges (fewer outer GMRES iterations than the
-single-level default is common), but it carries two structural costs the single-level default does
-not: a fixed per-solve setup cost (the Galerkin projection ``P^T A P`` and the coarse hierarchy build
-happen fresh every solve, since the operator's sparsity pattern generally changes every Newton
-iteration on a model with contact/tie constraints, leaving nothing stable to cache), and a
-near-null-space handling gap -- the coarse solve can be given the same rigid-body near-null-space
-treatment the single-level default uses (restricted to the corner-node subset), but the fine-level
-Chebyshev smoother, unlike a full recursive AMG hierarchy, has no coarsening step of its own and
-receives no near-null-space information at all. Whether the iteration-count win outweighs these
-costs is problem-dependent; it has been measured to lose to the single-level default overall on at
-least one real reference model in the regime tested, so it should not be assumed to help without
-checking on the model at hand.
+This is an **opt-in variant of the field-split AMG preconditioner**, not the shipped default. It is
+rebuilt exactly when blockamg's single-level hierarchies are, and its rebuild is cheaper than theirs;
+the coarse solve gets the same rigid-body near-null-space treatment as the single-level default
+(restricted to the corner-node subset), while the fine-level Chebyshev smoother needs none. Measured
+against blockamg's recommended single-level configuration with the same outer settings, it was about
+12% slower on one reference model and level within noise on another -- worth measuring on a model
+with expensive hierarchy rebuilds, not assumed to help.
 
 **Dirichlet handling is load-bearing, do not simplify away.** A field's diagonal block still carries
 its Dirichlet identity rows (production applies Dirichlet elimination upstream of blockamg), and
