@@ -11,29 +11,15 @@
 
 import numpy as np
 import pytest
-import scipy.sparse as sp
+from _blockamgsystems import displacementDamageSystem
 
-from edelweissfe.linsolve.base import FieldBlock
 from edelweissfe.linsolve.blockamg import createSolver
 
 
 def _system(n=12):
-    """A coupled two-field system: a 3D displacement-like block (3 dofs per node of an n^3 grid Laplacian,
-    rows scaled over two orders of magnitude so the equilibration matters) and a scalar block, weakly
-    coupled one way."""
-    lap1 = sp.diags([-1.0, 2.0, -1.0], [-1, 0, 1], shape=(n, n))
-    eye = sp.identity(n)
-    lap3 = sp.kron(sp.kron(lap1, eye), eye) + sp.kron(sp.kron(eye, lap1), eye) + sp.kron(sp.kron(eye, eye), lap1)
-    nodes = n**3
-    Kuu = sp.kron(lap3 + 0.01 * sp.identity(nodes), sp.identity(3))
-    rowScale = sp.diags(np.logspace(0, 2, 3 * nodes))
-    Kuu = (rowScale @ Kuu @ rowScale).tocsr()
-    Kdd = (lap3 + sp.identity(nodes)).tocsr()
-    Kud = sp.random(3 * nodes, nodes, density=1e-3, random_state=1) * 1e-2
-    A = sp.bmat([[Kuu, Kud], [None, Kdd]], format="csr")
-    blocks = [FieldBlock("displacement", 0, 3 * nodes, 3), FieldBlock("nonlocal damage", 3 * nodes, 4 * nodes, 1)]
-    b = np.random.default_rng(0).standard_normal(A.shape[0])
-    return A, b, blocks
+    """A one-way coupled displacement / damage system with displacement rows scaled over two orders of magnitude,
+    so that the equilibration matters."""
+    return displacementDamageSystem(n, coupling="one-way", rowScaling=True)
 
 
 def _solver(blocks, **options):

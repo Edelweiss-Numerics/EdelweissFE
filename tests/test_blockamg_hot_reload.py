@@ -26,6 +26,7 @@ may be able to end the run. The malformed-config cases below are the reason this
 import inspect
 import json
 
+import numpy as np
 import pytest
 
 from edelweissfe.linsolve.base import FieldBlock
@@ -215,7 +216,7 @@ def test_every_constructor_setting_is_reloadable_or_explicitly_ignored(configure
         name
         for name in settingNames
         if name not in BlockAMGSolver._HOT_RELOAD_IGNORED
-        and not hasattr(solver, BlockAMGSolver._HOT_RELOAD_ALIASES.get(name, "_" + name))
+        and BlockAMGSolver._HOT_RELOAD_ALIASES.get(name, "_" + name) not in vars(solver)
     ]
 
     assert unclassified == []
@@ -331,9 +332,8 @@ def _withFields(solver):
 def test_a_block_size_that_does_not_match_the_field_is_rejected(configuredSolver, options):
     solver, configPath = configuredSolver
     _reload(_withFields(solver))
-    if "p1FineBlockSize" in options:
-        solver._p1FineBlockSize = 3
 
+    # p1FieldNames and p1FineBlockSize in one edit: each fits the settings in force, only together they do not
     _write(configPath, {**options, "hotReloadConfigFile": str(configPath)})
 
     assert _reload(solver) is False
@@ -350,3 +350,28 @@ def test_a_field_precond_for_a_field_the_system_lacks_is_accepted(configuredSolv
 
     assert _reload(solver) is True
     assert solver._fieldPreconds == fieldPreconds
+
+
+def test_settings_the_build_fails_with_are_rolled_back(configuredSolver):
+    from _blockamgsystems import displacementDamageSystem
+
+    solver, configPath = configuredSolver
+    # large enough for a multi-level hierarchy: a block AMGCL solves directly never constructs its smoother
+    A, b, blocks = displacementDamageSystem(12)
+    solver.setFieldStructure(blocks)
+    messages = []
+    solver._log = lambda level, message: messages.append(message)
+    solver(A, b)
+
+    # valid as far as the checks see, but AMGCL knows no smoother of that name
+    badTree = {"displacement": {"relax": {"type": "chebychev"}}}
+    _write(configPath, {"fieldPreconds": badTree, "hotReloadConfigFile": str(configPath)})
+    x = solver(A, b)
+
+    assert np.linalg.norm(b - A @ x) <= 1e-2 * np.linalg.norm(b)
+    assert solver._fieldPreconds == {}
+    assert any("ROLLED BACK" in message for message in messages)
+    # the file is recorded as seen: the next solve does not try it again
+    messages.clear()
+    solver(A, b)
+    assert not any("hot reload" in message for message in messages)

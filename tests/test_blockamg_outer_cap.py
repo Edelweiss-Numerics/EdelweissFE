@@ -10,22 +10,13 @@ may converge on exactly its last allowed iteration.
 
 from types import SimpleNamespace
 
-import numpy as np
-import scipy.sparse as sp
+from _blockamgsystems import displacementDamageSystem
 
-from edelweissfe.linsolve.base import FieldBlock
 from edelweissfe.linsolve.blockamg import createSolver
 
 
 def _system(n=12):
-    lap1 = sp.diags([-1.0, 2.0, -1.0], [-1, 0, 1], shape=(n, n))
-    eye = sp.identity(n)
-    lap3 = sp.kron(sp.kron(lap1, eye), eye) + sp.kron(sp.kron(eye, lap1), eye) + sp.kron(sp.kron(eye, eye), lap1)
-    nodes = n**3
-    A = sp.bmat([[sp.kron(lap3 + 0.01 * sp.identity(nodes), sp.identity(3)), None], [None, lap3 + sp.identity(nodes)]])
-    blocks = [FieldBlock("displacement", 0, 3 * nodes, 3), FieldBlock("nonlocal damage", 3 * nodes, 4 * nodes, 1)]
-    b = np.random.default_rng(0).standard_normal(A.shape[0])
-    return A.tocsr(), b, blocks
+    return displacementDamageSystem(n)
 
 
 def _warnings(**options):
@@ -104,3 +95,22 @@ def test_a_cap_hit_rebuilds_the_hierarchies_for_the_next_solve():
     standing = solver._preconditioners
     solver(A, b)
     assert solver._preconditioners is not standing
+
+
+def test_a_cap_hit_is_dumped_whatever_the_threshold(tmp_path):
+    A, b, blocks = _system()
+    solver = createSolver(
+        {
+            "verbosity": "silent",
+            "outerTol": 1e-12,
+            "outerRestart": 2,
+            "outerMaxiter": 1,
+            "trueResidualMaxContinuations": 0,
+            "dumpOnDegradationDir": str(tmp_path),
+            "dumpOnDegradationMaxDumps": 1,
+        }
+    )
+    solver.setFieldStructure(blocks)
+    solver(A, b)
+    # two outer iterations, far below the dump threshold (the warning threshold, 100), but at the cap
+    assert (tmp_path / "manifest.jsonl").exists()

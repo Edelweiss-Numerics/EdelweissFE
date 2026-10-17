@@ -31,11 +31,16 @@ solver, and an unknown key is an error instead of being silently dropped."""
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
+from _blockamgsystems import displacementDamageSystem
 
 from edelweissfe.linsolve.blockamg import createSolver
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+
+#: The recommended configuration of the theory page, which includes this very file.
+_RECOMMENDED = "doc/source/documentation/blockamg_recommended.json"
 
 
 def test_the_sparsification_and_gap_keys_reach_the_solver():
@@ -62,6 +67,7 @@ def test_a_non_mapping_config_still_means_all_defaults():
         "examples/WinklerL/blockamg.json",
         "examples/AnchorPryOut/blockamg.json",
         "testfiles/edelweiss-only/CantileverBeamQuad4BlockAMG/blockamg.json",
+        _RECOMMENDED,
     ],
 )
 def test_the_shipped_configurations_are_accepted(configFile):
@@ -114,3 +120,49 @@ def test_null_field_names_and_trees_are_unset():
 def test_a_setting_the_run_could_not_use_raises_at_construction(options):
     with pytest.raises(ValueError, match=next(iter(options))):
         createSolver(options)
+
+
+def test_the_recommended_configuration_solves_a_displacement_damage_system():
+    A, b, blocks = displacementDamageSystem(10, coupling="one-way", rowScaling=True)
+    solver = createSolver({**json.load(open(_REPO_ROOT / _RECOMMENDED)), "verbosity": "silent"})
+    solver.setFieldStructure(blocks)
+    x = solver(A, b)
+    # the displacement field runs on the float-stored 3x3 block hierarchy (which takes no near null-space)
+    displacement = solver._preconditioners[0]
+    assert displacement.blockSize == 3 and displacement.isFloat
+    # the first solve asks for etaMax = 1e-3 on the scaled residual; the true one lands near it
+    assert np.linalg.norm(b - A @ x) <= 1e-2 * np.linalg.norm(b)
+
+
+def test_null_is_unset_for_every_key_whose_default_is_unset():
+    solver = createSolver(
+        {
+            "dumpOnDegradationDir": None,
+            "hotReloadConfigFile": None,
+            "dumpOnDegradationThreshold": None,
+            "p1Nu": None,
+            "p1NuPre": None,
+            "p1NuPost": None,
+            "p1FineDegree": None,
+        }
+    )
+    assert solver._dumpOnDegradationDir is None and solver._hotReloadConfigFile is None
+    assert solver._p1Nu is None and solver._p1FineDegree is None
+
+
+@pytest.mark.parametrize(
+    "options",
+    [{"etaMin": 1e-2, "etaMax": 1e-3}, {"residualGrowthFactor": 1.0}, {"hierarchyStalenessFactor": 0.5}],
+    ids=["etaMin above etaMax", "residualGrowthFactor", "hierarchyStalenessFactor"],
+)
+def test_a_value_out_of_range_raises_at_construction(options):
+    with pytest.raises(ValueError):
+        createSolver(options)
+
+
+def test_a_block_size_that_does_not_fit_its_field_raises_at_the_first_build():
+    A, b, blocks = displacementDamageSystem(6)
+    solver = createSolver({"verbosity": "silent", "fieldPreconds": {"nonlocal damage": {"backendBlockSize": 3}}})
+    solver.setFieldStructure(blocks)
+    with pytest.raises(ValueError, match="do not fit the fields"):
+        solver(A, b)

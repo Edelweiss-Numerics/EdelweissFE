@@ -10,6 +10,8 @@ then bought nothing.
 
 import numpy as np
 import scipy.sparse as sp
+from _blockamgsystems import displacementDamageSystem, gridLaplacian
+from scipy.sparse.linalg import splu
 
 from edelweissfe.linsolve.base import FieldBlock
 from edelweissfe.linsolve.blockamg import createSolver
@@ -18,11 +20,8 @@ from edelweissfe.linsolve.blockamg import createSolver
 def _system(n=18, nFields=3):
     """Three scalar fields on an n^3 grid Laplacian each, in a chain coupled both ways -- or the first one or
     two of them. n^3 above AMGCL's coarse_enough (3000), so that no field is solved directly."""
-    lap1 = sp.diags([-1.0, 2.0, -1.0], [-1, 0, 1], shape=(n, n))
-    eye = sp.identity(n)
-    lap3 = sp.kron(sp.kron(lap1, eye), eye) + sp.kron(sp.kron(eye, lap1), eye) + sp.kron(sp.kron(eye, eye), lap1)
     nodes = n**3
-    K = (lap3 + 0.05 * sp.identity(nodes)).tocsr()
+    K = (gridLaplacian(n) + 0.05 * sp.identity(nodes)).tocsr()
     coupling = 0.8 * sp.identity(nodes)
     A = sp.bmat([[K, coupling, None], [coupling, 2.0 * K, coupling], [None, coupling, K]], format="csr")
     blocks = [
@@ -83,3 +82,29 @@ def test_the_reverse_sweep_of_the_default_symmetric_sweep_improves_two_fields():
     # therefore the one setting whose numerics the correction form changed on a two-field system
     once = _outerIterations(nFields=2, sweeps=1, symmetric=False)
     assert _outerIterations(nFields=2, sweeps=1, symmetric=True) < 0.8 * once
+
+
+class _ExactFieldSolve:
+    """An exact solve with one field's diagonal block, in place of its AMG cycle."""
+
+    def __init__(self, block):
+        self._factorization = splu(block.tocsc())
+
+    def applyPreconditioner(self, residual):
+        return self._factorization.solve(residual)
+
+
+def test_with_exact_field_solves_one_forward_sweep_inverts_a_block_lower_triangular_system():
+    # K_du != 0, K_ud = 0: block lower triangular in DOF order (displacement first), so one forward block
+    # Gauss-Seidel sweep with exact field solves is the exact inverse, and the outer solve needs one iteration
+    A, b, blocks = displacementDamageSystem(8, coupling="one-way")
+    A = A.T.tocsr()
+    solver = createSolver({"verbosity": "silent", "outerTol": 1e-10, "sweeps": 1, "symmetric": False})
+    solver.setFieldStructure(blocks)
+    solver(A, b)
+    # the second solve of the same system reuses the standing preconditioners: make them exact
+    A_scaled = (sp.diags(solver._dinv) @ A @ sp.diags(solver._dinv)).tocsr()
+    solver._preconditioners = [_ExactFieldSolve(A_scaled[f.start : f.stop, f.start : f.stop]) for f in blocks]
+    x = solver(A, b)
+    assert solver._lastOuterIters == 1
+    assert np.linalg.norm(b - A @ x) <= 1e-9 * np.linalg.norm(b)
