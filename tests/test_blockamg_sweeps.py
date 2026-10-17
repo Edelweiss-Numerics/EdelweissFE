@@ -4,8 +4,8 @@
 
 A revisit of a field -- a second sweep, or the reverse sweep of ``symmetric`` -- must improve its part of
 ``v = M^-1 r``, ``v_i += M_i^-1 (r_i - sum_j A_ij v_j)``. The former overwrite form
-``v_i = M_i^-1 (r_i - sum_{j != i} A_ij v_j)`` threw the previous estimate away, which is only the same for an exact M_i; with an AMG cycle a second sweep
-then bought nothing.
+``v_i = M_i^-1 (r_i - sum_{j != i} A_ij v_j)`` threw the previous estimate away, which is only the same for an
+exact M_i; with an AMG cycle a second sweep then bought nothing.
 """
 
 import numpy as np

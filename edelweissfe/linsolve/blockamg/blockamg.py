@@ -60,8 +60,8 @@ What it does per solve
 #. **Split** :math:`\\hat A` into the field diagonal blocks and their couplings, from the field ranges.
 #. **Build one AMG hierarchy per field** (AMGCL: built via ``build`` and applied via ``applyPreconditioner``
    on every visit of the sweep to its field, i.e. once per outer Krylov iteration with ``symmetric`` off;
-   reused across Newton iterations while the Jacobian and its
-   sparsity pattern change little -- see the reuse rules below). A vector field (nodal dimension > 1, e.g. displacement) is given its full rigid-body
+   reused across Newton iterations while the Jacobian and its sparsity pattern change little -- see the
+   reuse rules below). A vector field (nodal dimension > 1, e.g. displacement) is given its full rigid-body
    near-null-space -- 3 translations plus 3 infinitesimal rotations, the standard basis for 3D
    elasticity AMG, since both are directions in which the discretized operator has essentially zero
    stiffness -- when node coordinates are available, translations alone otherwise; a scalar field
@@ -1771,9 +1771,9 @@ class BlockAMGSolver(LinearSolver):
         # (6) True-residual check. The outer solve converges the scaled residual, while the solve is accepted on
         #     the true relative residual ||b - A x|| / ||b||, which can be larger (stiff rows are down-weighted
         #     by D). A pass that misses eta is continued from its iterate with a tighter tolerance; the tolerance
-        #     is tightened in its own units (0.01x), since a warm restart at the same tolerance stops at once. The ratio of the true to the scaled residual
-        #     of the same iterate -- the gap -- is learned for gapCompensatedTolerance, smoothed and bounded by
-        #     gapMaxFactor.
+        #     is tightened in its own units (0.01x), since a warm restart at the same tolerance stops at once. The
+        #     ratio of the true to the scaled residual of the same iterate -- the gap -- is learned for
+        #     gapCompensatedTolerance, smoothed and bounded by gapMaxFactor.
         measuredGap = trueResidual / max(scaledResidual, 1e-300)
         if np.isfinite(measuredGap) and measuredGap > 0.0:
             # Ceiled at gapMaxFactor too: an unbounded gap from one non-converged solve compounds

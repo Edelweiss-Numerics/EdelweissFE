@@ -27,28 +27,19 @@
 #  ---------------------------------------------------------------------
 """blockamg, step by step: the field-split preconditioned Krylov solve written out with NumPy and SciPy on a small
 displacement / damage system, and the same solve with :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`.
-The theory page includes this test as its worked example."""
+The theory page includes this file as its worked example, from the marker comment below on.
+"""
 
-import re
-
+# The worked example of the theory page.
 import numpy as np
-import pytest
 import scipy.sparse as sp
-from _blockamgsystems import displacementDamageSystem
-from scipy.sparse.linalg import LinearOperator, gmres, splu, spsolve
+from _blockamgsystems import ExactFieldSolve, displacementDamageSystem, hierarchyLevels
+from scipy.sparse.linalg import LinearOperator, gmres, spsolve
 
-pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
-
-from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver  # noqa: E402
-from edelweissfe.linsolve.blockamg import createSolver  # noqa: E402
+from edelweissfe.linsolve.blockamg import createSolver
 
 #: One AMGCL hierarchy per field: smoothed aggregation, Chebyshev smoothing.
-_FIELD_AMG = {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": "chebyshev"}}
-
-
-def _levels(amg) -> int:
-    """The number of levels of an AMGCL hierarchy, from its report."""
-    return int(re.search(r"Number of levels:\s+(\d+)", amg.report()).group(1))
+FIELD_AMG = {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": "chebyshev"}}
 
 
 def test_the_algorithm_step_by_step():
@@ -63,33 +54,29 @@ def test_the_algorithm_step_by_step():
     A_scaled = (D @ A @ D).tocsr()
     b_scaled = scaling * b
 
-    # 2. Split by field, and build one AMG hierarchy per diagonal block A_ii.
+    # 2. Split by field, and build one AMG hierarchy per diagonal block A_ii, with AMGCL (an optional extension of
+    #    EdelweissFE, hence imported here).
+    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver
+
     fieldAMG = []
     for field in fields:
-        amg = PyAMGCLSolver({"precond": _FIELD_AMG})
+        amg = PyAMGCLSolver({"precond": FIELD_AMG})
         amg.build(A_scaled[field, field])
-        assert _levels(amg) > 1  # a real hierarchy, not a direct solve of a small block
+        assert hierarchyLevels(amg) > 1  # a real hierarchy, not a direct solve of a small block
         fieldAMG.append(amg)
 
-    # 3. The preconditioner: one forward block Gauss-Seidel sweep over the fields, each field correcting its
-    #    estimate by one AMG cycle on its own residual, x_i = M_i^-1 (r_i - sum_{j < i} A_ij x_j).
+    # 3. The preconditioner v = M^-1 r: one forward block Gauss-Seidel sweep over the fields, each field's part of
+    #    v from one AMG cycle on its own residual, v_i = M_i^-1 (r_i - sum_{j < i} A_ij v_j).
     def blockGaussSeidel(r, fieldSolves=fieldAMG):
-        x = np.zeros_like(r)
+        v = np.zeros_like(r)
         for i, field in enumerate(fields):
-            residual = r[field] - sum(A_scaled[field, earlier] @ x[earlier] for earlier in fields[:i])
-            x[field] = fieldSolves[i].applyPreconditioner(residual)
-        return x
+            residual = r[field] - sum(A_scaled[field, earlier] @ v[earlier] for earlier in fields[:i])
+            v[field] = fieldSolves[i].applyPreconditioner(residual)
+        return v
 
     #    With exact field solves, the sweep is the block lower triangular solve M^-1 = (B + L)^-1, B the
     #    diagonal blocks and L the blocks below them: what the AMG cycles approximate.
-    class ExactSolve:
-        def __init__(self, block):
-            self.factorization = splu(block.tocsc())
-
-        def applyPreconditioner(self, residual):
-            return self.factorization.solve(residual)
-
-    exact = [ExactSolve(A_scaled[field, field]) for field in fields]
+    exact = [ExactFieldSolve(A_scaled[field, field]) for field in fields]
     B_plus_L = sp.bmat(
         [
             [A_scaled[row, column] if j <= i else None for j, column in enumerate(fields)]
@@ -100,21 +87,27 @@ def test_the_algorithm_step_by_step():
     r = np.random.default_rng(1).standard_normal(A.shape[0])
     assert np.allclose(blockGaussSeidel(r, exact), spsolve(B_plus_L, r), rtol=1e-8, atol=1e-12)
 
-    # 4. The outer Krylov solve on the coupled system, preconditioned by the sweep.
-    M = LinearOperator(A.shape, matvec=blockGaussSeidel)
-    z, info = gmres(A_scaled, b_scaled, M=M, rtol=1e-10, atol=0.0, restart=200, maxiter=1)
+    # 4. The outer Krylov solve on the coupled system, right-preconditioned by the sweep: GMRES solves
+    #    (A_scaled M^-1) y = b_scaled for y, and z = M^-1 y. GMRES converges the residual of the operator it is
+    #    given, b_scaled - A_scaled M^-1 y = b_scaled - A_scaled z, the scaled residual D (b - A x).
+    A_scaled_Minv = LinearOperator(A.shape, matvec=lambda y: A_scaled @ blockGaussSeidel(y))
+    y, info = gmres(A_scaled_Minv, b_scaled, rtol=1e-10, atol=0.0, restart=200, maxiter=1)
+    z = blockGaussSeidel(y)
     x = scaling * z
+    #    The true residual b - A x = D^-1 (b_scaled - A_scaled z) is then at most max(D) / min(D) times larger,
+    #    relative to b: here 100 (sqrt of the 1e4 spread of the diagonal), hence 1e-8 after a 1e-10 solve.
     assert info == 0 and np.linalg.norm(b - A @ x) <= 1e-8 * np.linalg.norm(b)
 
-    # The same solve with BlockAMGSolver: the same steps in threaded C++, plus the reuse of the hierarchies across
-    # Newton iterations, an adaptive (Eisenstat--Walker) tolerance when outerTol is unset, and -- given the model
-    # (setModel), not only the field layout as here -- the rigid-body near null-space of the displacement field.
+    # The same solve with BlockAMGSolver: the same method in threaded C++, with AMGCL's right-preconditioned LGMRES
+    # as the outer solver. It adds the reuse of the hierarchies across Newton iterations, an adaptive
+    # (Eisenstat--Walker) tolerance when outerTol is unset, and a near null-space for the displacement field: its
+    # translations here, given only the field layout, and all rigid-body modes given the model (setModel).
     solver = createSolver(
         {
             "outerTol": 1e-10,
             "sweeps": 1,
             "symmetric": False,
-            "fieldPreconds": {"displacement": _FIELD_AMG, "nonlocal damage": _FIELD_AMG},
+            "fieldPreconds": {"displacement": FIELD_AMG, "nonlocal damage": FIELD_AMG},
             "verbosity": "silent",
         }
     )
