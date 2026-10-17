@@ -111,23 +111,25 @@ _IDENTIFICATION = "BlockAMGSolver"
 # __call__ pops both out of whichever precond dict applies (default or a fieldPreconds override)
 # before forwarding the rest verbatim as the AMGCL JSON parameter tree.
 #
-# backendPrecision defaults to "double": measured on all 9 dumped ords of a real reference model,
-# "float" inflated outer GMRES iterations by up to 30% and only won on wall-clock about half the
-# time, netting only ~3% aggregate rather than the roughly halved memory/bandwidth traffic a
-# single-precision backend should in principle buy -- plausibly because the Chebyshev smoother's own
-# power-iteration spectral-radius estimate is itself sensitive to reduced precision, losing accuracy
-# in float32 in a way that degrades smoother quality enough to eat most of the bandwidth saving.
+# backendPrecision defaults to "double". On the scalar backend "float" is AMGCL's builtin<float>,
+# which builds the whole hierarchy in single precision; measured on all 9 dumped ords of a real
+# reference model, it inflated outer GMRES iterations by up to 30% and only won on wall-clock about
+# half the time, netting only ~3% aggregate -- plausibly because the Chebyshev smoother's own
+# power-iteration spectral-radius estimate then runs in float32 too. With backendBlockSize 3, "float"
+# instead sets the hierarchy up in double and only stores the level matrices the cycle reads in float
+# (see builtin_float_matrices in amgcl-wrapper.hpp): measured with outer iteration counts identical to
+# the double hierarchy's on a captured damage-onset sequence, and about 15% faster.
 #
-# backendBlockSize defaults to 1 (scalar): kept opt-in via fieldPreconds, not the default, since a
-# block-valued backend has not been validated to win inside this block-Gauss-Seidel preconditioner
-# (a faster standalone solver is not automatically a better single-cycle preconditioner component). A
-# vector field of nodal dimension d maps to backendBlockSize: d (3 for a 3D displacement field, 2 for
-# a 2D one). Setting it > 1 skips set_nullspace (see __call__) -- AMGCL's near-null-space path is
-# unimplemented for block value types.
+# backendBlockSize defaults to 1 (scalar). A vector field of nodal dimension d maps to
+# backendBlockSize: d (3 for a 3D displacement field, 2 for a 2D one). Setting it > 1 skips
+# set_nullspace (see __call__) -- AMGCL's near-null-space path is unimplemented for block value
+# types, so the rotational modes are lost. Inside this block Gauss-Seidel preconditioner, 3x3 blocks
+# stored in float with a smoothed-aggregation spectral-radius estimate are nevertheless the measured
+# winner on the reference models (less index and value traffic per cycle), the recommended
+# configuration of doc/source/documentation/blockamgtheory.rst -- the shipped default is unchanged.
 #
-# Both are available as an opt-in via fieldPreconds, e.g.
-# {"displacement": {**_DEFAULT_VECTOR_PRECOND, "backendPrecision": "float"}} or
-# {"displacement": {**_DEFAULT_VECTOR_PRECOND, "backendBlockSize": 3}}.
+# Both are set per field via fieldPreconds, e.g.
+# {"displacement": {**_DEFAULT_VECTOR_PRECOND, "backendPrecision": "float", "backendBlockSize": 3}}.
 # power_iters=300 (was 50): AMGCL's Chebyshev smoother estimates the operator's spectral radius via
 # power iteration whose start vector is seeded per-OpenMP-thread by thread id
 # (amgcl/backend/builtin.hpp) -- deterministic for a given thread count, but a different vector at a
@@ -884,10 +886,9 @@ class BlockAMGSolver(LinearSolver):
         return coordinates
 
     def _getP1Map(self, fieldName: str):
-        """This field's P1 corner/midside topology map, computed lazily on first need and
-        cached for the lifetime of this instance (never refreshed even across AMR -- matching this
-        opt-in p-multigrid path's original behaviour, unvalidated for a mesh that changes after the
-        map was built and not a focus of this refactor).
+        """This field's P1 corner/midside topology map, computed lazily on first need and cached until
+        the model changes (:meth:`setModel`, e.g. after adaptive refinement, drops every computed map) or
+        a hot reload applies.
 
         Returns the map directly supplied via the constructor's ``p1Maps`` (the offline-probe path)
         unchanged; otherwise computes it via
@@ -1507,9 +1508,10 @@ class BlockAMGSolver(LinearSolver):
             # (sweeps > 1, or the symmetric reverse sweep) improves its x_i instead of discarding it --
             # the overwrite form x_i = M_i^-1 (r_i - sum_{j != i} A_ij x_j) is only the same for an exact
             # M_i, which an AMG cycle is not. On a field's first visit x_i = 0, so both forms coincide and
-            # the overwrite is kept: the shipped sweeps = 1, symmetric = False path is unchanged, bitwise
-            # (fields not yet visited, x_j = 0, are skipped instead of multiplied -- equal up to the sign
-            # of a zero).
+            # the overwrite is kept: a single field and the sweeps = 1, symmetric = False path are
+            # unchanged, bitwise (fields not yet visited, x_j = 0, are skipped instead of multiplied --
+            # equal up to the sign of a zero). The code default symmetric = True revisits fields on two or
+            # more fields, so its preconditioner did change with the correction form.
             for i in order:
                 localResidual = residual[slices[i]].copy()
                 for j in range(nFields):

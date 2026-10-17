@@ -830,9 +830,11 @@ configuration below with the same outer settings (fine operator in float, ``p1Nu
 slower on a cylinder sequence and level within noise on a contact sequence, with the cheaper
 rebuild -- an alternative worth measuring on a model with expensive rebuilds, not the default.
 Enable it per field with ``p1FieldNames``; the topology map is computed lazily from the model and
-recomputed whenever the model changes (``setModel``, e.g. after adaptive refinement). A field whose
-mesh is not entirely quadratic serendipity falls back to the single-level default with a
-warning.
+recomputed whenever the model changes (``setModel``, e.g. after adaptive refinement). There is no
+fallback to the single-level default: on linear elements every node is a corner, so the coarse
+operator is the field's block itself and the cycle gains nothing, and an element topology the map
+does not know raises. A node that two elements classify inconsistently (seen at non-conforming
+refinement interfaces) is made a corner, with a warning.
 
 The whole cycle, and every stage of its build, runs in C++ and is OpenMP-threaded. The Dirichlet
 DOFs of the field's block -- rows whose only nonzero is the diagonal, which includes the identity
