@@ -110,6 +110,40 @@ every registered linear solver it is called as ``(A, b) -> x``. Both of its stat
 (adaptive tolerance and hierarchy reuse) therefore *reconstruct* the loop state from
 :math:`\lVert b \rVert` and from the matrix's own bookkeeping across calls.
 
+The symbols of this page and their names in the code (``blockamg.py``, and the worked example below):
+
+.. list-table:: Notation
+    :widths: 30 35 35
+    :header-rows: 1
+
+    * - Symbol
+      - Meaning
+      - Code
+    * - :math:`A, b, x`
+      - the system as the nonlinear solver hands it over, and its solution
+      - ``A``, ``b``, ``x``
+    * - :math:`i = 1 \dots n`
+      - the fields (DOF ranges, in DOF order)
+      - ``FieldBlock``, ``blocks``
+    * - :math:`D`
+      - the diagonal scaling, entries :math:`\lvert a_{ii} \rvert^{-1/2}`
+      - ``scaling`` (its diagonal)
+    * - :math:`\hat A = D A D,\ \hat b = D b`
+      - the scaled (equilibrated) system, :math:`x = D z`
+      - ``system`` (``PyAMGCLEquilibratedSystem``), ``b_scaled``; ``A_scaled`` in the example
+    * - :math:`\hat A_{ij}`
+      - its field blocks
+      - ``system.diagonalBlock``, ``system.couplingMatvec``
+    * - :math:`M_i^{-1}`
+      - one AMG cycle on :math:`\hat A_{ii}`
+      - ``preconditioners[i].applyPreconditioner``
+    * - :math:`M^{-1}`
+      - the block Gauss--Seidel sweep, :math:`v = M^{-1} r`
+      - ``blockGaussSeidel``
+    * - :math:`\eta`
+      - the requested relative tolerance of one solve
+      - ``eta`` (``outerTol`` when fixed)
+
 .. code-block:: text
 
     Newton iteration k, in the nonlinear solver
@@ -123,24 +157,24 @@ every registered linear solver it is called as ``(A, b) -> x``. Both of its stat
                 v
     (A, b) ---> blockamg
                 |
-          (1)   Newton-state detection from ||b||
+          (1)   Newton state, from ||b|| and the solver's own bookkeeping
                     ||b|| > residualGrowthFactor * ||b||_prev  ?
-                        yes -> new increment / cutback: eta = etaMax,
+                        yes -> a new increment: eta = etaMax,
                                refresh (with refreshOnNewIncrement)
                         no  -> eta from Eisenstat-Walker forcing
+                    refresh the hierarchies?  first solve | block layout | size |
+                        nnz differs from the rebuild's | new increment | setModel |
+                        hot reload | previous solve stale or at the iteration cap
                 |
           (2)   equilibration     Ahat = D A D,  bhat = D b,  D = diag(1/sqrt|A_ii|)
+                                  (no refresh: the D of the rebuild solve)
                 |
           (3)   field split       diagonal blocks Ahat_ii  +  couplings Ahat_ij
                 |
-          (4)   hierarchy state
-                    refresh (first solve | block layout | size | nnz change |
-                             new increment | setModel | hot reload |
-                             previous solve stale or at the iteration cap)
-                        -> build one AMG hierarchy per field
-                           (smoothed aggregation + Chebyshev, per-field near-null-space)
-                    otherwise
-                        -> reuse the standing hierarchies
+          (4)   hierarchies       refresh -> build one AMG hierarchy per field
+                                     (smoothed aggregation + Chebyshev,
+                                      per-field near-null-space)
+                                  otherwise -> reuse the standing ones
                 |
           (5)   outer Krylov solve on Ahat, preconditioned by
                     M = block Gauss-Seidel sweep, one AMG cycle per diagonal block
@@ -150,7 +184,8 @@ every registered linear solver it is called as ``(A, b) -> x``. Both of its stat
                         yes -> warm restart at a tighter tolerance, back to (5)
                         no  -> done
                 |
-          (7)   record ||b||, eta, nnz and the outer iteration count for the next solve
+          (7)   record ||b||, eta and the outer iteration count for the next solve
+                (after a rebuild also nnz and the staleness reference count)
                 v
     x ------> nonlinear solver
                 |
@@ -217,9 +252,9 @@ rebuilt. All of these blocks, and the full-system operator used for the outer ma
 and the true-residual check, are handed to AMGCL's OpenMP-threaded sparse matrix-vector kernels:
 SciPy's own sparse ``matvec`` is single-threaded C code irrespective of ``OMP_NUM_THREADS``, and on a
 solver whose inner loop is nothing but sparse matrix-vector products that is a substantial share of
-the wall-clock. On a model with contact or tie constraints the sparsity pattern changes on virtually
-every Newton iteration, so there is no stable pattern to cache these threaded operators against and
-they are rebuilt every call.
+the wall-clock. They are rebuilt on every call, because the values of :math:`A` -- and with them those
+of :math:`D A D` -- change on every Newton iteration; a stable sparsity pattern would only save the
+counting pass.
 
 Per-field AMG hierarchies
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -263,17 +298,35 @@ deliberately complementary roles and only work if they agree on what "smooth err
 
 * The **smoother** damps error components whose eigenvalues lie inside an estimated window
   :math:`[\,\mathrm{lower},\ \mathrm{higher}\,]\cdot\rho` of the operator's spectral radius
-  :math:`\rho`. With the default ``lower = 0.01``, eigenvalues below 1% of the spectral radius are by
-  construction **not** targeted by the smoother at all.
+  :math:`\rho`. With the vector-field default ``lower = 0.01``, eigenvalues below 1% of the spectral
+  radius are by construction **not** targeted by the smoother at all.
 * Everything below that window -- including the operator's **near-null-space**, the directions in
   which it has almost no stiffness -- is left to the coarse-grid correction, which removes it only to
   the extent that smoothed aggregation's prolongation operator can represent it. Smoothed aggregation
   builds that prolongation from a supplied near-null-space basis.
 
+The Chebyshev smoother of degree :math:`k` is :math:`k` steps of the Chebyshev iteration on
+:math:`\hat A_{ii} u = r_i` for the interval :math:`[\ell, h] = [\mathrm{lower}, \mathrm{higher}]\cdot\rho`,
+with centre :math:`d = (h + \ell)/2` and half-width :math:`c = (h - \ell)/2`:
+
+.. math::
+
+   p_0 = \tfrac{1}{d}\, s_0, \qquad
+   p_k = \alpha_k s_k + (\alpha_k d - 1)\, p_{k-1}, \qquad
+   u_{k+1} = u_k + p_k, \qquad s_k = r_i - \hat A_{ii} u_k,
+
+with :math:`\alpha_1 = 2d / (2d^2 - c^2)` and :math:`\alpha_k = (d - \alpha_{k-1} c^2 / 4)^{-1}`
+(AMGCL's ``relaxation::chebyshev``). It damps every eigencomponent in :math:`[\ell, h]` by the
+Chebyshev polynomial's bound, and each step costs one matrix-vector product with the block: ``degree``
+16 with ``npre = 0``, ``npost = 1`` (the recommended configuration) costs 16 products per cycle on the
+finest level, ``degree`` 5 with ``npre = npost = 1`` (the vector-field default) 10.
+
 For 3D linear elasticity the physical near-null-space is the six-dimensional space of **rigid-body
 motions**: three translations and three infinitesimal rotations, each of which costs zero elastic
-strain energy and therefore corresponds to a genuinely near-zero eigenvalue of the discretized
-operator. :func:`~edelweissfe.linsolve.nullspace.rigidBodyNullspace` builds that full basis from the
+strain energy. Of the whole, constrained operator they are not eigenvectors -- the Dirichlet rows hold
+them -- but they are *locally* near-null: restricted to an aggregate away from the constrained boundary,
+a rigid-body motion is almost free of energy, and that local property is what smoothed aggregation
+needs. :func:`~edelweissfe.linsolve.nullspace.rigidBodyNullspace` builds that full basis from the
 field's node coordinates, about the field's own coordinate centroid, node-major to match the DOF
 vector's layout:
 
@@ -298,32 +351,40 @@ is why both functions divide the raw modes by the field's own slice of the scali
 Supplying only the translations -- the common simplification, since rotations need node coordinates
 rather than just the DOF-block structure -- leaves the coarse grid unable to represent rotational
 rigid-body error exactly, and by the construction above the Chebyshev smoother is not targeting that
-error class either, so it has nowhere efficient to go. Measured on two real captured systems, the
-full rigid-body basis needed about 28--31% fewer isolated per-field outer iterations than
-translations alone, and -- unlike translations alone -- was robust to both thread count and the
-Chebyshev power-iteration setting. (That was measured on the scalar backend; a block backend has no
-way to take the rotations, see ``backendBlockSize``.)
+error class either, so it has nowhere efficient to go.
 
-That power-iteration setting is the smoother's second, independent subtlety, and the reason the
-default is well above AMGCL's own. AMGCL estimates :math:`\rho` by a fixed number of power-iteration
-steps whose starting vector is seeded per OpenMP worker thread. The estimate is deterministic for a
-given thread count but *different* at a different thread count, because the number of independent
-random streams changes with it even though the operator does not. At a short iteration budget the
-estimate can be badly under-converged on a hard operator, which cripples the smoother: measured on
-one captured solve, 1460 versus 43 outer iterations on the identical matrix with nothing differing
-but ``OMP_NUM_THREADS`` (the true spectral radius, checked independently, barely moves between Newton
-iterations there). Running the power iteration close to convergence removes the practical
-thread-count sensitivity; the shipped default of 300 iterations measured 2.68x faster in aggregate
-over ten captured degraded systems at 16 threads (811 s to 302 s), with no observed downside on
-systems that were already fine. The one-time cost is paid per hierarchy build and is small against
-the build itself. It does not make the hierarchy bitwise independent of the thread count: the
-estimate still starts from per-thread random streams and agrees across thread counts only to its
-convergence (and its reductions are summed in thread order, so even two runs at the same thread
-count can differ in the last bits). Smoothed aggregation's ``estimate_spectral_radius`` (part of
-the recommended configuration, with only 20 power iterations) uses the same per-thread seeded
-estimate for the prolongation smoother's weight, so a hierarchy built with it depends measurably on
-the thread count; results are reproducible at a fixed thread count, up to that last-bit summation
-order.
+.. admonition:: Measured
+
+   On two real captured systems the full rigid-body basis needed about 28--31% fewer isolated per-field
+   outer iterations than translations alone, and -- unlike translations alone -- was robust to both
+   thread count and the Chebyshev power-iteration setting. That was on the scalar backend; a block
+   backend has no way to take the rotations (see ``backendBlockSize``).
+
+That power-iteration setting is the smoother's second, independent subtlety. The smoother needs
+:math:`\rho`. AMGCL's own default (``power_iters = 0``) bounds it by Gershgorin's theorem: safe and
+deterministic, but pessimistic, which shifts the window upward; the scalar default tree (the damage
+field's) keeps that. With ``power_iters > 0`` AMGCL estimates :math:`\rho` by that many steps of the power
+iteration instead -- tighter, but from a start vector drawn from random streams seeded per OpenMP thread.
+That estimate is deterministic for a given thread count but *different* at a different thread count,
+because the number of independent random streams changes with it even though the operator does not. At a
+short iteration budget it can be badly under-converged on a hard operator, which cripples the smoother.
+Running the power iteration close to convergence -- the vector-field default does 300 steps -- removes the
+practical thread-count sensitivity, for a one-time cost per hierarchy build that is small against the
+build itself. It does not make the hierarchy bitwise independent of the thread count: the estimate still
+starts from per-thread random streams and agrees across thread counts only to its convergence (and its
+reductions are summed in thread order, so even two runs at the same thread count can differ in the last
+bits). Smoothed aggregation's ``estimate_spectral_radius`` (part of the recommended configuration, with
+only 20 power iterations) uses the same per-thread seeded estimate for the prolongation smoother's
+weight, so a hierarchy built with it depends measurably on the thread count; results are reproducible at
+a fixed thread count, up to that last-bit summation order.
+
+.. admonition:: Measured
+
+   With the former setting of 50 power iterations, one captured solve took 1460 versus 43 outer
+   iterations on the identical matrix with nothing differing but ``OMP_NUM_THREADS`` (the true spectral
+   radius, checked independently, barely moves between Newton iterations there). 300 iterations were
+   2.68x faster in aggregate over ten captured degraded systems at 16 threads (811 s to 302 s), with no
+   observed downside on systems that were already fine.
 
 The block Gauss--Seidel sweep
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -340,8 +401,16 @@ part by one cycle of its own AMG hierarchy:
 where :math:`M_i^{-1}` denotes one AMG cycle on :math:`\hat A_{ii}`. On a field's first visit
 :math:`v_i = 0`, and this is the plain :math:`v_i = M_i^{-1}(r_i - \sum_{j \neq i} \hat A_{ij} v_j)`;
 the correction form matters on revisits, which an inexact :math:`M_i^{-1}` would otherwise throw
-away. With ``symmetric = true`` (the default) each forward sweep is followed by a reverse-order sweep,
-starting one field before the one just updated; ``sweeps`` repeats the (possibly reversed) sweep.
+away. With ``symmetric = true`` (the default) each forward sweep is followed by a reverse-order sweep
+of the same correction form, :math:`i = n-1, \dots, 1` -- starting one field before the one just
+updated, which has nothing to correct yet. With exact :math:`M_i = \hat A_{ii}` this is the classic block
+symmetric Gauss--Seidel preconditioner,
+
+.. math::
+
+   M_\mathrm{SGS}^{-1} = (B + U)^{-1}\, B\, (B + L)^{-1}, \qquad U = \text{the blocks } \hat A_{ij},\ i < j.
+
+``sweeps`` repeats the (possibly reversed) sweep.
 Neither is needed for the outer solve: right-preconditioned GMRES/LGMRES only needs :math:`M^{-1}`
 to be a fixed linear operator, not a symmetric one -- the measured configurations use
 ``sweeps = 1``, ``symmetric = false``.
@@ -369,16 +438,18 @@ steps across all internal restarts with a single ``maxiter``, so their product i
 one total-iteration budget. This is a generous translation, not an attempt to match SciPy's semantics
 exactly.
 
-LGMRES augments each restart with a few vectors carried over from the previous restart cycle of the
-same solve. ``lgmresK`` sets how many, ``lgmresM`` the inner iterations per restart. Every solve
-starts from an empty augmentation subspace. Keeping it alive *across* solves ("recycling") sounds
-attractive -- a hard solve's converged subspace as a warm start for the next -- but measured on
-captured systems it contributed nothing (bit-identical iteration counts), and on a live run it was
-actively harmful: a solve that had already struggled left a poorly conditioned subspace which
-compounded into a following solve needing 428 instead of 159 iterations, and in one run an outright
-``NaN``. It was therefore removed; the former keys ``lgmresAlwaysReset`` and
-``lgmresResetOnNewIncrement`` are still accepted at their non-recycling values ``true`` / ``false``,
-with a deprecation note, and rejected otherwise.
+LGMRES augments each restart with a few vectors carried over from the previous restart cycle of the same
+solve. ``lgmresK`` sets how many, and a restart cycle is ``lgmresM + lgmresK`` iterations, every one of
+them a preconditioner application: ``lgmresM`` Krylov steps plus one step per augmentation vector
+(``amgcl/solver/lgmres.hpp``). The first cycle of a solve has no augmentation vectors yet and is plain
+GMRES(``lgmresM + lgmresK``). Every solve starts from an empty augmentation subspace. Keeping it alive
+*across* solves ("recycling") sounds attractive -- a hard solve's converged subspace as a warm start for
+the next -- but measured on captured systems it contributed nothing (bit-identical iteration counts), and
+on a live run it was actively harmful: a solve that had already struggled left a poorly conditioned
+subspace which compounded into a following solve needing 428 instead of 159 iterations, and in one run an
+outright ``NaN``. It was therefore removed; the former keys ``lgmresAlwaysReset`` and
+``lgmresResetOnNewIncrement`` are still accepted at their non-recycling values ``true`` / ``false``, with
+a deprecation note, and rejected otherwise.
 
 
 Adaptive outer tolerance (Eisenstat--Walker forcing)
@@ -400,12 +471,18 @@ already small, i.e. :math:`\eta_k` is raised back to :math:`\gamma \eta_{k-1}^{\
 quantity exceeds 0.1. At the classic parameters that needs :math:`\eta_{k-1} > 0.26`, so the safeguard
 never acts with an :math:`\eta_\mathrm{max}` below that, the shipped and the recommended one
 included. With no meaningful history to compare against -- the first solve, a residual of
-exactly zero, or the solve right after a detected increment or cutback, where the ratio across the
+exactly zero, or the solve right after a detected new increment, where the ratio across the
 jump says nothing about Newton convergence -- the tolerance falls back to :math:`\eta_\mathrm{max}`.
 
-A solve is treated as the first of a new increment (or a cutback) when its residual norm exceeds
+A solve is treated as the first of a new increment when its residual norm exceeds
 ``residualGrowthFactor`` times the previous solve's. That single test drives both the tolerance reset
-and a hierarchy refresh.
+and a hierarchy refresh. It is a guess, and it has a blind spot: a cutback after a *diverged* attempt
+usually starts from a residual *smaller* than the last, large one of that attempt, so the retry is not
+recognized -- its first solve, typically the hardest, gets a tolerance from the ratio to the diverged
+residual (clamped to :math:`\eta_\mathrm{min}`) and, unless the sparsity pattern changed, the
+hierarchies of the discarded attempt. Only a cutback after an attempt whose residual had decreased is
+detected. (A notification from the nonlinear solver at the start of every increment would replace the
+guess; that is planned.)
 
 Pass an explicit ``outerTol`` to pin a fixed relative tolerance instead and switch the scheme off
 entirely. Adaptive forcing is safe to use as the default only because the requested tolerance is
@@ -497,7 +574,7 @@ The hierarchies are rebuilt when
   errs safely, since an unnecessary refresh costs time and never correctness. A pattern change is not
   a graceful degradation: measured on one transition, a hierarchy built for the previous pattern
   needed 494 outer iterations against 94 for a fresh one, an outright wall-clock regression,
-* a residual jump marks a new increment or a cutback (see ``residualGrowthFactor``) and
+* a residual jump marks a new increment (see ``residualGrowthFactor`` and its blind spot above) and
   ``refreshOnNewIncrement`` is set (the default), or
 * the previous solve's outer iteration count exceeded both ``hierarchyStalenessFactor`` times and 15
   more than the count of the solve the hierarchies were built for -- a growing count being the signal
@@ -570,14 +647,15 @@ Outer Krylov solve
     * - ``outerRestart``
       - ``100``
       - With ``"scipy"``, the GMRES restart length. With ``"amgcl_lgmres"`` only a factor: its product
-        with ``outerMaxiter`` is the iteration cap of a pass (the restart length is ``lgmresM``).
+        with ``outerMaxiter`` is the iteration cap of a pass (the restart cycle is ``lgmresM + lgmresK``).
     * - ``outerMaxiter``
       - ``8``
       - Maximum number of restart cycles (``"scipy"``), or a factor of the total iteration budget
         (``"amgcl_lgmres"``, see above).
     * - ``lgmresM``
       - ``30``
-      - ``"amgcl_lgmres"`` only: inner iterations per outer restart.
+      - ``"amgcl_lgmres"`` only: Krylov steps per restart cycle, to which the cycle adds one step per
+        augmentation vector (``lgmresK``).
     * - ``lgmresK``
       - ``3``
       - ``"amgcl_lgmres"`` only: number of augmentation vectors carried between the restart cycles of
@@ -695,7 +773,7 @@ Adaptive tolerance and true-residual enforcement
     * - ``etaMax``
       - ``3e-4``
       - Upper clamp on the forcing tolerance, and the tolerance used whenever there is no usable
-        residual history (first solve, or the solve right after a detected increment or cutback).
+        residual history (first solve, or the solve right after a detected new increment).
     * - ``ewGamma``
       - ``0.9``
       - The forcing scheme's :math:`\gamma`.
@@ -734,7 +812,7 @@ Hierarchy reuse
     * - ``residualGrowthFactor``
       - ``4.0``
       - A solve whose :math:`\lVert b \rVert` exceeds this multiple of the previous solve's is
-        treated as the first of a new increment (or a cutback): the forcing tolerance resets to
+        treated as the first of a new increment: the forcing tolerance resets to
         ``etaMax`` and the hierarchies are refreshed.
     * - ``hierarchyStalenessFactor``
       - ``1.5``
@@ -743,7 +821,7 @@ Hierarchy reuse
         for. A cap hit always refreshes them.
     * - ``refreshOnNewIncrement``
       - ``true``
-      - Refresh the hierarchies on a residual jump (new increment or cutback). With ``false`` the
+      - Refresh the hierarchies on a residual jump (a new increment). With ``false`` the
         first Newton iteration of an increment keeps the standing hierarchies; the layout/pattern
         checks and ``hierarchyStalenessFactor`` still apply.
     * - ``hierarchyDropTol``
@@ -946,7 +1024,8 @@ What each part buys: 3x3 blocks stored in float (set up in double, see ``backend
 cost per outer iteration; one high-degree post-smoothing sweep instead of a symmetric V(1,1) cycle,
 and smoothed aggregation's own spectral-radius estimate for its prolongation smoother, cut outer
 iterations. ``lgmresM = 50`` equals the cap of 50, so LGMRES never restarts: the outer solve is plain,
-unrestarted GMRES with at most 50 iterations, and ``lgmresK`` has no effect. A staleness factor of 3
+unrestarted GMRES with at most 50 iterations, and ``lgmresK`` only allocates its vectors without ever
+using them (``0`` gives the same iterates). A staleness factor of 3
 reuses hierarchies longer; with the cap of 50 it can only fire while the solve the hierarchies were built
 for took 16 iterations or fewer -- beyond that, only a cap hit (or a new increment, a pattern change)
 rebuilds them. ``etaMax = 1e-3`` is not about the linear solver at all: through a damage onset, Newton
@@ -980,7 +1059,7 @@ Practical guidance
 * Set ``OMP_NUM_THREADS`` for the AMGCL kernels as usual (see :doc:`parallelization`). Results are
   reproducible at a fixed thread count up to last-bit summation order; across thread counts the
   hierarchies differ slightly (see the Chebyshev power-iteration discussion above), and lowering the
-  shipped power-iteration setting makes that difference large.
+  power-iteration setting of the vector-field default makes that difference large.
 * Reach for the knobs in roughly this order: ``fieldPreconds`` for a field whose hierarchy is clearly
   the weak one, then ``sweeps``/``symmetric`` for the sweep itself, then the tolerance keys.
   ``p1FieldNames`` is an alternative per-field preconditioner, see above.

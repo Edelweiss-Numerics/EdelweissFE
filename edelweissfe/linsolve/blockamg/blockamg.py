@@ -133,10 +133,10 @@ _IDENTIFICATION = "BlockAMGSolver"
 #
 # Both are set per field via fieldPreconds, e.g.
 # {"displacement": {**_DEFAULT_VECTOR_PRECOND, "backendPrecision": "float", "backendBlockSize": 3}}.
-# power_iters 300: the Chebyshev smoother's spectral-radius estimate is a power iteration from a start vector
-# seeded per OpenMP thread, so it depends on the thread count; 50 iterations left it badly under-converged on hard
-# operators at some thread counts (1460 instead of 43 outer iterations on the same matrix), 300 do not (see the
-# Chebyshev section of the theory page).
+# power_iters 300: AMGCL's default (0) bounds the spectral radius by Gershgorin's theorem, pessimistically; a
+# power iteration is tighter but starts from a vector seeded per OpenMP thread, so it depends on the thread count.
+# The former 50 iterations left it badly under-converged on hard operators at some thread counts (1460 instead of
+# 43 outer iterations on the same matrix), 300 do not (see the Chebyshev section of the theory page).
 _DEFAULT_VECTOR_PRECOND = {
     "backendPrecision": "double",
     "backendBlockSize": 1,
@@ -301,19 +301,18 @@ class BlockAMGSolver(LinearSolver):
 
     #. **Adaptive outer tolerance** (Eisenstat--Walker forcing, "choice 2"), the default. Most Newton
        iterates do not need the linear solve tight, and loosening the requested tolerance for them cuts
-       outer iterations substantially without changing the Newton path -- provided GMRES's own
-       *preconditioned*-residual stopping check is not allowed to silently let the *true* residual run
-       looser than the requested ``eta`` (a real risk with an imperfect preconditioner, see the
-       true-residual enforcement below). It does not reproduce the Newton path of a tight fixed tolerance
-       exactly: through a damage onset, Newton needs linear solves about ten times tighter than the
-       default ``etaMax`` allows (see the recommended configuration of the theory page). Pass
-       ``outerTol=<a float>`` to pin a fixed tolerance instead.
+       outer iterations substantially -- provided the outer solve's own stopping test (on the scaled
+       residual) is not allowed to silently let the *true* residual run looser than the requested ``eta``
+       (a real risk with an imperfect preconditioner, see the true-residual enforcement below). It does not
+       reproduce the Newton path of a tight fixed tolerance exactly: through a damage onset, Newton needs
+       linear solves about ten times tighter than the default ``etaMax`` allows (see the recommended
+       configuration of the theory page). Pass ``outerTol=<a float>`` to pin a fixed tolerance instead.
     #. **Per-field AMG hierarchy reuse across Newton iterations**, on by default. Building a hierarchy
        is a large, avoidable fraction of a solve when the Jacobian has moved only a little since the
        last one. The outer Krylov solve always operates on the current matrix; only the block
        preconditioner ``M`` may be stale. A stale ``M`` costs outer iterations and, if it drives a solve to
        the iteration cap, the accuracy of that one Newton step; the next solve is then rebuilt. Refreshed on a
-       residual jump (new increment / cutback), on a field-structure change (e.g. AMR), on any
+       residual jump (a new increment), on a field-structure change (e.g. AMR), on any
        sparsity-pattern change (when the active contact or tie set changes, and on almost every Newton
        iteration while the multi-point condensation prunes exact zeros, ``pruneCondensedMatrixZeros``, which
        then defeats reuse), or when the previous solve's outer count grew past
@@ -335,7 +334,7 @@ class BlockAMGSolver(LinearSolver):
         default) uses adaptive forcing instead -- see ``etaMin``/``etaMax`` below.
     outerRestart, outerMaxiter
         With ``outerSolver = "scipy"``, the GMRES restart length and the number of restart cycles. With AMGCL's
-        LGMRES their product is the iteration cap of one pass (its restart length is ``lgmresM``); the
+        LGMRES their product is the iteration cap of one pass (its restart cycle is ``lgmresM + lgmresK``); the
         recommended configuration sets the cap of 50 as 50 x 1.
     outerSolver
         ``"amgcl_lgmres"`` (default) uses AMGCL's own native ``amgcl::solver::lgmres`` at both
@@ -350,8 +349,10 @@ class BlockAMGSolver(LinearSolver):
         uses ``scipy.sparse.linalg.gmres`` instead, kept as a fallback/opt-out, not removed.
     lgmresM, lgmresK
         Only used when ``outerSolver == "amgcl_lgmres"``: forwarded to AMGCL's own ``lgmres::params``
-        fields ``M`` (inner iterations per outer restart, default ``30``) and ``K`` (augmentation vectors
-        carried from one restart cycle to the next within a solve, default ``3``). Every solve starts
+        fields ``M`` (Krylov steps per restart cycle, default ``30``) and ``K`` (augmentation vectors
+        carried from one restart cycle to the next within a solve, default ``3``); a cycle is ``M + K``
+        iterations, each one preconditioner application, and the first cycle of a solve is plain
+        GMRES(``M + K``). Every solve starts
         from an empty augmentation subspace: carrying it across solves ("recycling") was measured to give
         nothing on captured systems (bit-identical iteration counts) and, on a live run, to compound a
         struggling solve's poorly conditioned subspace into a following solve needing 428 instead of 159
@@ -467,14 +468,16 @@ class BlockAMGSolver(LinearSolver):
     etaMin, etaMax
         Clamp on the Eisenstat--Walker forcing tolerance (ignored if ``outerTol`` is given). ``etaMax``
         is also the tolerance used whenever there is no residual history to base a ratio on (the first
-        solve, or the one right after a detected new increment/cutback).
+        solve, or the one right after a detected new increment).
     ewGamma, ewAlpha
         The Eisenstat--Walker "choice 2" parameters: ``eta_k = gamma * (||b_k|| / ||b_{k-1}||) **
         alpha``. Defaults ``gamma = 0.9``, ``alpha = (1 + sqrt 5) / 2`` are the classic values.
     residualGrowthFactor
         A solve whose ``||b||`` exceeds this multiple of the previous solve's ``||b||`` is treated as
-        the first solve of a new increment (or a cutback): the forcing tolerance resets to ``etaMax``
-        and the AMG hierarchies are refreshed rather than reused.
+        the first solve of a new increment: the forcing tolerance resets to ``etaMax`` and the AMG
+        hierarchies are refreshed rather than reused. A guess with a blind spot: the retry after a cutback
+        of a *diverged* attempt usually starts below that attempt's last residual and is not recognized
+        (see the theory page).
     gapCompensatedTolerance, gapSafetyFactor
         Opt-in (default ``False``, i.e. unchanged behaviour). The outer Krylov converges the
         *scaled* (equilibrated) residual while acceptance is on the *true* relative residual; the
@@ -511,15 +514,15 @@ class BlockAMGSolver(LinearSolver):
         below ``c / f``: with the recommended cap of 50 and factor 3, a reference of 17 or more leaves the cap
         hits as the only rebuild trigger of this kind.
     refreshOnNewIncrement
-        Refresh the AMG hierarchies whenever a residual jump marks a new increment or a cutback
+        Refresh the AMG hierarchies whenever a residual jump marks a new increment
         (default ``True``). With ``False`` a new increment alone keeps the standing hierarchies -- the
         first Newton iteration's Jacobian is the converged one of the previous increment -- and only
         the layout/pattern checks and ``hierarchyStalenessFactor`` decide.
     trueResidualMaxContinuations
-        How many times to warm-restart the outer solve (``x0`` from the previous pass, the same ``As``/``bs``/
-        ``M``, a tighter tolerance) if the true relative residual still exceeds ``eta`` after a pass, whether
-        that pass converged its own (scaled) residual or stopped at the iteration cap. ``0`` disables this:
-        the outer solve's own stopping test on the scaled residual decides.
+        How many times to warm-restart the outer solve (``x0`` from the previous pass, the same ``A_scaled``,
+        ``b_scaled`` and ``M``, a tighter tolerance) if the true relative residual still exceeds ``eta`` after
+        a pass, whether that pass converged its own (scaled) residual or stopped at the iteration cap. ``0``
+        disables this: the outer solve's own stopping test on the scaled residual decides.
     verbosity
         One of ``"silent"``, ``"warning"`` (default), ``"info"``, ``"debug"``. Messages go through the
         injected Journal (:meth:`~edelweissfe.linsolve.base.LinearSolver.setJournal`), falling back to
@@ -683,8 +686,8 @@ class BlockAMGSolver(LinearSolver):
         self._lazyP1MapNames = set()
         # Per-field node coordinates, derived from self._model; dropped in setModel().
         self._nodeCoordinateCache = {}
-        # Per-field fine spectral radius and dominant vector of the p-two-grid smoother, kept for the next build only with
-        # p1FineSpectralRadiusReuse; dropped in setModel() like the caches above.
+        # Per-field fine spectral radius and dominant vector of the p-two-grid smoother, kept for the next build
+        # only with p1FineSpectralRadiusReuse; dropped in setModel() like the caches above.
         self._p1FineSpectralRadiusCache = {}
         self._p1FieldNamesRequested = set(_fieldNamesFromConfig(p1FieldNames) or [])
         self._p1Nu = p1Nu
@@ -886,7 +889,7 @@ class BlockAMGSolver(LinearSolver):
         small), clamped to ``[etaMin, etaMax]``. The safeguard only acts while ``gamma eta_{k-1} ** alpha`` exceeds
         0.1, i.e. for a previous tolerance above about 0.26 at the classic parameters: never with an ``etaMax``
         below that. Falls back to ``etaMax`` with no history to compare
-        against (the first solve, or the one right after a new increment / cutback jump -- the ratio
+        against (the first solve, or the one right after a new-increment jump -- the ratio
         across that jump does not reflect Newton convergence and is not meaningful).
         """
         if self._lastResidualNorm is None or newIncrement or self._lastResidualNorm == 0.0:
@@ -1556,7 +1559,8 @@ class BlockAMGSolver(LinearSolver):
         slices = [slice(block.start, block.stop) for block in blocks]
         b = np.asarray(b).reshape(n)
 
-        # (1) Newton-state detection: a residual jump marks a new increment or a cutback
+        # (1) Newton-state detection: a residual jump marks a new increment (not a cutback after a diverged
+        #     attempt, whose retry starts below its last residual -- see residualGrowthFactor)
         residualNorm = float(np.linalg.norm(b))
         if not np.isfinite(residualNorm):
             # Nothing to solve: the outer solve would spend its whole iteration cap on it, and the norm would
@@ -1581,7 +1585,7 @@ class BlockAMGSolver(LinearSolver):
 
         # Refresh the per-field AMG hierarchies (rather than reuse the standing ones) when there is
         # nothing to reuse yet, the field-block layout changed (e.g. an AMR event resized the DOF
-        # vector), the sparsity pattern changed, a residual jump marks a new increment / cutback, or the
+        # vector), the sparsity pattern changed, a residual jump marks a new increment, or the
         # previous solve asked for it: its outer count drifted too far from that of the solve the hierarchies
         # were built for, or it hit the cap (_hierarchyIsStale), or the model or the settings changed.
         wasStale = self._refreshNext
@@ -1611,12 +1615,12 @@ class BlockAMGSolver(LinearSolver):
             rebuildReason = "stale"
 
         # (2) Equilibration: solve A x = b as (D A D) z = D b, x = D z, D = diag(scaling) with
-        #     scaling = 1 / sqrt|a_ii|. As = D A D, bs = D b in the code.
+        #     scaling = 1 / sqrt|a_ii|. A_scaled = D A D, b_scaled = D b in the code.
         with performancetiming.timeit("equilibration"):
             if mustRefresh:
                 diagonal = PyAMGCLEquilibratedSystem.absoluteDiagonal(A)
                 # A zero diagonal entry cannot be equilibrated: 1/sqrt(0) is inf, which would poison
-                # As and bs with non-finite values before the hierarchy build, and the failure would
+                # A_scaled and b_scaled with non-finite values before the hierarchy build, and the failure would
                 # surface much later as a NaN correction (i.e. as DivergingSolution, which reads like
                 # a physics problem rather than an unsupported system). Flooring the divisor is not a
                 # fix either -- a 1e-300 floor merely turns inf into ~1e150 and blows the scaled
@@ -1639,16 +1643,16 @@ class BlockAMGSolver(LinearSolver):
                 scaling = 1.0 / np.sqrt(diagonal)
             else:
                 # Reuse the equilibration the standing hierarchies were built for. Any D gives the same
-                # system in other variables (As z = bs with x = D z), so the outer solve still solves the
+                # system in other variables (A_scaled z = b_scaled with x = D z), so the outer solve still solves the
                 # *current* A x = b; only the preconditioner's quality can drift -- which costs outer
                 # iterations and, if it drives the solve to the cap, the accuracy of that one solve.
                 scaling = self._scaling
 
-            bs = scaling * b
+            b_scaled = scaling * b
 
-        # (3) Field split: As and its blocks As_ij in one threaded pass over A -- the outer Krylov operator, the
-        #     couplings the sweep needs on every solve, and on a rebuild the diagonal blocks the hierarchies are
-        #     built from.
+        # (3) Field split: A_scaled and its blocks A_scaled_ij in one threaded pass over A -- the outer Krylov
+        #     operator, the couplings the sweep needs on every solve, and on a rebuild the diagonal blocks the
+        #     hierarchies are built from.
         with performancetiming.timeit("equilibrated system"):
             system = PyAMGCLEquilibratedSystem()
             system.build(A, scaling, [(block.start, block.stop) for block in blocks])
@@ -1678,9 +1682,9 @@ class BlockAMGSolver(LinearSolver):
         sizes = [block.stop - block.start for block in blocks]
 
         # (5) The preconditioner v = M^-1 r: block Gauss-Seidel sweeps over the fields, M^-1 = (B + L)^-1 for one
-        #     forward sweep, B = blockdiag(M_i), M_i one AMG cycle on As_ii.
+        #     forward sweep, B = blockdiag(M_i), M_i one AMG cycle on A_scaled_ii.
         def sweepOnce(order, residual, v, visited):
-            # Residual-correction form, v_i += M_i^-1 (r_i - sum_j As_ij v_j): a revisit of a field (sweeps > 1,
+            # Residual-correction form, v_i += M_i^-1 (r_i - sum_j A_scaled_ij v_j): a revisit of a field (sweeps > 1,
             # or the symmetric reverse sweep) improves its v_i. On a first visit v_i = 0, and only the fields
             # already visited contribute to the sum.
             for i in order:
@@ -1720,9 +1724,9 @@ class BlockAMGSolver(LinearSolver):
         else:
             firstPassEta = eta
 
-        # (5) The outer Krylov solve on As z = bs, preconditioned by the sweep: AMGCL's LGMRES (the default,
-        #     right-preconditioned) or SciPy's GMRES (left-preconditioned); both converge the residual of As z = bs.
-        #     For LGMRES, outerRestart x outerMaxiter is the iteration cap of a pass.
+        # (5) The outer Krylov solve on A_scaled z = b_scaled, preconditioned by the sweep: AMGCL's LGMRES (the
+        #     default, right-preconditioned) or SciPy's GMRES (left-preconditioned); both converge the residual of
+        #     A_scaled z = b_scaled. For LGMRES, outerRestart x outerMaxiter is the iteration cap of a pass.
         def outerPass(tolerance: float, x0: np.ndarray = None) -> tuple:
             """One outer Krylov pass from x0 (zero if None): the Krylov iterate, the iteration count, and
             SciPy's ``info`` (non-zero: stopped at the iteration cap short of ``tolerance``)."""
@@ -1730,7 +1734,7 @@ class BlockAMGSolver(LinearSolver):
                 residualHistory = []
                 z, info = gmres(
                     outerOperator,
-                    bs,
+                    b_scaled,
                     x0=x0,
                     M=preconditioner,
                     rtol=tolerance,
@@ -1744,7 +1748,7 @@ class BlockAMGSolver(LinearSolver):
             lgmres = self._outerLgmres(n)
             z = lgmres.solve(
                 system,
-                bs,
+                b_scaled,
                 blockGaussSeidel,
                 tolerance,
                 self._outerRestart * self._outerMaxiter,
@@ -1756,12 +1760,13 @@ class BlockAMGSolver(LinearSolver):
         def solutionAndResiduals(z: np.ndarray) -> tuple:
             """The solution x of the Krylov iterate z, its true relative residual (the one the solve is
             accepted on) and its scaled relative residual (the equilibrated system's)."""
-            # A x - b = D^-1 (As z - bs) exactly: the true residual from the scaled one, without a product with A
-            scaledResidualVector = system.residual(bs, z)
+            # A x - b = D^-1 (A_scaled z - b_scaled) exactly: the true residual from the scaled one, without a
+            # product with A
+            scaledResidualVector = system.residual(b_scaled, z)
             return (
                 scaling * z,
                 np.linalg.norm(scaledResidualVector / scaling) / max(np.linalg.norm(b), 1e-300),
-                np.linalg.norm(scaledResidualVector) / max(np.linalg.norm(bs), 1e-300),
+                np.linalg.norm(scaledResidualVector) / max(np.linalg.norm(b_scaled), 1e-300),
             )
 
         with performancetiming.timeit("outer Krylov solve"):
