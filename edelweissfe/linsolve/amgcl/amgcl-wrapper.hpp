@@ -401,26 +401,26 @@ public:
   }
 };
 
-// The equilibrated, field-split system of blockamg.py's outer solve, built in one OpenMP-threaded
-// pass over A's CSR arrays instead of a chain of serial SciPy copies and slices.
-//
-// blockamg solves A x = b as (D A D)(D^-1 x) = D b, D = diag(dinv), and its block Gauss-Seidel
-// sweep needs every field's equilibrated diagonal block (for the per-field preconditioners, on a
-// hierarchy rebuild) and the equilibrated coupling blocks between fields (on every solve). This
-// class holds
-//
-//   * the equilibrated operator As = D A D, the outer Krylov operator: matvec(), residual(), and the
-//     operator LGMRESOuterSolverT::solve() iterates on. Each entry is formed exactly as SciPy's
-//     former `As.data *= dinv[As.indices]; As.data *= dinv[rows]` did, (a_ij * dinv_j) * dinv_i, so
-//     the operator is bitwise the former one;
-//   * the coupling blocks As[field i, field j], i != j, rectangular, with field-local column
-//     indices: couplingMatvec();
-//   * the per-row, per-field entry counts that let a diagonal block As[field i, field i] be written
-//     straight into caller-owned (NumPy) arrays on demand: diagonalBlockNnz() / fillDiagonalBlock().
-//
-// The copy is a parallel first touch, so the operator is spread over the NUMA nodes like every other
-// AMGCL matrix (the input arrays come from a single-threaded SciPy allocation). Columns are stored as
-// int, as in the input: 12 instead of 16 bytes per entry in every outer matrix-vector product.
+/// The equilibrated, field-split system of blockamg.py's outer solve, built in one OpenMP-threaded
+/// pass over A's CSR arrays instead of a chain of serial SciPy copies and slices.
+///
+/// blockamg solves A x = b as (D A D)(D^-1 x) = D b, D = diag(dinv), and its block Gauss-Seidel
+/// sweep needs every field's equilibrated diagonal block (for the per-field preconditioners, on a
+/// hierarchy rebuild) and the equilibrated coupling blocks between fields (on every solve). This
+/// class holds
+///
+///   * the equilibrated operator As = D A D, the outer Krylov operator: matvec(), residual(), and the
+///     operator LGMRESOuterSolverT::solve() iterates on. Each entry is formed exactly as SciPy's
+///     former `As.data *= dinv[As.indices]; As.data *= dinv[rows]` did, (a_ij * dinv_j) * dinv_i, so
+///     the operator is bitwise the former one;
+///   * the coupling blocks As[field i, field j], i != j, rectangular, with field-local column
+///     indices: couplingMatvec();
+///   * the per-row, per-field entry counts that let a diagonal block As[field i, field i] be written
+///     straight into caller-owned (NumPy) arrays on demand: diagonalBlockNnz() / fillDiagonalBlock().
+///
+/// The copy is a parallel first touch, so the operator is spread over the NUMA nodes like every other
+/// AMGCL matrix (the input arrays come from a single-threaded SciPy allocation). Columns are stored as
+/// int, as in the input: 12 instead of 16 bytes per entry in every outer matrix-vector product.
 class EquilibratedSystemT {
 public:
   typedef amgcl::backend::crs< double, int, int > Matrix;
@@ -433,7 +433,7 @@ public:
   std::vector< size_t >                    diagonalPtrOffset_;
   int                                      n_ = 0, nFields_ = 0;
 
-  // @brief |a_ii| for every row (0 where no diagonal entry is stored), the basis of the equilibration.
+  /// @brief |a_ii| for every row (0 where no diagonal entry is stored), the basis of the equilibration.
   static void absoluteDiagonal( int n, const int* ptr, const int* col, const double* val, double* out )
   {
 #pragma omp parallel for
@@ -446,11 +446,11 @@ public:
     }
   }
 
-  // @brief Build As = D A D and the coupling blocks.
-  // @param n, ptr, col, val A, square CSR (columns need not be sorted; duplicates are kept as given).
-  // @param dinv the equilibration, D = diag(dinv).
-  // @param nFields, fieldBounds the fields' DOF ranges, [fieldBounds[2k], fieldBounds[2k+1]),
-  // disjoint.
+  /// @brief Build As = D A D and the coupling blocks.
+  /// @param n, ptr, col, val A, square CSR (columns need not be sorted; duplicates are kept as given).
+  /// @param dinv the equilibration, D = diag(dinv).
+  /// @param nFields, fieldBounds the fields' DOF ranges, [fieldBounds[2k], fieldBounds[2k+1]),
+  /// disjoint.
   void build( int           n,
               const int*    ptr,
               const int*    col,
@@ -556,8 +556,8 @@ public:
     }
   }
 
-  // @brief Write As[field f, field g] (field-local columns) into ptr/col/val -- ptr already holding
-  // the block's row pointers.
+  /// @brief Write As[field f, field g] (field-local columns) into ptr/col/val -- ptr already holding
+  /// the block's row pointers.
   void fillBlock( int f, int g, const int* blockPtr, int* blockCol, double* blockVal ) const
   {
     const int start = fieldStart_[f], nRows = fieldStop_[f] - fieldStart_[f], columnStart = fieldStart_[g];
@@ -575,6 +575,7 @@ public:
     }
   }
 
+  /// @brief Throw unless build() has run.
   void checkBuilt() const
   {
     if ( !operator_ ) {
@@ -582,6 +583,7 @@ public:
     }
   }
 
+  /// @brief Throw unless build() has run and f is one of its fields.
   void checkField( int f ) const
   {
     checkBuilt();
@@ -590,21 +592,23 @@ public:
     }
   }
 
+  /// @brief The number of DOFs of field f.
   int diagonalBlockSize( int f ) const
   {
     checkField( f );
     return fieldStop_[f] - fieldStart_[f];
   }
 
+  /// @brief The number of entries of As[field f, field f] (stored zeros of A dropped).
   int diagonalBlockNnz( int f ) const
   {
     checkField( f );
     return diagonalPtr_[diagonalPtrOffset_[f + 1] - 1];
   }
 
-  // @brief As[field f, field f] into caller-owned arrays of diagonalBlockSize(f) + 1 and
-  // diagonalBlockNnz(f) entries -- written in parallel, so freshly allocated (untouched) arrays get
-  // the same NUMA spread as the operator.
+  /// @brief As[field f, field f] into caller-owned arrays of diagonalBlockSize(f) + 1 and
+  /// diagonalBlockNnz(f) entries -- written in parallel, so freshly allocated (untouched) arrays get
+  /// the same NUMA spread as the operator.
   void fillDiagonalBlock( int f, int* ptr, int* col, double* val ) const
   {
     checkField( f );
@@ -612,7 +616,7 @@ public:
     fillBlock( f, f, ptr, col, val );
   }
 
-  // @brief y <- As x
+  /// @brief y <- As x
   void matvec( const double* x, double* y ) const
   {
     checkBuilt();
@@ -621,7 +625,7 @@ public:
     amgcl::backend::spmv( 1.0, *operator_, xRange, 0.0, yRange );
   }
 
-  // @brief r <- rhs - As x
+  /// @brief r <- rhs - As x
   void residual( const double* rhs, const double* x, double* r ) const
   {
     checkBuilt();
@@ -631,7 +635,7 @@ public:
     amgcl::backend::residual( rhsRange, *operator_, xRange, rRange );
   }
 
-  // @brief y (field f) <- As[field f, field g] x (field g), f != g
+  /// @brief y (field f) <- As[field f, field g] x (field g), f != g
   void couplingMatvec( int f, int g, const double* x, double* y ) const
   {
     checkField( f );
