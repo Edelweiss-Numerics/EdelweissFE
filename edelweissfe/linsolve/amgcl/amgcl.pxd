@@ -72,7 +72,7 @@ cdef extern from "amgcl-wrapper.hpp":
     # preconditioner -- see amgcl-wrapper.hpp's own comment on PyPrecondApplyFn/
     # PyLGMRESPrecondT for why this is a bare function pointer + opaque context rather than a
     # Cython-overridden C++ virtual method.
-    ctypedef void (*PyPrecondApplyFn)(void* ctx, int n, const double* rhs, double* x)
+    ctypedef int (*PyPrecondApplyFn)(void* ctx, int n, const double* rhs, double* x)
 
     # AMGCL's own native outer Krylov solve, in place of scipy.sparse.linalg.gmres; one instance per
     # system size, no augmentation vectors carried across calls -- see LGMRESOuterSolverT.

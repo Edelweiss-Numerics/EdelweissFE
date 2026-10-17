@@ -2,16 +2,15 @@
 # -*- coding: utf-8 -*-
 """BlockAMGSolver's block Gauss-Seidel sweep in residual-correction form.
 
-A revisit of a field -- a second sweep, or the reverse sweep of ``symmetric`` -- must improve its estimate,
-``x_i += M_i^-1 (r_i - sum_j A_ij x_j)``. The former overwrite form ``x_i = M_i^-1 (r_i - sum_{j != i} A_ij x_j)``
-threw the previous estimate away, which is only the same for an exact M_i; with an AMG cycle a second sweep
+A revisit of a field -- a second sweep, or the reverse sweep of ``symmetric`` -- must improve its part of
+``v = M^-1 r``, ``v_i += M_i^-1 (r_i - sum_j A_ij v_j)``. The former overwrite form
+``v_i = M_i^-1 (r_i - sum_{j != i} A_ij v_j)`` threw the previous estimate away, which is only the same for an exact M_i; with an AMG cycle a second sweep
 then bought nothing.
 """
 
 import numpy as np
 import scipy.sparse as sp
-from _blockamgsystems import displacementDamageSystem, gridLaplacian
-from scipy.sparse.linalg import splu
+from _blockamgsystems import ExactFieldSolve, displacementDamageSystem, gridLaplacian
 
 from edelweissfe.linsolve.base import FieldBlock
 from edelweissfe.linsolve.blockamg import createSolver
@@ -84,16 +83,6 @@ def test_the_reverse_sweep_of_the_default_symmetric_sweep_improves_two_fields():
     assert _outerIterations(nFields=2, sweeps=1, symmetric=True) < 0.8 * once
 
 
-class _ExactFieldSolve:
-    """An exact solve with one field's diagonal block, in place of its AMG cycle."""
-
-    def __init__(self, block):
-        self._factorization = splu(block.tocsc())
-
-    def applyPreconditioner(self, residual):
-        return self._factorization.solve(residual)
-
-
 def test_with_exact_field_solves_one_forward_sweep_inverts_a_block_lower_triangular_system():
     # K_du != 0, K_ud = 0: block lower triangular in DOF order (displacement first), so one forward block
     # Gauss-Seidel sweep with exact field solves is the exact inverse, and the outer solve needs one iteration
@@ -103,8 +92,8 @@ def test_with_exact_field_solves_one_forward_sweep_inverts_a_block_lower_triangu
     solver.setFieldStructure(blocks)
     solver(A, b)
     # the second solve of the same system reuses the standing preconditioners: make them exact
-    A_scaled = (sp.diags(solver._dinv) @ A @ sp.diags(solver._dinv)).tocsr()
-    solver._preconditioners = [_ExactFieldSolve(A_scaled[f.start : f.stop, f.start : f.stop]) for f in blocks]
+    A_scaled = (sp.diags(solver._scaling) @ A @ sp.diags(solver._scaling)).tocsr()
+    solver._preconditioners = [ExactFieldSolve(A_scaled[f.start : f.stop, f.start : f.stop]) for f in blocks]
     x = solver(A, b)
     assert solver._lastOuterIters == 1
     assert np.linalg.norm(b - A @ x) <= 1e-9 * np.linalg.norm(b)

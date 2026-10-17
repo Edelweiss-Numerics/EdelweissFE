@@ -874,8 +874,9 @@ public:
 // whatever Cython-side state the callback needs (the calling PyAMGCLLGMRESSolver instance, in
 // practice) -- this header never interprets it as anything other than a pass-through argument. `n` is
 // duplicated here (also known to the caller) purely so the callback does not need to reach back into
-// any C++-side state to learn it.
-typedef void ( *PyPrecondApplyFn )( void* ctx, int n, const double* rhs, double* x );
+// any C++-side state to learn it. It returns 0 on success and anything else if it failed (a Python
+// exception, which the caller keeps and re-raises).
+typedef int ( *PyPrecondApplyFn )( void* ctx, int n, const double* rhs, double* x );
 
 // Adapts a PyPrecondApplyFn callback to amgcl::solver::lgmres's Precond interface: a single const
 // apply(rhs, x) method (see amgcl/solver/precond_side.hpp's spmv() -- with the default
@@ -893,9 +894,13 @@ class PyLGMRESPrecondT {
 public:
   PyLGMRESPrecondT( PyPrecondApplyFn applyFn, void* ctx, int n ) : applyFn_( applyFn ), ctx_( ctx ), n_( n ) {}
 
+  /// @brief x <- M^-1 rhs through the callback.
+  /// @throw std::runtime_error if the callback failed: the exception unwinds lgmres at once, instead of
+  /// letting it run to maxiter on a meaningless x.
   void apply( const amgcl::backend::builtin< double >::vector& rhs, amgcl::backend::builtin< double >::vector& x ) const
   {
-    applyFn_( ctx_, n_, rhs.data(), x.data() );
+    if ( applyFn_( ctx_, n_, rhs.data(), x.data() ) != 0 )
+      throw std::runtime_error( "LGMRESOuterSolverT: the preconditioner callback failed" );
   }
 
 private:

@@ -156,6 +156,10 @@ def test_a_failing_preconditioner_is_called_once_and_its_exception_raised(system
         solver.solve(equilibrated, np.ones(A.shape[0]), failing, 1e-10, 50)
     assert len(calls) == 1
 
+    # the failure ended the AMGCL call at once; the instance solves again
+    x = solver.solve(equilibrated, np.ones(A.shape[0]), lambda r: r, 1e-8, 400)
+    assert np.isfinite(x).all() and 0 < solver.lastIterations
+
 
 def test_a_diagonal_block_product_is_the_scipy_one_bit_for_bit(system):
     A, As, dinv, equilibrated = system

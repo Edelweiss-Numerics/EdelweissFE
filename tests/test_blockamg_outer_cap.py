@@ -10,6 +10,7 @@ may converge on exactly its last allowed iteration.
 
 from types import SimpleNamespace
 
+import numpy as np
 from _blockamgsystems import displacementDamageSystem
 
 from edelweissfe.linsolve.blockamg import createSolver
@@ -117,3 +118,30 @@ def test_a_cap_hit_is_dumped_whatever_the_threshold(tmp_path, monkeypatch):
     solver(A, b)
     # two outer iterations, far below the dump threshold (the warning threshold, 100), but at the cap
     assert (tmp_path / "manifest.jsonl").exists()
+
+
+def test_a_cap_hit_the_solve_recovered_from_rebuilds_but_is_not_reported(tmp_path, monkeypatch):
+    monkeypatch.setattr(BlockAMGSolver, "_degradationDumpsWritten", 0)
+    A, b, blocks = _system()
+    solver = createSolver(
+        {
+            "verbosity": "warning",
+            "outerTol": 1e-6,
+            "outerRestart": 200,
+            "outerMaxiter": 1,
+            "dumpOnDegradationDir": str(tmp_path),
+        }
+    )
+    solver.setFieldStructure(blocks)
+    # every pass counts as a cap hit, and the solve still ends with eta met (with continuations if needed)
+    monkeypatch.setattr(solver, "_lgmresCapHit", lambda iterations, tolerance: 1)
+    messages = []
+    solver._log = lambda level, message: messages.append(message)
+    x = solver(A, b)
+    assert np.linalg.norm(b - A @ x) <= 1e-6 * np.linalg.norm(b)
+    assert not [m for m in messages if "⚠" in m]
+    assert not (tmp_path / "manifest.jsonl").exists()
+
+    standing = solver._preconditioners
+    solver(A, b)
+    assert solver._preconditioners is not standing

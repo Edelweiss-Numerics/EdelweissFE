@@ -7,6 +7,8 @@
    unreached factor, so every following first pass asked for that much more accuracy.
 2. ``refreshOnNewIncrement=False`` keeps the standing hierarchies across a residual jump (new increment);
    the default rebuilds them, as before.
+3. A requested rebuild (setModel, a hot reload, a stale hierarchy) stands until a build succeeds.
+4. A right-hand side that is not finite is not solved, and leaves the solver's state as it was.
 """
 
 import numpy as np
@@ -52,3 +54,34 @@ def test_a_new_increment_rebuilds_the_hierarchies_only_if_asked(refresh):
     solver(A, 1e3 * b)
 
     assert (solver._preconditioners is standing) is (not refresh)
+
+
+def test_a_requested_rebuild_stands_until_a_build_succeeds(monkeypatch):
+    A, b, blocks = displacementDamageSystem(12, coupling="one-way", rowScaling=True)
+    solver = _solver(blocks, outerTol=1e-6)
+    solver(A, b)
+    standing = solver._preconditioners
+    solver._refreshNext = True
+
+    def failingBuild(*args):
+        raise RuntimeError("build failed")
+
+    monkeypatch.setattr(solver, "_buildFieldPreconditioners", failingBuild)
+    with pytest.raises(RuntimeError, match="build failed"):
+        solver(A, b)
+    assert solver._refreshNext and solver._preconditioners is standing
+
+    # the same layout and sparsity pattern: only the standing request rebuilds
+    monkeypatch.undo()
+    solver(A, b)
+    assert not solver._refreshNext and solver._preconditioners is not standing
+
+
+def test_a_right_hand_side_that_is_not_finite_is_not_solved():
+    A, b, blocks = displacementDamageSystem(12, coupling="one-way", rowScaling=True)
+    solver = _solver(blocks, outerTol=1e-6)
+    solver(A, b)
+    lastResidualNorm = solver._lastResidualNorm
+    b[3] = np.nan
+    assert np.isnan(solver(A, b)).all()
+    assert solver._lastResidualNorm == lastResidualNorm

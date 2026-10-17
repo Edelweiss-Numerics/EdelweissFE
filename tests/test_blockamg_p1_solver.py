@@ -135,6 +135,8 @@ def test_setModel_drops_the_cached_radius_and_rebuilds(problem):
     # the same layout and sparsity pattern: only setModel can ask for the rebuild
     solver.setModel(*_stubModel(coords))
     assert not solver._p1FineSpectralRadiusCache
+    # the residual history of the previous model does not enter the forcing of the new one
+    assert solver._lastResidualNorm is None
     x = solver(A, b)
     assert solver._preconditioners is not standing
     assert solver._preconditioners[0].fineSpectralRadiusSource == "estimated"

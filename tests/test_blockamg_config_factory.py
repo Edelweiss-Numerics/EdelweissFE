@@ -29,12 +29,11 @@
 solver, and an unknown key is an error instead of being silently dropped."""
 
 import json
-import re
 from pathlib import Path
 
 import numpy as np
 import pytest
-from _blockamgsystems import displacementDamageSystem
+from _blockamgsystems import displacementDamageSystem, hierarchyLevels
 
 from edelweissfe.linsolve.blockamg import createSolver
 
@@ -131,7 +130,7 @@ def test_the_recommended_configuration_solves_a_displacement_damage_system():
     # the displacement field runs on a multi-level float-stored 3x3 block hierarchy
     displacement = solver._preconditioners[0]
     assert displacement.blockSize == 3 and displacement.isFloat
-    assert int(re.search(r"Number of levels:\s+(\d+)", displacement.report()).group(1)) > 1
+    assert hierarchyLevels(displacement) > 1
     # the first solve asks for etaMax = 1e-3, compensated for the scaled-to-true residual gap
     assert np.linalg.norm(b - A @ x) <= 3e-3 * np.linalg.norm(b)
 
@@ -160,6 +159,41 @@ def test_null_is_unset_for_every_key_whose_default_is_unset():
 def test_a_value_out_of_range_raises_at_construction(options):
     with pytest.raises(ValueError):
         createSolver(options)
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"outerTol": 0.0},
+        {"outerTol": 1.0},
+        {"etaMin": 0.0},
+        {"ewGamma": 0.0},
+        {"ewGamma": 1.5},
+        {"ewAlpha": 1.0},
+        {"ewAlpha": 2.5},
+        {"gapMaxFactor": 0.5},
+        {"warnOuterIterationsThreshold": -1},
+        {"trueResidualMaxContinuations": -1},
+        {"dumpOnDegradationMaxDumps": -1},
+        {"dumpOnDegradationThreshold": -1},
+    ],
+    ids=lambda options: "{:}={:}".format(*next(iter(options.items()))),
+)
+def test_a_value_out_of_its_range_raises_and_names_its_key(options):
+    with pytest.raises(ValueError, match=next(iter(options))):
+        createSolver(options)
+
+
+def test_the_default_trees_on_the_theory_page_are_the_code_defaults():
+    from edelweissfe.linsolve.blockamg.blockamg import (
+        _DEFAULT_SCALAR_PRECOND,
+        _DEFAULT_VECTOR_PRECOND,
+    )
+
+    page = (_REPO_ROOT / "doc/source/documentation/blockamgtheory.rst").read_text()
+    block = page.split("and change only what is intended. The defaults are", 1)[1].split(".. code-block:: json", 1)[1]
+    trees = json.JSONDecoder().raw_decode(block.strip())[0]
+    assert trees == {"displacement": _DEFAULT_VECTOR_PRECOND, "nonlocal damage": _DEFAULT_SCALAR_PRECOND}
 
 
 def test_a_block_size_that_does_not_fit_its_field_raises_at_the_first_build():

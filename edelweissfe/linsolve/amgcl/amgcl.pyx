@@ -367,7 +367,7 @@ cdef class PyAMGCLEquilibratedSystem:
         return y
 
 
-cdef void _lgmresPrecondApplyTrampoline(void* ctx, int n, const double* rhs, double* x) noexcept:
+cdef int _lgmresPrecondApplyTrampoline(void* ctx, int n, const double* rhs, double* x) noexcept:
     """The C-callable trampoline bridging amgcl::solver::lgmres's per-``apply()`` Precond callback
     back into Python -- passed to :class:`LGMRESOuterSolver` as a bare function pointer (see
     ``amgcl-wrapper.hpp``'s ``PyPrecondApplyFn``/``PyLGMRESPrecondT``).
@@ -389,11 +389,9 @@ cdef void _lgmresPrecondApplyTrampoline(void* ctx, int n, const double* rhs, dou
     codebase's actual threading model does not use.
 
     A Python exception raised by the preconditioner callable cannot propagate through this C
-    function-pointer boundary (there is no C++ exception handler on the AMGCL side expecting one), so
-    it is caught here and stashed on the calling instance instead; :meth:`PyAMGCLLGMRESSolver.solve`
-    re-raises it once the (now-abandoned) AMGCL call returns. ``x`` is zeroed on that path so the
-    (about-to-be-discarded) AMGCL iteration continues on defined, if meaningless, numbers rather than
-    whatever uninitialized/stale data happened to be there, and every further call returns at once.
+    function-pointer boundary, so it is caught here and stashed on the calling instance instead, and the
+    function returns 1 (0 on success). The C++ side then throws, which ends AMGCL's lgmres at once, and
+    :meth:`PyAMGCLLGMRESSolver.solve` re-raises the stashed exception in place of the C++ one.
     """
     cdef PyAMGCLLGMRESSolver self = <PyAMGCLLGMRESSolver> ctx
     cdef Py_ssize_t i
@@ -405,12 +403,6 @@ cdef void _lgmresPrecondApplyTrampoline(void* ctx, int n, const double* rhs, dou
     # which reads every matrix entry at least once.
     cdef np.ndarray[np.float64_t, ndim=1, mode="c"] rhsArr
     cdef double[::1] xView
-    if self._pendingException is not None:
-        # an earlier application already failed: the AMGCL call is abandoned anyway, so do not keep
-        # calling into Python (and raising) for every remaining Arnoldi vector
-        for i in range(n):
-            x[i] = 0.0
-        return
     try:
         # inside the try: a MemoryError here must be stashed and re-raised like any other failure, not
         # swallowed by this noexcept function, which would leave x stale and the solve "successful"
@@ -428,8 +420,8 @@ cdef void _lgmresPrecondApplyTrampoline(void* ctx, int n, const double* rhs, dou
             x[i] = xView[i]
     except BaseException as exc:
         self._pendingException = exc
-        for i in range(n):
-            x[i] = 0.0
+        return 1
+    return 0
 
 
 cdef class PyAMGCLLGMRESSolver:
@@ -499,8 +491,8 @@ cdef class PyAMGCLLGMRESSolver:
         applyPreconditioner
             A Python callable, ``residual (1D float64 array) -> correction (1D float64 array)`` --
             exactly :mod:`~edelweissfe.linsolve.blockamg.blockamg`'s ``blockGaussSeidel`` closure's own
-            shape. Called once per Arnoldi vector via :func:`_lgmresPrecondApplyTrampoline`; any
-            exception it raises is re-raised here once the (now-abandoned) AMGCL call returns.
+            shape. Called once per Arnoldi vector via :func:`_lgmresPrecondApplyTrampoline`; an
+            exception it raises ends the AMGCL call at once and is re-raised here.
         tol, maxiter
             This call's relative residual tolerance and maximum total Arnoldi iterations (across every
             internal restart -- AMGCL's own ``maxiter`` semantics differ from scipy's restart x maxiter,
@@ -544,6 +536,10 @@ cdef class PyAMGCLLGMRESSolver:
                 system.system[0], &rhs_[0], &x_[0],
                 tol, maxiter, _lgmresPrecondApplyTrampoline, ctx, iters, error
             )
+        except RuntimeError:
+            # the C++ side's report of a failed callback: raise the callback's own exception instead
+            if self._pendingException is None:
+                raise
         finally:
             self._precondCallable = None
 

@@ -28,8 +28,11 @@
 """Small linear systems with the field structure of a gradient-enhanced damage model, shared by the blockamg
 tests: a 3D displacement field (3 DOFs per node) and a scalar nonlocal damage field, each a grid Laplacian."""
 
+import re
+
 import numpy as np
 import scipy.sparse as sp
+from scipy.sparse.linalg import splu
 
 from edelweissfe.linsolve.base import FieldBlock
 
@@ -96,3 +99,19 @@ def displacementDamageSystem(n: int = 12, coupling: str = "none", rowScaling: bo
     blocks = [FieldBlock("displacement", 0, 3 * nodes, 3), FieldBlock("nonlocal damage", 3 * nodes, 4 * nodes, 1)]
     b = np.random.default_rng(0).standard_normal(A.shape[0])
     return A.tocsr(), b, blocks
+
+
+class ExactFieldSolve:
+    """An exact solve with one field's diagonal block (a sparse LU factorization), in place of its AMG cycle: with
+    these, a block Gauss-Seidel sweep is the exact block triangular solve that the AMG cycles approximate."""
+
+    def __init__(self, block):
+        self._factorization = splu(block.tocsc())
+
+    def applyPreconditioner(self, residual):
+        return self._factorization.solve(residual)
+
+
+def hierarchyLevels(amg) -> int:
+    """The number of levels of an AMGCL hierarchy, read from its report; one level is a direct solve."""
+    return int(re.search(r"Number of levels:\s+(\d+)", amg.report()).group(1))
