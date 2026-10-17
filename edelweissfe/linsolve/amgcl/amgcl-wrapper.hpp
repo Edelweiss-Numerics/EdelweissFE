@@ -478,20 +478,36 @@ public:
       }
     }
 
-    // As = D A D, with the same rounding as SciPy's two in-place scalings
-    const int nnz = ptr[n];
-    operator_     = std::make_shared< Matrix >();
+    // As = D A D, with the same rounding as SciPy's two in-place scalings, and without A's explicitly
+    // stored zeros: the Dirichlet elimination (solvers/base/dirichlet.pyx) keeps the eliminated
+    // entries as stored zeros, so a constrained row is only recognizable as one -- a single entry, its
+    // diagonal -- once they are gone, and every product reads fewer entries (several percent of A on
+    // a condensed model). A sum loses only exact zero terms, so every product is bitwise the one with
+    // them (up to the sign of a zero).
+    operator_ = std::make_shared< Matrix >();
     operator_->set_size( n, n, false );
-    operator_->set_nonzeros( nnz );
     operator_->ptr[0] = 0;
 #pragma omp parallel for
     for ( ptrdiff_t i = 0; i < n; ++i ) {
-      operator_->ptr[i + 1] = ptr[i + 1];
+      int width = 0;
+      for ( int j = ptr[i]; j < ptr[i + 1]; ++j )
+        if ( val[j] != 0.0 )
+          ++width;
+      operator_->ptr[i + 1] = width;
+    }
+    operator_->set_nonzeros( operator_->scan_row_sizes() );
+#pragma omp parallel for
+    for ( ptrdiff_t i = 0; i < n; ++i ) {
+      int head = operator_->ptr[i];
       for ( int j = ptr[i]; j < ptr[i + 1]; ++j ) {
-        operator_->col[j] = col[j];
-        operator_->val[j] = ( val[j] * dinv[col[j]] ) * dinv[i];
+        if ( val[j] != 0.0 ) {
+          operator_->col[head]   = col[j];
+          operator_->val[head++] = ( val[j] * dinv[col[j]] ) * dinv[i];
+        }
       }
     }
+    const int* const filteredPtr = operator_->ptr;
+    const int* const filteredCol = operator_->col;
 
     // per row, the number of entries in each field's columns: row pointers of the diagonal blocks
     // (kept) and of the coupling blocks (consumed below)
@@ -505,8 +521,8 @@ public:
       if ( f < 0 )
         continue;
       const int local = static_cast< int >( i ) - fieldStart_[f];
-      for ( int j = ptr[i]; j < ptr[i + 1]; ++j ) {
-        const int g = fieldOfDof_[col[j]];
+      for ( int j = filteredPtr[i]; j < filteredPtr[i + 1]; ++j ) {
+        const int g = fieldOfDof_[filteredCol[j]];
         if ( g >= 0 )
           ++rowCounts[f * nFields + g][local + 1];
       }

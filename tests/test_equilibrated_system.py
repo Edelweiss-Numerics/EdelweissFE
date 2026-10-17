@@ -99,3 +99,21 @@ def test_overlapping_fields_raise(system):
     A, As, dinv, equilibrated = system
     with pytest.raises(RuntimeError, match="overlap"):
         PyAMGCLEquilibratedSystem().build(A, dinv, [(0, 100), (90, 200)])
+
+
+def test_explicitly_stored_zeros_are_dropped_without_changing_any_product(system):
+    A, As, dinv, equilibrated = system
+    # the Dirichlet elimination's form: zeroed entries stay stored
+    withZeros = A.copy()
+    withZeros.data[::7] = 0.0
+    reference = withZeros.copy()
+    reference.eliminate_zeros()
+    a, b = PyAMGCLEquilibratedSystem(), PyAMGCLEquilibratedSystem()
+    a.build(withZeros, dinv, _FIELDS)
+    b.build(reference, dinv, _FIELDS)
+    x = np.random.default_rng(8).standard_normal(A.shape[0])
+    assert np.array_equal(a.matvec(x), b.matvec(x))
+    for field in range(len(_FIELDS)):
+        block = a.diagonalBlock(field)
+        assert not np.any(block.data == 0.0)
+        assert np.array_equal(block.indices, b.diagonalBlock(field).indices)
