@@ -22,16 +22,62 @@
 #include <tuple>
 #include <vector>
 
+/// The interface PyAMGCLSolver drives, whatever the backend (scalar or BxB blocks, double or float):
+/// one pointer on the Cython side instead of one per backend. The matrix always arrives as a plain
+/// scalar double CSR and rhs/x are always double; each backend converts internally.
+class AMGCLSolverInterface {
+public:
+  virtual ~AMGCLSolverInterface() {}
+
+  /// @brief Supply near null-space vectors for smoothed-aggregation coarsening.
+  /// @param B rows x cols, row-major (column j is the j-th vector); cols == 0 clears it.
+  virtual void set_nullspace( const double* B, int rows, int cols ) = 0;
+
+  /// @brief Build the AMG hierarchy for the n x n CSR matrix (ptr, col, val) once, for repeated
+  /// applyPreconditioner() calls.
+  virtual void build( int n, const int* ptr, const int* col, const double* val ) = 0;
+
+  /// @brief x <- M^-1 rhs: one cycle of the hierarchy built by build().
+  virtual void applyPreconditioner( int n, const double* rhs, double* x ) = 0;
+
+  /// @brief Human-readable hierarchy report of the last build() or solve().
+  virtual std::string report() const = 0;
+
+  /// @brief Build a hierarchy for (ptr, col, val) and solve with the configured Krylov solver.
+  /// @param iters, error the iteration count and relative residual the solver reports.
+  virtual void solve( int           n,
+                      const int*    ptr,
+                      const int*    col,
+                      const double* val,
+                      const double* rhs,
+                      double*       x,
+                      int&          iters,
+                      double&       error ) = 0;
+};
+
+/// @brief The matrix values in the backend's value type: the caller's own array for double, a
+/// rounded copy (kept in storage) for float.
+inline const double* valuesAs( const double* val, int, std::vector< double >& )
+{
+  return val;
+}
+
+/// @copydoc valuesAs(const double*, int, std::vector<double>&)
+inline const float* valuesAs( const double* val, int nnz, std::vector< float >& storage )
+{
+  storage.assign( val, val + nnz );
+  return storage.data();
+}
+
 // Templated on the AMGCL backend's value type, so the same wrapper serves both the default
 // double-precision hierarchy and a float32 one (half the memory traffic in the smoother apply, the
 // dominant cost on large coupled solves). The outer
 // Krylov solve (blockamg's GMRES) always stays double; only the preconditioner's own storage and
-// arithmetic narrow. rhs/x at the applyPreconditioner()/solve() boundary are always double -- the
-// value-type-dependent scratch conversion happens inside this class, not at the Cython/Python
-// boundary, since applyPreconditioner() is called once per outer Krylov iteration (hot path) while
-// build() is not.
+// arithmetic narrow. The matrix values and rhs/x at the build()/applyPreconditioner()/solve()
+// boundary are always double -- the value-type-dependent conversion happens inside this class, not at
+// the Cython/Python boundary.
 template < typename ValueType >
-class LinearSolverT {
+class LinearSolverT : public AMGCLSolverInterface {
 public:
   typedef amgcl::backend::builtin< ValueType > Backend;
   typedef amgcl::make_solver< amgcl::runtime::preconditioner< Backend >, amgcl::runtime::solver::wrapper< Backend > >
@@ -65,7 +111,7 @@ public:
   // in its property tree -- they cannot travel through the JSON parameter string -- so this is a
   // separate entry point. Must be called before the first solve(); the pointer is read when the AMG
   // hierarchy is constructed. Passing cols == 0 clears any previously set null-space.
-  void set_nullspace( const double* B, int rows, int cols )
+  void set_nullspace( const double* B, int rows, int cols ) override
   {
     if ( cols <= 0 ) {
       nullspace_.clear();
@@ -85,14 +131,17 @@ public:
   // preconditioner without rebuilding. This is the build-once / apply-many split that :meth:`solve`
   // fuses: :meth:`solve` reconstructs the hierarchy on every call, which is fine for a one-shot solve
   // but ruinous for an inner block preconditioner applied on every outer Krylov iteration. Uses the
-  // current property tree (including any near null-space set via set_nullspace).
-  void build( int n, const int* ptr, const int* col, const ValueType* val )
+  // current property tree (including any near null-space set via set_nullspace). A float backend
+  // rounds the values first.
+  void build( int n, const int* ptr, const int* col, const double* val ) override
   {
-    int  nnz = ptr[n];
-    auto A   = std::make_tuple( n,
+    int                      nnz = ptr[n];
+    std::vector< ValueType > rounded;
+    const ValueType*         values = valuesAs( val, nnz, rounded );
+    auto                     A      = std::make_tuple( n,
                               amgcl::make_iterator_range( ptr, ptr + n + 1 ),
                               amgcl::make_iterator_range( col, col + nnz ),
-                              amgcl::make_iterator_range( val, val + nnz ) );
+                              amgcl::make_iterator_range( values, values + nnz ) );
     solver_.reset( new Solver( A, prm ) );
   }
 
@@ -101,7 +150,7 @@ public:
   // each field per outer iteration. Cheap relative to the build. rhs/x are double regardless of
   // ValueType -- for the float backend this narrows on the way in and widens on the way out; for the
   // (default) double backend the extra copy is a no-op-equivalent memcpy, not a behaviour change.
-  void applyPreconditioner( int n, const double* rhs, double* x )
+  void applyPreconditioner( int n, const double* rhs, double* x ) override
   {
     std::vector< ValueType > rhs_v( rhs, rhs + n );
     std::vector< ValueType > x_v( n, ValueType( 0 ) );
@@ -114,7 +163,7 @@ public:
   // Human-readable hierarchy report (levels, operator complexity, coarse size) for the AMG built by
   // build() or solve(). Streams AMGCL's own operator<< for the preconditioner + solver. Must be
   // called after a successful build()/solve() -- throws otherwise.
-  std::string report() const
+  std::string report() const override
   {
     if ( !solver_ ) {
       throw std::runtime_error( "report(): no hierarchy built yet -- call build() or solve() first" );
@@ -124,21 +173,23 @@ public:
     return oss.str();
   }
 
-  void solve( int              n,
-              const int*       ptr,
-              const int*       col,
-              const ValueType* val,
-              const double*    rhs,
-              double*          x,
-              int&             iters,
-              double&          error )
+  void solve( int           n,
+              const int*    ptr,
+              const int*    col,
+              const double* val,
+              const double* rhs,
+              double*       x,
+              int&          iters,
+              double&       error ) override
   {
 
-    int nnz = ptr[n];
+    int                      nnz = ptr[n];
+    std::vector< ValueType > rounded;
+    const ValueType*         values = valuesAs( val, nnz, rounded );
 
     auto ptr_rng = amgcl::make_iterator_range( ptr, ptr + n + 1 );
     auto col_rng = amgcl::make_iterator_range( col, col + nnz );
-    auto val_rng = amgcl::make_iterator_range( val, val + nnz );
+    auto val_rng = amgcl::make_iterator_range( values, values + nnz );
 
     auto A = std::make_tuple( n, ptr_rng, col_rng, val_rng );
 
@@ -170,6 +221,31 @@ public:
 // the level operators, prolongations and restrictions the cycle reads -- is stored in float, via
 // copy_matrix(), the same hook AMGCL's own builtin_hybrid backend uses to store a scalar-built
 // hierarchy in block form. Vectors stay double.
+
+/// @brief A copy of A with every entry converted to StoredType -- double to float, or a double 3x3
+/// block to a float one -- and the same structure, in one OpenMP-parallel pass (a parallel first touch,
+/// so the copy is spread over the NUMA nodes like A).
+template < typename StoredType, typename ValueType, typename Col, typename Ptr >
+std::shared_ptr< amgcl::backend::crs< StoredType, Col, Ptr > > convertedCopy(
+  const amgcl::backend::crs< ValueType, Col, Ptr >& A )
+{
+  std::shared_ptr< amgcl::backend::crs< StoredType, Col, Ptr > >
+    stored = std::make_shared< amgcl::backend::crs< StoredType, Col, Ptr > >();
+  stored->set_size( A.nrows, A.ncols, false );
+  stored->set_nonzeros( A.nnz );
+  stored->ptr[0]        = 0;
+  const ptrdiff_t nRows = static_cast< ptrdiff_t >( A.nrows );
+#pragma omp parallel for
+  for ( ptrdiff_t i = 0; i < nRows; ++i ) {
+    stored->ptr[i + 1] = A.ptr[i + 1];
+    for ( Ptr j = A.ptr[i]; j < A.ptr[i + 1]; ++j ) {
+      stored->col[j] = A.col[j];
+      stored->val[j] = A.val[j];
+    }
+  }
+  return stored;
+}
+
 namespace amgcl {
 
   // @brief A float-stored 3x3 block times a double vector block, accumulated in double. Without it,
@@ -200,24 +276,11 @@ namespace amgcl {
 
       struct provides_row_iterator : std::false_type {};
 
+      /// @brief The level matrix as the cycle reads it: A's entries rounded to float.
       static std::shared_ptr< matrix > copy_matrix( std::shared_ptr< typename Base::matrix > A,
                                                     const typename Base::params& )
       {
-        const typename Base::matrix& B      = *A;
-        std::shared_ptr< matrix >    stored = std::make_shared< matrix >();
-        stored->set_size( B.nrows, B.ncols, false );
-        stored->set_nonzeros( B.nnz );
-        stored->ptr[0]        = 0;
-        const ptrdiff_t nRows = static_cast< ptrdiff_t >( B.nrows );
-#pragma omp parallel for
-        for ( ptrdiff_t i = 0; i < nRows; ++i ) {
-          stored->ptr[i + 1] = B.ptr[i + 1];
-          for ( ptrdiff_t j = B.ptr[i]; j < B.ptr[i + 1]; ++j ) {
-            stored->col[j] = B.col[j];
-            stored->val[j] = B.val[j];
-          }
-        }
-        return stored;
+        return ::convertedCopy< StoredType >( *A );
       }
     };
 
@@ -251,7 +314,7 @@ namespace amgcl {
 // some of what a near-null-space would otherwise buy the scalar backend, but this has not been
 // re-measured against the current (Chebyshev, rigid-body-aware) scalar-backend default.
 template < typename BlockType, typename BackendType = amgcl::backend::builtin< BlockType > >
-class LinearSolverBlockT {
+class LinearSolverBlockT : public AMGCLSolverInterface {
 public:
   typedef BackendType Backend;
   typedef amgcl::make_solver< amgcl::runtime::preconditioner< Backend >, amgcl::runtime::solver::wrapper< Backend > >
@@ -271,7 +334,7 @@ public:
     }
   }
 
-  void set_nullspace( const double*, int, int )
+  void set_nullspace( const double*, int, int ) override
   {
     throw std::runtime_error(
       "set_nullspace() is not supported with a block-valued AMGCL backend -- AMGCL's own "
@@ -293,7 +356,7 @@ public:
     }
   }
 
-  void build( int n, const int* ptr, const int* col, const double* val )
+  void build( int n, const int* ptr, const int* col, const double* val ) override
   {
     checkBlockDivisible( n );
     int  nnz = ptr[n];
@@ -304,7 +367,7 @@ public:
     solver_.reset( new Solver( amgcl::adapter::block_matrix< BlockType >( A ), prm ) );
   }
 
-  void applyPreconditioner( int n, const double* rhs, double* x )
+  void applyPreconditioner( int n, const double* rhs, double* x ) override
   {
     std::fill( x, x + n, 0.0 );
     std::vector< double > rhs_v( rhs, rhs + n );
@@ -315,7 +378,7 @@ public:
     std::copy( x_v.begin(), x_v.end(), x );
   }
 
-  std::string report() const
+  std::string report() const override
   {
     if ( !solver_ ) {
       throw std::runtime_error( "report(): no hierarchy built yet -- call build() or solve() first" );
@@ -332,7 +395,7 @@ public:
               const double* rhs,
               double*       x,
               int&          iters,
-              double&       error )
+              double&       error ) override
   {
     checkBlockDivisible( n );
     int  nnz = ptr[n];
@@ -1067,6 +1130,23 @@ typedef LinearSolverBlockT< amgcl::static_matrix< double, 3, 3 > > LinearSolverB
 typedef LinearSolverBlockT< amgcl::static_matrix< double, 3, 3 >,
                             amgcl::backend::builtin_float_matrices< amgcl::static_matrix< double, 3, 3 > > >
   LinearSolverBlock3Float;
+
+/// @brief The AMGCL solver for a backend block size (1, 2 or 3) and value type, owned by the caller.
+/// Float selects builtin<float> for scalars and LinearSolverBlock3Float for 3x3 blocks; 2x2 blocks
+/// have no float variant.
+inline AMGCLSolverInterface* makeAMGCLSolver( const char* json_params, int blockSize, bool isFloat )
+{
+  if ( blockSize == 1 )
+    return isFloat ? static_cast< AMGCLSolverInterface* >( new LinearSolverFloat( json_params ) )
+                   : static_cast< AMGCLSolverInterface* >( new LinearSolver( json_params ) );
+  if ( blockSize == 2 && !isFloat )
+    return new LinearSolverBlock2( json_params );
+  if ( blockSize == 3 )
+    return isFloat ? static_cast< AMGCLSolverInterface* >( new LinearSolverBlock3Float( json_params ) )
+                   : static_cast< AMGCLSolverInterface* >( new LinearSolverBlock3( json_params ) );
+  throw std::runtime_error( "makeAMGCLSolver(): no backend for block size " + std::to_string( blockSize ) +
+                            ( isFloat ? " in float" : " in double" ) );
+}
 
 // Standalone OpenMP-threaded relaxation smoother, see RelaxationSmootherT above.
 typedef RelaxationSmootherT RelaxationSmoother;

@@ -28,45 +28,11 @@ from libcpp.string cimport string
 
 
 cdef extern from "amgcl-wrapper.hpp":
-    cdef cppclass LinearSolver:
-        LinearSolver(const char* json_params) except +
-        void solve(int n,
-                   const int* ptr,
-                   const int* col,
-                   const double* val,
-                   const double* rhs,
-                   double* x,
-                   int& iters,
-                   double& error) except +
-        void set_nullspace(const double* B, int rows, int cols) except +
-        void build(int n, const int* ptr, const int* col, const double* val) except +
-        void applyPreconditioner(int n, const double* rhs, double* x) except +
-        string report() except +
-
-    # Same interface, backed by amgcl::backend::builtin<float> -- half the memory traffic in the
-    # smoother apply, at the cost of matrix/hierarchy precision. rhs/x stay double at this
-    # boundary too; the narrowing/widening happens inside the C++ wrapper.
-    cdef cppclass LinearSolverFloat:
-        LinearSolverFloat(const char* json_params) except +
-        void solve(int n,
-                   const int* ptr,
-                   const int* col,
-                   const float* val,
-                   const double* rhs,
-                   double* x,
-                   int& iters,
-                   double& error) except +
-        void set_nullspace(const double* B, int rows, int cols) except +
-        void build(int n, const int* ptr, const int* col, const float* val) except +
-        void applyPreconditioner(int n, const double* rhs, double* x) except +
-        string report() except +
-
-    # Block-valued backends: the matrix stays a plain scalar CSR at this boundary (val is
-    # double, same layout as LinearSolver) -- the wrapper adapts it to node-major B x B blocks
-    # internally via amgcl::adapter::block_matrix. set_nullspace() always throws (AMGCL's own
+    # The interface every AMGCL solver backend implements (scalar or B x B blocks, double or float):
+    # the matrix values and rhs/x are always double at this boundary, each backend converts
+    # internally -- see AMGCLSolverInterface. set_nullspace() throws on a block backend (AMGCL's own
     # tentative-prolongation nullspace path is unimplemented for block value types).
-    cdef cppclass LinearSolverBlock2:
-        LinearSolverBlock2(const char* json_params) except +
+    cdef cppclass AMGCLSolverInterface:
         void solve(int n,
                    const int* ptr,
                    const int* col,
@@ -80,36 +46,9 @@ cdef extern from "amgcl-wrapper.hpp":
         void applyPreconditioner(int n, const double* rhs, double* x) except +
         string report() except +
 
-    cdef cppclass LinearSolverBlock3:
-        LinearSolverBlock3(const char* json_params) except +
-        void solve(int n,
-                   const int* ptr,
-                   const int* col,
-                   const double* val,
-                   const double* rhs,
-                   double* x,
-                   int& iters,
-                   double& error) except +
-        void set_nullspace(const double* B, int rows, int cols) except +
-        void build(int n, const int* ptr, const int* col, const double* val) except +
-        void applyPreconditioner(int n, const double* rhs, double* x) except +
-        string report() except +
-
-    # 3x3 blocks set up in double, stored in float -- see builtin_float_matrices.
-    cdef cppclass LinearSolverBlock3Float:
-        LinearSolverBlock3Float(const char* json_params) except +
-        void solve(int n,
-                   const int* ptr,
-                   const int* col,
-                   const double* val,
-                   const double* rhs,
-                   double* x,
-                   int& iters,
-                   double& error) except +
-        void set_nullspace(const double* B, int rows, int cols) except +
-        void build(int n, const int* ptr, const int* col, const double* val) except +
-        void applyPreconditioner(int n, const double* rhs, double* x) except +
-        string report() except +
+    # The backend for a block size (1, 2 or 3) and value type (float: builtin<float> for scalars,
+    # 3x3 blocks set up in double and stored in float), owned by the caller.
+    AMGCLSolverInterface* makeAMGCLSolver(const char* json_params, int blockSize, bint isFloat) except +
 
     # A standalone, OpenMP-threaded relaxation smoother -- e.g. the p-two-grid
     # preconditioner's fine sweep, one level below a full AMG hierarchy. Its own constructor
