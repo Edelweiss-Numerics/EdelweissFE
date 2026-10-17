@@ -1701,10 +1701,12 @@ class BlockAMGSolver(LinearSolver):
         #     operator, the couplings the sweep needs on every solve, and on a rebuild the diagonal blocks the
         #     hierarchies are built from.
         fieldBounds = [(block.start, block.stop) for block in blocks]
-        keptUnscaled = not self._krylovOnScaledSystem
+        # stored: the operator of the outer solve, A_scaled or A itself (krylovOnScaledSystem); the blocks are
+        # those of A_scaled either way
+        storedUnscaled = not self._krylovOnScaledSystem
         with performancetiming.timeit("equilibrated system"):
             system = PyAMGCLEquilibratedSystem()
-            system.build(A, scaling, fieldBounds, keepUnscaled=keptUnscaled)
+            system.build(A, scaling, fieldBounds, unscaled=storedUnscaled)
 
         # (4) Hierarchies: one per field, rebuilt or reused (see mustRefresh above)
         if mustRefresh:
@@ -1729,9 +1731,9 @@ class BlockAMGSolver(LinearSolver):
         # The outer solve runs on the system the settings in force ask for, read once for this solve: a hot reload
         # rolled back above may have changed krylovOnScaledSystem since the system was built.
         onScaledSystem = self._krylovOnScaledSystem
-        if not onScaledSystem and not keptUnscaled:
+        if onScaledSystem == storedUnscaled:
             with performancetiming.timeit("equilibrated system"):
-                system.build(A, scaling, fieldBounds, keepUnscaled=True)
+                system.build(A, scaling, fieldBounds, unscaled=not onScaledSystem)
 
         nFields = len(slices)
         sizes = [block.stop - block.start for block in blocks]

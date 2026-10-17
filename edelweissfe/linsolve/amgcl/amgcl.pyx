@@ -292,11 +292,12 @@ cdef class PyAMGCLEquilibratedSystem:
                                             _doubleData(out))
         return out
 
-    def build(self, object A, object scaling, object fieldBounds, bint keepUnscaled=False):
+    def build(self, object A, object scaling, object fieldBounds, bint unscaled=False):
         """
         A: scipy.sparse csr_matrix (square); scaling: the equilibration, length n; fieldBounds: a
-        sequence of ``(start, stop)`` DOF ranges, one per field, disjoint. keepUnscaled: also keep A
-        itself, for :meth:`matvec`/:meth:`residual` with ``unscaled`` and an outer solve on it.
+        sequence of ``(start, stop)`` DOF ranges, one per field, disjoint. unscaled: store A itself instead
+        of ``As``, for :meth:`matvec`/:meth:`residual` with ``unscaled`` and an outer solve on it; the blocks of
+        ``As`` are the same either way.
         """
         if A.shape[0] != A.shape[1]:
             raise ValueError("A must be square, got shape {:}".format(A.shape))
@@ -307,7 +308,7 @@ cdef class PyAMGCLEquilibratedSystem:
         if bounds.shape[0] % 2:
             raise ValueError("fieldBounds must be (start, stop) pairs, got {:} numbers".format(bounds.shape[0]))
         self.system.build(n, _intData(indptr), _intData(indices), _constDoubleData(data),
-                          _constDoubleData(scalingArray), bounds.shape[0] // 2, _intData(bounds), keepUnscaled)
+                          _constDoubleData(scalingArray), bounds.shape[0] // 2, _intData(bounds), unscaled)
         self.n = n
 
     def diagonalBlock(self, int field):
@@ -324,8 +325,8 @@ cdef class PyAMGCLEquilibratedSystem:
         return scipy.sparse.csr_matrix((data[:nnz], indices[:nnz], indptr), shape=(size, size), copy=False)
 
     def matvec(self, object x, bint unscaled=False):
-        """Returns ``As @ x`` -- or with ``unscaled``, ``A @ x`` (``build(..., keepUnscaled=True)``) -- as a new
-        float64 array."""
+        """Returns ``As @ x`` -- or with ``unscaled``, ``A @ x`` -- as a new float64 array: the operator
+        :meth:`build` stored."""
         xArray = _vector(x, self.n, "x")
         cdef np.ndarray[np.float64_t, ndim=1, mode="c"] y = np.empty(self.n, dtype=np.float64)
         self.system.matvec(_constDoubleData(xArray), _doubleData(y), unscaled)
@@ -489,7 +490,7 @@ cdef class PyAMGCLLGMRESSolver:
         """
         system
             This solve's equilibrated full coupled operator -- or, with ``onUnscaledOperator``, the
-            unscaled one it kept (``build(..., keepUnscaled=True)``).
+            unscaled one it stored (``build(..., unscaled=True)``).
         rhs
             array-like, converted to 1D float64 (C-contiguous).
         applyPreconditioner

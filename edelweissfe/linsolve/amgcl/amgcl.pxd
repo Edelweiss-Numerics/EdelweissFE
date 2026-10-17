@@ -59,7 +59,7 @@ cdef extern from "amgcl-wrapper.hpp":
         @staticmethod
         void absoluteDiagonal(int n, const int* ptr, const int* col, const double* val, double* out) except +
         void build(int n, const int* ptr, const int* col, const double* val, const double* scaling,
-                   int nFields, const int* fieldBounds, bint keepUnscaled) except +
+                   int nFields, const int* fieldBounds, bint unscaled) except +
         int diagonalBlockSize(int f) except +
         int diagonalBlockNnz(int f) except +
         void fillDiagonalBlock(int f, int* ptr, int* col, double* val) except +

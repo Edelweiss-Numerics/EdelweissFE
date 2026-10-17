@@ -465,10 +465,12 @@ inline double rowDiagonal( const int* ptr, const int* col, const double* val, pt
 /// hierarchy rebuild) and the equilibrated coupling blocks between fields (on every solve). This
 /// class holds
 ///
-///   * the equilibrated operator As = D A D, the outer Krylov operator: matvec(), residual(), and the
-///     operator LGMRESOuterSolverT::solve() iterates on. Each entry is formed exactly as SciPy's
-///     former `As.data *= scaling[As.indices]; As.data *= scaling[rows]` did, (a_ij * s_j) * s_i, s = scaling, so
-///     the operator is bitwise the former one;
+///   * the outer Krylov operator: matvec(), residual(), and the operator LGMRESOuterSolverT::solve()
+///     iterates on -- the equilibrated operator As = D A D or, built with `unscaled`, A itself. Only that one
+///     is stored. An entry of As is formed exactly as SciPy's former
+///     `As.data *= scaling[As.indices]; As.data *= scaling[rows]` did, (a_ij * s_j) * s_i, s = scaling, so the
+///     operator is bitwise the former one; with A stored, the entries of As the field split reads are formed
+///     from it by that same expression (scaledValue()), bitwise the same;
 ///   * the coupling blocks As[field i, field j], i != j, rectangular, with field-local column
 ///     indices: couplingMatvec();
 ///   * the per-row, per-field entry counts that let a diagonal block As[field i, field i] be written
@@ -481,13 +483,12 @@ class EquilibratedSystemT {
 public:
   typedef amgcl::backend::crs< double, int, int > Matrix;
 
+  /// the stored operator: As = D A D, or A itself if built with `unscaled`
   std::shared_ptr< Matrix > operator_;
-  /// the unscaled operator A, kept only on request (build()'s keepUnscaled): operator_'s pattern (its
-  /// ptr/col arrays, shared, not copied) with A's own values
-  std::shared_ptr< Matrix > unscaled_;
-  /// its values, allocated uninitialized and written by the parallel fill (first touch spreads the pages
-  /// over the NUMA nodes like the operator's)
-  std::unique_ptr< double[] >              unscaledValues_;
+  /// whether operator_ holds A itself (build()'s `unscaled`)
+  bool unscaled_ = false;
+  /// D = diag(scaling_), kept with `unscaled` to form the entries of As from A's (scaledValue())
+  std::vector< double >                    scaling_;
   std::vector< std::shared_ptr< Matrix > > couplings_;   // nFields x nFields, row-major; null on the diagonal
   std::vector< int >                       fieldStart_, fieldStop_;
   std::vector< signed char >               fieldOfDof_;  // -1 for a DOF in no field
@@ -511,8 +512,9 @@ public:
   /// @param scaling the equilibration, D = diag(scaling).
   /// @param nFields, fieldBounds the fields' DOF ranges, [fieldBounds[2k], fieldBounds[2k+1]),
   /// disjoint.
-  /// @param keepUnscaled also keep A itself (without its stored zeros), for an outer Krylov solve on
-  /// the unscaled system: matvec() and residual() with unscaled, LGMRESOuterSolverT::solve().
+  /// @param unscaled store A itself (without its stored zeros) instead of As, for an outer Krylov solve on
+  /// the unscaled system: matvec() and residual() with unscaled, LGMRESOuterSolverT::solve(). The blocks of
+  /// As are the same either way.
   void build( int           n,
               const int*    ptr,
               const int*    col,
@@ -520,10 +522,10 @@ public:
               const double* scaling,
               int           nFields,
               const int*    fieldBounds,
-              bool          keepUnscaled = false )
+              bool          unscaled = false )
   {
     EquilibratedSystemT assembled;
-    assembled.assemble( n, ptr, col, val, scaling, nFields, fieldBounds, keepUnscaled );
+    assembled.assemble( n, ptr, col, val, scaling, nFields, fieldBounds, unscaled );
     *this = std::move( assembled );
   }
 
@@ -535,7 +537,7 @@ public:
                  const double* scaling,
                  int           nFields,
                  const int*    fieldBounds,
-                 bool          keepUnscaled )
+                 bool          unscaled )
   {
     if ( nFields > std::numeric_limits< signed char >::max() ) {
       throw std::runtime_error( "EquilibratedSystemT: at most " +
@@ -582,35 +584,21 @@ public:
       operator_->ptr[i + 1] = width;
     }
     operator_->set_nonzeros( operator_->scan_row_sizes() );
-    // with keepUnscaled, A's own values are written in the same pass: same positions, one read of A
-    unscaledValues_.reset( keepUnscaled ? new double[operator_->nnz] : nullptr );
-    double* const unscaledValues = unscaledValues_.get();
+    unscaled_ = unscaled;
+    if ( unscaled )
+      scaling_.assign( scaling, scaling + n );
 #pragma omp parallel for
     for ( ptrdiff_t i = 0; i < n; ++i ) {
       int head = operator_->ptr[i];
       for ( int j = ptr[i]; j < ptr[i + 1]; ++j ) {
         if ( val[j] != 0.0 ) {
-          if ( unscaledValues )
-            unscaledValues[head] = val[j];
           operator_->col[head]   = col[j];
-          operator_->val[head++] = ( val[j] * scaling[col[j]] ) * scaling[i];
+          operator_->val[head++] = unscaled ? val[j] : ( val[j] * scaling[col[j]] ) * scaling[i];
         }
       }
     }
     const int* const filteredPtr = operator_->ptr;
     const int* const filteredCol = operator_->col;
-
-    unscaled_.reset();
-    if ( keepUnscaled ) {
-      unscaled_           = std::make_shared< Matrix >();
-      unscaled_->nrows    = n;
-      unscaled_->ncols    = n;
-      unscaled_->nnz      = operator_->nnz;
-      unscaled_->ptr      = operator_->ptr;
-      unscaled_->col      = operator_->col;
-      unscaled_->val      = unscaledValues_.get();
-      unscaled_->own_data = false;
-    }
 
     // per row, the number of entries in each field's columns: row pointers of the diagonal blocks
     // (kept) and of the coupling blocks (consumed below)
@@ -659,6 +647,15 @@ public:
     }
   }
 
+  /// @brief The entry of As at the stored operator's position j, in row i: stored, or formed from A's entry
+  /// by the expression As was assembled with.
+  double scaledValue( ptrdiff_t i, int j ) const
+  {
+    if ( !unscaled_ )
+      return operator_->val[j];
+    return ( operator_->val[j] * scaling_[operator_->col[j]] ) * scaling_[i];
+  }
+
   /// @brief Write As[field f, field g] (field-local columns) into ptr/col/val -- ptr already holding
   /// the block's row pointers.
   void fillBlock( int f, int g, const int* blockPtr, int* blockCol, double* blockVal ) const
@@ -672,7 +669,7 @@ public:
         const int c = operator_->col[j];
         if ( fieldOfDof_[c] == g ) {
           blockCol[head]   = c - columnStart;
-          blockVal[head++] = operator_->val[j];
+          blockVal[head++] = scaledValue( i, j );
         }
       }
     }
@@ -719,15 +716,17 @@ public:
     fillBlock( f, f, ptr, col, val );
   }
 
-  /// @brief The operator a product runs on: As, or with unscaled A itself (see build()'s keepUnscaled).
+  /// @brief The operator a product runs on: As, or with unscaled A itself -- the one build() stored.
   const Matrix& matrix( bool unscaled ) const
   {
     checkBuilt();
-    if ( unscaled && !unscaled_ ) {
-      throw std::runtime_error(
-        "EquilibratedSystemT: the unscaled operator was not kept -- build( ..., keepUnscaled )" );
+    if ( unscaled != unscaled_ ) {
+      throw std::runtime_error( unscaled ? "EquilibratedSystemT: the unscaled operator was not kept -- "
+                                           "build( ..., unscaled )"
+                                         : "EquilibratedSystemT: the equilibrated operator was not kept -- "
+                                           "build() without unscaled" );
     }
-    return unscaled ? *unscaled_ : *operator_;
+    return *operator_;
   }
 
   /// @brief y <- As x, or with unscaled y <- A x
@@ -764,7 +763,7 @@ public:
       for ( int j = operator_->ptr[i]; j < operator_->ptr[i + 1]; ++j ) {
         const int c = operator_->col[j];
         if ( fieldOfDof_[c] == f )
-          sum += operator_->val[j] * x[c - start];
+          sum += scaledValue( i, j ) * x[c - start];
       }
       y[local] = sum;
     }

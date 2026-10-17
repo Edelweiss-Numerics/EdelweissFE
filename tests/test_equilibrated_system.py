@@ -180,16 +180,36 @@ def test_the_outer_solver_rejects_a_right_hand_side_of_the_wrong_length(system):
 
 def test_the_unscaled_operator_is_scipys_bit_for_bit(system):
     A, As, dinv, equilibrated = system
-    kept = PyAMGCLEquilibratedSystem()
-    kept.build(A, dinv, _FIELDS, keepUnscaled=True)
+    unscaled = PyAMGCLEquilibratedSystem()
+    unscaled.build(A, dinv, _FIELDS, unscaled=True)
     x = np.random.default_rng(7).standard_normal(A.shape[0])
     rhs = np.random.default_rng(8).standard_normal(A.shape[0])
-    assert np.array_equal(kept.matvec(x, unscaled=True), A @ x)
-    assert np.array_equal(kept.residual(rhs, x, unscaled=True), rhs - A @ x)
-    # the scaled operator is unchanged by keeping the unscaled one
-    assert np.array_equal(kept.matvec(x), equilibrated.matvec(x))
+    assert np.array_equal(unscaled.matvec(x, unscaled=True), A @ x)
+    assert np.array_equal(unscaled.residual(rhs, x, unscaled=True), rhs - A @ x)
+    # only the operator built for is stored
     with pytest.raises(RuntimeError, match="not kept"):
         equilibrated.matvec(x, unscaled=True)
+    with pytest.raises(RuntimeError, match="not kept"):
+        unscaled.matvec(x)
+
+
+def test_the_blocks_are_the_same_whichever_operator_is_stored(system):
+    # with A stored, the entries of As the field split reads are formed from A's by the expression As is assembled
+    # with: bit for bit the same blocks
+    A, As, dinv, equilibrated = system
+    unscaled = PyAMGCLEquilibratedSystem()
+    unscaled.build(A, dinv, _FIELDS, unscaled=True)
+    rng = np.random.default_rng(10)
+    for f, (start, stop) in enumerate(_FIELDS):
+        expected, actual = equilibrated.diagonalBlock(f), unscaled.diagonalBlock(f)
+        assert np.array_equal(expected.indptr, actual.indptr) and np.array_equal(expected.indices, actual.indices)
+        assert np.array_equal(expected.data, actual.data)
+        x = rng.standard_normal(stop - start)
+        assert np.array_equal(unscaled.diagonalBlockMatvec(f, x), equilibrated.diagonalBlockMatvec(f, x))
+        for g, (gStart, gStop) in enumerate(_FIELDS):
+            if g != f:
+                v = rng.standard_normal(gStop - gStart)
+                assert np.array_equal(unscaled.couplingMatvec(f, g, v), equilibrated.couplingMatvec(f, g, v))
 
 
 def test_a_tiny_right_hand_side_is_solved_like_any_other(system):
