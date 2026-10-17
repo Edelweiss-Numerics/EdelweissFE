@@ -33,6 +33,10 @@ import scipy.sparse as sp
 
 from edelweissfe.linsolve.base import FieldBlock
 
+#: A symmetric positive definite coupling of a node's three displacement components, for vector operators that
+#: are not just three copies of a scalar one.
+NODAL_COUPLING = np.array([[2.0, 0.3, 0.1], [0.3, 1.5, 0.2], [0.1, 0.2, 1.8]])
+
 
 class DirichletStub:
     """What ``applyDirichletToStiffness`` reads from a boundary condition."""

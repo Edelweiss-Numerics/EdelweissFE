@@ -20,6 +20,8 @@
 #include <stdexcept>
 #include <string>
 #include <tuple>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 /// The interface PyAMGCLSolver drives, whatever the backend (scalar or BxB blocks, double or float):
@@ -264,6 +266,11 @@ namespace amgcl {
     }
     return c;
   }
+
+  static_assert( std::is_same< decltype( std::declval< const static_matrix< float, 3, 3 >& >() *
+                                         std::declval< const static_matrix< double, 3, 1 >& >() ),
+                               static_matrix< double, 3, 1 > >::value,
+                 "a float-stored 3x3 block times a double vector block must accumulate in double" );
 
   namespace backend {
 

@@ -86,6 +86,8 @@ cdef class PyAMGCLSolver:
     """The iteration count AMGCL reported for the most recent solve, -1 before the first."""
     cdef readonly double lastError
     """The relative residual AMGCL reported for the most recent solve, NaN before the first."""
+    cdef readonly int n
+    """The size of the matrix of the last :meth:`build`, -1 before the first."""
 
     def __cinit__(self, dict params=None):
         """
@@ -147,6 +149,7 @@ cdef class PyAMGCLSolver:
 
         self.lastIterations = -1
         self.lastError = float("nan")
+        self.n = -1
 
         # Convert dict to JSON string for C++
         cdef bytes json_bytes = json.dumps(params).encode("utf-8")
@@ -191,17 +194,9 @@ cdef class PyAMGCLSolver:
         wrapper (build() runs once per solve, not once per outer Krylov iteration), and a block
         backend (``blockSize > 1``) adapts the scalar CSR to node-major blocks there.
         """
-        if not scipy.sparse.isspmatrix_csr(A):
-            A = A.tocsr()
-
-        cdef int n = A.shape[0]
-        cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indptr = np.ascontiguousarray(A.indptr, dtype=np.int32)
-        cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indices = np.ascontiguousarray(A.indices, dtype=np.int32)
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] data = np.ascontiguousarray(A.data, dtype=np.float64)
-        cdef int[::1] indptr_ = indptr
-        cdef int[::1] indices_ = indices
-        cdef double[::1] data_ = data
-        self.solver.build(n, &indptr_[0], &indices_[0], &data_[0])
+        A, indptr, indices, data = _csrArrays(A)
+        self.solver.build(A.shape[0], _intData(indptr), _intData(indices), _constDoubleData(data))
+        self.n = A.shape[0]
 
     def applyPreconditioner(self, object rhs):
         """
@@ -211,13 +206,9 @@ cdef class PyAMGCLSolver:
         any backend-specific narrowing/widening or block reinterpretation happens inside the C++
         wrapper, not here, since this is called once per outer Krylov iteration.
         """
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] rhs_arr = np.ascontiguousarray(rhs, dtype=np.float64)
-        cdef int n = rhs_arr.shape[0]
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] x = np.zeros(n, dtype=np.float64)
-
-        cdef double[::1] rhs_ = rhs_arr
-        cdef double[::1] x_ = x
-        self.solver.applyPreconditioner(n, &rhs_[0], &x_[0])
+        rhsArray = _vector(rhs, self.n, "rhs")
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] x = np.zeros(self.n, dtype=np.float64)
+        self.solver.applyPreconditioner(self.n, _constDoubleData(rhsArray), _doubleData(x))
         return x
 
     def report(self):
@@ -234,53 +225,14 @@ cdef class PyAMGCLSolver:
         A: scipy.sparse.csr_matrix
         rhs: array-like, will be converted to 1D float64 (C-contiguous)
         """
-        if not scipy.sparse.isspmatrix_csr(A):
-            A = A.tocsr()
-
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] rhs_arr = np.asarray(rhs, dtype=np.float64, order="C")
-        if rhs_arr.ndim != 1:
-            raise ValueError("rhs must be a 1D array-like")
-
+        A, indptr, indices, data = _csrArrays(A)
         cdef int n = A.shape[0]
-        if rhs_arr.shape[0] != n:
-            raise ValueError(f"Dimension mismatch: Matrix {n}x{n}, RHS {rhs_arr.shape[0]}")
-        if n > np.iinfo(np.int32).max:
-            raise OverflowError(f"Matrix dimension {n} exceeds supported int32 range for AMGCL wrapper")
-
-        cdef long long int32_max = np.iinfo(np.int32).max
-        cdef long long nnz = A.nnz
-        if nnz > int32_max:
-            raise OverflowError(f"CSR nnz value {nnz} exceeds supported int32 range for AMGCL wrapper")
-        if int(A.indptr.min()) < 0:
-            raise OverflowError("CSR indptr contains negative values, which are unsupported")
-        if A.indices.size > 0:
-            if int(A.indices.max()) > int32_max:
-                raise OverflowError("CSR indices contain values that exceed int32 range for AMGCL wrapper")
-            if int(A.indices.min()) < 0:
-                raise OverflowError("CSR indices contain negative values, which are unsupported")
-
-        cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indptr = A.indptr.astype(np.int32, copy=False)
-        cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indices = A.indices.astype(np.int32, copy=False)
-
-        # Ensure contiguous (astype might return non-contiguous if copy=False was possible)
-        if not indptr.flags["C_CONTIGUOUS"]:
-            indptr = np.ascontiguousarray(indptr)
-        if not indices.flags["C_CONTIGUOUS"]:
-            indices = np.ascontiguousarray(indices)
-
+        rhsArray = _vector(rhs, n, "rhs")
         cdef np.ndarray[np.float64_t, ndim=1, mode="c"] x = np.zeros(n, dtype=np.float64)
-
         cdef int iters = 0
         cdef double error = 0.0
-
-        cdef int[::1] indptr_ = indptr
-        cdef int[::1] indices_ = indices
-        cdef double[::1] rhs_ = rhs_arr
-        cdef double[::1] x_ = x
-
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] data = np.ascontiguousarray(A.data, dtype=np.float64)
-        cdef double[::1] data_ = data
-        self.solver.solve(n, &indptr_[0], &indices_[0], &data_[0], &rhs_[0], &x_[0], iters, error)
+        self.solver.solve(n, _intData(indptr), _intData(indices), _constDoubleData(data), _constDoubleData(rhsArray),
+                          _doubleData(x), iters, error)
 
         # AMGCL reports these by reference and they were being dropped on the floor, which left an
         # unconverged solve indistinguishable from a converged one: an iterative solver that hits

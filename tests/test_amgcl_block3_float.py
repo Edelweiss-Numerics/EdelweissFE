@@ -32,6 +32,7 @@ GMRES.
 import numpy as np
 import pytest
 import scipy.sparse as sp
+from _blockamgsystems import NODAL_COUPLING, gridLaplacian
 from scipy.sparse.linalg import LinearOperator, gmres
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
@@ -50,15 +51,7 @@ _PRECOND = {
 def system():
     """An equilibrated vector-Laplacian-like operator on a 12^3 node grid, 3 DOFs per node."""
     m = 12
-    line = sp.diags([-np.ones(m - 1), 2.0 * np.ones(m), -np.ones(m - 1)], [-1, 0, 1])
-    identity = sp.identity(m)
-    laplacian = (
-        sp.kron(sp.kron(line, identity), identity)
-        + sp.kron(sp.kron(identity, line), identity)
-        + sp.kron(sp.kron(identity, identity), line)
-    )
-    coupling = np.array([[2.0, 0.3, 0.1], [0.3, 1.5, 0.2], [0.1, 0.2, 1.8]])
-    A = sp.kron(laplacian + 0.01 * sp.identity(m**3), coupling).tocsr()
+    A = sp.kron(gridLaplacian(m) + 0.01 * sp.identity(m**3), NODAL_COUPLING).tocsr()
     dinv = 1.0 / np.sqrt(A.diagonal())
     A = (sp.diags(dinv) @ A @ sp.diags(dinv)).tocsr()
     A.sort_indices()
