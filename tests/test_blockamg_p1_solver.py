@@ -196,6 +196,7 @@ def test_the_unscaled_outer_solve_converges_on_a_block_with_dirichlet_rows(probl
     assert _relativeResidual(A, x, b) <= 1.0001 * _TOLERANCE
     # right-preconditioned: its own stopping test is on the true residual, nothing to continue
     assert solver._lastContinuations == 0
+    assert solver._lgmresSolver.lastError == pytest.approx(_relativeResidual(A, x, b), rel=1e-6)
 
     # the same solution as on the scaled system, within what a 1e-8 residual bounds on this small lattice
     reference = _solver(isCorner, edgeEndpoints, **{**options, "krylovOnScaledSystem": True})(A, b)

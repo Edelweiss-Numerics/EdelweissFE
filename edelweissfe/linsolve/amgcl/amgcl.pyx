@@ -505,6 +505,10 @@ cdef class PyAMGCLLGMRESSolver:
         x0
             Optional initial guess (warm start), e.g. blockamg.py's true-residual continuation retry.
             Defaults to zero.
+
+        AMGCL's lgmres returns ``x = 0`` at once for ``||rhs|| < 2 eps`` (about 4.4e-16), whatever the units of
+        the system. So the solve runs on ``rhs`` (and ``x0``) scaled by a power of two to a norm in [0.5, 1), and
+        its solution is scaled back: exact in floating point, so the iterates are those of the unscaled solve.
         """
         cdef int n = system.n
         if n != self.n:
@@ -521,6 +525,10 @@ cdef class PyAMGCLLGMRESSolver:
             x = np.zeros(n, dtype=np.float64)
         else:
             x = _vector(x0, n, "x0").copy()
+
+        cdef int exponent = np.frexp(np.linalg.norm(rhs_arr))[1]
+        rhs_arr = np.ldexp(rhs_arr, -exponent)
+        x = np.ldexp(x, -exponent)
 
         cdef double[::1] rhs_ = rhs_arr
         cdef double[::1] x_ = x
@@ -554,7 +562,7 @@ cdef class PyAMGCLLGMRESSolver:
 
         self.lastIterations = iters
         self.lastError = error
-        return x
+        return np.ldexp(x, exponent)
 
 
 cdef class PyAMGCLSpGEMM:

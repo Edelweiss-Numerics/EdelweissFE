@@ -190,3 +190,16 @@ def test_the_unscaled_operator_is_scipys_bit_for_bit(system):
     assert np.array_equal(kept.matvec(x), equilibrated.matvec(x))
     with pytest.raises(RuntimeError, match="not kept"):
         equilibrated.matvec(x, unscaled=True)
+
+
+def test_a_tiny_right_hand_side_is_solved_like_any_other(system):
+    # AMGCL's lgmres returns x = 0 for ||rhs|| < 4.4e-16; the wrapper solves for rhs scaled by a power of two,
+    # which is exact, so the solution is the scaled one bit for bit
+    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLLGMRESSolver
+
+    A, As, dinv, equilibrated = system
+    solver = PyAMGCLLGMRESSolver(A.shape[0], {"M": 30})
+    rhs = np.random.default_rng(9).standard_normal(A.shape[0])
+    x = solver.solve(equilibrated, rhs, lambda r: r, 1e-8, 200)
+    tiny = solver.solve(equilibrated, np.ldexp(rhs, -80), lambda r: r, 1e-8, 200)
+    assert np.any(x != 0.0) and np.array_equal(tiny, np.ldexp(x, -80))

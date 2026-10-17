@@ -525,8 +525,9 @@ looser still, which does change the Newton path.
 True-residual enforcement
 -------------------------
 
-The outer Krylov method's own stopping test is not on the true residual but on the residual of the
-*scaled* (equilibrated) system it iterates on, :math:`\lVert \hat b - \hat A z \rVert / \lVert \hat b
+On the scaled system (``krylovOnScaledSystem = true``, the default), the outer Krylov method's own
+stopping test is not on the true residual but on the residual of the *scaled* (equilibrated) system it
+iterates on, :math:`\lVert \hat b - \hat A z \rVert / \lVert \hat b
 \rVert`: AMGCL's LGMRES is right-preconditioned and tests it directly. The
 scaled residual can differ substantially from the true relative residual (stiff rows are down-weighted
 by :math:`D`), so "converged" can mean a true relative residual well above the requested :math:`\eta`;
@@ -542,6 +543,17 @@ is tightened geometrically by a fixed factor of 0.01 per round -- deliberately e
 the units of the requested relative tolerance, which the Krylov solver interprets consistently by
 construction, rather than being derived from the solver's internal residual bookkeeping. Setting
 ``trueResidualMaxContinuations = 0`` disables enforcement: the outer solve's own test decides.
+
+On the unscaled system (``krylovOnScaledSystem = false``) none of this is needed: the residual the
+outer solve converges is the true one, so a pass that misses :math:`\eta` has stopped at its iteration
+cap, and a continuation would only extend the cap (``outerMaxiter`` is the knob for more cycles). What
+it trades is the norm itself. :math:`\lVert b - A x \rVert` sums the residuals of all
+fields in their own units, while the scaled residual :math:`D (b - A x)` weighs every row by its own
+diagonal. In a system whose fields differ widely in residual scale -- a displacement field in newtons
+next to a damage field with entries of order one, say -- a field with small residual entries can thus
+be left less resolved at the same :math:`\eta` on the unscaled system than on the scaled one. On the
+reference models the unscaled system was the faster of the two, with no more Newton iterations (see the
+recommended configuration), but that is a measurement on those models, not a guarantee.
 
 Gap-compensated tolerance
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -817,10 +829,11 @@ Adaptive tolerance and true-residual enforcement
         true residual. ``0`` disables enforcement.
     * - ``krylovOnScaledSystem``
       - ``true``
-      - ``false`` (recommended) runs the outer Krylov solve on the unscaled system, right-
-        preconditioned by :math:`x = D M^{-1} (D r)` with the same block preconditioner on
-        :math:`D A D`: its convergence norm is then the true residual, and the gap compensation and
-        the continuations are bypassed. At the same requested tolerance it does not over-solve.
+      - ``false`` (recommended) runs the outer Krylov solve on the unscaled system, preconditioned by
+        :math:`x = D M^{-1} (D r)` with the same block preconditioner on :math:`D A D`: the residual it
+        converges is then the true one, and the gap compensation and the continuations are bypassed.
+        At the same requested tolerance it does not over-solve; it accepts on the residual in the
+        fields' own units (see the true-residual enforcement above).
     * - ``gapCompensatedTolerance``
       - ``false``
       - **Opt-in.** Pre-compensate the first pass for the scaled-to-true residual gap so that it

@@ -336,10 +336,10 @@ class BlockAMGSolver(LinearSolver):
 
     Every solve also enforces the requested tolerance on the *true* residual, not just the outer solve's
     own stopping test -- see ``trueResidualMaxContinuations``. AMGCL's LGMRES converges the residual of the
-    system it iterates on, the *scaled* (equilibrated) one, directly (it is right-preconditioned). The scaled
-    residual can be considerably smaller than the true one (stiff rows are down-weighted by the
-    equilibration), so "converged" could otherwise mean a true residual well above ``eta`` (measured on a
-    real reference model: a 1.6e-2 true residual when 1e-4 was requested).
+    system it iterates on, by default the *scaled* (equilibrated) one (see ``krylovOnScaledSystem``),
+    directly (it is right-preconditioned). The scaled residual can be considerably smaller than the true one
+    (stiff rows are down-weighted by the equilibration), so "converged" could otherwise mean a true residual
+    well above ``eta`` (measured on a real reference model: a 1.6e-2 true residual when 1e-4 was requested).
 
     Parameters
     ----------
@@ -536,8 +536,13 @@ class BlockAMGSolver(LinearSolver):
         right-preconditioned by ``x = D M^-1 (D r)`` with the same block preconditioner ``M`` on
         ``D A D``, so its convergence norm is the acceptance norm; the gap compensation is bypassed, and
         so are the continuations: AMGCL's LGMRES is right-preconditioned, so a pass that misses the
-        true-residual target has already hit its iteration cap, and a warm restart would not fix that. At
-        the same requested tolerance this asks for the true residual directly, i.e. no implicit over-solving.
+        true-residual target has already hit its iteration cap (``outerMaxiter`` is the knob for more
+        cycles), and a warm restart would not fix that. At the same requested tolerance this asks for the
+        true residual directly, i.e. no implicit over-solving. The price is the acceptance norm itself:
+        ``||b - A x|| / ||b||`` sums the fields' residuals in their own units, so in a system whose fields
+        differ widely in residual scale, a field with small residual entries can be left less resolved at
+        ``eta`` than on the scaled system, whose residual ``D (b - A x)`` weighs every row by its own
+        diagonal.
     refreshOnNewIncrement
         Refresh the AMG hierarchies whenever a residual jump marks a new increment
         (default ``True``). With ``False`` a new increment alone keeps the standing hierarchies -- the
@@ -547,7 +552,8 @@ class BlockAMGSolver(LinearSolver):
         How many times to warm-restart the outer solve (``x0`` from the previous pass, the same ``A_scaled``,
         ``b_scaled`` and ``M``, a tighter tolerance) if the true relative residual still exceeds ``eta`` after
         a pass, whether that pass converged its own (scaled) residual or stopped at the iteration cap. ``0``
-        disables this: the outer solve's own stopping test on the scaled residual decides.
+        disables this: the outer solve's own stopping test on the scaled residual decides. Only on the scaled
+        system: with ``krylovOnScaledSystem = False`` the outer solve converges the true residual itself.
     verbosity
         One of ``"silent"``, ``"warning"`` (default), ``"info"``, ``"debug"``. Messages go through the
         injected Journal (:meth:`~edelweissfe.linsolve.base.LinearSolver.setJournal`), falling back to
