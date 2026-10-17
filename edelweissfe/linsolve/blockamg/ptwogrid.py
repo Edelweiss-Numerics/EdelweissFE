@@ -56,7 +56,7 @@ checking on the model at hand.
 
 **Dirichlet handling is load-bearing, do not simplify away.** A field's diagonal block still carries
 its Dirichlet identity rows (production applies Dirichlet elimination upstream of blockamg). Both
-the fine smoothing and the Galerkin projection must act on the *free* submatrix, with the Dirichlet
+the fine smoothing and the Galerkin projection must act on the *free* DOFs only, with the Dirichlet
 DOFs decoupled entirely, not merely masked in place -- masking in place for the fine smoother
 alone was tried and diverged outright (17-80x residual growth). The mechanism is not a genuine
 non-symmetry in the physical operator: a raw, Dirichlet-row-included diagonal block looks roughly
@@ -202,6 +202,11 @@ class PTwoGridPreconditioner:
         finePowerIters: int = _DEFAULT_FINE_POWER_ITERS,
         fineRecheckIters: int = _DEFAULT_FINE_RECHECK_ITERS,
     ):
+        for name, count in (("nu", nu), ("nuPre", nuPre), ("nuPost", nuPost)):
+            if count is not None and count < 0:
+                raise ValueError("ptwogrid: {:} must not be negative, got {!r}".format(name, count))
+        if fineDegree < 1:
+            raise ValueError("ptwogrid: fineDegree must be at least 1, got {!r}".format(fineDegree))
         if fineBlockSize not in (1, 3):
             raise ValueError("ptwogrid: fineBlockSize must be 1 or 3, got {!r}".format(fineBlockSize))
         if fineValueType not in ("double", "float"):
@@ -272,16 +277,16 @@ class PTwoGridPreconditioner:
         A = A.tocsr()
         n = A.shape[0]
         nNodes = len(self._isCorner)
-        if n % nNodes != 0:
+        if (nNodes == 0) != (n == 0) or (nNodes > 0 and n % nNodes != 0):
             raise ValueError(
                 "ptwogrid: block size {:} is not a multiple of the topology map's node count {:} -- "
                 "the map does not match this field.".format(n, nNodes)
             )
-        nDim = n // nNodes
+        nDim = n // nNodes if nNodes > 0 else 0
 
         with performancetiming.timeit("coarse nullspace"):
             nullspace = None
-            if self._useCoarseNullspace:
+            if self._useCoarseNullspace and n > 0:
                 # Build the full (unrestricted) coarse-DOF near null-space first, then restrict to the
                 # free coarse DOFs -- same two-step shape as the rest of blockamg's null-space
                 # construction, just applied to the corner-node subset's own synthetic block instead of

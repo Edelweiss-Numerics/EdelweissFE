@@ -610,8 +610,11 @@ cdef class PyAMGCLPTwoGrid:
     def __cinit__(self, dict params):
         """
         params: the flat parameter tree, e.g.
-        {"nu": 1, "fineDegree": 5, "fineLower": 0.01, "fineHigher": 1.1, "finePowerIters": 300,
-        "fineScale": false, "fineBlockSize": 1, "coarse": {<AMGCL preconditioner tree>}}
+        {"nuPre": 1, "nuPost": 1, "fineDegree": 5, "fineLower": 0.01, "fineHigher": 1.1, "finePowerIters": 300,
+        "fineRecheckIters": 15, "fineBlockSize": 1, "fineValueType": "double", "coarseValueType": "double",
+        "coarse": {<AMGCL preconditioner tree>}}
+        (``nu`` sets both sweep counts). The sweep counts, ``fineDegree`` (at least 1), the block size
+        and the value types are validated here, before any build.
         """
         cdef bytes json_bytes = json.dumps(params).encode("utf-8")
         cdef const char* c_json = json_bytes
@@ -665,10 +668,13 @@ cdef class PyAMGCLPTwoGrid:
         cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indices = np.ascontiguousarray(A.indices, dtype=np.int32)
         cdef np.ndarray[np.float64_t, ndim=1, mode="c"] data = np.ascontiguousarray(A.data, dtype=np.float64)
         cdef np.ndarray[np.int8_t, ndim=1, mode="c"] corner = np.ascontiguousarray(isCorner, dtype=np.int8)
-        cdef np.ndarray[np.int32_t, ndim=2, mode="c"] endpoints = np.ascontiguousarray(edgeEndpoints, dtype=np.int32)
+        endpointsArray = np.asarray(edgeEndpoints, dtype=np.int32)
+        if endpointsArray.size == 0:
+            endpointsArray = endpointsArray.reshape(0, 2)
         cdef int nNodes = corner.shape[0]
-        if endpoints.shape[0] != nNodes or endpoints.shape[1] != 2:
+        if endpointsArray.ndim != 2 or endpointsArray.shape[0] != nNodes or endpointsArray.shape[1] != 2:
             raise ValueError("edgeEndpoints must have shape (nNodes, 2)")
+        cdef np.ndarray[np.int32_t, ndim=2, mode="c"] endpoints = np.ascontiguousarray(endpointsArray)
 
         cdef np.ndarray[np.float64_t, ndim=2, mode="c"] B
         cdef int nullspaceRows = 0
@@ -690,12 +696,19 @@ cdef class PyAMGCLPTwoGrid:
             if dominantSize > 0:
                 dominantPtr = &dominant[0]
 
+        # an empty field (n = 0, nNodes = 0) or a zero block (nnz = 0) has empty arrays, which have no
+        # first element to point at -- passed as NULL, never read
         cdef int[::1] indptr_ = indptr
         cdef int[::1] indices_ = indices
         cdef double[::1] data_ = data
         cdef signed char[::1] corner_ = corner
         cdef int[:, ::1] endpoints_ = endpoints
-        self.preconditioner.build(n, &indptr_[0], &indices_[0], &data_[0], nNodes, &corner_[0], &endpoints_[0, 0],
+        self.preconditioner.build(n, &indptr_[0],
+                                  &indices_[0] if indices.shape[0] > 0 else NULL,
+                                  &data_[0] if data.shape[0] > 0 else NULL,
+                                  nNodes,
+                                  &corner_[0] if nNodes > 0 else NULL,
+                                  &endpoints_[0, 0] if nNodes > 0 else NULL,
                                   nullspacePtr, nullspaceRows, nullspaceCols, spectralRadius, dominantPtr, dominantSize)
 
     def applyPreconditioner(self, object r):
@@ -705,6 +718,9 @@ cdef class PyAMGCLPTwoGrid:
         cdef np.ndarray[np.float64_t, ndim=1, mode="c"] x = np.empty(n, dtype=np.float64)
         cdef double[::1] r_ = r_arr
         cdef double[::1] x_ = x
+        if n == 0:
+            self.preconditioner.apply(0, NULL, NULL)
+            return x
         self.preconditioner.apply(n, &r_[0], &x_[0])
         return x
 

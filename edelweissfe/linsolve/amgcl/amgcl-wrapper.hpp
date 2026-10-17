@@ -1079,10 +1079,12 @@ public:
   virtual void residual( const double* b, const double* x, double* r ) const = 0;
 };
 
-// @brief r <- b - A x for the fine operator in AMGCL's own formats: double scalar or block entries
-// (AMGCL reinterprets the scalar vectors as node-wise ones for a block matrix,
-// amgcl/backend/detail/matrix_ops.hpp), and float scalar entries, where AMGCL's kernel already
-// accumulates in the vectors' type, double (`sum += float * double`).
+/// @brief r <- b - A x for the fine operator, with AMGCL's own kernel: AMGCL reinterprets the scalar
+/// vectors as node-wise ones for a block matrix (amgcl/backend/detail/matrix_ops.hpp), and every sum is
+/// accumulated in the vectors' type, double, whatever the matrix's -- float scalar entries by the
+/// usual promotion (`sum += float * double`), float 3x3 blocks by the mixed block product defined with
+/// builtin_float_matrices above. A float operator therefore differs from the double one only by the
+/// rounding of its stored entries.
 template < typename MatrixValueType >
 inline void ptwogridFineResidual( const amgcl::backend::crs< MatrixValueType, int, int >& A,
                                   const double*                                           b,
@@ -1096,49 +1098,12 @@ inline void ptwogridFineResidual( const amgcl::backend::crs< MatrixValueType, in
   amgcl::backend::residual( bRange, A, xRange, rRange );
 }
 
-// @brief r <- b - A x for float 3x3 blocks with double vectors. AMGCL has no such kernel: its mixed
-// block product (amgcl/value_type/static_matrix.hpp) returns, and so accumulates in, the *matrix's*
-// value type, float. Here every block row is accumulated in double, in the same order as AMGCL's
-// double block kernel (per block: a_i0 x_0 + a_i1 x_1 + a_i2 x_2, then added to the row sum), so the
-// only difference to the double operator is the rounding of the stored entries.
-inline void ptwogridFineResidual( const amgcl::backend::crs< amgcl::static_matrix< float, 3, 3 >, int, int >& A,
-                                  const double*                                                               b,
-                                  const double*                                                               x,
-                                  double*                                                                     r )
-{
-  const ptrdiff_t nRows = static_cast< ptrdiff_t >( A.nrows );
-#pragma omp parallel for
-  for ( ptrdiff_t i = 0; i < nRows; ++i ) {
-    double sum0 = 0.0, sum1 = 0.0, sum2 = 0.0;
-    for ( int j = A.ptr[i], end = A.ptr[i + 1]; j < end; ++j ) {
-      const float*  a  = A.val[j].data();
-      const double* xj = x + 3 * static_cast< ptrdiff_t >( A.col[j] );
-      double        t0 = 0.0, t1 = 0.0, t2 = 0.0;
-      t0 += a[0] * xj[0];
-      t0 += a[1] * xj[1];
-      t0 += a[2] * xj[2];
-      t1 += a[3] * xj[0];
-      t1 += a[4] * xj[1];
-      t1 += a[5] * xj[2];
-      t2 += a[6] * xj[0];
-      t2 += a[7] * xj[1];
-      t2 += a[8] * xj[2];
-      sum0 += t0;
-      sum1 += t1;
-      sum2 += t2;
-    }
-    r[3 * i]     = b[3 * i] - sum0;
-    r[3 * i + 1] = b[3 * i + 1] - sum1;
-    r[3 * i + 2] = b[3 * i + 2] - sum2;
-  }
-}
-
-// The fine operator in one storage format (scalar entries, or node-wise BxB blocks) and one value
-// type, with the Chebyshev smoother acting on it. ValueType is the double entry type (double, or a
-// double 3x3 block); MatrixValueType is how the operator is stored for the smoother and the residual:
-// ValueType itself, or its float counterpart -- half the bytes per entry, the dominant traffic of
-// the cycle. The spectral-radius estimate only ever runs on a double operator: a float level is made
-// from a double one (makeFloatCopy()), which has estimated or re-checked the radius before.
+/// The fine operator in one storage format (scalar entries, or node-wise BxB blocks) and one value
+/// type, with the Chebyshev smoother acting on it. ValueType is the double entry type (double, or a
+/// double 3x3 block); MatrixValueType is how the operator is stored for the smoother and the residual:
+/// ValueType itself, or its float counterpart -- half the bytes per entry, the dominant traffic of
+/// the cycle. The spectral-radius estimate only ever runs on a double operator: a float level is made
+/// from a double one (makeFloatCopy()), which has estimated or re-checked the radius before.
 template < typename ValueType, typename MatrixValueType = ValueType >
 class PTwoGridFineLevelT : public PTwoGridFineSmoother {
 public:
@@ -1165,24 +1130,9 @@ public:
   template < typename FloatValueType >
   std::unique_ptr< PTwoGridFineLevelT< ValueType, FloatValueType > > makeFloatCopy() const
   {
-    typedef typename PTwoGridFineLevelT< ValueType, FloatValueType >::Matrix FloatMatrix;
-    const Matrix&                                                            A      = *A_;
-    std::shared_ptr< FloatMatrix >                                           Afloat = std::make_shared< FloatMatrix >();
-    Afloat->set_size( A.nrows, A.ncols, false );
-    Afloat->set_nonzeros( A.nnz );
-    Afloat->ptr[0]        = 0;
-    const ptrdiff_t nRows = static_cast< ptrdiff_t >( A.nrows );
-#pragma omp parallel for
-    for ( ptrdiff_t i = 0; i < nRows; ++i ) {
-      Afloat->ptr[i + 1] = A.ptr[i + 1];
-      for ( int j = A.ptr[i]; j < A.ptr[i + 1]; ++j ) {
-        Afloat->col[j] = A.col[j];
-        Afloat->val[j] = A.val[j];
-      }
-    }
     std::unique_ptr< PTwoGridFineLevelT< ValueType, FloatValueType > > level(
       new PTwoGridFineLevelT< ValueType, FloatValueType >() );
-    level->A_      = Afloat;
+    level->A_      = convertedCopy< FloatValueType >( *A_ );
     level->degree_ = degree_;
     level->d_      = d_;
     level->c_      = c_;
@@ -1362,8 +1312,18 @@ public:
   std::vector< float >                 coarseRhsFloat_, coarseXFloat_;
   std::vector< double >                coarseNullspace_;
 
-  std::vector< char >   isDirichlet_;
-  int                   n_ = 0, nCoarseFree_ = 0, nuPre_ = 1, nuPost_ = 1;
+  std::vector< char > isDirichlet_;
+  int                 n_ = 0, nCoarseFree_ = 0;
+  /// true after a build() of a field without a free DOF (empty, or entirely Dirichlet-constrained):
+  /// apply() is then the identity, x = r
+  bool trivial_ = false;
+
+  // parameters, parsed and validated in the constructor (see there)
+  int         nuPre_ = 1, nuPost_ = 1, fineBlockSize_ = 1;
+  unsigned    fineDegree_ = 5;
+  float       fineLower_ = 0.01f, fineHigher_ = 1.1f;
+  std::string fineValueType_, coarseValueType_;
+
   double                fineSpectralRadius_ = 0.0;
   std::vector< double > fineDominantVector_;
   // how the last build arrived at its fine spectral radius: 0 estimated in full, 1 supplied and kept,
@@ -1376,9 +1336,11 @@ public:
          setupFineOperatorSeconds_ = 0.0, setupSpectralRadiusSeconds_ = 0.0;
   double applyFineSeconds_ = 0.0, applyCoarseSeconds_ = 0.0;
 
-  // @brief Parse the flat parameter tree: nuPre, nuPost, fineDegree, fineLower, fineHigher,
-  // finePowerIters, fineRecheckIters, fineRecheckTolerance, fineBlockSize, fineValueType,
-  // coarseValueType, and the coarse level's AMGCL preconditioner tree under "coarse".
+  /// @brief Parse the flat parameter tree: nuPre, nuPost, fineDegree, fineLower, fineHigher,
+  /// finePowerIters, fineRecheckIters, fineRecheckTolerance, fineBlockSize, fineValueType,
+  /// coarseValueType, and the coarse level's AMGCL preconditioner tree under "coarse". The sweep counts,
+  /// the fine degree, the block size and the value types are validated here, so that a bad value fails
+  /// before build() has spent anything on the prolongation, the Galerkin product or the coarse hierarchy.
   PTwoGridPreconditionerT( const char* json_params )
   {
     std::string json_str( json_params );
@@ -1386,8 +1348,33 @@ public:
       std::stringstream ss( json_str );
       boost::property_tree::read_json( ss, prm );
     }
+    nuPre_               = prm.get( "nuPre", prm.get( "nu", 1 ) );
+    nuPost_              = prm.get( "nuPost", prm.get( "nu", 1 ) );
+    const int fineDegree = prm.get( "fineDegree", 5 );
+    fineLower_           = prm.get( "fineLower", 0.01f );
+    fineHigher_          = prm.get( "fineHigher", 1.1f );
+    fineBlockSize_       = prm.get( "fineBlockSize", 1 );
+    fineValueType_       = prm.get( "fineValueType", std::string( "double" ) );
+    coarseValueType_     = prm.get( "coarseValueType", std::string( "double" ) );
+    if ( nuPre_ < 0 || nuPost_ < 0 ) {
+      throw std::runtime_error( "ptwogrid: negative fine sweep counts" );
+    }
+    if ( fineDegree < 1 ) {
+      throw std::runtime_error( "ptwogrid: fineDegree must be at least 1, got " + std::to_string( fineDegree ) );
+    }
+    fineDegree_ = static_cast< unsigned >( fineDegree );
+    if ( fineBlockSize_ != 1 && fineBlockSize_ != 3 ) {
+      throw std::runtime_error( "ptwogrid: fineBlockSize must be 1 or 3, got " + std::to_string( fineBlockSize_ ) );
+    }
+    if ( fineValueType_ != "double" && fineValueType_ != "float" ) {
+      throw std::runtime_error( "ptwogrid: fineValueType must be double or float, got " + fineValueType_ );
+    }
+    if ( coarseValueType_ != "double" && coarseValueType_ != "float" ) {
+      throw std::runtime_error( "ptwogrid: coarseValueType must be double or float, got " + coarseValueType_ );
+    }
   }
 
+  /// @brief Wall time [s] since start.
   static double secondsSince( const Clock::time_point& start )
   {
     return std::chrono::duration< double >( Clock::now() - start ).count();
@@ -1423,21 +1410,41 @@ public:
               int                dominantVectorSize )
   {
     Clock::time_point start = Clock::now();
-    if ( nNodes <= 0 || n % nNodes != 0 ) {
+    if ( n < 0 || nNodes < 0 || ( nNodes == 0 ) != ( n == 0 ) || ( nNodes > 0 && n % nNodes != 0 ) ) {
       throw std::runtime_error( "ptwogrid: block size " + std::to_string( n ) +
                                 " is not a multiple of the topology map's node count " + std::to_string( nNodes ) +
                                 " -- the map does not match this field." );
     }
-    const int nDim = n / nNodes;
-    n_             = n;
-    nuPre_         = prm.get( "nuPre", prm.get( "nu", 1 ) );
-    nuPost_        = prm.get( "nuPost", prm.get( "nu", 1 ) );
-    if ( nuPre_ < 0 || nuPost_ < 0 ) {
-      throw std::runtime_error( "ptwogrid: negative fine sweep counts" );
+    const int nDim = nNodes > 0 ? n / nNodes : 0;
+    if ( fineBlockSize_ == 3 && n > 0 && nDim != 3 ) {
+      throw std::runtime_error( "ptwogrid: fineBlockSize 3 needs a 3-dimensional field, got " + std::to_string( nDim ) +
+                                " DOFs per node." );
     }
+    n_ = n;
 
     isDirichlet_.assign( n, 0 );
-    dirichletRowMask( n, ptr, col, val, isDirichlet_.data() );
+    if ( n > 0 )
+      dirichletRowMask( n, ptr, col, val, isDirichlet_.data() );
+
+    // A field without a free DOF -- empty, or every DOF Dirichlet-constrained -- has nothing to smooth
+    // or to coarsen (and no coarse operator to build a hierarchy on): its exact inverse is the
+    // identity, which apply() then is.
+    trivial_ = std::find( isDirichlet_.begin(), isDirichlet_.end(), 0 ) == isDirichlet_.end();
+    coarse_.reset();
+    coarseFloat_.reset();
+    fineScalar_.reset();
+    fineBlock3_.reset();
+    fineFloat_.reset();
+    fine_                     = nullptr;
+    fineSpectralRadius_       = 0.0;
+    fineSpectralRadiusSource_ = 0;
+    fineDominantVector_.clear();
+    nCoarseFree_ = 0;
+    if ( trivial_ ) {
+      setupDirichletAndPSeconds_ = secondsSince( start );
+      setupGalerkinSeconds_ = setupCoarseSeconds_ = setupFineOperatorSeconds_ = setupSpectralRadiusSeconds_ = 0.0;
+      return;
+    }
 
     buildProlongation( nNodes, nDim, isCorner, edgeEndpoints );
     setupDirichletAndPSeconds_ = secondsSince( start );
@@ -1485,47 +1492,23 @@ public:
     // coarseValueType float builds and runs the whole coarse hierarchy -- including its own Chebyshev
     // smoother's power iteration -- in single precision, AMGCL's own backendPrecision float; the
     // coarse right-hand side and correction are converted at the boundary.
-    const std::string coarseValueType = prm.get( "coarseValueType", std::string( "double" ) );
-    coarse_.reset();
-    coarseFloat_.reset();
-    if ( coarseValueType == "float" ) {
+    if ( coarseValueType_ == "float" ) {
       coarseFloat_.reset( new CoarseSolverFloat( *A1, coarsePrm ) );
       coarseRhsFloat_.assign( nCoarseFree_, 0.0f );
       coarseXFloat_.assign( nCoarseFree_, 0.0f );
     }
-    else if ( coarseValueType == "double" )
-      coarse_.reset( new CoarseSolver( *A1, coarsePrm ) );
     else
-      throw std::runtime_error( "ptwogrid: coarseValueType must be double or float, got " + coarseValueType );
+      coarse_.reset( new CoarseSolver( *A1, coarsePrm ) );
     A1.reset();
     setupCoarseSeconds_ = secondsSince( start );
 
     // fine level
-    start                        = Clock::now();
-    const int      fineBlockSize = prm.get( "fineBlockSize", 1 );
-    const unsigned degree        = prm.get( "fineDegree", 5u );
-    const float    lower         = prm.get( "fineLower", 0.01f );
-    const float    higher        = prm.get( "fineHigher", 1.1f );
-    fineScalar_.reset();
-    fineBlock3_.reset();
-    fineFloat_.reset();
-    fine_                           = nullptr;
-    const std::string fineValueType = prm.get( "fineValueType", std::string( "double" ) );
-    if ( fineValueType != "double" && fineValueType != "float" ) {
-      throw std::runtime_error( "ptwogrid: fineValueType must be double or float, got " + fineValueType );
-    }
+    start = Clock::now();
     std::shared_ptr< PTwoGridFineLevelT< Block3 >::Matrix > Ablock;
-    if ( fineBlockSize == 3 ) {
-      if ( nDim != 3 ) {
-        throw std::runtime_error( "ptwogrid: fineBlockSize 3 needs a 3-dimensional field, got " +
-                                  std::to_string( nDim ) + " DOFs per node." );
-      }
+    if ( fineBlockSize_ == 3 ) {
       Ablock = std::make_shared< PTwoGridFineLevelT< Block3 >::Matrix >(
         amgcl::adapter::block_matrix< Block3 >( *Afine ) );
       Afine.reset();
-    }
-    else if ( fineBlockSize != 1 ) {
-      throw std::runtime_error( "ptwogrid: fineBlockSize must be 1 or 3, got " + std::to_string( fineBlockSize ) );
     }
     setupFineOperatorSeconds_ += secondsSince( start );
 
@@ -1538,12 +1521,18 @@ public:
       fineScalar_.reset( new PTwoGridFineLevelT< double >() );
       fineScalar_->setOperator( Afine );
     }
-    fineSpectralRadius_ = chooseFineSpectralRadius( spectralRadius, dominantVector, dominantVectorSize, higher );
+    fineSpectralRadius_ = chooseFineSpectralRadius( spectralRadius, dominantVector, dominantVectorSize, fineHigher_ );
+    if ( !( fineSpectralRadius_ > 0.0 ) || !std::isfinite( fineSpectralRadius_ ) ) {
+      // the Chebyshev bounds are relative to it: a zero (or non-finite) radius -- a zero block, which
+      // blockamg's equilibration already refuses -- would divide by zero in the polynomial
+      throw std::runtime_error( "ptwogrid: the fine operator has no positive, finite spectral radius (got " +
+                                std::to_string( fineSpectralRadius_ ) + ") -- is the field's block zero?" );
+    }
     if ( fineBlock3_ )
-      fineBlock3_->setPolynomial( degree, lower, higher, fineSpectralRadius_ );
+      fineBlock3_->setPolynomial( fineDegree_, fineLower_, fineHigher_, fineSpectralRadius_ );
     else
-      fineScalar_->setPolynomial( degree, lower, higher, fineSpectralRadius_ );
-    if ( fineValueType == "float" ) {
+      fineScalar_->setPolynomial( fineDegree_, fineLower_, fineHigher_, fineSpectralRadius_ );
+    if ( fineValueType_ == "float" ) {
       if ( fineBlock3_ )
         fineFloat_ = fineBlock3_->makeFloatCopy< Block3Float >();
       else
@@ -1769,12 +1758,14 @@ public:
   // fine residual of x = 0 is the right-hand side itself, so no product is needed for it.
   void apply( int n, const double* r, double* x )
   {
-    if ( !coarse_ && !coarseFloat_ ) {
-      throw std::runtime_error( "apply(): no preconditioner built yet -- call build() first" );
-    }
+    checkBuilt();
     if ( n != n_ ) {
       throw std::runtime_error( "apply(): n=" + std::to_string( n ) + " does not match the built size " +
                                 std::to_string( n_ ) );
+    }
+    if ( trivial_ ) {
+      std::copy( r, r + n, x );
+      return;
     }
     Clock::time_point start = Clock::now();
 #pragma omp parallel for
@@ -1818,21 +1809,34 @@ public:
     applyFineSeconds_ += secondsSince( start );
   }
 
+  /// @brief Throw unless build() has run.
+  void checkBuilt() const
+  {
+    if ( !trivial_ && !coarse_ && !coarseFloat_ ) {
+      throw std::runtime_error( "ptwogrid: no preconditioner built yet -- call build() first" );
+    }
+  }
+
+  /// @brief The fine spectral radius the Chebyshev smoother was built with (0 for a trivial field).
   double fineSpectralRadius() const { return fineSpectralRadius_; }
-  int    fineSpectralRadiusSource() const { return fineSpectralRadiusSource_; }
-  int    fineDominantVectorSize() const { return static_cast< int >( fineDominantVector_.size() ); }
-  void   copyFineDominantVector( double* out ) const
+  /// @brief How the last build arrived at it, see fineSpectralRadiusSource_.
+  int fineSpectralRadiusSource() const { return fineSpectralRadiusSource_; }
+  /// @brief The length of fineDominantVector_ (0 if the radius was used as supplied).
+  int fineDominantVectorSize() const { return static_cast< int >( fineDominantVector_.size() ); }
+  /// @brief Copy fineDominantVector_ into out (fineDominantVectorSize() entries).
+  void copyFineDominantVector( double* out ) const
   {
     std::copy( fineDominantVector_.begin(), fineDominantVector_.end(), out );
   }
+  /// @brief The number of free coarse DOFs, the size of the Galerkin operator.
   int nCoarseFree() const { return nCoarseFree_; }
 
   // @brief the coarse level's AMGCL hierarchy report
   std::string report() const
   {
-    if ( !coarse_ && !coarseFloat_ ) {
-      throw std::runtime_error( "report(): no preconditioner built yet -- call build() first" );
-    }
+    checkBuilt();
+    if ( trivial_ )
+      return "ptwogrid: no free DOF, the preconditioner is the identity\n";
     std::ostringstream oss;
     if ( coarseFloat_ )
       oss << *coarseFloat_;
