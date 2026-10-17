@@ -403,6 +403,17 @@ public:
   }
 };
 
+/// @brief The diagonal entry a_ii of row i of a CSR matrix (the sum of its stored entries in column i, 0 if
+/// none is stored).
+inline double rowDiagonal( const int* ptr, const int* col, const double* val, ptrdiff_t i )
+{
+  double diagonal = 0.0;
+  for ( int j = ptr[i]; j < ptr[i + 1]; ++j )
+    if ( col[j] == i )
+      diagonal += val[j];
+  return diagonal;
+}
+
 /// The equilibrated, field-split system of blockamg.py's outer solve, built in one OpenMP-threaded
 /// pass over A's CSR arrays instead of a chain of serial SciPy copies and slices.
 ///
@@ -439,17 +450,15 @@ public:
   static void absoluteDiagonal( int n, const int* ptr, const int* col, const double* val, double* out )
   {
 #pragma omp parallel for
-    for ( ptrdiff_t i = 0; i < n; ++i ) {
-      double d = 0.0;
-      for ( int j = ptr[i]; j < ptr[i + 1]; ++j )
-        if ( col[j] == i )
-          d += val[j];
-      out[i] = std::abs( d );
-    }
+    for ( ptrdiff_t i = 0; i < n; ++i )
+      out[i] = std::abs( rowDiagonal( ptr, col, val, i ) );
   }
 
-  /// @brief Build As = D A D and the coupling blocks.
-  /// @param n, ptr, col, val A, square CSR (columns need not be sorted; duplicates are kept as given).
+  /// @brief Build As = D A D and the coupling blocks. The new system is assembled completely before it
+  /// replaces the previous one, so a build that throws (an invalid field layout, an allocation) leaves the
+  /// previous system intact.
+  /// @param n, ptr, col, val A, square CSR in canonical form: sorted columns, no duplicates -- the diagonal
+  /// blocks inherit its column order, and AMGCL's block backends require it sorted.
   /// @param dinv the equilibration, D = diag(dinv).
   /// @param nFields, fieldBounds the fields' DOF ranges, [fieldBounds[2k], fieldBounds[2k+1]),
   /// disjoint.
@@ -461,8 +470,20 @@ public:
               int           nFields,
               const int*    fieldBounds )
   {
-    // the field layout is validated completely before any member changes, so that a rejected build
-    // leaves the previous system intact
+    EquilibratedSystemT assembled;
+    assembled.assemble( n, ptr, col, val, dinv, nFields, fieldBounds );
+    *this = std::move( assembled );
+  }
+
+  /// @brief The work of build(), on this (fresh) object.
+  void assemble( int           n,
+                 const int*    ptr,
+                 const int*    col,
+                 const double* val,
+                 const double* dinv,
+                 int           nFields,
+                 const int*    fieldBounds )
+  {
     if ( nFields > std::numeric_limits< signed char >::max() ) {
       throw std::runtime_error( "EquilibratedSystemT: at most " +
                                 std::to_string( std::numeric_limits< signed char >::max() ) + " fields." );

@@ -507,6 +507,8 @@ cdef class PyAMGCLEquilibratedSystem:
         cdef int n = A.shape[0]
         dinvArray = _vector(dinv, n, "dinv")
         bounds = np.ascontiguousarray(np.asarray(fieldBounds, dtype=np.int32).reshape(-1))
+        if bounds.shape[0] % 2:
+            raise ValueError("fieldBounds must be (start, stop) pairs, got {:} numbers".format(bounds.shape[0]))
         self.system.build(n, _intData(indptr), _intData(indices), _constDoubleData(data), _constDoubleData(dinvArray),
                           bounds.shape[0] // 2, _intData(bounds))
         self.n = n

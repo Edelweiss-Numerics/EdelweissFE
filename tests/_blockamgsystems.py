@@ -51,10 +51,15 @@ def displacementDamageSystem(n: int = 12, coupling: str = "none", rowScaling: bo
     Parameters
     ----------
     n
-        Nodes per grid direction.
+        Nodes per grid direction. AMGCL solves a block directly below 3000 scalar rows (1000 rows of 3x3
+        blocks), so a test of the multi-level hierarchy needs n >= 15 for the damage field and n >= 10 for the
+        displacement field.
     coupling
-        ``"none"`` (block diagonal), ``"one-way"`` (a weak random K_ud, K_du = 0 -- the structure of a
-        gradient-enhanced damage model) or ``"symmetric"`` (K_du = K_ud^T).
+        ``"none"`` (block diagonal), ``"one-way"`` (a weak random K_ud and K_du = 0, as measured on a
+        gradient-enhanced damage model, where K_du was about 1e-7 relative to K_dd) or ``"symmetric"``
+        (K_du = K_ud^T). With ``"one-way"`` a forward block Gauss-Seidel sweep, displacement first, never
+        uses the coupling: the damage field's residual has no displacement term. Tests of the sweep itself
+        need ``"symmetric"``.
     rowScaling
         Scale the displacement rows and columns over two orders of magnitude, so that the equilibration matters.
 

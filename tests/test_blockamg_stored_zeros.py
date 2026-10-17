@@ -7,6 +7,7 @@ the last bits -- while the hierarchy-reuse pattern gate still sees the input's o
 """
 
 import numpy as np
+import scipy.sparse as sp
 from _blockamgsystems import displacementDamageSystem
 
 from edelweissfe.linsolve.blockamg import createSolver
@@ -46,3 +47,27 @@ def test_stored_zeros_change_nothing_but_the_pattern_gate_input():
     assert np.linalg.norm(x - y) <= 1e-12 * np.linalg.norm(y)
     assert solver._lastOuterIters == reference._lastOuterIters
     assert solver._lastNnz == withZeros.nnz
+
+
+def test_a_non_canonical_matrix_is_solved_as_its_canonical_form():
+    A, b, blocks = displacementDamageSystem(10, coupling="symmetric")
+    # a duplicate of a_00 appended to row 0 (unsorted, too), and every seventh row's columns reversed
+    indptr = A.indptr.copy()
+    indptr[1:] += 1
+    indices = np.insert(A.indices, A.indptr[1], 0)
+    data = np.insert(A.data, A.indptr[1], 0.5 * A[0, 0])
+    for i in range(7, A.shape[0], 7):
+        indices[indptr[i] : indptr[i + 1]] = indices[indptr[i] : indptr[i + 1]][::-1]
+        data[indptr[i] : indptr[i + 1]] = data[indptr[i] : indptr[i + 1]][::-1]
+    nonCanonical = sp.csr_matrix((data, indices, indptr), shape=A.shape)
+    assert not nonCanonical.has_canonical_format
+    canonical = A.tolil()
+    canonical[0, 0] += 0.5 * A[0, 0]
+    canonical = canonical.tocsr()
+    before = (nonCanonical.indptr.copy(), nonCanonical.indices.copy(), nonCanonical.data.copy())
+
+    x, solver = _solve(nonCanonical, b, blocks)
+    assert np.linalg.norm(b - canonical @ x) <= 1.0001e-8 * np.linalg.norm(b)
+    # the caller's matrix is left as it was
+    for array, original in zip((nonCanonical.indptr, nonCanonical.indices, nonCanonical.data), before):
+        assert np.array_equal(array, original)

@@ -1080,6 +1080,11 @@ class BlockAMGSolver(LinearSolver):
         self._solveCount += 1
         self._maybeHotReloadConfig()
         A = A.tocsr()
+        if not A.has_canonical_format:
+            # AMGCL's block backends read the columns as sorted, and no backend sums duplicate entries: a
+            # canonical copy, leaving the caller's matrix as it is
+            A = A.copy()
+            A.sum_duplicates()
         n = A.shape[0]
         blocks = self._resolveBlocks(n)
         slices = [slice(block.start, block.stop) for block in blocks]
