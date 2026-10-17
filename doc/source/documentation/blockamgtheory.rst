@@ -881,7 +881,7 @@ is the recommended starting point for 3D displacement problems:
         "sweeps": 1,
         "symmetric": false,
         "etaMin": 1e-4,
-        "etaMax": 1e-2,
+        "etaMax": 1e-3,
         "hierarchyStalenessFactor": 3,
         "trueResidualMaxContinuations": 0,
         "gapCompensatedTolerance": true,
@@ -908,12 +908,18 @@ What each part buys: 3x3 blocks stored in float (set up in double, see ``backend
 cost per outer iteration; one high-degree post-smoothing sweep instead of a symmetric V(1,1) cycle,
 and smoothed aggregation's own spectral-radius estimate for its prolongation smoother, cut outer
 iterations; ``lgmresM = 50`` restarts less often; a staleness factor of 3 reuses hierarchies longer.
+``etaMax = 1e-3`` is not about the linear solver at all: through a damage onset, Newton needs linear
+solves about ten times tighter than the Eisenstat--Walker forcing allows at the default ``etaMax``.
 On a model with multi-point constraints, also set ``pruneCondensedMatrixZeros = False`` in the
 nonlinear solver, so that the hierarchies can be reused at all (see the reuse rules above).
 
 Measured live, from the same checkpoints, against the shipped defaults: the contact model's six
 increments in 676 s instead of 1328 s (-49%), and the damage cylinder at about 10.3 s instead of
-25.5 s per Newton iteration (-60%). Offline, on 13 / 12 captured consecutive systems, the same
+25.5 s per Newton iteration (-60%), both with ``etaMax = 1e-2``. On the cylinder that setting took
+five Newton iterations per increment before the damage onset instead of three and failed the onset
+increment (a cutback); ``etaMax = 1e-3`` restores three, converges the onset increment and reaches the
+same load (t = 0.28) in 907 s, and is neutral on the contact model (19.4 against 19.3 s per Newton
+iteration). Offline, on 13 / 12 captured consecutive systems, the same
 configuration with a 200-iteration cap took 91--93 s / 60--61 s against 107--112 s / 72--73 s with
 the displacement blocks stored in double, at identical outer iteration counts.
 

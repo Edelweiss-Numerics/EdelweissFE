@@ -454,8 +454,7 @@ cdef class PyAMGCLLGMRESSolver:
     cdef readonly double lastError
     """The relative residual ``||rhs - Op x|| / ||rhs||`` AMGCL's lgmres reached in the most recent solve,
     recomputed at its exit, of the operator it iterated on: the equilibrated system, so not the true
-    residual, or with ``onUnscaledOperator`` the unscaled one. lgmres's own convergence test is this
-    value below ``tol``. NaN before the first solve."""
+    residual. lgmres's own convergence test is this value below ``tol``. NaN before the first solve."""
     cdef object _precondCallable
     cdef object _pendingException
 
