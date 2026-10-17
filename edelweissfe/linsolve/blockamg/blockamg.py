@@ -1389,8 +1389,15 @@ class BlockAMGSolver(LinearSolver):
         )
         backendPrecision = precondParams.pop("backendPrecision", "double")
         backendBlockSize = precondParams.pop("backendBlockSize", 1)
+        # The hierarchy is only ever applied as a preconditioner: "preonly" keeps AMGCL from allocating the
+        # work vectors of an iterative solver (BiCGStab by default) that would never run.
         preconditioner = PyAMGCLSolver(
-            {"precond": precondParams, "backendPrecision": backendPrecision, "backendBlockSize": backendBlockSize}
+            {
+                "precond": precondParams,
+                "solver": {"type": "preonly"},
+                "backendPrecision": backendPrecision,
+                "backendBlockSize": backendBlockSize,
+            }
         )
         # A block backend cannot take a near null-space (AMGCL's own path is unimplemented for block value
         # types); a scalar backend gets the rigid-body modes -- the error components a Chebyshev smoother does
