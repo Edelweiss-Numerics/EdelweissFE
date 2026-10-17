@@ -48,10 +48,10 @@ from edelweissfe.linsolve.base import FieldBlock
 def translationNullspace(block: FieldBlock, blockScaling: np.ndarray) -> np.ndarray:
     """The rigid-body translations of a vector field, transformed for the scaled operator.
 
-    Translations are 1 on each of the ``dimension`` components (node-major). The near null-space of
-    the scaled block :math:`D^{-1/2} A D^{-1/2}` is :math:`D^{1/2}` times that of :math:`A`, i.e.
-    the raw translations divided by ``blockScaling``, this block's slice of the diagonal of
-    :math:`D^{-1/2}` (the scaling vector).
+    Translations are 1 on each of the ``dimension`` components (node-major). With the diagonal scaling
+    :math:`D` whose entries are :math:`|a_{ii}|^{-1/2}` (``blockScaling`` is this block's slice of them), the
+    near null-space of the scaled block :math:`D A D` is :math:`D^{-1}` times that of :math:`A`: the raw
+    translations divided by ``blockScaling``.
     """
     size = block.stop - block.start
     components = block.dimension

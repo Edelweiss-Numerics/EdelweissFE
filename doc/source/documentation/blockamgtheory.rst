@@ -816,14 +816,16 @@ are rounded: vectors and every sum stay double (a float matrix times a double ve
 spectral radius is estimated and re-checked on the double operator before it is rounded -- unlike
 ``backendPrecision = "float"``, where AMGCL's own power iteration runs in single precision.
 
-The fine Chebyshev smoother follows AMGCL's own (same polynomial, ``lower`` 0.01, ``higher`` 1.1
-times the spectral radius), but its spectral-radius estimate -- 300 power iterations, the most
+The fine Chebyshev smoother uses AMGCL's polynomial, with the bounds of the vector-field default
+(``lower`` 0.01, ``higher`` 1.1 times the spectral radius; AMGCL's own defaults are 1/30 and 1), but its
+spectral-radius estimate -- 300 power iterations, the most
 expensive stage of the build -- starts from a deterministic, thread-count-independent vector, and can
 be reduced to a re-check: with ``p1FineSpectralRadiusReuse`` a field's first build estimates it in
 full, and every later rebuild continues the power iteration for 15 steps from the previous build's
 dominant vector. A re-check estimate up to 1% above the previous radius keeps it (the full estimate is
-itself converged only to about 1e-5); one further above replaces it; and one above it by more than the 10% margin of ``higher`` -- an operator that stiffened more than
-the smoother's bounds cover -- triggers the full estimate again. The cache is dropped when the model
+itself converged only to about 1e-5); one further above replaces it; and one above it by more than the
+10% margin of ``higher`` -- an operator that stiffened more than the smoother's bounds cover -- triggers
+the full estimate again. The cache is dropped when the model
 changes (e.g. after adaptive refinement).
 
 

@@ -1062,9 +1062,11 @@ public:
 // one. Here the estimate is either computed by power iteration -- from a deterministic, thread-count
 // independent start vector -- or handed in, e.g. the value of a previous build on the same field,
 // skipping the 300 sparse matrix-vector products of the estimate altogether (fineSpectralRadius()).
-// The start vector is the one AMGCL's own power iteration uses on a single thread (mt19937 seeded 0,
-// uniform on [-1, 1], one draw per free DOF in order); unlike AMGCL's, the estimate is independent of
-// the thread count and reproducible run to run.
+// The start vector is drawn like the one of AMGCL's own power iteration on a single thread (mt19937
+// seeded 0, uniform on [-1, 1]), but only for the free DOFs, in order -- AMGCL draws one per row, so the
+// two coincide only without Dirichlet DOFs. Unlike AMGCL's (per-thread seeds), the estimate is independent
+// of the thread count and reproducible run to run. (AMGCL's Chebyshev default, power_iters = 0, does no power
+// iteration at all: it bounds the radius by Gershgorin's theorem.)
 
 /// The fine smoother as the two-grid cycle sees it, independent of the operator's storage format
 /// (scalar entries or node-wise 3x3 blocks) and value type (double or float). Vectors are always plain
@@ -1608,8 +1610,8 @@ public:
     return fineScalar_->estimateSpectralRadius( powerIters, startVector, fineDominantVector_ );
   }
 
-  /// @brief The full estimate, from the deterministic start vector: AMGCL's single-thread one,
-  /// mt19937 seeded 0, uniform on [-1, 1], one draw per free DOF in order.
+  /// @brief The full estimate, from the deterministic start vector: mt19937 seeded 0, uniform on [-1, 1], one
+  /// draw per free DOF in order (AMGCL's single-thread draw, restricted to the free DOFs).
   double estimateFineSpectralRadiusInFull()
   {
     const int                                iters = finePowerIters_;
