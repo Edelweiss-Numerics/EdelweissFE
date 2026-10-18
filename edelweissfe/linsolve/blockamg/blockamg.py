@@ -902,9 +902,10 @@ class BlockAMGSolver(LinearSolver):
         """``1`` if the last AMGCL LGMRES pass stopped at the iteration cap short of its own tolerance, else ``0``.
 
         LGMRES stops on its own convergence test, its relative residual (``lastError``, recomputed at its exit,
-        of the operator it iterated on -- the scaled one, not the true residual eta is accepted on) below the
-        tolerance of that pass, or at the cap. Reaching the cap is not failure by itself: a pass may converge on
-        exactly its last allowed iteration. Neither is comparing ``lastError`` with eta, the true-residual target.
+        of the operator it iterated on: on the scaled system not the true residual eta is accepted on, with
+        ``krylovOnScaledSystem = False`` the true one itself) below the tolerance of that pass, or at the cap.
+        Reaching the cap is not failure by itself: a pass may converge on exactly its last allowed iteration.
+        Neither is comparing ``lastError`` with eta, the true-residual target.
         """
         capped = iterations >= self._outerRestart * self._outerMaxiter
         return 1 if capped and not self._lgmresSolver.lastError < tolerance else 0
@@ -1865,14 +1866,8 @@ class BlockAMGSolver(LinearSolver):
             """The solution x of the Krylov iterate z, its true relative residual (the one the solve is
             accepted on) and, on the scaled system, its scaled relative residual (NaN otherwise)."""
             if not onScaledSystem:
-                if self._outerSolver == "amgcl_lgmres":
-                    # LGMRES iterated on A itself and recomputed b - A x at its exit: its residual is the true one
-                    return z, self._lgmresSolver.lastError, float("nan")
-                return (
-                    z,
-                    np.linalg.norm(system.residual(b, z, unscaled=True)) / max(np.linalg.norm(b), 1e-300),
-                    float("nan"),
-                )
+                # LGMRES iterated on A itself and recomputed b - A x at its exit: its residual is the true one
+                return z, self._lgmresSolver.lastError, float("nan")
             # A x - b = D^-1 (A_scaled z - b_scaled) exactly: the true residual from the scaled one, without a
             # product with A
             scaledResidualVector = system.residual(b_scaled, z)

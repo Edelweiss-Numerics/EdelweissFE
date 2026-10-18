@@ -136,7 +136,7 @@ def test_the_algorithm_step_by_step():
     assert iterations(lambda y: blockGaussSeidel(y, exact)) < iterations(lambda y: blockGaussSeidel(y, exact, False))
 
     # The same solve with BlockAMGSolver: the same method in threaded C++, with AMGCL's right-preconditioned LGMRES
-    # as the outer solver, on the scaled system (step 4) by default and on the unscaled one (step 4b) with
+    # as the outer solver (5b), on the scaled system by default and on the unscaled one with
     # krylovOnScaledSystem = false. It adds the reuse of the hierarchies across Newton iterations, an adaptive
     # (Eisenstat--Walker) tolerance when outerTol is unset, and a near null-space for the displacement field: its
     # translations here, given only the field layout, and all rigid-body modes given the model (setModel).
