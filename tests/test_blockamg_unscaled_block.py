@@ -29,8 +29,6 @@
 D^-1 AMG(A_ii)^-1 D^-1, so that a block backend's constant blocks are the translations of A_ii."""
 
 import copy
-import json
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -38,9 +36,17 @@ from _blockamgsystems import displacementDamageSystem, hierarchyLevels
 
 from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLEquilibratedSystem
 from edelweissfe.linsolve.blockamg import createSolver
-from edelweissfe.linsolve.blockamg.blockamg import UnscaledBlockPreconditioner
+from edelweissfe.linsolve.blockamg.blockamg import (
+    UnscaledBlockPreconditioner,
+    _defaultFieldPrecond,
+)
 
-_RECOMMENDED = Path(__file__).resolve().parents[1] / "doc/source/documentation/blockamg_recommended.json"
+
+def _defaultConfig() -> dict:
+    """The code defaults, with the 3D displacement tree spelled out explicitly: ``_onUnscaledBlock``
+    below mutates it, which needs a concrete tree to mutate rather than the "no override, pick it up
+    from the field's dimension" that an empty ``fieldPreconds`` means at a live hierarchy build."""
+    return {"fieldPreconds": {"displacement": _defaultFieldPrecond(3)}}
 
 
 def _onUnscaledBlock(config: dict) -> dict:
@@ -68,11 +74,11 @@ def test_the_unscaled_diagonal_block_is_the_one_of_a(storedUnscaled):
             assert np.allclose(actual.data, expected.data, rtol=1e-14, atol=0.0)
 
 
-def test_the_recommended_configuration_on_the_unscaled_block_solves_and_iterates_less():
+def test_the_default_configuration_on_the_unscaled_block_solves_and_iterates_less():
     A, b, blocks = displacementDamageSystem(12, coupling="symmetric", rowScaling=True)
-    recommended = {**json.load(open(_RECOMMENDED)), "verbosity": "silent", "outerTol": 1e-8}
+    defaults = {**_defaultConfig(), "verbosity": "silent", "outerTol": 1e-8}
     iterations = []
-    for config in (recommended, _onUnscaledBlock(recommended)):
+    for config in (defaults, _onUnscaledBlock(defaults)):
         solver = createSolver(config)
         solver.setFieldStructure(blocks)
         x = solver(A, b)
@@ -85,7 +91,7 @@ def test_the_recommended_configuration_on_the_unscaled_block_solves_and_iterates
 
 
 def test_an_unscaled_block_hierarchy_needs_a_jacobi_scaled_chebyshev_smoother():
-    config = _onUnscaledBlock(json.load(open(_RECOMMENDED)))
+    config = _onUnscaledBlock(_defaultConfig())
     del config["fieldPreconds"]["displacement"]["relax"]["scale"]
     with pytest.raises(ValueError, match="relax.scale"):
         createSolver(config)

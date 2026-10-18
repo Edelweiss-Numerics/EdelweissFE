@@ -65,20 +65,21 @@ What it does per solve
    near-null-space -- 3 translations plus 3 infinitesimal rotations, the standard basis for 3D
    elasticity AMG, since both are directions in which the discretized operator has essentially zero
    stiffness -- when node coordinates are available, translations alone otherwise; a scalar field
-   takes the default constant. A block backend (``backendBlockSize > 1``, part of the recommended
-   configuration) cannot take a near-null-space and uses AMGCL's constant blocks instead.
+   takes the default constant. A block backend (``backendBlockSize > 1``, the default for a 3D or 2D
+   vector field) cannot take a near-null-space and uses AMGCL's constant blocks instead.
 #. **Precondition the outer Krylov solve** (AMGCL's LGMRES by default) with a block Gauss-Seidel sweep
    ``M^-1`` over the fields, each field's correction coming from one AMG V-cycle on its block, the couplings
-   folded in between fields. With ``krylovOnScaledSystem = False`` (the recommended configuration) the outer
-   solve runs on ``A x = b`` itself, preconditioned by ``D M^-1 D``, and its residual is the true one; by
-   default it runs on the scaled system ``D A D z = D b``, ``x = D z``, and the true residual is checked
-   afterwards.
+   folded in between fields. With ``krylovOnScaledSystem = False`` (the default) the outer solve runs on
+   ``A x = b`` itself, preconditioned by ``D M^-1 D``, and its residual is the true one;
+   ``krylovOnScaledSystem = True`` instead runs it on the scaled system ``D A D z = D b``, ``x = D z``,
+   with the true residual checked afterwards.
 
 Its reach is memory: AMG needs O(n) of it where a direct factorization does not fit. Its limit is the
 displacement block of a damaging, non-associated material, which is non-symmetric and whose symmetric
 part becomes indefinite at the damage onset -- smoothed aggregation and Chebyshev smoothing assume
-neither. With the recommended configuration of the theory page most solves take 5 to 50 outer
-iterations; the hardest damage-onset solves stop at the iteration cap of 50, return their iterate, and the
+neither. With these defaults most solves take 5 to 50 outer
+iterations; the hardest damage-onset solves may still stop at the iteration cap (``outerRestart x
+outerMaxiter = 100`` by default), return their iterate, and the
 hierarchies are rebuilt for the next solve. The cap is a deliberate budget, not a tolerance: a solve that
 needs more is taken as a sign that the hierarchies no longer fit the Jacobian, not given more iterations. A
 non-symmetric-aware AMG library (e.g. Trilinos/MueLu) might do better, at the cost of a heavy external
@@ -86,6 +87,7 @@ dependency.
 """
 
 import collections
+import copy
 import inspect
 import json
 import os
@@ -127,28 +129,37 @@ _IDENTIFICATION = "BlockAMGSolver"
 # (see builtin_float_matrices in amgcl-wrapper.hpp): measured with outer iteration counts identical to
 # the double hierarchy's on a captured damage-onset sequence, and about 15% faster.
 #
-# backendBlockSize defaults to 1 (scalar). A vector field of nodal dimension d maps to
-# backendBlockSize: d (3 for a 3D displacement field, 2 for a 2D one). Setting it > 1 skips
-# set_nullspace (see __call__) -- AMGCL's near-null-space path is unimplemented for block value
-# types, so the hierarchy gets AMGCL's identity blocks: constants per component in the equilibrated
-# variables, i.e. D-weighted translations rather than the translations D^-1 t of the scaled block
-# (nullspace.py), and no rotational modes. Inside this block Gauss-Seidel preconditioner, 3x3 blocks
-# stored in float with a smoothed-aggregation spectral-radius estimate are nevertheless the measured
-# winner on the reference models (less index and value traffic per cycle), the recommended
-# configuration of doc/source/documentation/blockamgtheory.rst -- the shipped default is unchanged.
+# backendBlockSize defaults to the field's own nodal dimension (see _defaultFieldPrecond below): 3 for
+# a 3D vector field, 2 for a 2D one, 1 (scalar) otherwise. Setting it > 1 skips set_nullspace (see
+# __call__) -- AMGCL's near-null-space path is unimplemented for block value types, so the hierarchy
+# gets AMGCL's identity blocks: constants per component in the equilibrated variables, i.e. D-weighted
+# translations rather than the translations D^-1 t of the scaled block (nullspace.py), and no
+# rotational modes. Inside this block Gauss-Seidel preconditioner, 3x3 blocks stored in float with a
+# smoothed-aggregation spectral-radius estimate are nevertheless the measured winner on the reference
+# models (less index and value traffic per cycle) -- the code default.
 #
 # Both are set per field via fieldPreconds, e.g.
-# {"displacement": {**_DEFAULT_VECTOR_PRECOND, "backendPrecision": "float", "backendBlockSize": 3}}.
+# {"displacement": {**_defaultFieldPrecond(3), "backendBlockSize": 2}} to force 2x2 blocks on a field
+# the model built with dimension 3.
 # power_iters 300: AMGCL's default (0) bounds the spectral radius by Gershgorin's theorem, pessimistically; a
 # power iteration is tighter but starts from a vector seeded per OpenMP thread, so it depends on the thread count.
 # The former 50 iterations left it badly under-converged on hard operators at some thread counts (1460 instead of
 # 43 outer iterations on the same matrix), 300 do not (see the Chebyshev section of the theory page).
-_DEFAULT_VECTOR_PRECOND = {
-    "backendPrecision": "double",
-    "backendBlockSize": 1,
-    "coarsening": {"type": "smoothed_aggregation", "aggr": {"eps_strong": 0.01}},
-    "relax": {"type": "chebyshev", "degree": 5, "power_iters": 300, "lower": 0.01},
-    "npre": 1,
+#
+# The coarsening/relaxation recipe every vector field shares, whatever its dimension -- the measured
+# winner on the reference models (see the theory page's "why the defaults are what they are"):
+# estimate_spectral_radius/power_iters 20 sharpens smoothed aggregation's own prolongation-smoother
+# weight; degree 16 with npre 0, npost 1 (one high-degree post-smoothing sweep, no pre-smoothing) beats
+# the former symmetric V(1,1) cycle at degree 5 for the same number of preconditioner applications.
+_VECTOR_PRECOND_BASE = {
+    "coarsening": {
+        "type": "smoothed_aggregation",
+        "aggr": {"eps_strong": 0.01},
+        "estimate_spectral_radius": True,
+        "power_iters": 20,
+    },
+    "relax": {"type": "chebyshev", "degree": 16, "power_iters": 300, "lower": 0.01, "higher": 1.1},
+    "npre": 0,
     "npost": 1,
 }
 _DEFAULT_SCALAR_PRECOND = {
@@ -157,6 +168,30 @@ _DEFAULT_SCALAR_PRECOND = {
     "coarsening": {"type": "smoothed_aggregation"},
     "relax": {"type": "chebyshev"},
 }
+
+
+def _defaultFieldPrecond(dimension: int) -> dict:
+    """The default AMGCL preconditioner tree for one field, chosen from its nodal dimension alone --
+    the per-field hierarchy build has nothing else to go on before the first solve.
+
+    A 3D vector field (displacement in 3D, dimension 3) gets the measured winner: its hierarchy is
+    stored in node-wise 3x3 blocks, in float -- set up in double, only the level matrices the cycle
+    reads are rounded (see the ``backendPrecision`` comment above), which was measured faster per
+    outer iteration (less index and value traffic) at identical iteration counts. A 2D vector field
+    (dimension 2) gets 2x2 blocks in double instead: this AMGCL wrapper has no float 2x2 backend to
+    fall back to. A vector field of any other dimension, which was never part of the measurement, gets
+    the same smoother on the plain scalar backend -- the only backend that can carry a near null-space
+    (see :meth:`BlockAMGSolver._buildFieldPreconditioner`), so it keeps the rigid-body path. A scalar
+    field (dimension 1, e.g. ``nonlocal damage``) gets the scalar tree.
+    """
+    # deep copies: the trees are nested, and a caller may adapt the one it gets
+    if dimension == 3:
+        return copy.deepcopy({**_VECTOR_PRECOND_BASE, "backendPrecision": "float", "backendBlockSize": 3})
+    if dimension == 2:
+        return copy.deepcopy({**_VECTOR_PRECOND_BASE, "backendPrecision": "double", "backendBlockSize": 2})
+    if dimension > 1:
+        return copy.deepcopy({**_VECTOR_PRECOND_BASE, "backendPrecision": "double", "backendBlockSize": 1})
+    return copy.deepcopy(_DEFAULT_SCALAR_PRECOND)
 
 
 #: The least excess over the reference outer iteration count that makes reused hierarchies stale, on top of
@@ -352,8 +387,8 @@ class BlockAMGSolver(LinearSolver):
        residual) is not allowed to silently let the *true* residual run looser than the requested ``eta``
        (a real risk with an imperfect preconditioner, see the true-residual enforcement below). It does not
        reproduce the Newton path of a tight fixed tolerance exactly: through a damage onset, Newton needs
-       linear solves about ten times tighter than the default ``etaMax`` allows (see the recommended
-       configuration of the theory page). Pass ``outerTol=<a float>`` to pin a fixed tolerance instead.
+       linear solves about ten times tighter than the default ``etaMax`` allows (see "why the defaults are
+       what they are" on the theory page). Pass ``outerTol=<a float>`` to pin a fixed tolerance instead.
     #. **Per-field AMG hierarchy reuse across Newton iterations**, on by default. Building a hierarchy
        is a large, avoidable fraction of a solve when the Jacobian has moved only a little since the
        last one. The outer Krylov solve always operates on the current matrix; only the block
@@ -382,7 +417,7 @@ class BlockAMGSolver(LinearSolver):
         default) uses adaptive forcing instead -- see ``etaMin``/``etaMax`` below.
     outerRestart, outerMaxiter
         Their product is the iteration cap of one pass of AMGCL's LGMRES (its restart cycle is
-        ``lgmresM + lgmresK``); the recommended configuration sets the cap of 50 as 50 x 1.
+        ``lgmresM + lgmresK``); the default sets the cap of 100 as 100 x 1.
     outerSolver
         ``"amgcl_lgmres"`` -- the only accepted value, and the default -- uses AMGCL's own native
         ``amgcl::solver::lgmres`` at both outer-solve call sites (the main solve and the true-residual
@@ -564,12 +599,12 @@ class BlockAMGSolver(LinearSolver):
         missed. A solve that hit the iteration cap always refreshes them (a missed tolerance does not:
         it reflects the scaled-to-true residual gap, which a rebuild cannot close). With an iteration cap
         ``c`` and no continuations, a solve can exceed ``f`` times the reference only while the reference is
-        below ``c / f``: with the recommended cap of 50 and factor 3, a reference of 17 or more leaves the cap
+        below ``c / f``: with the default cap of 100 and factor 3, a reference of 34 or more leaves the cap
         hits as the only rebuild trigger of this kind.
     krylovOnScaledSystem
-        ``True`` (default): the outer Krylov solve runs on the equilibrated system ``D A D``, which it
+        ``True``: the outer Krylov solve runs on the equilibrated system ``D A D``, which it
         converges in its own (scaled) norm while the solve is accepted on the true residual -- hence the
-        gap compensation and continuations. ``False`` (recommended, see the theory page): it runs on ``A`` itself,
+        gap compensation and continuations. ``False`` (default): it runs on ``A`` itself,
         right-preconditioned by ``x = D M^-1 (D r)`` with the same block preconditioner ``M`` on
         ``D A D``, so its convergence norm is the acceptance norm; the gap compensation is bypassed, and
         so are the continuations: AMGCL's LGMRES is right-preconditioned, so a pass that misses the
@@ -699,14 +734,14 @@ class BlockAMGSolver(LinearSolver):
         *,
         outerTol: float = None,
         outerRestart: int = 100,
-        outerMaxiter: int = 8,
+        outerMaxiter: int = 1,
         outerSolver: str = "amgcl_lgmres",
-        lgmresM: int = 30,
+        lgmresM: int = 50,
         lgmresK: int = 3,
         lgmresAlwaysReset: bool = True,
         lgmresResetOnNewIncrement: bool = False,
         sweeps: int = 1,
-        symmetric: bool = True,
+        symmetric: bool = False,
         hierarchyDropTol: float = 0.0,
         hierarchyDropLumping: bool = False,
         fieldPreconds: dict = None,
@@ -722,14 +757,14 @@ class BlockAMGSolver(LinearSolver):
         p1CoarseValueType: str = "double",
         p1FineSpectralRadiusReuse: bool = False,
         p1CoarsePrecond: dict = None,
-        etaMin: float = 1.0e-6,
-        etaMax: float = 3.0e-4,
+        etaMin: float = 1.0e-4,
+        etaMax: float = 1.0e-3,
         ewGamma: float = 0.9,
         ewAlpha: float = 1.618033988749895,
         residualGrowthFactor: float = 4.0,
-        hierarchyStalenessFactor: float = 1.5,
+        hierarchyStalenessFactor: float = 3.0,
         refreshOnNewIncrement: bool = True,
-        krylovOnScaledSystem: bool = True,
+        krylovOnScaledSystem: bool = False,
         gapCompensatedTolerance: bool = False,
         gapSafetyFactor: float = 0.3,
         gapMaxFactor: float = 1e3,
@@ -1472,9 +1507,7 @@ class BlockAMGSolver(LinearSolver):
 
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver
 
-        precondParams = dict(
-            self._fieldPreconds.get(block.name, _DEFAULT_VECTOR_PRECOND if isVectorField else _DEFAULT_SCALAR_PRECOND)
-        )
+        precondParams = dict(self._fieldPreconds.get(block.name, _defaultFieldPrecond(block.dimension)))
         backendPrecision = precondParams.pop("backendPrecision", "double")
         backendBlockSize = precondParams.pop("backendBlockSize", 1)
         onUnscaledBlock = precondParams.pop("hierarchyOnUnscaledBlock", False)
@@ -2022,8 +2055,8 @@ class BlockAMGSolver(LinearSolver):
                 "⚠ solve #{:} did not converge: ‖r‖={:.1e} still exceeds η={:.1e} after {:} continuations, "
                 "and an outer pass stopped at its iteration cap (outerRestart x outerMaxiter = {:}). The cap "
                 "is a budget, not a tolerance: a solve that needs more is a preconditioning problem -- the "
-                "hierarchies are rebuilt for the next solve; see also fieldPreconds and the recommended "
-                "configuration of the theory page.".format(
+                "hierarchies are rebuilt for the next solve; see also fieldPreconds and 'why the defaults "
+                "are what they are' on the theory page.".format(
                     self._solveCount, trueResidual, eta, continuations, self._outerRestart * self._outerMaxiter
                 ),
             )

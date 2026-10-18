@@ -104,7 +104,7 @@ def test_the_algorithm_step_by_step():
     assert info == 0 and np.linalg.norm(b - A @ x) <= 1e-8 * np.linalg.norm(b)
 
     # (5b) on the unscaled system, with the same preconditioner between two scalings (krylovOnScaledSystem = false,
-    #      the recommended setting): GMRES solves (A D M^-1 D) y = b for y, and x = D M^-1 D y. The residual it
+    #      the default): GMRES solves (A D M^-1 D) y = b for y, and x = D M^-1 D y. The residual it
     #      converges, b - A D M^-1 D y = b - A x, is then the true one, and step (6) has nothing left to check.
     A_DMinvD = LinearOperator(A.shape, matvec=lambda y: A @ (scaling * blockGaussSeidel(scaling * y)))
     y, info = gmres(A_DMinvD, b, rtol=1e-10, atol=0.0, restart=200, maxiter=1)
@@ -136,10 +136,11 @@ def test_the_algorithm_step_by_step():
     assert iterations(lambda y: blockGaussSeidel(y, exact)) < iterations(lambda y: blockGaussSeidel(y, exact, False))
 
     # The same solve with BlockAMGSolver: the same method in threaded C++, with AMGCL's right-preconditioned LGMRES
-    # as the outer solver (5b), on the scaled system by default and on the unscaled one with
-    # krylovOnScaledSystem = false. It adds the reuse of the hierarchies across Newton iterations, an adaptive
-    # (Eisenstat--Walker) tolerance when outerTol is unset, and a near null-space for the displacement field: its
-    # translations here, given only the field layout, and all rigid-body modes given the model (setModel).
+    # as the outer solver (5b), on the unscaled system by default (krylovOnScaledSystem = false) and on the scaled
+    # one with krylovOnScaledSystem = true. It adds the reuse of the hierarchies across Newton iterations, an
+    # adaptive (Eisenstat--Walker) tolerance when outerTol is unset, and a near null-space for the displacement
+    # field: its translations here, given only the field layout, and all rigid-body modes given the model
+    # (setModel).
     settings = {
         "outerTol": 1e-10,
         "sweeps": 1,
@@ -147,9 +148,9 @@ def test_the_algorithm_step_by_step():
         "fieldPreconds": {"displacement": FIELD_AMG, "nonlocal damage": FIELD_AMG},
         "verbosity": "silent",
     }
-    solver = createSolver(settings)
+    solver = createSolver({**settings, "krylovOnScaledSystem": True})
     solver.setFieldStructure(fieldBlocks)
     assert np.linalg.norm(solver(A, b) - x) <= 1e-6 * np.linalg.norm(x)
-    solver = createSolver({**settings, "krylovOnScaledSystem": False})
+    solver = createSolver(settings)  # the default, krylovOnScaledSystem = false
     solver.setFieldStructure(fieldBlocks)
     assert np.linalg.norm(solver(A, b) - x) <= 1e-6 * np.linalg.norm(x)

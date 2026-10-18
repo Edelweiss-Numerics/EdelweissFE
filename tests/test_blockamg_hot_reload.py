@@ -259,10 +259,12 @@ def test_reloaded_lgmres_settings_rebuild_the_outer_solver(configuredSolver):
     _reload(solver)
     solver._lgmresSolver = "standing"
 
-    _write(configPath, {"lgmresM": 50, "hotReloadConfigFile": str(configPath)})
+    # 40, not the construction default (50): an unchanged value is never added to the reload's
+    # "pending" set (see BlockAMGSolver._maybeHotReloadConfig), so this would not exercise anything.
+    _write(configPath, {"lgmresM": 40, "hotReloadConfigFile": str(configPath)})
 
     assert _reload(solver) is True
-    assert solver._lgmresM == 50
+    assert solver._lgmresM == 40
     assert solver._lgmresSolver is None
 
 
@@ -355,7 +357,10 @@ def test_a_field_precond_for_a_field_the_system_lacks_is_accepted(configuredSolv
 
 @pytest.mark.parametrize(
     "alongside",
-    [{}, {"lgmresM": 40}, {"outerMaxiter": 5}, {"krylovOnScaledSystem": False}],
+    # each value differs from the construction default, so it is a genuine candidate change
+    # (an unchanged value is never added to the reload's "pending" set, see
+    # BlockAMGSolver._maybeHotReloadConfig) -- krylovOnScaledSystem's own default is now False.
+    [{}, {"lgmresM": 40}, {"outerMaxiter": 5}, {"krylovOnScaledSystem": True}],
     ids=["alone", "with lgmresM", "with outerMaxiter", "with krylovOnScaledSystem"],
 )
 def test_settings_the_build_fails_with_are_rolled_back(configuredSolver, alongside):
@@ -375,8 +380,10 @@ def test_settings_the_build_fails_with_are_rolled_back(configuredSolver, alongsi
     x = solver(A, b)
 
     assert np.linalg.norm(b - A @ x) <= 1e-2 * np.linalg.norm(b)
-    assert solver._fieldPreconds == {} and solver._lgmresM == 30 and solver._outerSolver == "amgcl_lgmres"
-    assert solver._krylovOnScaledSystem is True
+    # reverted to whatever was in force before this (failed) reload -- the construction defaults here,
+    # since the fixture does not override lgmresM/krylovOnScaledSystem
+    assert solver._fieldPreconds == {} and solver._lgmresM == 50 and solver._outerSolver == "amgcl_lgmres"
+    assert solver._krylovOnScaledSystem is False
     assert any("ROLLED BACK" in message for message in messages)
     # the file is recorded as seen: the next solve does not try it again
     messages.clear()

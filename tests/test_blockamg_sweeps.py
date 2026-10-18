@@ -48,7 +48,12 @@ def _outerIterations(nFields=3, **options):
         "outerTol": 1e-8,
         "verbosity": "silent",
         "trueResidualMaxContinuations": 0,
+        # the settings the iteration counts below were measured with (the former defaults): a cap of 200 x 8,
+        # LGMRES cycles of 30, the outer solve on the scaled system
         "outerRestart": 200,
+        "outerMaxiter": 8,
+        "lgmresM": 30,
+        "krylovOnScaledSystem": True,
         "fieldPreconds": {name: dict(_WEAK) for name in ("first", "second", "third")},
     }
     config.update(options)
@@ -75,10 +80,11 @@ def test_further_and_reverse_sweeps_reduce_the_outer_iterations_of_a_coupled_sys
     assert _outerIterations(sweeps=1, symmetric=True) < 0.8 * once
 
 
-def test_the_reverse_sweep_of_the_default_symmetric_sweep_improves_two_fields():
+def test_the_reverse_sweep_of_a_symmetric_sweep_improves_two_fields():
     # with two fields the reverse sweep revisits only the first one: the overwrite form recomputed it from the
-    # second field's estimate alone, the correction form improves it -- the code default symmetric = true is
-    # therefore the one setting whose numerics the correction form changed on a two-field system
+    # second field's estimate alone, the correction form improves it -- symmetric = true (explicitly pinned
+    # here; the code default is now false) is therefore the one setting whose numerics the correction form
+    # changed on a two-field system
     once = _outerIterations(nFields=2, sweeps=1, symmetric=False)
     assert _outerIterations(nFields=2, sweeps=1, symmetric=True) < 0.8 * once
 

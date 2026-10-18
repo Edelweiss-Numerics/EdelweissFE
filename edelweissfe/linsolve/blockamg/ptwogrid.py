@@ -40,11 +40,11 @@ The whole cycle -- and every stage of its build -- runs in C++ (``PTwoGridPrecon
 :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLPTwoGrid`), OpenMP-threaded throughout; this module
 only chooses the parameters and builds the coarse near null-space, which is cheap.
 
-This is an **opt-in variant of the field-split AMG preconditioner**, not the shipped default. It is
+This is an **opt-in variant of the field-split AMG preconditioner**, not the default. It is
 rebuilt exactly when blockamg's single-level hierarchies are, and its rebuild is cheaper than theirs;
 the coarse solve gets the same rigid-body near-null-space treatment as the single-level default
 (restricted to the corner-node subset), while the fine-level Chebyshev smoother needs none. Measured
-against blockamg's recommended single-level configuration with the same outer settings, it was about
+against blockamg's default single-level configuration with the same outer settings, it was about
 12% slower on one reference model and level within noise on another -- worth measuring on a model
 with expensive hierarchy rebuilds, not assumed to help.
 

@@ -41,9 +41,6 @@ from edelweissfe.linsolve.blockamg import createSolver
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
-#: The recommended configuration of the theory page, which includes this very file.
-_RECOMMENDED = "doc/source/documentation/blockamg_recommended.json"
-
 
 def test_the_sparsification_and_gap_keys_reach_the_solver():
     solver = createSolver({"hierarchyDropTol": 1e-3, "hierarchyDropLumping": True, "gapMaxFactor": 50.0})
@@ -60,7 +57,7 @@ def test_an_unknown_key_raises_and_names_it():
 def test_a_non_mapping_config_still_means_all_defaults():
     solver = createSolver("")
     assert solver._hierarchyDropTol == 0.0
-    assert solver._symmetric is True
+    assert solver._symmetric is False
 
 
 @pytest.mark.parametrize(
@@ -69,7 +66,6 @@ def test_a_non_mapping_config_still_means_all_defaults():
         "examples/WinklerL/blockamg.json",
         "examples/AnchorPryOut/blockamg.json",
         "testfiles/edelweiss-only/CantileverBeamQuad4BlockAMG/blockamg.json",
-        _RECOMMENDED,
     ],
 )
 def test_the_shipped_configurations_are_accepted(configFile):
@@ -135,9 +131,9 @@ def test_a_setting_the_run_could_not_use_raises_at_construction(options):
         createSolver(options)
 
 
-def test_the_recommended_configuration_solves_a_displacement_damage_system():
+def test_the_defaults_solve_a_displacement_damage_system():
     A, b, blocks = displacementDamageSystem(12, coupling="symmetric", rowScaling=True)
-    solver = createSolver({**json.load(open(_REPO_ROOT / _RECOMMENDED)), "verbosity": "silent"})
+    solver = createSolver({"verbosity": "silent"})
     solver.setFieldStructure(blocks)
     x = solver(A, b)
     # the displacement field runs on a multi-level float-stored 3x3 block hierarchy
@@ -199,15 +195,16 @@ def test_a_value_out_of_its_range_raises_and_names_its_key(options):
 
 
 def test_the_default_trees_on_the_theory_page_are_the_code_defaults():
-    from edelweissfe.linsolve.blockamg.blockamg import (
-        _DEFAULT_SCALAR_PRECOND,
-        _DEFAULT_VECTOR_PRECOND,
-    )
+    from edelweissfe.linsolve.blockamg.blockamg import _defaultFieldPrecond
 
     page = (_REPO_ROOT / "doc/source/documentation/blockamgtheory.rst").read_text()
     block = page.split("and change only what is intended. The defaults are", 1)[1].split(".. code-block:: json", 1)[1]
     trees = json.JSONDecoder().raw_decode(block.strip())[0]
-    assert trees == {"displacement": _DEFAULT_VECTOR_PRECOND, "nonlocal damage": _DEFAULT_SCALAR_PRECOND}
+    assert trees == {
+        "3D vector field (e.g. displacement)": _defaultFieldPrecond(3),
+        "2D vector field": _defaultFieldPrecond(2),
+        "scalar field (e.g. nonlocal damage), or a vector field of any other dimension": _defaultFieldPrecond(1),
+    }
 
 
 def test_a_block_size_that_does_not_fit_its_field_raises_at_the_first_build():

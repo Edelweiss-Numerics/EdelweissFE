@@ -19,7 +19,16 @@ from edelweissfe.linsolve.blockamg import createSolver
 
 
 def _solver(blocks, **options):
-    config = {"outerTol": 1e-10, "verbosity": "silent", "gapCompensatedTolerance": True}
+    # krylovOnScaledSystem=True pinned deliberately: the learned gap (_trueResidualGap) is only ever
+    # updated on the scaled system (see BlockAMGSolver.__call__) -- on the unscaled one, the default
+    # since the current defaults, the outer solve already converges the true residual itself, so there
+    # is no gap to learn, and gapCompensatedTolerance has nothing to do.
+    config = {
+        "outerTol": 1e-10,
+        "verbosity": "silent",
+        "gapCompensatedTolerance": True,
+        "krylovOnScaledSystem": True,
+    }
     config.update(options)
     solver = createSolver(config)
     solver.setFieldStructure(blocks)
