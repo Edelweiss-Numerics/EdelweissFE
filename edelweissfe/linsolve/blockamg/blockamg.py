@@ -1506,12 +1506,25 @@ class BlockAMGSolver(LinearSolver):
         (``p1Maps`` / ``p1FieldNames``), one AMGCL hierarchy otherwise. A vector field's near null-space is its
         rigid-body modes (see :meth:`_nullspaceCoordinates`); a scalar field takes AMGCL's default constant."""
         isVectorField = block.dimension > 1
-        coords = self._nullspaceCoordinates(block.name) if isVectorField else None
 
         p1Map = None
         if isVectorField and (block.name in self._p1Maps or block.name in self._p1FieldNamesRequested):
             with performancetiming.timeit("p1 topology"):
                 p1Map = self._getP1Map(block.name)
+
+        # Node coordinates cost an O(nNodes) Python loop on first gather (cached after); only fetch them
+        # for a field whose near null-space can actually use them -- p-two-grid's coarse solve always
+        # runs on the plain scalar backend (see its own docstring), but a single-level field's own
+        # backend might not: the default fieldPreconds tree puts a 2D/3D vector field on a block backend,
+        # which has no near-null-space of its own (AMGCL's near-null-space path is unimplemented for
+        # block value types), so coordinates would be gathered and then simply discarded.
+        if block.name in self._fieldPreconds:
+            fieldBackendBlockSize = self._fieldPreconds[block.name].get("backendBlockSize", 1)
+        else:
+            fieldBackendBlockSize = _defaultFieldPrecond(block.dimension).get("backendBlockSize", 1)
+        onScalarBackend = p1Map is not None or fieldBackendBlockSize == 1
+        coords = self._nullspaceCoordinates(block.name) if isVectorField and onScalarBackend else None
+
         if p1Map is not None:
             from edelweissfe.linsolve.blockamg.ptwogrid import PTwoGridPreconditioner
 
