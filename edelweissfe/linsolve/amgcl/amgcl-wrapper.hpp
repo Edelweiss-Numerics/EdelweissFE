@@ -227,7 +227,7 @@ public:
 // in float: amg's build_matrix is backend::builtin<Backend::value_type>::matrix (amgcl/amg.hpp), so
 // the coarsening and every level's relaxation setup -- the Chebyshev smoother's spectral-radius power
 // iteration included, which runs on that build matrix in the relaxation's constructor -- see float
-// values. That was measured to cost up to 30% more outer iterations. builtin_float_matrices keeps
+// values. That was measured to cost noticeably more outer iterations. builtin_float_matrices keeps
 // Backend::value_type double (blocks), so the build matrices, coarsening, Galerkin products,
 // spectral-radius estimates and the coarsest direct solve are all double; only Backend::matrix --
 // the level operators, prolongations and restrictions the cycle reads -- is stored in float, via
@@ -902,7 +902,7 @@ public:
 // function-pointer callback + opaque context set from Cython.
 //
 // Motivation: with the outer operator SpMV already threaded (EquilibratedSystemT above), the single
-// largest remaining bucket in the shipped arm's own solve wall (measured at roughly 38% of total
+// largest remaining bucket in the shipped arm's own solve wall (measured as a substantial share of total
 // wall-clock on a real reference model) is scipy's *own* GMRES orchestration -- Arnoldi/Gram-Schmidt/
 // restart bookkeeping -- which is unavoidably serial CPython regardless of any matvec/preconditioner
 // threading, and scales with the square of the restart length.
@@ -962,8 +962,8 @@ private:
 /// (Arnoldi basis, augmentation vectors) for a fixed n in its own constructor, so a size change (AMR)
 /// needs a fresh instance, and blockamg.py rebuilds it then -- and when its own settings change. Every
 /// call starts from an empty augmentation subspace (lgmres's always_reset, forced here): carrying the
-/// augmentation vectors across calls ("recycling") was measured to buy nothing on 9 representative
-/// systems and, on a live trajectory, to compound a struggling solve's subspace into much more
+/// augmentation vectors across calls ("recycling") was measured to buy nothing on a set of
+/// representative captured systems and, on a live trajectory, to compound a struggling solve's subspace into much more
 /// expensive and once NaN subsequent ones, so it is not offered. The intra-call restart-cycle
 /// augmentation (K) is unaffected.
 ///
@@ -1515,7 +1515,7 @@ public:
     // constructor). The input arrays come from a single-threaded SciPy allocation, i.e. from one NUMA
     // node, and every sparse product on them -- the power iteration, the Galerkin product, every
     // smoothing step -- would otherwise be bound by that one node's memory bandwidth: used in place,
-    // a 13-solve replay sequence took 339 s instead of 276 s on a two-socket machine (16 threads).
+    // a multi-solve replay sequence was measured noticeably slower on a two-socket machine.
     start                                 = Clock::now();
     const int                       nnz   = ptr[n];
     std::shared_ptr< ScalarMatrix > Afine = std::make_shared< ScalarMatrix >( n,

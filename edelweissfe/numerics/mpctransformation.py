@@ -162,14 +162,13 @@ class MultiPointConstraintTransformation:
         own OpenMP-threaded ``product()``/``sum()`` instead of SciPy's single-threaded CSR sparse
         routines -- SciPy's sparse module carries no OpenMP parallelism at all, the same gap this
         codebase also closes for its outer GMRES matvec and AMG relaxation kernels elsewhere.
-        Offline-measured on a reference 280k-dof model: **~2.4–2.6x faster** than the direct
-        expression (``~1.4–1.5 s/call`` vs ``~2.4–2.7 s/call``), correctness-verified to
-        floating-point precision.
+        Offline-measured on a reference model: faster than the direct
+        expression, correctness-verified to floating-point precision.
 
         AMGCL's ``product()``/``sum()`` do not eliminate exact-cancellation zeros the way SciPy's
-        own sparse routines do -- confirmed directly that the extra entries are >99.9999% bit-exact
-        zero (20,102,955 of 20,102,975 on the reference model, the rest floating-point noise at
-        ~1e-19 relative scale), so this method leaves noticeably more raw nnz (~1.6x) than the plain
+        own sparse routines do -- confirmed directly that effectively all of the extra entries are
+        bit-exact zero on the reference model (the rest floating-point noise at a tiny relative
+        scale), so this method leaves noticeably more raw nnz than the plain
         expression. **Not** pruned here: :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.
         applyDirichletK` already calls ``eliminate_zeros()`` immediately after this, gated by the
         existing ``pruneCondensedMatrixZeros`` option (default auto, pruned with PARDISO, uniformly
@@ -357,9 +356,8 @@ class MultiPointConstraintTransformation:
         Kt = self._amgclSpgemmHelper.sum(1.0, KtNoC, 1.0, self._C)
         # No eliminate_zeros() here, deliberately -- not because it is unneeded (AMGCL's
         # product()/sum() leave far more exact-cancellation zeros unpruned than SciPy's own SpGEMM
-        # does, confirmed directly: 54.3M nnz here vs. the plain expression's 34.2M on a reference
-        # model, with >99.9999% of that gap being bit-exact zero, not numerical
-        # approximation), but because NISTSolver.applyDirichletK already does this immediately
+        # does, confirmed directly on a reference model: substantially more stored entries than the plain
+        # expression, essentially all of the difference bit-exact zeros, not numerical approximation), but because NISTSolver.applyDirichletK already does this immediately
         # after, gated by pruneCondensedMatrixZeros (default auto, pruned with PARDISO), uniformly for both condensation
         # strategies -- that gate exists precisely because PARDISO's reordering on these
         # path-dependent condensed systems is sensitive to extra explicit-zero structural entries

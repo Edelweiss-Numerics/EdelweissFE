@@ -296,7 +296,7 @@ hierarchy, and are consumed before the rest of the tree is forwarded verbatim:
     shipped field defaults use: a 3D vector field's own default tree sets it to ``"float"``
     explicitly, see below) or ``"float"``. A single-precision backend should in principle roughly
     halve the hierarchy's memory traffic, but measured across a full set of captured reference
-    systems it inflated outer iteration counts by up to 30% and netted only about 3% in aggregate --
+    systems it inflated outer iteration counts and netted only a small gain in aggregate --
     plausibly because the Chebyshev smoother's own spectral-radius estimate loses accuracy in
     ``float32``, degrading smoother quality enough to eat the bandwidth saving. That holds for the
     scalar backend, which builds the whole hierarchy in single precision. With
@@ -334,20 +334,16 @@ hierarchy, and are consumed before the rest of the tree is forwarded verbatim:
 
 .. admonition:: Measured
 
-   Displacement block alone (GMRES on :math:`\hat A_{uu}`, right-preconditioned, five captured systems of
-   the damage cylinder, the default block-3 float hierarchy): 20/22/24/37/44 instead
-   of 36/34/37/49/56 iterations to :math:`10^{-4}`, at the same cost per iteration and build. On those
-   systems the constant blocks of :math:`\hat A_{uu}` leave row residuals of 2e-2 (median) and 0.3 (90th
-   percentile) against 1e-16 and 2e-5 for the true translations :math:`D^{-1} t`.
+   Displacement block alone (GMRES on :math:`\hat A_{uu}`, right-preconditioned, several captured systems of
+   the damage cylinder, the default block-3 float hierarchy): fewer iterations to :math:`10^{-4}`
+   than with the scaled-block hierarchy, at the same cost per iteration and build. On those
+   systems the constant blocks of :math:`\hat A_{uu}` leave row residuals far from exact against
+   near-exact residuals for the true translations :math:`D^{-1} t`.
 
-   Full system, offline, the default configuration with and without it (two repetitions each): on the
-   damage cylinder's 13 onset systems 317 instead of 379 outer iterations and 67 instead of 74--76 s; on
-   the contact model's 12 systems, whose many partially constrained nodes change the block aggregation,
-   115 instead of 106 outer iterations, a hierarchy build twice as long (24 instead of 11--13 s), and
-   62--63 instead of 45--48 s. Live on the cylinder (increments 50--57, from the same checkpoint): 836
-   instead of 828 s -- before the damage onset about 15% faster per increment with 40% fewer outer
-   iterations, at the onset a few more Newton iterations (65 instead of 61). Hence opt-in, and not part of
-   the defaults.
+   Full system, offline, the default configuration with and without it: faster on the damage
+   cylinder's onset systems, both in outer iterations and wall-clock, including live; but slower on
+   the contact model's systems, whose many partially constrained nodes change the block aggregation
+   and lengthen the hierarchy build there. Hence opt-in, and not part of the defaults.
 
 Near-null-space and the Chebyshev smoother
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -414,7 +410,7 @@ error class either, so it has nowhere efficient to go.
 
 .. admonition:: Measured
 
-   On two real captured systems the full rigid-body basis needed about 28--31% fewer isolated per-field
+   On real captured systems the full rigid-body basis needed fewer isolated per-field
    outer iterations than translations alone, and -- unlike translations alone -- was robust to both
    thread count and the Chebyshev power-iteration setting. That was on the scalar backend; a block
    backend has no way to take the rotations (see ``backendBlockSize``).
@@ -439,11 +435,12 @@ a fixed thread count, up to that last-bit summation order.
 
 .. admonition:: Measured
 
-   With the former setting of 50 power iterations, one captured solve took 1460 versus 43 outer
-   iterations on the identical matrix with nothing differing but ``OMP_NUM_THREADS`` (the true spectral
-   radius, checked independently, barely moves between Newton iterations there). 300 iterations were
-   2.68x faster in aggregate over ten captured degraded systems at 16 threads (811 s to 302 s), with no
-   observed downside on systems that were already fine.
+   With the former setting of 50 power iterations, one captured solve needed far more outer
+   iterations than the identical matrix solved again with nothing differing but ``OMP_NUM_THREADS``
+   (the true spectral radius, checked independently, barely moves between Newton iterations there) --
+   a sign of under-convergence at some thread counts. 300 iterations removed that sensitivity and were
+   faster in aggregate over a set of captured degraded systems, with no observed downside on systems
+   that were already fine.
 
 The block Gauss--Seidel sweep
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -481,7 +478,8 @@ to be a fixed linear operator, not a symmetric one -- the measured configuration
 
 What that one forward sweep does depends on how the fields couple. On the gradient-enhanced damage
 model of the reference runs the coupling is one-sided: :math:`K_{ud}` (displacement rows, damage
-columns) is about 9% of :math:`K_{uu}`, while :math:`K_{du}` is about :math:`10^{-7}` of :math:`K_{dd}`.
+columns) is a noticeable fraction of :math:`K_{uu}`, while :math:`K_{du}` is many orders of magnitude
+smaller than :math:`K_{dd}`.
 With the displacement field first in DOF order, the only coupling product the forward sweep forms is
 :math:`\hat A_{du} v_u`, which is numerically zero there: on that model the default sweep acts as
 block Jacobi, and still pays that product on every outer iteration. Sweeping the damage field first
@@ -491,8 +489,8 @@ up to the inexact field solves.
 .. admonition:: Measured
 
    Damage first against displacement first, offline on the captured systems of the damage cylinder and
-   the contact model: identical outer iteration counts, and 5--7% more time per outer iteration. On these
-   models the preconditioner's strength is its per-field AMG cycles, not the coupling.
+   the contact model: identical outer iteration counts, and somewhat more time per outer iteration. On
+   these models the preconditioner's strength is its per-field AMG cycles, not the coupling.
 
 This is deliberately only an *approximate* inverse of the coupled operator -- which is exactly why
 the true-residual bookkeeping below exists.
@@ -506,8 +504,8 @@ The outer Krylov solve
 as the preconditioner callback. A former fallback, ``outerSolver = "scipy"``, used
 :func:`scipy.sparse.linalg.gmres` instead; it was removed once the native path was gated live against
 it at several thread counts and found to produce the same Newton trajectory. Orchestrating GMRES from
-Python -- the Arnoldi steps, orthogonalization and restart bookkeeping -- was measured as roughly 38%
-of this solver's wall-clock on a reference model when run that way, and, being serial Python,
+Python -- the Arnoldi steps, orthogonalization and restart bookkeeping -- was measured as a
+substantial share of this solver's wall-clock on a reference model when run that way, and, being serial Python,
 anti-scaled past one NUMA node on multi-socket hardware, which the native implementation does not.
 
 ``lgmres`` bounds *all* Arnoldi steps across all internal restarts with a single ``maxiter``;
@@ -522,8 +520,8 @@ GMRES(``lgmresM + lgmresK``). Every solve starts from an empty augmentation subs
 *across* solves ("recycling") sounds attractive -- a hard solve's converged subspace as a warm start for
 the next -- but measured on captured systems it contributed nothing (bit-identical iteration counts), and
 on a live run it was actively harmful: a solve that had already struggled left a poorly conditioned
-subspace which compounded into a following solve needing 428 instead of 159 iterations, and in one run an
-outright ``NaN``. It was therefore removed; the former keys ``lgmresAlwaysReset`` and
+subspace which compounded into a following solve needing far more iterations than a fresh one, and in
+one run an outright ``NaN``. It was therefore removed; the former keys ``lgmresAlwaysReset`` and
 ``lgmresResetOnNewIncrement`` are still accepted at their non-recycling values ``true`` / ``false``, with
 a deprecation note, and rejected otherwise.
 
@@ -575,7 +573,7 @@ iterates on, :math:`\lVert \hat b - \hat A z \rVert / \lVert \hat b
 \rVert`: AMGCL's LGMRES is right-preconditioned and tests it directly. The
 scaled residual can differ substantially from the true relative residual (stiff rows are down-weighted
 by :math:`D`), so "converged" can mean a true relative residual well above the requested :math:`\eta`;
-measured on a reference model, one solve reached :math:`1.6\cdot 10^{-2}` where :math:`10^{-4}` had
+measured on a reference model, one solve's achieved true residual was found far looser than what had
 been asked for.
 
 Every solve on the scaled system therefore measures the true relative residual :math:`\lVert A x - b \rVert / \lVert b
@@ -604,11 +602,11 @@ Gap-compensated tolerance
 
 Because the system is equilibrated, the outer Krylov method minimises the *scaled* residual
 :math:`\lVert \hat b - \hat A z \rVert` while acceptance is judged on the *true* relative residual.
-The ratio between the two -- the **gap** -- has been measured between 1.0 and 3.5 on the first
-reference model and up to about 40 on a contact model with multi-point constraints (stiff rows are
+The ratio between the two -- the **gap** -- has been measured to vary widely, from close to one on
+some models to considerably larger on a contact model with multi-point constraints (stiff rows are
 down-weighted by the equilibration), and it is why
 almost every solve needs a continuation on the scaled system (the former default): on a reference
-gradient-enhanced damage model, 4467 of 4499 solves ran one, i.e. effectively every linear solve was
+gradient-enhanced damage model, nearly every solve ran one, i.e. effectively every linear solve was
 performed twice. A continuation is disproportionately expensive, because restarting discards most of
 the accumulated Krylov subspace.
 
@@ -625,12 +623,12 @@ continuation that is still needed then tightens by the *measured* gap rather tha
 .. note::
    **Why this is not the default** -- and does not need to be: the default already runs the outer
    solve on the unscaled system (``krylovOnScaledSystem = false``), where there is no gap to
-   compensate at all. The measurement below is from the scaled system, where gap compensation is a
-   live option. Per increment it is a clear win there: on a live 12-increment window of a reference
-   model, continuations dropped from 126 to 1 and outer iterations from 8943 to 7124 (-20%), with no
-   cutbacks or material return-mapping failures. But the scaled system, left uncompensated, happens
-   to over-solve every system by roughly 30x, and the Newton iteration quietly relies on that:
-   converging merely inside the requested tolerance costs about one extra Newton iteration per
+   compensate at all. Gap compensation is a live option only on the scaled system. Per increment it
+   is a clear win there: on a live window of a reference model it substantially cut both the number of
+   continuations and the outer iterations needed, with no cutbacks or material return-mapping
+   failures. But the scaled system, left uncompensated, happens
+   to over-solve every system by a large factor, and the Newton iteration quietly relies on that:
+   converging merely inside the requested tolerance costs Newton extra iterations per
    increment, which is enough to park the run above the adaptive time stepper's ``criticalIter``
    threshold and so stop it from growing the time increment. In the same window the uncompensated
    path grew its increment and covered more simulated time, while the compensated one never grew.
@@ -661,23 +659,23 @@ The hierarchies are rebuilt when
   changed". It is not exact (two different patterns could coincidentally share an ``nnz``) but it
   errs safely, since an unnecessary refresh costs time and never correctness. A pattern change is not
   a graceful degradation: measured on one transition, a hierarchy built for the previous pattern
-  needed 494 outer iterations against 94 for a fresh one, an outright wall-clock regression,
+  needed far more outer iterations than a fresh one, an outright wall-clock regression,
 * a residual jump marks a new increment (see ``residualGrowthFactor`` and its blind spot above) and
   ``refreshOnNewIncrement`` is set (the default), or
 * the previous solve's outer iteration count exceeded both ``hierarchyStalenessFactor`` times and 15
   more than the count of the solve the hierarchies were built for -- a growing count being the signal
   that the reused hierarchies are drifting away from the current Jacobian. The reference is that
-  first solve, not the previous one, so a slow drift (12, 17, 25, 37, 50 iterations) is caught; the
+  first solve, not the previous one, so a slow drift across several solves is caught; the
   absolute margin keeps a factor alone from firing on noise at small counts, or
 * the previous solve hit the outer iteration cap. A missed tolerance alone does not trigger a
   rebuild: on the scaled system, with continuations off, it typically comes from the gap between the
   scaled residual the outer solve converges and the true one (stiff rows down-weighted by the
   equilibration, e.g. on a model with multi-point constraints), which a fresh hierarchy cannot close --
-  measured 18% slower on such a model when it did trigger rebuilds; on the unscaled system (the
+  measured slower on such a model when it did trigger rebuilds; on the unscaled system (the
   default) a miss without a cap hit happens only at a rounding tie, since the outer solve then
   converges the true residual itself. A cap hit asks for a rebuild even when the capped solve had
-  just rebuilt its hierarchies: not rebuilding again was measured neutral (live cylinder, increments 50--57: 828 s
-  against 826 s, the same Newton path, 19 more outer iterations), so the simpler rule stays.
+  just rebuilt its hierarchies: not rebuilding again was measured neutral on a live run (the same
+  Newton path, at a comparable cost), so the simpler rule stays.
 
 On a model with contact or tie constraints the active constraint set can change between Newton
 iterations, and then the sparsity pattern -- and with it the nonzero count -- changes and the
@@ -686,8 +684,8 @@ would otherwise drop exact zeros (``pruneCondensedMatrixZeros``, a nonlinear-sol
 changes the count on almost every Newton iteration even when the constraint set does not; left unset,
 that option's "auto" default already leaves pruning off here, because this solver reports
 :attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`, so reuse pays on such
-models without any extra configuration (on a contact model with 53,701 multi-point constraint slaves,
-a configuration relying on it ran six increments in 917 s instead of 1328 s with pruning on).
+models without any extra configuration (on a contact model with many multi-point constraint slaves,
+a configuration relying on it ran noticeably faster than with pruning on).
 
 The native LGMRES instance is deliberately *not* torn down on a hierarchy refresh -- only on an
 actual system-size change, which invalidates AMGCL's preallocated scratch vectors, or a hot reload of
@@ -782,7 +780,7 @@ Block preconditioner and per-field hierarchies
       - Give a vector field *on the scalar backend* the full six-mode (3D) or three-mode (2D)
         rigid-body near-null-space. Falls back to translations only for a field whose node
         coordinates are unavailable. Set ``false`` to force translations only unconditionally --
-        worth roughly 28--31% more per-field outer iterations on the scalar backend, so only for
+        worth noticeably more per-field outer iterations on the scalar backend, so only for
         comparison purposes there. No effect on the block backends (``backendBlockSize`` 2 or 3)
         the default 2D/3D ``fieldPreconds`` trees use: AMGCL's near-null-space path is unimplemented
         for block value types, so a block-valued field never gets one, whatever this is set to.
@@ -977,7 +975,7 @@ Hierarchy reuse
         off-diagonal :math:`a_{ij}` where :math:`|a_{ij}| < \text{tol}\cdot\sqrt{|a_{ii}| |a_{jj}|}`.
         Only the preconditioner is sparsified -- the operator the Krylov method applies is
         untouched -- so this cannot change the converged solution, only the iteration count needed
-        to reach it. Worth up to **1.81x on the linear solve** on operators that store many
+        to reach it. Worth a substantial speedup on the linear solve on operators that store many
         numerically negligible entries (meshfree RKPM discretisations are the motivating case). Off
         by default because the useful range is operator-dependent.
     * - ``hierarchyDropLumping``
@@ -985,7 +983,7 @@ Hierarchy reuse
       - When ``hierarchyDropTol`` drops an entry, add it onto its row's diagonal instead of
         discarding it, so row sums are preserved exactly and the constant near-null-space vector
         survives filtering -- the AMG literature's preferred filtered-matrix construction. Measured
-        neutral at best on operators tested so far (no change at ``1e-4``, 8.1% *slower* at
+        neutral at best on operators tested so far (no change at ``1e-4``, measurably *slower* at
         ``1e-2``, with outer GMRES iteration count unchanged either way): the whole penalty is the
         extra pass over the matrix. Off by default; plain truncation is simpler and faster.
 
@@ -1110,7 +1108,7 @@ Its preconditioner is rebuilt exactly when the single-level hierarchies are (see
 above), and its coarse solve gets a near-null-space while the fine-level Chebyshev smoother, having
 no coarsening step of its own, needs none. Measured against the default single-level
 configuration with the same outer settings (fine operator in float, ``p1NuPre = 0``,
-``p1NuPost = 1``, fine degree 16, the same coarse ``estimate_spectral_radius``), it was about 12%
+``p1NuPost = 1``, fine degree 16, the same coarse ``estimate_spectral_radius``), it was
 slower on a cylinder sequence and level within noise on a contact sequence, with the cheaper
 rebuild -- an alternative worth measuring on a model with expensive rebuilds, not the default.
 Enable it per field with ``p1FieldNames``; the topology map is computed lazily from the model and
@@ -1166,8 +1164,8 @@ Why the defaults are what they are
 The values documented in the key tables above are not a separate "recommended configuration" layered
 on top of different shipped defaults -- they *are* the code's defaults (:class:`BlockAMGSolver`'s
 constructor). They are the winner of a systematic comparison, against the **former** defaults, on two
-captured models (a 0.84M-DOF gradient-enhanced damage cylinder through its damage onset, and a
-1.07M-DOF contact anchor model with 53,701 multi-point-constraint slaves):
+captured models (a gradient-enhanced damage cylinder through its damage onset, and a
+contact anchor model with many multi-point-constraint slaves):
 
 * **3x3 blocks stored in float** (set up in double, see ``backendPrecision``) cut the cost per outer
   iteration.
@@ -1184,9 +1182,8 @@ captured models (a 0.84M-DOF gradient-enhanced damage cylinder through its damag
   new increment, a pattern change) rebuilds them.
 * ``etaMax = 1e-3`` is not about the linear solver at all: through a damage onset, Newton needs linear
   solves about ten times tighter than the Eisenstat--Walker forcing allowed at ``etaMax = 1e-2``.
-  ``etaMin = 1e-4`` was measured against ``1e-3``: the looser solves cost Newton
-  iterations already before the damage onset (74 instead of 64 Newton iterations over the same eight
-  increments, 1773 s instead of 1483 s).
+  ``etaMin = 1e-4`` was measured against ``1e-3``: the looser value cost Newton extra
+  iterations already before the damage onset, and more wall-clock to match.
 * ``krylovOnScaledSystem = false`` converges the true residual directly, so the gap compensation and
   the continuations of the scaled system have nothing to do and are left at their own, otherwise
   inert, defaults.
@@ -1196,20 +1193,19 @@ captured models (a 0.84M-DOF gradient-enhanced damage cylinder through its damag
   needed this set by hand (see the reuse rules above).
 
 Measured live, from the same checkpoints, the defaults against the former defaults (no per-model keys in
-either run, 16 threads): the contact model's six increments in 681 s instead of 1252 s (-46%); the damage
-cylinder's increments 50--57 in 954 s, where the former defaults had cleared six increments and were still
-on the damage-onset increment after 71 minutes (stopped there).
+either run): the contact model's increments finished markedly faster; on the damage cylinder, the
+former defaults had still not cleared the damage-onset increment in a comparable time budget, while
+the current defaults carried the run through it and beyond.
 
-How the settings got there, live against the production settings the reference runs had used: the contact
-model's six increments in 676 s instead of 1328 s (-49%), and the damage cylinder at about 10.3 s instead of
-25.5 s per Newton iteration (-60%), both with ``etaMax = 1e-2`` and on the scaled system. On the
-cylinder that setting took five Newton iterations per increment before the damage onset instead of
-three and failed the onset increment (a cutback); ``etaMax = 1e-3`` restores three, converges the
-onset increment and reaches the same load (t = 0.28) in 907 s, and is neutral on the contact model
-(19.4 against 19.3 s per Newton iteration). ``krylovOnScaledSystem = false`` then saves another 4.5%
-on the cylinder (869 s, 61 instead of 63 Newton iterations) and 19.4 -> 18.4 s per Newton iteration on
-the contact model. Offline, on 13 / 12 captured consecutive systems, the same
-configuration with a 200-iteration cap took 91--93 s / 60--61 s against 107--112 s / 72--73 s with
+How the settings got there, live against the production settings the reference runs had used: both
+the contact model and the damage cylinder solved faster, judged per Newton iteration on the cylinder,
+with ``etaMax = 1e-2`` and on the scaled system. On the
+cylinder that setting took Newton more iterations per increment before the damage onset and failed
+the onset increment outright (a cutback); ``etaMax = 1e-3`` restores the fewer-iteration path,
+converges the onset increment and reaches the same load, and is neutral on the contact model.
+``krylovOnScaledSystem = false`` then saves a further amount on the cylinder, with fewer Newton
+iterations, and on the contact model. Offline, on captured consecutive systems of both models, the
+same configuration with a 200-iteration cap needed less wall-clock than with
 the displacement blocks stored in double, at identical outer iteration counts.
 
 All of the above, except the offline 200-iteration-cap comparison just above, was measured with the

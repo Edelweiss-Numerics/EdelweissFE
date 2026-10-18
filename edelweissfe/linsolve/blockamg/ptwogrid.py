@@ -47,8 +47,8 @@ near-null-space treatment the single-level default gives a scalar-backend field 
 corner-node subset, independent of the field's own single-level backend -- a block backend, the
 default for 2D/3D fields, has no near-null-space of its own), while the fine-level Chebyshev smoother
 needs none. Measured
-against blockamg's default single-level configuration with the same outer settings, it was about
-12% slower on one reference model and level within noise on another -- worth measuring on a model
+against blockamg's default single-level configuration with the same outer settings, it was
+slower on one reference model and level within noise on another -- worth measuring on a model
 with expensive hierarchy rebuilds, not assumed to help.
 
 **Dirichlet handling is load-bearing, do not simplify away.** A field's diagonal block still carries
@@ -56,10 +56,10 @@ its Dirichlet identity rows (production applies Dirichlet elimination upstream o
 the identity rows of multi-point-constraint slaves, which are treated alike. Both
 the fine smoothing and the Galerkin projection must act on the *free* DOFs only, with the Dirichlet
 DOFs decoupled entirely, not merely masked in place -- masking in place for the fine smoother
-alone was tried and diverged outright (17-80x residual growth). The mechanism is not a genuine
-non-symmetry in the physical operator: a raw, Dirichlet-row-included diagonal block looks roughly
-50% non-symmetric by a simple ``‖B-Bᵀ‖/‖B‖`` measure, but that figure collapses to ~0.6% once the
-Dirichlet rows are properly removed (rather than merely zeroed) -- a storage artifact of how a
+alone was tried and diverged outright. The mechanism is not a genuine
+non-symmetry in the physical operator: a raw, Dirichlet-row-included diagonal block looks substantially
+non-symmetric by a simple ``‖B-Bᵀ‖/‖B‖`` measure, but that figure collapses to a small fraction of a
+percent once the Dirichlet rows are properly removed (rather than merely zeroed) -- a storage artifact of how a
 Dirichlet-eliminated row is represented in a sparse matrix, not physics. A free midside node whose
 edge-endpoint corner is Dirichlet-constrained keeps only the surviving ½-weight on its free endpoint
 -- no renormalization (the constrained corner contributes exactly zero to a homogeneous Newton
@@ -82,12 +82,11 @@ from edelweissfe.utils import performancetiming
 #: Coarse-level Chebyshev degree/sweep-count configuration, from a config sweep across degree and
 #: npre/npost on a real coupled system: halving the Chebyshev degree (8 -> 4) at npre=2/npost=2
 #: matches a higher-degree hierarchy's outer-iteration count almost exactly while cutting the coarse
-#: apply's own cost by ~7% -- npre=1/npost=1 variants were cheaper per call but pushed outer GMRES
+#: apply's own cost -- npre=1/npost=1 variants were cheaper per call but pushed outer GMRES
 #: iterations up enough to be a wash or a regression (a weaker coarse correction is not free). A
 #: direct PARDISO factorization of A1 was also tried and rejected: exact (residual ~1e-14) but no
-#: cheaper per call (~70ms, matching this config) -- A1's ~71 nnz/row at 70k free coarse DOF fills in
-#: heavily under a general (unsymmetric) LU, so an exact triangular solve costs about as much as the
-#: approximate V-cycle here.
+#: cheaper per call -- A1 fills in heavily under a general (unsymmetric) LU at the problem sizes
+#: tested, so an exact triangular solve costs about as much as the approximate V-cycle here.
 #: power_iters=300 (was 50): the coarse solve uses the identical AMGCL Chebyshev relaxation code path
 #: as blockamg's own single-level default, just on the coarse P1 operator instead of the full field
 #: block, and is subject to the identical thread-count-dependent spectral-radius-estimate issue (see
@@ -166,7 +165,7 @@ class PTwoGridPreconditioner:
         estimate. A radius without a vector is used as supplied.
     fineValueType
         ``"double"`` (default) or ``"float"``: the value type the fine operator is stored in for the
-        smoother and the residual -- about 80 % of an outer iteration is fine smoothing, which is
+        smoother and the residual -- fine smoothing dominates an outer iteration's cost, which is
         bound by the bytes per entry read. Vectors and every accumulation stay double (a float
         matrix times a double vector, summed in double), and the spectral-radius estimate and its
         re-check run on the double operator before it is rounded, so float only rounds the stored

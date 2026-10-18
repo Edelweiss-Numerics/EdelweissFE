@@ -267,8 +267,8 @@ cdef class PyAMGCLEquilibratedSystem:
 
     Replaces a chain of serial SciPy operations -- a full copy of ``A`` scaled in place, a threaded
     copy of that for the operator, row and column slices for every coupling and diagonal block --
-    measured at about 4 s of every solve on a 0.8-1.1M DOF system. The operator is bitwise the former
-    one (see ``EquilibratedSystemT`` in ``amgcl-wrapper.hpp``).
+    measured as a non-trivial share of every solve on a large coupled system. The operator is bitwise
+    the former one (see ``EquilibratedSystemT`` in ``amgcl-wrapper.hpp``).
     """
     cdef EquilibratedSystem* system
     cdef readonly int n

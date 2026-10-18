@@ -124,13 +124,13 @@ _IDENTIFICATION = "BlockAMGSolver"
 # backendPrecision defaults to "double" when omitted from a fieldPreconds tree -- not what the shipped
 # field defaults use: _defaultFieldPrecond's own 3D tree sets it to "float" explicitly (see below). On
 # the scalar backend "float" is AMGCL's builtin<float>,
-# which builds the whole hierarchy in single precision; measured on all 9 dumped ords of a real
-# reference model, it inflated outer GMRES iterations by up to 30% and only won on wall-clock about
-# half the time, netting only ~3% aggregate -- plausibly because the Chebyshev smoother's own
+# which builds the whole hierarchy in single precision; measured across a set of dumped systems of a
+# real reference model, it inflated outer GMRES iterations and only won on wall-clock part of the
+# time, netting only a small aggregate gain -- plausibly because the Chebyshev smoother's own
 # power-iteration spectral-radius estimate then runs in float32 too. With backendBlockSize 3, "float"
 # instead sets the hierarchy up in double and only stores the level matrices the cycle reads in float
 # (see builtin_float_matrices in amgcl-wrapper.hpp): measured with outer iteration counts identical to
-# the double hierarchy's on a captured damage-onset sequence, and about 15% faster.
+# the double hierarchy's on a captured damage-onset sequence, and faster.
 #
 # backendBlockSize defaults to the field's own nodal dimension (see _defaultFieldPrecond below): 3 for
 # a 3D vector field, 2 for a 2D one, 1 (scalar) otherwise. Setting it > 1 skips set_nullspace (see
@@ -146,8 +146,8 @@ _IDENTIFICATION = "BlockAMGSolver"
 # the model built with dimension 3.
 # power_iters 300: AMGCL's default (0) bounds the spectral radius by Gershgorin's theorem, pessimistically; a
 # power iteration is tighter but starts from a vector seeded per OpenMP thread, so it depends on the thread count.
-# The former 50 iterations left it badly under-converged on hard operators at some thread counts (1460 instead of
-# 43 outer iterations on the same matrix), 300 do not (see the Chebyshev section of the theory page).
+# The former 50 iterations left it badly under-converged on hard operators at some thread counts (needing far
+# more outer iterations than an otherwise identical solve), 300 do not (see the Chebyshev section of the theory page).
 #
 # The coarsening/relaxation recipe every vector field shares, whatever its dimension -- the measured
 # winner on the reference models (see the theory page's "why the defaults are what they are"):
@@ -418,7 +418,7 @@ class BlockAMGSolver(LinearSolver):
     residual is the true one; with ``krylovOnScaledSystem = True``, the scaled (equilibrated) one, which
     can be considerably smaller than the true one (stiff rows are down-weighted by the equilibration), so
     "converged" could otherwise mean a true residual well above ``eta`` (measured on a real reference
-    model: a 1.6e-2 true residual when 1e-4 was requested).
+    model: a true residual far above the requested tolerance).
 
     Parameters
     ----------
@@ -434,7 +434,7 @@ class BlockAMGSolver(LinearSolver):
         continuation retry below) -- see ``edelweissfe/linsolve/amgcl/amgcl-wrapper.hpp``'s
         ``LGMRESOuterSolverT`` for why: orchestrating GMRES from Python -- the Arnoldi steps,
         orthogonalization and restart bookkeeping -- was found to be the single largest unaddressed
-        cost bucket on the outer loop of a real reference model (roughly 38% of solve wall-clock) when
+        cost bucket on the outer loop of a real reference model when
         this solver used a SciPy-based outer solve instead. AMGCL's native implementation was live-gated
         against that SciPy path at multiple thread counts: trajectory-identical, no NaN (once cross-solve
         recycling -- see below -- was removed), and increasingly faster as thread count grows -- the
@@ -450,8 +450,8 @@ class BlockAMGSolver(LinearSolver):
         GMRES(``M + K``). Every solve starts
         from an empty augmentation subspace: carrying it across solves ("recycling") was measured to give
         nothing on captured systems (bit-identical iteration counts) and, on a live run, to compound a
-        struggling solve's poorly conditioned subspace into a following solve needing 428 instead of 159
-        iterations and once an outright NaN -- so it was removed.
+        struggling solve's poorly conditioned subspace into a following solve needing far more
+        iterations than a fresh one, and once an outright NaN -- so it was removed.
     lgmresAlwaysReset, lgmresResetOnNewIncrement
         Deprecated, kept accepted for existing configuration files: ``True`` / ``False`` respectively --
         the only behaviour left -- are accepted (a configuration file setting them gets a deprecation
@@ -484,7 +484,7 @@ class BlockAMGSolver(LinearSolver):
         them in its near-null-space basis to represent that error class exactly on the coarse levels --
         without them, that class of error has nowhere efficient to go, since a Chebyshev smoother is
         (by its own spectral-window construction) not targeting near-zero-eigenvalue error either.
-        Measured ~28-31% fewer isolated per-field outer iterations on two real captured systems, on the
+        Measured fewer isolated per-field outer iterations on real captured systems, on the
         scalar backend, robust to both thread count and the Chebyshev ``power_iters`` setting, unlike
         translations-only, which is sensitive to both. Falls back to translations-only automatically
         for any scalar-backend field whose coordinates are unavailable (e.g. an offline probe that only
@@ -543,12 +543,13 @@ class BlockAMGSolver(LinearSolver):
         ``a_ij`` where ``|a_ij| < hierarchyDropTol * sqrt(|a_ii| |a_jj|)``. Zero (the default) keeps the
         block as-is.
 
-        Why this exists. The RKPM operators this solver is used on store ~1643 entries per row at 43,350
-        DOF (3.79% dense) while the *median* off-diagonal is **1.29e-06 of the diagonal** -- numerically
-        far sparser than structurally. Smoothed aggregation then has to weigh 1643 candidates per row
-        where a handful matter, and the Galerkin product carries the rest down to every coarse level.
-        Measured on such a matrix: ``1e-6`` keeps 50.8% of the entries, ``1e-4`` keeps 29.6%, ``1e-3``
-        keeps 17.4%, and no row loses all of its off-diagonals even at ``1e-2``.
+        Why this exists. The RKPM operators this solver is used on store many entries per row while the
+        *median* off-diagonal is many orders of magnitude smaller than the diagonal -- numerically
+        far sparser than structurally. Smoothed aggregation then has to weigh every one of those candidates
+        per row where only a handful matter, and the Galerkin product carries the rest down to every
+        coarse level. Measured on such a matrix: a looser drop tolerance keeps more of the entries and a
+        tighter one keeps fewer, and no row loses all of its off-diagonals even at the tightest tolerance
+        tested.
 
         Only the *preconditioner* is sparsified; the operator the Krylov method applies, and therefore
         the residual it drives to zero, is the unmodified matrix. So this cannot change the converged
@@ -587,8 +588,9 @@ class BlockAMGSolver(LinearSolver):
         defaults, which run the outer solve on the unscaled system (no gap to compensate there -- see
         ``krylovOnScaledSystem``). On the scaled system, the outer Krylov converges the *scaled*
         (equilibrated) residual while acceptance is on the *true* relative residual; the ratio between
-        them (the "gap", measured 1.0-3.5 on a gradient-enhanced damage model and up to about 40 on a
-        contact model with multi-point constraints) is why almost every solve on that system needs a
+        them (the "gap", measured to vary widely -- from close to one on a gradient-enhanced damage
+        model to considerably larger on a contact model with multi-point constraints) is why almost
+        every solve on that system needs a
         warm-restart continuation. When enabled, the first pass asks for
         ``gapSafetyFactor * eta / gap`` (gap EMA-smoothed across solves) so it lands on target in one
         pass, and any remaining continuation tightens by the *measured* gap instead of the fixed
@@ -596,20 +598,20 @@ class BlockAMGSolver(LinearSolver):
 
         **Measured, and why it is not the default.** The measurement below is from the scaled system
         (the former default), before the ``krylovOnScaledSystem = False`` default made this moot for
-        most runs. Per increment it is a clear win there: on a live 12-increment AnchorPryOut window,
-        continuations 126 -> 1 and outer iterations 8943 -> 7124 (-20%), with no cutbacks or
-        return-mapping failures. But the scaled system, left uncompensated, over-solves by ~30x, and
-        Newton quietly relies on that: landing merely in-spec costs about one extra Newton iteration
-        per increment, which parks the run just above the adaptive time stepper's ``criticalIter``
-        growth threshold. In the same window the uncompensated arm grew its increment 0.000375 ->
-        0.000413 and covered 16% more simulated time, while this arm never grew. Judged per unit of
+        most runs. Per increment it is a clear win there: on a live AnchorPryOut window it
+        substantially cut both the number of continuations and the outer iterations needed, with no
+        cutbacks or return-mapping failures. But the scaled system, left uncompensated, over-solves by
+        a large factor, and Newton quietly relies on that: landing merely in-spec costs Newton extra
+        iterations per increment, which parks the run just above the adaptive time stepper's
+        ``criticalIter`` growth threshold. In the same window the uncompensated arm grew its increment
+        and covered more simulated time, while this arm never grew. Judged per unit of
         *simulated time* rather than per increment, the per-increment saving is largely or wholly given
         back -- hence this stays opt-in, for a model still run with ``krylovOnScaledSystem = True``.
         ``gapSafetyFactor`` is the knob between the two regimes there (smaller = more accurate = closer
         to the uncompensated path's Newton behaviour); the sweet spot is unexplored.
 
     gapMaxFactor
-        Upper clamp on the gap EMA (default 1e3, well above the measured gaps of up to about 40). Without
+        Upper clamp on the gap EMA (default 1e3, well above the gaps typically measured). Without
         it, one non-converged solve can report an outsized gap that compounds through the EMA into
         an ever-tighter, unmeetable tolerance for every solve after it.
     hierarchyStalenessFactor
@@ -743,8 +745,8 @@ class BlockAMGSolver(LinearSolver):
     #: changing pattern (e.g. from ``pruneCondensedMatrixZeros`` on a multi-point-constrained model)
     #: forces a hierarchy rebuild on every solve (see the ``patternChanged``/nnz rule in ``__call__``,
     #: which this ``nnz != self._lastNnz`` proxy trips on almost every Newton iteration when pruning
-    #: churns the pattern), which was measured to cost a contact model with 53,701
-    #: multi-point-constraint slaves 1328 s against 917 s over six increments.
+    #: churns the pattern), which was measured to cost a contact model with many
+    #: multi-point-constraint slaves noticeably more wall-clock over several increments.
     needsStableSparsityPattern = True
 
     #: Degradation dumps written across every instance in this process, so
@@ -953,15 +955,15 @@ class BlockAMGSolver(LinearSolver):
 
         The reference is the outer iteration count of the solve the hierarchies were built for (the first
         one after the last rebuild), not that of the previous solve: compared with its predecessor only, a
-        slow drift (12, 17, 25, 37, 50) never trips a 1.5 factor. A rebuild needs the count to exceed both
+        slow drift across several solves never trips a 1.5 factor. A rebuild needs the count to exceed both
         ``hierarchyStalenessFactor`` times that reference and the reference plus
-        :data:`_STALENESS_MIN_EXCESS` -- at small counts a factor alone fires on noise (8 -> 13). A solve
+        :data:`_STALENESS_MIN_EXCESS` -- at small counts a factor alone fires on noise. A solve
         that hit the iteration cap always asks for a rebuild: its count says nothing about how far the
         hierarchies drifted, only that they no longer do the job -- also when that solve had just rebuilt them
         (not rebuilding again was measured neutral, see the theory page). A missed tolerance does not: on
         the scaled system, with continuations off, it comes from the gap between the scaled residual the
         outer solve converges and the true one (stiff rows down-weighted by the equilibration), which a
-        rebuild cannot close -- measured +18% on a contact model with multi-point constraints when it did
+        rebuild cannot close -- measured slower on a contact model with multi-point constraints when it did
         trigger a rebuild; on the unscaled system (the default) a miss without a cap hit happens only at a
         rounding tie, since the outer solve then converges the true residual itself.
         """
@@ -1764,8 +1766,9 @@ class BlockAMGSolver(LinearSolver):
         newIncrement = (
             self._lastResidualNorm is not None and residualNorm > self._residualGrowthFactor * self._lastResidualNorm
         )
-        # A hierarchy built for another sparsity pattern can be a far worse preconditioner (measured: 494 instead
-        # of 94 outer iterations). nnz is an O(1) proxy for a pattern change; it errs on the safe side.
+        # A hierarchy built for another sparsity pattern can be a far worse preconditioner (measured to need
+        # far more outer iterations than a fresh one). nnz is an O(1) proxy for a pattern change; it errs on
+        # the safe side.
         patternChanged = self._lastNnz is not None and A.nnz != self._lastNnz
 
         # Refresh the per-field AMG hierarchies (rather than reuse the standing ones) when there is

@@ -139,8 +139,8 @@ class NISTSchema:
             "Condense the multi-point-constraint system matrix via the direct T^T K T + C "
             "expression, but through AMGCL's own OpenMP-threaded product()/sum() "
             "instead of SciPy's single-threaded CSR sparse routines. Offline-measured on a "
-            "reference 280k-dof model at ~2.4-2.6x faster than the direct SciPy expression, "
-            "correctness-verified to floating-point precision. Leaves ~1.6x more raw nnz than the "
+            "reference model as faster than the direct SciPy expression, "
+            "correctness-verified to floating-point precision. Leaves more raw nnz than the "
             "plain expression (AMGCL's product()/sum() do not prune exact-cancellation zeros the "
             "way SciPy's do) -- not eliminated at the MPC-transform step itself, since "
             "applyDirichletToStiffness already prunes immediately after, gated by the existing "
@@ -972,9 +972,9 @@ class NIST(NonlinearSolverBase):
         #
         # The pruning has a measured cost, though, which is why it is now switchable: it removes
         # whichever entries happen to be exactly zero on *this* iteration, so the pattern differs from
-        # one Newton iteration to the next (observed swings of ~200k nnz within a single increment)
-        # and a linear solver can never reuse its symbolic factorization -- worth ~35% of each
-        # iteration on a 280k-dof model. Turning it off is only half the story: it pays off solely in
+        # one Newton iteration to the next (observed large swings in nnz within a single increment)
+        # and a linear solver can never reuse its symbolic factorization -- a non-trivial share of each
+        # iteration's cost on a large model. Turning it off is only half the story: it pays off solely in
         # combination with a solver that then actually freezes its reordering, and the drift the
         # comment above describes has to be re-checked against a reference load path before it is
         # adopted. Left unset in the input file, this is decided automatically per self.linSolver

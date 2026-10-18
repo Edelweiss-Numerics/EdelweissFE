@@ -2,7 +2,7 @@
 ** Bonded anchor pry-out test -- EdelweissFE translation of AnchorPryOut.inp (Abaqus/Standard, UEL)
 **=================================================================================================
 **
-** A real, full-scale (280k-dof) engineering model -- concrete via a gradient-enhanced-damage
+** A real, full-scale engineering model -- concrete via a gradient-enhanced-damage
 ** Marmot material, steel fastener parts, 5 *TIE constraints, 2 penalty contact pairs, and
 ** geometry-driven AMR -- used here to demonstrate this repo's currently best-known linear-solver
 ** setup for exactly this kind of hard, ill-conditioned, path-dependent problem
@@ -15,19 +15,20 @@
 **  - `useAmgclMPCCondensation=True` (`>>options` on the loading step below): threads the multi-
 **    point-constraint condensation this model's 5 ties require (`T^T K T + C`, every solve) via
 **    AMGCL's own OpenMP-threaded `product()`/`sum()` instead of single-threaded SciPy CSR routines.
-**    Measured ~2.4-2.6x faster than the plain expression offline, ~7.3% faster end-to-end live.
+**    Measured faster than the plain expression offline, and faster end-to-end live.
 **  - Deliberately *not* enabled: p-two-grid (`p1FieldNames`) -- measured at parity with the
 **    single-level hierarchy on this model (not a real margin), not worth the added complexity here.
 **
 ** An earlier version of this file set a fixed, tight `outerTol=1e-8` on the theory that it was just an
 ** accuracy choice: a live smoke test on this exact model caught that it was not -- the first real cutback
-** needed 963 outer iterations and did not converge. `outerTol` stays unset (adaptive forcing). If your own
-** model needs a tighter fixed tolerance, re-verify the load path against a reference run.
+** needed far more outer iterations than it should and did not converge. `outerTol` stays unset (adaptive
+** forcing). If your own model needs a tighter fixed tolerance, re-verify the load path against a
+** reference run.
 **
-** Smoke-tested (this exact file, blockamg defaults, 32 threads, October 2026): the preload step converges;
-** the loading step's first increment cuts back twice (0.005 -> 0.0025 -> 0.00125) and then advances, three
-** solves of that cutback sequence stopping at the 100-iteration cap (their hierarchies are rebuilt); no NaN;
-** the preload and four loading increments take about 5 minutes. Not run to completion --
+** Smoke-tested (this exact file, blockamg defaults): the preload step converges;
+** the loading step's first increment cuts back twice (0.005 -> 0.0025 -> 0.00125) and then advances, a few
+** solves of that cutback sequence stopping at the 100-iteration cap (their hierarchies are rebuilt); no NaN.
+** Not run to completion --
 ** maxNumInc=100000 below is a real, unbounded run; verify the full load path yourself before relying on it.
 **
 ** Source: AnchorPryOut.inp (Abaqus, concrete via GCDP UEL U004/C3D20R, steel via C3D8I, mortar via

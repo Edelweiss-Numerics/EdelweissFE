@@ -113,9 +113,11 @@ def test_the_algorithm_step_by_step():
     assert np.linalg.norm(x_unscaled - x) <= 1e-6 * np.linalg.norm(x)
 
     # What the preconditioner buys: GMRES iterations to the same 1e-10, without a preconditioner, with the sweep
-    # (AMG cycles), and with exact field solves, block Jacobi against block Gauss-Seidel. Measured: 76; 7 (block
-    # Jacobi 7 too: the coupling is weak, and the AMG cycles' own error dominates); exact 5 and 3 -- the coupling
-    # term of the sweep shows once the field solves are exact.
+    # (AMG cycles), and with exact field solves, block Jacobi against block Gauss-Seidel. Measured: far fewer
+    # iterations with the sweep than without a preconditioner at all; with AMG-cycle field solves, block Jacobi
+    # needs about as many iterations as block Gauss-Seidel (the coupling is weak, and the AMG cycles' own error
+    # dominates); with exact field solves, the coupling term of the sweep becomes visible and Gauss-Seidel needs
+    # fewer iterations than Jacobi.
     def iterations(preconditioner):
         history = []
         A_scaled_Minv = LinearOperator(A.shape, matvec=lambda y: A_scaled @ preconditioner(y))

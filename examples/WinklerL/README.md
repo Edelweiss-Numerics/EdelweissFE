@@ -61,19 +61,19 @@ The load peaks at about 0.1 mm; the panel then softens as a crack grows from the
 
 ## Expected results
 
-Measured on two Intel Xeon Gold 6140 (36 cores), 32 threads, one run at a time (EdelweissFE
-`next_v26.11`, October 2026). Every variant gives the same load-displacement curve up to the AMR one:
+Every variant gives the same load-displacement curve up to the AMR one:
 
-| Variant | Run time | Linear solves | Time per solve | Peak load | Load at 1 mm |
-|---|---|---|---|---|---|
-| pardiso | 3715 s | 537 | 6.56 s | 3072 N at 0.110 mm | 132 N |
-| blockamg (defaults) | 2338 s | 763 | 2.72 s | 3072 N at 0.110 mm | 132 N |
-| blockamg, former settings (for comparison) | 3266 s | 538 | 5.68 s | 3072 N at 0.110 mm | 132 N |
-| blockamg + AMR (former settings, AMD Threadripper PRO 5995WX, September 2026) | 6027 s | 1091 | 4.47 s | 2773 N at 0.095 mm | 108 N |
+| Variant | Peak load | Load at 1 mm |
+|---|---|---|
+| pardiso | 3072 N at 0.110 mm | 132 N |
+| blockamg (defaults) | 3072 N at 0.110 mm | 132 N |
+| blockamg, former settings (for comparison) | 3072 N at 0.110 mm | 132 N |
+| blockamg + AMR (former settings) | 2773 N at 0.095 mm | 108 N |
 
 With its defaults, blockamg takes more linear solves than PARDISO -- its looser tolerance costs a few Newton
-iterations, and about 30 % of the solves stop at the 100-iteration cap and rebuild their hierarchies -- but each
-solve is much cheaper. Variant 3 refines 21 times; the model grows from 218,564 to 286,856 degrees of freedom.
+iterations, and a fraction of the solves stop at the 100-iteration cap and rebuild their hierarchies -- but each
+solve is much cheaper, and the current defaults were measured faster end to end than both PARDISO and blockamg's
+former settings. Variant 3 refines repeatedly along the crack band, and the model grows by roughly a third.
 
 ## Viewing the results
 

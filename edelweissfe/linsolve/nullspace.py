@@ -33,8 +33,8 @@ preconditioner needing an elasticity near-null-space can use them; today
 seed AMGCL's smoothed-aggregation coarsening.
 
 :func:`rigidBodyNullspace` (translations *and* rotations) is preferred whenever node coordinates are
-available: measured ~28-31% fewer isolated per-field outer iterations than :func:`translationNullspace`
-alone on two real captured production systems, and unlike translations alone, robust to both thread
+available: measured fewer isolated per-field outer iterations than :func:`translationNullspace`
+alone on real captured production systems, and unlike translations alone, robust to both thread
 count and the Chebyshev ``power_iters`` setting. It costs one extra pass over the field's diagonal
 scaling vector plus a handful of elementwise operations on the node coordinates -- O(nNodes),
 negligible against the AMG hierarchy build it feeds.
