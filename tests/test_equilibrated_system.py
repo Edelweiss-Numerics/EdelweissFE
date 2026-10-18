@@ -64,6 +64,11 @@ def test_the_absolute_diagonal_is_scipys(system):
 
 
 def test_the_operator_is_the_scipy_one_bit_for_bit(system):
+    # Bitwise equality holds because the C++ row sum uses the same operands in the same order as
+    # SciPy's CSR product, with no fused multiply-add rounding difference between the two. That is
+    # only guaranteed for an extension built without FMA-contracting architecture flags (setup.py's
+    # default, with no -march/-mfma); a user build with such flags on an FMA-capable CPU can contract
+    # the row sum's multiply-adds and round differently from SciPy's separate multiply and add.
     A, As, dinv, equilibrated = system
     x = np.random.default_rng(4).standard_normal(A.shape[0])
     rhs = np.random.default_rng(5).standard_normal(A.shape[0])
