@@ -26,7 +26,7 @@
 """Regression guard for the scalar double AMGCL backend (``PyAMGCLSolver`` with the default
 ``backendBlockSize = 1``, ``backendPrecision = "double"``): ``relax.type = "gauss_seidel"`` and
 ``"ilu0"`` must build and apply, which was briefly broken for every ``PyAMGCLSolver`` user (the registered
-``linsolver = amgcl``, the p-two-grid field's double block backend) while level matrices were stored with
+``linsolver = amgcl`` included) while level matrices were stored with
 AMGCL's ``builtin_stored_matrices`` instead of plain ``builtin<double>``: that derived backend makes AMGCL
 reject ``gauss_seidel`` outright (``relaxation_is_supported`` keys off ``provides_row_iterator``) and
 silently falls back ILU0 to its generic, approximate triangular solve instead of the exact one plain
@@ -84,3 +84,17 @@ def test_scalar_backend_solves(system, relaxationType):
     x = solver.solve(A, b)
     assert solver.lastError < 1.0001e-8
     assert np.linalg.norm(b - A @ x) < 1e-6 * np.linalg.norm(b)
+
+
+def test_ilu0_is_an_exact_triangular_solve():
+    # On a tridiagonal matrix ILU0 has no fill and is the exact LU factorization, so one application of the
+    # ILU0 relaxation as the preconditioner solves the system to rounding. AMGCL's exact triangular solves (serial
+    # or level-scheduled, plain builtin) do; its generic fallback for other backends -- two damped Jacobi sweeps
+    # per triangle -- leaves a residual of order 1e-1, so this catches the ILU half of the regression.
+    n = 1000
+    A = sp.diags([-np.ones(n - 1), 4.0 * np.ones(n), -np.ones(n - 1)], [-1, 0, 1], format="csr")
+    b = np.random.default_rng(12).standard_normal(n)
+    solver = PyAMGCLSolver({"precond": {"class": "relaxation", "type": "ilu0"}, "solver": {"type": "preonly"}})
+    solver.build(A)
+    x = solver.applyPreconditioner(b)
+    assert np.linalg.norm(b - A @ x) < 1e-12 * np.linalg.norm(b)
