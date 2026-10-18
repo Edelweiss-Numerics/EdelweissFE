@@ -172,8 +172,8 @@ class MultiPointConstraintTransformation:
         ~1e-19 relative scale), so this method leaves noticeably more raw nnz (~1.6x) than the plain
         expression. **Not** pruned here: :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.
         applyDirichletK` already calls ``eliminate_zeros()`` immediately after this, gated by the
-        existing ``pruneCondensedMatrixZeros`` option (default ``True``, uniformly for both
-        expressions) -- that gate exists precisely because PARDISO's reordering on these
+        existing ``pruneCondensedMatrixZeros`` option (default auto, pruned with PARDISO, uniformly
+        for both expressions) -- that gate exists precisely because PARDISO's reordering on these
         path-dependent condensed systems is known to drift with unpruned explicit-zero structural
         entries, and because ``blockamg``'s hierarchy-reuse gates on raw ``nnz``. Pruning here too
         would double that cost under the default config; setting ``pruneCondensedMatrixZeros=False``
@@ -360,7 +360,7 @@ class MultiPointConstraintTransformation:
         # does, confirmed directly: 54.3M nnz here vs. the plain expression's 34.2M on a reference
         # model, with >99.9999% of that gap being bit-exact zero, not numerical
         # approximation), but because NISTSolver.applyDirichletK already does this immediately
-        # after, gated by pruneCondensedMatrixZeros (default True), uniformly for both condensation
+        # after, gated by pruneCondensedMatrixZeros (default auto, pruned with PARDISO), uniformly for both condensation
         # strategies -- that gate exists precisely because PARDISO's reordering on these
         # path-dependent condensed systems is sensitive to extra explicit-zero structural entries
         # (nonlinearimplicitstatic.py's own documented, previously-observed drift), and because

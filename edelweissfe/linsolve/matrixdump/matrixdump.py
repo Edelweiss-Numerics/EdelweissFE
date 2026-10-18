@@ -145,6 +145,13 @@ class MatrixDumpSolver(LinearSolver):
         """Forward the model/DOF-manager references to the delegate -- see :meth:`setJournal`."""
         self._delegate.setModel(model, dofManager)
 
+    @property
+    def needsStableSparsityPattern(self) -> bool:
+        """The delegate's own answer -- this wrapper only observes the system it is handed and
+        changes nothing about it, so whether a stable pattern is worth having is entirely the
+        delegate's question (see :attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`)."""
+        return self._delegate.needsStableSparsityPattern
+
     def factorize(self, A: csr_matrix) -> None:
         """Dump ``A``, then forward the factorization to the delegate.
 

@@ -360,9 +360,11 @@ class BlockAMGSolver(LinearSolver):
        preconditioner ``M`` may be stale. A stale ``M`` costs outer iterations and, if it drives a solve to
        the iteration cap, the accuracy of that one Newton step; the next solve is then rebuilt. Refreshed on a
        residual jump (a new increment), on a field-structure change (e.g. AMR), on any
-       sparsity-pattern change (when the active contact or tie set changes, and on almost every Newton
-       iteration while the multi-point condensation prunes exact zeros, ``pruneCondensedMatrixZeros``, which
-       then defeats reuse), or when the previous solve's outer count grew past
+       sparsity-pattern change (when the active contact or tie set changes -- the multi-point
+       condensation's own ``pruneCondensedMatrixZeros`` option would otherwise defeat reuse by
+       changing the pattern on almost every Newton iteration, but that option's "auto" default
+       (``edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema``) leaves pruning off for this very
+       solver, via :attr:`needsStableSparsityPattern`), or when the previous solve's outer count grew past
        ``hierarchyStalenessFactor`` times (and 15 more than) that of the solve the hierarchies were built
        for, or hit the iteration cap.
 
@@ -673,6 +675,13 @@ class BlockAMGSolver(LinearSolver):
 
     #: See :attr:`~edelweissfe.linsolve.base.LinearSolver.identification`.
     identification = _IDENTIFICATION
+
+    #: See :attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`. ``True``: a
+    #: changing pattern (e.g. from ``pruneCondensedMatrixZeros`` on a multi-point-constrained model)
+    #: forces a hierarchy rebuild on every solve (see the "nothing to reuse yet" rule in
+    #: :meth:`_buildFieldPreconditioners`'s caller), which was measured to cost a contact model with
+    #: 53,701 multi-point-constraint slaves 1328 s against 917 s over six increments.
+    needsStableSparsityPattern = True
 
     #: Degradation dumps written across every instance in this process, so
     #: ``dumpOnDegradationMaxDumps`` is a genuine process-wide ceiling -- the same reasoning as

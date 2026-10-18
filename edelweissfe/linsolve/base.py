@@ -147,6 +147,19 @@ class LinearSolver:
     #: proactively, since the caller alone knows when "this iteration's row" is being assembled.
     lastSolveSummary: "LinearSolveSummary | None" = None
 
+    #: Whether this solver benefits from the system matrix keeping the same sparsity pattern from one
+    #: Newton iteration to the next -- i.e. whether it does something *across* solves that a changing
+    #: pattern defeats (``BlockAMGSolver`` reuses an AMG hierarchy built for the old pattern; a direct
+    #: factorization like PARDISO's starts from scratch on every solve regardless and has nothing to
+    #: lose). ``False`` here, inherited by every solver that does not override it. Read by
+    #: :attr:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema.pruneCondensedMatrixZeros`'s
+    #: "auto" default (``None``, unset in the input file) to decide whether pruning the
+    #: multi-point-condensed system's explicit zeros -- which changes its pattern on almost every
+    #: iteration -- is worth it *for this solver*: pruned (``True``) unless the solver says it needs
+    #: the pattern stable, in which case it is left alone (``False``) so hierarchy reuse can engage.
+    #: An explicit ``true``/``false`` in the input file always overrides this.
+    needsStableSparsityPattern = False
+
     def setJournal(self, journal) -> None:
         """Receive the shared :class:`~edelweissfe.journal.journal.Journal` instance.
 

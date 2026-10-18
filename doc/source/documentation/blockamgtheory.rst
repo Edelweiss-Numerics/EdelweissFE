@@ -100,10 +100,13 @@ manager's ordering intact, so the field blocks still describe the matrix that ac
 
 The MPC condensation is skipped entirely while no multi-point constraint has a record -- e.g. an
 ``hAdaptivity`` before its first refinement, whose hanging-node constraint is registered up front.
-This matters for hierarchy reuse: the condensed matrix is pruned of exact zeros
-(``pruneCondensedMatrixZeros``), which changes its sparsity pattern from one Newton iteration to
-the next, and a changed pattern forces a hierarchy rebuild (step (4) below). The uncondensed
-matrix keeps the assembler's fixed pattern.
+This matters for hierarchy reuse: the condensed matrix would be pruned of exact zeros
+(``pruneCondensedMatrixZeros``, a nonlinear-solver option), which changes its sparsity pattern from
+one Newton iteration to the next, and a changed pattern forces a hierarchy rebuild (step (4) below).
+Left unset, that option is automatic and leaves pruning off for ``blockamg`` specifically (it reports
+:attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`), so this cost is not paid
+by default; an explicit ``pruneCondensedMatrixZeros = true`` in the nonlinear solver's own
+configuration would still force it. The uncondensed matrix keeps the assembler's fixed pattern.
 
 Beyond that matrix and right-hand side, the solver is told nothing about the Newton loop -- like
 every registered linear solver it is called as ``(A, b) -> x``. Both of its stateful mechanisms
@@ -666,10 +669,12 @@ The hierarchies are rebuilt when
 On a model with contact or tie constraints the active constraint set can change between Newton
 iterations, and then the sparsity pattern -- and with it the nonzero count -- changes and the
 hierarchies are rebuilt. How often that happens depends on the model: the multi-point condensation
-used to drop exact zeros (``pruneCondensedMatrixZeros``), which changed the count on almost every
-Newton iteration even when the constraint set did not; with that switched off, reuse pays on such
-models too (on a contact model with 53,701 multi-point constraint slaves, a configuration relying on
-it ran six increments in 917 s instead of 1328 s).
+would otherwise drop exact zeros (``pruneCondensedMatrixZeros``, a nonlinear-solver option), which
+changes the count on almost every Newton iteration even when the constraint set does not; left unset,
+that option's "auto" default already leaves pruning off here, because this solver reports
+:attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`, so reuse pays on such
+models without any extra configuration (on a contact model with 53,701 multi-point constraint slaves,
+a configuration relying on it ran six increments in 917 s instead of 1328 s with pruning on).
 
 The native LGMRES instance is deliberately *not* torn down on a hierarchy refresh -- only on an
 actual system-size change, which is the one condition that invalidates AMGCL's preallocated scratch
