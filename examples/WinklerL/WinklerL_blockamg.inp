@@ -10,7 +10,7 @@
 *job, name=WinklerL_blockamg, domain=3d
 *solver, solver=NISTParallel, name=theSolver
 linsolver=blockamg
-** every blockamg setting, defaults included -- explained in README.md
+** the blockamg settings of this model -- explained in README.md
 linsolverConfigFile=blockamg.json
 
 *fieldOutput

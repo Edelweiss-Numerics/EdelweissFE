@@ -31,8 +31,9 @@
 ** against (`etaMin=1e-6`, `etaMax=3e-4`, `outerRestart=100`, `outerMaxiter=8`, `hierarchyStaleness-
 ** Factor=1.5`, `krylovOnScaledSystem=true`, and the displacement field's own `fieldPreconds` tree --
 ** blockamg's own shipped defaults for these have since changed; this file pins the former ones rather
-** than adopt the new, unverified trajectory) -- the same smoke test then reproduces the expected
-** trajectory exactly (125 outer iterations at that same cutback). If your own model needs a tighter
+** than adopt the new, unverified trajectory). The smoke test then reproduced 125 outer iterations at that
+** same cutback; later solver fixes (the correction-form reverse sweep, the staleness and cap-hit rules) can
+** change solve counts and timings, not the physical result. If your own model needs a tighter
 ** fixed tolerance, re-verify the load path against a reference run before trusting it with
 ** `outerSolver=amgcl_lgmres` -- this combination had not been tested at all before that finding.
 **

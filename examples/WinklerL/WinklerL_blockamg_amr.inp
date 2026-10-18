@@ -13,7 +13,7 @@
 *job, name=WinklerL_blockamg_amr, domain=3d
 *solver, solver=NISTParallel, name=theSolver
 linsolver=blockamg
-** every blockamg setting, defaults included -- explained in README.md
+** the blockamg settings of this model -- explained in README.md
 linsolverConfigFile=blockamg.json
 ** condense the hanging-node constraints with AMGCL's threaded products (faster; off by default)
 useAmgclMPCCondensation=True

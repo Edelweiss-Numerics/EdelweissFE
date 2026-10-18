@@ -41,7 +41,7 @@ initial OpenMP thread confines all of them to a single core.
 | `model.inp` | the shared model: units, geometry, material, sections, field outputs (included by every variant) |
 | `mesh.inp` | 20-node hexahedral mesh: GC3D20R concrete (displacement + nonlocal damage), C3D20R steel |
 | `mesh_hex8.inp`, `hex8_to_hex20.py` | the linear source mesh and the script that generated `mesh.inp` from it |
-| `blockamg.json` | every blockamg setting, defaults included (see below) |
+| `blockamg.json` | the blockamg settings of this model, most defaults included (see below) |
 
 To regenerate the mesh: `python hex8_to_hex20.py mesh_hex8.inp mesh.inp`.
 
@@ -62,7 +62,8 @@ The load peaks at about 0.1 mm; the panel then softens as a crack grows from the
 ## Expected results
 
 Measured on an AMD Ryzen Threadripper PRO 5995WX, 32 threads, one run at a time (EdelweissFE
-`next_v26.11`, September 2026):
+`next_v26.11`, September 2026). Later blockamg fixes can change solve counts and timings, not the physical
+result:
 
 | Variant | Run time | Linear solves | Time per solve | Peak load | Load at 1 mm |
 |---|---|---|---|---|---|
@@ -95,7 +96,7 @@ mesh = reader.read()
 
 ## The blockamg settings
 
-`blockamg.json` lists every setting blockamg accepts, defaults included, so that each one is visible.
+`blockamg.json` lists the settings this model was tuned against, most defaults included, so that each one is visible; the table below also covers keys it leaves at their defaults.
 The values that differ from blockamg's own current defaults are marked **bold** -- blockamg's shipped
 defaults changed after this file was tuned and smoke-tested, so several keys below are now pinned
 explicitly to the *former* defaults rather than adopt the new, unverified trajectory; those are bold

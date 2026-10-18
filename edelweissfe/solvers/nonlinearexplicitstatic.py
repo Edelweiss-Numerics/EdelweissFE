@@ -187,6 +187,7 @@ class NESTSchema:
         ),
         dtype=bool,
         default=None,
+        documentedDefault="auto",
     )
 
 

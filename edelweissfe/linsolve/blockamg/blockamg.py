@@ -115,8 +115,9 @@ _JOURNAL_LEVEL = {"warning": 0, "info": 2, "debug": 2}
 _IDENTIFICATION = "BlockAMGSolver"
 
 # "backendPrecision" and "backendBlockSize" are not AMGCL parameters -- they select the AMGCL
-# wrapper's own backend value type ("double" (default) or "float" for backendPrecision; 1 (default,
-# scalar), 2, or 3 for a block-valued backend operating on B x B nodal blocks for backendBlockSize).
+# wrapper's own backend value type ("double" or "float" for backendPrecision; 1 (scalar), 2, or 3 for a
+# block-valued backend operating on B x B nodal blocks for backendBlockSize). Omitted from a fieldPreconds
+# tree they fall back to "double" and 1; the default trees (_defaultFieldPrecond) set both per dimension.
 # __call__ pops both out of whichever precond dict applies (default or a fieldPreconds override)
 # before forwarding the rest verbatim as the AMGCL JSON parameter tree.
 #
@@ -616,8 +617,9 @@ class BlockAMGSolver(LinearSolver):
         both this factor times, and 15 more than, the count of the solve the hierarchies were built for
         -- a growing count is the signal that the reused hierarchies are drifting away from the current
         Jacobian; measured against that reference rather than the previous solve, a slow drift is not
-        missed. A solve that hit the iteration cap always refreshes them (a missed tolerance does not:
-        it reflects the scaled-to-true residual gap, which a rebuild cannot close). With an iteration cap
+        missed. A solve that hit the iteration cap always refreshes them (a missed tolerance does not: on the
+        scaled system it reflects the scaled-to-true residual gap, which a rebuild cannot close; on the
+        unscaled system, the default, only a rounding tie misses without a cap hit). With an iteration cap
         ``c`` and no continuations, a solve can exceed ``f`` times the reference only while the reference is
         below ``c / f``: with the default cap of 100 and factor 3, a reference of 34 or more leaves the cap
         hits as the only rebuild trigger of this kind.
@@ -1518,11 +1520,13 @@ class BlockAMGSolver(LinearSolver):
         # backend might not: the default fieldPreconds tree puts a 2D/3D vector field on a block backend,
         # which has no near-null-space of its own (AMGCL's near-null-space path is unimplemented for
         # block value types), so coordinates would be gathered and then simply discarded.
-        if block.name in self._fieldPreconds:
-            fieldBackendBlockSize = self._fieldPreconds[block.name].get("backendBlockSize", 1)
-        else:
-            fieldBackendBlockSize = _defaultFieldPrecond(block.dimension).get("backendBlockSize", 1)
-        onScalarBackend = p1Map is not None or fieldBackendBlockSize == 1
+        # the field's tree, resolved once (an explicit {} stays "AMGCL's defaults")
+        fieldTree = (
+            self._fieldPreconds[block.name]
+            if block.name in self._fieldPreconds
+            else _defaultFieldPrecond(block.dimension)
+        )
+        onScalarBackend = p1Map is not None or fieldTree.get("backendBlockSize", 1) == 1
         coords = self._nullspaceCoordinates(block.name) if isVectorField and onScalarBackend else None
 
         if p1Map is not None:
@@ -1549,7 +1553,7 @@ class BlockAMGSolver(LinearSolver):
 
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver
 
-        precondParams = dict(self._fieldPreconds.get(block.name, _defaultFieldPrecond(block.dimension)))
+        precondParams = dict(fieldTree)
         backendPrecision = precondParams.pop("backendPrecision", "double")
         backendBlockSize = precondParams.pop("backendBlockSize", 1)
         onUnscaledBlock = precondParams.pop("hierarchyOnUnscaledBlock", False)

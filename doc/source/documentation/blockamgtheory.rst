@@ -282,11 +282,11 @@ the code): a **3D vector** field (e.g. displacement) is stored in :math:`3\times
 float, coarsened by smoothed aggregation with a strong-connection threshold of 0.01 and
 ``estimate_spectral_radius`` (20 power iterations), and smoothed by a degree-16 Chebyshev polynomial
 (one post-smoothing sweep, no pre-smoothing); a **2D vector** field gets the same coarsening and
-smoothing but in :math:`2\times2` blocks, in double (this wrapper has no float 2x2 backend); a
-**scalar** field, or a vector field of any other dimension, takes the plain scalar backend with
-smoothed aggregation and Chebyshev at AMGCL's own defaults -- it is also the only backend that can
-carry a near-null-space (see below), which keeps that path available for a field shape the block
-backend was never tuned for. All of these can be overridden per field with ``fieldPreconds``.
+smoothing but in :math:`2\times2` blocks, in double (this wrapper has no float 2x2 backend); a vector
+field of any other dimension gets the same recipe on the plain scalar backend -- the only backend that
+can carry a near-null-space (see below), which keeps that path available for a field shape the block
+backend was never tuned for; a **scalar** field takes the plain scalar tree (smoothed aggregation,
+Chebyshev at AMGCL's own defaults). All of these can be overridden per field with ``fieldPreconds``.
 
 Three keys of a per-field parameter tree are not AMGCL parameters but select how the wrapper builds the
 hierarchy, and are consumed before the rest of the tree is forwarded verbatim:
