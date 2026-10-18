@@ -303,6 +303,34 @@ _P1_OPTIONS = {
 }
 
 
+class UnscaledBlockPreconditioner:
+    """One field's preconditioner M_i^-1 for A_scaled_ii = D A_ii D from an AMG hierarchy built on A_ii itself
+    (``hierarchyOnUnscaledBlock``). Since (D A_ii D)^-1 = D^-1 A_ii^-1 D^-1, one cycle gives the correction
+    D^-1 AMG(A_ii)^-1 D^-1 r.
+
+    Why: a block backend (``backendBlockSize > 1``) cannot take a near-null-space and uses AMGCL's constant
+    blocks. Those are the rigid-body translations of the block the hierarchy is built on -- of A_ii, but not of
+    A_scaled_ii, whose translations are D^-1 t."""
+
+    def __init__(self, hierarchy, scaling: np.ndarray):
+        """
+        hierarchy
+            The AMGCL hierarchy built on A_ii (its ``applyPreconditioner`` applies one cycle).
+        scaling
+            The field's slice of the equilibration, D = diag(scaling).
+        """
+        self._hierarchy = hierarchy
+        self._inverseScaling = 1.0 / scaling
+
+    def applyPreconditioner(self, residual: np.ndarray) -> np.ndarray:
+        """D^-1 AMG(A_ii)^-1 D^-1 residual."""
+        return self._inverseScaling * self._hierarchy.applyPreconditioner(self._inverseScaling * residual)
+
+    def report(self) -> str:
+        """The hierarchy's AMGCL report."""
+        return self._hierarchy.report()
+
+
 class BlockAMGSolver(LinearSolver):
     """Field-split block-AMG preconditioned Krylov solve (LGMRES by default). Callable as ``(A, b) -> x``.
 
@@ -391,7 +419,10 @@ class BlockAMGSolver(LinearSolver):
         fixed linear operator).
     fieldPreconds
         Optional mapping of field name to an AMGCL preconditioner parameter tree, overriding the
-        dimension-based default for that field.
+        dimension-based default for that field. Besides AMGCL's own keys a tree takes ``backendPrecision``,
+        ``backendBlockSize`` (see the comment above the default trees) and ``hierarchyOnUnscaledBlock``: build
+        the hierarchy on the field's unscaled block ``A_ii`` and apply it as ``D^-1 AMG(A_ii)^-1 D^-1``
+        (:class:`UnscaledBlockPreconditioner`; Chebyshev then needs ``"scale": true``).
     useRigidBodyNullspace
         ``True`` (the default) builds a vector field's near null-space as the full rigid-body basis --
         translations *and* rotations -- once nodal coordinates for that field are available via
@@ -1305,6 +1336,15 @@ class BlockAMGSolver(LinearSolver):
                 return "entry '{:}': backendPrecision must be 'double' or 'float'".format(fieldName)
             if blockSize not in (1, 2, 3) or (blockSize == 2 and precision == "float"):
                 return "entry '{:}': backendBlockSize must be 1, 2 or 3 (2 only in double)".format(fieldName)
+            onUnscaledBlock = precond.get("hierarchyOnUnscaledBlock", False)
+            if not isinstance(onUnscaledBlock, bool):
+                return "entry '{:}': hierarchyOnUnscaledBlock must be true or false".format(fieldName)
+            relax = precond.get("relax")
+            unscaledChebyshev = isinstance(relax, dict) and relax.get("type") == "chebyshev" and not relax.get("scale")
+            if onUnscaledBlock and unscaledChebyshev:
+                return "entry '{:}': hierarchyOnUnscaledBlock needs Jacobi-scaled Chebyshev (relax.scale: true)".format(
+                    fieldName
+                )
             if blockSize > 1 and fieldName in dimensions and dimensions[fieldName] != blockSize:
                 return "entry '{:}': backendBlockSize {:} does not match the field's dimension {:}".format(
                     fieldName, blockSize, dimensions[fieldName]
@@ -1376,16 +1416,18 @@ class BlockAMGSolver(LinearSolver):
                     "blockamg: settings that do not fit the fields: "
                     + "; ".join("{:} {:}".format(name, reason) for name, reason in rejections.items())
                 )
-        with performancetiming.timeit("diagonal blocks"):
-            diagonalBlocks = [system.diagonalBlock(i) for i in range(len(blocks))]
-            if self._hierarchyDropTol > 0.0:
-                diagonalBlocks = [self._dropSmallEntries(block) for block in diagonalBlocks]
         return [
-            self._buildFieldPreconditioner(block, diagonalBlock, scaling[block.start : block.stop])
-            for block, diagonalBlock in zip(blocks, diagonalBlocks)
+            self._buildFieldPreconditioner(block, system, i, scaling[block.start : block.stop])
+            for i, block in enumerate(blocks)
         ]
 
-    def _buildFieldPreconditioner(self, block, diagonalBlock, scaling: np.ndarray):
+    def _diagonalBlock(self, system, index: int, unscaled: bool = False):
+        """The field's diagonal block of A_scaled (or with ``unscaled`` of A), with ``hierarchyDropTol`` applied."""
+        with performancetiming.timeit("diagonal blocks"):
+            diagonalBlock = system.diagonalBlock(index, unscaled=unscaled)
+            return self._dropSmallEntries(diagonalBlock) if self._hierarchyDropTol > 0.0 else diagonalBlock
+
+    def _buildFieldPreconditioner(self, block, system, index: int, scaling: np.ndarray):
         """The preconditioner of one field: the p-two-grid cycle for a vector field that opted into it
         (``p1Maps`` / ``p1FieldNames``), one AMGCL hierarchy otherwise. A vector field's near null-space is its
         rigid-body modes (see :meth:`_nullspaceCoordinates`); a scalar field takes AMGCL's default constant."""
@@ -1408,6 +1450,7 @@ class BlockAMGSolver(LinearSolver):
             preconditioner = PTwoGridPreconditioner(
                 *p1Map, fineSpectralRadius=fineSpectralRadius, fineDominantVector=fineDominantVector, **p1Options
             )
+            diagonalBlock = self._diagonalBlock(system, index)
             with performancetiming.timeit("{:} p-two-grid build".format(block.name)):
                 preconditioner.build(diagonalBlock, scaling, coords=coords)
             if self._p1FineSpectralRadiusReuse:
@@ -1424,6 +1467,7 @@ class BlockAMGSolver(LinearSolver):
         )
         backendPrecision = precondParams.pop("backendPrecision", "double")
         backendBlockSize = precondParams.pop("backendBlockSize", 1)
+        onUnscaledBlock = precondParams.pop("hierarchyOnUnscaledBlock", False)
         # The hierarchy is only ever applied as a preconditioner: "preonly" keeps AMGCL from allocating the
         # work vectors of an iterative solver (BiCGStab by default) that would never run.
         preconditioner = PyAMGCLSolver(
@@ -1436,16 +1480,21 @@ class BlockAMGSolver(LinearSolver):
         )
         # A block backend cannot take a near null-space (AMGCL's own path is unimplemented for block value
         # types); a scalar backend gets the rigid-body modes -- the error components a Chebyshev smoother does
-        # not reduce, which the coarse levels must represent.
+        # not reduce, which the coarse levels must represent -- of the block it is built on: of A_ii itself, or
+        # D^-1 times them for A_scaled_ii.
         if isVectorField and backendBlockSize == 1:
+            modeScaling = np.ones_like(scaling) if onUnscaledBlock else scaling
             with performancetiming.timeit("nullspace construction"):
                 if coords is not None:
-                    nullspace = rigidBodyNullspace(block, coords, scaling)
+                    nullspace = rigidBodyNullspace(block, coords, modeScaling)
                 else:
-                    nullspace = translationNullspace(block, scaling)
+                    nullspace = translationNullspace(block, modeScaling)
             preconditioner.set_nullspace(nullspace)
+        diagonalBlock = self._diagonalBlock(system, index, unscaled=onUnscaledBlock)
         with performancetiming.timeit("{:} AMG build".format(block.name)):
             preconditioner.build(diagonalBlock)
+        if onUnscaledBlock:
+            return UnscaledBlockPreconditioner(preconditioner, scaling)
         return preconditioner
 
     def _p1Options(self) -> dict:

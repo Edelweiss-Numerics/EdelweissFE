@@ -278,8 +278,8 @@ revisits all fields but the last) and reused across Newton iterations while it s
 smoothed by a degree-5 Chebyshev polynomial; a **scalar** field takes smoothed aggregation and
 Chebyshev at AMGCL's own defaults. Both can be overridden per field with ``fieldPreconds``.
 
-Two keys of a per-field parameter tree are not AMGCL parameters but select the wrapper's own backend
-value type, and are consumed before the rest of the tree is forwarded verbatim:
+Three keys of a per-field parameter tree are not AMGCL parameters but select how the wrapper builds the
+hierarchy, and are consumed before the rest of the tree is forwarded verbatim:
 
 ``backendPrecision``
     ``"double"`` (default) or ``"float"``. A single-precision backend should in principle roughly
@@ -303,6 +303,39 @@ value type, and are consumed before the rest of the tree is forwarded verbatim:
     of :math:`\hat A` (see below); the two agree only where the diagonal is uniform, which it is not on
     quadratic elements (corner and midside nodes) or across a damage band. A block hierarchy also
     gives up the **rotational** rigid-body modes described next.
+
+``hierarchyOnUnscaledBlock``
+    ``false`` (default) or ``true``: build the field's hierarchy on its unscaled diagonal block
+    :math:`A_{ii}` instead of :math:`\hat A_{ii} = D A_{ii} D`, and apply it as
+    :math:`M_i^{-1} = D^{-1}\, \mathrm{AMG}(A_{ii})^{-1} D^{-1}`, since
+    :math:`\hat A_{ii}^{-1} = D^{-1} A_{ii}^{-1} D^{-1}`. A block hierarchy's constant blocks are then
+    the true translations of the block it is built on. Smoothed aggregation's strength test,
+    :math:`|a_{ij}| > \varepsilon \sqrt{a_{ii} a_{jj}}`, is unchanged by a symmetric diagonal scaling for
+    scalar entries; for :math:`3 \times 3` blocks AMGCL compares traces of block products,
+    :math:`\operatorname{tr}(\varepsilon^2 A_{ii} A_{jj}) < \operatorname{tr}(A_{ij} A_{ij})`, which is unchanged
+    only where :math:`D` is uniform within each node -- not at a node whose constrained DOFs (Dirichlet or MPC
+    slave identity rows) sit next to stiffness rows, so there the aggregates differ. The smoother has to
+    bring the scaling in itself, so Chebyshev needs
+    ``"relax": {"scale": true}`` (it then works on :math:`\operatorname{blockdiag}(A_{ii})^{-1} A_{ii}`),
+    which is checked. A scalar backend takes the rigid-body modes of :math:`A_{ii}` instead of
+    :math:`D^{-1}` times them.
+
+.. admonition:: Measured
+
+   Displacement block alone (GMRES on :math:`\hat A_{uu}`, right-preconditioned, five captured systems of
+   the damage cylinder, block-3 float hierarchy of the recommended configuration): 20/22/24/37/44 instead
+   of 36/34/37/49/56 iterations to :math:`10^{-4}`, at the same cost per iteration and build. On those
+   systems the constant blocks of :math:`\hat A_{uu}` leave row residuals of 2e-2 (median) and 0.3 (90th
+   percentile) against 1e-16 and 2e-5 for the true translations :math:`D^{-1} t`.
+
+   Full system, offline, recommended configuration with and without it (two repetitions each): on the
+   damage cylinder's 13 onset systems 317 instead of 379 outer iterations and 67 instead of 74--76 s; on
+   the contact model's 12 systems, whose many partially constrained nodes change the block aggregation,
+   115 instead of 106 outer iterations, a hierarchy build twice as long (24 instead of 11--13 s), and
+   62--63 instead of 45--48 s. Live on the cylinder (increments 50--57, from the same checkpoint): 836
+   instead of 828 s -- before the damage onset about 15% faster per increment with 40% fewer outer
+   iterations, at the onset a few more Newton iterations (65 instead of 61). Hence opt-in, and not part of
+   the recommended configuration.
 
 Near-null-space and the Chebyshev smoother
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

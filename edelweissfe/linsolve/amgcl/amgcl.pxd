@@ -62,7 +62,7 @@ cdef extern from "amgcl-wrapper.hpp":
                    int nFields, const int* fieldBounds, bint unscaled) except +
         int diagonalBlockSize(int f) except +
         int diagonalBlockNnz(int f) except +
-        void fillDiagonalBlock(int f, int* ptr, int* col, double* val) except +
+        void fillDiagonalBlock(int f, int* ptr, int* col, double* val, bint unscaled) except +
         void matvec(const double* x, double* y, bint unscaled) except +
         void residual(const double* rhs, const double* x, double* r, bint unscaled) except +
         void couplingMatvec(int f, int g, const double* x, double* y) except +
