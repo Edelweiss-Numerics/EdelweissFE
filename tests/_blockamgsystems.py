@@ -34,6 +34,13 @@ import scipy.sparse as sp
 from edelweissfe.linsolve.base import FieldBlock
 
 
+class DirichletStub:
+    """What ``applyDirichletToStiffness`` reads from a boundary condition."""
+
+    def __init__(self, dofs):
+        self.constrainedDofIndices = np.asarray(dofs, dtype=np.int64)
+
+
 def gridLaplacian(n: int) -> sp.csr_matrix:
     """The 7-point finite-difference Laplacian of an n x n x n node grid."""
     line = sp.diags([-1.0, 2.0, -1.0], [-1, 0, 1], shape=(n, n))

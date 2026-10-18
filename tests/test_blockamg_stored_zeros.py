@@ -8,17 +8,10 @@ the last bits -- while the hierarchy-reuse pattern gate still sees the input's o
 
 import numpy as np
 import scipy.sparse as sp
-from _blockamgsystems import displacementDamageSystem
+from _blockamgsystems import DirichletStub, displacementDamageSystem
 
 from edelweissfe.linsolve.blockamg import createSolver
 from edelweissfe.solvers.base.dirichlet import applyDirichletToStiffness
-
-
-class _DirichletStub:
-    """What ``applyDirichletToStiffness`` reads from a boundary condition."""
-
-    def __init__(self, dofs):
-        self.constrainedDofIndices = np.asarray(dofs, dtype=np.int64)
 
 
 def _system(n=14):
@@ -26,7 +19,7 @@ def _system(n=14):
     K.sort_indices()
     dofs = np.arange(0, 3 * n * n)  # the first face of the displacement field
     b[dofs] = 0.0
-    K = applyDirichletToStiffness(K, [_DirichletStub(dofs)], b)
+    K = applyDirichletToStiffness(K, [DirichletStub(dofs)], b)
     return K, b, blocks
 
 
