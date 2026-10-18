@@ -289,20 +289,29 @@ namespace amgcl {
 
   namespace backend {
 
-    /// @brief The builtin backend over BlockType (double, or a double block), with the level matrices the cycle
-    /// reads -- operators, prolongations, restrictions -- stored with StoredScalar entries and 32-bit indices.
-    /// The hierarchy is set up as builtin< BlockType > sets it up; builtin< BlockType > itself would store every
-    /// level with 64-bit indices (its default ptrdiff_t), 16 instead of 12 bytes per scalar double entry.
-    template < typename BlockType, typename StoredScalar >
-    struct builtin_stored_matrices : public builtin< BlockType > {
+    /// @brief The builtin backend over double B x B blocks, with the level matrices the cycle reads --
+    /// operators, prolongations, restrictions -- stored in float blocks with 32-bit indices. The
+    /// hierarchy is set up as builtin< BlockType > sets it up -- coarsening, Galerkin products, every
+    /// Chebyshev spectral-radius estimate and the coarsest direct solve stay double; only
+    /// Backend::matrix, via copy_matrix(), narrows. 32-bit indices: builtin< BlockType > itself would
+    /// store every level with 64-bit indices (its default ptrdiff_t), 16 instead of 12 bytes per scalar
+    /// double entry. Used only for LinearSolverBlock3Float below -- the scalar and double-block backends
+    /// stay plain builtin< BlockType >, so relax.type = "gauss_seidel" and the exact ILU0/ILUk/ILUT/ILUP
+    /// triangular solve keep working for them (see LinearSolverT's, LinearSolverBlockT's docs).
+    template < typename BlockType >
+    struct builtin_float_matrices : public builtin< BlockType > {
       /// @brief The backend this one stores the level matrices of.
       typedef builtin< BlockType > Base;
-      /// @brief BlockType with StoredScalar entries.
-      typedef typename math::replace_scalar< BlockType, StoredScalar >::type StoredType;
+      /// @brief BlockType with float entries.
+      typedef typename math::replace_scalar< BlockType, float >::type StoredType;
       /// @brief A level matrix as the cycle reads it.
       typedef crs< StoredType, int, int > matrix;
 
-      /// @brief No row iterator over the stored matrices (they differ from the build matrices).
+      /// @brief No row iterator over the stored matrices (they differ from the build matrices, and are
+      /// float where the build matrices are double). This is also what makes AMGCL reject
+      /// relax.type = "gauss_seidel" for this backend (relaxation_is_supported) and route ilu0/iluk/
+      /// ilut/ilup to the generic approximate triangular solve (ilu_solve.hpp's primary template)
+      /// instead of the exact one plain amgcl::backend::builtin gets.
       struct provides_row_iterator : std::false_type {};
 
       /// @brief The level matrix as the cycle reads it: A's entries as StoredType, its indices as int.
@@ -313,18 +322,8 @@ namespace amgcl {
       }
     };
 
-    /// @brief The builtin backend over double blocks, with the level matrices stored in float blocks.
-    template < typename BlockType >
-    using builtin_float_matrices = builtin_stored_matrices< BlockType, float >;
-
-    /// @brief The builtin backend with the level matrices stored with 32-bit indices, values unchanged.
-    template < typename ValueType >
-    using builtin_int_indexed_matrices = builtin_stored_matrices< ValueType,
-                                                                  typename math::scalar_of< ValueType >::type >;
-
-    template < typename B1, typename S1, typename B2, typename S2 >
-    struct backends_compatible< builtin_stored_matrices< B1, S1 >, builtin_stored_matrices< B2, S2 > >
-      : std::true_type {};
+    template < typename B1, typename B2 >
+    struct backends_compatible< builtin_float_matrices< B1 >, builtin_float_matrices< B2 > > : std::true_type {};
 
   } // namespace backend
 } // namespace amgcl
@@ -334,7 +333,9 @@ namespace amgcl {
 // (i) the CSR index arrays shrink by ~B² (one column index per block instead of per scalar entry --
 // index traffic, not values, is typically the larger share of hierarchy bandwidth, which is exactly
 // what this attacks); (ii) block-aware smoothers (block-ILU0, block-GS) invert each node's B×B
-// coupling exactly, AMGCL's own canonical recipe for vector-PDE (elasticity) operators.
+// coupling exactly, AMGCL's own canonical recipe for vector-PDE (elasticity) operators -- true for the
+// plain-builtin instantiations below (LinearSolverBlock2, LinearSolverBlock3); LinearSolverBlock3Float's
+// float-stored level matrices lose both (see builtin_float_matrices above).
 //
 // This is a *separate* class from LinearSolverT, not another instantiation of it, because the
 // construction/apply pattern genuinely differs: the matrix arrives from Python as a plain scalar CSR
@@ -1140,23 +1141,20 @@ public:
   }
 };
 
-// The default double-precision wrapper, and a float32 one for a mixed-precision backend. Every instantiation
-// stores its level matrices with 32-bit indices (builtin_stored_matrices above): the same hierarchy and the same
-// arithmetic as AMGCL's builtin backend, with fewer bytes per entry for the cycle to read.
-typedef LinearSolverT< double, amgcl::backend::builtin_int_indexed_matrices< double > > LinearSolver;
-typedef LinearSolverT< float, amgcl::backend::builtin_int_indexed_matrices< float > >   LinearSolverFloat;
+// The default double-precision wrapper (plain amgcl::backend::builtin<double>, unchanged from before
+// this module existed), and a float32 one for a mixed-precision backend (plain builtin<float>: the
+// whole hierarchy -- not just the level matrices -- is float, see the comment above LinearSolverT).
+typedef LinearSolverT< double > LinearSolver;
+typedef LinearSolverT< float >  LinearSolverFloat;
 
 // Block-valued instantiations: 3×3 for a 3D displacement field, 2×2 for a 2D one -- one template
-// parameter apart.
-typedef LinearSolverBlockT< amgcl::static_matrix< double, 2, 2 >,
-                            amgcl::backend::builtin_int_indexed_matrices< amgcl::static_matrix< double, 2, 2 > > >
-  LinearSolverBlock2;
-typedef LinearSolverBlockT< amgcl::static_matrix< double, 3, 3 >,
-                            amgcl::backend::builtin_int_indexed_matrices< amgcl::static_matrix< double, 3, 3 > > >
-  LinearSolverBlock3;
+// parameter apart. Both plain amgcl::backend::builtin<BlockType>, so relax.type = "gauss_seidel" and
+// the exact ILU0/ILUk/ILUT/ILUP triangular solve work exactly as they do for the scalar backends above.
+typedef LinearSolverBlockT< amgcl::static_matrix< double, 2, 2 > > LinearSolverBlock2;
+typedef LinearSolverBlockT< amgcl::static_matrix< double, 3, 3 > > LinearSolverBlock3;
 
-// 3×3 blocks set up in double but stored -- and read in the cycle -- in float, see
-// builtin_float_matrices above.
+// 3×3 blocks set up in double but stored -- and read in the cycle -- in float, with 32-bit level
+// indices, see builtin_float_matrices above.
 typedef LinearSolverBlockT< amgcl::static_matrix< double, 3, 3 >,
                             amgcl::backend::builtin_float_matrices< amgcl::static_matrix< double, 3, 3 > > >
   LinearSolverBlock3Float;

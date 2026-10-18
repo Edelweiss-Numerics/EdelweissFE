@@ -106,14 +106,19 @@ cdef class PyAMGCLSolver:
 
         ``backendBlockSize``: ``1`` (default, scalar), ``2``, or ``3``. Selects a block-valued backend
         operating on node-major B x B nodal blocks instead of scalar entries -- shrinks the
-        CSR index traffic by ~B² and lets block-aware smoothers (block-ILU0, block-GS) invert each
-        node's coupling exactly. The matrix still arrives as a plain scalar CSR; the wrapper adapts it
-        internally. With ``backendPrecision == "float"``, block size 3 sets the hierarchy up in double
-        -- coarsening, Galerkin products and every Chebyshev spectral-radius estimate -- and stores
-        only the level matrices the cycle reads in float, with double vectors and double accumulation
-        (``LinearSolverBlock3Float``); block size 2 with float raises. :meth:`set_nullspace` always
-        raises on a block backend -- AMGCL's own near-null-space path is unimplemented for block value
-        types.
+        CSR index traffic by ~B² and, with ``backendPrecision == "double"`` (block size 2 or 3), lets
+        block-aware smoothers (block-ILU0, block-GS) invert each node's coupling exactly: both run on
+        plain ``amgcl::backend::builtin<BlockType>``, the same backend the scalar solver uses, just over
+        B x B blocks instead of scalar entries. The matrix still arrives as a plain scalar CSR; the
+        wrapper adapts it internally. With ``backendPrecision == "float"``, block size 3
+        (``LinearSolverBlock3Float``) sets the hierarchy up in double -- coarsening, Galerkin products
+        and every Chebyshev spectral-radius estimate -- and stores only the level matrices the cycle
+        reads in float, with double vectors and double accumulation; on *that* backend block-GS is
+        unsupported (AMGCL rejects it at construction, since the float-stored level matrices do not
+        provide a row iterator) and block-ILU0/ILUk/ILUT/ILUP fall back to AMGCL's generic approximate
+        triangular solve instead of the exact one plain ``builtin`` gets. Block size 2 with float raises.
+        :meth:`set_nullspace` always raises on a block backend -- AMGCL's own near-null-space path is
+        unimplemented for block value types.
 
         Example params:
         {
