@@ -26,8 +26,12 @@
 ** A previous attempt at this file also set a fixed, tight `outerTol=1e-8` on the theory that it was
 ** just an accuracy choice independent of the solver settings above -- a live smoke test on this
 ** exact model caught that it was not: with `outerTol=1e-8`, the first real cutback needed 963 outer
-** GMRES iterations and did not converge. `outerTol` is left unset here (the adaptive Eisenstat-
-** Walker forcing default, `etaMax=3e-4`) -- the same smoke test then reproduces the expected
+** GMRES iterations and did not converge. `outerTol` is left unset here, with the adaptive Eisenstat-
+** Walker forcing pinned in `blockamg.json` to the settings this file was tuned and smoke-tested
+** against (`etaMin=1e-6`, `etaMax=3e-4`, `outerRestart=100`, `outerMaxiter=8`, `hierarchyStaleness-
+** Factor=1.5`, `krylovOnScaledSystem=true`, and the displacement field's own `fieldPreconds` tree --
+** blockamg's own shipped defaults for these have since changed; this file pins the former ones rather
+** than adopt the new, unverified trajectory) -- the same smoke test then reproduces the expected
 ** trajectory exactly (125 outer iterations at that same cutback). If your own model needs a tighter
 ** fixed tolerance, re-verify the load path against a reference run before trusting it with
 ** `outerSolver=amgcl_lgmres` -- this combination had not been tested at all before that finding.

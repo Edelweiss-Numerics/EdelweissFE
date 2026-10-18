@@ -1,7 +1,34 @@
 {
   "outerSolver": "amgcl_lgmres",
+  "outerRestart": 100,
+  "outerMaxiter": 8,
+  "lgmresM": 30,
   "sweeps": 1,
   "symmetric": true,
+  "etaMin": 1e-6,
+  "etaMax": 3e-4,
+  "hierarchyStalenessFactor": 1.5,
+  "krylovOnScaledSystem": true,
+  "fieldPreconds": {
+    "displacement": {
+      "backendPrecision": "double",
+      "backendBlockSize": 1,
+      "coarsening": {
+        "type": "smoothed_aggregation",
+        "aggr": {
+          "eps_strong": 0.01
+        }
+      },
+      "relax": {
+        "type": "chebyshev",
+        "degree": 5,
+        "power_iters": 300,
+        "lower": 0.01
+      },
+      "npre": 1,
+      "npost": 1
+    }
+  },
   "verbosity": "info",
   "dumpOnDegradationDir": "degradation_dumps_rbm6",
   "dumpOnDegradationThreshold": 150,

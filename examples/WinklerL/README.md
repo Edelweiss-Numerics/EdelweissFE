@@ -96,38 +96,48 @@ mesh = reader.read()
 ## The blockamg settings
 
 `blockamg.json` lists every setting blockamg accepts, defaults included, so that each one is visible.
-The values that differ from the defaults are marked **bold**.
+The values that differ from blockamg's own current defaults are marked **bold** -- blockamg's shipped
+defaults changed after this file was tuned and smoke-tested, so several keys below are now pinned
+explicitly to the *former* defaults rather than adopt the new, unverified trajectory; those are bold
+too, even though they were not bold when this file was first written.
 
 | Setting | Value | Meaning |
 |---|---|---|
 | `outerSolver` | `amgcl_lgmres` | the outer Krylov solver: AMGCL's LGMRES (the only accepted value) |
 | `outerTol` | `adaptive` | the outer tolerance: Eisenstat-Walker forcing between `etaMin` and `etaMax`, or a fixed number |
 | `outerRestart` | **50** | outer Krylov restart length (default 100) |
-| `outerMaxiter` | **3** | outer restart cycles, so at most `outerRestart * outerMaxiter` iterations (default 8) |
-| `lgmresM`, `lgmresK` | 30, 3 | LGMRES inner subspace size and number of augmentation vectors |
-| `lgmresAlwaysReset` | true | discard LGMRES's recycled vectors before every solve |
-| `lgmresResetOnNewIncrement` | false | discard them only at a new increment |
+| `outerMaxiter` | **3** | outer restart cycles, so at most `outerRestart * outerMaxiter` iterations (default 1) |
+| `lgmresM` | **30** | LGMRES inner subspace size (default 50) |
+| `lgmresK` | 3 | number of LGMRES augmentation vectors (default 3) |
 | `sweeps` | 1 | block Gauss-Seidel sweeps over the fields per preconditioner application |
-| `symmetric` | **false** | no reverse sweep after the forward one: same iteration count, ~30 % cheaper here (default true) |
-| `fieldPreconds` | `{}` | per-field AMGCL parameter trees overriding the built-in defaults |
-| `useRigidBodyNullspace` | true | give the displacement AMG the six rigid-body modes as near null-space |
-| `p1FieldNames` | `[]` | fields preconditioned by p-multigrid through their corner nodes (experimental) |
+| `symmetric` | false | no reverse sweep after the forward one: same iteration count, ~30 % cheaper here (now also the default) |
+| `krylovOnScaledSystem` | **true** | iterate the outer Krylov solve on the equilibrated system `D A D` rather than `A` itself (default false) |
+| `fieldPreconds` | `{"displacement": {...}}` | **pins the displacement field's former default tree** (plain scalar backend, Chebyshev degree 5): the current default builds a node-wise 3x3 float-block hierarchy instead, not yet verified against this model |
+| `useRigidBodyNullspace` | true | give the displacement AMG the six rigid-body modes as near null-space (only takes effect on the scalar backend the pinned `fieldPreconds` tree above uses) |
+| `p1FieldNames` | `[]` | fields preconditioned by p-multigrid through their corner nodes (experimental); empty here, so every other `p1*` tuning key (`p1Nu`, `p1NuPre`, `p1NuPost`, `p1FineDegree`, `p1FineBlockSize`, `p1FineValueType`, `p1CoarseValueType`, `p1FineSpectralRadiusReuse`, `p1CoarsePrecond`) is unset and moot |
 | `hierarchyDropTol` | 0.0 | drop small entries before building each AMG hierarchy (0: keep all) |
-| `etaMin` | **1e-4** | lower bound of the adaptive tolerance: late Newton iterations need no more accuracy (default 1e-6) |
-| `etaMax` | 3e-4 | upper bound of the adaptive tolerance |
+| `etaMin` | 1e-4 | lower bound of the adaptive tolerance: late Newton iterations need no more accuracy (now also the default) |
+| `etaMax` | **3e-4** | upper bound of the adaptive tolerance (default 1e-3) |
 | `ewGamma`, `ewAlpha` | 0.9, 1.618 | Eisenstat-Walker forcing parameters |
 | `residualGrowthFactor` | 4.0 | a jump of the right-hand side by this factor marks a new increment (tolerance and hierarchies reset) |
-| `hierarchyStalenessFactor` | 1.5 | rebuild the AMG hierarchies when a solve needs this many times the previous solve's iterations |
-| `trueResidualMaxContinuations` | **0** | warm restarts to reach the tolerance on the true residual (default 2) |
-| `gapCompensatedTolerance` | **true** | tighten the first pass by the measured gap between scaled and true residual (default false) |
+| `refreshOnNewIncrement` | true | refresh the AMG hierarchies whenever a residual jump marks a new increment (default) |
+| `hierarchyStalenessFactor` | **1.5** | rebuild the AMG hierarchies when a solve needs this many times (and 15 more than) the outer iteration count of the solve the hierarchies were built for (default 3) |
+| `trueResidualMaxContinuations` | **0** | warm restarts to reach the tolerance on the true residual (default 2); only on the scaled system, so only relevant together with `krylovOnScaledSystem` above |
+| `gapCompensatedTolerance` | **true** | tighten the first pass by the measured gap between scaled and true residual (default false); only on the scaled system |
 | `gapSafetyFactor` | 0.3 | safety factor of that tightening |
+| `gapMaxFactor` | 1e3 | upper clamp on the measured gap's exponential moving average (default) |
 | `verbosity` | **info** | `silent`, `warning` (default), `info` or `debug` |
 | `warnOuterIterationsThreshold` | 100 | warn about solves that need more outer iterations |
 | `dumpOnDegradationThreshold`, `dumpOnDegradationMaxDumps`, `dumpOnDegradationContextSolves` | 100, 10, 0 | capture degraded solves for offline diagnosis (only active with `dumpOnDegradationDir`) |
 
 Two settings have no value to write down, because they are off by default: `dumpOnDegradationDir`
 (a directory to enable the capture above) and `hotReloadConfigFile` (a JSON file re-read during the
-run, to change settings on the fly).
+run, to change settings on the fly). `lgmresAlwaysReset` and `lgmresResetOnNewIncrement` are no longer
+set here either: both are deprecated and accepted only at their one remaining value (discard LGMRES's
+recycled vectors before every solve, never carry them across an increment), so leaving them unset and
+pinning them explicitly no longer differ.
 
-The two settings that matter most for this model are `symmetric` and `etaMin`. A key blockamg does
-not know -- a typo, say -- stops the run with an error that lists the recognized keys.
+The two settings that matter most for this model are `symmetric` and `etaMin` -- both now also
+blockamg's own defaults, but pinned here regardless so this file keeps stating, explicitly, the
+configuration it was tuned and smoke-tested against. A key blockamg does not know -- a typo, say --
+stops the run with an error that lists the recognized keys.

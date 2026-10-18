@@ -7,7 +7,27 @@
   "lgmresK": 3,
   "sweeps": 1,
   "symmetric": false,
-  "fieldPreconds": {},
+  "krylovOnScaledSystem": true,
+  "fieldPreconds": {
+    "displacement": {
+      "backendPrecision": "double",
+      "backendBlockSize": 1,
+      "coarsening": {
+        "type": "smoothed_aggregation",
+        "aggr": {
+          "eps_strong": 0.01
+        }
+      },
+      "relax": {
+        "type": "chebyshev",
+        "degree": 5,
+        "power_iters": 300,
+        "lower": 0.01
+      },
+      "npre": 1,
+      "npost": 1
+    }
+  },
   "useRigidBodyNullspace": true,
   "p1FieldNames": [],
   "hierarchyDropTol": 0.0,
