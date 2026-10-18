@@ -132,6 +132,7 @@ class NISTSchema:
         ),
         dtype=bool,
         default=None,
+        documentedDefault="auto",
     )
     useAmgclMPCCondensation: bool | None = schemaField(
         description=(
