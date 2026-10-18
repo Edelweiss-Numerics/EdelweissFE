@@ -1195,8 +1195,13 @@ captured models (a 0.84M-DOF gradient-enhanced damage cylinder through its damag
   model with multi-point constraints the hierarchies are now reused automatically; the former setup
   needed this set by hand (see the reuse rules above).
 
-Measured live, from the same checkpoints, against the former defaults: the contact model's six
-increments in 676 s instead of 1328 s (-49%), and the damage cylinder at about 10.3 s instead of
+Measured live, from the same checkpoints, the defaults against the former defaults (no per-model keys in
+either run, 16 threads): the contact model's six increments in 681 s instead of 1252 s (-46%); the damage
+cylinder's increments 50--57 in 954 s, where the former defaults had cleared six increments and were still
+on the damage-onset increment after 71 minutes (stopped there).
+
+How the settings got there, live against the production settings the reference runs had used: the contact
+model's six increments in 676 s instead of 1328 s (-49%), and the damage cylinder at about 10.3 s instead of
 25.5 s per Newton iteration (-60%), both with ``etaMax = 1e-2`` and on the scaled system. On the
 cylinder that setting took five Newton iterations per increment before the damage onset instead of
 three and failed the onset increment (a cutback); ``etaMax = 1e-3`` restores three, converges the
