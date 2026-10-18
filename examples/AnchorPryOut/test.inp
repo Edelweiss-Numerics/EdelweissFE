@@ -8,39 +8,27 @@
 ** setup for exactly this kind of hard, ill-conditioned, path-dependent problem
 ** (`linsolver=blockamg`, `blockamg.json` in this directory):
 **
-**  - `outerSolver=amgcl_lgmres`: AMGCL's own native outer Krylov solve in place of
-**    `scipy.sparse.linalg.gmres`, with `lgmresAlwaysReset=true` -- both now the `blockamg` default
-**    in this codebase, live-gated at 8/16/32 threads, faster than the previous scipy-based default
-**    at every thread count tested and increasingly so as thread count grows. `lgmresAlwaysReset`
-**    matters here specifically: the opposite setting was found (live, on this exact model) to let a
-**    struggling solve's poorly-conditioned recycled Krylov subspace compound into a much more
-**    expensive, or once, NaN, subsequent solve.
+**  - blockamg's own defaults: `blockamg.json` sets only the log verbosity. The defaults (outer solve
+**    by AMGCL's LGMRES on the unscaled system, 3x3 float-block hierarchy for the displacement field,
+**    adaptive Eisenstat-Walker tolerance between 1e-4 and 1e-3, an outer-iteration cap of 100) are
+**    explained in doc/source/documentation/blockamgtheory.rst, "Why the defaults are what they are".
 **  - `useAmgclMPCCondensation=True` (`>>options` on the loading step below): threads the multi-
 **    point-constraint condensation this model's 5 ties require (`T^T K T + C`, every solve) via
 **    AMGCL's own OpenMP-threaded `product()`/`sum()` instead of single-threaded SciPy CSR routines.
-**    Measured ~2.4-2.6x faster than the plain expression offline, ~7.3% faster end-to-end live on
-**    top of the `lgmres` default above.
-**  - Deliberately *not* enabled: p-two-grid (`p1FieldNames`) -- measured at parity with the shipped
-**    default on this model (not a real margin), not worth the added complexity here.
+**    Measured ~2.4-2.6x faster than the plain expression offline, ~7.3% faster end-to-end live.
+**  - Deliberately *not* enabled: p-two-grid (`p1FieldNames`) -- measured at parity with the
+**    single-level hierarchy on this model (not a real margin), not worth the added complexity here.
 **
-** A previous attempt at this file also set a fixed, tight `outerTol=1e-8` on the theory that it was
-** just an accuracy choice independent of the solver settings above -- a live smoke test on this
-** exact model caught that it was not: with `outerTol=1e-8`, the first real cutback needed 963 outer
-** GMRES iterations and did not converge. `outerTol` is left unset here, with the adaptive Eisenstat-
-** Walker forcing pinned in `blockamg.json` to the settings this file was tuned and smoke-tested
-** against (`etaMin=1e-6`, `etaMax=3e-4`, `outerRestart=100`, `outerMaxiter=8`, `hierarchyStaleness-
-** Factor=1.5`, `krylovOnScaledSystem=true`, and the displacement field's own `fieldPreconds` tree --
-** blockamg's own shipped defaults for these have since changed; this file pins the former ones rather
-** than adopt the new, unverified trajectory). The smoke test then reproduced 125 outer iterations at that
-** same cutback; later solver fixes (the correction-form reverse sweep, the staleness and cap-hit rules) can
-** change solve counts and timings, not the physical result. If your own model needs a tighter
-** fixed tolerance, re-verify the load path against a reference run before trusting it with
-** `outerSolver=amgcl_lgmres` -- this combination had not been tested at all before that finding.
+** An earlier version of this file set a fixed, tight `outerTol=1e-8` on the theory that it was just an
+** accuracy choice: a live smoke test on this exact model caught that it was not -- the first real cutback
+** needed 963 outer iterations and did not converge. `outerTol` stays unset (adaptive forcing). If your own
+** model needs a tighter fixed tolerance, re-verify the load path against a reference run.
 **
-** Smoke-tested (this exact file): both the trivial preload step and the loading step's first full
-** cutback sequence (0.005 -> 0.0025 -> 0.00125 -> 0.000625, converging and advancing to the next
-** increment) reproduce the expected trajectory, no NaN. Not run to completion -- maxNumInc=100000
-** below is a real, unbounded run; verify the full load path yourself before relying on it.
+** Smoke-tested (this exact file, blockamg defaults, 32 threads, October 2026): the preload step converges;
+** the loading step's first increment cuts back twice (0.005 -> 0.0025 -> 0.00125) and then advances, three
+** solves of that cutback sequence stopping at the 100-iteration cap (their hierarchies are rebuilt); no NaN;
+** the preload and four loading increments take about 5 minutes. Not run to completion --
+** maxNumInc=100000 below is a real, unbounded run; verify the full load path yourself before relying on it.
 **
 ** Source: AnchorPryOut.inp (Abaqus, concrete via GCDP UEL U004/C3D20R, steel via C3D8I, mortar via
 ** COH3D8 cohesive elements, 5 *TIE constraints, 2 penalty *Contact pairs).
