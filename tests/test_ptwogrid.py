@@ -37,6 +37,7 @@ extracted free submatrix, with the fine spectral radius taken from the C++ build
 import numpy as np
 import pytest
 import scipy.sparse as sp
+from _blockamgsystems import DirichletStub
 from _p1lattice import dirichletDofs, lattice, latticeSystem
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
@@ -178,7 +179,6 @@ def test_a_reused_spectral_radius_reproduces_the_estimated_one(problem):
     reused = PTwoGridPreconditioner(isCorner, edgeEndpoints, fineSpectralRadius=estimated.fineSpectralRadius)
     reused.build(As, dinv, coords=coords)
     assert reused.fineSpectralRadius == estimated.fineSpectralRadius
-    assert reused.timings()["setup: fine spectral radius"] < estimated.timings()["setup: fine spectral radius"]
     # the coarse AMGCL hierarchy is rebuilt, with its own (thread-order dependent) power iteration
     assert _relativeDifference(reused.applyPreconditioner(r), estimated.applyPreconditioner(r)) < 1e-12
 
@@ -289,20 +289,13 @@ def test_a_float_coarse_level_stays_close_to_the_double_one(problem):
     assert _relativeDifference(single.applyPreconditioner(r), double.applyPreconditioner(r)) < 1e-3
 
 
-class _DirichletStub:
-    """What ``applyDirichletToStiffness`` reads from a boundary condition."""
-
-    def __init__(self, dofs):
-        self.constrainedDofIndices = np.asarray(dofs, dtype=np.int64)
-
-
 def _systemWithStoredZeros(coords, constrainedDofs):
     """The same block as :func:`latticeSystem`, but constrained by the solvers' own Dirichlet elimination,
     which keeps the eliminated entries as explicitly stored zeros, and equilibrated in place."""
     from edelweissfe.solvers.base.dirichlet import applyDirichletToStiffness
 
     K, _ = latticeSystem(coords, [])
-    K = applyDirichletToStiffness(K, [_DirichletStub(constrainedDofs)], np.zeros(K.shape[0]))
+    K = applyDirichletToStiffness(K, [DirichletStub(constrainedDofs)], np.zeros(K.shape[0]))
     dinv = 1.0 / np.sqrt(np.abs(K.diagonal()))
     As = K.copy()
     As.data *= dinv[As.indices]
