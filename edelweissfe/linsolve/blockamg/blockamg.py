@@ -89,7 +89,6 @@ import time
 
 import numpy as np
 import scipy.sparse as sp
-from scipy.sparse.linalg import LinearOperator, gmres
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.linsolve.base import FieldBlock, LinearSolver, LinearSolveSummary
@@ -178,6 +177,18 @@ def _checkLgmresRecyclingKeys(lgmresAlwaysReset: bool, lgmresResetOnNewIncrement
                 "(measured to give nothing and to produce NaN on a live run). Drop the key, or set it to "
                 "{!r}.".format(name, value, _DEPRECATED_LGMRES_KEYS[name])
             )
+
+
+def _checkOuterSolver(outerSolver: str) -> None:
+    """Raise unless ``outerSolver`` is AMGCL's own LGMRES: the SciPy outer solver (``outerSolver == "scipy"``)
+    was removed. Its own GMRES orchestration (Arnoldi/Gram-Schmidt/restart bookkeeping, all run from Python) was
+    the single largest unaddressed cost bucket on the outer loop of a real reference model, and AMGCL's native
+    LGMRES was found trajectory-identical and, unlike SciPy's orchestration, keeps scaling past one NUMA node."""
+    if outerSolver != "amgcl_lgmres":
+        raise ValueError(
+            "blockamg: outerSolver={!r} is not supported -- the SciPy outer solver was removed; AMGCL's own "
+            "LGMRES ('amgcl_lgmres') is now the only outer solver.".format(outerSolver)
+        )
 
 
 def _boolFromConfig(value) -> bool:
@@ -323,9 +334,8 @@ class BlockAMGSolver(LinearSolver):
        for, or hit the iteration cap.
 
     Every solve also enforces the requested tolerance on the *true* residual, not just the outer solve's
-    own stopping test -- see ``trueResidualMaxContinuations``. Both outer solvers converge the residual of the
-    system they iterate on, the *scaled* (equilibrated) one: AMGCL's right-preconditioned LGMRES tests it
-    directly, and SciPy's left-preconditioned GMRES checks it at the end of every restart cycle. The scaled
+    own stopping test -- see ``trueResidualMaxContinuations``. AMGCL's LGMRES converges the residual of the
+    system it iterates on, the *scaled* (equilibrated) one, directly (it is right-preconditioned). The scaled
     residual can be considerably smaller than the true one (stiff rows are down-weighted by the
     equilibration), so "converged" could otherwise mean a true residual well above ``eta`` (measured on a
     real reference model: a 1.6e-2 true residual when 1e-4 was requested).
@@ -336,22 +346,23 @@ class BlockAMGSolver(LinearSolver):
         A fixed outer relative tolerance, overriding Eisenstat--Walker forcing. ``None`` (the
         default) uses adaptive forcing instead -- see ``etaMin``/``etaMax`` below.
     outerRestart, outerMaxiter
-        With ``outerSolver = "scipy"``, the GMRES restart length and the number of restart cycles. With AMGCL's
-        LGMRES their product is the iteration cap of one pass (its restart cycle is ``lgmresM + lgmresK``); the
-        recommended configuration sets the cap of 50 as 50 x 1.
+        Their product is the iteration cap of one pass of AMGCL's LGMRES (its restart cycle is
+        ``lgmresM + lgmresK``); the recommended configuration sets the cap of 50 as 50 x 1.
     outerSolver
-        ``"amgcl_lgmres"`` (default) uses AMGCL's own native ``amgcl::solver::lgmres`` at both
-        outer-solve call sites (the main solve and the true-residual continuation retry below) -- see
-        ``edelweissfe/linsolve/amgcl/amgcl-wrapper.hpp``'s ``LGMRESOuterSolverT`` for why: SciPy's own
-        GMRES orchestration (Arnoldi/Gram-Schmidt/restart bookkeeping, all run from Python) was found
-        to be the single largest unaddressed cost bucket on the outer loop of a real reference model
-        (roughly 38% of solve wall-clock). Live-gated at multiple thread counts: trajectory-identical
-        to the SciPy path, no NaN (once cross-solve recycling -- see below -- was removed), and
-        increasingly faster than SciPy as thread count grows -- SciPy's own orchestration anti-scales
-        past one NUMA node on multi-socket hardware, AMGCL's native implementation does not. ``"scipy"``
-        uses ``scipy.sparse.linalg.gmres`` instead, kept as a fallback/opt-out, not removed.
+        ``"amgcl_lgmres"`` -- the only accepted value, and the default -- uses AMGCL's own native
+        ``amgcl::solver::lgmres`` at both outer-solve call sites (the main solve and the true-residual
+        continuation retry below) -- see ``edelweissfe/linsolve/amgcl/amgcl-wrapper.hpp``'s
+        ``LGMRESOuterSolverT`` for why: orchestrating GMRES from Python -- the Arnoldi steps,
+        orthogonalization and restart bookkeeping -- was found to be the single largest unaddressed
+        cost bucket on the outer loop of a real reference model (roughly 38% of solve wall-clock) when
+        this solver used a SciPy-based outer solve instead. AMGCL's native implementation was live-gated
+        against that SciPy path at multiple thread counts: trajectory-identical, no NaN (once cross-solve
+        recycling -- see below -- was removed), and increasingly faster as thread count grows -- the
+        SciPy-based orchestration anti-scaled past one NUMA node on multi-socket hardware, AMGCL's native
+        implementation does not. The SciPy outer solver (``outerSolver = "scipy"``) was therefore removed;
+        any other value raises ``ValueError`` at construction.
     lgmresM, lgmresK
-        Only used when ``outerSolver == "amgcl_lgmres"``: forwarded to AMGCL's own ``lgmres::params``
+        Forwarded to AMGCL's own ``lgmres::params``
         fields ``M`` (Krylov steps per restart cycle, default ``30``) and ``K`` (augmentation vectors
         carried from one restart cycle to the next within a solve, default ``3``); a cycle is ``M + K``
         iterations, each one preconditioner application, and the first cycle of a solve is plain
@@ -673,8 +684,7 @@ class BlockAMGSolver(LinearSolver):
         self._outerTol = outerTol
         self._outerRestart = outerRestart
         self._outerMaxiter = outerMaxiter
-        if outerSolver not in ("scipy", "amgcl_lgmres"):
-            raise ValueError("outerSolver must be 'scipy' or 'amgcl_lgmres', got {!r}".format(outerSolver))
+        _checkOuterSolver(outerSolver)
         self._outerSolver = outerSolver
         self._lgmresM = lgmresM
         self._lgmresK = lgmresK
@@ -832,8 +842,7 @@ class BlockAMGSolver(LinearSolver):
         return drifted or capHit
 
     def _lgmresCapHit(self, iterations: int, tolerance: float) -> int:
-        """``1`` if the last AMGCL LGMRES pass stopped at the iteration cap short of its own tolerance, else ``0``
-        (SciPy's ``info`` convention).
+        """``1`` if the last AMGCL LGMRES pass stopped at the iteration cap short of its own tolerance, else ``0``.
 
         LGMRES stops on its own convergence test, its relative residual (``lastError``, recomputed at its exit,
         of the operator it iterated on -- the scaled one, not the true residual eta is accepted on) below the
@@ -1186,8 +1195,8 @@ class BlockAMGSolver(LinearSolver):
             for key in keys:
                 rejections.setdefault(key, reason)
 
-        if settings["outerSolver"] not in ("scipy", "amgcl_lgmres"):
-            reject("must be 'scipy' or 'amgcl_lgmres'", "outerSolver")
+        if settings["outerSolver"] != "amgcl_lgmres":
+            reject("must be 'amgcl_lgmres' (the SciPy outer solver was removed)", "outerSolver")
         for key in ("lgmresM", "outerRestart", "outerMaxiter", "sweeps"):
             if settings[key] < 1:
                 reject("must be at least 1", key)
@@ -1668,7 +1677,6 @@ class BlockAMGSolver(LinearSolver):
         with performancetiming.timeit("equilibrated system"):
             system = PyAMGCLEquilibratedSystem()
             system.build(A, scaling, [(block.start, block.stop) for block in blocks])
-        outerOperator = LinearOperator((n, n), matvec=system.matvec, dtype=np.float64)
 
         # (4) Hierarchies: one per field, rebuilt or reused (see mustRefresh above)
         if mustRefresh:
@@ -1722,8 +1730,6 @@ class BlockAMGSolver(LinearSolver):
                     sweepOnce(range(nFields - 2, -1, -1), residual, v, visited)
             return np.concatenate(v)
 
-        preconditioner = LinearOperator((n, n), matvec=blockGaussSeidel, dtype=np.float64)
-
         if self._outerTol is not None:
             eta = self._outerTol
         else:
@@ -1737,27 +1743,12 @@ class BlockAMGSolver(LinearSolver):
         else:
             firstPassEta = eta
 
-        # (5b) The outer Krylov solve on A_scaled z = b_scaled, preconditioned by the sweep: AMGCL's LGMRES (the
-        #      default, right-preconditioned) or SciPy's GMRES (left-preconditioned); both converge the residual of
-        #      A_scaled z = b_scaled. For LGMRES, outerRestart x outerMaxiter is the iteration cap of a pass.
+        # (5b) The outer Krylov solve on A_scaled z = b_scaled, preconditioned by the sweep: AMGCL's LGMRES
+        #      (right-preconditioned), which converges the residual of A_scaled z = b_scaled directly.
+        #      outerRestart x outerMaxiter is the iteration cap of a pass.
         def outerPass(tolerance: float, x0: np.ndarray = None) -> tuple:
-            """One outer Krylov pass from x0 (zero if None): the Krylov iterate, the iteration count, and
-            SciPy's ``info`` (non-zero: stopped at the iteration cap short of ``tolerance``)."""
-            if self._outerSolver == "scipy":
-                residualHistory = []
-                z, info = gmres(
-                    outerOperator,
-                    b_scaled,
-                    x0=x0,
-                    M=preconditioner,
-                    rtol=tolerance,
-                    atol=0.0,
-                    restart=self._outerRestart,
-                    maxiter=self._outerMaxiter,
-                    callback=lambda residualNorm: residualHistory.append(residualNorm),
-                    callback_type="pr_norm",
-                )
-                return z, len(residualHistory), info
+            """One outer Krylov pass from x0 (zero if None): the Krylov iterate, the iteration count, and 1 if the
+            pass stopped at the iteration cap short of ``tolerance``, 0 otherwise."""
             lgmres = self._outerLgmres(n)
             z = lgmres.solve(
                 system,

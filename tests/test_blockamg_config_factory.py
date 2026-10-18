@@ -166,6 +166,7 @@ def test_a_value_out_of_range_raises_at_construction(options):
 @pytest.mark.parametrize(
     "options",
     [
+        {"outerSolver": "scipy"},
         {"outerTol": 0.0},
         {"outerTol": 1.0},
         {"etaMin": 0.0},

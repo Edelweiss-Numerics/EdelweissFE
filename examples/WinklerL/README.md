@@ -100,7 +100,7 @@ The values that differ from the defaults are marked **bold**.
 
 | Setting | Value | Meaning |
 |---|---|---|
-| `outerSolver` | `amgcl_lgmres` | the outer Krylov solver: AMGCL's LGMRES (or `scipy` GMRES) |
+| `outerSolver` | `amgcl_lgmres` | the outer Krylov solver: AMGCL's LGMRES (the only accepted value) |
 | `outerTol` | `adaptive` | the outer tolerance: Eisenstat-Walker forcing between `etaMin` and `etaMax`, or a fixed number |
 | `outerRestart` | **50** | outer Krylov restart length (default 100) |
 | `outerMaxiter` | **3** | outer restart cycles, so at most `outerRestart * outerMaxiter` iterations (default 8) |

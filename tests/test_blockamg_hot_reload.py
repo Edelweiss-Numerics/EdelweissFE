@@ -270,6 +270,7 @@ def test_reloaded_lgmres_settings_rebuild_the_outer_solver(configuredSolver):
     "name, value",
     [
         ("outerSolver", "amgcl-lgmres"),
+        ("outerSolver", "scipy"),
         ("lgmresM", 0),
         ("p1FineBlockSize", 2),
         ("p1FineValueType", "half"),
@@ -354,8 +355,8 @@ def test_a_field_precond_for_a_field_the_system_lacks_is_accepted(configuredSolv
 
 @pytest.mark.parametrize(
     "alongside",
-    [{}, {"lgmresM": 40}, {"outerSolver": "scipy"}],
-    ids=["alone", "with lgmresM", "with outerSolver"],
+    [{}, {"lgmresM": 40}, {"outerMaxiter": 5}],
+    ids=["alone", "with lgmresM", "with outerMaxiter"],
 )
 def test_settings_the_build_fails_with_are_rolled_back(configuredSolver, alongside):
     from _blockamgsystems import displacementDamageSystem

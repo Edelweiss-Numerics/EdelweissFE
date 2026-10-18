@@ -217,8 +217,7 @@ unknown :math:`y`,
    \hat A M^{-1} y = \hat b, \qquad z = M^{-1} y, \qquad x = D z,
 
 whose residual :math:`\hat b - \hat A M^{-1} y = \hat b - \hat A z = D (b - A x)` is the scaled one --
-hence the true-residual check of step (6). SciPy's GMRES (``outerSolver = "scipy"``) applies
-:math:`M^{-1}` from the left instead, but converges the same scaled residual (see below). The numbers
+hence the true-residual check of step (6). The numbers
 (1)--(7) reappear as comments in ``BlockAMGSolver.__call__``.
 
 
@@ -446,22 +445,19 @@ the true-residual bookkeeping below exists.
 The outer Krylov solve
 ~~~~~~~~~~~~~~~~~~~~~~
 
-With ``outerSolver = "amgcl_lgmres"`` (the default) the outer solve is AMGCL's own native
+``outerSolver = "amgcl_lgmres"`` -- the only accepted value, and the default -- is AMGCL's own native
 ``amgcl::solver::lgmres``, driven through
 :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLLGMRESSolver`; the block sweep is passed straight in
-as the preconditioner callback. The alternative, ``"scipy"``, uses
-:func:`scipy.sparse.linalg.gmres` and is kept as a fallback. The native path exists because
-orchestrating GMRES from Python -- the Arnoldi steps, orthogonalization and restart bookkeeping --
-was measured as roughly 38% of this solver's wall-clock on a reference model, and, being serial
-Python, anti-scales past one NUMA node on multi-socket hardware while the native implementation does
-not. Both paths were gated live against each other at several thread counts and produce the same
-Newton trajectory.
+as the preconditioner callback. A former fallback, ``outerSolver = "scipy"``, used
+:func:`scipy.sparse.linalg.gmres` instead; it was removed once the native path was gated live against
+it at several thread counts and found to produce the same Newton trajectory. Orchestrating GMRES from
+Python -- the Arnoldi steps, orthogonalization and restart bookkeeping -- was measured as roughly 38%
+of this solver's wall-clock on a reference model when run that way, and, being serial Python,
+anti-scaled past one NUMA node on multi-socket hardware, which the native implementation does not.
 
-The two paths interpret the iteration budget differently. SciPy takes ``outerRestart`` as the restart
-length and ``outerMaxiter`` as a number of restart *cycles*; AMGCL's ``lgmres`` bounds *all* Arnoldi
-steps across all internal restarts with a single ``maxiter``, so their product is passed through as
-one total-iteration budget. This is a generous translation, not an attempt to match SciPy's semantics
-exactly.
+``lgmres`` bounds *all* Arnoldi steps across all internal restarts with a single ``maxiter``;
+``outerRestart`` and ``outerMaxiter`` are multiplied together and passed through as one total-iteration
+budget.
 
 LGMRES augments each restart with a few vectors carried over from the previous restart cycle of the same
 solve. ``lgmresK`` sets how many, and a restart cycle is ``lgmresM + lgmresK`` iterations, every one of
@@ -521,9 +517,7 @@ True-residual enforcement
 
 The outer Krylov method's own stopping test is not on the true residual but on the residual of the
 *scaled* (equilibrated) system it iterates on, :math:`\lVert \hat b - \hat A z \rVert / \lVert \hat b
-\rVert`: AMGCL's LGMRES is right-preconditioned and tests it directly; SciPy's GMRES (``"scipy"``) is
-left-preconditioned, stops its inner loop on the preconditioned residual, and checks the scaled one at
-the end of every restart cycle, continuing until it meets the tolerance or the cycles run out. The
+\rVert`: AMGCL's LGMRES is right-preconditioned and tests it directly. The
 scaled residual can differ substantially from the true relative residual (stiff rows are down-weighted
 by :math:`D`), so "converged" can mean a true relative residual well above the requested :math:`\eta`;
 measured on a reference model, one solve reached :math:`1.6\cdot 10^{-2}` where :math:`10^{-4}` had
@@ -664,8 +658,9 @@ Outer Krylov solve
       - Meaning
     * - ``outerSolver``
       - ``"amgcl_lgmres"``
-      - Which outer Krylov implementation to use: ``"amgcl_lgmres"`` for AMGCL's own native,
-        OpenMP-threaded LGMRES, or ``"scipy"`` for :func:`scipy.sparse.linalg.gmres` as a fallback.
+      - Which outer Krylov implementation to use. ``"amgcl_lgmres"`` (AMGCL's own native,
+        OpenMP-threaded LGMRES) is the only accepted value; the former SciPy fallback
+        (``"scipy"``, :func:`scipy.sparse.linalg.gmres`) was removed and raises ``ValueError``.
     * - ``outerTol``
       - unset
       - A fixed outer relative tolerance, switching off Eisenstat--Walker forcing. Unset, ``null``
@@ -673,19 +668,18 @@ Outer Krylov solve
         tolerance.
     * - ``outerRestart``
       - ``100``
-      - With ``"scipy"``, the GMRES restart length. With ``"amgcl_lgmres"`` only a factor: its product
-        with ``outerMaxiter`` is the iteration cap of a pass (the restart cycle is ``lgmresM + lgmresK``).
+      - A factor: its product with ``outerMaxiter`` is the iteration cap of a pass (the restart
+        cycle is ``lgmresM + lgmresK``).
     * - ``outerMaxiter``
       - ``8``
-      - Maximum number of restart cycles (``"scipy"``), or a factor of the total iteration budget
-        (``"amgcl_lgmres"``, see above).
+      - A factor of the total iteration budget (see above).
     * - ``lgmresM``
       - ``30``
-      - ``"amgcl_lgmres"`` only: Krylov steps per restart cycle, to which the cycle adds one step per
+      - Krylov steps per restart cycle, to which the cycle adds one step per
         augmentation vector (``lgmresK``).
     * - ``lgmresK``
       - ``3``
-      - ``"amgcl_lgmres"`` only: number of augmentation vectors carried between the restart cycles of
+      - Number of augmentation vectors carried between the restart cycles of
         one solve.
     * - ``lgmresAlwaysReset``, ``lgmresResetOnNewIncrement``
       - ``true``, ``false``
