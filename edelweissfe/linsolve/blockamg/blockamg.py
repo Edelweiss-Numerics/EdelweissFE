@@ -54,9 +54,9 @@ What it does per solve
 ----------------------
 
 #. **Equilibrate.** Symmetric diagonal (Jacobi) scaling :math:`\\hat A = D A D`, with
-   :math:`D = \\operatorname{diag}(\\lvert A_{ii} \\rvert^{-1/2})` (its diagonal is ``scaling`` in the code), removes
-   the large dynamic range (Dirichlet penalties + stiffness) that otherwise wrecks AMG's
-   strength-of-connection. The solve is done on :math:`\\hat A` and unscaled at the end.
+   :math:`D = \\operatorname{diag}(\\lvert A_{ii} \\rvert^{-1/2})` (its diagonal is ``scaling`` in the code),
+   removes the large dynamic range (Dirichlet penalties + stiffness) that otherwise wrecks AMG's
+   strength-of-connection. The preconditioner is built for :math:`\\hat A`.
 #. **Split** :math:`\\hat A` into the field diagonal blocks and their couplings, from the field ranges.
 #. **Build one AMG hierarchy per field** (AMGCL: built via ``build`` and applied via ``applyPreconditioner``
    on every visit of the sweep to its field, i.e. once per outer Krylov iteration with ``symmetric`` off;
@@ -67,8 +67,12 @@ What it does per solve
    stiffness -- when node coordinates are available, translations alone otherwise; a scalar field
    takes the default constant. A block backend (``backendBlockSize > 1``, part of the recommended
    configuration) cannot take a near-null-space and uses AMGCL's constant blocks instead.
-#. **Precondition GMRES** with a block Gauss-Seidel sweep over the fields, each field's correction
-   coming from one AMG V-cycle on its block, the couplings folded in between fields.
+#. **Precondition the outer Krylov solve** (AMGCL's LGMRES by default) with a block Gauss-Seidel sweep
+   ``M^-1`` over the fields, each field's correction coming from one AMG V-cycle on its block, the couplings
+   folded in between fields. With ``krylovOnScaledSystem = False`` (the recommended configuration) the outer
+   solve runs on ``A x = b`` itself, preconditioned by ``D M^-1 D``, and its residual is the true one; by
+   default it runs on the scaled system ``D A D z = D b``, ``x = D z``, and the true residual is checked
+   afterwards.
 
 Its reach is memory: AMG needs O(n) of it where a direct factorization does not fit. Its limit is the
 displacement block of a damaging, non-associated material, which is non-symmetric and whose symmetric
@@ -1761,9 +1765,9 @@ class BlockAMGSolver(LinearSolver):
                     sweepOnce(range(nFields - 2, -1, -1), residual, v, visited)
             return np.concatenate(v)
 
-        # krylovOnScaledSystem = False: the outer solve runs on A itself, right-preconditioned by
-        # x = D M^-1 (D r) -- M built on D A D as always -- so that its own convergence norm is the
-        # true residual the solve is accepted on.
+        # krylovOnScaledSystem = False: the outer solve runs on A itself, preconditioned by x = D M^-1 (D r) --
+        # M built on D A D as always -- so that the residual it converges is the true one the solve is accepted
+        # on.
         if onScaledSystem:
             outerRightHandSide, outerPreconditioner = b_scaled, blockGaussSeidel
         else:
@@ -1965,7 +1969,7 @@ class BlockAMGSolver(LinearSolver):
                     self._solveCount, trueResidual, eta, continuations, self._outerRestart * self._outerMaxiter
                 ),
             )
-        elif not converged:
+        elif not converged and onScaledSystem:
             self._log(
                 "warning",
                 "⚠ solve #{:} did not fully converge: ‖r‖={:.1e} still exceeds η={:.1e} after {:} "
@@ -1974,6 +1978,13 @@ class BlockAMGSolver(LinearSolver):
                 "gapCompensatedTolerance close; a rebuilt preconditioner does not.".format(
                     self._solveCount, trueResidual, eta, continuations
                 ),
+            )
+        elif not converged:
+            # on the unscaled system only at a rounding tie: the outer solve's own residual is the true one
+            self._log(
+                "warning",
+                "⚠ solve #{:} did not fully converge: ‖r‖={:.1e} still exceeds η={:.1e}, though the outer solve "
+                "reported convergence on the same residual (rounding).".format(self._solveCount, trueResidual, eta),
             )
 
         return x
