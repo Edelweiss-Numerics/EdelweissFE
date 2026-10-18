@@ -503,6 +503,8 @@ cdef class PyAMGCLEquilibratedSystem:
         A: scipy.sparse csr_matrix (square); dinv: the equilibration, length n; fieldBounds: a
         sequence of ``(start, stop)`` DOF ranges, one per field, disjoint.
         """
+        if A.shape[0] != A.shape[1]:
+            raise ValueError("A must be square, got shape {:}".format(A.shape))
         A, indptr, indices, data = _csrArrays(A)
         cdef int n = A.shape[0]
         dinvArray = _vector(dinv, n, "dinv")
