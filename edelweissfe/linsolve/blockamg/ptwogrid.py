@@ -42,8 +42,11 @@ only chooses the parameters and builds the coarse near null-space, which is chea
 
 This is an **opt-in variant of the field-split AMG preconditioner**, not the default. It is
 rebuilt exactly when blockamg's single-level hierarchies are, and its rebuild is cheaper than theirs;
-the coarse solve gets the same rigid-body near-null-space treatment as the single-level default
-(restricted to the corner-node subset), while the fine-level Chebyshev smoother needs none. Measured
+the coarse solve always runs on the plain scalar backend, so it gets the same rigid-body
+near-null-space treatment the single-level default gives a scalar-backend field (restricted to the
+corner-node subset, independent of the field's own single-level backend -- a block backend, the
+default for 2D/3D fields, has no near-null-space of its own), while the fine-level Chebyshev smoother
+needs none. Measured
 against blockamg's default single-level configuration with the same outer settings, it was about
 12% slower on one reference model and level within noise on another -- worth measuring on a model
 with expensive hierarchy rebuilds, not assumed to help.

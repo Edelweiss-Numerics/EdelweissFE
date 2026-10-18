@@ -67,7 +67,7 @@ What it does per solve
    stiffness -- when node coordinates are available, translations alone otherwise; a scalar field
    takes the default constant. A block backend (``backendBlockSize > 1``, the default for a 3D or 2D
    vector field) cannot take a near-null-space and uses AMGCL's constant blocks instead.
-#. **Precondition the outer Krylov solve** (AMGCL's LGMRES by default) with a block Gauss-Seidel sweep
+#. **Precondition the outer Krylov solve** (AMGCL's LGMRES, the only outer solver) with a block Gauss-Seidel sweep
    ``M^-1`` over the fields, each field's correction coming from one AMG V-cycle on its block, the couplings
    folded in between fields. With ``krylovOnScaledSystem = False`` (the default) the outer solve runs on
    ``A x = b`` itself, preconditioned by ``D M^-1 D``, and its residual is the true one;
@@ -120,7 +120,9 @@ _IDENTIFICATION = "BlockAMGSolver"
 # __call__ pops both out of whichever precond dict applies (default or a fieldPreconds override)
 # before forwarding the rest verbatim as the AMGCL JSON parameter tree.
 #
-# backendPrecision defaults to "double". On the scalar backend "float" is AMGCL's builtin<float>,
+# backendPrecision defaults to "double" when omitted from a fieldPreconds tree -- not what the shipped
+# field defaults use: _defaultFieldPrecond's own 3D tree sets it to "float" explicitly (see below). On
+# the scalar backend "float" is AMGCL's builtin<float>,
 # which builds the whole hierarchy in single precision; measured on all 9 dumped ords of a real
 # reference model, it inflated outer GMRES iterations by up to 30% and only won on wall-clock about
 # half the time, netting only ~3% aggregate -- plausibly because the Chebyshev smoother's own
@@ -367,14 +369,18 @@ class UnscaledBlockPreconditioner:
 
 
 class BlockAMGSolver(LinearSolver):
-    """Field-split block-AMG preconditioned Krylov solve (LGMRES by default). Callable as ``(A, b) -> x``.
+    """Field-split block-AMG preconditioned Krylov solve (AMGCL's LGMRES, the only outer solver). Callable as
+    ``(A, b) -> x``.
 
     The block structure is not configured here -- it is derived by the base class from the model and
     DOF manager the nonlinear solver hands over via
-    :meth:`~edelweissfe.linsolve.base.LinearSolver.setModel`. A field's near null-space is decided
-    from its nodal dimension: a vector field (dimension > 1) gets its full rigid-body basis
+    :meth:`~edelweissfe.linsolve.base.LinearSolver.setModel`. A field's near null-space, where its
+    backend can carry one at all (the plain scalar backend only -- see ``useRigidBodyNullspace``), is
+    decided from its nodal dimension: a vector field (dimension > 1) gets its full rigid-body basis
     (translations and rotations) when node coordinates are available, translations alone otherwise;
-    a scalar field takes the default constant.
+    a scalar field takes the default constant. The default ``fieldPreconds`` tree puts a 2D or 3D
+    vector field on a block backend instead, which has no near-null-space of its own, so this applies
+    to such a field only with an explicit scalar-backend ``fieldPreconds`` override.
 
     Stateful across calls in two independent ways. This solver, like every other registered linear solver, sees
     only ``(A, b)`` per call, so it reconstructs the Newton-loop state rather than being told about it: from
@@ -384,11 +390,13 @@ class BlockAMGSolver(LinearSolver):
     #. **Adaptive outer tolerance** (Eisenstat--Walker forcing, "choice 2"), the default. Most Newton
        iterates do not need the linear solve tight, and loosening the requested tolerance for them cuts
        outer iterations substantially -- provided the outer solve's own stopping test (on the scaled
-       residual) is not allowed to silently let the *true* residual run looser than the requested ``eta``
-       (a real risk with an imperfect preconditioner, see the true-residual enforcement below). It does not
+       system: the scaled residual) is not allowed to silently let the *true* residual run looser than
+       the requested ``eta`` (a real risk with an imperfect preconditioner, see the true-residual
+       enforcement below). It does not
        reproduce the Newton path of a tight fixed tolerance exactly: through a damage onset, Newton needs
-       linear solves about ten times tighter than the default ``etaMax`` allows (see "why the defaults are
-       what they are" on the theory page). Pass ``outerTol=<a float>`` to pin a fixed tolerance instead.
+       linear solves about ten times tighter than the forcing allowed at ``etaMax = 1e-2`` (see "why the
+       defaults are what they are" on the theory page). Pass ``outerTol=<a float>`` to pin a fixed
+       tolerance instead.
     #. **Per-field AMG hierarchy reuse across Newton iterations**, on by default. Building a hierarchy
        is a large, avoidable fraction of a solve when the Jacobian has moved only a little since the
        last one. The outer Krylov solve always operates on the current matrix; only the block
@@ -405,10 +413,11 @@ class BlockAMGSolver(LinearSolver):
 
     Every solve also enforces the requested tolerance on the *true* residual, not just the outer solve's
     own stopping test -- see ``trueResidualMaxContinuations``. AMGCL's LGMRES converges the residual of the
-    system it iterates on, by default the *scaled* (equilibrated) one (see ``krylovOnScaledSystem``),
-    directly (it is right-preconditioned). The scaled residual can be considerably smaller than the true one
-    (stiff rows are down-weighted by the equilibration), so "converged" could otherwise mean a true residual
-    well above ``eta`` (measured on a real reference model: a 1.6e-2 true residual when 1e-4 was requested).
+    system it iterates on directly (it is right-preconditioned): on the unscaled system by default, whose
+    residual is the true one; with ``krylovOnScaledSystem = True``, the scaled (equilibrated) one, which
+    can be considerably smaller than the true one (stiff rows are down-weighted by the equilibration), so
+    "converged" could otherwise mean a true residual well above ``eta`` (measured on a real reference
+    model: a 1.6e-2 true residual when 1e-4 was requested).
 
     Parameters
     ----------
@@ -433,7 +442,8 @@ class BlockAMGSolver(LinearSolver):
         any other value raises ``ValueError`` at construction.
     lgmresM, lgmresK
         Forwarded to AMGCL's own ``lgmres::params``
-        fields ``M`` (Krylov steps per restart cycle, default ``30``) and ``K`` (augmentation vectors
+        fields ``M`` (Krylov steps per restart cycle, default ``50`` here -- AMGCL's own default is
+        ``30``) and ``K`` (augmentation vectors
         carried from one restart cycle to the next within a solve, default ``3``); a cycle is ``M + K``
         iterations, each one preconditioner application, and the first cycle of a solve is plain
         GMRES(``M + K``). Every solve starts
@@ -461,20 +471,25 @@ class BlockAMGSolver(LinearSolver):
         the hierarchy on the field's unscaled block ``A_ii`` and apply it as ``D^-1 AMG(A_ii)^-1 D^-1``
         (:class:`UnscaledBlockPreconditioner`; Chebyshev then needs ``"scale": true``).
     useRigidBodyNullspace
-        ``True`` (the default) builds a vector field's near null-space as the full rigid-body basis --
-        translations *and* rotations -- once nodal coordinates for that field are available via
-        ``self._model`` (set by :meth:`~edelweissfe.linsolve.base.LinearSolver.setModel`), instead of
-        translations alone. The rotations matter because, for 3D elasticity, they are (like the
-        translations) directions in which the discretized operator has essentially zero stiffness, so
-        smoothed aggregation needs them in its near-null-space basis to represent that error class
-        exactly on the coarse levels -- without them, that class of error has nowhere efficient to go,
-        since a Chebyshev smoother is (by its own spectral-window construction) not targeting
-        near-zero-eigenvalue error either. Measured ~28-31% fewer isolated per-field outer iterations on
-        two real captured systems, robust to both thread count and the Chebyshev ``power_iters``
-        setting, unlike translations-only, which is sensitive to both. Falls back to translations-only
-        automatically for any field whose coordinates are unavailable (e.g. an offline probe that only
+        Only takes effect on the plain scalar backend (``backendBlockSize == 1``) -- AMGCL's
+        near-null-space path is unimplemented for block value types, so a field on a block backend
+        (the default ``fieldPreconds`` tree for a 2D or 3D vector field) never gets one, whatever this
+        is set to. ``True`` (the default) builds a scalar-backend vector field's near null-space as the
+        full rigid-body basis -- translations *and* rotations -- once nodal coordinates for that field
+        are available via ``self._model`` (set by
+        :meth:`~edelweissfe.linsolve.base.LinearSolver.setModel`), instead of translations alone. The
+        rotations matter because, for 3D elasticity, they are (like the translations) directions in
+        which the discretized operator has essentially zero stiffness, so smoothed aggregation needs
+        them in its near-null-space basis to represent that error class exactly on the coarse levels --
+        without them, that class of error has nowhere efficient to go, since a Chebyshev smoother is
+        (by its own spectral-window construction) not targeting near-zero-eigenvalue error either.
+        Measured ~28-31% fewer isolated per-field outer iterations on two real captured systems, on the
+        scalar backend, robust to both thread count and the Chebyshev ``power_iters`` setting, unlike
+        translations-only, which is sensitive to both. Falls back to translations-only automatically
+        for any scalar-backend field whose coordinates are unavailable (e.g. an offline probe that only
         ever calls the lower-level ``setFieldStructure``, with no model to read coordinates from) --
-        never a hard requirement. Set ``False`` to force translations-only unconditionally.
+        never a hard requirement. Set ``False`` to force translations-only unconditionally on the
+        scalar backend.
     p1Maps
         Optional mapping of field name to a ``(isCorner, edgeEndpoints)`` P1 topology map
         (:func:`edelweissfe.numerics.p1topology.buildP1Map`), injected directly. A vector field named
@@ -567,25 +582,30 @@ class BlockAMGSolver(LinearSolver):
         of a *diverged* attempt usually starts below that attempt's last residual and is not recognized
         (see the theory page).
     gapCompensatedTolerance, gapSafetyFactor
-        Opt-in (default ``False``, i.e. unchanged behaviour). The outer Krylov converges the
-        *scaled* (equilibrated) residual while acceptance is on the *true* relative residual; the
-        ratio between them (the "gap", measured 1.0-3.5 on a gradient-enhanced damage model and up to about 40
-        on a contact model with multi-point constraints) is why ~99% of production solves need
-        a warm-restart continuation. When enabled, the first pass asks for
+        Opt-in (default ``False``). Only with ``krylovOnScaledSystem = True``: no effect under the
+        defaults, which run the outer solve on the unscaled system (no gap to compensate there -- see
+        ``krylovOnScaledSystem``). On the scaled system, the outer Krylov converges the *scaled*
+        (equilibrated) residual while acceptance is on the *true* relative residual; the ratio between
+        them (the "gap", measured 1.0-3.5 on a gradient-enhanced damage model and up to about 40 on a
+        contact model with multi-point constraints) is why almost every solve on that system needs a
+        warm-restart continuation. When enabled, the first pass asks for
         ``gapSafetyFactor * eta / gap`` (gap EMA-smoothed across solves) so it lands on target in one
         pass, and any remaining continuation tightens by the *measured* gap instead of the fixed
         0.01x factor.
 
-        **Measured, and why it is not the default.** Per increment it is a clear win: on a live
-        12-increment AnchorPryOut window, continuations 126 -> 1 and outer iterations 8943 -> 7124
-        (-20%), with no cutbacks or return-mapping failures. But the default path over-solves by
-        ~30x, and Newton quietly relies on that: landing merely in-spec costs about one extra Newton
-        iteration per increment, which parks the run just above the adaptive time stepper's
-        ``criticalIter`` growth threshold. In the same window the default arm grew its increment
-        0.000375 -> 0.000413 and covered 16% more simulated time, while this arm never grew. Judged
-        per unit of *simulated time* rather than per increment, the per-increment saving is largely
-        or wholly given back. ``gapSafetyFactor`` is the knob between the two regimes (smaller =
-        more accurate = closer to the default's Newton behaviour); the sweet spot is unexplored.
+        **Measured, and why it is not the default.** The measurement below is from the scaled system
+        (the former default), before the ``krylovOnScaledSystem = False`` default made this moot for
+        most runs. Per increment it is a clear win there: on a live 12-increment AnchorPryOut window,
+        continuations 126 -> 1 and outer iterations 8943 -> 7124 (-20%), with no cutbacks or
+        return-mapping failures. But the scaled system, left uncompensated, over-solves by ~30x, and
+        Newton quietly relies on that: landing merely in-spec costs about one extra Newton iteration
+        per increment, which parks the run just above the adaptive time stepper's ``criticalIter``
+        growth threshold. In the same window the uncompensated arm grew its increment 0.000375 ->
+        0.000413 and covered 16% more simulated time, while this arm never grew. Judged per unit of
+        *simulated time* rather than per increment, the per-increment saving is largely or wholly given
+        back -- hence this stays opt-in, for a model still run with ``krylovOnScaledSystem = True``.
+        ``gapSafetyFactor`` is the knob between the two regimes there (smaller = more accurate = closer
+        to the uncompensated path's Newton behaviour); the sweet spot is unexplored.
 
     gapMaxFactor
         Upper clamp on the gap EMA (default 1e3, well above the measured gaps of up to about 40). Without
@@ -640,7 +660,12 @@ class BlockAMGSolver(LinearSolver):
     warnOuterIterationsThreshold
         A solve needing more outer Krylov iterations than this triggers a ``"warning"``-level message (a
         preconditioner-quality red flag), shown at every verbosity but ``"silent"``. A solve that misses
-        ``eta`` has a warning of its own, whatever this threshold.
+        ``eta`` has a warning of its own, whatever this threshold. Dead under the shipped defaults at its
+        own default (100): the default cap is ``outerRestart * outerMaxiter = 100`` and, on the default
+        unscaled path, there are no continuations past a pass's own outer count, so ``outerIters`` can
+        never exceed 100 -- a solve that needs more either converges within the cap or stops at it (and
+        gets the cap-hit warning instead). Lower this below the cap, or raise the cap, to see anything
+        from it.
     dumpOnDegradationDir
         If set, write the raw ``(A, b)`` of every solve whose outer-iteration count exceeds
         ``dumpOnDegradationThreshold`` to this directory (created if missing), for offline diagnosis
@@ -655,8 +680,9 @@ class BlockAMGSolver(LinearSolver):
     dumpOnDegradationThreshold
         The outer-iteration count above which a solve's system is dumped. ``None`` (the default) reuses
         ``warnOuterIterationsThreshold``, so a dump and its corresponding warning message fire on
-        the same solves. A solve that stops at the iteration cap and misses ``eta`` is dumped too, whatever the
-        threshold.
+        the same solves -- and is just as dead under the shipped defaults, for the same reason (see
+        ``warnOuterIterationsThreshold``). A solve that stops at the iteration cap and misses ``eta`` is
+        dumped too, whatever the threshold; that cap-hit path is what actually fires under the defaults.
     dumpOnDegradationMaxDumps
         A process-wide ceiling on the number of degradation dumps written (across every
         ``BlockAMGSolver`` instance in this process, e.g. one per analysis step) -- a disk-space guard
@@ -713,9 +739,10 @@ class BlockAMGSolver(LinearSolver):
 
     #: See :attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`. ``True``: a
     #: changing pattern (e.g. from ``pruneCondensedMatrixZeros`` on a multi-point-constrained model)
-    #: forces a hierarchy rebuild on every solve (see the "nothing to reuse yet" rule in
-    #: :meth:`_buildFieldPreconditioners`'s caller), which was measured to cost a contact model with
-    #: 53,701 multi-point-constraint slaves 1328 s against 917 s over six increments.
+    #: forces a hierarchy rebuild on every solve (see the ``patternChanged``/nnz rule in ``__call__``,
+    #: which this ``nnz != self._lastNnz`` proxy trips on almost every Newton iteration when pruning
+    #: churns the pattern), which was measured to cost a contact model with 53,701
+    #: multi-point-constraint slaves 1328 s against 917 s over six increments.
     needsStableSparsityPattern = True
 
     #: Degradation dumps written across every instance in this process, so
@@ -929,10 +956,12 @@ class BlockAMGSolver(LinearSolver):
         :data:`_STALENESS_MIN_EXCESS` -- at small counts a factor alone fires on noise (8 -> 13). A solve
         that hit the iteration cap always asks for a rebuild: its count says nothing about how far the
         hierarchies drifted, only that they no longer do the job -- also when that solve had just rebuilt them
-        (not rebuilding again was measured neutral, see the theory page). A missed tolerance does not: with
-        continuations off, it comes from the gap between the scaled residual the outer solve converges
-        and the true one (stiff rows down-weighted by the equilibration), which a rebuild cannot close --
-        measured +18% on a contact model with multi-point constraints when it did trigger a rebuild.
+        (not rebuilding again was measured neutral, see the theory page). A missed tolerance does not: on
+        the scaled system, with continuations off, it comes from the gap between the scaled residual the
+        outer solve converges and the true one (stiff rows down-weighted by the equilibration), which a
+        rebuild cannot close -- measured +18% on a contact model with multi-point constraints when it did
+        trigger a rebuild; on the unscaled system (the default) a miss without a cap hit happens only at a
+        rounding tie, since the outer solve then converges the true residual itself.
         """
         if rebuilt or self._stalenessReferenceIters is None:
             self._stalenessReferenceIters = outerIters
@@ -1753,8 +1782,11 @@ class BlockAMGSolver(LinearSolver):
         else:
             rebuildReason = "stale"
 
-        # (2) Equilibration: solve A x = b as (D A D) z = D b, x = D z, D = diag(scaling) with
-        #     scaling = 1 / sqrt|a_ii|. A_scaled = D A D, b_scaled = D b in the code.
+        # (2) Equilibration: build the field preconditioners from A_scaled = D A D, D = diag(scaling)
+        #     with scaling = 1 / sqrt|a_ii| (b_scaled = D b in the code). With
+        #     krylovOnScaledSystem = True the outer solve also runs on this substitution, solving
+        #     A x = b as (D A D) z = D b, x = D z; with the default False it solves A x = b directly,
+        #     right-preconditioned by the same equilibrated blocks (see __call__ below).
         with performancetiming.timeit("equilibration"):
             if mustRefresh:
                 diagonal = PyAMGCLEquilibratedSystem.absoluteDiagonal(A)
@@ -1885,9 +1917,10 @@ class BlockAMGSolver(LinearSolver):
         else:
             firstPassEta = eta
 
-        # (5b) The outer Krylov solve, preconditioned by the sweep, on A_scaled z = b_scaled (krylovOnScaledSystem,
-        #      the default) or on A x = b: AMGCL's LGMRES (right-preconditioned), which converges the residual of
-        #      the system it is given directly. outerRestart x outerMaxiter is the iteration cap of a pass.
+        # (5b) The outer Krylov solve, preconditioned by the sweep, on A_scaled z = b_scaled
+        #      (krylovOnScaledSystem) or on A x = b (the default): AMGCL's LGMRES (right-preconditioned),
+        #      which converges the residual of the system it is given directly. outerRestart x
+        #      outerMaxiter is the iteration cap of a pass.
         def outerPass(tolerance: float, x0: np.ndarray = None) -> tuple:
             """One outer Krylov pass from x0 (zero if None): the Krylov iterate, the iteration count, and 1 if the
             pass stopped at the iteration cap short of ``tolerance``, 0 otherwise."""

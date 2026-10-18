@@ -104,7 +104,7 @@ The block structure -- which DOFs belong to which field, and each field's dimens
     {
         "outerSolver": "amgcl_lgmres",
         "sweeps": 1,
-        "symmetric": true
+        "symmetric": false
     }
 
 The method, the near-null-space construction, the adaptive outer tolerance, hierarchy reuse, every configuration key with its default, and the experimental p-multigrid variant are documented in detail on their own page:

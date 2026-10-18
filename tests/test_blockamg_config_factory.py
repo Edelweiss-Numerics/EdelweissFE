@@ -203,7 +203,8 @@ def test_the_default_trees_on_the_theory_page_are_the_code_defaults():
     assert trees == {
         "3D vector field (e.g. displacement)": _defaultFieldPrecond(3),
         "2D vector field": _defaultFieldPrecond(2),
-        "scalar field (e.g. nonlocal damage), or a vector field of any other dimension": _defaultFieldPrecond(1),
+        "vector field of a dimension other than 2 or 3": _defaultFieldPrecond(4),
+        "scalar field (e.g. nonlocal damage)": _defaultFieldPrecond(1),
     }
 
 
