@@ -742,8 +742,6 @@ class BlockAMGSolver(LinearSolver):
         # in force -- which is the whole point when the file is being edited during a long run.
         self._hotReloadConfigFile = hotReloadConfigFile
         self._hotReloadStamp = None
-        if self._dumpOnDegradationDir is not None:
-            os.makedirs(self._dumpOnDegradationDir, exist_ok=True)
         # Rolling window of the last dumpOnDegradationContextSolves solves (each entry: solveCount, A,
         # b, blocks, mustRefresh, patternChanged, newIncrement, previousOuterIters), oldest first --
         # only populated when dumpOnDegradationDir is set, so this costs nothing otherwise. Bounded by
@@ -799,6 +797,12 @@ class BlockAMGSolver(LinearSolver):
             raise ValueError(
                 "blockamg: " + "; ".join("{:} {:}".format(name, reason) for name, reason in rejections.items())
             )
+
+        # Created only once construction is known to succeed: a configuration rejected above must not
+        # leave a directory behind, and an uncreatable path should raise the ValueError above naming
+        # dumpOnDegradationDir, not a bare OSError from makedirs() before validation even ran.
+        if self._dumpOnDegradationDir is not None:
+            os.makedirs(self._dumpOnDegradationDir, exist_ok=True)
 
     @property
     def reportsSolveSummary(self) -> bool:

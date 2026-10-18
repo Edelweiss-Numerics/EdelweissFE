@@ -100,6 +100,17 @@ def test_a_single_field_name_is_not_split_into_characters():
         createSolver({"p1FieldNames": 3})
 
 
+def test_an_uncreatable_dump_directory_raises_and_is_never_created(tmp_path):
+    # a plain file where the directory should go: os.makedirs() would raise a bare, unnamed OSError
+    # if construction tried to create it before validating -- the settings check must reject this
+    # first, with a ValueError naming the key, and must not touch the filesystem at all.
+    blocked = tmp_path / "not_a_directory"
+    blocked.write_text("")
+    with pytest.raises(ValueError, match="dumpOnDegradationDir"):
+        createSolver({"dumpOnDegradationDir": str(blocked)})
+    assert blocked.is_file()
+
+
 def test_null_field_names_and_trees_are_unset():
     solver = createSolver({"p1FieldNames": None, "p1CoarsePrecond": None, "fieldPreconds": None})
     assert solver._p1FieldNamesRequested == set()
