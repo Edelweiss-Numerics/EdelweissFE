@@ -30,7 +30,8 @@ Solver-independent: both functions are pure geometry/linear algebra over a
 richer basis) its node coordinates -- no solver-instance state. Any algebraic-multigrid-style
 preconditioner needing an elasticity near-null-space can use them; today
 :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver` and its p-two-grid variant do, to
-seed AMGCL's smoothed-aggregation coarsening.
+seed AMGCL's smoothed-aggregation coarsening. A block backend takes :func:`translationNullspace` alone
+(``blockTranslationNullspace``): its node-major layout gives every node a diagonal block of weights.
 
 :func:`rigidBodyNullspace` (translations *and* rotations) is preferred whenever node coordinates are
 available: measured fewer isolated per-field outer iterations than :func:`translationNullspace`

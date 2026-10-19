@@ -1,11 +1,14 @@
 #pragma once
 
+#include "amgcl-block-translations.hpp"
 #include <algorithm>
 #include <amgcl/adapter/block_matrix.hpp>
 #include <amgcl/adapter/crs_tuple.hpp>
+#include <amgcl/amg.hpp>
 #include <amgcl/backend/builtin.hpp>
 #include <amgcl/make_solver.hpp>
 #include <amgcl/preconditioner/runtime.hpp>
+#include <amgcl/relaxation/runtime.hpp>
 #include <amgcl/solver/lgmres.hpp>
 #include <amgcl/solver/runtime.hpp>
 #include <amgcl/value_type/static_matrix.hpp>
@@ -32,7 +35,8 @@ class AMGCLSolverInterface {
 public:
   virtual ~AMGCLSolverInterface() {}
 
-  /// @brief Supply near null-space vectors for smoothed-aggregation coarsening.
+  /// @brief Supply near null-space vectors for smoothed-aggregation coarsening (a block backend takes only the
+  /// translations, see LinearSolverBlockT).
   /// @param B rows x cols, row-major (column j is the j-th vector); cols == 0 clears it.
   virtual void set_nullspace( const double* B, int rows, int cols ) = 0;
 
@@ -347,34 +351,124 @@ namespace amgcl {
 // conversion) rather than element-cast like the float backend's std::vector<ValueType> narrowing.
 // LinearSolverT stays untouched to keep the validated scalar/float paths at zero regression risk.
 //
-// set_nullspace() is not supported here and always throws: AMGCL's own tentative-prolongation
-// nullspace path self-flags as unimplemented for block value types (amgcl/coarsening/
-// tentative_prolongation.hpp: "TODO: this is just a workaround to make non-scalar value types
-// compile. Most probably this won't actually work.") -- not merely undocumented, upstream itself does
-// not trust it. A block-aware smoother's own per-node B×B inversion is expected to substitute for
-// some of what a near-null-space would otherwise buy the scalar backend, but this has not been
-// re-measured against the current (Chebyshev, rigid-body-aware) scalar-backend default.
+// The near null-space. Without one, the hierarchy is AMGCL's runtime-configured one (Solver), whose
+// near null-space for a block value type is the identity block: constants per component of the
+// variables it is built on -- for blockamg's equilibrated blocks D A D, D-weighted translations, not
+// the translations D^-1 t of D A D. set_nullspace() takes exactly those B translations instead, one
+// diagonal B×B block per node (edelweissfe/linsolve/nullspace.py's translationNullspace), and the
+// next build() then builds smoothed aggregation with a tentative prolongation from them
+// (TranslationSolver, see amgcl-block-translations.hpp). Any other near null-space -- the rotations
+// in particular -- is refused: AMGCL's own tentative-prolongation path for block value types
+// self-flags as unimplemented (amgcl/coarsening/tentative_prolongation.hpp: "TODO: this is just a
+// workaround to make non-scalar value types compile. Most probably this won't actually work."), and
+// its runtime coarsening would instead switch the whole coarsening to scalar matrices (as_scalar).
 template < typename BlockType, typename BackendType = amgcl::backend::builtin< BlockType > >
 class LinearSolverBlockT : public AMGCLSolverInterface {
 public:
-  typedef BackendType Backend;
-  typedef amgcl::make_solver< amgcl::runtime::preconditioner< Backend >, amgcl::runtime::solver::wrapper< Backend > >
-    Solver;
+  typedef BackendType                                Backend;
+  typedef amgcl::runtime::solver::wrapper< Backend > KrylovSolver;
+  /// @brief AMGCL's runtime-configured hierarchy: precond.class, precond.coarsening.type and
+  /// precond.relax.type are chosen by the parameter tree; the near null-space is the identity block.
+  typedef amgcl::make_solver< amgcl::runtime::preconditioner< Backend >, KrylovSolver > Solver;
+  /// @brief Smoothed aggregation whose tentative prolongation is built from the translations given to
+  /// set_nullspace(); only precond.relax.type stays a runtime choice.
+  typedef amgcl::make_solver< amgcl::amg< Backend,
+                                          amgcl::coarsening::smoothed_aggregation_with_translations,
+                                          amgcl::runtime::relaxation::wrapper >,
+                              KrylovSolver >
+    TranslationSolver;
 
   static const int BlockSize = amgcl::math::static_rows< BlockType >::value;
 
   boost::property_tree::ptree prm;
-  std::unique_ptr< Solver >   solver_;
+  /// @brief The hierarchy of the last build() or solve() without translations, else null.
+  std::unique_ptr< Solver > solver_;
+  /// @brief The hierarchy of the last build() or solve() with translations, else null.
+  std::unique_ptr< TranslationSolver > translationSolver_;
+  /// @brief The translations given to set_nullspace(), n x BlockSize row-major; empty for the identity blocks.
+  /// Kept alive here: the parameter tree of TranslationSolver only holds a pointer to them.
+  std::vector< double > translations_;
 
-  LinearSolverBlockT( const char* json_params ) : prm( parseJsonParameters( json_params ) ), solver_() {}
-
-  void set_nullspace( const double*, int, int ) override
+  LinearSolverBlockT( const char* json_params )
+    : prm( parseJsonParameters( json_params ) ), solver_(), translationSolver_()
   {
-    throw std::runtime_error(
-      "set_nullspace() is not supported with a block-valued AMGCL backend -- AMGCL's own "
-      "tentative-prolongation nullspace path is an unimplemented, self-flagged 'probably won't work' "
-      "TODO for block value types, not a supported feature. Do not request a near null-space when "
-      "backendBlockSize > 1." );
+  }
+
+  /// @brief Set the near null-space of the next build()/solve(): the BlockSize translations of the block, or
+  /// (cols == 0) none, i.e. AMGCL's identity blocks.
+  /// @param B rows x cols, row-major: per node a diagonal BlockSize x BlockSize block of positive weights
+  /// @param rows, cols the shape of B: rows = n, cols = BlockSize, or cols = 0
+  /// @throws std::runtime_error for another shape, for an entry off the diagonal blocks or a weight that is not
+  /// positive and finite, or for a parameter tree whose hierarchy is not smoothed aggregation
+  void set_nullspace( const double* B, int rows, int cols ) override
+  {
+    if ( cols <= 0 ) {
+      translations_.clear();
+      return;
+    }
+    if ( cols != BlockSize || rows <= 0 || rows % BlockSize != 0 ) {
+      throw std::runtime_error( "set_nullspace(): a block-valued AMGCL backend takes the " +
+                                std::to_string( BlockSize ) + " translations as its near null-space, n x " +
+                                std::to_string( BlockSize ) + " with one diagonal block per node, got " +
+                                std::to_string( rows ) + " x " + std::to_string( cols ) +
+                                " (rotations need the scalar backend)" );
+    }
+    try {
+      amgcl::coarsening::check_translation_weights( B, static_cast< size_t >( rows / BlockSize ), BlockSize );
+    }
+    catch ( const std::runtime_error& error ) {
+      throw std::runtime_error( std::string( "set_nullspace(): " ) + error.what() );
+    }
+    const std::string precondClass   = prm.get< std::string >( "precond.class", "amg" );
+    const std::string coarseningType = prm.get< std::string >( "precond.coarsening.type", "smoothed_aggregation" );
+    if ( precondClass != "amg" || coarseningType != "smoothed_aggregation" ) {
+      throw std::runtime_error( "set_nullspace(): the translations of a block-valued AMGCL backend are a near "
+                                "null-space for smoothed aggregation, but the parameters ask for precond.class '" +
+                                precondClass + "' with precond.coarsening.type '" + coarseningType + "'" );
+    }
+    translations_.assign( B, B + static_cast< size_t >( rows ) * cols );
+  }
+
+  /// @brief The parameters of TranslationSolver for an n-row matrix: prm without the runtime selectors
+  /// precond.class and precond.coarsening.type (fixed at compile time), with the translations as
+  /// precond.coarsening.nullspace.
+  /// @throws std::runtime_error if the translations were set for another number of rows
+  boost::property_tree::ptree translationParameters( int n )
+  {
+    if ( translations_.size() != static_cast< size_t >( n ) * BlockSize ) {
+      throw std::runtime_error( "block-valued AMGCL backend: set_nullspace() gave the translations of " +
+                                std::to_string( translations_.size() / BlockSize ) + " rows, the matrix has " +
+                                std::to_string( n ) );
+    }
+    boost::property_tree::ptree                     parameters = prm;
+    boost::optional< boost::property_tree::ptree& > precond    = parameters.get_child_optional( "precond" );
+    if ( precond ) {
+      precond->erase( "class" );
+      boost::optional< boost::property_tree::ptree& > coarsening = precond->get_child_optional( "coarsening" );
+      if ( coarsening ) {
+        coarsening->erase( "type" );
+      }
+    }
+    const int cols = BlockSize; // a copy: put() takes a reference, and BlockSize has no out-of-class definition
+    parameters.put( "precond.coarsening.nullspace.cols", cols );
+    parameters.put( "precond.coarsening.nullspace.rows", n );
+    parameters.put( "precond.coarsening.nullspace.B", translations_.data() );
+    return parameters;
+  }
+
+  /// @brief Build the hierarchy for the block matrix A: TranslationSolver if set_nullspace() gave the
+  /// translations, Solver otherwise. The other one is released; a build that throws leaves both as they were.
+  template < class BlockMatrix >
+  void buildHierarchy( const BlockMatrix& A, int n )
+  {
+    if ( translations_.empty() ) {
+      solver_.reset( new Solver( A, prm ) );
+      translationSolver_.reset();
+    }
+    else {
+      translationSolver_.reset( new TranslationSolver( A, translationParameters( n ) ) );
+      solver_.reset();
+    }
   }
 
   // n must be divisible by BlockSize (node-major DOF layout: BlockSize contiguous scalar DOFs per
@@ -398,7 +492,7 @@ public:
                               amgcl::make_iterator_range( ptr, ptr + n + 1 ),
                               amgcl::make_iterator_range( col, col + nnz ),
                               amgcl::make_iterator_range( val, val + nnz ) );
-    solver_.reset( new Solver( amgcl::adapter::block_matrix< BlockType >( A ), prm ) );
+    buildHierarchy( amgcl::adapter::block_matrix< BlockType >( A ), n );
   }
 
   void applyPreconditioner( int n, const double* rhs, double* x ) override
@@ -408,11 +502,17 @@ public:
     std::vector< double > x_v( x, x + n );
     auto                  rhs_rng = amgcl::backend::reinterpret_as_rhs< BlockType >( rhs_v );
     auto                  x_rng   = amgcl::backend::reinterpret_as_rhs< BlockType >( x_v );
-    solver_->precond().apply( rhs_rng, x_rng );
+    if ( translationSolver_ )
+      translationSolver_->precond().apply( rhs_rng, x_rng );
+    else
+      solver_->precond().apply( rhs_rng, x_rng );
     std::copy( x_v.begin(), x_v.end(), x );
   }
 
-  std::string report() const override { return hierarchyReport( solver_ ); }
+  std::string report() const override
+  {
+    return translationSolver_ ? hierarchyReport( translationSolver_ ) : hierarchyReport( solver_ );
+  }
 
   void solve( int           n,
               const int*    ptr,
@@ -436,12 +536,14 @@ public:
     // on every Newton iteration even when the pattern does not, so an unchanged pattern buys nothing
     // here -- reusing on that basis would silently return the previous iteration's answer. (Callers
     // that do want to control refresh timing use build()/apply() instead of solve().)
-    solver_.reset( new Solver( amgcl::adapter::block_matrix< BlockType >( A ), prm ) );
+    buildHierarchy( amgcl::adapter::block_matrix< BlockType >( A ), n );
 
     std::vector< double > rhs_v( rhs, rhs + n );
     std::vector< double > x_v( n, 0.0 );
-    std::tie( iters, error ) = ( *solver_ )( amgcl::backend::reinterpret_as_rhs< BlockType >( rhs_v ),
-                                             amgcl::backend::reinterpret_as_rhs< BlockType >( x_v ) );
+    auto                  rhs_rng = amgcl::backend::reinterpret_as_rhs< BlockType >( rhs_v );
+    auto                  x_rng   = amgcl::backend::reinterpret_as_rhs< BlockType >( x_v );
+    std::tie( iters, error )      = translationSolver_ ? ( *translationSolver_ )( rhs_rng, x_rng )
+                                                       : ( *solver_ )( rhs_rng, x_rng );
     std::copy( x_v.begin(), x_v.end(), x );
   }
 };
@@ -1917,6 +2019,8 @@ typedef LinearSolverT< float >  LinearSolverFloat;
 // Block-valued instantiations: 3×3 for a 3D displacement field, 2×2 for a 2D one -- one template
 // parameter apart. Both plain amgcl::backend::builtin<BlockType>, so relax.type = "gauss_seidel" and
 // the exact ILU0/ILUk/ILUT/ILUP triangular solve work exactly as they do for the scalar backends above.
+// Every block instantiation, LinearSolverBlock3Float included, takes the translations as its near
+// null-space (set_nullspace(), see LinearSolverBlockT).
 typedef LinearSolverBlockT< amgcl::static_matrix< double, 2, 2 > > LinearSolverBlock2;
 typedef LinearSolverBlockT< amgcl::static_matrix< double, 3, 3 > > LinearSolverBlock3;
 

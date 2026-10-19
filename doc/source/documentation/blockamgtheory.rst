@@ -284,11 +284,12 @@ float, coarsened by smoothed aggregation with a strong-connection threshold of 0
 (one post-smoothing sweep, no pre-smoothing); a **2D vector** field gets the same coarsening and
 smoothing but in :math:`2\times2` blocks, in double (this wrapper has no float 2x2 backend); a vector
 field of any other dimension gets the same recipe on the plain scalar backend -- the only backend that
-can carry a near-null-space (see below), which keeps that path available for a field shape the block
-backend was never tuned for; a **scalar** field takes the plain scalar tree (smoothed aggregation,
-Chebyshev at AMGCL's own defaults). All of these can be overridden per field with ``fieldPreconds``.
+can carry the full rigid-body near-null-space (see below), which keeps that path available for a field
+shape the block backend was never tuned for; a **scalar** field takes the plain scalar tree (smoothed
+aggregation, Chebyshev at AMGCL's own defaults). All of these can be overridden per field with
+``fieldPreconds``.
 
-Three keys of a per-field parameter tree are not AMGCL parameters but select how the wrapper builds the
+Four keys of a per-field parameter tree are not AMGCL parameters but select how the wrapper builds the
 hierarchy, and are consumed before the rest of the tree is forwarded verbatim:
 
 ``backendPrecision``
@@ -314,23 +315,28 @@ hierarchy, and are consumed before the rest of the tree is forwarded verbatim:
     :math:`D`-weighted translations, :math:`D` times a constant, not the translations :math:`D^{-1} t`
     of :math:`\hat A` (see below); the two agree only where the diagonal is uniform, which it is not on
     quadratic elements (corner and midside nodes) or across a damage band. A block hierarchy also
-    gives up the **rotational** rigid-body modes described next.
+    gives up the **rotational** rigid-body modes described next; ``blockTranslationNullspace`` gives it
+    the translations back.
+
+``blockTranslationNullspace``
+    ``false`` (default) or ``true``, for a block backend (``backendBlockSize`` 2 or 3) only: build smoothed
+    aggregation with the translations :math:`D^{-1} t` of :math:`\hat A_{ii}` as its near-null-space,
+    instead of AMGCL's identity blocks -- see :ref:`the near-null-space of a block backend
+    <blockamg-block-nullspace>` below. The aggregation, the prolongation smoothing and the smoother stay
+    AMGCL's. It needs smoothed aggregation and excludes ``hierarchyOnUnscaledBlock``, whose constant
+    blocks already are the translations of the block it is built on; both are checked.
 
 ``hierarchyOnUnscaledBlock``
     ``false`` (default) or ``true``: build the field's hierarchy on its unscaled diagonal block
     :math:`A_{ii}` instead of :math:`\hat A_{ii} = D A_{ii} D`, and apply it as
     :math:`M_i^{-1} = D^{-1}\, \mathrm{AMG}(A_{ii})^{-1} D^{-1}`, since
     :math:`\hat A_{ii}^{-1} = D^{-1} A_{ii}^{-1} D^{-1}`. A block hierarchy's constant blocks are then
-    the true translations of the block it is built on. Smoothed aggregation's strength test,
-    :math:`|a_{ij}| > \varepsilon \sqrt{a_{ii} a_{jj}}`, is unchanged by a symmetric diagonal scaling for
-    scalar entries; for :math:`3 \times 3` blocks AMGCL compares traces of block products,
-    :math:`\operatorname{tr}(\varepsilon^2 A_{ii} A_{jj}) < \operatorname{tr}(A_{ij} A_{ij})`, which is unchanged
-    only where :math:`D` is uniform within each node -- not at a node whose constrained DOFs (Dirichlet or MPC
-    slave identity rows) sit next to stiffness rows, so there the aggregates differ. The smoother has to
-    bring the scaling in itself, so Chebyshev needs
-    ``"relax": {"scale": true}`` (it then works on :math:`\operatorname{blockdiag}(A_{ii})^{-1} A_{ii}`),
-    which is checked. A scalar backend takes the rigid-body modes of :math:`A_{ii}` instead of
-    :math:`D^{-1}` times them.
+    the true translations of the block it is built on. The smoother has to bring the scaling in itself,
+    so Chebyshev needs ``"relax": {"scale": true}`` (it then works on
+    :math:`\operatorname{blockdiag}(A_{ii})^{-1} A_{ii}`), which is checked. A scalar backend takes the
+    rigid-body modes of :math:`A_{ii}` instead of :math:`D^{-1}` times them. On a block backend this is,
+    up to the aggregates, ``blockTranslationNullspace`` with ``"relax": {"scale": true}`` (see
+    :ref:`below <blockamg-block-nullspace>`).
 
 .. admonition:: Measured
 
@@ -342,8 +348,11 @@ hierarchy, and are consumed before the rest of the tree is forwarded verbatim:
 
    Full system, offline, the default configuration with and without it: faster on the damage
    cylinder's onset systems, both in outer iterations and wall-clock, including live; but slower on
-   the contact model's systems, whose many partially constrained nodes change the block aggregation
-   and lengthen the hierarchy build there. Hence opt-in, and not part of the defaults.
+   the contact model's systems. Hence opt-in, and not part of the defaults. The outer iterations
+   behind both are the translations' and the Jacobi-scaled smoother's, not a different aggregation:
+   ``blockTranslationNullspace`` with ``"relax": {"scale": true}`` on the scaled block needed the same
+   outer iterations, solve by solve, on the captured sequences of both models (see
+   :ref:`below <blockamg-block-nullspace>`).
 
 Near-null-space and the Chebyshev smoother
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -441,6 +450,68 @@ a fixed thread count, up to that last-bit summation order.
    a sign of under-convergence at some thread counts. 300 iterations removed that sensitivity and were
    faster in aggregate over a set of captured degraded systems, with no observed downside on systems
    that were already fine.
+
+.. _blockamg-block-nullspace:
+
+The near-null-space of a block backend
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A block backend (``backendBlockSize`` 2 or 3, the default for 2D and 3D vector fields) stores a field's
+block in :math:`B \times B` nodal blocks, and AMGCL's near-null-space path is unimplemented for block
+value types. Its tentative prolongation gives every node :math:`i` of an aggregate :math:`a` the identity
+block, :math:`P^{\mathrm{tent}}_{ia} = I_B`, so the coarse space holds the constants per component of the
+variables the hierarchy is built on. For the equilibrated block :math:`\hat A_{ii} = D A_{ii} D` these
+are :math:`z = D^{-1} x`, and a constant :math:`z` is the displacement :math:`x = D\,c`: a
+:math:`D`-weighted translation. The translations of :math:`\hat A_{ii}` are :math:`D^{-1} t` instead, the
+same transformation the scalar backend applies to its rigid-body modes (see above).
+
+``blockTranslationNullspace`` builds the hierarchy from those translations
+(``amgcl-block-translations.hpp`` of the AMGCL wrapper :mod:`edelweissfe.linsolve.amgcl.amgcl`). Per node
+they form the diagonal block :math:`W_i = \operatorname{diag}(w_{i1}, \dots, w_{iB})`,
+:math:`w_{ik} = 1/s_{ik}` with :math:`s` the equilibration
+(:func:`~edelweissfe.linsolve.nullspace.translationNullspace`). Smoothed aggregation orthonormalizes its
+near-null-space on every aggregate by a QR factorization of the stacked blocks. Column :math:`k` of that
+stack is nonzero only in the rows of component :math:`k`, so the columns are orthogonal and the
+factorization is a normalization per component:
+
+.. math::
+
+   P^{\mathrm{tent}}_{ia} = \operatorname{diag}\!\left( \frac{w_{ik}}{\lVert w_k \rVert_a} \right), \qquad
+   R_a = \operatorname{diag}\!\left( \lVert w_k \rVert_a \right), \qquad
+   \lVert w_k \rVert_a^2 = \sum_{j \in a} w_{jk}^2 .
+
+So :math:`(P^{\mathrm{tent}})^\mathsf{T} P^{\mathrm{tent}} = I` on every aggregate, and
+:math:`P^{\mathrm{tent}} R = W` reproduces the translations exactly; :math:`R` is the near-null-space of
+the coarse level, which repeats the construction. Every block stays a diagonal :math:`B \times B` block,
+so the hierarchy keeps AMGCL's block value type. The rotations do not fit that way (six modes on
+:math:`3 \times 3` blocks would need :math:`6 \times 6` coarse blocks) and stay with the scalar backend.
+Everything else is AMGCL's smoothed aggregation, unchanged: the aggregation on :math:`\hat A_{ii}`, the
+prolongation smoothing and the Galerkin product. Unit weights :math:`w = 1` give AMGCL's own hierarchy back,
+up to a scaling of the coarse variables.
+
+This also explains ``hierarchyOnUnscaledBlock``. With the same aggregates, the hierarchy of
+:math:`\hat A_{ii}` with the translations :math:`D^{-1} t` and the hierarchy of :math:`A_{ii}` with its constant
+blocks :math:`t` are the same hierarchy in other variables, :math:`M_{\hat A}^{-1} = D^{-1} M_A^{-1} D^{-1}`,
+which is how :class:`~edelweissfe.linsolve.blockamg.blockamg.UnscaledBlockPreconditioner` applies the latter.
+A Jacobi-scaled Chebyshev smoother (``"relax": {"scale": true}``) is invariant under that transformation, an
+unscaled one is not. So ``hierarchyOnUnscaledBlock`` is ``blockTranslationNullspace`` plus ``relax.scale``,
+up to the aggregates: for blocks, AMGCL's strength test compares traces of block products,
+:math:`\operatorname{tr}(\varepsilon^2 A_{ii} A_{jj}) < \operatorname{tr}(A_{ij} A_{ij})`, which a symmetric
+diagonal scaling leaves unchanged only where :math:`D` is uniform within each node.
+
+.. admonition:: Measured
+
+   Full system, offline, on the captured sequences and on isolated systems of both reference models, the
+   default configuration with and without ``blockTranslationNullspace``, outer iterations only: clearly
+   fewer on the damage cylinder, both in its onset sequence and on its isolated systems; on the contact
+   model about the same in its sequence, whose hierarchies were rebuilt more often, and fewer on its
+   isolated systems. A control with unit weights needed exactly the iterations of the defaults, system by
+   system, on the cylinder's isolated systems.
+   ``blockTranslationNullspace`` with ``"relax": {"scale": true}`` needed the same outer iterations as
+   ``hierarchyOnUnscaledBlock``, solve by solve, on both sequences: the aggregation that the unscaled block
+   changes made no measurable difference. What ``hierarchyOnUnscaledBlock`` adds over the translations is
+   the Jacobi-scaled smoother -- fewer iterations on the cylinder, more on the contact model, where it also
+   triggered more rebuilds.
 
 The block Gauss--Seidel sweep
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -783,13 +854,15 @@ Block preconditioner and per-field hierarchies
         worth noticeably more per-field outer iterations on the scalar backend, so only for
         comparison purposes there. No effect on the block backends (``backendBlockSize`` 2 or 3)
         the default 2D/3D ``fieldPreconds`` trees use: AMGCL's near-null-space path is unimplemented
-        for block value types, so a block-valued field never gets one, whatever this is set to.
+        for block value types, so a block-valued field never gets the rotations, whatever this is set
+        to, and the translations only with ``blockTranslationNullspace``.
     * - ``fieldPreconds``
       - ``{}``
       - Mapping of field name (e.g. ``"displacement"``, ``"nonlocal damage"``) to an AMGCL
         preconditioner parameter tree replacing the dimension-based default for that field,
-        including ``backendPrecision`` / ``backendBlockSize`` and the Chebyshev
-        ``relax.power_iters`` / ``relax.lower`` / ``relax.higher`` settings.
+        including ``backendPrecision`` / ``backendBlockSize`` / ``blockTranslationNullspace`` /
+        ``hierarchyOnUnscaledBlock`` (see above) and the Chebyshev ``relax.power_iters`` /
+        ``relax.lower`` / ``relax.higher`` settings.
     * - ``p1FieldNames``
       - ``[]``
       - **Opt-in.** Vector fields to precondition with
@@ -884,7 +957,7 @@ The 2D tree differs from the 3D one only in ``backendPrecision``/``backendBlockS
 no float 2x2 backend. A vector field of a dimension this solver has never been tuned for (anything but
 2 or 3, e.g. a 4-DOF-per-node formulation) gets the same coarsening/relaxation recipe as the 2D and 3D
 trees, but on the plain scalar backend (``backendBlockSize`` 1) rather than an untested block size --
-the scalar backend is also the only one of the four that can carry a near-null-space (see above), so
+the scalar backend is also the only one of the four that can carry the rotations (see above), so
 this fallback keeps the rigid-body path available. Only a genuinely scalar field (nodal dimension 1)
 gets the plain, unembellished scalar tree, which predates the vector recipe above and was never
 re-tuned against it. Note that AMGCL silently ignores parameter keys it does not recognise (warning
@@ -1101,8 +1174,8 @@ coarse space is purely topological -- the mesh's corner nodes -- so no re-discre
 midside node. The coarse solve always runs on the plain scalar backend, so it is given the same
 rigid-body near-null-space treatment the single-level default gives a scalar-backend field,
 restricted to the corner-node subset -- independent of what backend the field's own single-level
-``fieldPreconds`` tree uses (a block backend, the default for 2D/3D fields, has no near-null-space of
-its own; see ``useRigidBodyNullspace`` above).
+``fieldPreconds`` tree uses (a block backend, the default for 2D/3D fields, takes the translations at
+most; see ``useRigidBodyNullspace`` above).
 
 Its preconditioner is rebuilt exactly when the single-level hierarchies are (see the reuse rules
 above), and its coarse solve gets a near-null-space while the fine-level Chebyshev smoother, having
