@@ -146,21 +146,6 @@ def test_unsorted_and_duplicate_entries_in_K():
         assert _maxRelDiff(plain, threaded) < 1e-14
 
 
-def test_bitwise_equal_to_amgcl_products():
-    """The kernel sums in the order of AMGCL's spgemm_saad applied as T^T (K T) + C, so the result is the
-    same, bit for bit, as AMGCL's product()/sum() at up to 16 threads (AMGCL switches algorithm above)."""
-    amgcl = pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
-    n = 300
-    K = _randomSparseK(n, density=0.05, seed=9)
-    mpc = MultiPointConstraintTransformation(_randomRecords(n, 60, 9), n)
-    TTranspose = mpc._T.T.tocsr()
-
-    helper = amgcl.PyAMGCLSpGEMM()
-    viaAmgcl = helper.sum(1.0, helper.product(TTranspose, helper.product(K, mpc._T)), 1.0, mpc._C)
-    viaAmgcl.sort_indices()
-    _assertIdentical(viaAmgcl, mpccondensation.MPCCondensation(mpc._T, TTranspose, mpc._C).condense(K))
-
-
 def test_explicit_zeros_are_kept():
     """The pattern is the structural one: an exactly cancelling entry stays stored (pruning is the solver's
     decision, see pruneCondensedMatrixZeros)."""

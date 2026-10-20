@@ -21,16 +21,17 @@
 // built by one thread with a sparse accumulator (Gustavson's row-by-row product). Two passes: countPattern() counts
 // the entries of every row, the caller allocates the result, fill() writes the sorted columns and the values.
 //
-// The sums are taken in the same order as AMGCL's spgemm_saad evaluates T^T (K T) + C: the inner sum over b in the
-// stored order of row a of K, the outer sum over a in the stored order of row i of T^T. Each row is computed by a
-// single thread, so the result does not depend on the number of threads.
+// The sums are taken in a fixed order, that of evaluating T^T (K T) + C row by row: the inner sum over b in the
+// stored order of row a of K, the outer sum over a in the stored order of row i of T^T, the first term of each sum
+// assigned and the following ones added. Each row is computed by a single thread, so the result does not depend on
+// the number of threads.
 //
 // Most rows need no arithmetic: a row of T^T that is a single unit entry (an independent DOF that is no master of
 // any slave), paired with a row of K that has no slave column, gives a row of Kt equal to that row of K. Such rows
 // are copied.
 //
-// Explicit zeros are kept: the pattern is the structural pattern of T^T K T + C, the one AMGCL's product()/sum()
-// produce. Whether to prune them is the solver's decision (pruneCondensedMatrixZeros).
+// Explicit zeros are kept: the pattern is the structural pattern of T^T K T + C. Whether to prune them is the
+// solver's decision (pruneCondensedMatrixZeros).
 //
 // T, T^T and C are borrowed, not copied: the caller keeps them alive and unchanged for the lifetime of this object.
 // countPattern() and fill() are called back to back with the same K; the per-row copy flags travel between them in
@@ -212,8 +213,8 @@ public:
         int32_t*      idx    = outIdx + rowBegin;
         double*       val    = outVal + rowBegin;
 
-        // first touch assigns, later touches add, as in AMGCL's spgemm_saad; a column beyond the length counted by
-        // countPattern() is not written (K changed in between) and reported after the loop
+        // first touch assigns, later touches add; a column beyond the length counted by countPattern() is not written
+        // (K changed in between) and reported after the loop
         auto add = [&]( int32_t c, double v ) {
           if ( mark[c] == stamp ) {
             val[pos[c]] += v;

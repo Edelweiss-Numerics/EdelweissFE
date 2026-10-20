@@ -954,7 +954,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         transformation = MultiPointConstraintTransformation(
             records,
             self.theDofManager.nDof,
-            useThreadedCondensation=self.options.get("useAmgclMPCCondensation", False),
+            useThreadedCondensation=self.options.get("useThreadedMPCCondensation", False),
         )
 
         self.journal.message(

@@ -89,21 +89,6 @@ cdef extern from "amgcl-wrapper.hpp":
                    double& error,
                    bint onUnscaledOperator) except +
 
-    # OpenMP-threaded sparse-matrix product/sum, wired into
-    # edelweissfe/numerics/mpctransformation.py's T^T K T + C condensation as an opt-in alternative
-    # (useAmgclSpgemm/useAmgclMPCCondensation) to the plain expression's scipy CSR (single-threaded)
-    # routines. Square matrices only -- see SpGEMMHelperT's own comment for why.
-    cdef cppclass SpGEMMHelper:
-        SpGEMMHelper() except +
-        void product(int aN, const int* aPtr, const int* aCol, const double* aVal,
-                     int bN, const int* bPtr, const int* bCol, const double* bVal) except +
-        void sum(double alpha, int aN, const int* aPtr, const int* aCol, const double* aVal,
-                 double beta, int bN, const int* bPtr, const int* bCol, const double* bVal) except +
-        int resultNRows() except +
-        int resultNCols() except +
-        int resultNnz() except +
-        void copyResult(int* ptrOut, int* colOut, double* valOut) except +
-
     # The p-two-grid (P1) preconditioner of edelweissfe/linsolve/blockamg/ptwogrid.py, built and
     # applied entirely in C++ (OpenMP) -- see PTwoGridPreconditionerT's own comment.
     cdef cppclass PTwoGridPreconditioner:

@@ -41,7 +41,7 @@ _ASSERT_EXACT_ENV_VAR = "EDELWEISS_MPC_ASSERT_EXACT"
 
 #: Set to a directory to dump the raw K plus this transformation's own T/D/S/C matrices for the
 #: first few calls to :meth:`MultiPointConstraintTransformation.transformSystemMatrix` -- an offline
-#: harness for investigating the SpGEMM-threading behaviour below: unlike the linsolve-level
+#: harness for investigating the condensation's performance: unlike the linsolve-level
 #: ``linsolveDumps`` harness (whose dumps are already-condensed ``Kt``), this needs the
 #: *pre*-condensation K and T/D/S/C themselves. Capped (see ``_DUMP_MPC_MAX_CALLS``) -- `K` on a
 #: large coupled model is hundreds of MB uncompressed, and this is a diagnostic tool, not a feature.

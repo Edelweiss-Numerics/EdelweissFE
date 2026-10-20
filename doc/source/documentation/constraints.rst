@@ -346,19 +346,14 @@ its own, so it equilibrates cleanly also for a consistent mass matrix; see
 dynamics (mass-conserving row-sum folding of slave masses and forces onto the masters, direct
 kinematic slaving -- the critical time step is untouched).
 
-The implicit solver's ``useAmgclMPCCondensation`` option (:doc:`solvers`, ``NIST``) computes
+The implicit solver's ``useThreadedMPCCondensation`` option (:doc:`solvers`, ``NIST``) computes
 :math:`T^T K T + I_s` with an OpenMP-threaded kernel
 (:class:`~edelweissfe.numerics.mpccondensation.MPCCondensation`) instead of SciPy's single-threaded
 CSR routines. Each row of the result is computed by one thread directly from the rows of :math:`K`
 it combines, with no intermediate matrix; rows of :math:`K` that no constraint touches are copied
-unchanged, so the cost is close to one pass over :math:`K`. The result does not depend on the
-number of threads, keeps explicit zeros (pruned afterwards according to
-``pruneCondensedMatrixZeros``), and is the same, bit for bit, as the AMGCL sparse matrix-matrix
-products the option is named after and used before (at up to 16 threads, where AMGCL itself is
-thread-count independent). On a 2.3 million DOF tie and hanging-node model (174,205 slave DOFs,
-506 million entries in :math:`K`) one condensation takes about 0.5 s with 32 threads, against about
-11 s (16 threads) to 21 s (32 threads) for the AMGCL products and about twice the memory. It is off
-by default.
+unchanged, so the cost is close to one pass over :math:`K`. The sums are taken in a fixed order,
+so the result does not depend on the number of threads. Explicit zeros are kept and pruned
+afterwards according to ``pruneCondensedMatrixZeros``. It is off by default.
 
 On matching interface meshes, tying is exactly equivalent to merging the interface nodes: the
 patch test passes to machine precision, and both the implicit and the explicit (central

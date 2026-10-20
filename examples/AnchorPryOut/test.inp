@@ -12,10 +12,9 @@
 **    by AMGCL's LGMRES on the unscaled system, 3x3 float-block hierarchy for the displacement field,
 **    adaptive Eisenstat-Walker tolerance between 1e-4 and 1e-3, an outer-iteration cap of 100) are
 **    explained in doc/source/documentation/blockamgtheory.rst, "Why the defaults are what they are".
-**  - `useAmgclMPCCondensation=True` (`>>options` on the loading step below): threads the multi-
-**    point-constraint condensation this model's 5 ties require (`T^T K T + C`, every solve) via
-**    AMGCL's own OpenMP-threaded `product()`/`sum()` instead of single-threaded SciPy CSR routines.
-**    Measured faster than the plain expression offline, and faster end-to-end live.
+**  - `useThreadedMPCCondensation=True` (`>>options` on the loading step below): computes the multi-
+**    point-constraint condensation this model's 5 ties require (`T^T K T + C`, every solve) with
+**    the OpenMP-threaded kernel instead of single-threaded SciPy CSR routines.
 **  - Deliberately *not* enabled: p-two-grid (`p1FieldNames`) -- measured at parity with the
 **    single-level hierarchy on this model (not a real margin), not worth the added complexity here.
 **
@@ -396,7 +395,7 @@ maxInc=1, minInc=1, maxNumInc=1, maxIter=25, stepLength=1
 ** Increment control mirrors the source model's *Dynamic data line (5e-3, 1, 1e-08, 5e-3).
 *step, solver=theSolver
 maxInc=5e-3, minInc=1e-8, maxNumInc=100000, maxIter=25, criticalIter=10, stepLength=1
->>options, name=theSolver, extrapolation=linear, useAmgclMPCCondensation=True
+>>options, name=theSolver, extrapolation=linear, useThreadedMPCCondensation=True
 >>dirichlet, name=fixLeft,        nSet=left,           field=displacement, 1=0, 2=0, 3=0
 >>dirichlet, name=fixRight,       nSet=right,          field=displacement, 1=0, 2=0, 3=0
 >>dirichlet, name=fixBack,        nSet=back,           field=displacement, 1=0, 2=0, 3=0

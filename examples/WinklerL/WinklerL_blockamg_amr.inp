@@ -15,8 +15,8 @@
 linsolver=blockamg
 ** blockamg log verbosity only; every other setting is the default -- see README.md
 linsolverConfigFile=blockamg.json
-** condense the hanging-node constraints with AMGCL's threaded products (faster; off by default)
-useAmgclMPCCondensation=True
+** condense the hanging-node constraints with the threaded kernel (faster; off by default)
+useThreadedMPCCondensation=True
 
 *modelModifier, type=hAdaptivity, name=amr
 ** mark every element whose largest alphaP (the fieldOutput of model.inp) exceeds 0.1

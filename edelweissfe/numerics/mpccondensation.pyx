@@ -59,11 +59,10 @@ cdef class MPCCondensation:
     in one OpenMP-threaded pass over the rows of the result, with no intermediate matrix.
 
     Each row of the result is built by one thread, which sums the rows of :math:`K` that row of
-    :math:`T^T` selects, each multiplied into :math:`T`. The sums are taken in the same order as AMGCL's
-    single-threaded-per-row product (``spgemm_saad``) evaluates :math:`T^T (K T) + C`, and the result does not
-    depend on the number of threads. Rows of :math:`K` that no constraint touches are copied unchanged. The
-    column indices of the result are sorted; explicit zeros are kept (the pattern is the structural pattern of
-    :math:`T^T K T + C`).
+    :math:`T^T` selects, each multiplied into :math:`T`. The sums are taken in the fixed order of evaluating
+    :math:`T^T (K T) + C` row by row, so the result does not depend on the number of threads. Rows of
+    :math:`K` that no constraint touches are copied unchanged. The column indices of the result are sorted;
+    explicit zeros are kept (the pattern is the structural pattern of :math:`T^T K T + C`).
 
     Parameters
     ----------
