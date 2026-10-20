@@ -81,6 +81,17 @@ def test_the_former_lgmres_recycling_keys_are_accepted_only_at_their_non_recycli
         createSolver({"lgmresResetOnNewIncrement": True})
 
 
+@pytest.mark.parametrize("value", [True, False])
+def test_the_removed_key_for_a_hierarchy_on_a_itself_raises_and_names_what_replaces_it(value):
+    # A fieldPreconds tree goes on to AMGCL, which would only warn about the unknown key on stderr: blockamg refuses
+    # it, whatever its value, and names what it was -- the default translations plus a Jacobi-scaled smoother.
+    from edelweissfe.linsolve.blockamg.blockamg import _defaultFieldPrecond
+
+    tree = {**_defaultFieldPrecond(3), "hierarchyOnUnscaledBlock": value}
+    with pytest.raises(ValueError, match="was removed.*blockTranslationNullspace.*scale"):
+        createSolver({"fieldPreconds": {"displacement": tree}})
+
+
 def test_a_quoted_false_is_false_and_anything_else_raises():
     assert createSolver({"symmetric": "false"})._symmetric is False
     assert createSolver({"symmetric": "True"})._symmetric is True

@@ -589,7 +589,7 @@ public:
   std::shared_ptr< Matrix > operator_;
   /// whether operator_ holds A itself (build()'s `unscaled`)
   bool unscaled_ = false;
-  /// D = diag(scaling_), to form the entries of the operator not stored (scaledValue(), unscaledValue())
+  /// D = diag(scaling_), to form the entries of As when A itself is stored (scaledValue())
   std::vector< double >                    scaling_;
   std::vector< std::shared_ptr< Matrix > > couplings_;   // nFields x nFields, row-major; null on the diagonal
   std::vector< int >                       fieldStart_, fieldStop_;
@@ -757,18 +757,9 @@ public:
     return ( operator_->val[j] * scaling_[operator_->col[j]] ) * scaling_[i];
   }
 
-  /// @brief The entry of A at the stored operator's position j, in row i: stored, or recovered from As's entry
-  /// (up to rounding).
-  double unscaledValue( ptrdiff_t i, int j ) const
-  {
-    if ( unscaled_ )
-      return operator_->val[j];
-    return ( operator_->val[j] / scaling_[operator_->col[j]] ) / scaling_[i];
-  }
-
   /// @brief Write As[field f, field g] (field-local columns) into ptr/col/val -- ptr already holding
-  /// the block's row pointers. With unscaled, A[field f, field g] instead.
-  void fillBlock( int f, int g, const int* blockPtr, int* blockCol, double* blockVal, bool unscaled = false ) const
+  /// the block's row pointers.
+  void fillBlock( int f, int g, const int* blockPtr, int* blockCol, double* blockVal ) const
   {
     const int start = fieldStart_[f], nRows = fieldStop_[f] - fieldStart_[f], columnStart = fieldStart_[g];
 #pragma omp parallel for
@@ -779,7 +770,7 @@ public:
         const int c = operator_->col[j];
         if ( fieldOfDof_[c] == g ) {
           blockCol[head]   = c - columnStart;
-          blockVal[head++] = unscaled ? unscaledValue( i, j ) : scaledValue( i, j );
+          blockVal[head++] = scaledValue( i, j );
         }
       }
     }
@@ -816,14 +807,14 @@ public:
     return diagonalPtr_[diagonalPtrOffset_[f + 1] - 1];
   }
 
-  /// @brief As[field f, field f] -- or with unscaled A[field f, field f] -- into caller-owned arrays of
-  /// diagonalBlockSize(f) + 1 and diagonalBlockNnz(f) entries -- written in parallel, so freshly allocated
-  /// (untouched) arrays get the same NUMA spread as the operator.
-  void fillDiagonalBlock( int f, int* ptr, int* col, double* val, bool unscaled = false ) const
+  /// @brief As[field f, field f] into caller-owned arrays of diagonalBlockSize(f) + 1 and
+  /// diagonalBlockNnz(f) entries -- written in parallel, so freshly allocated (untouched) arrays get
+  /// the same NUMA spread as the operator.
+  void fillDiagonalBlock( int f, int* ptr, int* col, double* val ) const
   {
     checkField( f );
     std::copy( diagonalPtr_.begin() + diagonalPtrOffset_[f], diagonalPtr_.begin() + diagonalPtrOffset_[f + 1], ptr );
-    fillBlock( f, f, ptr, col, val, unscaled );
+    fillBlock( f, f, ptr, col, val );
   }
 
   /// @brief The operator a product runs on: As, or with unscaled A itself -- the one build() stored.

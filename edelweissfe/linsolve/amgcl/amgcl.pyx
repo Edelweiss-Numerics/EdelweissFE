@@ -318,9 +318,9 @@ cdef class PyAMGCLEquilibratedSystem:
                           _constDoubleData(scalingArray), bounds.shape[0] // 2, _intData(bounds), unscaled)
         self.n = n
 
-    def diagonalBlock(self, int field, bint unscaled=False):
-        """``As[field, field]`` -- or with ``unscaled`` ``A[field, field]``, exactly A's entries if :meth:`build`
-        stored A -- as a new scipy.sparse csr_matrix (sorted columns if ``A``'s were)."""
+    def diagonalBlock(self, int field):
+        """``As[field, field]`` as a new scipy.sparse csr_matrix (sorted columns if ``A``'s were), whichever
+        operator :meth:`build` stored."""
         cdef int size = self.system.diagonalBlockSize(field)
         cdef int nnz = self.system.diagonalBlockNnz(field)
         cdef np.ndarray[np.int32_t, ndim=1, mode="c"] indptr = np.empty(size + 1, dtype=np.int32)
@@ -329,7 +329,7 @@ cdef class PyAMGCLEquilibratedSystem:
         cdef int[::1] indptr_ = indptr
         cdef int[::1] indices_ = indices
         cdef double[::1] data_ = data
-        self.system.fillDiagonalBlock(field, &indptr_[0], &indices_[0], &data_[0], unscaled)
+        self.system.fillDiagonalBlock(field, &indptr_[0], &indices_[0], &data_[0])
         return scipy.sparse.csr_matrix((data[:nnz], indices[:nnz], indptr), shape=(size, size), copy=False)
 
     def matvec(self, object x, bint unscaled=False):

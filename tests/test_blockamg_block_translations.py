@@ -48,10 +48,7 @@ import edelweissfe.linsolve.amgcl.amgcl as amgclModule  # noqa: E402
 from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver  # noqa: E402
 from edelweissfe.linsolve.base import FieldBlock  # noqa: E402
 from edelweissfe.linsolve.blockamg import createSolver  # noqa: E402
-from edelweissfe.linsolve.blockamg.blockamg import (  # noqa: E402
-    UnscaledBlockPreconditioner,
-    _defaultFieldPrecond,
-)
+from edelweissfe.linsolve.blockamg.blockamg import _defaultFieldPrecond  # noqa: E402
 from edelweissfe.linsolve.nullspace import translationNullspace  # noqa: E402
 
 #: Every block backend blockamg builds, as (nodal dimension = block size, backendPrecision, nodes per grid
@@ -117,14 +114,13 @@ def _relativeDifference(x, y) -> float:
 
 
 @pytest.mark.parametrize("dimension, precision, n", _BLOCK_BACKENDS, ids=_BLOCK_BACKEND_IDS)
-def test_the_translations_of_d_a_d_give_the_hierarchy_on_the_unscaled_block(dimension, precision, n):
+def test_the_translations_of_d_a_d_give_the_hierarchy_of_a_on_its_constant_blocks(dimension, precision, n):
     # The defining property of the tentative prolongation: its coarse space holds the translations D^-1 t of
     # D A D exactly, component by component. With the same aggregates (eps_strong 0: every connection is strong,
     # whatever the scaling), the same prolongation damping (no spectral-radius estimate) and a block-Jacobi
     # smoother, which is invariant under the scaling, the hierarchy of D A D on D^-1 t is then the hierarchy of A
-    # on its constant blocks t in other variables -- the preconditioner hierarchyOnUnscaledBlock applies,
-    # M^-1 = D^-1 AMG(A)^-1 D^-1 -- to rounding. The per-aggregate normalization only scales the coarse
-    # variables, which the direct solve on the coarse level does not see.
+    # on its constant blocks t in other variables, M^-1 = D^-1 AMG(A)^-1 D^-1, to rounding. The per-aggregate
+    # normalization only scales the coarse variables, which the direct solve on the coarse level does not see.
     A, block = _scaledVectorLaplacian(dimension, n)
     scaled, scaling = _equilibrated(A)
     precond = {
@@ -138,7 +134,8 @@ def test_the_translations_of_d_a_d_give_the_hierarchy_on_the_unscaled_block(dime
     assert hierarchyLevels(onA) == hierarchyLevels(withTranslations) == 2
 
     r = np.random.default_rng(5).standard_normal(A.shape[0])
-    expected = UnscaledBlockPreconditioner(onA, scaling).applyPreconditioner(r)
+    # one cycle of the hierarchy of A as a preconditioner of D A D: (D A D)^-1 = D^-1 A^-1 D^-1
+    expected = onA.applyPreconditioner(r / scaling) / scaling
     # float: the level matrices of D A D are rounded (set up in double either way)
     tolerance = 1e-4 if precision == "float" else 1e-7
     assert _relativeDifference(withTranslations.applyPreconditioner(r), expected) < tolerance
@@ -266,25 +263,21 @@ def test_the_default_trees_build_the_hierarchy_from_the_translations(monkeypatch
     assert hierarchyLevels(solver._preconditioners[0]) > 1
 
 
-@pytest.mark.parametrize(
-    "change",
-    [
-        # in double: the float scalar backend sets its hierarchy up in single precision, whose spectral-radius
-        # estimates are not reproducible to the last bit from one build to the next
-        {"backendBlockSize": 1, "backendPrecision": "double"},
-        {"hierarchyOnUnscaledBlock": True, "relax": {**_defaultFieldPrecond(3)["relax"], "scale": True}},
-    ],
-    ids=["scalar backend", "on the unscaled block"],
-)
-def test_the_key_changes_nothing_where_the_hierarchy_has_the_translations_anyway(monkeypatch, change):
-    # The 3D default tree with the scalar backend or the unscaled block set on top is valid as it is, and gives the
-    # same hierarchy whatever blockTranslationNullspace says: the scalar backend takes the rigid-body modes (the
-    # translations here, without node coordinates), the unscaled block AMGCL's constant blocks, its translations.
+def test_the_key_changes_nothing_on_the_scalar_backend(monkeypatch):
+    # The 3D default tree with the scalar backend set on top is valid as it is, and gives the same hierarchy
+    # whatever blockTranslationNullspace says: the scalar backend takes the rigid-body modes (the translations
+    # here, without node coordinates). In double: the float scalar backend sets its hierarchy up in single
+    # precision, whose spectral-radius estimates are not reproducible to the last bit from one build to the next.
     A, b, blocks = _displacementSystem(3)
     solutions, iterations, recordings = [], [], []
     for translations in (True, False):
         recorded = _recordNullspaces(monkeypatch)
-        tree = {**_defaultFieldPrecond(3), **change, "blockTranslationNullspace": translations}
+        tree = {
+            **_defaultFieldPrecond(3),
+            "backendBlockSize": 1,
+            "backendPrecision": "double",
+            "blockTranslationNullspace": translations,
+        }
         solver = createSolver({"fieldPreconds": {"displacement": tree}, "verbosity": "silent", "outerTol": 1e-8})
         solver.setFieldStructure(blocks)
         solutions.append(solver(A, b))
@@ -293,12 +286,9 @@ def test_the_key_changes_nothing_where_the_hierarchy_has_the_translations_anyway
     assert iterations[0] == iterations[1]
     assert np.linalg.norm(solutions[0] - solutions[1]) <= 1e-12 * np.linalg.norm(solutions[1])
     displacement = blocks[0]
-    if "hierarchyOnUnscaledBlock" in change:
-        assert recordings == [[], []] and type(solver._preconditioners[0]) is UnscaledBlockPreconditioner
-    else:
-        expected = translationNullspace(displacement, solver._scaling[displacement.start : displacement.stop])
-        for recorded in recordings:
-            assert len(recorded) == 1 and recorded[0][0] == 1 and np.array_equal(recorded[0][1], expected)
+    expected = translationNullspace(displacement, solver._scaling[displacement.start : displacement.stop])
+    for recorded in recordings:
+        assert len(recorded) == 1 and recorded[0][0] == 1 and np.array_equal(recorded[0][1], expected)
 
 
 @pytest.mark.parametrize(
