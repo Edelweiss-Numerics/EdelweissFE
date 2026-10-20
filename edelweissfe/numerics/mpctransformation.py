@@ -362,6 +362,7 @@ class MultiPointConstraintTransformation:
         Rt[self.slaveDofIndices] = -(dU[self.slaveDofIndices] - self._W @ dU)
         return Rt
 
+    @performancetiming.timeit("mpc recover slave solution")
     def recoverSlaveSolution(self, x: np.ndarray) -> np.ndarray:
         """Complete the solution of the condensed system (in place): add the master-interpolated
         part to the slave DOFs, :math:`x_s \\mathrel{+}= \\sum_a N_a \\, x_{m_a}`.

@@ -652,6 +652,7 @@ class NonlinearImplicitDynamic(NIST):
             self._initialAccelerationPending = False
             self._computeInitialAcceleration(system, U_n, stepActions, model, timeStep)
 
+    @performancetiming.timeit("inertia and damping terms")
     def assembleAdditionalTerms(
         self, dU: DofVector, R: DofVector, F: DofVector, K: VIJSystemMatrix, timeStep: TimeStep
     ):
@@ -675,37 +676,42 @@ class NonlinearImplicitDynamic(NIST):
         increment = self._currentIncrement
         system = increment.system
 
-        self._newmarkVelocityAndAcceleration(
-            dU,
-            system.V,
-            system.A,
-            increment.dT,
-            increment.beta,
-            increment.gamma,
-            system.dynamicDofs,
-            increment.V_np,
-            increment.A_np,
-        )
-        PInertia = system.M @ np.asarray(increment.A_np)
-        PDamping = system.C @ np.asarray(increment.V_np)
+        with performancetiming.timeit("newmark kinematics"):
+            self._newmarkVelocityAndAcceleration(
+                dU,
+                system.V,
+                system.A,
+                increment.dT,
+                increment.beta,
+                increment.gamma,
+                system.dynamicDofs,
+                increment.V_np,
+                increment.A_np,
+            )
 
-        R -= PInertia
-        R -= PDamping
+        with performancetiming.timeit("inertia and damping forces"):
+            PInertia = system.M @ np.asarray(increment.A_np)
+            PDamping = system.C @ np.asarray(increment.V_np)
 
-        # The inertia and damping forces are fluxes of the same field as the internal forces, so
-        # they enter the reference scale of the relative flux tolerance too. Without them a body in
-        # free flight -- no internal force at all -- would be held to an absolute 1e-7.
-        F += np.abs(PInertia)
-        F += np.abs(PDamping)
+            R -= PInertia
+            R -= PDamping
+
+            # The inertia and damping forces are fluxes of the same field as the internal forces, so
+            # they enter the reference scale of the relative flux tolerance too. Without them a body in
+            # free flight -- no internal force at all -- would be held to an absolute 1e-7.
+            F += np.abs(PInertia)
+            F += np.abs(PDamping)
 
         # The effective tangent K + M / (beta dT^2) + gamma C / (beta dT). Same VIJ layout as K, so
         # it is an entry-wise sum, before the parent's CSR conversion, MPC condensation and
         # Dirichlet row replacement. Note that `a * M` forms a temporary VIJ-length vector for the
         # duration of this line; it is not kept. The damping is diagonal and touches only its few
         # nonzero slots.
-        K += increment.massFactor * np.asarray(system.Mvij)
-        K[system.dampingVIJIndices] += increment.dampingFactor * system.dampingVIJValues
+        with performancetiming.timeit("effective tangent"):
+            K += increment.massFactor * np.asarray(system.Mvij)
+            K[system.dampingVIJIndices] += increment.dampingFactor * system.dampingVIJValues
 
+    @performancetiming.timeit("finalize increment")
     def finalizeIncrement(self, model: FEModel):
         """The converged trial kinematics become the state; see the parent's hook. Only an accepted
         increment gets here -- a failing one leaves by exception and keeps the previous velocity
@@ -845,24 +851,25 @@ class NonlinearImplicitDynamic(NIST):
         topologyChanged = topologyRecords != self._topologyRecordsAtLastBuild
         self._topologyRecordsAtLastBuild = topologyRecords
 
-        dynamicDofs, dynamicFields = self._locateDynamicDofs()
+        with performancetiming.timeit("newmark system setup"):
+            dynamicDofs, dynamicFields = self._locateDynamicDofs()
 
-        if dofManagerChanged:
-            V = self.theDofManager.constructDofVector()
-            A = self.theDofManager.constructDofVector()
-            for fieldName in dynamicFields:
-                field = model.nodeFields[fieldName]
-                # The input-file driver creates both entries (zero) on every mass-carrying field
-                # before anything runs, and a checkpoint restores them -- so on that path they are
-                # always present, zero meaning a start from rest. Guarded all the same for a model
-                # assembled programmatically, which never passes through that driver: a missing
-                # entry is then the same start from rest, not an error.
-                if "V" in field:
-                    V = self.theDofManager.writeNodeFieldToDofVector(V, field, "V")
-                if "A" in field:
-                    A = self.theDofManager.writeNodeFieldToDofVector(A, field, "A")
-        else:
-            V, A = system.V, system.A
+            if dofManagerChanged:
+                V = self.theDofManager.constructDofVector()
+                A = self.theDofManager.constructDofVector()
+                for fieldName in dynamicFields:
+                    field = model.nodeFields[fieldName]
+                    # The input-file driver creates both entries (zero) on every mass-carrying field
+                    # before anything runs, and a checkpoint restores them -- so on that path they are
+                    # always present, zero meaning a start from rest. Guarded all the same for a model
+                    # assembled programmatically, which never passes through that driver: a missing
+                    # entry is then the same start from rest, not an error.
+                    if "V" in field:
+                        V = self.theDofManager.writeNodeFieldToDofVector(V, field, "V")
+                    if "A" in field:
+                        A = self.theDofManager.writeNodeFieldToDofVector(A, field, "A")
+            else:
+                V, A = system.V, system.A
 
         reusedMassAndDamping = None
         if (
@@ -893,10 +900,11 @@ class NonlinearImplicitDynamic(NIST):
 
         if dofManagerChanged and topologyChanged:
             if self._conservedAtLastAccept is not None:
-                self.reportTopologyChangeConservation(
-                    self._conservedAtLastAccept,
-                    self._conservedQuantities(self._newmarkSystem, model),
-                )
+                with performancetiming.timeit("conservation report"):
+                    self.reportTopologyChangeConservation(
+                        self._conservedAtLastAccept,
+                        self._conservedQuantities(self._newmarkSystem, model),
+                    )
             self._initialAccelerationPending = bool(self.options["computeInitialAcceleration"])
             self.journal.message(
                 (
