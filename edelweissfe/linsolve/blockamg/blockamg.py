@@ -66,8 +66,8 @@ What it does per solve
    elasticity AMG, since both are directions in which the discretized operator has essentially zero
    stiffness -- when node coordinates are available, translations alone otherwise; a scalar field
    takes the default constant. A block backend (``backendBlockSize > 1``, the default for a 3D or 2D
-   vector field) cannot take the rotations: it uses AMGCL's constant blocks, or with
-   ``blockTranslationNullspace`` the translations.
+   vector field) cannot take the rotations: it takes the translations (``blockTranslationNullspace``, on
+   in the default trees), or AMGCL's constant blocks with that switched off.
 #. **Precondition the outer Krylov solve** (AMGCL's LGMRES, the only outer solver) with a block Gauss-Seidel sweep
    ``M^-1`` over the fields, each field's correction coming from one AMG V-cycle on its block, the couplings
    folded in between fields. With ``krylovOnScaledSystem = False`` (the default) the outer solve runs on
@@ -134,19 +134,21 @@ _IDENTIFICATION = "BlockAMGSolver"
 # the double hierarchy's on a captured damage-onset sequence, and faster.
 #
 # backendBlockSize defaults to the field's own nodal dimension (see _defaultFieldPrecond below): 3 for
-# a 3D vector field, 2 for a 2D one, 1 (scalar) otherwise. Setting it > 1 skips the rigid-body modes
-# (see _buildFieldPreconditioner) -- AMGCL's near-null-space path is unimplemented for block value types,
-# so the hierarchy gets AMGCL's identity blocks: constants per component in the equilibrated variables,
-# i.e. D-weighted translations rather than the translations D^-1 t of the scaled block (nullspace.py), and
-# no rotational modes. "blockTranslationNullspace": true gives a block hierarchy those translations
-# instead (amgcl-block-translations.hpp); the rotations stay out of reach of a block backend. Inside this
-# block Gauss-Seidel preconditioner, 3x3 blocks stored in float with a
-# smoothed-aggregation spectral-radius estimate are nevertheless the measured winner on the reference
-# models (less index and value traffic per cycle) -- the code default.
+# a 3D vector field, 2 for a 2D one, 1 (scalar) otherwise. Setting it > 1 gives up the rotational
+# rigid-body modes (see _buildFieldPreconditioner): AMGCL's near-null-space path is unimplemented for block
+# value types, and its own identity blocks are constants per component in the equilibrated variables,
+# i.e. D-weighted translations rather than the translations D^-1 t of the scaled block (nullspace.py).
+# "blockTranslationNullspace": true, part of the 2D and 3D default trees, gives a block hierarchy those
+# translations instead (amgcl-block-translations.hpp); false falls back to the identity blocks. Inside this
+# block Gauss-Seidel preconditioner, 3x3 blocks stored in float with a smoothed-aggregation spectral-radius
+# estimate and the translations are nevertheless the measured winner on the reference models (less index and
+# value traffic per cycle than the scalar backend, fewer outer iterations than the identity blocks) -- the
+# code default.
 #
-# Both are set per field via fieldPreconds, e.g.
-# {"displacement": {**_defaultFieldPrecond(3), "backendBlockSize": 2}} to force 2x2 blocks on a field
-# the model built with dimension 3.
+# All three are set per field via fieldPreconds, e.g.
+# {"displacement": {**_defaultFieldPrecond(3), "backendBlockSize": 1, "backendPrecision": "double"}} to put a
+# 3D field on the scalar backend, in double (see above), which takes the full rigid-body modes, rotations
+# included (blockTranslationNullspace has nothing to add there, see _takesBlockTranslations).
 # power_iters 300: AMGCL's default (0) bounds the spectral radius by Gershgorin's theorem, pessimistically; a
 # power iteration is tighter but starts from a vector seeded per OpenMP thread, so it depends on the thread count.
 # The former 50 iterations left it badly under-converged on hard operators at some thread counts (needing far
@@ -186,18 +188,50 @@ def _defaultFieldPrecond(dimension: int) -> dict:
     outer iteration (less index and value traffic) at identical iteration counts. A 2D vector field
     (dimension 2) gets 2x2 blocks in double instead: this AMGCL wrapper has no float 2x2 backend to
     fall back to. A vector field of any other dimension, which was never part of the measurement, gets
-    the same smoother on the plain scalar backend -- the only backend that can carry a near null-space
-    (see :meth:`BlockAMGSolver._buildFieldPreconditioner`), so it keeps the rigid-body path. A scalar
-    field (dimension 1, e.g. ``nonlocal damage``) gets the scalar tree.
+    the same smoother on the plain scalar backend -- the only backend that can carry the full rigid-body
+    near null-space (see :meth:`BlockAMGSolver._buildFieldPreconditioner`), so it keeps the rigid-body path. A
+    scalar field (dimension 1, e.g. ``nonlocal damage``) gets the scalar tree.
+
+    Both block trees build smoothed aggregation from the translations ``D^-1 t`` of the field's equilibrated
+    block (``blockTranslationNullspace``) instead of AMGCL's identity blocks, which are ``D``-weighted
+    translations: measured live on the reference models, faster on all but one and level within noise on
+    that one, with the same physical results (see the theory page).
     """
     # deep copies: the trees are nested, and a caller may adapt the one it gets
     if dimension == 3:
-        return copy.deepcopy({**_VECTOR_PRECOND_BASE, "backendPrecision": "float", "backendBlockSize": 3})
+        return copy.deepcopy(
+            {
+                **_VECTOR_PRECOND_BASE,
+                "backendPrecision": "float",
+                "backendBlockSize": 3,
+                "blockTranslationNullspace": True,
+            }
+        )
     if dimension == 2:
-        return copy.deepcopy({**_VECTOR_PRECOND_BASE, "backendPrecision": "double", "backendBlockSize": 2})
+        return copy.deepcopy(
+            {
+                **_VECTOR_PRECOND_BASE,
+                "backendPrecision": "double",
+                "backendBlockSize": 2,
+                "blockTranslationNullspace": True,
+            }
+        )
     if dimension > 1:
         return copy.deepcopy({**_VECTOR_PRECOND_BASE, "backendPrecision": "double", "backendBlockSize": 1})
     return copy.deepcopy(_DEFAULT_SCALAR_PRECOND)
+
+
+def _takesBlockTranslations(fieldTree: dict) -> bool:
+    """Whether a field's tree builds its block hierarchy from the translations ``D^-1 t`` of the scaled block
+    (``blockTranslationNullspace``) -- the one hierarchy where the key changes the coarse space. The scalar backend
+    (``backendBlockSize`` 1) takes the rigid-body modes, the translations included, whatever the key says; a
+    hierarchy on the unscaled block (``hierarchyOnUnscaledBlock``) has the translations of ``A_ii`` as AMGCL's
+    constant blocks already. So a default tree stays valid, and means what it says, with either set on top."""
+    return (
+        fieldTree.get("blockTranslationNullspace", False) is True
+        and fieldTree.get("backendBlockSize", 1) > 1
+        and fieldTree.get("hierarchyOnUnscaledBlock", False) is not True
+    )
 
 
 #: The least excess over the reference outer iteration count that makes reused hierarchies stale, on top of
@@ -349,11 +383,12 @@ class UnscaledBlockPreconditioner:
     (``hierarchyOnUnscaledBlock``). Since (D A_ii D)^-1 = D^-1 A_ii^-1 D^-1, one cycle gives the correction
     D^-1 AMG(A_ii)^-1 D^-1 r.
 
-    Why: by default a block backend (``backendBlockSize > 1``) uses AMGCL's constant blocks. Those are the
-    rigid-body translations of the block the hierarchy is built on -- of A_ii, but not of A_scaled_ii, whose
-    translations are D^-1 t. ``blockTranslationNullspace`` gives a hierarchy on A_scaled_ii those translations
-    directly; with ``relax.scale`` added it was measured to need the same outer iterations as this, solve by
-    solve (see the theory page)."""
+    Why: AMGCL's constant blocks, which a block backend (``backendBlockSize > 1``) takes without a near
+    null-space, are the rigid-body translations of the block the hierarchy is built on -- of A_ii, but not of
+    A_scaled_ii, whose translations are D^-1 t. ``blockTranslationNullspace`` (on in the default 2D/3D trees)
+    gives a hierarchy on A_scaled_ii those translations directly; with ``relax.scale`` added it was measured to
+    need the same outer iterations as this, solve by solve (see the theory page). On A_ii the constant blocks
+    already are the translations, so a hierarchy built here ignores ``blockTranslationNullspace``."""
 
     def __init__(self, hierarchy, scaling: np.ndarray):
         """
@@ -385,9 +420,9 @@ class BlockAMGSolver(LinearSolver):
     decided from its nodal dimension: a vector field (dimension > 1) gets its full rigid-body basis
     (translations and rotations) when node coordinates are available, translations alone otherwise;
     a scalar field takes the default constant. The default ``fieldPreconds`` tree puts a 2D or 3D
-    vector field on a block backend instead, which never takes the rotations: it uses AMGCL's constant
-    blocks, or with ``blockTranslationNullspace`` the translations. So the rigid-body basis applies to such
-    a field only with an explicit scalar-backend ``fieldPreconds`` override.
+    vector field on a block backend instead, which never takes the rotations: it takes the translations
+    (``blockTranslationNullspace``), or AMGCL's constant blocks with that switched off. So the rigid-body
+    basis applies to such a field only with an explicit scalar-backend ``fieldPreconds`` override.
 
     Stateful across calls in two independent ways. This solver, like every other registered linear solver, sees
     only ``(A, b)`` per call, so it reconstructs the Newton-loop state rather than being told about it: from
@@ -474,17 +509,20 @@ class BlockAMGSolver(LinearSolver):
     fieldPreconds
         Optional mapping of field name to an AMGCL preconditioner parameter tree, overriding the
         dimension-based default for that field. Besides AMGCL's own keys a tree takes ``backendPrecision``,
-        ``backendBlockSize`` (see the comment above the default trees), ``blockTranslationNullspace``: on a
-        block backend, build smoothed aggregation from the translations ``D^-1 t`` of the field's scaled block
-        instead of AMGCL's constant blocks (``D``-weighted translations), and ``hierarchyOnUnscaledBlock``:
-        build the hierarchy on the field's unscaled block ``A_ii`` and apply it as ``D^-1 AMG(A_ii)^-1 D^-1``
-        (:class:`UnscaledBlockPreconditioner`; Chebyshev then needs ``"scale": true``). The last two exclude
-        each other.
+        ``backendBlockSize`` (see the comment above the default trees), ``blockTranslationNullspace`` (``true``
+        in the default 2D/3D trees, ``false`` in a tree that leaves it out): on a block backend, build smoothed
+        aggregation from the translations ``D^-1 t`` of the field's scaled block instead of AMGCL's constant
+        blocks (``D``-weighted translations), and ``hierarchyOnUnscaledBlock``: build the hierarchy on the
+        field's unscaled block ``A_ii`` and apply it as ``D^-1 AMG(A_ii)^-1 D^-1``
+        (:class:`UnscaledBlockPreconditioner`; Chebyshev then needs ``"scale": true``). Where the hierarchy
+        has the translations anyway -- the scalar backend's rigid-body modes, the constant blocks of ``A_ii`` --
+        ``blockTranslationNullspace`` changes nothing, so a default tree stays valid with
+        ``hierarchyOnUnscaledBlock`` or ``backendBlockSize`` 1 set on top.
     useRigidBodyNullspace
         Only takes effect on the plain scalar backend (``backendBlockSize == 1``) -- AMGCL's
         near-null-space path is unimplemented for block value types, so a field on a block backend
         (the default ``fieldPreconds`` tree for a 2D or 3D vector field) never gets the rotations, whatever
-        this is set to, and the translations only with ``blockTranslationNullspace``. ``True`` (the
+        this is set to; it takes the translations with ``blockTranslationNullspace``, the default. ``True`` (the
         default) builds a scalar-backend vector field's near null-space as the
         full rigid-body basis -- translations *and* rotations -- once nodal coordinates for that field
         are available via ``self._model`` (set by
@@ -1433,25 +1471,17 @@ class BlockAMGSolver(LinearSolver):
                 return "entry '{:}': hierarchyOnUnscaledBlock needs Jacobi-scaled Chebyshev (relax.scale: true)".format(
                     fieldName
                 )
-            translations = precond.get("blockTranslationNullspace", False)
-            if not isinstance(translations, bool):
+            if not isinstance(precond.get("blockTranslationNullspace", False), bool):
                 return "entry '{:}': blockTranslationNullspace must be true or false".format(fieldName)
-            if translations and blockSize == 1:
-                return (
-                    "entry '{:}': blockTranslationNullspace needs a block backend (backendBlockSize 2 or 3); the "
-                    "scalar backend takes the rigid-body modes anyway".format(fieldName)
-                )
-            if translations and onUnscaledBlock:
-                return (
-                    "entry '{:}': blockTranslationNullspace and hierarchyOnUnscaledBlock exclude each other: the "
-                    "constant blocks of the unscaled block already are its translations".format(fieldName)
-                )
             # AMGCL's defaults: class amg, coarsening.type smoothed_aggregation
             coarsening = precond.get("coarsening", {})
             coarseningType = coarsening.get("type", "smoothed_aggregation") if isinstance(coarsening, dict) else None
-            if translations and (precond.get("class", "amg") != "amg" or coarseningType != "smoothed_aggregation"):
-                return "entry '{:}': blockTranslationNullspace needs smoothed aggregation (coarsening.type)".format(
-                    fieldName
+            if _takesBlockTranslations(precond) and (
+                precond.get("class", "amg") != "amg" or coarseningType != "smoothed_aggregation"
+            ):
+                return (
+                    "entry '{:}': blockTranslationNullspace needs smoothed aggregation (coarsening.type); it is "
+                    "true in the default 2D/3D trees, set it to false for another coarsening".format(fieldName)
                 )
             if blockSize > 1 and fieldName in dimensions and dimensions[fieldName] != blockSize:
                 return "entry '{:}': backendBlockSize {:} does not match the field's dimension {:}".format(
@@ -1590,7 +1620,8 @@ class BlockAMGSolver(LinearSolver):
         backendPrecision = precondParams.pop("backendPrecision", "double")
         backendBlockSize = precondParams.pop("backendBlockSize", 1)
         onUnscaledBlock = precondParams.pop("hierarchyOnUnscaledBlock", False)
-        blockTranslations = precondParams.pop("blockTranslationNullspace", False)
+        precondParams.pop("blockTranslationNullspace", None)
+        blockTranslations = _takesBlockTranslations(fieldTree)
         # The hierarchy is only ever applied as a preconditioner: "preonly" keeps AMGCL from allocating the
         # work vectors of an iterative solver (BiCGStab by default) that would never run.
         preconditioner = PyAMGCLSolver(
@@ -1603,8 +1634,9 @@ class BlockAMGSolver(LinearSolver):
         )
         # The near null-space -- the error components a Chebyshev smoother does not reduce, which the coarse
         # levels must represent -- of the block the hierarchy is built on: of A_ii itself, or D^-1 times it for
-        # A_scaled_ii. A scalar backend gets the rigid-body modes. A block backend takes the translations alone
-        # (coords is None for it), and only with blockTranslationNullspace; without, AMGCL's constant blocks.
+        # A_scaled_ii. A scalar backend gets the rigid-body modes. A block backend on A_scaled_ii takes the
+        # translations alone (coords is None for it) with blockTranslationNullspace, the default; without it, and
+        # on A_ii, whose constant blocks already are its translations, AMGCL's constant blocks.
         if isVectorField and (backendBlockSize == 1 or blockTranslations):
             modeScaling = np.ones_like(scaling) if onUnscaledBlock else scaling
             with performancetiming.timeit("nullspace construction"):

@@ -10,7 +10,8 @@
 **
 **  - blockamg's own defaults: `blockamg.json` sets only the log verbosity. The defaults (outer solve
 **    by AMGCL's LGMRES on the unscaled system, 3x3 float-block hierarchy for the displacement field,
-**    adaptive Eisenstat-Walker tolerance between 1e-4 and 1e-3, an outer-iteration cap of 100) are
+**    built from the translations of its equilibrated block, adaptive Eisenstat-Walker tolerance
+**    between 1e-4 and 1e-3, an outer-iteration cap of 100) are
 **    explained in doc/source/documentation/blockamgtheory.rst, "Why the defaults are what they are".
 **  - `useAmgclMPCCondensation=True` (`>>options` on the loading step below): threads the multi-
 **    point-constraint condensation this model's 5 ties require (`T^T K T + C`, every solve) via

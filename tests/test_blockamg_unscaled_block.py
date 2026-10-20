@@ -74,11 +74,16 @@ def test_the_unscaled_diagonal_block_is_the_one_of_a(storedUnscaled):
             assert np.allclose(actual.data, expected.data, rtol=1e-14, atol=0.0)
 
 
-def test_the_default_configuration_on_the_unscaled_block_solves_and_iterates_less():
+def test_the_default_tree_on_the_unscaled_block_iterates_less_than_on_the_identity_blocks():
+    # hierarchyOnUnscaledBlock set on top of the default tree, whose blockTranslationNullspace the unscaled block
+    # ignores (its constant blocks are its translations), against the default tree with the translations switched
+    # off: AMGCL's identity blocks of A_scaled_uu, D-weighted translations
     A, b, blocks = displacementDamageSystem(12, coupling="symmetric", rowScaling=True)
     defaults = {**_defaultConfig(), "verbosity": "silent", "outerTol": 1e-8}
+    identityBlocks = copy.deepcopy(defaults)
+    identityBlocks["fieldPreconds"]["displacement"]["blockTranslationNullspace"] = False
     iterations = []
-    for config in (defaults, _onUnscaledBlock(defaults)):
+    for config in (identityBlocks, _onUnscaledBlock(defaults)):
         solver = createSolver(config)
         solver.setFieldStructure(blocks)
         x = solver(A, b)
@@ -86,7 +91,7 @@ def test_the_default_configuration_on_the_unscaled_block_solves_and_iterates_les
         iterations.append(solver._lastOuterIters)
     displacement = solver._preconditioners[0]
     assert type(displacement) is UnscaledBlockPreconditioner and hierarchyLevels(displacement) > 1
-    print("outer iterations, on A_scaled_uu / on A_uu:", iterations)
+    print("outer iterations, identity blocks of A_scaled_uu / on A_uu:", iterations)
     assert iterations[1] <= iterations[0]
 
 
