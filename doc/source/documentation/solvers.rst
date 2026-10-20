@@ -111,6 +111,24 @@ criterion of their Newton iterations with the solver option ``convergenceCriteri
 .. automodule:: edelweissfe.solvers.base.convergencecriteria
    :members:
 
+Iteration table of the implicit solvers
+---------------------------------------
+
+Every Newton iteration writes one row to the console: per field, the largest flux residual and the largest
+correction, each marked ``✓`` once the criterion is met. With a linear solver that reports per-solve diagnostics
+(e.g. ``blockamg`` at ``verbosity=info``), a ``linear solve`` column follows with the solver's iteration count
+and achieved residual. The rows are never wrapped, so a model with many fields gives long lines rather than
+broken ones.
+
+.. code-block:: text
+
+          displacement            nonlocal damage              linear solve
+       ||R||∞     ||ddU||∞      ||R||∞     ||ddU||∞         iters        ‖r‖
+       2.07e+01    8.35e-03     2.12e-02    8.15e-07          14        3.01e-04✓
+
+.. automodule:: edelweissfe.solvers.base.convergencetable
+   :members:
+
 ``NEST`` - Nonlinear Explicit Static
 -------------------------------------
 

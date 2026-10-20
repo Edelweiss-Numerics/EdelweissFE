@@ -41,6 +41,8 @@ from edelweissfe.numerics.mpctransformation import (
     MultiPointConstraintTransformation,
     _flattenChainedRecords,
 )
+from edelweissfe.solvers.base.convergencecriteria import FieldConvergence
+from edelweissfe.solvers.base.convergencetable import ConvergenceTable
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.checkpointedstate import packState, unpackState
@@ -93,6 +95,10 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     #: explicit-dynamic solvers build one when needed (see NonlinearExplicitDynamic.prepareIncrement),
     #: the distinction is about which matrix is in play, not about the solver family.
     mpcTransformation = None
+
+    #: The layout of the iteration table that :meth:`checkConvergence` writes, one column per field; set up
+    #: by the solver whenever it (re)builds its equation system.
+    convergenceTable: ConvergenceTable | None = None
 
     def __init__(self, jobInfo, journal, **kwargs):
         pass
@@ -575,7 +581,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         """
 
-        iterationMessage = ""
+        tableColumns = []
         convergedAtAll = True
         nodesWithLargestResidual = {}
 
@@ -603,12 +609,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 nGrew += 1
             residualHistory[field] = (fluxResidual, nGrew)
 
-            iterationMessage += self.iterationMessageTemplate.format(
-                fluxResidual,
-                "✓" if fieldConvergence.fluxResidualConverged else " ",
-                fieldConvergence.correction,
-                "✓" if fieldConvergence.correctionConverged else " ",
-            )
+            tableColumns.append(fieldConvergence)
             convergedAtAll = (
                 convergedAtAll and fieldConvergence.correctionConverged and fieldConvergence.fluxResidualConverged
             )
@@ -617,7 +618,9 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             fluxResidualTolerances = (
                 self.fluxResidualTolerances if iterationCounter < 15 else self.fluxResidualTolerancesAlt
             )
-            residualScalarVariables = max(np.abs(R[list(self.theDofManager.idcsOfScalarVariablesInDofVector.values())]))
+            scalarResiduals = np.abs(R[list(self.theDofManager.idcsOfScalarVariablesInDofVector.values())])
+            indexOfLargestScalarResidual = int(np.argmax(scalarResiduals))
+            residualScalarVariables = scalarResiduals[indexOfLargestScalarResidual]
             correction = (
                 np.linalg.norm(
                     ddU[list(self.theDofManager.idcsOfScalarVariablesInDofVector.values())],
@@ -630,45 +633,34 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             convergedCorrection = correction < self.fieldCorrectionTolerances["scalar variables"]
             convergedFlux = residualScalarVariables <= fluxResidualTolerances["scalar variables"]
 
-            iterationMessage += self.iterationMessageTemplate.format(
-                residualScalarVariables,
-                "✓" if convergedFlux else " ",
-                correction,
-                "✓" if convergedCorrection else " ",
+            tableColumns.append(
+                FieldConvergence(
+                    residualScalarVariables,
+                    convergedFlux,
+                    correction,
+                    convergedCorrection,
+                    indexOfLargestScalarResidual,
+                )
             )
 
             convergedAtAll = convergedAtAll and convergedCorrection and convergedFlux
 
-        # The width of the real fields' cells only, captured before the linear-solve cell (if any) is
-        # appended -- this is exactly how far a debug detail line below needs to be blank-padded to
-        # land in the "linear solve" column's own lane instead of sprawling across the whole row.
-        realFieldsWidth = len(iterationMessage)
-
-        # Matches NonlinearImplicitStatic's header gap; must stay in sync with it.
-        linSolverGap = " "
-
         summary = self.linSolver.lastSolveSummary if self.linSolver.reportsSolveSummary else None
-        if summary is not None and ddU is not None:
-            # ddU is None on the very first iteration of an increment (no linear solve has happened
-            # yet this increment) -- without this guard, the column would show a stale summary left
-            # over from the previous increment's last solve, which belongs to no residual on this row.
-            superscript = {0: "", 1: "¹", 2: "²", 3: "³"}.get(summary.retries, "")
-            itersPart = "{:}{:}".format(summary.iters, superscript)
-            iterationMessage += linSolverGap + "{:<12}{:11.2e}{:1} ".format(
-                itersPart, summary.residual, "✓" if summary.residualMet else " "
+        # ddU is None on the very first iteration of an increment (no linear solve has happened yet this
+        # increment) -- the column then stays blank instead of showing a stale summary left over from the
+        # previous increment's last solve, which belongs to no residual on this row.
+        thisIterationsSolve = summary if ddU is not None else None
+
+        self.journal.preformatted(
+            [self.convergenceTable.row(tableColumns, thisIterationsSolve)], self.identification, level=2
+        )
+
+        if thisIterationsSolve is not None:
+            self.journal.preformatted(
+                [self.convergenceTable.linearSolveDetailLine(line) for line in thisIterationsSolve.detailLines],
+                self.linSolver.identification,
+                level=2,
             )
-        elif summary is not None:
-            iterationMessage += linSolverGap + " " * 25
-
-        self.journal.message(iterationMessage, self.identification, level=2)
-
-        if summary is not None and ddU is not None:
-            for line in summary.detailLines:
-                self.journal.message(
-                    " " * realFieldsWidth + "{:>25}".format(line),
-                    self.linSolver.identification,
-                    level=2,
-                )
 
         return convergedAtAll, nodesWithLargestResidual
 

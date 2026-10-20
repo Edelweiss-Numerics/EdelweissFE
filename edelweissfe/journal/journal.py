@@ -113,7 +113,7 @@ class Journal:
         }
 
     def message(self, message: str, senderIdentification: str, level: int = 1):
-        """Write message to log.
+        """Write message to log. Lines longer than the message column are wrapped.
 
         Parameters
         ----------
@@ -125,25 +125,57 @@ class Journal:
             Level of message.
         """
 
-        lines = message.splitlines()
+        # Maximum allowed characters for the line based on leveledOutput indentations
+        wrap_width = Journal.leftColumn - {0: 0, 1: 2, 2: 4}.get(level, 0)
+
         wrapped_lines = []
+        for line in message.splitlines():
+            if len(line) > wrap_width:
+                wrapped_lines.extend(textwrap.wrap(line, width=wrap_width))
+            else:
+                wrapped_lines.append(line)
+
+        self._writeLines(wrapped_lines, senderIdentification, level, senderOnEveryLine=False)
+
+    def preformatted(self, lines: list[str], senderIdentification: str, level: int = 1):
+        """Write lines whose layout must be kept, such as the rows of a table, to log. They are never wrapped:
+        a line longer than the message column pushes the sender to the right instead. Each line carries the
+        sender.
+
+        Parameters
+        ----------
+        lines
+            The lines.
+        senderIdentification
+            The name of the sender.
+        level
+            Level of message.
+        """
+
+        self._writeLines(lines, senderIdentification, level, senderOnEveryLine=True)
+
+    def _writeLines(self, lines: list[str], senderIdentification: str, level: int, senderOnEveryLine: bool):
+        """Write lines to the terminal and the log file, with the sender in the right column.
+
+        Parameters
+        ----------
+        lines
+            The lines, already fitted to the message column (or deliberately not).
+        senderIdentification
+            The name of the sender.
+        level
+            Level of message.
+        senderOnEveryLine
+            Put the sender on every line, rather than on the first one only.
+        """
 
         # Abbreviate senderIdentification if it is too long
         max_sender_len = Journal._rightColumn - 2
         if len(senderIdentification) > max_sender_len:
             senderIdentification = senderIdentification[: max_sender_len - 3] + "..."
 
-        # Maximum allowed characters for the line based on leveledOutput indentations
-        wrap_width = Journal.leftColumn - {0: 0, 1: 2, 2: 4}.get(level, 0)
-
-        for line in lines:
-            if len(line) > wrap_width:
-                wrapped_lines.extend(textwrap.wrap(line, width=wrap_width))
-            else:
-                wrapped_lines.append(line)
-
-        for i, line in enumerate(wrapped_lines):
-            sender = senderIdentification if i == 0 else ""
+        for i, line in enumerate(lines):
+            sender = senderIdentification if i == 0 or senderOnEveryLine else ""
             theLine = Journal.leveledOutput[level].format(line, sender)
             if level < self._suppressLvl:
                 if self._verbose:
