@@ -10,7 +10,6 @@
 #include <new>
 #include <omp.h>
 #include <stdexcept>
-#include <utility>
 #include <vector>
 
 // The multi-point-constraint condensation of a system matrix, Kt = T^T K T + C, computed in one threaded pass over
@@ -36,24 +35,36 @@
 // T, T^T and C are borrowed, not copied: the caller keeps them alive and unchanged for the lifetime of this object.
 // countPattern() and fill() are called back to back with the same K; the per-row copy flags travel between them in
 // a caller-owned buffer, so one object can serve concurrent calls.
+//
+// Nothing inside the parallel regions allocates: an exception cannot leave an OpenMP region (it would end in
+// std::terminate), so every per-thread buffer is allocated before the region, where a failed allocation raises
+// normally. A row of Kt, or of K T, has at most n entries, which bounds every buffer.
 
 class MPCCondensationCore {
 
-  // A zero-initialized scratch array. calloc hands out untouched zero pages for large blocks, so the memory is only
-  // paid for where a thread actually writes.
+  // Zero-initialized scratch arrays, n entries for each of nThreads threads. calloc hands out untouched zero pages
+  // for large blocks, so the memory is only paid for where a thread actually writes.
   template < typename V >
-  struct ZeroedArray {
-    V* p;
-    explicit ZeroedArray( int64_t n )
-      : p( static_cast< V* >( std::calloc( std::max< int64_t >( n, 1 ), sizeof( V ) ) ) )
+  struct PerThreadArray {
+    V*      p;
+    int64_t n;
+    PerThreadArray( int nThreads, int64_t n_ )
+      : p( static_cast< V* >( std::calloc( std::max< int64_t >( nThreads * n_, 1 ), sizeof( V ) ) ) ), n( n_ )
     {
       if ( !p )
         throw std::bad_alloc();
     }
-    ~ZeroedArray() { std::free( p ); }
-    ZeroedArray( const ZeroedArray& )            = delete;
-    ZeroedArray& operator=( const ZeroedArray& ) = delete;
-    V&           operator[]( int64_t k ) { return p[k]; }
+    ~PerThreadArray() { std::free( p ); }
+    PerThreadArray( const PerThreadArray& )            = delete;
+    PerThreadArray& operator=( const PerThreadArray& ) = delete;
+    // the slice of the calling thread
+    V* ofThisThread() const { return p + omp_get_thread_num() * n; }
+  };
+
+  // one entry of a row being sorted
+  struct ColumnValue {
+    int32_t column;
+    double  value;
   };
 
   int            n;
@@ -106,12 +117,14 @@ public:
   // rows that are plain copies of a row of K in rowIsCopy (n entries). Returns nnz(Kt).
   int64_t countPattern( const int32_t* Kp, const int32_t* Ki, int32_t* outPtr, uint8_t* rowIsCopy, int numThreads )
   {
+    const int              nThreads = threadCount( numThreads );
     std::vector< int64_t > rowNnz( n );
+    // mark[c] == i + 1: column c is already counted for row i
+    PerThreadArray< int32_t > markOfThread( nThreads, n );
 
-#pragma omp parallel num_threads( threadCount( numThreads ) )
+#pragma omp parallel num_threads( nThreads )
     {
-      // mark[c] == i + 1: column c is already counted for row i
-      ZeroedArray< int32_t > mark( n );
+      int32_t* mark = markOfThread.ofThisThread();
 
 #pragma omp for schedule( dynamic, 256 )
       for ( int64_t i = 0; i < n; ++i ) {
@@ -176,21 +189,30 @@ public:
              double*        outVal,
              int            numThreads )
   {
+    const int           nThreads = threadCount( numThreads );
     std::atomic< bool > countMismatch( false );
 
-#pragma omp parallel num_threads( threadCount( numThreads ) )
+    // Accumulator of the row of Kt: mark[c] == i + 1 says column c sits at position pos[c] of row i.
+    PerThreadArray< int32_t > markOfThread( nThreads, n );
+    PerThreadArray< int32_t > posOfThread( nThreads, n );
+    // Accumulator of one row a of K T, for the rows of T^T that combine several rows of K: tMark[c] == tStamp says
+    // column c sits at position tPos[c] of tCols/tVals.
+    PerThreadArray< int32_t >     tMarkOfThread( nThreads, n );
+    PerThreadArray< int32_t >     tPosOfThread( nThreads, n );
+    PerThreadArray< int32_t >     tColsOfThread( nThreads, n );
+    PerThreadArray< double >      tValsOfThread( nThreads, n );
+    PerThreadArray< ColumnValue > sortBufferOfThread( nThreads, n );
+
+#pragma omp parallel num_threads( nThreads )
     {
-      // Accumulator of the row of Kt: mark[c] == i + 1 says column c sits at position pos[c] of row i.
-      ZeroedArray< int32_t > mark( n );
-      ZeroedArray< int32_t > pos( n );
-      // Accumulator of one row a of K T, for the rows of T^T that combine several rows of K: tMark[c] == tStamp
-      // says column c sits at position tPos[c] of tCols/tVals.
-      ZeroedArray< int32_t >                      tMark( n );
-      ZeroedArray< int32_t >                      tPos( n );
-      int32_t                                     tStamp = 0;
-      std::vector< int32_t >                      tCols;
-      std::vector< double >                       tVals;
-      std::vector< std::pair< int32_t, double > > sortBuffer;
+      int32_t*     mark       = markOfThread.ofThisThread();
+      int32_t*     pos        = posOfThread.ofThisThread();
+      int32_t*     tMark      = tMarkOfThread.ofThisThread();
+      int32_t*     tPos       = tPosOfThread.ofThisThread();
+      int32_t*     tCols      = tColsOfThread.ofThisThread();
+      double*      tVals      = tValsOfThread.ofThisThread();
+      ColumnValue* sortBuffer = sortBufferOfThread.ofThisThread();
+      int32_t      tStamp     = 0;
 
 #pragma omp for schedule( dynamic, 256 )
       for ( int64_t i = 0; i < n; ++i ) {
@@ -247,24 +269,24 @@ public:
             const int64_t a = Tti[ja];
             const double  w = Ttv[ja];
             ++tStamp;
-            tCols.clear();
-            tVals.clear();
+            int32_t tLength = 0;
             for ( int64_t jb = Kp[a]; jb < Kp[a + 1]; ++jb ) {
               const int64_t b   = Ki[jb];
               const double  kab = Kv[jb];
               for ( int64_t jt = Tp[b]; jt < Tp[b + 1]; ++jt ) {
                 const int32_t c = Ti[jt];
                 if ( tMark[c] != tStamp ) {
-                  tMark[c] = tStamp;
-                  tPos[c]  = static_cast< int32_t >( tCols.size() );
-                  tCols.push_back( c );
-                  tVals.push_back( kab * Tv[jt] );
+                  tMark[c]       = tStamp;
+                  tPos[c]        = tLength;
+                  tCols[tLength] = c;
+                  tVals[tLength] = kab * Tv[jt];
+                  ++tLength;
                 }
                 else
                   tVals[tPos[c]] += kab * Tv[jt];
               }
             }
-            for ( size_t k = 0; k < tCols.size(); ++k )
+            for ( int32_t k = 0; k < tLength; ++k )
               add( tCols[k], w * tVals[k] );
           }
         }
@@ -279,15 +301,14 @@ public:
 
         if ( std::is_sorted( idx, idx + length ) )
           continue;
-        sortBuffer.resize( length );
         for ( int32_t k = 0; k < length; ++k )
           sortBuffer[k] = { idx[k], val[k] };
-        std::sort( sortBuffer.begin(), sortBuffer.end(), []( const auto& x, const auto& y ) {
-          return x.first < y.first;
+        std::sort( sortBuffer, sortBuffer + length, []( const ColumnValue& x, const ColumnValue& y ) {
+          return x.column < y.column;
         } );
         for ( int32_t k = 0; k < length; ++k ) {
-          idx[k] = sortBuffer[k].first;
-          val[k] = sortBuffer[k].second;
+          idx[k] = sortBuffer[k].column;
+          val[k] = sortBuffer[k].value;
         }
       }
     }

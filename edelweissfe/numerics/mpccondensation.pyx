@@ -45,6 +45,9 @@ cdef extern from "_mpccondensation.h":
 
 def _csrArrays32(A, name):
     """The CSR arrays of ``A`` as contiguous int32/float64 arrays (copied only if their type differs)."""
+    # CSC and BSR matrices have an indptr too, and would be read as a different matrix
+    if A.format != "csr":
+        raise TypeError("MPC condensation: {:} must be CSR, not {:}.".format(name, A.format))
     if A.nnz > np.iinfo(np.int32).max:
         raise OverflowError("MPC condensation: {:} has more than 2^31 - 1 entries.".format(name))
     return (

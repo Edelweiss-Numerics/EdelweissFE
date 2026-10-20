@@ -146,6 +146,28 @@ def test_unsorted_and_duplicate_entries_in_K():
         assert _maxRelDiff(plain, threaded) < 1e-14
 
 
+def test_repeated_condensation_reuses_the_kernel():
+    """The kernel is built once per transformation; later calls (every Newton iteration) give the same result."""
+    n = 300
+    mpc = MultiPointConstraintTransformation(_randomRecords(n, 60, 11), n, useThreadedCondensation=True)
+    first = mpc.transformSystemMatrix(_randomSparseK(n, density=0.05, seed=11))
+    kernel = mpc._threadedCondensation
+    _assertIdentical(first, mpc.transformSystemMatrix(_randomSparseK(n, density=0.05, seed=11)))
+    assert mpc._threadedCondensation is kernel
+
+
+@pytest.mark.parametrize("matrixFormat", ["csc", "bsr", "coo"])
+def test_non_csr_matrices_are_rejected(matrixFormat):
+    """A CSC or BSR matrix also has an indptr, and would be read as a different matrix."""
+    n = 50
+    mpc = MultiPointConstraintTransformation([(5, [(0, 0.5), (1, 0.5)])], n)
+    condensation = mpccondensation.MPCCondensation(mpc._T, mpc._T.T.tocsr(), mpc._C)
+    with pytest.raises(TypeError, match="must be CSR"):
+        condensation.condense(_randomSparseK(n, seed=12).asformat(matrixFormat))
+    with pytest.raises(TypeError, match="must be CSR"):
+        mpccondensation.MPCCondensation(mpc._T.tocsc(), mpc._T.T.tocsr(), mpc._C)
+
+
 def test_explicit_zeros_are_kept():
     """The pattern is the structural one: an exactly cancelling entry stays stored (pruning is the solver's
     decision, see pruneCondensedMatrixZeros)."""
