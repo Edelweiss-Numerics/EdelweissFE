@@ -1746,6 +1746,24 @@ class BlockAMGSolver(LinearSolver):
 
         return bool(pending)
 
+    def _notSolved(self, n: int, reason: str) -> np.ndarray:
+        """The result of a solve that is declined because its system is not finite: NaN, without solving. It reaches
+        the nonlinear solver as a diverged solution, which cuts the increment back, and this solver's state is left
+        as it was.
+
+        Parameters
+        ----------
+        n
+            The number of DOFs.
+        reason
+            What is not finite, for the warning.
+        """
+        self._log("warning", "⚠ solve #{:}: {:}; returning NaN without solving.".format(self._solveCount, reason))
+        self._lastSolveSummary = LinearSolveSummary(
+            iters=0, residual=float("nan"), residualMet=False, retries=0, detailLines=()
+        )
+        return np.full(n, np.nan)
+
     def __call__(self, A, b):
         solveStartTime = time.time()
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLEquilibratedSystem
@@ -1768,18 +1786,8 @@ class BlockAMGSolver(LinearSolver):
         residualNorm = float(np.linalg.norm(b))
         if not np.isfinite(residualNorm):
             # Nothing to solve: the outer solve would spend its whole iteration cap on it, and the norm would
-            # pin the next forcing tolerance. The NaN correction reaches the nonlinear solver as a diverged
-            # solution, and this solver's state is left as it was.
-            self._log(
-                "warning",
-                "⚠ solve #{:}: the right-hand side is not finite; returning NaN without solving.".format(
-                    self._solveCount
-                ),
-            )
-            self._lastSolveSummary = LinearSolveSummary(
-                iters=0, residual=float("nan"), residualMet=False, retries=0, detailLines=()
-            )
-            return np.full(n, np.nan)
+            # pin the next forcing tolerance.
+            return self._notSolved(n, "the right-hand side is not finite")
         newIncrement = (
             self._lastResidualNorm is not None and residualNorm > self._residualGrowthFactor * self._lastResidualNorm
         )
@@ -1847,6 +1855,19 @@ class BlockAMGSolver(LinearSolver):
                         "AMG scheme does not support. Use a direct solver for such a model.".format(
                             zeroDiagonal.size, int(zeroDiagonal[0])
                         )
+                    )
+                # A diagonal entry that is NaN or infinite is no better: it makes the scaling, and with it the
+                # translations' weights 1/scaling of a block hierarchy, non-finite, which AMGCL's hierarchy build
+                # rejects with a RuntimeError -- which nothing in the nonlinear solvers catches, whereas a NaN
+                # correction is a DivergingSolution and a cutback. Decline the solve like a non-finite right-hand
+                # side (checked after the zero diagonal, which is the user's error to see first).
+                nonFiniteDiagonal = np.nonzero(~np.isfinite(diagonal))[0]
+                if nonFiniteDiagonal.size:
+                    return self._notSolved(
+                        n,
+                        "the diagonal is not finite at {:} dof(s) (first at index {:})".format(
+                            nonFiniteDiagonal.size, int(nonFiniteDiagonal[0])
+                        ),
                     )
                 scaling = 1.0 / np.sqrt(diagonal)
             else:
