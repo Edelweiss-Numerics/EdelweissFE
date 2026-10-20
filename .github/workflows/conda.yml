@@ -25,6 +25,7 @@ on:
       - "**.pyx"
       - "**.pxd"
       - "edelweissfe/**.h"
+      - "edelweissfe/**.hpp"
       - "edelweissfe/**.c"
       - "edelweissfe/**.cpp"
       - "edelweissfe/_cli/**"
