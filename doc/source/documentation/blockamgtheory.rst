@@ -290,7 +290,7 @@ shape the block backend was never tuned for; a **scalar** field takes the plain 
 aggregation, Chebyshev at AMGCL's own defaults). All of these can be overridden per field with
 ``fieldPreconds``.
 
-Four keys of a per-field parameter tree are not AMGCL parameters but select how the wrapper builds the
+Three keys of a per-field parameter tree are not AMGCL parameters but select how the wrapper builds the
 hierarchy, and are consumed before the rest of the tree is forwarded verbatim:
 
 ``backendPrecision``

@@ -119,8 +119,9 @@ _IDENTIFICATION = "BlockAMGSolver"
 # wrapper's own backend value type ("double" or "float" for backendPrecision; 1 (scalar), 2, or 3 for a
 # block-valued backend operating on B x B nodal blocks for backendBlockSize). Omitted from a fieldPreconds
 # tree they fall back to "double" and 1; the default trees (_defaultFieldPrecond) set both per dimension.
-# __call__ pops both out of whichever precond dict applies (default or a fieldPreconds override)
-# before forwarding the rest verbatim as the AMGCL JSON parameter tree.
+# _buildFieldPreconditioner pops both, and "blockTranslationNullspace" (see below), out of whichever precond
+# dict applies (default or a fieldPreconds override) before forwarding the rest verbatim as the AMGCL JSON
+# parameter tree.
 #
 # backendPrecision defaults to "double" when omitted from a fieldPreconds tree -- not what the shipped
 # field defaults use: _defaultFieldPrecond's own 3D tree sets it to "float" explicitly (see below). On
@@ -379,14 +380,14 @@ class BlockAMGSolver(LinearSolver):
 
     The block structure is not configured here -- it is derived by the base class from the model and
     DOF manager the nonlinear solver hands over via
-    :meth:`~edelweissfe.linsolve.base.LinearSolver.setModel`. A field's near null-space, where its
-    backend can carry one at all (the plain scalar backend only -- see ``useRigidBodyNullspace``), is
-    decided from its nodal dimension: a vector field (dimension > 1) gets its full rigid-body basis
-    (translations and rotations) when node coordinates are available, translations alone otherwise;
-    a scalar field takes the default constant. The default ``fieldPreconds`` tree puts a 2D or 3D
-    vector field on a block backend instead, which never takes the rotations: it takes the translations
-    (``blockTranslationNullspace``), or AMGCL's constant blocks with that switched off. So the rigid-body
-    basis applies to such a field only with an explicit scalar-backend ``fieldPreconds`` override.
+    :meth:`~edelweissfe.linsolve.base.LinearSolver.setModel`. A field's near null-space is decided from its
+    backend and its nodal dimension. On the plain scalar backend (see ``useRigidBodyNullspace``), a vector
+    field (dimension > 1) gets its full rigid-body basis (translations and rotations) when node
+    coordinates are available, translations alone otherwise; a scalar field takes the default constant.
+    The default ``fieldPreconds`` tree puts a 2D or 3D vector field on a block backend instead, which never
+    takes the rotations: it takes the translations (``blockTranslationNullspace``), or AMGCL's constant blocks
+    with that switched off. So the rigid-body basis applies to such a field only with an explicit
+    scalar-backend ``fieldPreconds`` override.
 
     Stateful across calls in two independent ways. This solver, like every other registered linear solver, sees
     only ``(A, b)`` per call, so it reconstructs the Newton-loop state rather than being told about it: from
@@ -1533,8 +1534,10 @@ class BlockAMGSolver(LinearSolver):
 
     def _buildFieldPreconditioner(self, block, system, index: int, scaling: np.ndarray):
         """The preconditioner of one field: the p-two-grid cycle for a vector field that opted into it
-        (``p1Maps`` / ``p1FieldNames``), one AMGCL hierarchy otherwise. A vector field's near null-space is its
-        rigid-body modes (see :meth:`_nullspaceCoordinates`); a scalar field takes AMGCL's default constant."""
+        (``p1Maps`` / ``p1FieldNames``), one AMGCL hierarchy otherwise. A vector field on the scalar backend gets
+        its rigid-body modes as near null-space (see :meth:`_nullspaceCoordinates`; the translations alone without
+        node coordinates), on a block backend the translations alone (``blockTranslationNullspace``, else AMGCL's
+        constant blocks); a scalar field takes AMGCL's default constant."""
         isVectorField = block.dimension > 1
 
         p1Map = None
