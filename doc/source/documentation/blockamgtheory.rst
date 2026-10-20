@@ -1103,6 +1103,7 @@ Verbosity levels
 Messages go through the shared :class:`~edelweissfe.journal.journal.Journal`, and this level decides
 whether the solver attempts to log at all -- the Journal's own level then decides whether the attempt
 is shown.
+All messages are nested inside the Newton iteration they belong to; warnings are marked ``⚠``.
 
 ``"silent"``
     Nothing at all.

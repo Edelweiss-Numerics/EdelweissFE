@@ -108,11 +108,11 @@ from edelweissfe.linsolve.nullspace import rigidBodyNullspace, translationNullsp
 # not affect, the Journal instance's own message-level suppression (see _log()) -- this gate decides
 # whether blockamg attempts to log at all; Journal's own level decides whether the attempt is shown.
 _VERBOSITY_LEVELS = ("silent", "warning", "info", "debug")
-# Journal indentation level, not verbosity: "info"/"debug" both nest at level 2, alongside the Newton
-# residual line each solve corresponds to -- they are the same nesting depth (a per-Newton-iteration
-# detail), just gated by different verbosity settings. "warning" stays at level 0 (the least indented,
-# most visible spot in the log) regardless of nesting, since a warning is rare and meant to stand out.
-_JOURNAL_LEVEL = {"warning": 0, "info": 2, "debug": 2}
+# Journal indentation level, not verbosity: every message nests at level 2, alongside the Newton residual
+# line each solve corresponds to -- all of them are per-Newton-iteration details, just gated by different
+# verbosity settings. A warning keeps that nesting too, and stands out by its "⚠" marker instead.
+_JOURNAL_LEVEL = 2
+_WARNING_MARKER = "⚠ "
 _IDENTIFICATION = "BlockAMGSolver"
 
 # "backendPrecision" and "backendBlockSize" are not AMGCL parameters -- they select the AMGCL
@@ -1004,8 +1004,10 @@ class BlockAMGSolver(LinearSolver):
         """
         if self._verbosityIndex < _VERBOSITY_LEVELS.index(level):
             return
+        if level == "warning" and not message.startswith(_WARNING_MARKER):
+            message = _WARNING_MARKER + message
         if self._journal is not None:
-            self._journal.message(message, _IDENTIFICATION, level=_JOURNAL_LEVEL[level])
+            self._journal.message(message, _IDENTIFICATION, level=_JOURNAL_LEVEL)
         else:
             print(message, flush=True)
 
@@ -2098,9 +2100,8 @@ class BlockAMGSolver(LinearSolver):
             detailLines=detailLines,
         )
         if outerIters > self._warnOuterIterationsThreshold:
-            # Rare and actionable, so this stays at "warning" (Journal level 0, the least indented and
-            # most visible spot in the log) and spells out the likely cause, unlike the routine
-            # per-solve line above it.
+            # Rare and actionable, so this is a "warning" (marked "⚠" in the log) and spells out the likely
+            # cause, unlike the routine per-solve line above it.
             self._log(
                 "warning",
                 "⚠ solve #{:} needed {:} outer Krylov iterations, above the warning threshold of {:}. "

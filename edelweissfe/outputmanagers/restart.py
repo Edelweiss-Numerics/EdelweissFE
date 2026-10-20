@@ -206,7 +206,7 @@ class OutputManager(OutputManagerBase):
         fileName, serial = self._files.nextCheckpoint()
         writeCheckpoint(fileName, self.model, self._currentStep, self.model.outputManagers, serial=serial)
 
-        self.journal.message("Wrote restart checkpoint {:}".format(fileName), self.identification, 2)
+        self.journal.message("Wrote restart checkpoint {:}".format(fileName), self.identification, 1)
 
     def finalizeFailedIncrement(self, **kwargs):
         pass

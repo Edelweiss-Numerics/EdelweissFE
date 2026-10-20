@@ -628,7 +628,7 @@ class ModelModifier(ModelModifierBase):
                 len(markedEids), nBefore, len(self._mesh.active()), len(records)
             ),
             "hadaptivity",
-            0,
+            1,
         )
         self._committedOccasions.append(markedElementNumbers)
         self._committedOccasionEids.append(list(markedEids))

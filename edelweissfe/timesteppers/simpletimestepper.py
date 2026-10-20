@@ -161,7 +161,7 @@ class SimpleTimeStepper(TimeStepperBase):
         if self.enforcedTimeIncrement is not None:
             self.enforcedTimeIncrement = self.increment * self.stepLength
 
-        self.journal.message("Cutback to increment size {:}".format(self.increment), self.identification, 2)
+        self.journal.message("Cutback to increment size {:}".format(self.increment), self.identification, 1)
 
     def enforceTimeIncrement(self, timeIncrement: float):
         self.enforcedTimeIncrement = timeIncrement
@@ -172,7 +172,7 @@ class SimpleTimeStepper(TimeStepperBase):
 
         self.increment = min(max(self.increment * scaleFactor, self.minIncrement), self.maxIncrement)
 
-        self.journal.message("New increment size {:}".format(self.increment), self.identification, 2)
+        self.journal.message("New increment size {:}".format(self.increment), self.identification, 1)
 
     def preventIncrementIncrease(self):
         """This time stepper never increases the increment size automatically, hence this is a no-op."""

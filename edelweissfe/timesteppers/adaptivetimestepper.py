@@ -177,7 +177,7 @@ class AdaptiveTimeStepper(TimeStepperBase):
 
         self.increment = min(max(self.increment * cutbackFactor, self.minIncrement), self.maxIncrement)
 
-        self.journal.message("Cutback to increment size {:}".format(self.increment), self.identification, 2)
+        self.journal.message("Cutback to increment size {:}".format(self.increment), self.identification, 1)
 
     def preventIncrementIncrease(self):
         self.allowedToIncreasedNext = False
@@ -185,4 +185,4 @@ class AdaptiveTimeStepper(TimeStepperBase):
     def changeIncrementSize(self, scaleFactor: float):
         self.increment = min(max(self.increment * scaleFactor, self.minIncrement), self.maxIncrement)
 
-        self.journal.message("New increment size {:}".format(self.increment), self.identification, 2)
+        self.journal.message("New increment size {:}".format(self.increment), self.identification, 1)

@@ -1110,8 +1110,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             )
         if overridden:
             worstDof, worstWeight = max(overridden, key=lambda entry: entry[1])
-            # Rare and actionable, so this stays at level 0 (least indented -- the most visible spot
-            # in the log) and spells out the cause and the fix, unlike the routine messages above it.
+            # Rare and actionable, so it is marked as a warning and spells out the cause and the fix,
+            # unlike the routine messages above it; nested like them, as part of the rebuild.
             self.journal.message(
                 "WARNING: {:} multi-point-constraint equation(s) conflicted with a Dirichlet boundary "
                 "condition and were dropped -- a DOF cannot be both eliminated by a constraint and "
@@ -1126,7 +1126,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                     len(overridden), worstDof, worstWeight
                 ),
                 self.identification,
-                0,
+                2,
             )
 
         return [record for record in records if record[0] not in dropped]

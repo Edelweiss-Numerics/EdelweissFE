@@ -905,7 +905,7 @@ class NonlinearImplicitDynamic(NIST):
                     else "keeping the interpolated acceleration (computeInitialAcceleration is off)"
                 ),
                 self.identification,
-                1,
+                2,
             )
 
         return self._newmarkSystem
@@ -1092,7 +1092,7 @@ class NonlinearImplicitDynamic(NIST):
                 ),
             ),
             self.identification,
-            1,
+            2,
         )
 
     def _locateDynamicDofs(self) -> tuple[np.ndarray, list]:
@@ -1303,7 +1303,7 @@ class NonlinearImplicitDynamic(NIST):
                     "does not integrate in time; it is discarded and the field is treated "
                     "quasi-statically.".format(fieldName, self.identification),
                     self.identification,
-                    0,
+                    2,
                 )
 
     @performancetiming.timeit("initial acceleration")
