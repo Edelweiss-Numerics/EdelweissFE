@@ -358,10 +358,14 @@ namespace amgcl {
 // diagonal B×B block per node (edelweissfe/linsolve/nullspace.py's translationNullspace), and the
 // next build() then builds smoothed aggregation with a tentative prolongation from them
 // (TranslationSolver, see amgcl-block-translations.hpp). Any other near null-space -- the rotations
-// in particular -- is refused: AMGCL's own tentative-prolongation path for block value types
-// self-flags as unimplemented (amgcl/coarsening/tentative_prolongation.hpp: "TODO: this is just a
-// workaround to make non-scalar value types compile. Most probably this won't actually work."), and
-// its runtime coarsening would instead switch the whole coarsening to scalar matrices (as_scalar).
+// in particular -- is refused: that hierarchy only knows diagonal blocks of translation weights, and
+// the rotations are carried by the scalar backend. (AMGCL's runtime coarsening, given a near null-space
+// on a block value type, switches the whole coarsening to scalar matrices, as_scalar: it coarsens the
+// unblocked matrix and re-blocks P and R. This hierarchy does not use that route, and the rotations
+// through it are untested here. The TODO in amgcl/coarsening/tentative_prolongation.hpp -- "this is
+// just a workaround to make non-scalar value types compile. Most probably this won't actually work."
+// -- concerns the compile-time smoothed_aggregation<BlockBackend> path, whose tentative prolongation
+// TranslationSolver replaces.)
 template < typename BlockType, typename BackendType = amgcl::backend::builtin< BlockType > >
 class LinearSolverBlockT : public AMGCLSolverInterface {
 public:
@@ -411,7 +415,7 @@ public:
                                 std::to_string( BlockSize ) + " translations as its near null-space, n x " +
                                 std::to_string( BlockSize ) + " with one diagonal block per node, got " +
                                 std::to_string( rows ) + " x " + std::to_string( cols ) +
-                                " (rotations need the scalar backend)" );
+                                " (the rotations are supported on the scalar backend)" );
     }
     try {
       amgcl::coarsening::check_translation_weights( B, static_cast< size_t >( rows / BlockSize ), BlockSize );

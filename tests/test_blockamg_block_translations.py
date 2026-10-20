@@ -383,8 +383,8 @@ def test_a_block_backend_takes_no_near_null_space_but_the_translations():
         "solver": {"type": "preonly"},
         "backendBlockSize": 3,
     }
-    # more modes than the translations: the rotations need the scalar backend
-    with pytest.raises(RuntimeError, match="rotations need the scalar backend"):
+    # more modes than the translations: the rotations are supported on the scalar backend
+    with pytest.raises(RuntimeError, match="rotations are supported on the scalar backend"):
         PyAMGCLSolver(params).set_nullspace(np.ones((scaled.shape[0], 6)))
     # a coupling of two components inside a node's block, or a weight that is not positive
     offDiagonal, negative = translations.copy(), translations.copy()

@@ -135,9 +135,9 @@ _IDENTIFICATION = "BlockAMGSolver"
 #
 # backendBlockSize defaults to the field's own nodal dimension (see _defaultFieldPrecond below): 3 for
 # a 3D vector field, 2 for a 2D one, 1 (scalar) otherwise. Setting it > 1 gives up the rotational
-# rigid-body modes (see _buildFieldPreconditioner): AMGCL's near-null-space path is unimplemented for block
-# value types, and its own identity blocks are constants per component in the equilibrated variables,
-# i.e. D-weighted translations rather than the translations D^-1 t of the scaled block (nullspace.py).
+# rigid-body modes (see _buildFieldPreconditioner): a block hierarchy takes the translations as its
+# near-null-space at most, and AMGCL's own identity blocks are constants per component in the equilibrated
+# variables, i.e. D-weighted translations rather than the translations D^-1 t of the scaled block (nullspace.py).
 # "blockTranslationNullspace": true, part of the 2D and 3D default trees, gives a block hierarchy those
 # translations instead (amgcl-block-translations.hpp); false falls back to the identity blocks. Inside this
 # block Gauss-Seidel preconditioner, 3x3 blocks stored in float with a smoothed-aggregation spectral-radius
@@ -188,7 +188,7 @@ def _defaultFieldPrecond(dimension: int) -> dict:
     outer iteration (less index and value traffic) at identical iteration counts. A 2D vector field
     (dimension 2) gets 2x2 blocks in double instead: this AMGCL wrapper has no float 2x2 backend to
     fall back to. A vector field of any other dimension, which was never part of the measurement, gets
-    the same smoother on the plain scalar backend -- the only backend that can carry the full rigid-body
+    the same smoother on the plain scalar backend -- the only backend that takes the full rigid-body
     near null-space (see :meth:`BlockAMGSolver._buildFieldPreconditioner`), so it keeps the rigid-body path. A
     scalar field (dimension 1, e.g. ``nonlocal damage``) gets the scalar tree.
 
@@ -479,10 +479,10 @@ class BlockAMGSolver(LinearSolver):
         blocks (``D``-weighted translations). On the scalar backend, whose rigid-body modes hold the translations
         anyway, it changes nothing, so a default tree stays valid with ``backendBlockSize`` 1 set on top.
     useRigidBodyNullspace
-        Only takes effect on the plain scalar backend (``backendBlockSize == 1``) -- AMGCL's
-        near-null-space path is unimplemented for block value types, so a field on a block backend
-        (the default ``fieldPreconds`` tree for a 2D or 3D vector field) never gets the rotations, whatever
-        this is set to; it takes the translations with ``blockTranslationNullspace``, the default. ``True`` (the
+        Only takes effect on the plain scalar backend (``backendBlockSize == 1``) -- a block hierarchy takes the
+        translations only, so a field on a block backend (the default ``fieldPreconds`` tree for a 2D or 3D
+        vector field) never gets the rotations, whatever this is set to; it takes the translations with
+        ``blockTranslationNullspace``, the default. ``True`` (the
         default) builds a scalar-backend vector field's near null-space as the
         full rigid-body basis -- translations *and* rotations -- once nodal coordinates for that field
         are available via ``self._model`` (set by
@@ -1546,9 +1546,8 @@ class BlockAMGSolver(LinearSolver):
         # for a field whose near null-space can actually use them -- p-two-grid's coarse solve always
         # runs on the plain scalar backend (see its own docstring), but a single-level field's own
         # backend might not: the default fieldPreconds tree puts a 2D/3D vector field on a block backend,
-        # which never takes the rotations (AMGCL's near-null-space path is unimplemented for block value
-        # types; blockTranslationNullspace gives it the translations at most), so coordinates would be
-        # gathered and then simply discarded.
+        # which never takes the rotations (a block hierarchy takes the translations only, with
+        # blockTranslationNullspace), so coordinates would be gathered and then simply discarded.
         # the field's tree, resolved once (an explicit {} stays "AMGCL's defaults")
         fieldTree = (
             self._fieldPreconds[block.name]

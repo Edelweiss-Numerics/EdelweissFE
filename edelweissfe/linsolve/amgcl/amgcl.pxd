@@ -31,8 +31,7 @@ cdef extern from "amgcl-wrapper.hpp":
     # The interface every AMGCL solver backend implements (scalar or B x B blocks, double or float):
     # the matrix values and rhs/x are always double at this boundary, each backend converts
     # internally -- see AMGCLSolverInterface. On a block backend set_nullspace() takes the translations
-    # only, one diagonal block per node (AMGCL's own tentative-prolongation nullspace path is
-    # unimplemented for block value types; see amgcl-block-translations.hpp).
+    # only, one diagonal block per node (see amgcl-block-translations.hpp).
     cdef cppclass AMGCLSolverInterface:
         void solve(int n,
                    const int* ptr,

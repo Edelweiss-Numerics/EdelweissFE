@@ -127,8 +127,8 @@ cdef class PyAMGCLSolver:
         unsupported (AMGCL rejects it at construction, since the float-stored level matrices do not
         provide a row iterator) and block-ILU0/ILUk/ILUT/ILUP fall back to AMGCL's generic approximate
         triangular solve instead of the exact one plain ``builtin`` gets. Block size 2 with float raises.
-        On a block backend :meth:`set_nullspace` takes the B translations only (AMGCL's own near-null-space path
-        is unimplemented for block value types), see there.
+        On a block backend :meth:`set_nullspace` takes the B translations only (the rotations are carried by the
+        scalar backend), see there.
 
         Example params:
         {
@@ -195,7 +195,7 @@ cdef class PyAMGCLSolver:
         smoothed aggregation with a tentative prolongation built from them instead of AMGCL's identity blocks
         (``amgcl-block-translations.hpp``), so the parameters must ask for smoothed aggregation. Anything else
         -- the rotations, an entry off the diagonal blocks, a weight that is not positive -- raises
-        ``RuntimeError``. AMGCL's own near-null-space path is unimplemented for block value types.
+        ``RuntimeError``; the rotations are carried by the scalar backend.
         """
         cdef np.ndarray[np.float64_t, ndim=2, mode="c"] B_arr = np.ascontiguousarray(B, dtype=np.float64)
         cdef int rows = B_arr.shape[0]
