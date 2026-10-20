@@ -53,8 +53,15 @@ from edelweissfe.linsolve.nullspace import translationNullspace  # noqa: E402
 
 #: Every block backend blockamg builds, as (nodal dimension = block size, backendPrecision, nodes per grid
 #: direction): the grids give a hierarchy of exactly two levels (AMGCL solves directly below 3000 scalar rows).
+#: With :data:`_DEEP_COARSE_ENOUGH` they give three or more.
 _BLOCK_BACKENDS = [(3, "double", 12), (3, "float", 12), (2, "double", 40)]
 _BLOCK_BACKEND_IDS = ["3x3 double", "3x3 float", "2x2 double"]
+
+#: AMGCL's ``coarse_enough`` for the tests of a hierarchy of three or more levels: it solves directly below this many
+#: block rows. The grids above have 1728 (3x3) or 1600 (2x2) nodes, and an aggregate of the plain aggregation holds
+#: a node and its strong neighbours, a few nodes, so the first coarsening leaves hundreds of nodes and the second
+#: still more than this.
+_DEEP_COARSE_ENOUGH = 20
 
 
 def _scaledVectorLaplacian(dimension: int, n: int):
@@ -113,31 +120,49 @@ def _relativeDifference(x, y) -> float:
     return np.linalg.norm(x - y) / np.linalg.norm(y)
 
 
+@pytest.mark.parametrize("coarseEnough", [None, _DEEP_COARSE_ENOUGH], ids=["two levels", "three or more levels"])
 @pytest.mark.parametrize("dimension, precision, n", _BLOCK_BACKENDS, ids=_BLOCK_BACKEND_IDS)
-def test_the_translations_of_d_a_d_give_the_hierarchy_of_a_on_its_constant_blocks(dimension, precision, n):
+def test_the_translations_of_d_a_d_give_the_hierarchy_of_a_on_its_constant_blocks(
+    dimension, precision, n, coarseEnough
+):
     # The defining property of the tentative prolongation: its coarse space holds the translations D^-1 t of
     # D A D exactly, component by component. With the same aggregates (eps_strong 0: every connection is strong,
     # whatever the scaling), the same prolongation damping (no spectral-radius estimate) and a block-Jacobi
     # smoother, which is invariant under the scaling, the hierarchy of D A D on D^-1 t is then the hierarchy of A
     # on its constant blocks t in other variables, M^-1 = D^-1 AMG(A)^-1 D^-1, to rounding. The per-aggregate
     # normalization only scales the coarse variables, which the direct solve on the coarse level does not see.
+    #
+    # On three or more levels (coarseEnough) the same holds level by level, which is what the coarse translations
+    # R_a of the first transfer_operators() call hand to the second one: the coarse matrix of D A D is C^T A_1 C
+    # for the coarse matrix A_1 of A and a block diagonal C (the per-aggregate normalization), the coarse
+    # translations are C^-1 times the constants of A_1, so the argument repeats on every level. It needs a smoother
+    # that is invariant under that congruence on every level, which the block-Jacobi smoother is (unlike an
+    # unscaled Chebyshev smoother, whose spectral-radius bound is not), and a coarse space whose aggregates do not
+    # depend on the scaling (eps_strong 0: a connection is strong if it is not zero).
     A, block = _scaledVectorLaplacian(dimension, n)
     scaled, scaling = _equilibrated(A)
     precond = {
         "coarsening": {"type": "smoothed_aggregation", "aggr": {"eps_strong": 0.0}},
         "relax": {"type": "damped_jacobi"},
     }
+    if coarseEnough is not None:
+        precond["coarse_enough"] = coarseEnough
     # the reference in double: A is far worse conditioned than D A D, which rounding to float would show
     onA = _hierarchy(A, dimension, "double", precond)
     withTranslations = _hierarchy(scaled, dimension, precision, precond, translationNullspace(block, scaling))
     withConstantBlocks = _hierarchy(scaled, dimension, precision, precond)
-    assert hierarchyLevels(onA) == hierarchyLevels(withTranslations) == 2
+    if coarseEnough is None:
+        assert hierarchyLevels(onA) == hierarchyLevels(withTranslations) == 2
+    else:
+        assert hierarchyLevels(onA) == hierarchyLevels(withTranslations) >= 3
 
     r = np.random.default_rng(5).standard_normal(A.shape[0])
     # one cycle of the hierarchy of A as a preconditioner of D A D: (D A D)^-1 = D^-1 A^-1 D^-1
     expected = onA.applyPreconditioner(r / scaling) / scaling
-    # float: the level matrices of D A D are rounded (set up in double either way)
+    # float: the level matrices of D A D are rounded (set up in double either way); more levels, more rounding
     tolerance = 1e-4 if precision == "float" else 1e-7
+    if coarseEnough is not None:
+        tolerance *= 10.0
     assert _relativeDifference(withTranslations.applyPreconditioner(r), expected) < tolerance
     # and the test can tell: AMGCL's constant blocks of D A D are another coarse space
     assert _relativeDifference(withConstantBlocks.applyPreconditioner(r), expected) > 1e-3
@@ -179,6 +204,33 @@ def test_unit_translation_weights_give_amgcls_constant_blocks(dimension, precisi
     tolerance = 1e-4 if precision == "float" else 1e-9
     assert _relativeDifference(unitWeights.applyPreconditioner(r), expected) < tolerance
     assert _relativeDifference(cleared.applyPreconditioner(r), expected) < 1e-12
+
+
+@pytest.mark.parametrize("dimension, precision, n", _BLOCK_BACKENDS, ids=_BLOCK_BACKEND_IDS)
+def test_unit_translation_weights_give_amgcls_constant_blocks_on_every_level(dimension, precision, n):
+    # The same on three or more levels, with AMGCL's default eps_strong: the aggregates of every level then have to
+    # agree, which they do only if the translations' strength-of-connection threshold is halved from level to level
+    # as AMGCL's own is. Weights 1 give a coarse matrix N^-1 A_1 N^-1 for AMGCL's coarse matrix A_1, N the scalar
+    # per-aggregate normalization of each node, and coarse translations N: the translations of N^-1 A_1 N^-1 again
+    # are N times the constants of A_1. The strength of a connection and the block-Jacobi smoother do not change
+    # under a congruence with a multiple of the identity, so the two hierarchies are the same on every level, to
+    # rounding, and only the coarse variables are scaled.
+    scaled, _ = _equilibrated(_scaledVectorLaplacian(dimension, n)[0])
+    block = FieldBlock("displacement", 0, scaled.shape[0], dimension)
+    precond = {
+        "coarsening": {"type": "smoothed_aggregation"},
+        "relax": {"type": "damped_jacobi"},
+        "coarse_enough": _DEEP_COARSE_ENOUGH,
+    }
+    constantBlocks = _hierarchy(scaled, dimension, precision, precond)
+    unitWeights = _hierarchy(
+        scaled, dimension, precision, precond, translationNullspace(block, np.ones(scaled.shape[0]))
+    )
+    assert hierarchyLevels(constantBlocks) == hierarchyLevels(unitWeights) >= 3
+
+    r = np.random.default_rng(6).standard_normal(scaled.shape[0])
+    tolerance = 1e-3 if precision == "float" else 1e-8
+    assert _relativeDifference(unitWeights.applyPreconditioner(r), constantBlocks.applyPreconditioner(r)) < tolerance
 
 
 def _recordNullspaces(monkeypatch) -> list:
@@ -261,6 +313,18 @@ def test_the_default_trees_build_the_hierarchy_from_the_translations(monkeypatch
     expected = translationNullspace(displacement, solver._scaling[displacement.start : displacement.stop])
     assert np.array_equal(recorded[0][1], expected)
     assert hierarchyLevels(solver._preconditioners[0]) > 1
+
+
+@pytest.mark.parametrize("dimension", [3, 2], ids=["3D, 3x3 float", "2D, 2x2 double"])
+def test_the_default_trees_solve_on_three_or_more_levels(monkeypatch, dimension):
+    # the translations of the coarse levels (R_a of every coarsening but the last) feed the next coarsening: a
+    # hierarchy of three or more levels builds from them, and solves to the outer tolerance, as with the constant
+    # blocks. No claim on the iteration counts: they are the AMG's own, not this feature's.
+    A, b, blocks = _displacementSystem(dimension)
+    tree = {**_defaultFieldPrecond(dimension), "coarse_enough": _DEEP_COARSE_ENOUGH}
+    solver, recorded, _ = _solveWithAndWithoutTranslations(monkeypatch, A, b, blocks, tree)
+    assert len(recorded) == 1
+    assert hierarchyLevels(solver._preconditioners[0]) >= 3
 
 
 def test_the_key_changes_nothing_on_the_scalar_backend(monkeypatch):
