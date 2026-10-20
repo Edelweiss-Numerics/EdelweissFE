@@ -1424,10 +1424,18 @@ class BlockAMGSolver(LinearSolver):
                 return "entry '{:}': backendBlockSize must be 1, 2 or 3 (2 only in double)".format(fieldName)
             if "hierarchyOnUnscaledBlock" in precond:
                 # refused rather than forwarded: AMGCL only warns about a key it does not know, on stderr
+                if precond["hierarchyOnUnscaledBlock"] is False:
+                    return (
+                        "entry '{:}': hierarchyOnUnscaledBlock was removed; false was its default and did nothing, "
+                        "so drop the key".format(fieldName)
+                    )
                 return (
-                    "entry '{:}': hierarchyOnUnscaledBlock was removed; it was blockTranslationNullspace, true in "
-                    "the default 2D/3D trees, plus a Jacobi-scaled smoother: drop the key, and add "
-                    '"relax": {{"scale": true}} for that smoother'.format(fieldName)
+                    "entry '{:}': hierarchyOnUnscaledBlock was removed. For a vector field on a block backend, "
+                    'its coarse space is blockTranslationNullspace: set "blockTranslationNullspace": true in this '
+                    "entry (an entry replaces the default tree, it does not inherit that key), and to keep its "
+                    'Jacobi-scaled smoother put "scale": true inside the existing relax dict, next to '
+                    '"type": "chebyshev". A scalar field has no replacement: its hierarchy is built on the '
+                    "scaled block".format(fieldName)
                 )
             if not isinstance(precond.get("blockTranslationNullspace", False), bool):
                 return "entry '{:}': blockTranslationNullspace must be true or false".format(fieldName)

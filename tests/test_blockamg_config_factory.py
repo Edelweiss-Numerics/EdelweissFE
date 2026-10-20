@@ -81,15 +81,34 @@ def test_the_former_lgmres_recycling_keys_are_accepted_only_at_their_non_recycli
         createSolver({"lgmresResetOnNewIncrement": True})
 
 
-@pytest.mark.parametrize("value", [True, False])
-def test_the_removed_key_for_a_hierarchy_on_a_itself_raises_and_names_what_replaces_it(value):
+@pytest.mark.parametrize("spelledOut", [False, True], ids=["default tree", "tree without blockTranslationNullspace"])
+def test_the_removed_key_for_a_hierarchy_on_a_itself_names_what_replaces_it_when_it_was_true(spelledOut):
     # A fieldPreconds tree goes on to AMGCL, which would only warn about the unknown key on stderr: blockamg refuses
-    # it, whatever its value, and names what it was -- the default translations plus a Jacobi-scaled smoother.
+    # it, and names what it was -- the translations of the default trees plus a Jacobi-scaled smoother. A tree that
+    # is spelled out replaces the default one and has to set the key itself, else it builds AMGCL's identity blocks.
     from edelweissfe.linsolve.blockamg.blockamg import _defaultFieldPrecond
 
-    tree = {**_defaultFieldPrecond(3), "hierarchyOnUnscaledBlock": value}
-    with pytest.raises(ValueError, match="was removed.*blockTranslationNullspace.*scale"):
+    tree = {**_defaultFieldPrecond(3), "hierarchyOnUnscaledBlock": True}
+    if spelledOut:
+        del tree["blockTranslationNullspace"]
+    with pytest.raises(
+        ValueError,
+        match=r'was removed.*set "blockTranslationNullspace": true.*put "scale": true inside the existing relax dict',
+    ):
         createSolver({"fieldPreconds": {"displacement": tree}})
+
+
+def test_the_removed_key_for_a_hierarchy_on_a_itself_was_a_no_op_when_it_was_false():
+    from edelweissfe.linsolve.blockamg.blockamg import _defaultFieldPrecond
+
+    tree = {**_defaultFieldPrecond(3), "hierarchyOnUnscaledBlock": False}
+    with pytest.raises(
+        ValueError, match="was removed; false was its default and did nothing, so drop the key"
+    ) as error:
+        createSolver({"fieldPreconds": {"displacement": tree}})
+    # nothing to replace: no advice to switch anything on
+    assert '"scale"' not in str(error.value)
+    assert "blockTranslationNullspace" not in str(error.value)
 
 
 def test_a_quoted_false_is_false_and_anything_else_raises():
