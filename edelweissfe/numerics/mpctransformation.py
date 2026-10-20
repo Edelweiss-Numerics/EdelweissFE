@@ -34,7 +34,7 @@ from scipy.sparse import csr_matrix
 from edelweissfe.utils import performancetiming
 
 #: Set to enable a per-call cross-check of :meth:`MultiPointConstraintTransformation.transformSystemMatrix`'s
-#: AMGCL-threaded expression (``useAmgclSpgemm``) against the plain SciPy ``T^T @ K @ T + C``
+#: threaded condensation (``useThreadedCondensation``) against the plain SciPy ``T^T @ K @ T + C``
 #: expression it is an alternative to. Expensive (recomputes the plain expression every call it fires
 #: on) -- development/CI use only.
 _ASSERT_EXACT_ENV_VAR = "EDELWEISS_MPC_ASSERT_EXACT"
@@ -157,35 +157,26 @@ class MultiPointConstraintTransformation:
         instances of a model.
     nDof
         The total size of the equation system.
-    useAmgclSpgemm
-        Compute ``transformSystemMatrix`` as the direct ``Tᵀ K T + C`` expression, but via AMGCL's
-        own OpenMP-threaded ``product()``/``sum()`` instead of SciPy's single-threaded CSR sparse
-        routines -- SciPy's sparse module carries no OpenMP parallelism at all, the same gap this
-        codebase also closes for its outer GMRES matvec and AMG relaxation kernels elsewhere.
-        Offline-measured on a reference model: faster than the direct
-        expression, correctness-verified to floating-point precision.
+    useThreadedCondensation
+        Compute ``transformSystemMatrix`` with the OpenMP-threaded kernel of
+        :class:`~edelweissfe.numerics.mpccondensation.MPCCondensation` instead of SciPy's
+        single-threaded CSR routines: every row of ``Tᵀ K T + C`` is computed directly from the rows
+        of ``K`` it combines, with no intermediate matrix, and rows of ``K`` that no constraint
+        touches are copied unchanged. The result does not depend on the number of threads.
 
-        AMGCL's ``product()``/``sum()`` do not eliminate exact-cancellation zeros the way SciPy's
-        own sparse routines do -- confirmed directly that effectively all of the extra entries are
-        bit-exact zero on the reference model (the rest floating-point noise at a tiny relative
-        scale), so this method leaves noticeably more raw nnz than the plain
-        expression. **Not** pruned here: :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.
-        applyDirichletK` already calls ``eliminate_zeros()`` immediately after this, gated by the
-        existing ``pruneCondensedMatrixZeros`` option (default auto, pruned with PARDISO, uniformly
-        for both expressions) -- that gate exists precisely because PARDISO's reordering on these
-        path-dependent condensed systems is known to drift with unpruned explicit-zero structural
-        entries, and because ``blockamg``'s hierarchy-reuse gates on raw ``nnz``. Pruning here too
-        would double that cost under the default config; setting ``pruneCondensedMatrixZeros=False``
-        together with this option carries the same, now-larger, unpruned pattern into the solve,
-        same as it already does for the plain expression -- verify the load path if combining the
-        two. Default ``False`` pending a live gate (offline validation only so far).
+        Explicit zeros are kept (the pattern is the structural pattern of ``Tᵀ K T + C``), unlike
+        SciPy's products, which drop exact-cancellation zeros, so this leaves more raw nnz than the
+        plain expression. **Not** pruned here: :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.
+        applyDirichletToStiffness` calls ``eliminate_zeros()`` immediately after this, gated by the
+        ``pruneCondensedMatrixZeros`` option (default auto: pruned for PARDISO, kept for
+        ``blockamg``, whose hierarchy reuse needs a pattern that is stable across iterations).
     """
 
     def __init__(
         self,
         records: list[tuple[int, list[tuple[int, float]]]],
         nDof: int,
-        useAmgclSpgemm: bool = False,
+        useThreadedCondensation: bool = False,
     ):
         slaveDofs = [slaveDof for slaveDof, _ in records]
 
@@ -236,13 +227,10 @@ class MultiPointConstraintTransformation:
         nSlaves = len(self.slaveDofIndices)
         self._C = csr_matrix((np.ones(nSlaves), (self.slaveDofIndices, self.slaveDofIndices)), shape=(nDof, nDof))
 
-        self._useAmgclSpgemm = useAmgclSpgemm
-        # Lazily populated by _transformSystemMatrixAmgcl on first use: self._T is fixed for the
-        # lifetime of this object (assigned once above, never reassigned), so both the
-        # transpose-to-CSR conversion and the AMGCL SpGEMM helper are safe to build once and reuse
-        # across every condensation call rather than repeating the work every Newton iteration.
-        self._TTranspose = None
-        self._amgclSpgemmHelper = None
+        self._useThreadedCondensation = useThreadedCondensation
+        # Built by _transformSystemMatrixThreaded on first use, from T, T^T and C, which are fixed for the
+        # lifetime of this object.
+        self._threadedCondensation = None
 
     @property
     def nEliminatedDof(self) -> int:
@@ -279,7 +267,7 @@ class MultiPointConstraintTransformation:
         return Kt
 
     def _assertExact(self, K: csr_matrix, result: csr_matrix) -> None:
-        """:envvar:`EDELWEISS_MPC_ASSERT_EXACT` cross-check: the AMGCL-threaded result must match
+        """:envvar:`EDELWEISS_MPC_ASSERT_EXACT` cross-check: the threaded result must match
         the plain ``T^T K T + C`` expression to within a matrix-norm-relative tolerance
         (entry-relative fails on cancellation-tiny entries)."""
         legacy = self._transformSystemMatrixLegacy(K)
@@ -293,7 +281,7 @@ class MultiPointConstraintTransformation:
         if maxDiff > 1e-9 * scale:
             raise AssertionError(
                 "mpctransformation: EDELWEISS_MPC_ASSERT_EXACT caught a real mismatch between the "
-                "AMGCL-threaded result and the plain T^T K T + C expression: max|delta|={:.3e}, "
+                "threaded result and the plain T^T K T + C expression: max|delta|={:.3e}, "
                 "tolerance={:.3e} (1e-9 x max|data|={:.3e}).".format(maxDiff, 1e-9 * scale, scale)
             )
 
@@ -325,48 +313,31 @@ class MultiPointConstraintTransformation:
         the slave DOFs. The slave DOFs of the solution must be completed with
         :meth:`recoverSlaveSolution` after the linear solve.
 
-        Dispatches to the AMGCL-threaded expression (``useAmgclSpgemm``) or the plain SciPy
-        expression (default) -- see the constructor's ``useAmgclSpgemm`` docstring for why the
-        AMGCL path is not yet the default despite being faster (pending a live gate).
+        Dispatches to the threaded kernel (``useThreadedCondensation``) or the plain SciPy
+        expression (default) -- see the constructor's ``useThreadedCondensation`` docstring.
         """
         self._dumpForOfflineProbe(K)
-        if self._useAmgclSpgemm:
-            result = self._transformSystemMatrixAmgcl(K)
+        if self._useThreadedCondensation:
+            result = self._transformSystemMatrixThreaded(K)
             if os.environ.get(_ASSERT_EXACT_ENV_VAR):
                 self._assertExact(K, result)
             return result
         return self._transformSystemMatrixLegacy(K)
 
     @performancetiming.timeit("mpc transform system matrix")
-    def _transformSystemMatrixAmgcl(self, K: csr_matrix) -> csr_matrix:
-        """Condense the system matrix via the same direct :math:`T^T K \\, T + C` expression
-        :meth:`_transformSystemMatrixLegacy` computes, but through AMGCL's own OpenMP-threaded
-        ``product()``/``sum()`` instead of SciPy's single-threaded CSR sparse routines -- see
-        ``useAmgclSpgemm``'s own constructor-argument docstring for the measured speedup and the
-        ``eliminate_zeros()`` rationale.
+    def _transformSystemMatrixThreaded(self, K: csr_matrix) -> csr_matrix:
+        """Condense the system matrix, :math:`T^T K \\, T + C`, with the OpenMP-threaded kernel of
+        :class:`~edelweissfe.numerics.mpccondensation.MPCCondensation` -- see the constructor's
+        ``useThreadedCondensation`` docstring. The result has sorted column indices and keeps explicit
+        zeros; :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyDirichletToStiffness` prunes them
+        if ``pruneCondensedMatrixZeros`` says so.
         """
-        if self._amgclSpgemmHelper is None:
-            from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSpGEMM
+        if self._threadedCondensation is None:
+            from edelweissfe.numerics.mpccondensation import MPCCondensation
 
-            self._amgclSpgemmHelper = PyAMGCLSpGEMM()
-            self._TTranspose = self._T.T.tocsr()
+            self._threadedCondensation = MPCCondensation(self._T, self._T.T.tocsr(), self._C)
 
-        KT = self._amgclSpgemmHelper.product(K, self._T)
-        KtNoC = self._amgclSpgemmHelper.product(self._TTranspose, KT)
-        Kt = self._amgclSpgemmHelper.sum(1.0, KtNoC, 1.0, self._C)
-        # No eliminate_zeros() here, deliberately -- not because it is unneeded (AMGCL's
-        # product()/sum() leave far more exact-cancellation zeros unpruned than SciPy's own SpGEMM
-        # does, confirmed directly on a reference model: substantially more stored entries than the plain
-        # expression, essentially all of the difference bit-exact zeros, not numerical approximation), but because NISTSolver.applyDirichletK already does this immediately
-        # after, gated by pruneCondensedMatrixZeros (default auto, pruned with PARDISO), uniformly for both condensation
-        # strategies -- that gate exists precisely because PARDISO's reordering on these
-        # path-dependent condensed systems is sensitive to extra explicit-zero structural entries
-        # (nonlinearimplicitstatic.py's own documented, previously-observed drift), and because
-        # blockamg's hierarchy-reuse gates on raw nnz (an unpruned, possibly call-to-call-unstable
-        # zero count would risk spurious hierarchy rebuilds independent of any PARDISO concern).
-        # Pruning here too would only double that work under the default config.
-        Kt.sort_indices()
-        return Kt
+        return self._threadedCondensation.condense(K)
 
     @performancetiming.timeit("mpc transform residual")
     def transformResidual(self, R: np.ndarray, dU: np.ndarray) -> np.ndarray:

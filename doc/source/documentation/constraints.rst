@@ -346,15 +346,19 @@ its own, so it equilibrates cleanly also for a consistent mass matrix; see
 dynamics (mass-conserving row-sum folding of slave masses and forces onto the masters, direct
 kinematic slaving -- the critical time step is untouched).
 
-The implicit solver's ``useAmgclMPCCondensation`` option (:doc:`solvers`, ``NIST``) offers an
-alternative way to compute :math:`T^T K T + I_s` through AMGCL's own OpenMP-threaded sparse
-matrix-matrix product/sum instead of SciPy's single-threaded CSR routines (correctness-equivalent
-to floating-point precision; measured ~2.4--2.6x faster offline and ~7.3% faster end-to-end live on
-a large-scale contact+AMR+tie model). It is off by default, pending a live gate at more thread
-counts. An earlier cached-pattern alternative was tried first and removed: it restricted the
-SpGEMMs to the eliminated DOFs, but their cost still tracked the full system size, not the
-(typically much smaller) number of eliminated DOFs, making it measurably *slower* than the direct
-expression -- now superseded by the AMGCL-threaded option on every axis measured.
+The implicit solver's ``useAmgclMPCCondensation`` option (:doc:`solvers`, ``NIST``) computes
+:math:`T^T K T + I_s` with an OpenMP-threaded kernel
+(:class:`~edelweissfe.numerics.mpccondensation.MPCCondensation`) instead of SciPy's single-threaded
+CSR routines. Each row of the result is computed by one thread directly from the rows of :math:`K`
+it combines, with no intermediate matrix; rows of :math:`K` that no constraint touches are copied
+unchanged, so the cost is close to one pass over :math:`K`. The result does not depend on the
+number of threads, keeps explicit zeros (pruned afterwards according to
+``pruneCondensedMatrixZeros``), and is the same, bit for bit, as the AMGCL sparse matrix-matrix
+products the option is named after and used before (at up to 16 threads, where AMGCL itself is
+thread-count independent). On a 2.3 million DOF tie and hanging-node model (174,205 slave DOFs,
+506 million entries in :math:`K`) one condensation takes about 0.5 s with 32 threads, against about
+11 s (16 threads) to 21 s (32 threads) for the AMGCL products and about twice the memory. It is off
+by default.
 
 On matching interface meshes, tying is exactly equivalent to merging the interface nodes: the
 patch test passes to machine precision, and both the implicit and the explicit (central

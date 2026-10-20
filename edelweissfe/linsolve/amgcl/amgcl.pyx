@@ -573,12 +573,12 @@ cdef class PyAMGCLSpGEMM:
     installed headers that both are OpenMP-parallel (``spgemm_saad``/``spgemm_rmerge`` and ``sum()``
     itself each carry ``#pragma omp parallel``/``#pragma omp for``).
 
-    Used by :meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.
-    _transformSystemMatrixAmgcl` as an opt-in alternative (``useAmgclSpgemm``/
-    ``useAmgclMPCCondensation``) to the plain ``T^T @ K @ T + C`` expression's ``scipy.sparse`` CSR
-    products/addition, all single-threaded (SciPy's own sparse routines carry no OpenMP parallelism
-    at all). This class exposes the two primitives (``product``, ``sum``) generically, one call at a
-    time, matching ``SpGEMMHelperT``'s own design (square matrices only; compose calls in Python).
+    The multi-point-constraint condensation (``useAmgclMPCCondensation``) used to compose
+    ``T^T @ K @ T + C`` from these; it now uses the fused kernel of
+    :class:`~edelweissfe.numerics.mpccondensation.MPCCondensation`, which reproduces this result bit
+    for bit at up to 16 threads (``tests/test_mpc_threaded_condensation.py`` checks that). This class
+    exposes the two primitives (``product``, ``sum``) generically, one call at a time, matching
+    ``SpGEMMHelperT``'s own design (square matrices only; compose calls in Python).
     """
     cdef SpGEMMHelper* helper
 
