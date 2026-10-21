@@ -220,6 +220,12 @@ from edelweissfe.utils.schema import schemaField
 #: the double-precision remainder (observed: 2e-14 of a step of 2.0).
 _NEGLIGIBLE_INCREMENT_FRACTION = 1e-10
 
+#: Rows per block of the mass matrix, the blocks the inertia forces are computed in on the thread
+#: pool (see :meth:`NonlinearImplicitDynamic._rowBlocks`). A model of 2.3 M degrees of freedom gets
+#: 141 blocks, several per thread to balance the load, each with millions of entries -- far more work
+#: than handing it to a thread costs. A model of fewer rows is a single block, computed serially.
+_MASS_ROWS_PER_BLOCK = 1 << 14
+
 
 @dataclass(frozen=True)
 class NIDSchema(NISTSchema):
@@ -295,6 +301,9 @@ class _NewmarkSystem:
         it would be all zeros but for a few entries per element.
     M, C
         The mass and the damping as CSR matrices, for the residual's matrix-vector products.
+    MRowBlocks
+        ``M`` in blocks of :data:`_MASS_ROWS_PER_BLOCK` consecutive rows, sharing its arrays, which
+        compute the inertia forces on the thread pool; see :meth:`NonlinearImplicitDynamic._rowBlocks`.
     V, A
         The velocity and acceleration at the last converged increment.
     """
@@ -307,6 +316,7 @@ class _NewmarkSystem:
     dampingVIJValues: np.ndarray
     M: csr_matrix
     C: csr_matrix
+    MRowBlocks: list
     V: DofVector
     A: DofVector
 
@@ -691,7 +701,15 @@ class NonlinearImplicitDynamic(NIST):
             )
 
         with performancetiming.timeit("inertia and damping forces"):
-            PInertia = system.M @ np.asarray(increment.A_np)
+            A_np = np.asarray(increment.A_np)
+            PInertia = np.empty_like(A_np)
+
+            def computeInertiaForcesOfRows(rows: slice):
+                PInertia[rows] = system.MRowBlocks[rows.start // _MASS_ROWS_PER_BLOCK] @ A_np
+
+            # M @ A_np, one row block per call -- bitwise the same, see _rowBlocks. The damping is
+            # diagonal, so C @ V_np costs next to nothing.
+            forEachSliceInParallel(computeInertiaForcesOfRows, len(PInertia), _MASS_ROWS_PER_BLOCK)
             PDamping = system.C @ np.asarray(increment.V_np)
 
             R -= PInertia
@@ -899,6 +917,7 @@ class NonlinearImplicitDynamic(NIST):
             dampingVIJValues=damping[1],
             M=M,
             C=C,
+            MRowBlocks=self._rowBlocks(M, _MASS_ROWS_PER_BLOCK),
             V=V,
             A=A,
         )
@@ -1067,6 +1086,44 @@ class NonlinearImplicitDynamic(NIST):
             / model.nodeFields[fieldName].dimension
             for fieldName in fieldNames
         }
+
+    @staticmethod
+    def _rowBlocks(M: csr_matrix, rowsPerBlock: int) -> list[csr_matrix]:
+        """``M`` cut into CSR matrices of ``rowsPerBlock`` consecutive rows (the last one may be
+        shorter), whose products with a vector can run on separate threads.
+
+        A block's column indices and values are views of ``M``'s, so the blocks cost only their row
+        pointers. SciPy computes every row of ``M @ x`` on its own, from zero, adding the row's
+        products in storage order; a block holds the same entries in the same order, with indices of
+        the same type, so its rows of ``block @ x`` are bitwise those of ``M @ x``.
+
+        Parameters
+        ----------
+        M
+            The matrix.
+        rowsPerBlock
+            The number of rows of a block.
+
+        Returns
+        -------
+        list[csr_matrix]
+            The blocks, in row order.
+        """
+
+        nRows, nColumns = M.shape
+        blocks = []
+        for start in range(0, nRows, rowsPerBlock):
+            stop = min(start + rowsPerBlock, nRows)
+            entries = slice(M.indptr[start], M.indptr[stop])
+            # Built empty and given the views afterwards: the constructor would copy every view
+            # smaller than half of its array (SciPy's prune), so all blocks of a large model.
+            block = csr_matrix((stop - start, nColumns), dtype=M.dtype)
+            block.indptr = M.indptr[start : stop + 1] - M.indptr[start]
+            block.indices = M.indices[entries]
+            block.data = M.data[entries]
+            blocks.append(block)
+
+        return blocks
 
     def reportTopologyChangeConservation(self, before: _ConservedQuantities, after: _ConservedQuantities):
         """Report what a topology change did to the quantities that ought to survive it: every
