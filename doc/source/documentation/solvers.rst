@@ -129,6 +129,34 @@ broken ones.
 .. automodule:: edelweissfe.solvers.base.convergencetable
    :members:
 
+Performance table of the implicit solvers
+-----------------------------------------
+
+At the end of a step, and every ``report-performance-frequency`` increments if that option is set, the implicit
+solvers print where the step's time went (:mod:`~edelweissfe.utils.performancetiming`): one row per timed part,
+nested parts indented below their parent, each with its share of the step's wall clock, its number of calls and its
+time per call. The table ends with the sum of the top-level rows, the wall clock since the start of the step, and the
+share left ``unaccounted``, the time spent in code no timer covers. Every part of an increment is timed, so this share
+stays small; a large one points at work that has no row yet.
+
+Besides the element loop and the linear solve, the rows include the parts that cost a lot on large models although no
+element is involved:
+
+* ``topology update``: the model modifiers (e.g. ``AMR``), then the ties and the contact catching up;
+* ``equation system rebuild``, after a change of the mesh or of a constraint's DOF footprint: ``dof manager``,
+  ``linear solver setup``, ``system matrix pattern`` and ``mpc transformation build``;
+* ``mpc transform system matrix``: condensing the slave DOFs of the multi-point constraints out of the system;
+* ``inertia and damping terms`` (``NID``, ``NIDParallel``), per Newton iteration: ``newmark kinematics``,
+  ``inertia and damping forces`` and ``effective tangent``;
+* ``reset residual and tangent``, per Newton iteration;
+* ``accept increment``, ``finalize increment`` and ``conservation report``, per accepted increment;
+* ``output``, per output increment: ``field output`` and one row per output manager, named by its kind (``ensight``,
+  ``restart``, ``monitor``, ...).
+
+A resumed run (``*restart, readFrom=...``) prints one more table before its step: restoring the checkpoint, which
+replays its topology history (top-level ``AMR`` rows). The step's table starts from zero after it, so its rows and its
+wall clock cover the same time.
+
 ``NEST`` - Nonlinear Explicit Static
 -------------------------------------
 
