@@ -67,6 +67,11 @@ class OutputManagerBase(OptionSchemaProvider, ABC):
 
     identification = "OutputManagerBase"
 
+    #: The name of this output manager, from its ``*output, name=...`` line (or the driver's default).
+    #: Unique within a job: the model keeps its output managers by it, and the step's performance
+    #: table has one row per manager under it. Set by every concrete output manager's constructor.
+    name: str
+
     #: Whether this output manager writes restart checkpoints. A solver that changes the model at
     #: the end of an increment (e.g. a topology check) finalizes such a manager after that change,
     #: so that the checkpoint holds the state the next increment starts from.

@@ -252,6 +252,9 @@ class NEST(NIST):
             The output managers.
         """
 
+        # The step's table covers the step only; whatever was timed before it is not its row.
+        performancetiming.reset()
+
         self.validateModelCapabilities(model)
 
         for constraintName, constraint in model.constraints.items():

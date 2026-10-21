@@ -144,18 +144,19 @@ element is involved:
 
 * ``topology update``: the model modifiers (e.g. ``AMR``), then the ties and the contact catching up;
 * ``equation system rebuild``, after a change of the mesh or of a constraint's DOF footprint: ``dof manager``,
-  ``linear solver setup``, ``system matrix pattern`` and ``mpc transformation build``;
+  ``linear solver setup``, ``system matrix pattern``, ``mpc transformation build`` and ``mpc dirichlet conflict
+  check``;
 * ``mpc transform system matrix``: condensing the slave DOFs of the multi-point constraints out of the system;
 * ``inertia and damping terms`` (``NID``, ``NIDParallel``), per Newton iteration: ``newmark kinematics``,
   ``inertia and damping forces`` and ``effective tangent``;
 * ``reset residual and tangent``, per Newton iteration;
 * ``accept increment``, ``finalize increment`` and ``conservation report``, per accepted increment;
-* ``output``, per output increment: ``field output`` and one row per output manager, named by its kind (``ensight``,
-  ``restart``, ``monitor``, ...).
+* ``output``, per output increment: ``field output`` and one row per output manager, under the name of its
+  ``*output`` line.
 
-A resumed run (``*restart, readFrom=...``) prints one more table before its step: restoring the checkpoint, which
-replays its topology history (top-level ``AMR`` rows). The step's table starts from zero after it, so its rows and its
-wall clock cover the same time.
+The timers start from zero together with the step's wall clock, so the rows and the wall clock of a step's table cover
+the same time, whatever ran before the step. A resumed run (``*restart, readFrom=...``) whose checkpoint replays a
+topology history prints that replay in a table of its own (top-level ``AMR`` rows), before the step's table.
 
 ``NEST`` - Nonlinear Explicit Static
 -------------------------------------

@@ -458,7 +458,9 @@ class NED(NonlinearSolverBase):
         # Against this the timing table reports what it did *not* measure, so it has to span
         # everything this method does -- the initial topology refinement and the first equation
         # system included, since both are timed categories that would otherwise be subtracted from a
-        # window they never ran in and drive the residue negative.
+        # window they never ran in and drive the residue negative. The same goes for whatever was
+        # timed before the step, so the timers start from zero together with the wall clock.
+        performancetiming.reset()
         self._stepWallClockTic = perf_counter()
 
         self._externalWork = 0.0

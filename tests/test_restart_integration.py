@@ -239,7 +239,43 @@ def test_restart_resume_matches_uninterrupted_reference_with_amr(tmp_path):
     np.testing.assert_allclose(resumedU, referenceU, atol=1e-10)
 
 
-def test_restart_replay_is_timed_in_its_own_table(tmp_path, monkeypatch):
+@pytest.fixture
+def performanceTableRows(monkeypatch) -> list[list[str]]:
+    """The row names of every performance table printed while the test runs, one list per table, in
+    order."""
+
+    tables = []
+    makePrettyTable = performancetiming.makePrettyTable
+
+    def recordingMakePrettyTable(*args, **kwargs):
+        table = makePrettyTable(*args, **kwargs)
+        tables.append([row[0] for row in table.rows])
+        return table
+
+    monkeypatch.setattr(performancetiming, "makePrettyTable", recordingMakePrettyTable)
+    return tables
+
+
+def test_step_table_leaves_out_work_timed_before_the_step(tmp_path, performanceTableRows):
+    """A step's table reports its rows against the step's wall clock, so its timers start from zero
+    with that clock, in the solver's beginStep. Work timed before the step -- by a driver, a script, a
+    test -- is then not among the rows, where it would be counted against a wall clock it never ran in
+    and push the unaccounted share below zero. Whoever drives the step gets this, not only the input
+    file driver's restart branch."""
+
+    with performancetiming.timeit("work before the step"):
+        pass
+
+    path = tmp_path / "step.inp"
+    path.write_text(_materialAndMesh("pardiso") + _STEP_1)
+    _runInputFile(path)
+
+    (stepTable,) = performanceTableRows
+    assert "elements" in stepTable
+    assert "work before the step" not in stepTable
+
+
+def test_restart_replay_is_timed_in_its_own_table(tmp_path, performanceTableRows):
     """A resumed run replays the checkpoint's AMR history before the step starts, and those AMR calls
     are timed. They are reported in a table of their own, and the step's table starts from zero: left
     in it, they would be counted in its rows but not in its wall clock, which starts with the step."""
@@ -253,27 +289,45 @@ def test_restart_replay_is_timed_in_its_own_table(tmp_path, monkeypatch):
     assert len(_runInputFile(truncatedPath).elements) > 1, "truncated too early: refinement had not happened yet"
     checkpoint = _mostRecentCheckpoint(tmp_path)
 
-    # The row names of every performance table printed by the resumed run, in order.
-    tables = []
-    makePrettyTable = performancetiming.makePrettyTable
-
-    def recordingMakePrettyTable(*args, **kwargs):
-        table = makePrettyTable(*args, **kwargs)
-        tables.append([row[0] for row in table.rows])
-        return table
-
-    monkeypatch.setattr(performancetiming, "makePrettyTable", recordingMakePrettyTable)
+    # The output managers' rows, one per manager under the name of its *output line, nested in "output".
+    (truncatedStepTable,) = performanceTableRows
+    assert "output" in truncatedStepTable and " restartwriter" in truncatedStepTable
+    performanceTableRows.clear()
 
     resumePath = tmp_path / "resume.inp"
     resumePath.write_text(_AMR_MATERIAL_AND_MESH + f"\n*restart, readFrom={checkpoint}\n" + _amrStep(maxNumInc=10000))
     _runInputFile(resumePath)
 
-    restoreTable, stepTable = tables[0], tables[-1]
-    assert len(tables) == 2
+    restoreTable, stepTable = performanceTableRows
     # The replay: AMR at the top level, with the refinement it applied.
     assert "AMR" in restoreTable and " materialize" in restoreTable
     # In the step, AMR runs only inside the topology update, never at the top level.
     assert "topology update" in stepTable and "AMR" not in stepTable
+
+
+def test_restart_without_topology_history_prints_no_restore_table(tmp_path, performanceTableRows):
+    """A checkpoint without a topology history replays nothing, so there is nothing to report before
+    the resumed step: no table of only "sum of the above: 0 s" and a 100 % unaccounted share."""
+
+    checkpointBaseName = tmp_path / "ckpt"
+    truncatedPath = tmp_path / "truncated.inp"
+    truncatedPath.write_text(
+        _materialAndMesh("pardiso") + f"\n*output, type=restart, name=restartwriter\n"
+        f"writeInterval=1, baseName={checkpointBaseName}, numberOfFilesToKeep=3\n" + _STEP_1 + _step2(maxNumInc=3)
+    )
+    _runInputFile(truncatedPath)
+    checkpoint = _mostRecentCheckpoint(tmp_path)
+    performanceTableRows.clear()
+
+    resumePath = tmp_path / "resume.inp"
+    resumePath.write_text(
+        _materialAndMesh("pardiso") + f"\n*restart, readFrom={checkpoint}\n" + _STEP_1 + _step2(maxNumInc=10000)
+    )
+    _runInputFile(resumePath)
+
+    # Only the resumed step's own table.
+    (stepTable,) = performanceTableRows
+    assert "elements" in stepTable
 
 
 def test_restart_ensight_output_continues_across_resume(tmp_path):

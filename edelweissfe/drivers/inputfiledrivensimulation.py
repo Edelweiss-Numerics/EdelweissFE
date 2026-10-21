@@ -183,12 +183,11 @@ def finiteElementSimulation(
             0,
         )
         # Restoring replays the checkpoint's topology history, and the AMR calls of that replay are
-        # timed. A step's performance table starts its wall clock at the beginning of the step, so the
-        # replay is reported here, in a table of its own, and the timers start the step from zero.
-        # Otherwise the resumed step's table counts the replay in its rows but not in its wall clock,
-        # and its "unaccounted" share is off by the whole replay -- far below zero on a large refined model.
-        journal.printPrettyTable(performancetiming.makePrettyTable(wallTime=restoreTime), identification)
-        performancetiming.reset()
+        # timed. They are reported here, in a table of their own: the step's timers start from zero
+        # together with its wall clock (the solver's beginStep), so the replay would otherwise be
+        # lost. A checkpoint without a topology history records nothing, and gets no table.
+        if performancetiming.hasRecordedTimes():
+            journal.printPrettyTable(performancetiming.makePrettyTable(wallTime=restoreTime), identification)
 
     plotter = createPlotterFromInputFile(inputfile, journal)
     stepManager = createStepManagerFromInputFile(inputfile)

@@ -252,8 +252,8 @@ class StepBase(ABC):
                             with performancetiming.timeit("field output"):
                                 fieldOutputController.finalizeIncrement()
                             for manager in outputManagers:
-                                # Every output manager class is called OutputManager; its module names the kind.
-                                with performancetiming.timeit(type(manager).__module__.rsplit(".", 1)[-1]):
+                                # One row per manager, under the name of its *output line.
+                                with performancetiming.timeit(manager.name):
                                     manager.finalizeIncrement(statusInfoDict=solver.incrementStatus)
 
             except ReachedMaxIncrements:

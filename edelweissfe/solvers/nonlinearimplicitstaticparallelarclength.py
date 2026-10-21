@@ -35,6 +35,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
@@ -260,12 +261,13 @@ class NISTPArcLength(NISTParallel):
         distributedLoads = stepActions["distributedload"].values()
         bodyForces = stepActions["bodyforce"].values()
 
-        # Find which global DOFs the Dirichlet BCs constrain, once up front.
-        self.locateConstrainedDofs(dirichlets)
+        with performancetiming.timeit("step actions at increment start"):
+            # Find which global DOFs the Dirichlet BCs constrain, once up front.
+            self.locateConstrainedDofs(dirichlets)
 
-        for stepActionType in stepActions.values():
-            for action in stepActionType.values():
-                action.applyAtIncrementStart(model, timeStep)
+            for stepActionType in stepActions.values():
+                for action in stepActionType.values():
+                    action.applyAtIncrementStart(model, timeStep)
 
         R_ = np.tile(self.theDofManager.constructDofVector(), (2, 1)).T  # 2 RHSs
         R_0 = R_[:, 0]
@@ -284,9 +286,10 @@ class NISTPArcLength(NISTParallel):
         dLambda = self.dLambda
         ddLambda = 0.0
 
-        dU, isExtrapolatedIncrement, dLambda = self.extrapolateLastIncrement(
-            extrapolation, timeStep, dU, dirichlets, prevTimeStep, model, dLambda
-        )
+        with performancetiming.timeit("predictor"):
+            dU, isExtrapolatedIncrement, dLambda = self.extrapolateLastIncrement(
+                extrapolation, timeStep, dU, dirichlets, prevTimeStep, model, dLambda
+            )
 
         # referenceIncrement = incNumber, 1.0, 1.0, 0.0, 0.0, 0.0
         # zeroIncrement = incNumber, 0.0, 0.0, 0.0, 0.0, 0.0
@@ -297,10 +300,11 @@ class NISTPArcLength(NISTParallel):
             for geostatic in stepActions["geostatic"].values():
                 geostatic.applyAtIterationStart()
 
-            U_np[:] = U_n
-            U_np += dU
+            with performancetiming.timeit("reset residual and tangent"):
+                U_np[:] = U_n
+                U_np += dU
 
-            P[:] = K[:] = F[:] = FConstraints[:] = P_0[:] = P_f[:] = K_f[:] = K_0[:] = 0.0
+                P[:] = K[:] = F[:] = FConstraints[:] = P_0[:] = P_f[:] = K_f[:] = K_0[:] = 0.0
 
             P, K, F = self.computeElements(model.elements, U_np, dU, P, K, F, timeStep)
             P, K = self.assembleConstraints(model.constraints, U_np, dU, P, K, timeStep, FConstraints)

@@ -82,8 +82,8 @@ The model is first rebuilt from the same input file, then restored in this order
        from (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.setupFingerprint`), then
        the recorded topology decisions are replayed through the model modifiers' own ``apply``
        (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory`), and the
-       result is checked against the recorded fingerprint; the time of the replay is printed in a
-       performance table of its own, before the resumed step's
+       result is checked against the recorded fingerprint; the time of a replay is printed in a
+       performance table of its own, before the resumed step's table
    * - ties, contact surfaces
      - catch up with the replayed mesh, as they had in the uninterrupted run
    * - node fields, scalar variables, element state

@@ -402,6 +402,18 @@ def extractIncrementTimes(maxLevels: int = 4, skipUnused: bool = False) -> Prett
     return makeIncrementTimesPrettyTable(extractIncrementTimeRows(maxLevels, skipUnused))
 
 
+def hasRecordedTimes() -> bool:
+    """Whether any timed category has been entered since the last :func:`reset`, on any thread.
+
+    Returns
+    -------
+    bool
+        True if :func:`makePrettyTable` would print at least one row.
+    """
+
+    return bool(_mergedSnapshot()["children"])
+
+
 def reset():
     """Reset all measured times, on every thread that has ever recorded one."""
     with _allRootsLock:

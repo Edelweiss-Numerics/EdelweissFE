@@ -331,6 +331,11 @@ class NIST(NonlinearSolverBase):
 
         self.applyStepActionsAtStepStart(model, step)
 
+        # The step's table reports its rows against this wall clock, so the two start together.
+        # Whatever was timed before the step -- a checkpoint's topology replay, a caller's own timed
+        # work -- would otherwise be counted in the rows but not in the wall clock, and the share
+        # left unaccounted would be off by that much: far below zero on a large refined model.
+        performancetiming.reset()
         self._stepWallClockTic = perf_counter()
 
     def prepareIncrement(self, step, model: FEModel, isRetry: bool):
@@ -479,6 +484,7 @@ class NIST(NonlinearSolverBase):
 
                 with performancetiming.timeit("mpc transformation build"):
                     self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
+                with performancetiming.timeit("mpc dirichlet conflict check"):
                     self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
 
                 # After a change of the mesh or of the constraint connectivity, the last accepted
