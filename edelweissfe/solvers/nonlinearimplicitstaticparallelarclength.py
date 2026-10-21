@@ -109,6 +109,9 @@ class ArcLengthIncrement:
     loadParameterIncrement: float = 0.0
     #: The load parameter of the state being evaluated: of the iterate, or of a trial state of a line search.
     loadParameter: float = 0.0
+    #: The internal forces of the elements and the constraints of the state evaluated last, i.e. the reactions at the
+    #: prescribed degrees of freedom, for the controller (see :meth:`NISTPArcLength.passSystemStateToController`).
+    reaction: DofVector | None = None
 
 
 class NISTPArcLength(NISTParallel):
@@ -126,7 +129,9 @@ class NISTPArcLength(NISTParallel):
     load parameter enters them through its hooks: the prediction (:meth:`extrapolateLastIncrement`), the loads of the
     evaluated state (:meth:`assembleLoadsAtIncrementEnd`), the first iterate (:meth:`firstIterateNeedsCorrection`), the
     linear solve for two right-hand sides (:meth:`solveForCorrection`), and the corrections of the pair of the solution
-    and the load parameter (:meth:`setTrialState`, :meth:`applyCorrection`).
+    and the load parameter (:meth:`setTrialState`, :meth:`applyCorrection`). A controller with a nonlinear equation
+    receives the state of every iterate (:meth:`passSystemStateToController`), has its equation checked with the
+    residual (:meth:`checkConvergence`), and scales the linear prediction (:meth:`extrapolationWeights`).
 
     Every arc length step scales its own reference load -- the change of its loads and prescribed displacements over
     the step -- from :math:`\\lambda = 0`, so it starts from the loads the steps before it ended with; at its end, every
@@ -432,6 +437,8 @@ class NISTPArcLength(NISTParallel):
                 maxGrowingIter,
             )
             dLambda = self.arcLengthIncrement.loadParameterIncrement
+            # the converged state, for finishIncrement
+            self.passSystemStateToController(stepActions["dirichlet"].values())
         finally:
             self.arcLengthIncrement = None
 
@@ -573,6 +580,8 @@ class NISTPArcLength(NISTParallel):
             R_0[dirichlet.constrainedDofIndices] = 0.0
         R_f = self.applyDirichletToResidual(increment.referenceTimeStep, R_f, dirichlets)
 
+        self.passSystemStateToController(dirichlets)
+
         # identity rows, and the columns eliminated into both right-hand sides R_0 and R_f
         K_ = self.applyDirichletToStiffness(K_, dirichlets, rightHandSides)
 
@@ -581,6 +590,141 @@ class NISTPArcLength(NISTParallel):
         increment.referenceCorrection = ddU_[:, 1]
 
         return ddU_[:, 0]
+
+    def assembleResidualAndTangent(
+        self,
+        U_n: DofVector,
+        dU: DofVector,
+        U_np: DofVector,
+        R: DofVector,
+        P: DofVector,
+        PLoadsAndConstraints: DofVector,
+        F: DofVector,
+        FConstraints: DofVector,
+        K: SystemMatrixAssembly,
+        stepActions: dict,
+        model: FEModel,
+        timeStep: TimeStep,
+    ) -> tuple[DofVector, SystemMatrixAssembly, DofVector]:
+        """Evaluate the model as
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleResidualAndTangent` does, and keep, under arc
+        length control, the internal forces of the elements and the constraints of the evaluated state for the
+        controller: the residual contributions without those of the loads.
+
+        Parameters
+        ----------
+        U_n
+            The solution at the start of the increment.
+        dU
+            The trial solution increment.
+        U_np
+            The trial solution, overwritten.
+        R
+            The residual, overwritten.
+        P
+            The internal forces (the reaction), overwritten.
+        PLoadsAndConstraints
+            The residual contributions of the loads and the constraints, overwritten.
+        F
+            The accumulated absolute element fluxes, overwritten.
+        FConstraints
+            The accumulated absolute constraint fluxes, overwritten.
+        K
+            The tangent being assembled, assembled anew.
+        stepActions
+            The active step actions.
+        model
+            The model tree.
+        timeStep
+            The time step.
+
+        Returns
+        -------
+        tuple[DofVector,SystemMatrixAssembly,DofVector]
+            The internal forces, the tangent and the accumulated element fluxes.
+        """
+
+        P, K, F = super().assembleResidualAndTangent(
+            U_n, dU, U_np, R, P, PLoadsAndConstraints, F, FConstraints, K, stepActions, model, timeStep
+        )
+
+        increment = self.arcLengthIncrement
+        if increment is not None:
+            increment.reaction = P + PLoadsAndConstraints
+            increment.reaction -= increment.deadLoad
+            increment.reaction -= increment.loadParameter * increment.referenceLoad
+
+        return P, K, F
+
+    def passSystemStateToController(self, dirichlets: list):
+        """Pass the state of the model evaluated last -- the iterate, or the converged state -- to the controller, see
+        :meth:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.setSystemState`.
+
+        Parameters
+        ----------
+        dirichlets
+            The Dirichlet boundary conditions of the step.
+        """
+
+        increment = self.arcLengthIncrement
+
+        # the change of the prescribed degrees of freedom over the step, conjugate to their reactions
+        referenceIncrement = self.theDofManager.constructDofVector()
+        referenceIncrement = self.applyDirichletToResidual(increment.referenceTimeStep, referenceIncrement, dirichlets)
+
+        self.arcLengthController.setSystemState(
+            increment.reaction, referenceIncrement, increment.loadParameterAtStart, increment.loadParameterIncrement
+        )
+
+    def checkConvergence(
+        self,
+        R: DofVector,
+        ddU: DofVector,
+        dU: DofVector,
+        F: DofVector,
+        FConstraints: DofVector,
+        iterationCounter: int,
+        residualHistory: dict,
+    ) -> tuple[bool, dict]:
+        """Check the convergence as
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkConvergence` does; under arc
+        length control, a converged iterate must satisfy the controller's equation as well, which is only linearized
+        in the correction of the load parameter (see
+        :meth:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.isConstraintSatisfied`).
+
+        Parameters
+        ----------
+        R
+            The current residual.
+        ddU
+            The current correction increment.
+        dU
+            The current solution increment.
+        F
+            The accumulated absolute element fluxes.
+        FConstraints
+            The accumulated absolute constraint fluxes.
+        iterationCounter
+            The current iteration number.
+        residualHistory
+            The convergence state of every field in each iteration checked so far in this increment.
+
+        Returns
+        -------
+        tuple[bool,dict]
+            - True if converged.
+            - The nodes with the largest residual, per field.
+        """
+
+        converged, nodesWithLargestResidual = super().checkConvergence(
+            R, ddU, dU, F, FConstraints, iterationCounter, residualHistory
+        )
+
+        increment = self.arcLengthIncrement
+        if converged and increment is not None:
+            converged = self.arcLengthController.isConstraintSatisfied(increment.timeStep, dU, self.theDofManager)
+
+        return converged, nodesWithLargestResidual
 
     def correctionAtStepLength(self, dU: DofVector, ddU_0: DofVector, stepLength: float) -> tuple[DofVector, float]:
         """The correction of the pair of the solution and the load parameter at a step length :math:`\\alpha`: the
@@ -781,6 +925,49 @@ class NISTPArcLength(NISTParallel):
             dLambda += weightOfBeforeLast * self.dLambdaOfIncrementBeforeLast
 
         return dLambda
+
+    def extrapolationWeights(
+        self, extrapolation: str, timeStep: TimeStep, prevTimeStep: TimeStep
+    ) -> tuple[float, float | None]:
+        """The weights of the accepted increments in the prediction, see
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.extrapolationWeights`. Under arc length control, the
+        controller scales the last accepted increment in a linear prediction (see
+        :meth:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.getExtrapolationFactor`),
+        of the solution and of the load parameter alike.
+
+        Parameters
+        ----------
+        extrapolation
+            The type of extrapolation, ``linear`` or ``quadratic``.
+        timeStep
+            The new increment.
+        prevTimeStep
+            The last accepted increment, which the prediction extrapolates.
+
+        Returns
+        -------
+        tuple[float,float|None]
+            - The weight of the last accepted increment.
+            - The weight of the accepted increment before it, None for a linear prediction.
+        """
+
+        weightOfLast, weightOfBeforeLast = super().extrapolationWeights(extrapolation, timeStep, prevTimeStep)
+        if self.arcLengthController is None or weightOfBeforeLast is not None:
+            return weightOfLast, weightOfBeforeLast
+
+        return self.arcLengthController.getExtrapolationFactor(timeStep, prevTimeStep), None
+
+    def forgetPredictionAfterFailure(self):
+        """Drop the prediction after a failed increment as
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.forgetPredictionAfterFailure` does, unless the
+        controller predicts the increment that follows a cutback from the last accepted increment as well (see
+        :attr:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.extrapolatesAfterCutback`).
+        """
+
+        if self.arcLengthController is not None and self.arcLengthController.extrapolatesAfterCutback:
+            return
+
+        super().forgetPredictionAfterFailure()
 
     def acceptIncrement(self, step, model: FEModel, timeStep: TimeStep):
         """Accept the increment as :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.acceptIncrement` does,
