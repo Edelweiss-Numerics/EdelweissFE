@@ -42,10 +42,7 @@ from edelweissfe.nodecouplingentity.base.nodecouplingentity import (
     BaseNodeCouplingEntity,
 )
 from edelweissfe.numerics.dofvector import DofVector
-from edelweissfe.numerics.parallelizationutilities import (
-    getNumberOfThreads,
-    isFreeThreadingSupported,
-)
+from edelweissfe.numerics.parallelizationutilities import getNumberOfWorkerThreads
 from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
 from edelweissfe.points.node import Node
 from edelweissfe.sets.nodeset import NodeSet
@@ -505,7 +502,7 @@ class DofManager:
         nEntities = len(entities_list)
 
         # Threading setup
-        numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
+        numThreads = getNumberOfWorkerThreads()
 
         # Heuristic: Don't spawn threads for tiny workloads
         if nEntities < 500 or numThreads == 1:

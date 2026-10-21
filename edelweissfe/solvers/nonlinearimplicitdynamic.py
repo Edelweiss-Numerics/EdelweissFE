@@ -301,9 +301,12 @@ class _NewmarkSystem:
         it would be all zeros but for a few entries per element.
     M, C
         The mass and the damping as CSR matrices, for the residual's matrix-vector products.
-    MRowBlocks
-        ``M`` in blocks of :data:`_MASS_ROWS_PER_BLOCK` consecutive rows, sharing its arrays, for the
-        products with the mass on the thread pool (:meth:`massTimes`).
+    MRowBlocks, MRowsPerBlock
+        ``M`` in blocks of ``MRowsPerBlock`` consecutive rows (:data:`_MASS_ROWS_PER_BLOCK`), sharing
+        its arrays, for the products with the mass on the thread pool (:meth:`massTimes`).
+    massByField
+        Each dynamic field's total assembled mass (:meth:`NonlinearImplicitDynamic._totalMassByField`),
+        a property of ``M`` alone, so computed once here rather than per accepted increment.
     V, A
         The velocity and acceleration at the last converged increment.
     """
@@ -316,7 +319,9 @@ class _NewmarkSystem:
     dampingVIJValues: np.ndarray
     M: csr_matrix
     C: csr_matrix
-    MRowBlocks: list
+    MRowBlocks: list[csr_matrix]
+    MRowsPerBlock: int
+    massByField: dict
     V: DofVector
     A: DofVector
 
@@ -328,9 +333,9 @@ class _NewmarkSystem:
         product = np.empty_like(vector)
 
         def multiplyRows(rows: slice):
-            product[rows] = self.MRowBlocks[rows.start // _MASS_ROWS_PER_BLOCK] @ vector
+            product[rows] = self.MRowBlocks[rows.start // self.MRowsPerBlock] @ vector
 
-        forEachSliceInParallel(multiplyRows, len(product), _MASS_ROWS_PER_BLOCK)
+        forEachSliceInParallel(multiplyRows, len(product), self.MRowsPerBlock)
         return product
 
 
@@ -733,6 +738,14 @@ class NonlinearImplicitDynamic(NIST):
         # mass is added slice by slice on the thread pool, which also keeps the temporary `a * M` as
         # short as a slice. The damping is diagonal and touches only its few nonzero slots.
         with performancetiming.timeit("effective tangent"):
+            # Slice by slice, a longer mass vector would silently add only its prefix, where the
+            # whole-array sum raised; the layouts are the same by construction, so say so.
+            if len(system.Mvij) != len(K):
+                raise ValueError(
+                    "The mass ({:} entries) and the tangent ({:} entries) differ in their VIJ layout.".format(
+                        len(system.Mvij), len(K)
+                    )
+                )
 
             def addScaledMass(s: slice):
                 K[s] += increment.massFactor * system.Mvij[s]
@@ -910,9 +923,9 @@ class NonlinearImplicitDynamic(NIST):
             reusedMassAndDamping = self._reuseMassAndDamping(system, model)
 
         if reusedMassAndDamping is not None:
-            Mvij, damping, M, C = reusedMassAndDamping
+            Mvij, damping, M, C, massByField = reusedMassAndDamping
         else:
-            Mvij, damping, M, C = self._assembleMassAndDamping(model, dynamicDofs, dynamicFields)
+            Mvij, damping, M, C, massByField = self._assembleMassAndDamping(model, dynamicDofs, dynamicFields)
 
         self._newmarkSystem = _NewmarkSystem(
             dofManager=self.theDofManager,
@@ -924,6 +937,8 @@ class NonlinearImplicitDynamic(NIST):
             M=M,
             C=C,
             MRowBlocks=self._rowBlocks(M, _MASS_ROWS_PER_BLOCK),
+            MRowsPerBlock=_MASS_ROWS_PER_BLOCK,
+            massByField=massByField,
             V=V,
             A=A,
         )
@@ -951,7 +966,7 @@ class NonlinearImplicitDynamic(NIST):
     @performancetiming.timeit("reuse mass and damping")
     def _reuseMassAndDamping(
         self, system: _NewmarkSystem, model: FEModel
-    ) -> tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix] | None:
+    ) -> tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix, dict] | None:
         """The mass and the damping of ``system``, moved into the layout of the current
         :class:`~edelweissfe.numerics.dofmanager.DofManager` without reassembling them -- or None if
         that manager differs from the old one in anything the operators depend on.
@@ -978,10 +993,10 @@ class NonlinearImplicitDynamic(NIST):
 
         Returns
         -------
-        tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix] | None
+        tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix, dict] | None
             The mass as a VIJ value vector of the current manager, the damping's VIJ indices and
-            values (all in the unchanged element slots), and both as CSR matrices -- or None if they
-            have to be reassembled.
+            values (all in the unchanged element slots), both as CSR matrices, and the mass by field
+            (unchanged, as the fields' slots are) -- or None if they have to be reassembled.
         """
 
         old = system.dofManager
@@ -1020,7 +1035,7 @@ class NonlinearImplicitDynamic(NIST):
             2,
         )
 
-        return Mvij, (system.dampingVIJIndices, system.dampingVIJValues), system.M, system.C
+        return Mvij, (system.dampingVIJIndices, system.dampingVIJValues), system.M, system.C, system.massByField
 
     def _conservedQuantities(self, system: _NewmarkSystem, model: FEModel) -> _ConservedQuantities:
         """Total mass, linear momentum and kinetic energy of one Newmark system.
@@ -1057,7 +1072,7 @@ class NonlinearImplicitDynamic(NIST):
         MV = system.massTimes(V)
 
         return _ConservedQuantities(
-            massByField=self._totalMassByField(system.M, system.dofManager, system.dynamicFields, model),
+            massByField=system.massByField,
             momentum=linearMomentum(MV, system.dofManager, system.dynamicFields, model),
             kineticEnergy=0.5 * float(V @ MV),
         )
@@ -1225,10 +1240,10 @@ class NonlinearImplicitDynamic(NIST):
 
         Returns
         -------
-        tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix]
+        tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix, dict]
             The mass as a VIJ value vector, the damping as the VIJ indices and values of its
-            nonzero diagonal entries (see :meth:`_lumpedDampingOfElement`), and the same two as CSR
-            matrices.
+            nonzero diagonal entries (see :meth:`_lumpedDampingOfElement`), the same two as CSR
+            matrices, and each dynamic field's total mass.
 
         Raises
         ------
@@ -1306,14 +1321,15 @@ class NonlinearImplicitDynamic(NIST):
                 )
             )
 
-        for fieldName, totalMass in self._totalMassByField(M, self.theDofManager, dynamicFields, model).items():
+        massByField = self._totalMassByField(M, self.theDofManager, dynamicFields, model)
+        for fieldName, totalMass in massByField.items():
             self.journal.message(
                 "consistent mass assembled: field '{:}' carries a total mass of {:e}".format(fieldName, totalMass),
                 self.identification,
                 2,
             )
 
-        return Mvij, (dampingVIJIndices, dampingVIJValues), M, C
+        return Mvij, (dampingVIJIndices, dampingVIJValues), M, C, massByField
 
     def _lumpedDampingOfElement(self, el) -> tuple[np.ndarray, np.ndarray]:
         """The lumped (diagonal) damping one element reports, placed on the diagonal of its own

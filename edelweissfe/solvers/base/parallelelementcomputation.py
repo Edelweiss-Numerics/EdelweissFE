@@ -33,9 +33,8 @@ import numpy as np
 from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.numerics.parallelizationutilities import (
     chunked_iterable,
-    getNumberOfThreads,
+    getNumberOfWorkerThreads,
     getThreadPool,
-    isFreeThreadingSupported,
 )
 from edelweissfe.timesteppers.timestep import TimeStep
 
@@ -90,7 +89,7 @@ def computeElementsInParallel(
             Ke = K[element]
             element.computeKernels(Ke, Pe, Ue, dUe, time, dT)
 
-    numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
+    numThreads = getNumberOfWorkerThreads()
 
     if numThreads == 1:
         # avoid ThreadPoolExecutor/task dispatch overhead when there is nothing to parallelize
@@ -278,7 +277,7 @@ def computeElementsInParallelForExplicit(
 
         return chunk_psi
 
-    numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
+    numThreads = getNumberOfWorkerThreads()
 
     # Many small chunks per thread rather than one large one each, because the elements are not
     # equally expensive: a quadrature point that is yielding or damaging pays for a return mapping

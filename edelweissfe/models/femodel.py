@@ -42,9 +42,8 @@ from edelweissfe.models.modelchange import TopologyRecord
 from edelweissfe.models.topologypipeline import TopologyPipeline
 from edelweissfe.numerics.parallelizationutilities import (
     chunked_iterable,
-    getNumberOfThreads,
+    getNumberOfWorkerThreads,
     getThreadPool,
-    isFreeThreadingSupported,
 )
 from edelweissfe.utils.checkpoint import readRestartDataInto, writeRestartDataOf
 from edelweissfe.utils.exceptions import RestartError, TopologyError
@@ -446,7 +445,7 @@ class FEModel:
         """
 
         elements = self.elements
-        numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
+        numThreads = getNumberOfWorkerThreads()
 
         if numThreads == 1 or len(elements) < numThreads:
             for element in elements.values():

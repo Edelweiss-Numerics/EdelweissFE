@@ -73,6 +73,20 @@ def getNumberOfThreads() -> int:
     return max(1, num_workers)
 
 
+def getNumberOfWorkerThreads() -> int:
+    """The number of threads a parallel computation on the thread pool runs with:
+    :func:`getNumberOfThreads` if free threading is available, else 1 -- without free threading the
+    workers would only take turns on the GIL, so the work runs serially in the calling thread.
+
+    Returns
+    -------
+    int
+        The number of worker threads, at least 1.
+    """
+
+    return getNumberOfThreads() if isFreeThreadingSupported() else 1
+
+
 def getNumberOfAvailableCpus() -> int:
     """Get the number of CPUs this process is actually permitted to run on.
 
@@ -190,7 +204,7 @@ def forEachSliceInParallel(work, length: int, sliceLength: int = 1 << 20):
     """
 
     slices = [slice(start, min(start + sliceLength, length)) for start in range(0, length, sliceLength)]
-    numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
+    numThreads = getNumberOfWorkerThreads()
 
     if numThreads == 1 or len(slices) <= 1:
         for s in slices:
