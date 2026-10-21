@@ -200,6 +200,7 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.phenomena import carriesLinearMomentum
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
+from edelweissfe.numerics.parallelizationutilities import forEachSliceInParallel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.conservationchecks import (
     CONSERVATION_TOLERANCE,
@@ -704,11 +705,15 @@ class NonlinearImplicitDynamic(NIST):
 
         # The effective tangent K + M / (beta dT^2) + gamma C / (beta dT). Same VIJ layout as K, so
         # it is an entry-wise sum, before the parent's CSR conversion, MPC condensation and
-        # Dirichlet row replacement. Note that `a * M` forms a temporary VIJ-length vector for the
-        # duration of this line; it is not kept. The damping is diagonal and touches only its few
-        # nonzero slots.
+        # Dirichlet row replacement. On a large model that sum runs over a billion entries, so the
+        # mass is added slice by slice on the thread pool, which also keeps the temporary `a * M` as
+        # short as a slice. The damping is diagonal and touches only its few nonzero slots.
         with performancetiming.timeit("effective tangent"):
-            K += increment.massFactor * np.asarray(system.Mvij)
+
+            def addScaledMass(s: slice):
+                K[s] += increment.massFactor * system.Mvij[s]
+
+            forEachSliceInParallel(addScaledMass, len(K))
             K[system.dampingVIJIndices] += increment.dampingFactor * system.dampingVIJValues
 
     @performancetiming.timeit("finalize increment")
