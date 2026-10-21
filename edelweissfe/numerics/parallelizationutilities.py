@@ -164,3 +164,38 @@ def chunked_iterable(iterable, size):
         if not chunk:
             break
         yield chunk
+
+
+def forEachSliceInParallel(work, length: int, sliceLength: int = 1 << 20):
+    """Call ``work(s)`` for consecutive slices ``s`` that together cover ``range(length)``, on the
+    persistent thread pool.
+
+    Meant for the simple array operations on arrays as long as the system matrix -- zeroing it,
+    adding a scaled mass matrix to it -- which numpy runs on a single thread, and which on a large
+    model take seconds per Newton iteration that way. Every call works on its own part of the
+    arrays, so the result is bitwise the one of the same operation on the whole array. Short slices
+    keep the temporaries of an expression like ``K[s] += a * M[s]`` small.
+
+    Runs serially in the calling thread if free threading is not available or the array fits into
+    one slice.
+
+    Parameters
+    ----------
+    work
+        Called once per slice, with a :class:`slice` of ``range(length)``.
+    length
+        The length of the arrays ``work`` operates on.
+    sliceLength
+        The length of the slices; the last one may be shorter.
+    """
+
+    slices = [slice(start, min(start + sliceLength, length)) for start in range(0, length, sliceLength)]
+    numThreads = getNumberOfThreads() if isFreeThreadingSupported() else 1
+
+    if numThreads == 1 or len(slices) <= 1:
+        for s in slices:
+            work(s)
+        return
+
+    # list() waits for every slice, and re-raises the first exception of any of them.
+    list(getThreadPool(numThreads).map(work, slices))

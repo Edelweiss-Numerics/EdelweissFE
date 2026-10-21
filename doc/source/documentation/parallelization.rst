@@ -13,6 +13,15 @@ However, it is RECOMMENDED to enforce a fixed number of threads by running
 
 This ensures that the same number of threads ``XX`` is employed both in EdelweissFE as well as in the underlying Intel MKL (e.g., if the PARDISO linear solver is used).
 
+Array operations on the thread pool
+-----------------------------------
+
+The same thread pool also runs the simple array operations on arrays as long as the system matrix
+(zeroing it before the element loop, adding the scaled mass matrix to it), which numpy alone runs
+on a single thread. :func:`~edelweissfe.numerics.parallelizationutilities.forEachSliceInParallel`
+splits such an operation into slices of the arrays, one call per slice; the result is bitwise the
+serial one.
+
 .. _parallelization_thread_pinning:
 
 Do not set ``OMP_PROC_BIND`` or ``OMP_PLACES``
