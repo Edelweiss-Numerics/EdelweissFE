@@ -423,6 +423,12 @@ cdef class MarmotElementWrapper:
         self.marmotElement.computeInternalEnergy(internalEnergy)
         return internalEnergy
 
+    def computeEnergyGradients(self, double[::1] dElasticEnergy_dQ, double[::1] dDissipation_dQ):
+        """Gradients of the elastic energy and the dissipation wrt the element's dofs (in the element's dof order),
+        for the state of the last computeKernels call."""
+
+        self.marmotElement.computeEnergyGradients(&dElasticEnergy_dQ[0], &dDissipation_dQ[0])
+
     def acceptLastState(self, ):
         """Accept the computed state (in nonlinear iteration schemes)."""
 

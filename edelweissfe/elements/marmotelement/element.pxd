@@ -152,6 +152,9 @@ cdef extern from "Marmot/MarmotElement.h":
 
         void computeInternalEnergy(double& internalEnergy)
 
+        # invalid_argument if the material provides no energy tangents -> ValueError
+        void computeEnergyGradients(double* dElasticEnergy_dQ, double* dDissipation_dQ) except +ValueError
+
         StateView getStateView(const string& stateName, int gaussPt)
 
         vector[vector[string]] getNodeFields()
