@@ -307,7 +307,8 @@ def test_restart_replay_is_timed_in_its_own_table(tmp_path, performanceTableRows
 
 def test_restart_without_topology_history_prints_no_restore_table(tmp_path, performanceTableRows):
     """A checkpoint without a topology history replays nothing, so there is nothing to report before
-    the resumed step: no table of only "sum of the above: 0 s" and a 100 % unaccounted share."""
+    the resumed step: no table of a no-op refresh, "sum of the above: 0 s" and a 100 % unaccounted
+    share."""
 
     checkpointBaseName = tmp_path / "ckpt"
     truncatedPath = tmp_path / "truncated.inp"
