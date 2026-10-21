@@ -302,8 +302,8 @@ class _NewmarkSystem:
     M, C
         The mass and the damping as CSR matrices, for the residual's matrix-vector products.
     MRowBlocks
-        ``M`` in blocks of :data:`_MASS_ROWS_PER_BLOCK` consecutive rows, sharing its arrays, which
-        compute the inertia forces on the thread pool; see :meth:`NonlinearImplicitDynamic._rowBlocks`.
+        ``M`` in blocks of :data:`_MASS_ROWS_PER_BLOCK` consecutive rows, sharing its arrays, for the
+        products with the mass on the thread pool (:meth:`massTimes`).
     V, A
         The velocity and acceleration at the last converged increment.
     """
@@ -319,6 +319,19 @@ class _NewmarkSystem:
     MRowBlocks: list
     V: DofVector
     A: DofVector
+
+    def massTimes(self, vector) -> np.ndarray:
+        """``M @ vector``, one row block of :attr:`MRowBlocks` per call on the thread pool -- bitwise
+        the product with the whole of ``M`` (see :meth:`NonlinearImplicitDynamic._rowBlocks`)."""
+
+        vector = np.asarray(vector)
+        product = np.empty_like(vector)
+
+        def multiplyRows(rows: slice):
+            product[rows] = self.MRowBlocks[rows.start // _MASS_ROWS_PER_BLOCK] @ vector
+
+        forEachSliceInParallel(multiplyRows, len(product), _MASS_ROWS_PER_BLOCK)
+        return product
 
 
 @dataclass
@@ -701,15 +714,8 @@ class NonlinearImplicitDynamic(NIST):
             )
 
         with performancetiming.timeit("inertia and damping forces"):
-            A_np = np.asarray(increment.A_np)
-            PInertia = np.empty_like(A_np)
-
-            def computeInertiaForcesOfRows(rows: slice):
-                PInertia[rows] = system.MRowBlocks[rows.start // _MASS_ROWS_PER_BLOCK] @ A_np
-
-            # M @ A_np, one row block per call -- bitwise the same, see _rowBlocks. The damping is
-            # diagonal, so C @ V_np costs next to nothing.
-            forEachSliceInParallel(computeInertiaForcesOfRows, len(PInertia), _MASS_ROWS_PER_BLOCK)
+            # The damping is diagonal, so C @ V_np costs next to nothing.
+            PInertia = system.massTimes(increment.A_np)
             PDamping = system.C @ np.asarray(increment.V_np)
 
             R -= PInertia
@@ -753,11 +759,11 @@ class NonlinearImplicitDynamic(NIST):
         system.A[:] = increment.A_np
         self._writeVelocityAndAccelerationToNodeFields(system, model)
 
-        kineticEnergy = 0.5 * float(np.dot(np.asarray(system.V), system.M @ np.asarray(system.V)))
-        self.journal.message("kinetic energy {:e}".format(kineticEnergy), self.identification, 2)
-
         # What a topology change before the next increment is compared against.
         self._conservedAtLastAccept = self._conservedQuantities(system, model)
+        self.journal.message(
+            "kinetic energy {:e}".format(self._conservedAtLastAccept.kineticEnergy), self.identification, 2
+        )
 
     @staticmethod
     def _newmarkVelocityAndAcceleration(
@@ -1048,7 +1054,7 @@ class NonlinearImplicitDynamic(NIST):
         """
 
         V = np.asarray(system.V)
-        MV = np.asarray(system.M @ V)
+        MV = system.massTimes(V)
 
         return _ConservedQuantities(
             massByField=self._totalMassByField(system.M, system.dofManager, system.dynamicFields, model),

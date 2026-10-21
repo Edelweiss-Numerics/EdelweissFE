@@ -23,9 +23,9 @@ splits such an operation into slices of the arrays, one call per slice; the resu
 serial one.
 
 SciPy's sparse matrix-vector product is single-threaded as well, so the implicit dynamic solvers
-compute their inertia forces, the mass matrix times the acceleration, the same way: one call per
-block of consecutive rows of the mass matrix, each block a CSR matrix sharing the mass matrix' arrays,
-and each row summed exactly as in the product with the whole matrix.
+multiply by the mass matrix (the inertia forces, the momentum and the kinetic energy) the same way:
+one call per block of consecutive rows of the mass matrix, each block a CSR matrix sharing the mass
+matrix' arrays, and each row summed exactly as in the product with the whole matrix.
 
 .. _parallelization_thread_pinning:
 
