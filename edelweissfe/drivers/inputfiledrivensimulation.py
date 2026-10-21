@@ -49,6 +49,7 @@ from edelweissfe.helpers.inputfilehelpers import (
 )
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel, printPrettyModelSummary
+from edelweissfe.utils import performancetiming
 from edelweissfe.utils.checkpoint import ResumeCheckpoint
 from edelweissfe.utils.exceptions import RestartError, StepFailed
 from edelweissfe.utils.fieldoutput import FieldOutputController
@@ -171,7 +172,9 @@ def finiteElementSimulation(
     if restartDefinitions and restartDefinitions[0].get("readFrom"):
         resumeCheckpoint = ResumeCheckpoint(restartDefinitions[0]["readFrom"])
         resumeStepNumber = resumeCheckpoint.stepNumber
+        tic = getCurrentTime()
         resumeCheckpoint.restoreModel(model, journal)
+        restoreTime = getCurrentTime() - tic
         journal.message(
             "Resuming from restart checkpoint {:} (step {:}, time {:})".format(
                 resumeCheckpoint.fileName, resumeStepNumber, model.time
@@ -179,6 +182,13 @@ def finiteElementSimulation(
             identification,
             0,
         )
+        # Restoring replays the checkpoint's topology history, and the AMR calls of that replay are
+        # timed. A step's performance table starts its wall clock at the beginning of the step, so the
+        # replay is reported here, in a table of its own, and the timers start the step from zero.
+        # Otherwise the resumed step's table counts the replay in its rows but not in its wall clock,
+        # and its "unaccounted" share is off by the whole replay -- far below zero on a large refined model.
+        journal.printPrettyTable(performancetiming.makePrettyTable(wallTime=restoreTime), identification)
+        performancetiming.reset()
 
     plotter = createPlotterFromInputFile(inputfile, journal)
     stepManager = createStepManagerFromInputFile(inputfile)

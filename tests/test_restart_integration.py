@@ -60,6 +60,7 @@ import numpy as np
 import pytest
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
+from edelweissfe.utils import performancetiming
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 
@@ -236,6 +237,43 @@ def test_restart_resume_matches_uninterrupted_reference_with_amr(tmp_path):
     assert set(resumedModel.elements.keys()) == set(referenceModel.elements.keys())
     assert set(resumedModel.nodes.keys()) == set(referenceModel.nodes.keys())
     np.testing.assert_allclose(resumedU, referenceU, atol=1e-10)
+
+
+def test_restart_replay_is_timed_in_its_own_table(tmp_path, monkeypatch):
+    """A resumed run replays the checkpoint's AMR history before the step starts, and those AMR calls
+    are timed. They are reported in a table of their own, and the step's table starts from zero: left
+    in it, they would be counted in its rows but not in its wall clock, which starts with the step."""
+
+    checkpointBaseName = tmp_path / "ckpt"
+    truncatedPath = tmp_path / "truncated.inp"
+    truncatedPath.write_text(
+        _AMR_MATERIAL_AND_MESH + f"\n*output, type=restart, name=restartwriter\n"
+        f"writeInterval=1, baseName={checkpointBaseName}, numberOfFilesToKeep=3\n" + _amrStep(maxNumInc=6)
+    )
+    assert len(_runInputFile(truncatedPath).elements) > 1, "truncated too early: refinement had not happened yet"
+    checkpoint = _mostRecentCheckpoint(tmp_path)
+
+    # The row names of every performance table printed by the resumed run, in order.
+    tables = []
+    makePrettyTable = performancetiming.makePrettyTable
+
+    def recordingMakePrettyTable(*args, **kwargs):
+        table = makePrettyTable(*args, **kwargs)
+        tables.append([row[0] for row in table.rows])
+        return table
+
+    monkeypatch.setattr(performancetiming, "makePrettyTable", recordingMakePrettyTable)
+
+    resumePath = tmp_path / "resume.inp"
+    resumePath.write_text(_AMR_MATERIAL_AND_MESH + f"\n*restart, readFrom={checkpoint}\n" + _amrStep(maxNumInc=10000))
+    _runInputFile(resumePath)
+
+    restoreTable, stepTable = tables[0], tables[-1]
+    assert len(tables) == 2
+    # The replay: AMR at the top level, with the refinement it applied.
+    assert "AMR" in restoreTable and " materialize" in restoreTable
+    # In the step, AMR runs only inside the topology update, never at the top level.
+    assert "topology update" in stepTable and "AMR" not in stepTable
 
 
 def test_restart_ensight_output_continues_across_resume(tmp_path):
