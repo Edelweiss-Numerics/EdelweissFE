@@ -42,6 +42,7 @@ from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
+from edelweissfe.numerics.parallelizationutilities import forEachSliceInParallel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.convergencecriteria import (
     AbaqusConvergenceCriterion,
@@ -793,7 +794,9 @@ class NIST(NonlinearSolverBase):
                 U_np[:] = U_n
                 U_np += dU
 
-                P[:] = K[:] = F[:] = FConstraints[:] = PExt[:] = 0.0
+                P[:] = F[:] = FConstraints[:] = PExt[:] = 0.0
+                # K holds the entries of all element matrices, far too many to zero on a single thread
+                forEachSliceInParallel(lambda s: K[s].fill(0.0), len(K))
 
             P, K, F = self.computeElements(elements, U_np, dU, P, K, F, timeStep)
             PExt, K = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_np, PExt, K, timeStep)

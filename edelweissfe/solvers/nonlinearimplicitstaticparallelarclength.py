@@ -38,6 +38,7 @@ import numpy as np
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
+from edelweissfe.numerics.parallelizationutilities import forEachSliceInParallel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstaticparallel import NISTParallel
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
@@ -304,7 +305,13 @@ class NISTPArcLength(NISTParallel):
                 U_np[:] = U_n
                 U_np += dU
 
-                P[:] = K[:] = F[:] = FConstraints[:] = P_0[:] = P_f[:] = K_f[:] = K_0[:] = 0.0
+                P[:] = F[:] = FConstraints[:] = P_0[:] = P_f[:] = 0.0
+
+                # the tangents hold the entries of all element matrices, far too many to zero on a single thread
+                def zeroTangents(s):
+                    K[s] = K_f[s] = K_0[s] = 0.0
+
+                forEachSliceInParallel(zeroTangents, len(K))
 
             P, K, F = self.computeElements(model.elements, U_np, dU, P, K, F, timeStep)
             P, K = self.assembleConstraints(model.constraints, U_np, dU, P, K, timeStep, FConstraints)
