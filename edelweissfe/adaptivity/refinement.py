@@ -229,6 +229,9 @@ class AdaptiveMesh:
         self.rootEntities = RootEntityTable(self.topology, self.latticeUnits)
         #: result of _nodesOnElementBoundaries for the current active mesh; reset by every change
         self._boundaryNodesCache = None
+        #: (point in an element's box, its edge length, entity) -> verified hanging-node weights; valid
+        #: for the lifetime of the mesh, as they depend on nothing else
+        self._traceWeightsOf = {}
 
     # ---- topological containers ----
     def define_element_set(self, name, eids):
@@ -600,7 +603,9 @@ class AdaptiveMesh:
         such elements, the coarsest, which guarantees continuity with the coarsest trace. Its weights are
         the master element's own shape functions at the node's exact reference point, which on that edge
         or face are non-zero only for the entity's nodes: the exact coarse trace, on curved and warped
-        elements alike. They are verified in exact arithmetic before use.
+        elements alike. They are verified in exact arithmetic before use. Rational arithmetic is slow, but
+        the weights depend only on the node's point in the master's box and the entity, and an octree has
+        few distinct such pairs: each is computed and verified once.
         """
         best = {}  # slave -> (dimension, level, eid, pointInElement, kind, entity)
         for eid, label, pointInElement in self._nodesOnElementBoundaries():
@@ -616,10 +621,13 @@ class AdaptiveMesh:
         hanging = []
         for label, (_, _, eid, pointInElement, kind, entity) in sorted(best.items()):
             e = self.elements[eid]
-            xi = tuple(Fraction(2 * v, e["referenceBoxEdgeLength"]) - 1 for v in pointInElement)
-            exactWeights = self.topology.shape_functions_exact(*xi)
-            self._verifyTraceWeights(label, eid, xi, entity, exactWeights)
-            weights = np.array([float(exactWeights[i]) for i in entity])
+            key = (pointInElement, e["referenceBoxEdgeLength"], entity)
+            if key not in self._traceWeightsOf:
+                xi = tuple(Fraction(2 * v, e["referenceBoxEdgeLength"]) - 1 for v in pointInElement)
+                exactWeights = self.topology.shape_functions_exact(*xi)
+                self._verifyTraceWeights(label, eid, xi, entity, exactWeights)
+                self._traceWeightsOf[key] = tuple(float(exactWeights[i]) for i in entity)
+            weights = np.array(self._traceWeightsOf[key])
             hanging.append(HangingNode(label, kind, [e["conn"][i] for i in entity], weights))
         return hanging
 
