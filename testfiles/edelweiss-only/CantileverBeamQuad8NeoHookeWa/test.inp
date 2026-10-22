@@ -1,5 +1,5 @@
-*material, name=neohookewa, id=neohookewa, provider=edelweiss
-91304.34783, 100000.
+*material, name=neohooke, id=neohookewa, provider=edelweiss
+1, 91304.34783, 100000.
 
 *section, name=section1, thickness=40.0, material=neohookewa, type=plane
 all

@@ -32,8 +32,8 @@ The material properties for materials using the ``*material`` keyword are assign
 .. code-block:: edelweiss
     :caption: Use different non-advanced materials. Example:
 
-    *material, name=neohookewaplastic, id=Mat1, provider=edelweissmaterial
-    91304.34783, 100000., 260, 70, 320, 9
+    *material, name=neohookeplastic, id=Mat1, provider=edelweissmaterial
+    1, 91304.34783, 100000., 260, 70, 320, 9
 
 Arguments for the ``*advancedmaterial`` keyword are
 
@@ -96,14 +96,9 @@ Relevant module: ``edelweissfe.materials``
     * - ``vonmises``
       - Von Mises material.
       - ``*material``
-    * - ``neohookewa``
-      - Neo-Hookean Pence-Gou formulation 'a' material.
-      - ``*material``
-    * - ``neohookewb``
-      - Neo-Hookean Pence-Gou formulation 'b' material.
-      - ``*material``
-    * - ``neohookewc``
-      - Neo-Hookean Pence-Gou formulation 'c' material.
+    * - ``neohooke``
+      - Neo-Hookean Pence-Gou material; the first material property selects the formulation
+        (1='a', 2='b', 3='c').
       - ``*material``
     * - ``hyperelasticadvanced``
       - Hyperelastic material with advanced defined energy density function using I1 and J.
@@ -111,14 +106,9 @@ Relevant module: ``edelweissfe.materials``
     * - ``hyperelasticadvancedi2extended``
       - Hyperelastic material with advanced defined energy density function using I1, I2, J and C itself.
       - ``*advancedmaterial``
-    * - ``neohookewaplastic``
-      - Neo-Hookean Pence-Gou formulation 'a' material with J2 plasticity.
-      - ``*material``
-    * - ``neohookewbplastic``
-      - Neo-Hookean Pence-Gou formulation 'b' material with J2 plasticity.
-      - ``*material``
-    * - ``neohookewcplastic``
-      - Neo-Hookean Pence-Gou formulation 'c' material with J2 plasticity.
+    * - ``neohookeplastic``
+      - Neo-Hookean Pence-Gou material with J2 plasticity; the first material property selects
+        the formulation (1='a', 2='b', 3='c').
       - ``*material``
     * - ``hyperplasticadvanced``
       - Hyperelastic-plastic material with advanced defined energy density function using I1 and J.
@@ -202,12 +192,13 @@ and :math:`\mathbf{s}` as the deviatoric stress.
 
 Elastic Neo-Hookean W(I1, J) Pence-Gou [a] materials
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-These materials need the following parameters as input data in the correct order:
+This material needs the following parameters as input data in the correct order:
 
+#. **formulation** - Selects the energy density function: 1 for :math:`W_a`, 2 for :math:`W_b`, 3 for :math:`W_c` (see below).
 #. :math:`\mu`       - Shear modulus.
 #. :math:`\kappa`    - Bulk modulus.
 
-These materials base on a energy density function :math:`W(I_1, J)`, where :math:`I_1=\text{trace}(\mathbf{b})` is the first
+This material bases on a energy density function :math:`W(I_1, J)`, where :math:`I_1=\text{trace}(\mathbf{b})` is the first
 and :math:`J=\det(\mathbf{F})` is the second invariant of the left Cauchy-Green tensor :math:`\mathbf{b}=\mathbf{FF}^\text{T}`
 with the deformation gradient :math:`\mathbf{F}`, the Kirchhoff stress is then:
 
@@ -235,8 +226,6 @@ and the tangent modulus is
 .. math::
    C^{\tau \text{F}}_{ijkL} = \mu\frac{\partial b_{ij}}{\partial F_{kL}} + \left(\kappa - \frac{2\mu}{3}\right) (2J^2-J) \delta_{ij} (F^{-1})_{Lk}.
 
-.. autoclass:: edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial
-   :members:
 
 The :math:`\mathbf{W_b}` **material** is defined by
 
@@ -254,8 +243,6 @@ and the tangent modulus is
    C^{\tau \text{F}}_{ijkL} = \frac{\mu}{J^{2/3}}\frac{\partial b_{ij}}{\partial F_{kL}} - \frac{2\mu}{3J^{2/3}} b_{ij} (F^{-1})_{Lk} -
    \frac{2\mu}{3J^{2/3}}\delta_{ij} F_{kL} + \left[ \frac{2\mu I_1}{9 J^{2/3}} + \frac{\kappa}{2} \left( J^2 + \frac{1}{J^2} \right) \right] \delta_{ij}\left(F^{-1}\right)_{Lk}.
 
-.. autoclass:: edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial
-   :members:
 
 The :math:`\mathbf{W_c}` **material** is defined by
 
@@ -272,7 +259,7 @@ and the tangent modulus is
 .. math::
    C^{\tau \text{F}}_{ijkL} = \mu\frac{\partial b_{ij}}{\partial F_{kL}} + J^{\frac{2}{3}-\frac{\kappa}{\mu}}\left(\kappa - \frac{2\mu}{3}\right) \delta_{ij} (F^{-1})_{Lk}.
 
-.. autoclass:: edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial
+.. autoclass:: edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial
    :members:
 
 Advanced hyperelastic materials
@@ -337,6 +324,7 @@ These materials use the same hyperelastic formulations as for the :ref:`Elastic 
 the spatial Hencky-strain :math:`\mathbf{e}` and the same yield and hardening functions as for the :ref:`Von Mises material` added onto them.
 This material needs the following material properties in the correct order:
 
+#. **formulation**               - Selects the energy density function: 1 for :math:`W_a`, 2 for :math:`W_b`, 3 for :math:`W_c`.
 #. :math:`\mathbf{\mu}`          - Shear modulus.
 #. :math:`\mathbf{\kappa}`       - Bulk modulus.
 #. :math:`\mathbf{f_{y0}}`       - Yield stress.
@@ -353,13 +341,7 @@ These three material formulations solve for the residual:
 
 and give back the Kirchhoff stress and its corresponding tangent modulus. The full algorithm for these materials can be found in [b], chapter 14.
 
-.. autoclass:: edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial
-   :members:
-
-.. autoclass:: edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial
-   :members:
-
-.. autoclass:: edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial
+.. autoclass:: edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial
    :members:
 
 Advanced hyperelastic-plastic material

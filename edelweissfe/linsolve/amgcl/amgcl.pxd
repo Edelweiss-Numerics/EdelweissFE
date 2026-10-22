@@ -24,9 +24,15 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+from libcpp.string cimport string
+
+
 cdef extern from "amgcl-wrapper.hpp":
-    cdef cppclass LinearSolver:
-        LinearSolver(const char* json_params) except +
+    # The interface every AMGCL solver backend implements (scalar or B x B blocks, double or float):
+    # the matrix values and rhs/x are always double at this boundary, each backend converts
+    # internally -- see AMGCLSolverInterface. On a block backend set_nullspace() takes the translations
+    # only, one diagonal block per node (see amgcl-block-translations.hpp).
+    cdef cppclass AMGCLSolverInterface:
         void solve(int n,
                    const int* ptr,
                    const int* col,
@@ -35,3 +41,76 @@ cdef extern from "amgcl-wrapper.hpp":
                    double* x,
                    int& iters,
                    double& error) except +
+        void set_nullspace(const double* B, int rows, int cols) except +
+        void build(int n, const int* ptr, const int* col, const double* val) except +
+        void applyPreconditioner(int n, const double* rhs, double* x) except +
+        string report() except +
+
+    # The backend for a block size (1, 2 or 3) and value type (float: builtin<float> for scalars,
+    # 3x3 blocks set up in double and stored in float), owned by the caller.
+    AMGCLSolverInterface* makeAMGCLSolver(const char* json_params, int blockSize, bint isFloat) except +
+
+    # blockamg's equilibrated, field-split system As = D A D: the outer Krylov operator, the
+    # coupling blocks between fields and, on demand, the diagonal blocks -- built in one threaded
+    # pass, see EquilibratedSystemT's own comment.
+    cdef cppclass EquilibratedSystem:
+        EquilibratedSystem() except +
+
+        @staticmethod
+        void absoluteDiagonal(int n, const int* ptr, const int* col, const double* val, double* out) except +
+        void build(int n, const int* ptr, const int* col, const double* val, const double* scaling,
+                   int nFields, const int* fieldBounds, bint unscaled) except +
+        int diagonalBlockSize(int f) except +
+        int diagonalBlockNnz(int f) except +
+        void fillDiagonalBlock(int f, int* ptr, int* col, double* val) except +
+        void matvec(const double* x, double* y, bint unscaled) except +
+        void residual(const double* rhs, const double* x, double* r, bint unscaled) except +
+        void couplingMatvec(int f, int g, const double* x, double* y) except +
+        void diagonalBlockMatvec(int f, const double* x, double* y) except +
+
+    # Callback signature bridging AMGCL's native lgmres Krylov loop back into a Python-level
+    # preconditioner -- see amgcl-wrapper.hpp's own comment on PyPrecondApplyFn/
+    # PyLGMRESPrecondT for why this is a bare function pointer + opaque context rather than a
+    # Cython-overridden C++ virtual method.
+    ctypedef int (*PyPrecondApplyFn)(void* ctx, int n, const double* rhs, double* x)
+
+    # AMGCL's own native outer Krylov solve, in place of scipy.sparse.linalg.gmres; one instance per
+    # system size, no augmentation vectors carried across calls -- see LGMRESOuterSolverT.
+    cdef cppclass LGMRESOuterSolver:
+        LGMRESOuterSolver(int n, const char* json_params) except +
+        void solve(const EquilibratedSystem& system,
+                   const double* rhs,
+                   double* x,
+                   double tol,
+                   int maxiter,
+                   PyPrecondApplyFn applyFn,
+                   void* ctx,
+                   int& iters,
+                   double& error,
+                   bint onUnscaledOperator) except +
+
+    # The p-two-grid (P1) preconditioner of edelweissfe/linsolve/blockamg/ptwogrid.py, built and
+    # applied entirely in C++ (OpenMP) -- see PTwoGridPreconditionerT's own comment.
+    cdef cppclass PTwoGridPreconditioner:
+        PTwoGridPreconditioner(const char* json_params) except +
+
+        @staticmethod
+        void dirichletRowMask(int n, const int* ptr, const int* col, const double* val, char* isDirichlet) except +
+        void build(int n, const int* ptr, const int* col, const double* val,
+                   int nNodes, const signed char* isCorner, const int* edgeEndpoints,
+                   const double* nullspace, int nullspaceRows, int nullspaceCols,
+                   double spectralRadius, const double* dominantVector, int dominantVectorSize) except +
+        void apply(int n, const double* r, double* x) except +
+        double fineSpectralRadius()
+        int fineSpectralRadiusSource()
+        int fineDominantVectorSize()
+        void copyFineDominantVector(double* out)
+        int nCoarseFree()
+        string report() except +
+        double setupDirichletAndPSeconds_
+        double setupGalerkinSeconds_
+        double setupCoarseSeconds_
+        double setupFineOperatorSeconds_
+        double setupSpectralRadiusSeconds_
+        double applyFineSeconds_
+        double applyCoarseSeconds_

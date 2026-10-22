@@ -26,8 +26,9 @@
 #  ---------------------------------------------------------------------
 
 import inspect
+import threading
 from collections import defaultdict
-from time import time
+from time import perf_counter
 
 from prettytable import PrettyTable
 
@@ -46,7 +47,7 @@ class _PerformanceTimerBranch(defaultdict):
         """
         Start measuring time.
         """
-        self._tic = time()
+        self._tic = perf_counter()
         self.calls += 1
 
     def toc(
@@ -55,15 +56,91 @@ class _PerformanceTimerBranch(defaultdict):
         """
         Stop measuring time.
         """
-        self.time += time() - self._tic
+        self.time += perf_counter() - self._tic
 
     def get_snapshot(self) -> dict:
         """Returns a nested dictionary of the current accumulated times."""
         return {"time": self.time, "calls": self.calls, "children": {k: v.get_snapshot() for k, v in self.items()}}
 
 
-times = _PerformanceTimerBranch()
-"""The global dictionary of measured computations times."""
+class _ThreadLocalState(threading.local):
+    """Every thread gets its own independent root branch and its own current-stack-position pointer.
+
+    Under free-threading (PYTHON_GIL=0), :class:`~edelweissfe.solvers.base.parallelelementcomputation`
+    genuinely runs Python bytecode from multiple OS threads concurrently (a real thread pool, not just
+    native OpenMP workers that never touch Python state) -- and any of those worker threads may enter a
+    ``timeit``-decorated/wrapped call. A single *shared* "current stack position" pointer and shared
+    per-category accumulator nodes (the previous design) is not just unprotected, it is not a
+    thread-safe design at all: two threads swapping the same shared pointer in ``__enter__``/``__exit__``
+    can each observe the other's write, corrupting *which* node the surrounding stack frame resumes at,
+    and two threads calling ``tic()``/``toc()`` on the very same shared node race on ``self._tic``,
+    whichever calls second overwriting the first's start time before its own ``toc()`` reads it back --
+    this is what produced the wildly inflated per-category ``acc. runtime`` figures (a "GMRES: 340s"
+    reading on a run whose total wall-clock was 80s) recorded as a known gotcha before this fix.
+
+    The correct fix is not a lock around the existing shared state (that would only serialize what is
+    supposed to be genuinely parallel element computation) -- it is to give each thread its own,
+    entirely independent tree, so no thread ever observes another thread's mutation of ``_tic``/``.time``
+    /the stack pointer. Trees are only ever combined by :func:`_mergedSnapshot`, which reads (not
+    mutates) each thread's already-accumulated snapshot -- safe because a thread's own tree is only
+    ever mutated by that same thread.
+    """
+
+    def __init__(self):
+        self.root = _PerformanceTimerBranch()
+        self.stack = self.root
+        self.registered = False
+
+
+_threadLocalState = _ThreadLocalState()
+
+_allRoots: list[_PerformanceTimerBranch] = []
+"""Every thread's own root branch that has ever recorded anything, for :func:`_mergedSnapshot`."""
+_allRootsLock = threading.Lock()
+"""Guards *only* the append to :data:`_allRoots` -- registration happens once per thread, never on the
+per-call tic()/toc()/stack-swap hot path this whole fix exists to keep lock-free."""
+
+
+def _currentThreadRoot() -> _PerformanceTimerBranch:
+    """The calling thread's own root branch, registering it (once) in :data:`_allRoots` first if this
+    is that thread's first call into this module."""
+    if not _threadLocalState.registered:
+        with _allRootsLock:
+            _allRoots.append(_threadLocalState.root)
+        _threadLocalState.registered = True
+    return _threadLocalState.root
+
+
+def _mergeInto(dst: dict, src: dict) -> None:
+    """Recursively accumulate src's time/calls/children into dst, in place."""
+    dst["time"] += src["time"]
+    dst["calls"] += src["calls"]
+    for name, childSnapshot in src["children"].items():
+        if name not in dst["children"]:
+            dst["children"][name] = {"time": 0.0, "calls": 0, "children": {}}
+        _mergeInto(dst["children"][name], childSnapshot)
+
+
+def _mergedSnapshot() -> dict:
+    """The combined snapshot across every thread that has ever recorded a measurement, summed by
+    category name at every nesting level -- the multi-threaded equivalent of the old single shared
+    ``times`` tree's own :meth:`_PerformanceTimerBranch.get_snapshot`.
+
+    Quiescent-point requirement (found on review, not yet exploitable by any call site in this
+    codebase): this reads every registered thread's tree without a lock. Safe as long as no other
+    thread is still actively timing something when this is called -- true today, since every call
+    site (:func:`makePrettyTable`, :func:`extractIncrementTimes`, :func:`reset`) runs only after
+    joining whatever thread pool did the work being reported on, never concurrently with it. Adding
+    per-node locking to make this safe under genuinely concurrent reporting too would reintroduce
+    exactly the lock contention on the hot tic()/toc() path this module's whole redesign exists to
+    avoid, for a usage pattern nothing here currently needs.
+    """
+    with _allRootsLock:
+        roots = list(_allRoots)
+    merged = {"time": 0.0, "calls": 0, "children": {}}
+    for root in roots:
+        _mergeInto(merged, root.get_snapshot())
+    return merged
 
 
 class timeit:
@@ -75,26 +152,42 @@ class timeit:
     ----------
     category
         The category for storing the measured time.
-    """
 
-    _currentStackLevel = times
+    Thread-safety note (found on review): the *decorator* form (``@timeit(...)``) constructs exactly
+    one ``timeit`` instance at decoration time, and every call to the decorated function reuses the
+    same ``wrapper`` closure over that one instance -- so anything stored on ``self`` here would be
+    shared and racy across concurrent or recursive calls to the same decorated function, exactly the
+    class of bug this module's thread-local redesign exists to eliminate. ``wrapper`` therefore keeps
+    its "what do I restore the stack to" bookkeeping in a plain local variable, not on ``self`` --
+    safe by construction, since every call gets its own Python stack frame regardless of which thread
+    or how many concurrent/recursive calls are in flight. The *context-manager* form (``with
+    timeit(...):``) cannot do the same (``__enter__``/``__exit__`` are separate calls needing to share
+    state across them) -- every call site in this codebase already constructs a fresh instance per
+    ``with`` block, which is enough in practice, but ``self._parentStackLevel`` is kept in a
+    per-instance ``threading.local()`` regardless, so even a ``with`` block built from a *shared,
+    reused* ``timeit`` instance stays correct if used across multiple threads.
+    """
 
     def __init__(self, category: str):
         self._category = category
-        self._parentStackLevel = None
+        self._local = threading.local()
 
     def __call__(self, theFunction):
+        category = self._category
+
         def wrapper(*args, **kwargs):
-            self._parentStackLevel = timeit._currentStackLevel
-            timer = timeit._currentStackLevel[self._category]
-            timeit._currentStackLevel = timer
+            _currentThreadRoot()  # idempotent registration; cheap after the first call on this thread
+            state = _threadLocalState
+            parentStackLevel = state.stack  # a plain local, not self.* -- see the class docstring
+            timer = state.stack[category]
+            state.stack = timer
 
             timer.tic()
             try:
                 return theFunction(*args, **kwargs)
             finally:
                 timer.toc()
-                timeit._currentStackLevel = self._parentStackLevel
+                state.stack = parentStackLevel
 
         wrapper.__doc__ = theFunction.__doc__
         wrapper.__module__ = theFunction.__module__
@@ -102,14 +195,28 @@ class timeit:
 
         return wrapper
 
+    def __enter__(self):
+        _currentThreadRoot()  # idempotent registration; cheap after the first call on this thread
+        state = _threadLocalState
+        self._local.parentStackLevel = state.stack
+        timer = state.stack[self._category]
+        state.stack = timer
+        timer.tic()
+        return self
 
-def _makeTable(branch: _PerformanceTimerBranch, level: int, maxLevels: int) -> list[tuple]:
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        _threadLocalState.stack.toc()
+        _threadLocalState.stack = self._local.parentStackLevel
+
+
+def _makeTable(branch: dict, level: int, maxLevels: int) -> list[tuple]:
     """Recursive function for creating a table of the measured times.
 
     Parameters
     ----------
     branch
-        The current active branch.
+        The current active branch, as a :meth:`_PerformanceTimerBranch.get_snapshot`-shaped dict
+        (``{"time": ..., "calls": ..., "children": {name: dict, ...}}``).
     levels
         The current level.
     maxLevels
@@ -121,55 +228,108 @@ def _makeTable(branch: _PerformanceTimerBranch, level: int, maxLevels: int) -> l
         The table in list format containing columns as tuples."""
 
     table = []
-    for k, v in branch.items():
-        table.append((level, k, v.time, v.calls))
-        if level < maxLevels and len(v):
+    for k, v in branch["children"].items():
+        table.append((level, k, v["time"], v["calls"]))
+        if level < maxLevels and v["children"]:
             table += _makeTable(v, level + 1, maxLevels)
 
     return table
 
 
-def makePrettyTable(maxLevels: int = 4) -> PrettyTable:
-    """Create a pretty formatted table of the measured times.
+def makePrettyTable(maxLevels: int = 4, wallTime: float = None) -> PrettyTable:
+    """Create a pretty formatted table of the measured times, merged across every thread that has
+    recorded a measurement.
 
     Parameters
     ----------
     maxLevels
         The maximum number of stack levels considered in the table.
+    wallTime
+        The wall-clock time the timed work actually took, measured by the caller. If given, the
+        shares are relative to it, and a wall-clock row plus the share left unaccounted by the
+        top-level categories are appended. Otherwise the shares are relative to the sum of the
+        top-level categories, which is always printed as the one absolute time in the table.
+
+        The difference row is the point of the parameter. Without it a reader adds up the categories
+        and takes the total for the whole run, which it is not: only what somebody thought to
+        decorate is in this table, and code that runs between the timed calls appears nowhere. On the
+        explicit anchor pry-out run this was 21.3 % of the step -- 19 766 s of 92 978 s, spent almost
+        entirely in one undecorated call -- and the table gave no hint that anything was missing.
+        Whatever is left over is not necessarily a defect, but it is a number that has to be *seen*
+        before it can be judged.
 
     Returns
     -------
     PrettyTable
         The table in pretty format."""
 
-    theTable = _makeTable(times, 0, maxLevels)
+    theTable = _makeTable(_mergedSnapshot(), 0, maxLevels)
+
+    # Top level only: the nested rows are already counted inside their parents, so summing every
+    # row would double-count everything below level 0.
+    timed = sum(t for level, _, t, _ in theTable if level == 0)
+    # Every share is relative to the same reference -- the wall clock if it is known, otherwise
+    # what was timed -- so nested rows read directly as a fraction of the whole run, not of their
+    # parent.
+    reference = wallTime if wallTime is not None else timed
+
+    def share(t: float) -> str:
+        return "{:.2f}%".format(t / reference * 100.0 if reference > 0.0 else 0.0)
 
     prettytable = PrettyTable()
-    prettytable.field_names = ["function", "acc. runtime", "calls"]
+    prettytable.field_names = ["function", "share", "calls", "time/call"]
     prettytable.align = "l"
+    # Keeps the narrow numeric columns from being squeezed when the journal fits the table to its width.
+    prettytable.max_width["function"] = 46
 
     for level, cat, t, calls in theTable:
+        t_per_call = t / calls if calls > 0 else 0.0
         prettytable.add_row(
             (
                 "{:}{:}".format(" " * level, cat),
-                "{:}{:10.4E}s".format(" " * level, t),
+                share(t),
                 calls,
+                "{:.5f}s".format(t_per_call),
             )
         )
+
+    prettytable.add_row(("=" * 24, "", "", ""))
+    prettytable.add_row(("sum of the above: {:.5f}s".format(timed), "", "", ""))
+    if wallTime is not None:
+        prettytable.add_row(("wall clock: {:.5f}s".format(wallTime), "", "", ""))
+        prettytable.add_row(("unaccounted", share(wallTime - timed), "", ""))
 
     return prettytable
 
 
-def extractIncrementTimes(maxLevels: int = 4) -> PrettyTable:
+def extractIncrementTimeRows(maxLevels: int = 4, skipUnused: bool = False) -> list[tuple[int, str, float, int]]:
     """
-    Returns a PrettyTable of the time elapsed since the last time
-    this function was called, while keeping global 'times' intact.
+    Returns the time elapsed since the last time this function was called, as
+    ``(level, function, time, calls)`` rows, while keeping the accumulated totals intact.
+
+    **Consuming this is destructive**: it advances the snapshot the next delta is measured
+    against, so a caller that needs the same increment's times in more than one place (printed
+    *and* written to a file, say) must call this once and share the rows -- a second call
+    within the same increment reports zeros. :func:`makeIncrementTimesPrettyTable` turns the
+    rows into the printable table for exactly that reason.
+
+    Parameters
+    ----------
+    maxLevels
+        The maximum number of stack levels considered.
+    skipUnused
+        Omit categories that were not entered at all during the interval. Off by default so the
+        table keeps a stable set of rows between reports. Turn it on where the table is printed
+        repeatedly during a run: a category that did not run shows as ``0.00000s`` against real
+        numbers, which reads as "this was free" rather than "this did not happen".
+
+    Returns
+    -------
+    list[tuple[int, str, float, int]]
+        One ``(level, function, time, calls)`` row per timed category, parents before children.
     """
 
-    if not hasattr(extractIncrementTimes, "_last_snapshot") or extractIncrementTimes._last_snapshot is None:
-        extractIncrementTimes._last_snapshot = None
-
-    current_state = times.get_snapshot()
+    current_state = _mergedSnapshot()
 
     def compute_delta(curr, last):
         last_t = last["time"] if last else 0.0
@@ -185,30 +345,69 @@ def extractIncrementTimes(maxLevels: int = 4) -> PrettyTable:
 
         return {"time": delta_t, "calls": delta_c, "children": children_deltas}
 
-    delta_tree = compute_delta(current_state, extractIncrementTimes._last_snapshot)
-    extractIncrementTimes._last_snapshot = current_state
+    delta_tree = compute_delta(current_state, extractIncrementTimeRows._last_snapshot)
+    extractIncrementTimeRows._last_snapshot = current_state
 
     def flatten_delta(node, level):
         rows = []
         for name, data in node["children"]:
+            if skipUnused and data["calls"] == 0:
+                # Its children cannot have been entered either, so the whole subtree goes.
+                continue
             rows.append((level, name, data["time"], data["calls"]))
             if level < maxLevels and data["children"]:
                 rows += flatten_delta(data, level + 1)
         return rows
 
-    delta_rows = flatten_delta(delta_tree, 0)
+    return flatten_delta(delta_tree, 0)
+
+
+extractIncrementTimeRows._last_snapshot = None
+
+
+def makeIncrementTimesPrettyTable(rows: list[tuple[int, str, float, int]]) -> PrettyTable:
+    """Create a pretty formatted table from :func:`extractIncrementTimeRows` rows.
+
+    Parameters
+    ----------
+    rows
+        The ``(level, function, time, calls)`` rows to format.
+
+    Returns
+    -------
+    PrettyTable
+        The table in pretty format.
+    """
 
     prettytable = PrettyTable()
-    prettytable.field_names = ["function", "inc. runtime", "calls"]
+    prettytable.field_names = ["function", "inc. runtime", "calls", "time/call"]
     prettytable.align = "l"
-    for level, cat, t, calls in delta_rows:
-        prettytable.add_row([" " * level + cat, "{:}{:10.4E}s".format(" " * level, t), calls])
+    for level, cat, t, calls in rows:
+        t_per_call = t / calls if calls > 0 else 0.0
+        prettytable.add_row([" " * level + cat, "{:.5f}s".format(t), calls, "{:.5f}s".format(t_per_call)])
 
     return prettytable
 
 
+def extractIncrementTimes(maxLevels: int = 4, skipUnused: bool = False) -> PrettyTable:
+    """
+    Returns a PrettyTable of the time elapsed since the last time
+    this function was called, while keeping the accumulated totals intact.
+
+    Convenience composition of :func:`extractIncrementTimeRows` and
+    :func:`makeIncrementTimesPrettyTable`, and destructive for the same reason: use those two
+    directly whenever the rows are needed for anything besides printing.
+    """
+
+    return makeIncrementTimesPrettyTable(extractIncrementTimeRows(maxLevels, skipUnused))
+
+
 def reset():
-    """Reset all measured times."""
-    global times
-    times.clear()
-    extractIncrementTimes._last_snapshot = None
+    """Reset all measured times, on every thread that has ever recorded one."""
+    with _allRootsLock:
+        roots = list(_allRoots)
+    for root in roots:
+        root.clear()
+        root.time = 0.0
+        root.calls = 0
+    extractIncrementTimeRows._last_snapshot = None

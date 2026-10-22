@@ -1,0 +1,29 @@
+** Finite-strain gradient-enhanced damage: GradientEnhancedFiniteStrainDisplacementElement (GCPE8UL, plane strain)
+** with Marmot's GradientEnhancedCompressibleNeoHookeDamage reference material.
+**
+** A strip is pulled to 2 % nominal strain, twenty times the damage threshold kappa0, so that the solution crosses
+** from the undamaged neo-Hookean response into damage driven by the nonlocal field and the full coupled
+** (displacement, nonlocal damage) tangent is exercised: the reaction force peaks in the first increment and softens
+** from 14.6 to 1.8, while the nonlocal field grows to 2.1e-2. The nonlocal field has natural boundary conditions only.
+*material, name=GradientEnhancedCompressibleNeoHookeDamage, id=geDamage
+**K,    G,    kappa0, kappaF, l,   rho
+3500, 1500,   1e-3,   1e-2,   2.0, 1.0
+
+*section, name=section1, thickness=1.0, material=geDamage, type=plane
+all
+
+*job, name=gejob, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=planeRectQuad, name=gen
+x0=0, l=20
+y0=0, h=4
+elType=GCPE8UL
+nX=10
+nY=2
+
+*step, solver=theSolver
+maxInc=1e-1, minInc=1e-4, maxNumInc=1000, maxIter=25, stepLength=1
+>>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0
+>>dirichlet, name=fix, nSet=gen_leftBottom, field=displacement, 2=0
+>>dirichlet, name=right, nSet=gen_right, field=displacement, 1=0.4

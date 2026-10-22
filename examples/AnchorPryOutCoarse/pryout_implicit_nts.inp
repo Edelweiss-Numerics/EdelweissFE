@@ -1,0 +1,28 @@
+**=================================================================================================
+** BONDED ANCHOR PRY-OUT  --  implicit static (NISTParallel), node-to-surface contact
+**=================================================================================================
+** One of four variants of the same model. See README.md for what the example is and how to run it.
+**
+**     pryout_implicit_nts.inp    implicit static  + node-to-surface contact
+**     pryout_implicit_gpts.inp   implicit static  + Gauss-point-to-segment contact
+**     pryout_explicit_nts.inp    explicit dynamic + node-to-surface contact
+**     pryout_explicit_gpts.inp   explicit dynamic + Gauss-point-to-segment contact
+**
+** Everything the four have in common lives in the shared includes below, so a variant is only the
+** four lines that make it that variant. All four ramp the fixture plate to the SAME 1.5 mm, so they
+** are comparable at equal load rather than at equal time.
+**
+**   edelweissfe pryout_implicit_nts.inp
+**
+** and then, once all four have run:
+**
+**   python plot_damage_comparison.py
+**=================================================================================================
+*include, input=./materials_implicit.inc
+*include, input=./model.inc
+*include, input=./contact_nts.inc
+*include, input=./adaptivity.inc
+*include, input=./outputs.inc
+*include, input=./steps_implicit.inc
+
+*job, name=pryOut, domain=3d

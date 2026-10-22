@@ -1,0 +1,62 @@
+** Live (mid-run) h-adaptivity under the Newmark-beta implicit dynamic solver (NID).
+**
+** A short bar of two C3D20R, fixed at x = 0 and pulled at x = L, refined TWICE while the run is in
+** flight: the marker is a live (initialOnly=False) nodeSet marker on the fixed end, so only what
+** touches that end is refined and the 2:1 interface carries hanging-node multi-point constraints --
+** the Newmark residual, the effective tangent and the acceleration re-solve all go through the MPC
+** condensation here, which a uniform refinement would never exercise.
+**
+** maxLevel=2 is what makes this a genuine MID-FLIGHT test rather than a start-of-step one. The time
+** stepper yields a zero-length increment before the first real one, and that increment consumes the
+** modifier's initial-call latch -- so a live marker first fires on the first REAL increment, which
+** is also where the solver first builds its Newmark system. That first event is therefore
+** indistinguishable from a step start. The SECOND pass, one increment later, is the case this deck
+** is about: the velocity and acceleration are non-zero by then, they are carried onto the new nodes
+** by the node-field warm start (hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES), the mass is
+** reassembled on the refined mesh, and the acceleration is re-solved from equilibrium because an
+** interpolated one is not in equilibrium with that mass. Watch for the solver's own
+** "Topology change: ..." line -- it asserts the total mass and reports momentum and kinetic energy.
+**
+** The exactness checks (a velocity field of degree at most one reproduced to round-off on every new
+** node; mass, momentum and kinetic energy conserved to round-off in that case) and the regression
+** that a two-step NON-adaptive deck is unchanged by any of this live in tests/test_nid_amr.py.
+** This deck pins the solution itself.
+
+*material, name=LinearElastic, id=bar
+**E        nu   density
+20000.0,   0.0, 2.0e-3
+
+*section, name=section1, material=bar, type=solid
+gen_all
+
+*job, name=nidLiveAmrJob, domain=3d
+*solver, solver=NID, name=theSolver
+newmarkBeta=0.25
+newmarkGamma=0.5
+
+*modelGenerator, generator=boxGen, name=gen
+nX      =2
+nY      =1
+nZ      =1
+lX      =4.0
+lY      =1.0
+lZ      =1.0
+elType  =C3D20R
+
+*modelModifier, type=hAdaptivity, name=amrLive
+>>marker, type=nodeSet, nSet=gen_left, initialOnly=False
+refineElSet=gen_all
+maxLevel=2
+
+*fieldOutput
+>>perNode, elSet=gen_all, field=displacement, result=U, name=displacement
+>>perNode, nSet=gen_right, field=displacement, result=V, name=tipV, f(x)='np.mean(x[:,0])', saveHistory=True
+
+*output, type=monitor, name=monitor
+fieldOutput=tipV
+
+*step, solver=theSolver
+stepLength=1.0, startInc=0.1, maxInc=0.1, minInc=1e-6, maxNumInc=5, maxIter=25
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=fixedEnd, nSet=gen_left, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=pull, nSet=gen_right, field=displacement, 1=0.02

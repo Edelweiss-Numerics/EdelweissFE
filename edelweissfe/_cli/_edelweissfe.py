@@ -38,14 +38,15 @@ import warnings
 import matplotlib
 import numpy as np
 
+from edelweissfe.config import registry
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
-from edelweissfe.utils.inputfileparser import (
-    inputLanguage,
-    parseInputFile,
-    printKeywords,
-)
-from edelweissfe.utils.inputlanguage import keywordIdentifier
+from edelweissfe.utils.inputfileparser import keywordIdentifier, parseInputFile
 from edelweissfe.utils.printdocumentation import printDocumentation
+from edelweissfe.utils.schema import datalineFieldMeta
+from edelweissfe.utils.schemasurface import (
+    renderPrintKeywordsBlock,
+    specFromKeywordClass,
+)
 
 warnings.simplefilter("always", DeprecationWarning)
 
@@ -85,7 +86,10 @@ def main():
         exit(0)
 
     if args.kw:
-        printKeywords()
+        for keywordName in registry.availableNames("keyword"):
+            keywordClass, _schema = registry.lookup("keyword", keywordName)
+            print(renderPrintKeywordsBlock(specFromKeywordClass(keywordClass)))
+            print("\n")
         exit(0)
 
     if args.doc:
@@ -101,9 +105,11 @@ def main():
     for file in fileList:
         inputFile = parseInputFile(file)
         for keyword, definitions in inputFile.items():  # check if datalines are given where required
-            kw = inputLanguage[keyword]
+            _, keywordSchema = registry.lookup("keyword", keyword)
+            datalineMeta = datalineFieldMeta(keywordSchema) if keywordSchema is not None else None
+            expectsRequiredDatalines = datalineMeta is not None and datalineMeta.required
             for definition in definitions:
-                if kw.expectsRequiredDatalines:
+                if expectsRequiredDatalines:
                     if not definition["datalines"]:
                         raise ValueError(
                             f"Error during parsing of keyword {keywordIdentifier}{keyword}: No datalines given. {keywordIdentifier}{keyword} expects data lines."

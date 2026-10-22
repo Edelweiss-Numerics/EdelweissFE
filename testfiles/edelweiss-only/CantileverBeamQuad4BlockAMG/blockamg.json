@@ -1,0 +1,5 @@
+{
+  "outerTol": 1e-8,
+  "sweeps": 1,
+  "symmetric": true
+}

@@ -30,24 +30,53 @@
 # @author: Matthias Neuner, Paul Hofer
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 import numpy as np
 
 from edelweissfe.sets.elementset import ElementSet
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.math import createFunction
 from edelweissfe.utils.misc import strCaseCmp
+from edelweissfe.utils.schema import OptionSchemaProvider, schemaField
 
 
-class Section(ABC):
+@dataclass(frozen=True)
+class MaterialParameterFromFieldSchema:
+    """One ``>>materialParameterFromField`` block, shared by every section type.
+
+    The update-type option is spelled ``type`` in the input file but the field is named
+    ``parameterUpdateType`` here -- a dataclass field literally called ``type`` would shadow the
+    builtin, which this project's conventions avoid. See ``optionName`` on
+    :func:`~edelweissfe.utils.schema.schemaField`.
+    """
+
+    index: int = schemaField(description="index of material parameter", dtype=int)
+    field: str = schemaField(description="name of analytical field", dtype=str)
+    parameterUpdateType: str = schemaField(description="either 'setToValue' or 'scale'", dtype=str, optionName="type")
+    f_p_f: str = schemaField(
+        description="p...value of parameter from material definition; f...value of analytical field",
+        dtype=str,
+        default="f",
+        optionName="f(p,f)",
+    )
+
+
+@dataclass(frozen=True)
+class WriteMaterialPropertiesToFileSchema:
+    """One ``>>writeMaterialPropertiesToFile`` block, shared by every section type."""
+
+    filename: str = schemaField(description="file name for material property export", dtype=str)
+
+
+class Section(OptionSchemaProvider, ABC):
     def __init__(
         self,
         name,
         model,
         material: dict,
         elementSets: list[ElementSet],
-        materialParameterFromFieldDefs: list[CaseInsensitiveDict],
-        writeMaterialPropertiesToFileDefs: list[CaseInsensitiveDict],
+        materialParameterFromFieldDefs: tuple[MaterialParameterFromFieldSchema, ...] = (),
+        writeMaterialPropertiesToFileDefs: tuple[WriteMaterialPropertiesToFileSchema, ...] = (),
         # expression: Callable = None,
     ):
         self.material = material
@@ -56,15 +85,20 @@ class Section(ABC):
         self.materialParameterFromFieldDefs = materialParameterFromFieldDefs
         self.writeMaterialPropertiesToFileDefs = writeMaterialPropertiesToFileDefs
 
+        # A schema instance is frozen, so the per-definition expression (once compiled from
+        # `f(p,f)`) is kept in a parallel list rather than stashed back onto the definition.
+        self._materialParameterFromFieldExpressions = []
         for definition in materialParameterFromFieldDefs:
             if not any(
-                [strCaseCmp(definition["type"], implementedType) for implementedType in ["setToValue", "scale"]]
+                strCaseCmp(definition.parameterUpdateType, implementedType)
+                for implementedType in ["setToValue", "scale"]
             ):
                 raise ValueError(
-                    f"{name}: {definition['type']} is not a known type; currently available types: 'setToValue', 'scale'"
+                    f"{name}: {definition.parameterUpdateType} is not a known type; currently available "
+                    "types: 'setToValue', 'scale'"
                 )
 
-            definition["expression"] = createFunction(definition["f(p,f)"], "p", "f", model=model)
+            self._materialParameterFromFieldExpressions.append(createFunction(definition.f_p_f, "p", "f", model=model))
 
         if len(self.writeMaterialPropertiesToFileDefs) > 1:
             raise ValueError("Too many definitions for writeMaterialPropertiesToFile")
@@ -72,31 +106,65 @@ class Section(ABC):
         self.writeMaterialPropertiesToFile = False
         for definition in self.writeMaterialPropertiesToFileDefs:
             self.writeMaterialPropertiesToFile = True
-            self.materialPropertiesFileName = definition["filename"]
+            self.materialPropertiesFileName = definition.filename
 
     def assignSectionPropertiesToModel(self, model):
-        if any(self.materialParameterFromFieldDefs):
-            for elSet in self.elSets:
-                for el in elSet:
-                    if isinstance(self.material, dict):  # for marmotmaterial provider
-                        modifiedMaterial = self.material.copy()
-                        modifiedMaterial["properties"] = self.propertiesFromField(el, self.material, model, True)
-                    else:  # for edelweissmaterial provider
-                        materialType = type(self.material)
-                        modifiedProperties = self.propertiesFromField(el, self.material, model, False)
-                        modifiedMaterial = materialType(modifiedProperties)
-                        if hasattr(self.material, "_materialEnergy"):  # for autodiff materials
-                            modifiedMaterial.setEnergyFunction(self.material._materialEnergy)
-                    self.assignSectionPropertiesToElement(el, material=modifiedMaterial)
-        else:
-            for elSet in self.elSets:
-                for el in elSet:
-                    self.assignSectionPropertiesToElement(el)
+        for elSet in self.elSets:
+            for el in elSet:
+                self.assignSectionToElement(el, model)
 
         if self.writeMaterialPropertiesToFile:
             self.exportMaterialPropertiesToFile(self.elSets)
 
         return model
+
+    def assignSectionToElement(self, element, model):
+        """Assign this section, including its material, to a single element.
+
+        This is the one entry point for every element of this section: the elements of the initial
+        mesh as well as elements created later, e.g., by mesh refinement. The material is evaluated
+        at the element's position (see :meth:`materialAtElement`), so an element gets the same
+        material no matter when or how it was created.
+
+        Parameters
+        ----------
+        element
+            The element.
+        model
+            The model, which holds the analytical fields used by ``materialParameterFromField``.
+        """
+        self.assignSectionPropertiesToElement(element, material=self.materialAtElement(element, model))
+
+    def materialAtElement(self, element, model):
+        """The material of this section at an element, including ``materialParameterFromField``.
+
+        Without any ``materialParameterFromField`` definition, this is the nominal material of the
+        section. Otherwise, a new material is created, with its parameters modified by the
+        analytical fields evaluated at the element center.
+
+        Parameters
+        ----------
+        element
+            The element.
+        model
+            The model, which holds the analytical fields.
+
+        Returns
+        -------
+        The material to be assigned to the element.
+        """
+        if not self.materialParameterFromFieldDefs:
+            return self.material
+
+        if isinstance(self.material, dict):  # for marmotmaterial provider
+            modifiedMaterial = self.material.copy()
+            modifiedMaterial["properties"] = self.propertiesFromField(element, self.material, model, True)
+        else:  # for edelweissmaterial provider
+            materialType = type(self.material)
+            modifiedProperties = self.propertiesFromField(element, self.material, model, False)
+            modifiedMaterial = materialType(modifiedProperties)
+
+        return modifiedMaterial
 
     @abstractmethod
     def assignSectionPropertiesToElement(self, element, material):
@@ -107,14 +175,16 @@ class Section(ABC):
         materialProperties = np.copy(material["properties"]) if isMarmotMaterial else material.materialProperties.copy()
         isCustomMaterial = isinstance(materialProperties, dict)
 
-        for definition in self.materialParameterFromFieldDefs:
-            index = int(definition["index"]) if not isCustomMaterial else definition["index"]
-            fieldValue = model.analyticalFields[definition["field"]].evaluateAtCoordinates(coordinatesAtCenter)[0][0]
+        for definition, expression in zip(
+            self.materialParameterFromFieldDefs, self._materialParameterFromFieldExpressions
+        ):
+            index = int(definition.index) if not isCustomMaterial else definition.index
+            fieldValue = model.analyticalFields[definition.field].evaluateAtCoordinates(coordinatesAtCenter)[0][0]
             parameterValue = materialProperties[index]
-            if strCaseCmp(definition["type"], "setToValue"):
-                materialProperties[index] = definition["expression"](parameterValue, fieldValue)
-            elif strCaseCmp(definition["type"], "scale"):
-                materialProperties[index] *= definition["expression"](parameterValue, fieldValue)
+            if strCaseCmp(definition.parameterUpdateType, "setToValue"):
+                materialProperties[index] = expression(parameterValue, fieldValue)
+            elif strCaseCmp(definition.parameterUpdateType, "scale"):
+                materialProperties[index] *= expression(parameterValue, fieldValue)
 
         return materialProperties
 

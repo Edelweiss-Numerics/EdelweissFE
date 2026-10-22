@@ -1,0 +1,127 @@
+** toy pull-out (anchorage-shaped benchmark): a vertical shaft sandwiched between two blocks.
+** step 1 presses both blocks laterally onto the shaft (closing the 0.02 gaps, then confining);
+** step 2 pulls the shaft upward against friction on both interfaces. During steady sliding the
+** pull reaction equals mu times the total confinement normal force: RFPull / (2 * RFConfine)
+** = mu = 0.4. Exercises TWO simultaneous frictional contact constraints with opposing normals.
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+1.8e4, 0.3
+
+*job, name=pulloutjob, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=boxGen, name=blockL
+nX      =2
+nY      =2
+nZ      =2
+x0      =0
+y0      =0
+z0      =0
+lX      =1
+lY      =1
+lZ      =1
+elProvider =edelweiss
+elType  =C3D8
+
+*modelGenerator, generator=boxGen, name=blockR
+nX      =2
+nY      =2
+nZ      =2
+x0      =1.44
+y0      =0
+z0      =0
+lX      =1
+lY      =1
+lZ      =1
+elProvider =edelweiss
+elType  =C3D8
+
+** the shaft: slender in x, running the full height in y (the pull direction), sticking out on top.
+** z0 is deliberately offset by a small, non-round amount (not 0): with z0=0 the shaft and both
+** blocks share identical z0/lZ/nZ, so their facet triangulations land on exactly the same z
+** coordinates. That exact alignment puts one slave node's closest-point projection on a razor-edge
+** tie between two adjacent facets (equal to ~1e-9 out of ~6e-3, i.e. better than 1 part in a
+** million) -- ordinary floating-point non-associativity (e.g. a different OMP_NUM_THREADS taking a
+** different parallel-reduction order through assembly) is then enough to flip which facet wins,
+** producing a discrete, thread-count-dependent divergence in the reference comparison. Breaking the
+** alignment removes the tie itself rather than papering over its sensitivity. Do not "clean up" this
+** offset back to a round number.
+*modelGenerator, generator=boxGen, name=shaft
+nX      =1
+nY      =3
+nZ      =2
+x0      =1.02
+y0      =0
+z0      =0.0037
+lX      =0.4
+lY      =1.5
+lZ      =1
+elProvider =edelweiss
+elType  =C3D8
+
+** interfaces: blockL right face (Xmax=5) <-> shaft left face (Xmin=3);
+**             blockR left face (Xmin=3) <-> shaft right face (Xmax=5)
+*modelGenerator, generator=surfaceElementGenerator, name=gen1
+surface = shaft_left
+name    = shaftLeftSurf
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen2
+surface = blockL_right
+name    = blockLRightSurf
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen3
+surface = shaft_right
+name    = shaftRightSurf
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen4
+surface = blockR_left
+name    = blockRLeftSurf
+
+*section, name=section1, material=linearelastic, type=solid
+blockL_all
+blockR_all
+shaft_all
+
+*constraint, name=contactL, type=nodeToDeformableSurfacePenalty
+slaveSurface=shaftLeftSurf_facets, masterSurface=blockLRightSurf_facets, penalty=3e7,
+type=quadratic, searchDistance=1.0, sliding=small, mu=0.4, tangentPenalty=3e5
+
+*constraint, name=contactR, type=nodeToDeformableSurfacePenalty
+slaveSurface=shaftRightSurf_facets, masterSurface=blockRLeftSurf_facets, penalty=3e7,
+type=quadratic, searchDistance=1.0, sliding=small, mu=0.4, tangentPenalty=3e5
+
+*fieldOutput
+>>perNode, elSet=shaft_all, field=displacement, result=U, name=dispShaft
+>>perNode, elSet=blockL_all, field=displacement, result=U, name=dispBlockL
+>>perNode, elSet=blockR_all, field=displacement, result=U, name=dispBlockR
+>>perNode, name=RFPull,    nSet=shaft_top,    field=displacement, result=P, f(x)='sum(x[:,1])', saveHistory=True
+>>perNode, name=RFConfine, nSet=blockL_left,  field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=True
+
+*output, type=monitor, name=monitor
+fieldOutput=RFPull
+fieldOutput=RFConfine
+
+** step 1: lateral confinement -- both blocks pressed onto the shaft
+*step, solver=theSolver
+maxInc=0.34, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=confL, nSet=blockL_left,  field=displacement, 1=0.05,  2=0.0, 3=0.0
+>>dirichlet, name=confR, nSet=blockR_right, field=displacement, 1=-0.05, 2=0.0, 3=0.0
+>>dirichlet, name=holdL, nSet=blockL_bottom, field=displacement, 2=0.0
+>>dirichlet, name=holdR, nSet=blockR_bottom, field=displacement, 2=0.0
+>>dirichlet, name=holdShaft, nSet=shaft_top, field=displacement, 1=0.0, 2=0.0, 3=0.0
+** the shaft's top is torsionally locked (X,Z=0 above) but its bottom is otherwise only resisted by
+** the shaft's own (poor, single-element-wide) torsional stiffness and friction -- a genuine,
+** near-zero-stiffness rigid-rotation-about-Y mode. Not needed for determinism given the z0 offset
+** above, but pinning it costs nothing physically and removes a second, independent spurious mode.
+>>dirichlet, name=antiTorsion, nSet=shaft_bottom, field=displacement, 3=0.0
+
+** step 2: pull the shaft upward against the friction of both confined interfaces
+*step, solver=theSolver
+maxInc=0.1, minInc=1e-6, maxNumInc=400, maxIter=25, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=confL, nSet=blockL_left,  field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=confR, nSet=blockR_right, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=holdL, nSet=blockL_bottom, field=displacement, 2=0.0
+>>dirichlet, name=holdR, nSet=blockR_bottom, field=displacement, 2=0.0
+>>dirichlet, name=holdShaft, nSet=shaft_top, field=displacement, 1=0.0, 2=0.3, 3=0.0
+>>dirichlet, name=antiTorsion, nSet=shaft_bottom, field=displacement, 3=0.0
