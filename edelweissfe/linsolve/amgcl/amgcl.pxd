@@ -28,10 +28,8 @@ from libcpp.string cimport string
 
 
 cdef extern from "amgcl-wrapper.hpp":
-    # The interface every AMGCL solver backend implements (scalar or B x B blocks, double or float):
-    # the matrix values and rhs/x are always double at this boundary, each backend converts
-    # internally -- see AMGCLSolverInterface. On a block backend set_nullspace() takes the translations
-    # only, one diagonal block per node (see amgcl-block-translations.hpp).
+    # The interface of every AMGCL solver backend (scalar or block, double or float); values are double
+    # at this boundary. On a block backend set_nullspace() takes the translations only.
     cdef cppclass AMGCLSolverInterface:
         void solve(int n,
                    const int* ptr,
@@ -50,9 +48,7 @@ cdef extern from "amgcl-wrapper.hpp":
     # 3x3 blocks set up in double and stored in float), owned by the caller.
     AMGCLSolverInterface* makeAMGCLSolver(const char* json_params, int blockSize, bint isFloat) except +
 
-    # blockamg's equilibrated, field-split system As = D A D: the outer Krylov operator, the
-    # coupling blocks between fields and, on demand, the diagonal blocks -- built in one threaded
-    # pass, see EquilibratedSystemT's own comment.
+    # blockamg's equilibrated, field-split system As = D A D; see EquilibratedSystemT.
     cdef cppclass EquilibratedSystem:
         EquilibratedSystem() except +
 
@@ -68,14 +64,10 @@ cdef extern from "amgcl-wrapper.hpp":
         void couplingMatvec(int f, int g, const double* x, double* y) except +
         void diagonalBlockMatvec(int f, const double* x, double* y) except +
 
-    # Callback signature bridging AMGCL's native lgmres Krylov loop back into a Python-level
-    # preconditioner -- see amgcl-wrapper.hpp's own comment on PyPrecondApplyFn/
-    # PyLGMRESPrecondT for why this is a bare function pointer + opaque context rather than a
-    # Cython-overridden C++ virtual method.
+    # Callback from AMGCL's native lgmres loop into a Python-level preconditioner; see PyLGMRESPrecondT.
     ctypedef int (*PyPrecondApplyFn)(void* ctx, int n, const double* rhs, double* x)
 
-    # AMGCL's own native outer Krylov solve, in place of scipy.sparse.linalg.gmres; one instance per
-    # system size, no augmentation vectors carried across calls -- see LGMRESOuterSolverT.
+    # AMGCL's native outer Krylov solve; one instance per system size; see LGMRESOuterSolverT.
     cdef cppclass LGMRESOuterSolver:
         LGMRESOuterSolver(int n, const char* json_params) except +
         void solve(const EquilibratedSystem& system,
@@ -89,8 +81,7 @@ cdef extern from "amgcl-wrapper.hpp":
                    double& error,
                    bint onUnscaledOperator) except +
 
-    # The p-two-grid (P1) preconditioner of edelweissfe/linsolve/blockamg/ptwogrid.py, built and
-    # applied entirely in C++ (OpenMP) -- see PTwoGridPreconditionerT's own comment.
+    # The p-two-grid (P1) preconditioner of blockamg/ptwogrid.py, in C++; see PTwoGridPreconditionerT.
     cdef cppclass PTwoGridPreconditioner:
         PTwoGridPreconditioner(const char* json_params) except +
 

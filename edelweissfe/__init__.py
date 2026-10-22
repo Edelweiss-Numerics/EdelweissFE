@@ -32,9 +32,8 @@ import pathlib
 import sys
 
 if sys.platform == "win32":
-    # Since Python 3.8, Windows resolves the DLLs that extension modules depend on without looking at PATH. Make
-    # Marmot.dll findable for the Marmot-backed extensions: from the Marmot installation they were built against,
-    # recorded by setup.py -- not from the runtime environment, which may hold a different Marmot build.
+    # Windows ignores PATH for extension DLLs: make Marmot.dll findable, from the Marmot installation the
+    # extensions were built against (recorded by setup.py).
     _marmotInstallDirFile = pathlib.Path(__file__).parent / "marmot_install_dir.txt"
     if _marmotInstallDirFile.is_file():
         _marmotDllDir = pathlib.Path(_marmotInstallDirFile.read_text(encoding="utf-8").strip()) / "bin"

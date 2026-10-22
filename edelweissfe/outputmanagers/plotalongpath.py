@@ -134,9 +134,7 @@ class OutputManager(OutputManagerBase):
         normalize = configuration.normalize
         label = configuration.label
 
-        # A falsy "f(x)" (i.e. None or "") is treated as "no transform requested" and substituted
-        # with the identity expression "x", rather than passed on to createMathExpression as-is.
-        # A schema default of "x" alone would not reproduce this for an explicitly-empty value.
+        # A missing or empty "f(x)" means the identity.
         fx = configuration.f_x
         if not fx:
             fx = "x"

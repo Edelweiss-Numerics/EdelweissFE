@@ -34,9 +34,7 @@ this is for.
 
 from collections.abc import Callable, Mapping
 
-#: How many dumps are written when the configuration does not say. One contiguous Newton sequence is
-#: the smallest useful capture (a single system cannot answer any sequential question), and six
-#: iterations is a typical increment of a converging nonlinear analysis.
+#: Default number of dumps: about one Newton sequence of a typical increment.
 _DEFAULT_MAX_DUMPS = 6
 
 
@@ -84,9 +82,8 @@ def createSolver(opts) -> Callable:
         ``(A, b) -> x``.
     """
 
-    # Imported inside the function body to match every other factory in this package: `getLinSolver`
-    # is imported here rather than at module scope because `config.linsolve` imports the registry,
-    # and the registry is what resolves *this* module -- a module-scope import would close that loop.
+    # Imported here to avoid a circular import: `config.linsolve` imports the registry, which resolves
+    # this module.
     from edelweissfe.config.linsolve import getLinSolverByName
     from edelweissfe.linsolve.matrixdump.matrixdump import MatrixDumpSolver
 

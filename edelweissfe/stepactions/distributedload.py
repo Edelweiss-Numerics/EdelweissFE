@@ -249,9 +249,7 @@ class StepAction(DistributedLoadBase):
         definition = CaseInsensitiveDict(withoutParserBookkeepingKeys(definition))
         definition.pop("name", None)
 
-        # A full re-declaration restates ``surface``. It is structural, not an option of the schema,
-        # and the load stays on the surface it was created on, so a re-declaration may only name
-        # that same surface.
+        # a full re-declaration restates ``surface``, which must be the surface the load was created on
         surfaceName = definition.pop("surface", None)
         if surfaceName is not None and model.surfaces[surfaceName] is not self._surface:
             raise ValueError(

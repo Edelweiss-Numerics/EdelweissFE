@@ -77,9 +77,7 @@ def createSolver(opts) -> Callable:
         If the optional ``mumps`` dependency is not installed -- raised here, at construction time
         (matching the pre-refactor behaviour), not deferred to the first solve.
     """
-    # Imported inside the function body, not at module scope: the `mumps` bindings are an optional
-    # dependency, so at module scope their absence would break anyone who merely resolves a
-    # `linsolver` registry name rather than this one.
+    # Imported lazily: the `mumps` bindings are an optional dependency.
     from edelweissfe.linsolve.mumps.mumps import mumpsSolve
 
     return MumpsSolver(mumpsSolve)

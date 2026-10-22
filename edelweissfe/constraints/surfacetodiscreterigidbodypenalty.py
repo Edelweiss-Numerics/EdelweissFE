@@ -240,8 +240,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self.nQuadraturePoints = configuration.nQuadraturePoints
         self.searchDistance = configuration.searchDistance
 
-        # Validates the rigid surface (closed, triangles only, no zero-area triangles) right away,
-        # rather than at the first contact search.
+        # Validates the rigid surface (closed, triangles only, no zero-area triangles).
         self._rigidTriangles, self._rigidTriangleNormals = rigidBody.referenceTriangles()
 
         self._buildFromSlaveSurface(slaveSurface)
@@ -364,17 +363,13 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
         candidatesPerPoint = closestFacetCandidates(bodyFramePoints, list(self._rigidTriangles), self.searchDistance)
 
-        # Beyond an edge or a vertex, several triangles share the same (clamped) closest point. Of
-        # those, the one whose plane the point lies farthest in front of measures the gap correctly;
-        # any other would support the point by its infinite plane where the body is not. STL
-        # coordinates are single precision, hence the tolerance for "the same distance".
+        # Beyond an edge or a vertex, several triangles share the same closest point; the one whose plane
+        # the point lies farthest in front of measures the gap correctly. Tolerance: STL is single precision.
         allVertices = self._rigidTriangles.reshape(-1, 3)
         equalDistanceTolerance = 1e-6 * np.linalg.norm(allVertices.max(axis=0) - allVertices.min(axis=0))
 
-        # All (point, candidate) pairs are evaluated at once; only the selection below, which depends
-        # on the best candidate so far, is a scan -- over the candidate ranks, for all points at once.
-        # Every quantity is formed as in a pair-by-pair evaluation, and the scan visits each point's
-        # candidates in their order, so the choice is bit-identical to a pair-by-pair scan.
+        # All (point, candidate) pairs are evaluated at once; the selection below scans the candidate ranks,
+        # for all points at once, in each point's candidate order.
         pointIndices, triangleIndices = candidatePairs(candidatesPerPoint)
         pairPoints = bodyFramePoints[pointIndices]
         pairTriangles = self._rigidTriangles[triangleIndices]

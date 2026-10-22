@@ -64,8 +64,7 @@ class MonitorSchema:
         description="Name of the field output to monitor.", dtype=str, default=None, required=True
     )
     label: str = schemaField(description="Name of the output manager.", dtype=str, default="Monitor")
-    #: Spelled ``f(x)`` in the input file, which is not a valid Python identifier -- hence the
-    #: ``optionName`` indirection, see ``edelweissfe.utils.schema.schemaField``.
+    #: Spelled ``f(x)`` in the input file, which is not a valid Python identifier: see ``optionName``.
     f_x: str | None = schemaField(
         description="Apply a model accessible function on the result.",
         dtype=str,
@@ -114,10 +113,7 @@ class OutputManager(OutputManagerBase):
         configuration
             The options this output manager accepts; defaults to all-defaults.
         """
-        # `configuration.label` always overrides the `name` argument, since `label` defaults to
-        # "Monitor" and is thus never missing. A per-manager `label` option overriding the name
-        # entirely (rather than merely customizing it) looks like a latent bug, but the behavior
-        # is preserved here.
+        # `configuration.label` (default "Monitor") always overrides the `name` argument.
         self.name = configuration.label
 
         self.journal = journal
@@ -125,10 +121,7 @@ class OutputManager(OutputManagerBase):
         self.fieldOutputController = fieldOutputController
 
         fx = configuration.f_x
-        # A *falsy* value -- None (option absent) as well as an explicitly empty string --
-        # falls back to the identity expression "x". A schema default of "x" alone would not
-        # reproduce this, since an explicitly-empty option would then stay empty instead of
-        # falling back.
+        # None and an explicitly empty string both fall back to the identity expression "x".
         if not fx:
             fx = "x"
 

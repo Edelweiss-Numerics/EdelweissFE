@@ -45,8 +45,7 @@ class PointMass(BaseElement):
         self.mass = mass
         self._use_rotation = inertia is not None
 
-        # Normalize the rotary inertia to one value per rotational DOF. PointMass is only ever
-        # used by DiscreteRigidBody, which is 3D-only (enforced by the generator and constraint).
+        # One rotary inertia per rotational DOF; PointMass is only used by the 3D-only DiscreteRigidBody.
         if inertia is None:
             self.inertia = np.zeros(3)
         else:
@@ -218,9 +217,7 @@ class PointMass(BaseElement):
 
     @property
     def hasMaterial(self) -> bool:
-        # Deliberately True, not an oversight: this bypasses FEModel._prepareElements' blanket
-        # materialAssigned check (which would otherwise reject any model containing a PointMass),
-        # while setMaterial below still raises loudly if a section is ever actually assigned to one.
+        # Deliberately True: passes FEModel's material-assigned check; setMaterial still raises.
         return True
 
     def initializeElement(self):

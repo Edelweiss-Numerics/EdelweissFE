@@ -35,11 +35,7 @@ class AdaptiveStep(StepBase):
     An adaptive incremental step to be used in nonlinear simulations with implicit time integration.
     """
 
-    #: Option schema for this step, per OptionSchemaProvider. Shared with
-    #: :class:`~edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations`
-    #: -- every step type accepts exactly the same incrementation options (see
-    #: :meth:`~edelweissfe.steps.base.stepbase.StepBase.__init__`, which validates/coerces against
-    #: it directly; no further construction happens here).
+    #: Option schema for this step; all step types share the same incrementation options.
     schema = StepIncrementationSchema
 
     def _createTimeStepper(self) -> AdaptiveTimeStepper:

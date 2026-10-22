@@ -33,18 +33,12 @@ from scipy.sparse import csr_matrix
 
 from edelweissfe.utils import performancetiming
 
-#: Set to enable a per-call cross-check of :meth:`MultiPointConstraintTransformation.transformSystemMatrix`'s
-#: threaded condensation (``useThreadedCondensation``) against the plain SciPy ``T^T @ K @ T + C``
-#: expression it is an alternative to. Expensive (recomputes the plain expression every call it fires
-#: on) -- development/CI use only.
+#: Set to cross-check the threaded condensation against the plain SciPy ``T^T @ K @ T + C`` on every call.
+#: Expensive; development/CI use only.
 _ASSERT_EXACT_ENV_VAR = "EDELWEISS_MPC_ASSERT_EXACT"
 
-#: Set to a directory to dump the raw K plus this transformation's own T/D/S/C matrices for the
-#: first few calls to :meth:`MultiPointConstraintTransformation.transformSystemMatrix` -- an offline
-#: harness for investigating the condensation's performance: unlike the linsolve-level
-#: ``linsolveDumps`` harness (whose dumps are already-condensed ``Kt``), this needs the
-#: *pre*-condensation K and T/D/S/C themselves. Capped (see ``_DUMP_MPC_MAX_CALLS``) -- `K` on a
-#: large coupled model is hundreds of MB uncompressed, and this is a diagnostic tool, not a feature.
+#: Set to a directory to dump the raw (pre-condensation) K and T/C for the first
+#: ``_DUMP_MPC_MAX_CALLS`` calls of :meth:`MultiPointConstraintTransformation.transformSystemMatrix` (diagnostics).
 _DUMP_MPC_ENV_VAR = "EDELWEISS_DUMP_MPC"
 _DUMP_MPC_MAX_CALLS = 3
 _dumpMpcCallsWritten = 0
@@ -187,9 +181,7 @@ class MultiPointConstraintTransformation:
             if not masters:
                 raise ValueError("Multi-point constraints: slave DOF {:} has no master DOFs.".format(slaveDof))
 
-        # a master referenced by one constraint may itself be a slave DOF of another (or the same)
-        # constraint -- e.g. a tie facet referencing a hanging-node MPC's slave node. Substitute those
-        # down to independent DOFs rather than rejecting the composition.
+        # A master may itself be a slave DOF of another constraint; substitute down to independent DOFs.
         records = _flattenChainedRecords(records)
 
         self.nDof = nDof
@@ -197,9 +189,7 @@ class MultiPointConstraintTransformation:
 
         recordOfSlaveDof = {slaveDof: masters for slaveDof, masters in records}
 
-        # W: (nSlaves x nDof) weight matrix, row k carrying the master weights of the k-th
-        # (sorted) slave DOF. Serves the drift correction, the slave-kinematics assignment,
-        # and the lumped-mass folding.
+        # W: (nSlaves x nDof) weight matrix, row k carrying the master weights of the k-th (sorted) slave DOF.
         wRows, wCols, wVals = [], [], []
         for k, slaveDof in enumerate(self.slaveDofIndices):
             for masterDof, coefficient in recordOfSlaveDof[slaveDof]:
@@ -208,8 +198,7 @@ class MultiPointConstraintTransformation:
                 wVals.append(coefficient)
         self._W = csr_matrix((wVals, (wRows, wCols)), shape=(len(self.slaveDofIndices), nDof))
 
-        # T: identity on independent DOFs, slave rows carrying the master weights, slave columns
-        # entirely zero.
+        # T: identity on independent DOFs, slave rows carrying the master weights, slave columns zero.
         independentDofs = np.setdiff1d(np.arange(nDof, dtype=int), self.slaveDofIndices, assume_unique=True)
         tRows = np.concatenate(
             [independentDofs, np.repeat(self.slaveDofIndices, [len(recordOfSlaveDof[s]) for s in self.slaveDofIndices])]
@@ -218,18 +207,14 @@ class MultiPointConstraintTransformation:
         tVals = np.concatenate([np.ones(len(independentDofs)), np.array(wVals)])
         self._T = csr_matrix((tVals, (tRows, tCols)), shape=(nDof, nDof))
 
-        # C: the identity on the slave DOFs only, filling the (structurally zero) slave rows and columns
-        # of T^T K T. Deliberately NOT the raw constraint equation (C_sm = -N_a): that would couple the
-        # slave rows to the masters one-sidedly -- a non-symmetric operator whose slave-to-master
-        # couplings blow up under a symmetric diagonal equilibration of a small-valued K (e.g. a
-        # consistent mass matrix). The slaves are instead recovered after the solve, see
-        # recoverSlaveSolution.
+        # C: the identity on the slave DOFs, filling the (structurally zero) slave rows and columns of T^T K T.
+        # Not the raw constraint equation (C_sm = -N_a), which would be non-symmetric (see module docstring);
+        # the slaves are recovered after the solve instead, see recoverSlaveSolution.
         nSlaves = len(self.slaveDofIndices)
         self._C = csr_matrix((np.ones(nSlaves), (self.slaveDofIndices, self.slaveDofIndices)), shape=(nDof, nDof))
 
         self._useThreadedCondensation = useThreadedCondensation
-        # Built by _transformSystemMatrixThreaded on first use, from T, T^T and C, which are fixed for the
-        # lifetime of this object.
+        # Built on first use by _transformSystemMatrixThreaded.
         self._threadedCondensation = None
 
     @property

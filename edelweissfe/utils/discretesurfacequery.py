@@ -51,10 +51,7 @@ class DiscreteSurfaceQuery:
         # Extract the outer surface to ensure we have a PolyData object
         self.mesh = self.mesh.extract_surface(algorithm="dataset_surface")
 
-        # Ensure outward normals are computed for each cell. auto_orient_normals determines the
-        # true outward direction from the mesh topology itself (requires a closed, manifold
-        # surface -- true for any solid rigid body's contact surface), rather than trusting the
-        # source file's face winding order, which is not otherwise guaranteed to be outward.
+        # Outward cell normals, oriented from the (closed, manifold) mesh topology rather than the file's winding.
         self.mesh.compute_normals(cell_normals=True, point_normals=False, auto_orient_normals=True, inplace=True)
         self.mesh_cell_normals = np.array(self.mesh.cell_normals)
 
@@ -114,13 +111,11 @@ class DiscreteSurfaceQuery:
         localCoords = coords.copy()
 
         if translation is not None and rotation_center is not None:
-            # RP current position
             rp_current = rotation_center + translation
             localCoords -= rp_current
 
         if rotation_matrix is not None:
-            # Inverse rotation R^T * (P - RP_current) -- see the rotation-convention note above;
-            # .dot(rotation_matrix), NOT .dot(rotation_matrix.T), is the correct inverse here.
+            # Inverse rotation R^T (P - RP_current): for row vectors this is .dot(R), see the docstring note.
             localCoords = localCoords.dot(rotation_matrix)
 
         if rotation_center is not None:
@@ -146,9 +141,7 @@ class DiscreteSurfaceQuery:
 
         normals = self.mesh_cell_normals[closest_cells]
 
-        # Forward rotation R * n (body -> world frame); see "Note on the rotation convention" in
-        # this method's docstring for why .dot(rotation_matrix.T), not .dot(rotation_matrix), is
-        # the correct forward transform for these row vectors.
+        # Forward rotation R n (body -> world): for row vectors this is .dot(R.T), see the docstring note.
         if rotation_matrix is not None:
             normals = normals.dot(rotation_matrix.T)
 

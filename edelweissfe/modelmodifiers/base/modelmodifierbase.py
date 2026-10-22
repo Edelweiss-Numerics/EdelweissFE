@@ -43,10 +43,9 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
     mesh, or state variables during analysis steps.
     """
 
-    #: Whether this modifier can start a topology change by itself. A purely reactive modifier sets
-    #: this to False: it only ever plans in response to another modifier's mutation, so in a solver
-    #: that never runs the topology update it cannot do anything, and its presence alone must not
-    #: disqualify that solver. See NonlinearSolverBase.validateModelCapabilities.
+    #: Whether this modifier can start a topology change by itself. A purely reactive modifier sets this
+    #: to False, so it does not disqualify a solver without topology updates (see
+    #: NonlinearSolverBase.validateModelCapabilities).
     initiatesTopologyChanges = True
 
     @property
@@ -172,10 +171,9 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
 
         return set()
 
-    #: The state this modifier carries from one decision to the next, by attribute name and type;
-    #: see :mod:`~edelweissfe.utils.checkpointedstate`. Not the mesh it built: a restart replays the
-    #: recorded decisions through :meth:`apply`. Every modifier declares it -- an empty mapping if it
-    #: carries none. Undeclared, it cannot be checkpointed.
+    #: The state this modifier carries from one decision to the next, by attribute name and type (see
+    #: :mod:`~edelweissfe.utils.checkpointedstate`); not the mesh, which a restart replays through
+    #: :meth:`apply`. Every modifier declares it, an empty mapping if it carries none.
     checkpointedState: dict | None = None
 
     def getRestartData(self) -> dict[str, np.ndarray]:
@@ -200,9 +198,5 @@ class ModelModifierBase(OptionSchemaProvider, ABC):
 
         unpackState(self, data)
 
-    # getRestartData/setRestartData are gone. A modifier no longer serializes its own history, nor
-    # implements its own replay: FEModel records every applied plan in model.topology.history and
-    # replays it through this class's apply(). The previous arrangement had each modifier
-    # reimplementing the mutation for the replay path, which is precisely why a resumed run could
-    # rebuild a differently-numbered mesh -- two implementations of one mutation always drift.
-    # State that plan() carries from one decision to the next is declared in checkpointedState.
+    # A modifier does not serialize or replay its own history: FEModel records every applied plan in
+    # model.topology.history and replays it through apply(), so live run and restart share one code path.

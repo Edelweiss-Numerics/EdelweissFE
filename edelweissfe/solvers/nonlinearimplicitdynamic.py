@@ -213,17 +213,13 @@ from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
 
-#: An increment shorter than this fraction of the time elapsed in the step is the round-off
-#: remainder of the time stepper's progress accumulation, not an increment, and is skipped with the
-#: state kept -- see :meth:`NonlinearImplicitDynamic.solveIncrement`. Far below any increment a deck
-#: can ask for (``minInc`` is a fraction of the step, typically 1e-8 at its smallest) and far above
-#: the double-precision remainder (observed: 2e-14 of a step of 2.0).
+#: An increment shorter than this fraction of the elapsed step time is the round-off remainder of the
+#: time stepper's progress accumulation and is skipped with the state kept; see
+#: :meth:`NonlinearImplicitDynamic.solveIncrement`.
 _NEGLIGIBLE_INCREMENT_FRACTION = 1e-10
 
-#: Rows per block of the mass matrix, the blocks the inertia forces are computed in on the thread
-#: pool (see :meth:`NonlinearImplicitDynamic._rowBlocks`). A model of 2.3 M degrees of freedom gets
-#: 141 blocks, several per thread to balance the load, each with millions of entries -- far more work
-#: than handing it to a thread costs. A model of fewer rows is a single block, computed serially.
+#: Rows per block of the mass matrix, in which the inertia forces are computed on the thread pool (see
+#: :meth:`NonlinearImplicitDynamic._rowBlocks`). A smaller model is a single block, computed serially.
 _MASS_ROWS_PER_BLOCK = 1 << 14
 
 
@@ -409,9 +405,7 @@ class NonlinearImplicitDynamic(NIST):
 
     identification = "NID"
 
-    #: Live h-adaptivity is supported: the velocity and the acceleration ride the node-field warm
-    #: start onto new nodes, the mass and the damping are reassembled on the refined mesh, and the
-    #: acceleration is re-equilibrated on the increment that follows. See the module docstring.
+    #: Live h-adaptivity is supported; see the module docstring.
     supportsModelModifiers = True
 
     #: Option schema for this solver, per OptionSchemaProvider.
@@ -439,13 +433,9 @@ class NonlinearImplicitDynamic(NIST):
         #: first increment of a step has built it. See :class:`_NewmarkSystem`.
         self._newmarkSystem = None
         #: Whether the next increment has to compute the acceleration from equilibrium first.
-        #: Armed by :meth:`beginStep` for a step starting cold, disarmed by the increment that
-        #: consumes it.
         self._initialAccelerationPending = False
-        #: Length of ``model.topology.history`` when the current equation system was assembled.
-        #: A change in it is what distinguishes a rebuild caused by the mesh actually changing
-        #: from one caused by a constraint re-reporting its connectivity; see
-        #: :meth:`_updateNewmarkSystem`.
+        #: Length of ``model.topology.history`` when the current equation system was assembled; tells
+        #: a mesh change from a constraint re-reporting its connectivity (see :meth:`_updateNewmarkSystem`).
         self._topologyRecordsAtLastBuild = 0
         #: The per-topology-change mass check and the drift it accumulates over a step; see
         #: :class:`~edelweissfe.solvers.base.conservationchecks.ConservationCheck`.
@@ -610,21 +600,11 @@ class NonlinearImplicitDynamic(NIST):
         dT = timeStep.timeIncrement
 
         if dT <= _NEGLIGIBLE_INCREMENT_FRACTION * abs(timeStep.stepTime):
-            # A zero-length increment has no equation of motion. The displacement and the velocity
-            # are continuous in time, so the state cannot change in zero time, and a load that
-            # appears at this instant appears as an ACCELERATION -- which is exactly what the
-            # equilibrium solve for the initial acceleration provides -- not as a displacement.
-            # The parent's quasi-static solve would instead put the model at static equilibrium
-            # with the new load in zero time; for a suddenly applied load that is the whole dynamic
-            # response, skipped before it began. The time stepper proposes one such increment before
-            # the first real one of every step, so this is the ordinary path, not an edge case.
-            #
-            # An increment that is merely NEGLIGIBLE is treated the same way, for a different
-            # reason: the time stepper closes a step with whatever step progress its accumulation
-            # of increments left over, and 400 increments of 0.0025 leave a remainder of 2e-14 --
-            # a 401st increment of that length. It carries no physics, but the Newmark update
-            # divides by beta*dt^2 and would amplify the round-off of the linear solve by 1e28
-            # into the acceleration and the velocity.
+            # A zero-length increment has no equation of motion: displacement and velocity cannot change
+            # in zero time, and a load appearing now appears as an acceleration (the initial acceleration
+            # solve), not as a static displacement. The time stepper proposes one before every step.
+            # A negligible round-off increment is skipped too: the Newmark update divides by beta*dt^2
+            # and would amplify the round-off of the linear solve into the acceleration and velocity.
             self.applyStepActionsAtIncrementStart(model, timeStep, stepActions)
             self.journal.message(
                 "{:} increment ({:e}): no equation of motion to integrate, state kept".format(
@@ -726,20 +706,16 @@ class NonlinearImplicitDynamic(NIST):
             R -= PInertia
             R -= PDamping
 
-            # The inertia and damping forces are fluxes of the same field as the internal forces, so
-            # they enter the reference scale of the relative flux tolerance too. Without them a body in
-            # free flight -- no internal force at all -- would be held to an absolute 1e-7.
+            # Inertia and damping forces enter the reference scale of the relative flux tolerance too
+            # (a body in free flight has no internal force at all).
             F += np.abs(PInertia)
             F += np.abs(PDamping)
 
-        # The effective tangent K + M / (beta dT^2) + gamma C / (beta dT). Same VIJ layout as K, so
-        # it is an entry-wise sum, before the parent's CSR conversion, MPC condensation and
-        # Dirichlet row replacement. On a large model that sum runs over a billion entries, so the
-        # mass is added slice by slice on the thread pool, which also keeps the temporary `a * M` as
-        # short as a slice. The damping is diagonal and touches only its few nonzero slots.
+        # The effective tangent K + M / (beta dT^2) + gamma C / (beta dT). Same VIJ layout as K, so it
+        # is an entry-wise sum, before the parent's CSR conversion, MPC condensation and Dirichlet row
+        # replacement. The mass is added slice by slice on the thread pool; the damping is diagonal.
         with performancetiming.timeit("effective tangent"):
-            # Slice by slice, a longer mass vector would silently add only its prefix, where the
-            # whole-array sum raised; the layouts are the same by construction, so say so.
+            # A slice-wise sum would silently add only a prefix of a longer mass vector.
             if len(system.Mvij) != len(K):
                 raise ValueError(
                     "The mass ({:} entries) and the tangent ({:} entries) differ in their VIJ layout.".format(
@@ -887,8 +863,7 @@ class NonlinearImplicitDynamic(NIST):
         if not dofManagerChanged and not stepActions["changematerialproperty"]:
             return system
 
-        # Safe to advance unconditionally here: a topology change always rebuilds the manager, so
-        # it can never be missed by an increment that returned above.
+        # Safe to advance here: a topology change always rebuilds the manager, so it is never skipped above.
         topologyRecords = len(model.topology.history)
         topologyChanged = topologyRecords != self._topologyRecordsAtLastBuild
         self._topologyRecordsAtLastBuild = topologyRecords
@@ -901,11 +876,7 @@ class NonlinearImplicitDynamic(NIST):
                 A = self.theDofManager.constructDofVector()
                 for fieldName in dynamicFields:
                     field = model.nodeFields[fieldName]
-                    # The input-file driver creates both entries (zero) on every mass-carrying field
-                    # before anything runs, and a checkpoint restores them -- so on that path they are
-                    # always present, zero meaning a start from rest. Guarded all the same for a model
-                    # assembled programmatically, which never passes through that driver: a missing
-                    # entry is then the same start from rest, not an error.
+                    # A missing entry (programmatically assembled model) means a start from rest.
                     if "V" in field:
                         V = self.theDofManager.writeNodeFieldToDofVector(V, field, "V")
                     if "A" in field:
@@ -1020,8 +991,7 @@ class NonlinearImplicitDynamic(NIST):
         ):
             return None
 
-        # Behind the elements' slots lie only constraints', which carry no mass and no damping; a
-        # nonzero there means the prefix assumption is wrong, not that the operators may be moved.
+        # Behind the elements' slots lie only constraints', which carry no mass and no damping.
         if np.any(np.asarray(system.Mvij)[nElementVIJ:]) or np.any(system.dampingVIJIndices >= nElementVIJ):
             return None
 
@@ -1136,8 +1106,7 @@ class NonlinearImplicitDynamic(NIST):
         for start in range(0, nRows, rowsPerBlock):
             stop = min(start + rowsPerBlock, nRows)
             entries = slice(M.indptr[start], M.indptr[stop])
-            # Built empty and given the views afterwards: the constructor would copy every view
-            # smaller than half of its array (SciPy's prune), so all blocks of a large model.
+            # Built empty and given the views afterwards: the constructor would copy them (SciPy's prune).
             block = csr_matrix((stop - start, nColumns), dtype=M.dtype)
             block.indptr = M.indptr[start : stop + 1] - M.indptr[start]
             block.indices = M.indices[entries]
@@ -1294,23 +1263,19 @@ class NonlinearImplicitDynamic(NIST):
         dampingVIJIndices = dampingVIJIndices[keptDamping]
         dampingVIJValues = dampingVIJValues[keptDamping]
 
-        # The mass matrix has the stiffness' VIJ layout, so the solver's own CSR generator for K
-        # (built for this DofManager) sums it into K's sparsity pattern -- no COO sort of its own.
+        # The mass matrix has the stiffness' VIJ layout, so K's CSR generator sums it into K's pattern.
         M = self.csrGenerator.updateCSR(np.asarray(Mvij))
         C = coo_matrix((dampingVIJValues, (I[dampingVIJIndices], J[dampingVIJIndices])), shape=(nDof, nDof)).tocsr()
 
-        # Checked on the summed CSR values: a non-finite entry survives the summation, and the CSR
-        # arrays are the shorter ones. Symmetry is not checked here but per element type in the
-        # tests -- see the module documentation, "Checks on the mass".
+        # Symmetry is checked per element type in the tests; see the module documentation.
         if not np.all(np.isfinite(M.data)) or not np.all(np.isfinite(C.data)):
             raise ValueError("The assembled consistent mass or damping contains non-finite entries.")
 
         if np.any(C.data < 0.0):
             raise ValueError("The assembled damping has negative entries; a damping must dissipate.")
 
-        # A dynamic degree of freedom no element gave any mass -- a zero density, or a node carried
-        # only by mass-less entities -- would leave the effective tangent with the stiffness alone
-        # there while being integrated as though it had inertia.
+        # A dynamic degree of freedom without mass (zero density, or only mass-less entities) would be
+        # integrated as though it had inertia.
         diagonal = M.diagonal()
         massless = dynamicDofs[diagonal[dynamicDofs] <= 0.0]
         if massless.size:

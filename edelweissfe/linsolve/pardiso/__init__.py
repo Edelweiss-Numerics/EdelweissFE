@@ -94,19 +94,11 @@ def createSolver(opts) -> Callable:
         :func:`~edelweissfe.config.linsolve.getDefaultLinSolver` catches this to fall back to SciPy.
     """
 
-    # Imported inside the function body, not at module scope: this extension is optional and
-    # genuinely absent in installs built without MKL, and `getDefaultLinSolver` relies on catching
-    # the ImportError to fall back to SciPy. At module scope that failure would instead hit anyone
-    # who merely resolves this registry name.
+    # Imported lazily: the extension is optional (needs MKL), and getDefaultLinSolver catches the ImportError.
     from edelweissfe.linsolve.pardiso.pardiso import PardisoSolver
 
-    # Symbolic-factorization reuse across solves is only correct if the caller
-    # can guarantee the sparsity pattern stays genuinely stable for the solver
-    # instance's entire lifetime; it has been observed to silently produce wrong
-    # (but not NaN, so undetected by the usual failure check) results for some
-    # coupled-DOF problems. Off by default; opt in explicitly via
-    # opts["reuseSymbolicFactorization"] = True once that has been verified safe
-    # for the problem at hand.
+    # Reusing the symbolic factorization is only correct if the sparsity pattern stays stable for the solver's
+    # lifetime; otherwise it can silently give wrong results. Off by default.
     reuseSymbolicFactorization = (
         bool(opts.get("reuseSymbolicFactorization", False)) if isinstance(opts, Mapping) else False
     )

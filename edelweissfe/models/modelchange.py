@@ -82,9 +82,8 @@ class ModelChange:
     changedNodeSets: set = field(default_factory=set)
     changedElementSets: set = field(default_factory=set)
     changedSurfaces: set = field(default_factory=set)
-    #: Existing (neither added nor removed) node labels whose coordinates changed -- e.g. a
-    #: geometry-snap modifier projecting newly-created AMR boundary nodes onto an analytical
-    #: surface. Deliberately separate from ``addedNodes``: a moved node is not new.
+    #: Existing (neither added nor removed) node labels whose coordinates changed, e.g. by a geometry-snap
+    #: modifier. A moved node is not new.
     movedNodes: set = field(default_factory=set)
 
     @property
@@ -174,8 +173,7 @@ def _composeSubstitutions(maps: list) -> dict:
         The net map: every key of any map, in order of first appearance, with its fully resolved
         value list (a new list, not one of the input lists).
     """
-    # for every key: the indices of the maps it is a key in, ascending (nearly always just one,
-    # since labels are never reused -- but a key appearing again must still be honored)
+    # for every key: the indices of the maps it is a key in, ascending (usually one, but repeats are honored)
     occurrences = {}
     for k, substitution in enumerate(maps):
         for key in substitution:
@@ -249,9 +247,7 @@ def coalesce(changes: list) -> ModelChange | None:
         changedSurfaces |= change.changedSurfaces
         movedNodes |= change.movedNodes
         movedNodes -= transientNodes
-    # A node net-added or net-removed within the window is not "existing", even if some change in it
-    # also reported it as moved (e.g. a geometry-snap modifier moving a node an AMR modifier just
-    # created in the same round) -- movedNodes documents only existing nodes whose coordinates changed.
+    # movedNodes holds only existing nodes: drop those net-added or net-removed within the window.
     movedNodes -= addedNodes | removedNodes
 
     last = changes[-1]

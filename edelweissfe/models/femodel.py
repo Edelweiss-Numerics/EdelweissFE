@@ -354,10 +354,8 @@ class FEModel:
                     self.nodeFields[field] = newNodeField
 
         journal.message("Assembling ScalarVariables", self.identification)
-        # rebuilding scalarVariables cold-starts every value (ScalarVariable() defaults to 0.0), which
-        # would silently discard converged Lagrange-multiplier values on every AMR refinement, even
-        # though node fields are warm-started. Snapshot by name and restore the overlapping subset so
-        # unchanged constraints keep their converged multiplier and only genuinely new ones cold-start.
+        # Rebuilding cold-starts every value: restore the converged Lagrange multipliers of unchanged
+        # constraints by name, so that only new ones start at zero.
         previousScalarVariableValues = {name: v.value for name, v in self.scalarVariables.items()}
         self.scalarVariables = dict()
         self._createAndAssignScalarVariableForConstraints(journal)
@@ -420,9 +418,7 @@ class FEModel:
 
         self._acceptElementStates()
 
-        # Left serial deliberately. Measured on the 337 471-dof explicit anchor pry-out model, where
-        # the element loop below costs 19.09 ms per call: these two together cost 0.015 ms, i.e. less
-        # than a tenth of a percent of it. There is nothing here to parallelize.
+        # Serial: negligible next to the element loop.
         for constraint in self.constraints.values():
             constraint.acceptLastState()
 
@@ -456,9 +452,7 @@ class FEModel:
             for element in chunk:
                 element.acceptLastState()
 
-        # The same chunk granularity the parallel element computation uses: four chunks per thread,
-        # enough to even out the spread between cheap facet elements and expensive solid ones
-        # without paying dispatch overhead per element.
+        # Four chunks per thread, as in the parallel element computation, to balance cheap and expensive elements.
         chunkSize = max(1, len(elements) // (numThreads * 4))
         chunks = chunked_iterable(elements.values(), chunkSize)
 
@@ -502,10 +496,8 @@ class FEModel:
 
         writeRestartDataOf(f.create_group("constraints"), self.constraints)
 
-        # The ordered record of every applied model-modifier decision (e.g. AMR refinements). A
-        # resumed run replays these through the modifiers' own apply() -- see readRestart and
-        # TopologyPipeline.replayHistory -- rather than serializing the resulting topology directly, so there
-        # is exactly one code path that mutates topology, live or replayed.
+        # The ordered record of every applied model-modifier decision (e.g. AMR refinements). A resumed run
+        # replays these (see readRestart), so that a single code path mutates topology, live or replayed.
         historyGroup = f.create_group("topologyHistory")
         historyGroup.attrs["setupFingerprint"] = self.topology.setupFingerprint()
         historyGroup.attrs["count"] = len(self.topology.history)
@@ -536,10 +528,8 @@ class FEModel:
 
         self.time = f.attrs["time"]
 
-        # Must run before every restore below: replaying the topology history can materialize
-        # elements/nodes a plain rebuild from the .inp file cannot reproduce (e.g. AMR-refined
-        # children) -- the node-field and element-statevar restores that follow address elements by
-        # label and would silently miss anything not already in self.elements/self.nodeFields yet.
+        # Must run before every restore below: the replay materializes elements/nodes (e.g. AMR-refined
+        # children) which those restores address by label.
         historyGroup = f["topologyHistory"]
         if self.topology.setupFingerprint() != historyGroup.attrs["setupFingerprint"]:
             raise RestartError(
@@ -560,9 +550,8 @@ class FEModel:
             )
         self.topology.replayHistory(records, journal)
         readRestartDataInto(f["modelModifiers"], self.modelModifiers)
-        # Bring the mesh-dependent consumers (ties, contact surfaces) up to date with the replayed
-        # mesh here, as part of restoring the model: the uninterrupted run's consumers had caught up
-        # with every change before the checkpoint was written, so a resumed run must start the same.
+        # Bring the mesh-dependent consumers (ties, contact surfaces) up to date with the replayed mesh, as
+        # they were when the checkpoint was written.
         self.topology.refreshMeshDependents()
 
         for nf in self.nodeFields.values():
@@ -580,10 +569,8 @@ class FEModel:
         for name, scalarVariable in self.scalarVariables.items():
             scalarVariable.value = f["scalarVariables"].attrs[name]
 
-        # One uniform loop, by element number, with no skip set and nothing swallowed -- sound only
-        # because the replay above reproduces the original numbering exactly, verified against the
-        # recorded fingerprint. A missing element here means the replayed model does not match the
-        # one checkpointed, which must be reported, not silently skipped.
+        # Sound only because the replay reproduces the original numbering exactly (verified by fingerprint):
+        # a missing element means a mismatched model and must be reported.
         for elementKey, stateVars in f["elements"].items():
             elNumber = int(elementKey)
             element = self.elements.get(elNumber)

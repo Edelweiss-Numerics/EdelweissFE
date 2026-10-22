@@ -47,18 +47,12 @@ class KeywordBase(OptionSchemaProvider):
     grammar and its construction are separate concerns.
     """
 
-    #: The schema dataclass describing this keyword's own line options, dataline payload, and
-    #: ``>>`` sub-blocks, or ``None`` if it declares none. See
-    #: :class:`~edelweissfe.utils.schema.OptionSchemaProvider`.
+    #: Schema of this keyword's line options, dataline payload and ``>>`` sub-blocks, or ``None``.
     schema: ClassVar[type | None] = None
 
-    #: The keyword's identifier as written in the ``.inp`` file, in its exact display case (e.g.
-    #: ``"elSet"``, ``"analyticalField"`` -- NOT the casefolded registry key ``"elset"``). This is
-    #: the single source of truth for the keyword's spelling: the grammar surface renders it and
-    #: the parser resolves it, so it must not be re-transcribed anywhere else. Declared (annotation
-    #: only) on the base; every concrete subclass sets it.
+    #: The keyword as written in the ``.inp`` file, in display case (e.g. ``"elSet"``, not the registry
+    #: key ``"elset"``). Single source of truth for its spelling; set by every concrete subclass.
     keywordName: ClassVar[str]
 
-    #: The keyword's human-readable description. Rendered by the grammar surface; the single
-    #: source of truth, never re-typed in a test or spec.
+    #: The keyword's human-readable description, rendered by the grammar surface.
     keywordDescription: ClassVar[str]

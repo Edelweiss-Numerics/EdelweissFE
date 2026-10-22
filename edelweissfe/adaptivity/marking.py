@@ -58,11 +58,8 @@ from edelweissfe.utils.schema import (
     schemaField,
 )
 
-# 2x2x2 Gauss points on the reference cube [-1, 1]^3, with unit weights. These are the reduced-
-# integration points of GC3D20R and, for a serendipity HEX20, the superconvergent points of the
-# gradient -- so evaluating the FE gradient here (and averaging it to nodes) is the classic
-# Zienkiewicz-Zhu recovery in its sweet spot. Shape-function values/derivatives are the same for
-# every element, so they are tabulated once at import time (the marker runs every increment).
+# 2x2x2 Gauss points on [-1, 1]^3 with unit weights: the superconvergent points of the gradient of a
+# serendipity HEX20 (Zienkiewicz-Zhu). Shape functions are tabulated once at import time.
 _GP_1D = 1.0 / np.sqrt(3.0)
 _GAUSS_POINTS = np.array(
     [(sx * _GP_1D, sy * _GP_1D, sz * _GP_1D) for sx in (-1.0, 1.0) for sy in (-1.0, 1.0) for sz in (-1.0, 1.0)],
@@ -72,9 +69,8 @@ _GP_N = np.array([hex20_shape(*gp) for gp in _GAUSS_POINTS])  # (8, 20)  shape-f
 _GP_DNDXI = np.array([hex20_shape_grad(*gp)[1] for gp in _GAUSS_POINTS])  # (8, 20, 3)  dN/dxi at Gauss points
 _NODE_DNDXI = np.array([hex20_shape_grad(*p)[1] for p in LOCAL_COORDS])  # (20, 20, 3)  dN/dxi at each node
 
-# HEX20 corner (vertex) local indices and edge topology, used by superconvergent patch recovery
-# (SPR): the 8 corners are the patch-assembly nodes, and each of the 12 edge midsides is recovered
-# from the polynomial fits of its two corner-endpoint patches.
+# HEX20 corner and edge topology for superconvergent patch recovery (SPR): patches are assembled at
+# the 8 corners, and each of the 12 edge midsides is recovered from its two corner patches.
 _MID_LOCALS = {edge[1] for edge in EDGES}  # 12 edge-midside local indices
 _CORNER_LOCALS = [i for i in range(N_NODES) if i not in _MID_LOCALS]  # 8 corner local indices
 _MID_EDGES = [(edge[1], edge[0], edge[2]) for edge in EDGES]  # (midLocal, cornerA_local, cornerB_local)
@@ -242,8 +238,7 @@ def _perElementFieldOutputResult(model, fieldOutputName):
     return elements, values
 
 
-# Comparison operators a FieldOutputMarker may apply against its threshold, keyed by the string a
-# user writes in the input file. numpy broadcasts these element-wise over a result row.
+# Comparison operators a FieldOutputMarker may apply against its threshold, keyed by the input file string.
 _COMPARISON_OPERATORS = {
     ">": operator.gt,
     ">=": operator.ge,
@@ -453,13 +448,9 @@ class SurfaceMarker(MarkerBase):
         return marked
 
 
-# A predictive Rankine (max-principal-stress) criterion needs no dedicated marker: the expression
-# stack (edelweissfe.utils.math.mathModules) already ships eigVal(), which turns a Marmot Voigt
-# stress row into its principal stresses in descending order. Compute the quantity in the stress
-# fieldOutput's own f(x) and let a plain FieldOutputMarker threshold it:
+# A Rankine (max-principal-stress) criterion is a plain FieldOutputMarker on a stress fieldOutput:
 #     >>perElement, ..., result=stress, f(x)='eigVal(x.reshape(-1,6))[:,0].reshape(x.shape[0],x.shape[1])'
 #     >>marker, type=fieldOutput, fieldOutput=<that output>, operator='>=', threshold=<factor*f_t>
-# refines every element whose largest principal stress reaches the threshold at any quadrature point.
 
 
 def _sprPolynomialBasis(localCoords, order):
@@ -851,9 +842,8 @@ class RecoveryErrorMarker(MarkerBase):
         values = nodeField[self.entry]
         indexOf = nodeField._indicesOfNodesInArray
 
-        # gather, for every eligible element, its node coordinates and field values plus a compact
-        # global node index (so shared nodes accumulate into the same recovery slot). Elements with a
-        # node that does not carry the field are skipped -- they cannot contribute to recovery.
+        # gather node coordinates, field values and a compact global node index per element; elements
+        # with a node that does not carry the field are skipped
         elements = []
         coordsList = []
         valuesList = []
@@ -888,21 +878,13 @@ class RecoveryErrorMarker(MarkerBase):
         )
 
         # ---- absolute field-magnitude eligibility ----
-        # An element is a refinement candidate only where the driving field itself is significant.
-        # This is the decisive gate for gradient-enhanced damage: in the elastic phase the nonlocal
-        # field is machine zero (~1e-30), yet its *shape* is floating-point noise whose recovered-vs-FE
-        # gradient mismatch is O(1) relative to itself -- so a purely relative (scale-invariant)
-        # criterion cannot tell it apart from a genuinely localizing field and would refine the elastic
-        # structure everywhere. An absolute floor on the peak nodal |field| per element separates the
-        # two cleanly (the active-damage field is 1e-5 and up, ~25 orders above the elastic noise) and
-        # restricts marking to the process zone once damage is active. Elements below the floor are
-        # scored zero and never reached by the ranking below.
+        # A relative criterion cannot reject the elastic phase, where the field is machine-zero noise;
+        # elements below the absolute floor on peak |field| are scored zero.
         elementFieldMax = np.max(np.abs(valuesAll), axis=(1, 2))  # (nElem,) peak |field| per element
         indicators = np.where(elementFieldMax >= self.fieldThreshold, indicators, 0.0)
 
         # ---- global relative-error gate ----
-        # Among the significant elements, skip refinement while the field is already well resolved: the
-        # ZZ global relative error ||eta|| / ||grad|| must exceed relTol for any element to be marked.
+        # refine only if ||eta|| / ||grad|| over the significant elements exceeds relTol
         totalSquared = float(np.sum(indicators**2))
         if totalSquared <= 0.0:
             return set()
@@ -925,8 +907,7 @@ class RecoveryErrorMarker(MarkerBase):
             if accumulated >= target:
                 break
 
-        # optional refinement halo: bridge the flank-marked rows across the (locally smooth) band core
-        # and buffer ahead of the front, growing only within the refineable elements
+        # optional halo: bridge the flank-marked rows across the band core
         if self.halo > 0 and marked:
             marked = _growByNeighbors(marked, refineElements, self.halo)
         return marked

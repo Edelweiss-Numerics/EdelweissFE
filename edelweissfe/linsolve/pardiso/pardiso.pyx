@@ -208,10 +208,6 @@ cdef class PardisoSolver:
         self.rows = A.shape[0]
         # pardiso uses fortran 1-based indexing; scipy may use int64 index arrays for
         # large matrices, so cast explicitly to the 32-bit interface type.
-        #
-        # Timed separately from phase 11 itself because this is a pure O(nnz) allocate-and-copy that
-        # is paid on *every* solve whenever symbolic reuse is off -- an avoidable cost that has
-        # nothing to do with the reordering it precedes, and would otherwise hide inside it.
         with performancetiming.timeit("pardiso index preparation"):
             self.indicesFortran = np.ascontiguousarray(A.indices + 1, dtype=np.intc)
             self.indptrFortran = np.ascontiguousarray(A.indptr + 1, dtype=np.intc)
@@ -253,8 +249,7 @@ cdef class PardisoSolver:
             The solution vector.
         """
 
-        # if reuse is disabled, always re-analyze; _hasSamePattern is not even
-        # evaluated in that case (see the class docstring for why reuse is opt-in)
+        # if reuse is disabled, always re-analyze
         if not self.reuseSymbolicFactorization or not self._hasSamePattern(A):
             self._analyze(A)
 
@@ -270,11 +265,7 @@ cdef class PardisoSolver:
         cdef int idum = 0
         cdef double ddum = 0
 
-        # This one-shot solve is about to overwrite PARDISO's numeric factors for a different
-        # matrix, which invalidates anything a previous explicit factorize() stored: keeping that
-        # state would let a later solveFactorized() pair these new factors with the old matrix's
-        # values. Drop it before factorizing, so solveFactorized() raises "no factorization
-        # available" instead of returning a silently wrong result.
+        # This solve overwrites the numeric factors, so a factorization stored by factorize() is invalid.
         self.hasNumericFactorization = False
         self.currentData = None
 
@@ -347,9 +338,7 @@ cdef class PardisoSolver:
             self.currentData = None
             raise RuntimeError("PARDISO numeric factorization failed with error code {:}".format(error))
 
-        # Held onto deliberately: phase 33 runs iterative refinement against the matrix values, and
-        # for a lagged preconditioner those must stay the values this factorization was built from,
-        # not whatever matrix is currently being solved.
+        # phase 33 refines iteratively against the values this factorization was built from
         self.currentData = A.data
         self.hasNumericFactorization = True
 

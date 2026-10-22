@@ -128,36 +128,22 @@ class LinearSolver:
     _model = None
     _dofManager = None
 
-    #: Display name for this solver's own log lines (e.g. a "linear solve" column's debug detail).
-    #: Overridden by a solver that wants its messages attributed to something other than the generic
-    #: base name -- e.g. ``BlockAMGSolver`` sets this to its own identification string.
+    #: Display name for this solver's own log lines; overridden by solvers with their own name.
     identification = "LinearSolver"
 
-    #: Whether this solver reports per-solve diagnostics (an iteration count, a residual, etc.) that
-    #: the nonlinear solver can render as an extra "linear solve" column in its own convergence table.
-    #: ``False`` for solvers with nothing iterative to report -- a direct factorization has no
-    #: per-solve iteration count or residual, so there is nothing there worth a column. A solver
-    #: overriding this to ``True`` must also populate :attr:`lastSolveSummary` after every
-    #: :meth:`__call__`.
+    #: Whether this solver reports per-solve diagnostics (iterations, residual) for an extra "linear
+    #: solve" column in the nonlinear solver's convergence table. If ``True``, :attr:`lastSolveSummary`
+    #: must be populated after every :meth:`__call__`.
     reportsSolveSummary = False
 
-    #: The most recent call's diagnostics as a :class:`LinearSolveSummary`, or ``None`` before any
-    #: call, or for a solver that never overrides :attr:`reportsSolveSummary`. Read by the nonlinear
-    #: solver immediately after calling this solver, to build its per-iteration row -- never pushed
-    #: proactively, since the caller alone knows when "this iteration's row" is being assembled.
+    #: The most recent call's diagnostics as a :class:`LinearSolveSummary`, or ``None``; read by the
+    #: nonlinear solver right after each call.
     lastSolveSummary: "LinearSolveSummary | None" = None
 
-    #: Whether this solver benefits from the system matrix keeping the same sparsity pattern from one
-    #: Newton iteration to the next -- i.e. whether it does something *across* solves that a changing
-    #: pattern defeats (``BlockAMGSolver`` reuses an AMG hierarchy built for the old pattern; a direct
-    #: factorization like PARDISO's starts from scratch on every solve regardless and has nothing to
-    #: lose). ``False`` here, inherited by every solver that does not override it. Read by
-    #: :attr:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema.pruneCondensedMatrixZeros`'s
-    #: "auto" default (``None``, unset in the input file) to decide whether pruning the
-    #: multi-point-condensed system's explicit zeros -- which changes its pattern on almost every
-    #: iteration -- is worth it *for this solver*: pruned (``True``) unless the solver says it needs
-    #: the pattern stable, in which case it is left alone (``False``) so hierarchy reuse can engage.
-    #: An explicit ``true``/``false`` in the input file always overrides this.
+    #: Whether this solver benefits from a sparsity pattern that stays the same across Newton iterations
+    #: (e.g. ``BlockAMGSolver`` reuses its AMG hierarchy). Read by the "auto" default of
+    #: :attr:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema.pruneCondensedMatrixZeros`: zeros
+    #: are pruned unless the solver needs the pattern stable.
     needsStableSparsityPattern = False
 
     def setJournal(self, journal) -> None:

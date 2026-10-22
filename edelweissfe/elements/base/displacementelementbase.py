@@ -63,10 +63,8 @@ class DisplacementElementBase(BaseElement):
     def __init__(self, elementType: str, elNumber: int):
         self._elType = elementType
         properties = elLibrary[elementType]
-        # Guard against being handed an element type belonging to a *different* formulation, e.g.
-        # `DisplacementElement("CPE4TL", 1)`: `elLibrary` supplies quadrature data for both
-        # formulations, so nothing else here would notice. The type -> class mapping is looked up
-        # in the `element` category of the registry; a subclass of that class is accepted too.
+        # Reject an element type of a *different* formulation (e.g. `DisplacementElement("CPE4TL", 1)`), which
+        # `elLibrary` alone would not notice. The registry's `element` category maps type -> class; subclasses pass.
         if not isinstance(self, registry.lookup("element", elementType)[0]):
             raise Exception("Something went wrong with the element initialization!")
         self._elNumber = elNumber
@@ -92,7 +90,7 @@ class DisplacementElementBase(BaseElement):
     def elNumber(self) -> int:
         """The unique number of this element"""
 
-        return self._elNumber  # return number
+        return self._elNumber
 
     @property
     def elType(self) -> str:

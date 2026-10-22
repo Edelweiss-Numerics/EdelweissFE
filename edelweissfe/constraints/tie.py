@@ -207,8 +207,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         self._positionTolerance = configuration.positionTolerance
         self._positionToleranceFactor = configuration.positionToleranceFactor
         self._adjustTolerance = configuration.adjustTolerance
-        #: References to the published tied/untied NodeSets, so a later refresh() updates their
-        #: membership in place (via replaceMembers) instead of colliding with its own earlier publish.
+        #: The published tied/untied NodeSets, updated in place by a later refresh().
         self._tiedNodeSet = None
         self._untiedNodeSet = None
 
@@ -233,11 +232,8 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
                 "itself."
             )
 
-        # Frozen ONCE from the INITIAL (pre-any-AMR) master surface, not recomputed on every
-        # refresh(): computing it fresh from whatever the master surface's mean facet size happens
-        # to be at refresh time is unsafe under AMR -- a node evaluated after an unrelated
-        # refinement has already shrunk that mean would get an artificially tight tolerance unrelated
-        # to its actual (unchanged) gap.
+        # Frozen once from the initial master surface: AMR shrinks the mean facet size, which must not
+        # tighten the tolerance for an unchanged gap.
         if self._positionTolerance is not None:
             self._membershipTolerance = self._positionTolerance
         else:
@@ -252,11 +248,8 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         self._reassignNodesOfElementsWithSnappedNodes(model)
         self._publishTiedUntiedNodeSets(model)
 
-        # Registration is what gets a tie refreshed at all: multi-point constraints live in
-        # model.multiPointConstraints, which no per-increment sweep iterates, and
-        # getMultiPointConstraints() is called from inside the DofManager/VIJSystemMatrix rebuild --
-        # too late to safely swap in newly regenerated facet elements. TopologyPipeline.refreshMeshDependents
-        # runs after the model modifiers have settled and strictly before that rebuild decision.
+        # Registration is what gets a tie refreshed after topology changes, via
+        # TopologyPipeline.refreshMeshDependents, before the DofManager rebuild.
         model.topology.registerMeshDependent(self)
 
     @classmethod
@@ -305,31 +298,23 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
 
         masterFacetCoords = [np.array([n.coordinates for n in el.nodes]) for el in masterFacetElements]
 
-        # Frozen at construction (see __init__) -- NOT recomputed from the current (possibly
-        # AMR-refined, and therefore shrunk) masterFacetCoords passed in here on a refresh() call.
+        # Frozen at construction (see __init__), not recomputed from the possibly refined facets.
         membershipTolerance = self._membershipTolerance
 
-        # Projecting every slave node onto its closest master facet by brute force is O(nSlave *
-        # nMaster) and, on a large tied surface re-projected after every AMR refinement, dominates
-        # the whole refinement step. Index the master facets by centroid in a k-d tree instead and,
-        # per slave node, run the exact closest-point test only on the facets that could possibly win.
-        # The candidate set is a *superset* of the brute-force winner (see maxFacetRadius below), and
-        # iterating it in ascending facet order with a strict "<" reproduces the brute-force choice
-        # exactly (same first-of-equals tie-break) -- so this is an acceleration, not an approximation.
+        # Master facets are indexed by centroid in a k-d tree; per slave node, the exact closest-point
+        # test runs only on candidate facets, a superset of the brute-force winner. Ascending facet order
+        # with a strict "<" keeps the brute-force first-of-equals tie-break.
         if masterFacetCoords:
             centroids = np.array([coords.mean(axis=0) for coords in masterFacetCoords])
             facetTree = cKDTree(centroids)
-            # The farthest any facet vertex sits from that facet's own centroid. If a facet's true
-            # closest point beats a known distance d, its centroid lies within d + maxFacetRadius of
-            # the slave node (triangle inequality), so a ball query of that radius, seeded with the
-            # exact distance to the nearest-centroid facet (an upper bound on the global minimum),
-            # is guaranteed to include the brute-force winner.
+            # The farthest any facet vertex sits from its facet's centroid. A facet closer than a known
+            # distance d has its centroid within d + maxFacetRadius (triangle inequality); d is the exact
+            # distance to the nearest-centroid facet, an upper bound on the minimum.
             maxFacetRadius = max(
                 float(np.linalg.norm(coords - coords.mean(axis=0), axis=1).max()) for coords in masterFacetCoords
             )
 
-        # All slave nodes are projected at once. Snapping below moves only the node it ties, after its
-        # projection, so projecting first is the same as projecting each node right before it is tied.
+        # All slave nodes are projected at once; snapping below moves only the node already projected.
         slaveCoords = np.array([slaveNode.coordinates for slaveNode in slaveNodes], dtype=float).reshape(-1, self.nDim)
         if masterFacetCoords and slaveNodes:
             _, seedIndices = facetTree.query(slaveCoords, k=1)
@@ -356,9 +341,8 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
                 untiedSlaveNodes.append(slaveNode)
                 continue
 
-            # Snapping is the separate, independent decision: a tied node is only snapped if adjust
-            # is requested AND (when given) its distance is also within adjustTolerance -- a node
-            # beyond adjustTolerance stays tied, just not snapped, preserving its gap exactly.
+            # A tied node is snapped only if adjust is requested and it lies within adjustTolerance (if
+            # given); otherwise it stays tied with its gap.
             withinAdjustTolerance = self._adjustTolerance is None or bestDistance <= self._adjustTolerance
             if adjust and withinAdjustTolerance and bestDistance > 0.0:
                 slaveNode.coordinates[:] = bestWeights @ masterFacetCoords[bestFacetIdx]
@@ -450,9 +434,8 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         if not (touchedSlave or touchedMaster):
             return False
 
-        # The facets themselves were already regenerated, in the topology-update phase, by the
-        # implicit surfaceFacets modifier (see TopologyPipeline.ensureSurfaceFacetModifier). This constraint
-        # is a pure reader: it re-projects onto whatever now tiles the surface.
+        # The facets were already regenerated by the implicit surfaceFacets modifier (see
+        # TopologyPipeline.ensureSurfaceFacetModifier); this constraint only re-projects onto them.
         slaveFacetElements = list(model.elementSets[self._slaveSurfaceSetName])
         masterFacetElements = list(model.elementSets[self._masterSurfaceSetName])
         self.tiedRecords, self.untiedSlaveNodes = self._buildTiedRecords(

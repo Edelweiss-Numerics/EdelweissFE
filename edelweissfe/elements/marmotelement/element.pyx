@@ -37,10 +37,8 @@ cimport numpy as np
 
 from edelweissfe.utils.exceptions import CutbackRequest
 
-# Point Marmot's warning channel at stdout, once, when this extension is imported. MarmotJournal
-# writes into a null streambuf unless a consumer calls setMSGOutputDirection, and nothing here ever
-# did -- so every warning Marmot raised on this path was discarded before it could be printed.
-# std::cout is where the solver's own output goes, so a redirected run log captures it.
+# Point Marmot's warning channel at stdout once, on import: MarmotJournal otherwise writes into a null
+# streambuf, discarding every warning.
 MarmotJournal.setMSGOutputDirection(cout)
 
 
@@ -181,9 +179,8 @@ cdef class MarmotElementWrapper:
         cdef double[::1] _properties = np.ascontiguousarray(
                 np.atleast_1d(np.asarray(properties, dtype=np.float64)))
 
-        # The count travels with the pointer: the values come from a user-written input file and
-        # the element reads a fixed number per property name, so without it a short list is not an
-        # error but an out-of-bounds read landing in a material coefficient.
+        # The count travels with the pointer, so a too-short list from the input file is an error,
+        # not an out-of-bounds read.
         self.marmotElement.assignProperty(
                 propertyName.encode("UTF-8"),
                 &_properties[0],

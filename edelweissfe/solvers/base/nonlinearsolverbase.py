@@ -80,20 +80,14 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     #: (e.g. surface ties). Subclasses supporting MPCs must set this to True.
     supportsMPC = False
 
-    #: Whether this solver runs the topology update (e.g. h-adaptivity) at all. Subclasses that
-    #: call model.topology.update(...) anywhere in an increment must set this to True; without it, a
-    #: modifier silently never runs and the model never adapts. Setting it does not promise the
-    #: update runs every increment: a solver that runs it once, before its increment loop, sets this
-    #: and then refuses the modifiers that would need it later -- see
-    #: ModelModifierBase.actsOnlyAtSimulationStart and NED.validateModelCapabilities.
+    #: Whether this solver runs the topology update (e.g. h-adaptivity) at all; without it a modifier never runs.
+    #: A solver that runs it only before its increment loop sets this too, and refuses the modifiers that would
+    #: need it later (see ModelModifierBase.actsOnlyAtSimulationStart and NED.validateModelCapabilities).
     supportsModelModifiers = False
 
-    #: The active multi-point-constraint (hanging node / tie) condensation, if any -- None
-    #: whenever there are no multi-point constraints in the model. Lets
-    #: applyDirichletToStiffness tell an MPC-transformed (fresh, disposable) system matrix
-    #: apart from the assembler's own persistent, in-place-updated one: both implicit and
-    #: explicit-dynamic solvers build one when needed (see NonlinearExplicitDynamic.prepareIncrement),
-    #: the distinction is about which matrix is in play, not about the solver family.
+    #: The active multi-point-constraint (hanging node / tie) condensation, or None without MPCs. Lets
+    #: applyDirichletToStiffness tell an MPC-transformed (disposable) system matrix apart from the
+    #: assembler's persistent, in-place-updated one.
     mpcTransformation = None
 
     #: The layout of the iteration table that :meth:`checkConvergence` writes, one column per field; set up
@@ -116,10 +110,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 f"Multi-point constraints (e.g. surface ties) are not supported by the {self.identification} solver."
             )
 
-        # Only modifiers that can act on their own matter here. A purely reactive one (the implicit
-        # surface-facet retiling, which every *surface recipe brings along) cannot plan anything
-        # unless another modifier changed the mesh first, so it loses nothing in a solver that never
-        # runs the topology update -- and must not be the reason a model is refused.
+        # Only self-starting modifiers matter: a purely reactive one (e.g. the surface-facet retiling) never acts
+        # unless another modifier changed the mesh first.
         selfStarting = sorted(name for name, m in model.modelModifiers.items() if m.initiatesTopologyChanges)
         if selfStarting and not self.supportsModelModifiers:
             raise NotImplementedError(
@@ -142,11 +134,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             *solver keyword), such that typos are not silently swallowed.
         """
 
-        # Input keywords arrive case-folded (the parser lowercases option keys), while the option
-        # names in SolverSpecificOptions are camelCase -- match them case-insensitively via their
-        # canonical spelling. A >>options block carries the UNION of every solver's options (they all
-        # register on the same 'options' keyword) plus routing/meta keys ('category', 'inputFile',
-        # 'datalines'), so keys not belonging to this solver are silently skipped rather than rejected.
+        # Option keys arrive lowercased: match them case-insensitively against the camelCase names. A >>options
+        # block carries every solver's options plus meta keys, so keys of other solvers are skipped.
         canonicalByLower = {key.lower(): key for key in self.SolverSpecificOptions}
         for k, v in updatedOptions.items():
             canonicalKey = canonicalByLower.get(k.lower())
@@ -646,9 +635,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             convergedAtAll = convergedAtAll and convergedCorrection and convergedFlux
 
         summary = self.linSolver.lastSolveSummary if self.linSolver.reportsSolveSummary else None
-        # ddU is None on the very first iteration of an increment (no linear solve has happened yet this
-        # increment) -- the column then stays blank instead of showing a stale summary left over from the
-        # previous increment's last solve, which belongs to no residual on this row.
+        # ddU is None on the first iteration of an increment: no solve yet, so the column stays blank.
         thisIterationsSolve = summary if ddU is not None else None
 
         self.journal.preformatted(
@@ -701,10 +688,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         csr_matrix
             The system matrix in compressed sparse row format.
         """
-        # In-place update: the returned matrix is the generator's internal CSR matrix.
-        # This is safe since no solver retains it across iterations, and the subsequent
-        # Dirichlet application only modifies values (the pattern is preserved), which
-        # are fully overwritten again on the next update.
+        # In-place update: the returned matrix is the generator's internal CSR matrix. Safe, since no solver
+        # keeps it across iterations and the Dirichlet application only overwrites values.
         KCsr = self.csrGenerator.updateInPlace(K)
         return KCsr
 
@@ -937,9 +922,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         if stepActions is not None:
             records = self._reconcileMPCDirichletConflicts(records, stepActions)
 
-        # Without a record T is the identity. Condensing with it would still cost a T^T K T + C product
-        # per Newton iteration, and the zero pruning after it changes the sparsity pattern between
-        # iterations, which defeats any pattern-keyed reuse in the linear solver.
+        # Without a record T is the identity: skip the T^T K T + C product and the pattern-changing zero pruning.
         if not records:
             return None
 
@@ -970,9 +953,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         for dirichlet in stepActions["dirichlet"].values():
             if not dirichlet.active:
                 continue
-            # the node set may have been mutated in place since this BC was built -- adaptive
-            # refinement adding boundary nodes -- which resizes the DOF index array derived from it
-            # but not the cached prescribed values, until the BC is asked to catch up
+            # the node set may have grown in place (adaptive refinement): let the BC catch up first
             dirichlet.reconcileIfSetChanged()
             indices = np.asarray(self._constrainedDofsOf(dirichlet)).flatten()
             values = np.asarray(dirichlet.delta).flatten()
@@ -1110,8 +1091,6 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             )
         if overridden:
             worstDof, worstWeight = max(overridden, key=lambda entry: entry[1])
-            # Rare and actionable, so it is marked as a warning and spells out the cause and the fix,
-            # unlike the routine messages above it; nested like them, as part of the rebuild.
             self.journal.message(
                 "WARNING: {:} multi-point-constraint equation(s) conflicted with a Dirichlet boundary "
                 "condition and were dropped -- a DOF cannot be both eliminated by a constraint and "
@@ -1146,8 +1125,6 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         if transformation is None:
             return
 
-        # A post-condition, not a gate: _reconcileMPCDirichletConflicts has already removed every
-        # conflicting record by the time the transformation is assembled, so this can only fire if
-        # that reconciliation missed one. Cheap enough to keep as a guard against exactly that.
+        # A post-condition: _reconcileMPCDirichletConflicts has already removed every conflicting record.
         for dirichlet in stepActions["dirichlet"].values():
             transformation.checkDirichletConflicts(self._constrainedDofsOf(dirichlet))

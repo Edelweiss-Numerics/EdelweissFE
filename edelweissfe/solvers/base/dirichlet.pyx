@@ -106,14 +106,11 @@ def applyDirichletToStiffness(K: csr_matrix, dirichlets: Iterable, rhs=None) -> 
                 else:
                     data[j] = 0.0  # Off-diagonal
 
-        # NOTE: the zeroed off-diagonals are deliberately kept as explicitly stored zeros.
-        # This preserves the sparsity pattern, so the assembled CSR matrix can be updated
-        # in place across iterations and direct solvers can reuse their symbolic
-        # factorization. (Direct solvers handle stored zeros without issues.)
+        # NOTE: the zeroed off-diagonals stay stored, preserving the sparsity pattern for in-place
+        # updates of the CSR matrix and reuse of the symbolic factorization.
         return K
 
-    # a strided 2D view of the right-hand side(s): writes go to the caller's own memory, whatever its
-    # layout (e.g. the arc-length solver's two right-hand sides are the columns of a transposed array)
+    # a strided 2D view of the right-hand side(s): writes go to the caller's own memory, whatever its layout
     rhsArray = np.asarray(rhs)
     cdef double[:, :] b = rhsArray[:, None] if rhsArray.ndim == 1 else rhsArray
     cdef int nRhs = b.shape[1]

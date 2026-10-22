@@ -109,13 +109,8 @@ def createFieldOutputFromInputFile(inputfile: dict, model: FEModel, journal: Jou
                 f_export_of_x = createMathExpression(f_export_of_x)
 
             if definition["rigidBody"]:
-                # A rigid body's visualization nodes are not independent degrees of
-                # freedom -- they are fully determined by its reference point -- so
-                # this bypasses NodeFields entirely rather than treating them as a
-                # subset of one. There is consequently no "P"/"dU"-like distinction
-                # to select via `result` -- RigidBodyFieldOutput always returns the
-                # field's current value -- so reject anything but the "U" (current
-                # value) convention rather than silently ignoring the user's intent.
+                # A rigid body's visualization nodes are determined by its reference point, so this
+                # bypasses NodeFields; only the current value ("U") can be output.
                 if definition["result"] not in ("U", "u"):
                     raise Exception(
                         f"During parsing of keyword {keywordIdentifier}fieldOutput "
@@ -241,8 +236,7 @@ def fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal) 
         The updated, filled model tree.
     """
 
-    # Model setup is a topology change: it is the one phase besides a model modifier's own update in
-    # which elements may be created (see TopologyPipeline.changes). Everything below runs inside it.
+    # Model setup is a topology change, in which elements may be created (see TopologyPipeline.changes).
     with model.topology.changes():
         return _fillFEModelFromInputFile(model, inputfile, journal)
 
@@ -272,10 +266,8 @@ def _fillFEModelFromInputFile(model: FEModel, inputfile: dict, journal: Journal)
     abqModelConstructor = AbqModelConstructor(journal)
     model = abqModelConstructor.createGeometryFromInputFile(model, inputfile)
 
-    # The base mesh is complete here, and it numbers its nodes and elements from the input file
-    # rather than from the allocators (see TopologyPipeline.adoptSetupElementNumbers). Raise both allocators
-    # above it now, so that everything created from this point on -- contact facets, rigid-body
-    # point masses, and later every model modifier -- draws numbers that cannot collide with it.
+    # The base mesh numbers its nodes and elements from the input file; raise both allocators above it,
+    # so that everything created from here on cannot collide with it.
     model.topology.adoptSetupElementNumbers()
     model.topology.adoptSetupNodeNumbers()
 
@@ -455,9 +447,7 @@ def createOutputManagersFromInputFile(
         outputManagerClass, outputManagerSchema = registry.lookup("outputmanager", outputManagerType)
 
         if outputManagerSchema is not None and issubclass(outputManagerSchema, DatalineAggregatingSchema):
-            # One instance aggregating a heterogeneous list of jobs, one or more per dataline,
-            # instead of one instance per dataline -- see `DatalineAggregatingSchema` for why the
-            # dataline interpretation belongs to the schema rather than to this adapter.
+            # One instance aggregating the jobs of all datalines; see `DatalineAggregatingSchema`.
             try:
                 configuration = outputManagerSchema.fromDatalines(
                     [convertLineToStringDictionary(line) for line in datalines]
@@ -488,12 +478,8 @@ def createOutputManagersFromInputFile(
                 "manager was ported, so there is no fallback path any more."
             )
 
-        # Look up the output manager's class and schema in the registry, then parse -> validate/coerce
-        # into the module's own option schema -> call its constructor. `moduleOptions` carries the
-        # nested `>>` sub-keyword blocks (ensight's `>>perNode`, `>>perElement`, `>>configuration`)
-        # and is forwarded as the schema's sub-keyword source; for a schema that declares no
-        # sub-keyword fields it is `{}`, and a stray block under such a keyword is rejected by
-        # `buildSchemaFromOptions` rather than silently dropped.
+        # Look up the output manager's class and schema, validate the options against the schema, and
+        # construct it. `moduleOptions` carries the nested `>>` sub-keyword blocks (e.g. `>>perNode`).
         for optionsForOneManager in [datalines] if len(datalines) == 0 else datalines:
             args, kwargs = parseDatalinesToArgsAndKwargs(optionsForOneManager)
 

@@ -134,18 +134,9 @@ def finiteElementSimulation(
     for updateConfig in inputfile["updateConfiguration"]:
         updateConfiguration(updateConfig, jobInfo, journal)
 
-    # Create the default entries 'U' (flux) and 'P' (effort) on every node field, and the kinematic
-    # entries 'V' (velocity) and 'A' (acceleration) on the ones a dynamic solver integrates in time
-    # -- those whose inertia is a mass. They stay zero until such a solver publishes into them.
-    #
-    # Created here, before the field outputs take their sample at job initialisation, so that a
-    # ``result=V``/``result=A`` output is valid from the start (a per-node field output reads
-    # ``nodeField[result]`` directly and would otherwise raise) rather than only from the first
-    # increment a dynamic solver has finished. Restricted to the mass-carrying fields because a
-    # velocity of a non-local damage or a temperature field is not a kinematic quantity any solver
-    # here publishes. On those fields they are created for every run, a quasi-static one included,
-    # where they stay zero -- and, like every other entry, travel into its restart checkpoints and
-    # through a refinement's warm start.
+    # Create the entries 'U' (flux) and 'P' (effort) on every node field, and 'V' (velocity) and 'A'
+    # (acceleration) on the mass-carrying ones (zero unless a dynamic solver writes them). Must happen
+    # before the field outputs are initialized, so that ``result=V``/``result=A`` outputs are valid.
     for nodeField in model.nodeFields.values():
         nodeField.createFieldValueEntry("U")
         nodeField.createFieldValueEntry("P")
@@ -155,17 +146,10 @@ def finiteElementSimulation(
 
     model._linkFieldVariableObjects(model.nodeSets["all"])
 
-    # *restart, readFrom=...: resume from a checkpoint. Reconstruct-then-overwrite, not full
-    # serialization -- the model above was already rebuilt from this same .inp file, and
-    # readRestart only overwrites its converged state (node fields, element history, scalar
-    # variables, stateful constraints' history) plus model.time, so it must run after node fields
-    # exist (createFieldValueEntry above) and after advanceToTime's cold-start bookkeeping, which
-    # would otherwise clobber model.time back to job['startTime'].
-    #
-    # Resuming skips every step before the checkpoint's step. Topology changes made by model
-    # modifiers (e.g. AMR) are replayed from the checkpoint's topology history. A `modelupdate`
-    # executes an arbitrary expression, whose effect no checkpoint records -- so a resume past one,
-    # in a skipped step or at the start of the resumed step, is refused.
+    # *restart, readFrom=...: the model rebuilt from the .inp file gets its converged state and
+    # model.time overwritten from the checkpoint. Must run after the node field entries are created
+    # and after advanceToTime (which would reset model.time). Steps before the checkpoint's step are
+    # skipped; AMR topology changes are replayed; resuming past a `modelupdate` is refused.
     restartDefinitions = inputfile["restart"]
     resumeCheckpoint = None
     resumeStepNumber = None
@@ -182,11 +166,7 @@ def finiteElementSimulation(
             identification,
             0,
         )
-        # Restoring replays the checkpoint's topology history, and the AMR calls of that replay are
-        # timed. They are reported here, in a table of their own: the step's timers start from zero
-        # together with its wall clock (the solver's beginStep), so the replay would otherwise be
-        # lost. A checkpoint without a topology history replays nothing worth a table (the mesh
-        # dependents' refresh is a no-op then), and gets none.
+        # Report the timing of the topology replay here; the step's timers start from zero later.
         if model.topology.history:
             journal.printPrettyTable(performancetiming.makePrettyTable(wallTime=restoreTime), identification)
 
@@ -216,12 +196,10 @@ def finiteElementSimulation(
     defaultSolver = getSolverByName(job["solver"])
     solvers["default"] = defaultSolver(jobInfo, journal)
 
-    # Looked up by name from a >>options block (edelweissfe.stepactions.options), which resolves
-    # directly against these two rather than scanning step actions for a category tag.
+    # Looked up by name from a >>options block (edelweissfe.stepactions.options).
     model.solvers = solvers
     model.outputManagers = {outputManager.name: outputManager for outputManager in outputManagers}
 
-    # The output managers exist only now, well after the model was restored above.
     try:
         for step in stepManager.generateSteps(jobInfo, model, fieldOutputController, journal, solvers, outputManagers):
             if resumeStepNumber is not None:
@@ -231,9 +209,7 @@ def finiteElementSimulation(
                         "the run cannot be resumed after it".format(step.number)
                     )
                 if step.number < resumeStepNumber:
-                    # Constructed, so that its step actions exist, but not solved: it already ran
-                    # before the interrupted job wrote this checkpoint, and the state its step
-                    # actions carried over is restored with the resumed step.
+                    # Constructed (so its step actions exist) but not solved: it ran before the checkpoint.
                     continue
             resumeFrom = None
             if step.number == resumeStepNumber:
@@ -243,9 +219,7 @@ def finiteElementSimulation(
             try:
                 step.solve(resumeFrom)
             finally:
-                # Record inside finally so a step that raises (e.g. via a deliberate
-                # maxNumInc cap) still counts its elapsed time -- previously this sat after
-                # step.solve() outside any try and was skipped whenever a step failed.
+                # In finally, so a failing step still counts its elapsed time.
                 toc = getCurrentTime()
                 stepTime = toc - tic
                 jobInfo["computationTime"] += stepTime

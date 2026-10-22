@@ -36,10 +36,7 @@ exclusive midside, with its two edge-endpoint corners if the latter.
 import numpy as np
 
 #: ``(nSpatialDimensions, nNodes) -> (cornerLocalIndices, [(midsideLocal, cornerALocal, cornerBLocal), ...])``
-#: the only two quadratic-serendipity element families in this codebase that carry exclusive
-#: midside nodes (verified against the actual shape functions, both the pure-Python
-#: ``edelweissfe.elements.displacementelement`` and Marmot's ``DisplacementFiniteElement``, and
-#: cross-checked against ``edelweissfe.adaptivity.hex20shapefunctions.EDGES`` for Hexa20).
+#: for the quadratic-serendipity element families carrying exclusive midside nodes.
 _QUAD8_TOPOLOGY = ([0, 1, 2, 3], [(4, 0, 1), (5, 1, 2), (6, 2, 3), (7, 3, 0)])
 _HEXA20_TOPOLOGY = (
     list(range(8)),
@@ -60,12 +57,8 @@ _HEXA20_TOPOLOGY = (
 )
 _QUADRATIC_TOPOLOGY = {(2, 8): _QUAD8_TOPOLOGY, (3, 20): _HEXA20_TOPOLOGY}
 
-#: node counts verified, against this repo's full element-type inventory (every ``*element,
-#: type=...`` across ``testfiles/``), to carry no midside nodes at all whenever the
-#: ``(nSpatialDimensions, nNodes)`` pair is not one of the two quadratic families above -- e.g.
-#: ``C3D8``/``GC3D8*`` (3, 8), ``GCPS4`` (2, 4), ``T2D2`` (2, 2). A contact facet has no
-#: ``nSpatialDimensions`` of its own at all and is always pure-corner regardless of node count,
-#: since a facet element cannot itself carry a midside concept.
+#: node counts that carry no midside nodes outside the quadratic families above, e.g. ``C3D8`` (3, 8),
+#: ``GCPS4`` (2, 4), ``T2D2`` (2, 2). A contact facet (no ``nSpatialDimensions``) is always pure-corner.
 _KNOWN_LINEAR_NODE_COUNTS = {1, 2, 3, 4, 6, 8}
 
 
@@ -156,11 +149,8 @@ def buildP1Map(model, fieldName: str):
     nodeRows = {node: i for i, node in enumerate(field.nodes)}
     nNodes = len(field.nodes)
     isCorner = np.zeros(nNodes, dtype=bool)
-    # provisional -- a node classified as a midside by the element seen first may turn out to be a
-    # corner of a *different* element processed later (the AMR corner-wins case), so isCorner and
-    # the edge-endpoint candidates are collected in one pass over every element first, and only
-    # resolved into the final per-row result afterward -- writing straight into a shared
-    # `edgeEndpoints` array during this loop would leave a stale entry for exactly that case.
+    # Provisional: a midside of one element may be a corner of a later one (AMR), so candidates are
+    # collected over all elements first and resolved afterward.
     provisionalEdges: dict[int, frozenset] = {}
     conflictingRows: set[int] = set()
 

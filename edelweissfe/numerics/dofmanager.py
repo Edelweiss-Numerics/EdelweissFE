@@ -121,11 +121,8 @@ class DofManager:
         #: Reverse dictionary mapping an index to its Host object (e.g., a Node).
         #:
         #: .. warning::
-        #:    Nothing in EdelweissFE reads this, and nothing calls :meth:`getHostObjectForIndex`
-        #:    either; building it costs a pass over every degree of freedom. It is kept, and
-        #:    still built by default, only because an external caller may rely on it -- but it
-        #:    should either find a consumer or be removed. The explicit solver already asks for
-        #:    it not to be built.
+        #:    Not read within EdelweissFE (kept for external callers); building it costs a pass over
+        #:    every degree of freedom.
         self.indexToHostObjectMapping = dict()
         self.accumulatedElementNDof = 0  #: Accumulated number of element DOFs (= sum of element vector sizes)
         self.largestNumberOfElNDof = 0  #: Size of the largest element DOF vector
@@ -156,8 +153,7 @@ class DofManager:
         )
         self.idcsOfHigherOrderEntitiesInDofVector = self.idcsOfElementsInDofVector | self.idcsOfConstraintsInDofVector
 
-        #: Which of the optional structures this manager carries, so that
-        #: :meth:`refreshConstraintIndices` keeps exactly those, and no others, consistent.
+        #: Which of the optional structures this manager carries, for :meth:`refreshConstraintIndices`.
         self._hasAccumulatedNodalFluxes = initializeAccumulatedNodalFluxesFieldwise
         self._hasVIJPattern = initializeVIJPattern
 
@@ -497,39 +493,30 @@ class DofManager:
         if not entities:
             return {}
 
-        # Ensure we have a list for chunking
         entities_list = list(entities)
         nEntities = len(entities_list)
 
-        # Threading setup
         numThreads = getNumberOfWorkerThreads()
 
-        # Heuristic: Don't spawn threads for tiny workloads
+        # Don't spawn threads for tiny workloads
         if nEntities < 500 or numThreads == 1:
             return self._locate_serial_internal(entities_list)
 
         chunk_size = (nEntities + numThreads - 1) // numThreads
         chunks = [entities_list[i : i + chunk_size] for i in range(0, nEntities, chunk_size)]
 
-        # 1. Localize the global map to a local variable
-        # This prevents threads from accessing 'self' inside the hot loop
+        # Local names avoid attribute lookups in the hot loop below
         global_fv_map = self.idcsOfFieldVariablesInDofVector
 
         def processEntityChunk(chunk):
             localMap = {}
-            # 2. Bind the .get or dictionary access to a local name
-            # This is a micro-optimization that avoids repeated attribute lookups
             fv_lookup = global_fv_map
 
             for ent in chunk:
-                # 3. Cache entity attributes to local variables
-                # This avoids the 'dot' overhead inside the nested loops
                 nodes = ent.nodes
                 fields_on_ent = ent.fields
                 permutation = ent.dofIndicesPermutation
 
-                # 4. Use a flat list comprehension or optimized loop
-                # List comprehensions are generally faster than .append/.extend in Python
                 try:
                     indices = [
                         idx
@@ -540,7 +527,6 @@ class DofManager:
                 except (KeyError, AttributeError):
                     continue
 
-                # 5. Use np.int32 for better cache performance
                 destArr = np.array(indices, dtype=np.int32)
 
                 if permutation is not None:
@@ -550,9 +536,7 @@ class DofManager:
             return localMap
 
         idcsOfElementsInDofVector = {}
-        # We use the executor context manager here as requested (no persistent executor)
         with ThreadPoolExecutor(max_workers=numThreads) as executor:
-            # map() returns a generator; wrapping in list() or iterating merges results
             for partial_map in executor.map(processEntityChunk, chunks):
                 idcsOfElementsInDofVector.update(partial_map)
 
@@ -627,8 +611,7 @@ class DofManager:
         for field in self.idcsOfNodeFieldsInDofVector:
             nodeSetFieldsInDofVector[field] = dict()
             for nSet in nodeSets:
-                # Concatenate the per-node index arrays as whole arrays: iterating them element by
-                # element, as np.fromiter over a chain would, is a Python-level loop over every DOF.
+                # Concatenate the per-node index arrays as whole arrays, not element by element.
                 indicesPerNode = [field_var_map[node.fields[field]] for node in nSet if field in node.fields]
                 nodeSetFieldsInDofVector[field][nSet] = (
                     np.concatenate(indicesPerNode).astype(int, copy=False) if indicesPerNode else np.empty(0, dtype=int)

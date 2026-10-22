@@ -80,17 +80,8 @@ identity) keeps its frictional history and augmented-Lagrange multiplier; a newl
 starts at rest.
 """
 
-# Angular threshold separating a *continuous* drift of the frozen contact frame between two
-# increments (the slave staying on its facet, or crossing onto a smoothly adjacent one of a curved
-# but adequately resolved master surface) from a genuine *crease* of the master surface, used in
-# updateConnectivity to decide whether the frictional history may still be rotated into the newly
-# frozen tangent plane. 30 degrees is the customary smooth-versus-sharp feature angle of surface
-# geometry processing and of contact surface smoothing, and it separates the two regimes with a
-# comfortable margin on both sides: a smooth surface of curvature radius R facetted with facet size
-# h changes its normal by about h / R between neighboring facets, i.e. by less than 10 degrees for
-# any surface resolved finely enough for a meaningful contact pressure distribution, while the
-# creases of engineering geometries (45 degree chamfers, 90 degree steps, notch flanks) change it
-# by 45 degrees and more.
+# Normal change between increments beyond which the master surface is treated as creased, and the
+# frictional history is discarded rather than rotated into the new tangent plane (see updateConnectivity).
 _cosOfSmoothNormalChangeLimit = np.cos(np.deg2rad(30.0))
 
 
@@ -352,12 +343,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self.slaveFacetElements = list(slaveSurface)
         self.facetElements = list(masterSurface)
 
-        # The contact points are the unique nodes of the slave surface, each weighted by its
-        # tributary area: the sum of its area shares over its incident slave facets (assigned by
-        # the surface element generator; consistent with a uniform pressure on the source faces),
-        # evaluated in the reference configuration (consistent with the small-deformation
-        # setting). A share may be zero (nodalWeights=serendipityOptimal zeroes the corner nodes of
-        # quadratic faces); such nodes are kept, inert, to preserve the slave node ordering.
+        # The contact points are the unique slave surface nodes, each weighted by its tributary area (sum
+        # of its area shares over its incident slave facets, in the reference configuration). Nodes with a
+        # zero share (nodalWeights=serendipityOptimal) are kept, inert, to preserve the slave node ordering.
         tributaryAreaOfSlaveNode = {}
         for slaveFacet in self.slaveFacetElements:
             for node, share in zip(slaveFacet.nodes, slaveFacet.nodalAreaShares):
@@ -420,15 +408,13 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._frozenWeights = [None] * self.nSlaves
         self._frozenNormals = [None] * self.nSlaves
 
-        # Frictional history: tangential force exerted on each slave node, at the last converged
-        # state and at the current Newton iterate (the latter is only a scratch value, promoted to
-        # converged by acceptLastState()).
+        # Frictional history: tangential force on each slave node, converged and at the current Newton
+        # iterate (scratch, promoted by acceptLastState()).
         self._tangentialForceConverged = np.zeros((self.nSlaves, self.nDim))
         self._tangentialForceCurrent = np.zeros((self.nSlaves, self.nDim))
 
-        # Augmented-Lagrange state: per-slave normal traction multiplier (a force, <= 0 in
-        # contact), plus the gap of the current Newton iterate as a scratch value for the Uzawa
-        # update on increment acceptance.
+        # Augmented-Lagrange state: per-slave normal traction multiplier (a force, <= 0 in contact), and
+        # the gap of the current Newton iterate for the Uzawa update on increment acceptance.
         self._lambdaN = np.zeros(self.nSlaves)
         self._gapCurrent = np.zeros(self.nSlaves)
 
@@ -493,10 +479,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         newAssignment = [None] * self.nSlaves
 
         if self.sliding == "small":
-            # Clamped closest-point search: the assigned facet is the one whose closed domain
-            # (interior/edges/vertices) is truly closest -- no dead zone at facet seams, and the
-            # clamped weights are non-negative by construction. Facet, weights, and normal are
-            # frozen for the whole increment, making the gap linear in the displacement DOFs.
+            # Clamped closest-point search (no dead zone at facet seams, non-negative weights). Facet,
+            # weights, and normal are frozen for the whole increment: the gap is linear in the DOFs.
             nSlavesWithDiscardedHistory = 0
             candidatesPerSlave = closestFacetCandidates(slaveCoords, facetCoords, self.searchDistance)
             closestFacet, closestWeights, closestDistance = closestFacets(slaveCoords, facetCoords, candidatesPerSlave)
@@ -505,10 +489,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
                 if bestFacet >= 0 and (self.searchDistance is None or bestDistance <= self.searchDistance):
                     newAssignment[s] = bestFacet
-                    # The search and its clamping run on the true barycentric weights; only what is
-                    # *stored* -- hence what distributes the force and enters the gap gradient -- is
-                    # transformed. See _validateMasterWeightTransforms for why this is admissible
-                    # here and refused for finite sliding.
+                    # Only the stored weights are transformed, not those of the search;
+                    # see _validateMasterWeightTransforms.
                     weightTransform = self.facetElements[bestFacet].weightTransform
                     self._frozenWeights[s] = bestWeights if weightTransform is None else weightTransform @ bestWeights
                     normal, _ = facetNormalAndMeasure(facetCoords[bestFacet])
@@ -516,33 +498,16 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
                     self._frozenNormals[s] = normal
 
                     if previousNormal is None or previousNormal.dot(normal) >= _cosOfSmoothNormalChangeLimit:
-                        # Rotate the frictional history into the new frozen tangent plane; the frame
-                        # changes only slightly per increment in a small-deformation setting. Nothing
-                        # to rotate if the slave was out of contact in the last increment (no
-                        # previous normal): its history has been zeroed then, respectively at
-                        # construction.
+                        # Rotate the frictional history into the new frozen tangent plane (nothing to
+                        # rotate without a previous normal: the history is zero then).
                         projectorOntoTangentPlane = np.eye(self.nDim) - np.outer(normal, normal)
                         self._tangentialForceConverged[s] = (
                             projectorOntoTangentPlane @ self._tangentialForceConverged[s]
                         )
                     else:
-                        # The new frozen tangent plane is *not* a small perturbation of the one the
-                        # frictional history was accumulated in: the slave has slid over a genuine
-                        # crease of the master surface (or its facet has rotated far beyond what the
-                        # small-sliding formulation assumes). Rotating the history here would
-                        # silently discard the -- possibly dominant -- part of it that now points
-                        # along the new normal, leaving a stick predictor unrelated to the actual
-                        # frictional state, so the history is discarded instead and the slave enters
-                        # the increment like a fresh contact on the new face. This is cheap where it
-                        # is wrong and right where it matters: a slave in genuine stick does not
-                        # move, hence cannot cross a crease in the first place, while a *slipping*
-                        # slave is returned onto the cone |f_T| = mu * N within the same increment,
-                        # independently of its history. The normal traction multiplier is retained:
-                        # it is a frame-independent magnitude acting along the freshly frozen gap
-                        # gradient, and the contact pressure does not vanish just because the slave
-                        # slid over a corner -- releasing it (as done below on loss of contact)
-                        # would only undo the converged Uzawa progress and let the penetration
-                        # spike again.
+                        # The slave slid over a crease: discard the frictional history (the slave
+                        # re-enters like a fresh contact on the new face), but keep the normal traction
+                        # multiplier, which is frame-independent.
                         self._tangentialForceConverged[s] = 0.0
                         nSlavesWithDiscardedHistory += 1
                 else:
@@ -823,9 +788,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             penaltyTimesArea = self.penalty * self.tributaryAreas[s]
 
             if g >= 0.0:
-                # Open gap, but a not-yet-released multiplier from the last Uzawa update: apply
-                # its constant force only (no penalty part, no tangent contribution). The
-                # multiplier decays to zero within a few increments after separation.
+                # Open gap, but a not-yet-released multiplier: apply its constant force only.
                 f_n = lambdaForce
                 stiffness = 0.0
             else:
@@ -974,13 +937,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
                 g = self._gapCurrent[s]
                 penaltyTimesArea = self.penalty * self.tributaryAreas[s]
 
-                # Augment by the converged *penalty force part* (law-dependent), so the multiplier
-                # absorbs exactly the force the penalty spring was carrying -- one-step transfer
-                # for both laws. Augmenting by penalty*A*g irrespective of the law is the textbook
-                # rule for the linear law only; for the quadratic law the converged gap scales as
-                # sqrt(2N/(penalty*A)), so penalty*A*g overshoots the required traction by orders
-                # of magnitude and destabilizes the increments. At an open gap, release toward
-                # zero with the linear measure (there is no penalty force to transfer).
+                # Augment by the converged penalty force (law-dependent); the textbook penalty*A*g holds
+                # for the linear law only and overshoots grossly for the quadratic one. At an open gap,
+                # release toward zero with the linear measure.
                 if g >= 0.0:
                     penaltyForcePart = penaltyTimesArea * g
                 else:

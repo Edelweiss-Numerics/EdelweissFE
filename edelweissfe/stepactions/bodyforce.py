@@ -86,10 +86,8 @@ class BodyForceSchema:
         description="In subsequent steps only: define the updated force vector incrementally",
         dtype=str,
         default=None,
-        # The documented default is `0`, but the actual runtime default is `None`, the sentinel
-        # `updateStepActionFromDefinition` checks for -- `delta` is unreachable via an input file
-        # anyway (see its docstring). `documentedDefault` reproduces the golden text without
-        # changing behavior. See SchemaFieldMeta.documentedDefault.
+        # Documented as `0`; the runtime default `None` is the sentinel `updateStepActionFromDefinition`
+        # checks for. See SchemaFieldMeta.documentedDefault.
         documentedDefault=0,
     )
 

@@ -121,9 +121,7 @@ class VonMisesMaterial(BaseHypoElasticMaterial):
         # derivative of fy dKappa
         self._dfy_ddKappa = lambda kappa_: self.HLin + self.deltaYieldStress * self.delta * np.exp(-self.delta * kappa_)
         self._G = self._E / (2 * (1.0 + self._v))
-        # E and v are immutable for the lifetime of this instance (ChangeMaterialProperty
-        # constructs a new material instance rather than mutating an existing one), so the
-        # elasticity matrix only needs to be assembled once.
+        # E and v never change for this instance, so the elasticity matrix is assembled once
         self._Ei = self._computeElasticityMatrix()
 
     def _computeElasticityMatrix(self) -> np.ndarray:

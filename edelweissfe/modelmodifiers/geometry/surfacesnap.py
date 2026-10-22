@@ -146,13 +146,10 @@ class SnapPlan:
     labels: tuple
     coords: tuple
     newWallNodes: tuple
-    #: candidates (new this round, or retried from a past round) that are still not snapped after
-    #: this round -- a hanging-node collision, or vetoed by the quality safeguard. Retried again on
-    #: a later round: a collision can resolve once its coarse neighbour is itself refined, and a
-    #: quality veto can resolve once the local geometry changes.
+    #: candidates still not snapped after this round (hanging-node collision or quality veto);
+    #: retried on a later round.
     stillPendingLabels: tuple
-    #: previously-pending labels (from an earlier round) that got successfully snapped this round,
-    #: and so should be removed from the pending set.
+    #: previously-pending labels snapped this round, to be removed from the pending set.
     resolvedPendingLabels: tuple
 
     def __init__(self, labels, coords, newWallNodes, stillPendingLabels=(), resolvedPendingLabels=()):
@@ -183,8 +180,7 @@ class ModelModifier(ModelModifierBase):
     #: Option schema for this model modifier, per OptionSchemaProvider.
     schema = SurfaceSnapSchema
 
-    #: Carries nothing from one decision to the next itself: the wall and pending nodes it tracks
-    #: are model node sets, grown in :meth:`apply` and therefore rebuilt by a restart's replay.
+    #: Empty: the tracked wall and pending nodes are model node sets, rebuilt by a restart's replay.
     checkpointedState = {}
 
     def __init__(self, name: str, model: FEModel, journal: Journal, *args, **kwargs):
@@ -222,18 +218,11 @@ class ModelModifier(ModelModifierBase):
         #: local slot indices (0-19) that are corners, i.e. the nodes a face/edge actually spans.
         self._cornerSlots = {i for i, p in enumerate(refParams) if np.all(np.isclose(np.abs(p), 1.0))}
 
-        # The tracked "known to lie exactly on the analytical surface" node set -- a genuine model
-        # NodeSet, not private Python state, precisely so it is restart-replay-safe (see module
-        # docstring). Private to this modifier instance: never referenced by a marker, BC, or any
-        # other consumer, so growing it has no side effect beyond this modifier's own bookkeeping --
-        # unless a user happens to already have a node set of this exact generated name, which is
-        # rejected rather than silently overwritten (it would otherwise invalidate anything that
-        # already holds that set, e.g. a BC or output).
+        # Nodes known to lie exactly on the analytical surface: a model NodeSet (not Python state) so
+        # restart replay rebuilds it. An existing set of the same name is rejected, not overwritten.
         self._wallSetName = f"__surfaceSnap_{name}_wallNodes"
-        #: nodes topologically confirmed on the tracked wall but not yet successfully snapped (a
-        #: hanging-node collision or a quality-safeguard veto) -- retried every round something
-        #: changed, since either condition can resolve later (the collision once its coarse
-        #: neighbour is itself refined; the veto once local geometry changes).
+        #: nodes on the tracked wall not yet snapped (hanging-node collision or quality veto);
+        #: retried every round something changed.
         self._pendingSetName = f"__surfaceSnap_{name}_pendingNodes"
         for generatedSetName in (self._wallSetName, self._pendingSetName):
             if generatedSetName in model.nodeSets:
@@ -306,14 +295,8 @@ class ModelModifier(ModelModifierBase):
         affectedElements = set()  # elements whose quality must be checked before vs. after
 
         # Pass 1: every child face tiling a tracked wall face, and which of its 8 nodes are new.
-        #
-        # Cannot identify the wall face by looking up the PARENT element (change.faceMap's own
-        # key): hAdaptivity has already REMOVED the parent from model.elements by the time this
-        # runs -- only its children (change.faceMap's values) still exist. Instead: a face was on
-        # the tracked wall iff every one of its REUSED (non-added) node labels, gathered across
-        # every child tiling it, is already a member of the tracked wall set -- reused corners and
-        # some reused edge-midpoints always exist for a genuine HEX20 face subdivision, so this
-        # never needs the parent itself.
+        # The parent is already removed from the model, so a face is on the wall iff all its reused
+        # (non-added) node labels, gathered across its children, are in the tracked wall set.
         if change.faceMap and change.addedNodes:
             for (parentLabel, faceID), childPairs in change.faceMap.items():
                 faceIdx = self._topology.faceid_to_face[faceID]
@@ -342,9 +325,7 @@ class ModelModifier(ModelModifierBase):
                             candidateKind[label] = "corner" if i in self._cornerSlots else "midside"
                             elementOf[label] = childEl
 
-        # Pass 1b: retry every label still pending from an earlier round -- a hanging-node
-        # collision may have stopped being one once its coarse neighbour was itself refined, or a
-        # quality-safeguard veto may resolve once local geometry changes.
+        # Pass 1b: retry every label still pending from an earlier round.
         for label in pendingLabels:
             if label in candidateKind or label not in model.nodes:
                 continue
@@ -363,8 +344,7 @@ class ModelModifier(ModelModifierBase):
         collisions = set()
         labelsToCoord = {}
 
-        # Pass 2: corners first (always radially projected, regardless of midside mode) -- later
-        # midside computation in "straight" mode needs their resolved (post-snap) positions.
+        # Pass 2: corners first (always projected): "straight" midsides need their snapped positions.
         for label, kind in candidateKind.items():
             if kind != "corner":
                 continue
@@ -403,13 +383,9 @@ class ModelModifier(ModelModifierBase):
                 1,
             )
 
-        # Quality safeguard: an affected element's min corner Jacobian must not invert or drop
-        # below qualityDropThreshold of its pre-snap value. All-or-nothing per round, not per
-        # node: a partial snap could leave a midside straight-mode mean referencing a corner that
-        # was itself rolled back, which is not worth the complexity for what Phase 1 measured to
-        # be a non-occurring case in practice. Either way, wall-face/pending membership is
-        # unaffected -- these nodes ARE on the wall face regardless of whether they got moved, and
-        # a veto is retried on a later round (see stillPendingLabels below).
+        # Quality safeguard: an affected element's min corner Jacobian must not invert or drop below
+        # qualityDropThreshold of its pre-snap value. All-or-nothing per round, since a straight-mode
+        # midside depends on its corners. Vetoed nodes stay pending.
         affected = {el for el in affectedElements if set(n.label for n in el.nodes) & labelsToCoord.keys()}
         degraded = []
         for el in affected:
@@ -453,10 +429,8 @@ class ModelModifier(ModelModifierBase):
             model.nodes[label].coordinates = np.array(coord, dtype=float)
 
         if plan.labels:
-            # Every hAdaptivity instance keeps its own AdaptiveMesh mirror with node coordinates
-            # cached at refine time (see HAdaptivityModelModifier.syncNodeCoordinates's own
-            # docstring for why). Without this, a LATER refinement of an already-snapped element
-            # would silently subdivide from the pre-snap geometry, discarding this correction.
+            # hAdaptivity caches node coordinates; without this sync, a later refinement would
+            # subdivide from the pre-snap geometry.
             coordByLabel = dict(zip(plan.labels, plan.coords))
             for modifier in model.modelModifiers.values():
                 if isinstance(modifier, HAdaptivityModelModifier):
@@ -471,12 +445,7 @@ class ModelModifier(ModelModifierBase):
             newLabels = [label for label in plan.newWallNodes if label not in existing]
             if newLabels:
                 wallSet.add([model.nodes[label] for label in newLabels])
-                # Growing this set is itself the meaningful, replay-worthy event: a round can
-                # legitimately snap zero nodes (every candidate a hanging-node collision, or the
-                # quality safeguard vetoed all of them) while still discovering real new wall-face
-                # membership a later round needs. Marking changedNodeSets here -- not just when
-                # movedNodes is non-empty -- is what makes the topology update's isEmpty check record
-                # (and therefore restart-replay) this round even when nothing moved.
+                # Marked even if no node moved, so this round is recorded and replayed on restart.
                 change.changedNodeSets.add(self._wallSetName)
 
         if plan.stillPendingLabels or plan.resolvedPendingLabels:

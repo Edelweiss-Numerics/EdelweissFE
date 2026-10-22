@@ -83,17 +83,13 @@ class TopologyPipeline:
         self.isOpen = False
         #: Guard against a model modifier that keeps planning in response to its own output.
         self.maxRounds = 16
-        #: Ordered record of every applied model-modifier decision; see :meth:`update`. This
-        #: IS the restart history -- a resumed run replays it rather than re-deciding.
+        #: Ordered record of every applied model-modifier decision: the restart history, replayed on resume.
         self.history = []
         #: Compare the replayed topology's fingerprint against the recorded one, once, after the whole
-        #: history has been replayed. On by default: it is the difference between "the resumed run
-        #: diverged" and "it did not". See :meth:`replayHistory`.
+        #: history has been replayed. See :meth:`replayHistory`.
         self.verifyFingerprints = True
-        #: Additionally compute and compare a fingerprint after *every* replayed record, which turns
-        #: "the resumed run diverged" into "it diverged HERE". Off by default: it costs one whole-mesh
-        #: walk per record, so a long history replays in O(records x mesh) rather than O(mesh).
-        #: Switch it on to locate a divergence the final check reported.
+        #: Additionally compare a fingerprint after *every* replayed record, to locate a divergence.
+        #: Off by default: it costs one whole-mesh walk per record.
         self.verifyFingerprintsPerRecord = False
         #: The fingerprint of the mesh as the input file built it, before any model modifier acted;
         #: see :meth:`setupFingerprint`.
@@ -353,18 +349,11 @@ class TopologyPipeline:
 
         changed = False
         with self.changes():
-            # Seeded with the version at the START of this update, not None: a modifier must see
-            # what earlier modifiers did in the SAME round. Seeding with None meant a purely
-            # reactive modifier (one that only acts on someone else's change) was handed None in
-            # round 1 -- after the change it needed to see had already happened -- and then had its
-            # version stamped, so round 2 showed nothing new either. It never reacted at all.
+            # Seeded with the version at the START of this update, so that a modifier sees what
+            # earlier modifiers did in the same round.
             lastPlannedVersion = {name: self.version for name in self._model.modelModifiers}
-            # Which modifier touched which element, over the WHOLE update rather than one round.
-            # Two modifiers mutating one element is a conflict even when their declared domains are
-            # disjoint -- e.g. one deleting what the other just created -- and the result depends on
-            # their order, which is exactly the kind of thing that must not decide a simulation
-            # quietly. Spanning all rounds matters because the rounds exist precisely so that a
-            # modifier can react to another's output, which is when the collision is most likely.
+            # Which modifier touched which element, over all rounds: two modifiers mutating one
+            # element is a conflict, even with disjoint declared domains.
             touchedBy = {}  # element number -> (modifier name, round it was touched in)
             roundNumber = 0
             while True:
@@ -377,10 +366,7 @@ class TopologyPipeline:
                     if plan is None:
                         continue
                     modelChange = modifier.apply(self._model, plan)
-                    # A modifier may plan and then find nothing left to do. Recording that would
-                    # rebuild the equation system for nothing, pay a topology fingerprint for
-                    # nothing, and let the no-op modifier burn through maxRounds and be
-                    # named as the one that would not settle.
+                    # a plan that changed nothing is not recorded, nor does it count for maxRounds
                     if modelChange is not None and modelChange.isEmpty:
                         continue
                     if modelChange is not None:
@@ -585,8 +571,7 @@ class TopologyPipeline:
                     )
                 plan = modifier.decodePlan(record.plan)
                 modelChange = modifier.apply(self._model, plan)
-                # Carry the recorded digest forward instead of recomputing it -- unless every record
-                # is to be verified, which needs the replayed one.
+                # carry the recorded digest forward, unless every record is verified
                 replayed = self.recordChange(
                     record.roundNumber,
                     record.modifier,

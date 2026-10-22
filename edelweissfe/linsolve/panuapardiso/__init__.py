@@ -82,9 +82,7 @@ def createSolver(opts) -> Callable:
         time (matching the pre-refactor behaviour), not deferred to the first solve.
     """
 
-    # Imported inside the function body, not at module scope: this extension is optional and
-    # genuinely absent in most installs, so at module scope its absence would break anyone who
-    # merely resolves a `linsolver` registry name rather than this one.
+    # Imported lazily: this extension is optional.
     from edelweissfe.linsolve.panuapardiso.panuapardiso import panuaPardisoSolve
 
     return PanuaPardisoSolver(panuaPardisoSolve)

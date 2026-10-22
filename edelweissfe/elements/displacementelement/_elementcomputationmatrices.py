@@ -168,11 +168,8 @@ def computeNOperator(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, nInt: int, 
                     )
                 )
     elif dim == 3:
-        # Hexa8/Hexa20 node ordering (see edelweissfe.elements._hexa3dnodeordering) follows the
-        # standard Abaqus C3D8/C3D20 convention (corner ring 0-3 at zeta=-1, ring 4-7 at zeta=+1),
-        # matching Marmot's element formulation -- this is also the local node ordering assumed by
-        # any face-numbering convention (e.g. a contact-facet generator) built on top of this
-        # element.
+        # Hexa8/Hexa20 node ordering (see edelweissfe.elements._hexa3dnodeordering) follows the Abaqus
+        # C3D8/C3D20 convention (corner ring 0-3 at zeta=-1, ring 4-7 at zeta=+1), as in Marmot.
         if nNodes == 8:  # Hexa8
             for i in range(nInt):
                 N[i] = hexa8N(xi[i], eta[i], z[i])

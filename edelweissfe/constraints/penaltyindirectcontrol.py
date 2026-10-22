@@ -147,10 +147,8 @@ class Constraint(ConstraintBase, MeshDependent):
         self.constrainedNSet = constrainedNSet
         self.loadNSet = loadNSet
 
-        # the target total load, never mutated -- the per-node share (self.unitResidual, built in
-        # _rebuildDerivedState) is (re)derived from this against the *current* size of loadNSet, so
-        # a mid-run AMR growth of loadNSet keeps the documented normalizeLoad semantics (constant
-        # total load, or a fixed per-node load) instead of freezing them at construction-time size
+        # the target total load, never mutated: the per-node share (self.unitResidual) is rederived from
+        # it against the current size of loadNSet, which may grow under AMR
         self._targetLoadVector = np.fromstring(configuration.loadVector, dtype=float, sep=",")
         self._normalizeLoad = configuration.normalizeLoad
 

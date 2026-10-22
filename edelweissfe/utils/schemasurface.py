@@ -210,16 +210,11 @@ def _renderKeywordLines(spec: KeywordSurfaceSpec, bracket: str) -> list[str]:
         if fieldMeta.subSchema is not None:
             (subRequired if fieldMeta.required else subOptional).append((optionName, fieldName))
         elif fieldMeta.optionsOverrideOnly:
-            # Reachable only via a later ">>options" override, not part of this keyword's own
-            # line/">>"-block grammar -- see SchemaFieldMeta.optionsOverrideOnly. Rendering-only
-            # exclusion: scalarOptionNames/optionNames still include it, so the dynamic ">>options"
-            # validation (coercePresentOptions against this very schema) is unaffected.
+            # Only reachable via a later ">>options" override; hidden from rendering only, still validated.
             continue
         elif fieldMeta.updateOnly:
-            # Belongs only to this schema's "update<keyword>" grammar (e.g. distributedload's
-            # "delta"), not to the base keyword's own line grammar -- see
-            # SchemaFieldMeta.updateOnly. Rendering-only exclusion, from the *base* keyword's block;
-            # a dedicated update-keyword spec built with its own schema renders it normally.
+            # Only part of the "update<keyword>" grammar (e.g. distributedload's "delta"); hidden from the base
+            # keyword's rendering only.
             continue
         else:
             (scalarRequired if fieldMeta.required else scalarOptional).append((optionName, fieldName))

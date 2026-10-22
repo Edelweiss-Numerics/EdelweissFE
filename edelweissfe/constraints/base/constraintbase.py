@@ -40,15 +40,13 @@ from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
 class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
-    #: Scratch buffer for the tangent that :meth:`applyConstraintExplicit` computes and discards.
-    #: Declared here so every constraint has it without touching its constructor; replaced by an
-    #: instance-level array on first use, and re-allocated only when the DOF footprint changes.
+    #: Scratch buffer for the tangent that :meth:`applyConstraintExplicit` computes and discards;
+    #: re-allocated only when the DOF footprint changes.
     _discardedTangentScratch = None
 
     #: The state this constraint carries from one increment to the next, by attribute name and type;
-    #: see :mod:`~edelweissfe.utils.checkpointedstate`. Every constraint declares it -- an empty
-    #: mapping if it carries none -- or overrides :meth:`getRestartData` and :meth:`setRestartData`.
-    #: Undeclared, it cannot be checkpointed.
+    #: see :mod:`~edelweissfe.utils.checkpointedstate`. Every constraint declares it (empty if it carries
+    #: none) or overrides :meth:`getRestartData` and :meth:`setRestartData`.
     checkpointedState: dict | None = None
 
     @classmethod
@@ -241,10 +239,7 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
             The current time step.
         """
 
-        # nDof**2 for any constraint that does not override getVIJContributionSize, allocated on
-        # every increment for a tangent no explicit solver reads. Kept and re-zeroed instead: the
-        # zeroing preserves the previous semantics exactly, whatever applyConstraint assumes about
-        # the buffer it is handed.
+        # The discarded tangent buffer is kept across increments and re-zeroed rather than reallocated.
         size = self.getVIJContributionSize()
         scratch = self._discardedTangentScratch
         if scratch is None or scratch.size != size:

@@ -329,18 +329,12 @@ class Constraint(ConstraintBase, MeshDependent):
         uSlaves = np.array([U_np[idcs] for idcs in self._indicesOfSlaveInLocal])
         coords = self._referenceCoords + uSlaves
 
-        # The rigid body's own querySurface() would otherwise fall back to
-        # getCurrentKinematics(), which reads the RP's pose from NodeFields --
-        # only refreshed once per *converged* increment. Mid-Newton-iteration,
-        # that pose would be one increment stale relative to U_np (used above for
-        # the slave coordinates), decoupling the RP DOFs from the contact residual.
-        # Compute the current RP kinematics directly from this constraint's own
-        # local U_np slice instead, so slave and RP kinematics are always consistent.
+        # RP kinematics from this iterate's U_np, not from the NodeFields (updated only per converged
+        # increment), so slave and RP kinematics stay consistent within the Newton loop.
         u_rp = U_np[self._indicesOfRPDispInLocal]
         theta_rp = U_np[self._indicesOfRPRotInLocal]
-        # dPhysicalSpin_dTheta maps a perturbation of the *stored* pseudo-vector DOF theta_rp onto the
-        # physical (spatial) infinitesimal rotation it actually produces -- the identity only at
-        # theta_rp = 0; see DiscreteRigidBody.poseFromDofs and the class docstring.
+        # dPhysicalSpin_dTheta maps a perturbation of the stored pseudo-vector theta_rp onto the physical
+        # infinitesimal rotation; see DiscreteRigidBody.poseFromDofs.
         rpCurrent, R, dPhysicalSpin_dTheta = self.rigidBody.poseFromDofs(u_rp, theta_rp)
         kinematics = (u_rp, R, self.rpNode.coordinates)
 
@@ -361,10 +355,8 @@ class Constraint(ConstraintBase, MeshDependent):
             f_n = -normalForce
 
             w_p = -n_s
-            # dPhysicalSpin_dTheta^T maps the physical moment r_s x n_s onto the generalized force
-            # conjugate to the *stored* rotation pseudo-vector DOF -- exact for any accumulated RP
-            # rotation, not just theta_rp=0 (where dPhysicalSpin_dTheta=I and this reduces to the naive
-            # r_s x n_s). See class docstring.
+            # dPhysicalSpin_dTheta^T maps the moment r_s x n_s onto the force conjugate to the stored
+            # rotation DOF; see class docstring.
             w_rp = np.concatenate((n_s, dPhysicalSpin_dTheta.T @ np.cross(r_s, n_s)))
 
             pIdcs = self._indicesOfSlaveInLocal[s]
@@ -378,10 +370,8 @@ class Constraint(ConstraintBase, MeshDependent):
             K.K_rps[s] += stiffness * np.outer(w_rp, w_p)
             K.K_rprp += stiffness * np.outer(w_rp, w_rp)
 
-            # Geometric stiffness from the rigid rotation of the (locally flat) facet normal, and from
-            # dPhysicalSpin_dTheta(theta_rp) itself, with the RP rotation. Each block below is named
-            # after the derivative it is (see the class docstring for the theta_rp-theta_rp self-block,
-            # which is not included here):
+            # Geometric stiffness from the rigid rotation of the facet normal with the RP (the
+            # theta_rp-theta_rp self-block is not included; see class docstring):
             #   dn_dTheta    = d(n_s)/d(theta_rp)     = -skew(n_s) @ dPhysicalSpin_dTheta
             #   dMoment_dUs  = d(r_s x n_s)/d(u_s)     = -skew(n_s)
             #   dMoment_dUrp = d(r_s x n_s)/d(u_rp)    = skew(n_s)

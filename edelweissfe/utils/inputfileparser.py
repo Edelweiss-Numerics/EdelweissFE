@@ -50,19 +50,14 @@ from edelweissfe.utils.schema import (
     subKeywordFieldNames,
 )
 
-#: The ``.inp`` syntax markers: a top-level keyword line starts with ``*``, a ``>>`` sub-keyword
-#: line with ``>>``. The single source of truth for these two markers, imported from here by every
-#: other module that needs to spell an error message with the right marker.
+#: The ``.inp`` syntax markers: a top-level keyword line starts with ``*``, a sub-keyword line with ``>>``.
 keywordIdentifier = "*"
 moduleLevelKeywordIdentifier = ">>"
 
-#: Top-level keywords whose grammar is completed by a further name/generator-dispatched target's
-#: own schema -- maps the keyword's casefolded name to ``(registry category, the keyword-line
-#: option name carrying the dispatch value)``.
-#: ``step`` is included only for :func:`_expectsPlainDatalines`'s sake -- its ``>>`` grammar is
-#: resolved separately, always via the ``stepaction`` category regardless of the step *type* (see
-#: :func:`_resolveModuleKeywordSchema`), because every step action registers identically onto every
-#: step type.
+#: Top-level keywords whose grammar is completed by a dispatched target's own schema: maps the
+#: keyword's casefolded name to ``(registry category, the keyword-line option carrying the dispatch value)``.
+#: ``step`` is included only for :func:`_expectsPlainDatalines`; its ``>>`` grammar always resolves
+#: via the ``stepaction`` category.
 _DISPATCH_CATEGORY_BY_KEYWORD = {
     "output": ("outputmanager", "type"),
     "section": ("section", "type"),
@@ -244,8 +239,7 @@ def _resolveDispatchSchemaForKeywordLine(keyword: str, options: dict) -> type | 
     try:
         _, schema = registry.lookup(category, dispatchValue)
     except RegistryConflictError:
-        # An unresolvable name conflict, not a "does not exist" -- must not be mistaken for the
-        # latter by a caller treating a plain miss as "no dispatch schema".
+        # a name conflict is an error, not a miss
         raise
     except RegistryLookupError:
         return None
@@ -362,12 +356,7 @@ def _expectsPlainDatalines(keyword: str, options: dict) -> bool:
         return keywordSchema is not None and datalineFieldMeta(keywordSchema) is not None
 
     if strCaseCmp(keyword, "step"):
-        # Every step type shares one schema (`steps.base.stepbase.StepIncrementationSchema`) with
-        # only optional fields, so this could dispatch through
-        # `dispatchSchema`/`_dispatchTargetExpectsPlainDatalines` like every other keyword -- kept
-        # as an unconditional `True` anyway since the outcome is identical for both registered
-        # step types and this avoids a resolve-then-recompute round trip on the hottest keyword in
-        # a typical input file.
+        # every step type shares one schema, which accepts datalines
         return True
 
     category, optionName = dispatch
@@ -377,8 +366,7 @@ def _expectsPlainDatalines(keyword: str, options: dict) -> bool:
     try:
         _, dispatchSchema = registry.lookup(category, dispatchValue)
     except RegistryConflictError:
-        # An unresolvable name conflict, not a "does not exist" -- must not be mistaken for the
-        # latter by a caller treating a plain miss as "no plain datalines here".
+        # a name conflict is an error, not a miss
         raise
     except RegistryLookupError:
         return False
@@ -414,9 +402,7 @@ def parseKeywordLine(line, fileName):
     try:
         checkKeywordInput(**options)
     except ValueError as e:
-        # in some cases, dispatch-target-specific kwArgs arguments can be given directly on the
-        # keyword line (e.g. a plane section's 'thickness') -- see
-        # _resolveDispatchSchemaForKeywordLine.
+        # dispatch-target options may be given directly on the keyword line (e.g. a plane section's 'thickness')
         dispatchSchema = _resolveDispatchSchemaForKeywordLine(keyword, options)
 
         if dispatchSchema is not None:
@@ -456,12 +442,8 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fil
     isTypeDispatchedMarker = strCaseCmp(topLevelKeyword, "modelModifier") and strCaseCmp(keyword, "marker")
 
     if isStepDynamicOptions or isTypeDispatchedMarker:
-        # A discriminator-dispatched sub-keyword whose full option set the parser cannot know up
-        # front: '>>options' (its options depend on the step action it targets, see
-        # stepactions/options.py) and '>>marker' (its options depend on 'type', and are
-        # validated later against the selected marker's own schema in MarkerBase.fromOptions, via the
-        # 'marker' registry -- so no flat union of every marker's options has to live here). Only the
-        # discriminator is enforced at parse time; every other key is passed through raw.
+        # '>>options' (depends on the targeted step action) and '>>marker' (depends on 'type') are
+        # validated later; only the discriminator is checked here, all other keys are passed raw.
         discriminator = "name" if isStepDynamicOptions else "type"
 
         @caseInsensitiveRequiredArgsChecker([discriminator])
@@ -529,12 +511,7 @@ def parseModuleKeywordLine(line, fileName, topLevelKeyword, topLevelOptions, fil
 
     options["inputFile"] = fileName  # save also the filename of the original inputfile!
 
-    # Unlike a top-level keyword, no `>>` sub-keyword in the whole grammar ever expects its own
-    # plain datalines -- a sub-keyword's own scalar options are declared on its schema's regular
-    # fields, never on a dataline payload of its own. So a `datalines` key must never be added here
-    # for any `>>` block: doing so would break e.g. `>>bodyforce`, whose `fromStepActionDefinition`
-    # hands the whole definition dict to `buildSchemaFromOptions` without stripping parser
-    # bookkeeping keys first.
+    # No `datalines` key for `>>` blocks: e.g. `>>bodyforce` passes the whole dict to `buildSchemaFromOptions`.
 
     return keyword, options
 

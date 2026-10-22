@@ -60,21 +60,14 @@ phenomena = {
 
 # field                  kind of inertia
 #
-# The coefficient of a field's SECOND time derivative is not always a mass. A dynamic solver
-# assembles one inertia vector over every field alike -- the integrator divides by all of it --
-# but reporting a momentum or an energy needs to know which entries may be added to which. This
-# is the only place that question is answered:
+# The coefficient of a field's SECOND time derivative is not always a mass. Reporting a momentum or an
+# energy needs to know which inertia entries may be added to which:
 #
-#  * ``"mass"``               -- m*v is a linear momentum, 0.5*m*v^2 an energy; summable with
-#                                every other mass field in both balances.
+#  * ``"mass"``               -- m*v is a linear momentum, 0.5*m*v^2 an energy.
 #  * ``"rotational inertia"`` -- 0.5*I*w^2 is an energy, but I*w is an ANGULAR momentum and must
-#                                not be added to a linear one. No dimension check catches that:
-#                                in 3d both occupy three components.
-#  * ``"non-mechanical"``     -- neither. Typically a numerical regularisation: the non-local
-#                                micro-inertia is a time squared, so 0.5*m*v^2 there is a volume.
-#
-# A field with no inertia at all is recorded as ``"non-mechanical"`` too -- the question is what
-# its inertia WOULD mean, and it has none to sum anywhere.
+#                                not be added to a linear one (in 3d both have three components).
+#  * ``"non-mechanical"``     -- neither, e.g. the non-local micro-inertia (a time squared).
+#                                Also used for fields without any inertia.
 inertiaKind = {
     "displacement": "mass",
     "rotation": "rotational inertia",
@@ -221,14 +214,8 @@ def getFieldSize(field, domainSize):
     if fType == "vector":
         return domainSize
     if fType == "rotation vector":
-        # _createNodeFieldsFromNodes() calls this for every *declared* phenomenon, whether or
-        # not any element of the model actually requests it for a given node -- an unused field
-        # is filtered out there afterwards (its NodeField ends up with zero nodes), not here.
-        # So this only has to return *some* valid size for domainSize == 1, not defend that a
-        # rotation vector is a sensible field to actually use on a 1D domain; no element in this
-        # codebase currently does. A two dimensional domain has an unambiguous single out-of-plane
-        # rotation axis; a one dimensional domain does not have an equally natural one, so 1 here
-        # is a placeholder to keep every 1D model buildable, not a physical claim.
+        # Called for every declared phenomenon, used or not. 2D has a single out-of-plane rotation axis;
+        # for 1D, 1 is a placeholder that keeps every 1D model buildable, not a physical claim.
         if domainSize in (1, 2):
             return 1
         elif domainSize == 3:

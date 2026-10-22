@@ -62,9 +62,8 @@ class LinearElasticMaterial(BaseHypoElasticMaterial):
         self._v = materialProperties[1]  # set v
         if len(materialProperties) > 2:
             self._density = materialProperties[2]
-        # E and v are immutable for the lifetime of this instance (ChangeMaterialProperty
-        # constructs a new material instance rather than mutating an existing one), so the
-        # elasticity matrices only need to be assembled once.
+        # E and v never change for this instance (ChangeMaterialProperty creates a new one), so the
+        # elasticity matrices are assembled once.
         self._EiPlaneStress = (
             self._E / (1 - self._v**2) * np.array([[1, self._v, 0], [self._v, 1, 0], [0, 0, (1 - self._v) / 2]])
         )

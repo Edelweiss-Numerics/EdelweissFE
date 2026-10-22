@@ -47,9 +47,7 @@ def getDefaultLinSolver() -> Callable:
     """
 
     try:
-        # An empty option mapping matches PARDISO's safe default: symbolic-factorization reuse is
-        # opt-in only, see the pardiso factory. If the PARDISO extension is not installed, the
-        # factory raises ImportError, which is caught below to fall back to SciPy's superlu.
+        # the factory raises ImportError if the PARDISO extension is not installed
         return getLinSolverByName("pardiso", {})
     except ImportError:
         return getLinSolverByName("superlu", {})

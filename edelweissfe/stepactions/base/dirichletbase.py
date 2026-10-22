@@ -55,10 +55,8 @@ class DirichletBase(StepActionBase):
     nSet: object
     #: Number of DOFs (components) the field has per node.
     fieldSize: int
-    #: The global DOF indices constrained by this BC, in node-major order.
-    #: Populated once per step by the solver (see
-    #: :meth:`NonlinearSolverBase.locateConstrainedDofs`), because it depends on
-    #: the DofManager's layout, which the boundary condition does not know itself.
+    #: The global DOF indices constrained by this BC, in node-major order. Populated once per step by
+    #: the solver (see :meth:`NonlinearSolverBase.locateConstrainedDofs`), as it depends on the DofManager.
     constrainedDofIndices: np.ndarray = None
 
     @property

@@ -82,9 +82,7 @@ def createSolver(opts) -> Callable:
         If the optional ``amgcl`` extension was not built.
     """
 
-    # Imported inside the function body, not at module scope: this extension is optional, so at
-    # module scope its absence would break anyone who merely resolves a `linsolver` registry name
-    # rather than this one.
+    # Imported here, not at module scope: this extension is optional.
     from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver
 
     amgclOpts = dict(opts) if isinstance(opts, Mapping) else {}
