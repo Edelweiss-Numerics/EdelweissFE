@@ -58,9 +58,7 @@ class FractureEnergyIntegratorSchema:
     outside it.
     """
 
-    # `forceFieldOutput`/`displacementFieldOutput` are declared `required=True` explicitly, but are
-    # still given `default=None` so that `FractureEnergyIntegratorSchema()` remains constructible
-    # without arguments; `buildSchemaFromOptions` still enforces that an `.inp` file supplies them.
+    # `default=None` keeps the schema constructible without arguments; `required=True` is still enforced.
     forceFieldOutput: str | None = schemaField(
         description="fieldOutput for force (with time history).", dtype=str, default=None, required=True
     )
@@ -123,9 +121,7 @@ class OutputManager(OutputManagerBase):
         self.fieldOutputController = fieldOutputController
 
         fractureArea = configuration.f_x
-        # Legacy behaviour: any *falsy* value (in particular an explicitly empty string) falls
-        # back to "x", not just an omitted option. A schema default of "x" alone would not
-        # reproduce this, since an explicitly-empty option would otherwise stay empty.
+        # Any falsy value, including an explicitly empty string, falls back to "x".
         if not fractureArea:
             fractureArea = "x"
 

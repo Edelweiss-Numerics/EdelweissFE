@@ -176,9 +176,7 @@ class NESTSchema:
     linsolverConfigFile: str | None = schemaField(
         description="A JSON configuration file for the linear solver.", dtype=str, default=""
     )
-    # Inherited behaviour, so it needs an entry here too: NEST reuses NIST.applyDirichletK, which
-    # reads this option, but replaces SolverSpecificOptions wholesale rather than extending it -- so
-    # an option missing from that list is a KeyError at solve time, not a silent default.
+    # Read by the inherited NIST.applyDirichletToStiffness, so NEST must declare it too.
     pruneCondensedMatrixZeros: bool | None = schemaField(
         description=(
             "Compact explicitly stored zeros out of the multi-point-constraint-condensed system "
@@ -226,8 +224,7 @@ class NEST(NIST):
         self.journal = journal
 
         self.options = self.SolverSpecificOptions.copy()
-        # the datalines of the *solver keyword belong exclusively to this solver, so unknown entries
-        # are user typos and must not be swallowed
+        # the *solver datalines belong only to this solver: unknown entries are typos
         self._updateOptions(kwargs, journal, strict=True)
 
     def beginStep(
@@ -252,7 +249,6 @@ class NEST(NIST):
             The output managers.
         """
 
-        # The step's table covers the step only; whatever was timed before it is not its row.
         performancetiming.reset()
 
         self.validateModelCapabilities(model)
@@ -283,10 +279,6 @@ class NEST(NIST):
 
         self.computationTimes = createTimingDict()
 
-        # self.options already reflects every >>options, name=<this solver's name>, ... block applied
-        # so far, applied as each block is constructed or re-declared; there is nothing to reset or
-        # re-fetch here.
-
         # get parameters for runge kutta scheme
         self.rkAlpha, self.rkOmega, self.rkLambda = getRungeKuttaParameters(self.options.get("runge-kutta-stages", 2))
         self.rkStages = self.options.get("runge-kutta-stages", 2)
@@ -303,12 +295,7 @@ class NEST(NIST):
             if self.options["linsolver"]
             else getDefaultLinSolver()
         )
-        # NEST solves a linear system per Runge-Kutta stage (see solveIncrement, via the inherited
-        # linearSolve()), so its linear solver needs the same initialization NIST gives its own:
-        # setJournal for solvers that log, and setModel for solvers that derive anything beyond the
-        # plain (A, b) call -- a field-split solver such as blockamg raises without the field
-        # structure setModel supplies. NEST's equation system is built once here rather than being
-        # rebuilt on connectivity changes, so one call at construction is enough.
+        # the equation system is built once per step, so one setModel call suffices
         self.linSolver.setJournal(self.journal)
         self.linSolver.setModel(model, self.theDofManager)
 

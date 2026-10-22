@@ -207,9 +207,8 @@ class AdaptiveMesh:
         #: eid -> dict(conn, coords, level, active, parent, children, componentId, rootEid,
         #: referenceBoxOrigin, referenceBoxEdgeLength, nodeKeys)
         self.elements = {}
-        # The active elements, kept alongside elements[eid]["active"] so that active() does not scan
-        # the whole hierarchy. Insertion-ordered: a child's eid exceeds every existing one, so the order
-        # stays ascending -- which balance_2to1 relies on for the order it refines in.
+        # The active elements, so that active() does not scan the hierarchy. Insertion order is ascending
+        # in eid, which balance_2to1 relies on.
         self._active = {}  # eid -> None
         self.elementSets = {}  # name -> set(eid)      (children inherit membership on refine)
         self.nodeSets = {}  # name -> set(node label)

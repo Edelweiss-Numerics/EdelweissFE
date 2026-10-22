@@ -186,11 +186,7 @@ class GradientEnhancedTangents:
     dc_dK: np.ndarray
     d2c_dK2: np.ndarray
 
-    #: The contiguous block createZero() allocates the six entries above as views into, so that
-    #: zero() can reset all of them with a single fill; a declared field (defaulting to unset,
-    #: not an attribute createZero() bolts on afterwards) so zero() can tell the two construction
-    #: paths apart without hasattr/getattr. None for an instance built by hand rather than by
-    #: createZero, which falls back to zeroing each entry individually.
+    #: The contiguous block the entries above are views into (set by createZero(), None if built by hand).
     _block: np.ndarray = field(default=None, repr=False, compare=False)
 
     @classmethod
@@ -212,11 +208,7 @@ class GradientEnhancedTangents:
 
         shapes = ((6, 6), (6, n), (n, 6), (n, n), (n, n), (n, n))
 
-        # One contiguous block with the entries as views into it, so that resetting is a single
-        # fill rather than one per entry. The entries are small -- a six by six and five smaller
-        # ones -- so for a material point evaluated hundreds of thousands of times in a
-        # simulation, the per call overhead of six numpy operations is what dominates, not the
-        # arithmetic.
+        # One contiguous block with the entries as views into it, so that zero() is a single fill.
         block = np.zeros(sum(rows * columns for rows, columns in shapes))
 
         views, offset = [], 0

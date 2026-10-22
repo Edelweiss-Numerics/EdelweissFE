@@ -497,13 +497,8 @@ def caseInsensitiveRequiredArgsChecker(kwargsRequired: list[str]):
     return wrapper
 
 
-#: Keys the ``.inp`` parser injects into the option dict of every module-level (``>>``) keyword as
-#: its own bookkeeping, rather than because the user wrote them: the originating file name
-#: (``inputFile``, added unconditionally), the user-vs-default discriminator for the shared
-#: ``options`` keyword (``explicitlySetArgs``), and the dataline accumulator for keywords that take
-#: datalines. See ``inputfileparser.parseModuleKeywordLine``.
-#:
-#: Compared case-folded, since the parser stores these options in a ``CaseInsensitiveDict``.
+#: Keys the ``.inp`` parser injects into the option dict of a module-level (``>>``) keyword as its own
+#: bookkeeping; compared case-folded. See ``inputfileparser.parseModuleKeywordLine``.
 _parserBookkeepingKeys = frozenset({"inputfile", "explicitlysetargs", "datalines"})
 
 

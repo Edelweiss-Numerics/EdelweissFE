@@ -134,11 +134,8 @@ class ScatterDofVector(np.ndarray):
         ndarray or float
             The slice view corresponding to the key.
         """
-        # Hot path: see DofVector.__getitem__ for the measurement. The slice itself is
-        # cheap here, so wrapping the result back into a ScatterDofVector subclass (which
-        # runs __array_finalize__ and its four attribute lookups) was almost the entire
-        # cost. A plain ndarray view of the same buffer aliases the same memory, so the
-        # element kernels still write straight into the scatter buffer.
+        # Hot path: return a plain ndarray view (avoids __array_finalize__); it aliases the
+        # scatter buffer, so element kernels still write straight into it.
         try:
             offset, size = self._offset_map[key]
         except (KeyError, TypeError):
@@ -206,8 +203,7 @@ class ScatterDofVector(np.ndarray):
             If True, accumulate absolute values. Default is False.
         """
         data = np.abs(self) if absolute else self
-        # bincount performs the duplicate-resolving scatter-add in a single pass,
-        # considerably faster than the unbuffered np.add.at
+        # bincount: duplicate-resolving scatter-add in a single pass
         targetDofVector += np.bincount(self._global_indices, weights=data, minlength=self._nDof)
 
     def toDofVector(self, absolute: bool = False) -> "edelweissfe.numerics.dofvector.DofVector":

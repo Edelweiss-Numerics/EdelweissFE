@@ -68,11 +68,8 @@ cdef class ElementResultCollector:
             The name of the requested result.
         """
 
-        # hotfix for cython compile error associated with 'range' typing of argument quadraturePoints
-        # this is due to a bug in in cython 0.29.xx and should be fixed in cython 3.x.x
-        # https://github.com/cython/cython/issues/4002
-        #
-        # Update November 11th 2025: This is no longer needed, since we explicitly cast quadraturePoints to list
+        # quadraturePoints is cast to list below instead of typed as range (cython 0.29 bug,
+        # https://github.com/cython/cython/issues/4002)
         #
         # quadraturePoints:range
 

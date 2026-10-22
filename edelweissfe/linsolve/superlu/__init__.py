@@ -46,10 +46,7 @@ class SuperLUSolver(LinearSolver):
     """
 
     def __call__(self, A, b):
-        # Imported inside the call, not at module scope: several linsolve backends are optional and
-        # genuinely absent in some installs, and `getDefaultLinSolver` relies on catching the
-        # resulting ImportError at construction time (see createSolver below). SciPy is not optional,
-        # but the convention is kept uniform across all factories.
+        # Imported lazily, like the optional backends of the other factories.
         from scipy.sparse.linalg import spsolve
 
         return spsolve(A.copy(), b, use_umfpack=False)

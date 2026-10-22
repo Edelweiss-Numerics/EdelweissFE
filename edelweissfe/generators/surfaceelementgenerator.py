@@ -74,17 +74,8 @@ from edelweissfe.utils.schema import schemaField
 # Quad faces of 3D solids are split into two Tria3 facets via a diagonal, preserving the source
 # face's winding (and thus outward orientation).
 #
-# hexa8/hexa20 face numbers/node groups are transcribed from Marmot's own face definitions
-# (MarmotFiniteElement3D.cpp, Hexa8::getBoundaryElementIndices/Hexa20::getBoundaryElementIndices),
-# fan-triangulated from each face's first listed corner. Since edelweissfe's own Hexa8/Hexa20
-# elements use the same node ordering as Marmot (see edelweissfe.elements.displacementelement.
-# _elementcomputationmatrices), this is also the genuine Abaqus S1..S6 face-numbering convention --
-# unlike the codebase's previous, non-standard convention, a *surface keyword's S<n> face numbers
-# now mean the same thing here as they do in Marmot or a real Abaqus model. boxGen/pipeGen's own
-# face-number registration (1=Ymin, 2=Ymax, 3=Xmin, 4=Zmax, 5=Xmax, 6=Zmin) already matches this
-# numbering -- verified by applying Marmot's face definitions directly to boxgen's own node layout
-# (local node k <-> (ix, iy, iz) offsets) and checking that each triangle's cross-product normal
-# points in the expected outward direction.
+# hexa8/hexa20 faces follow Marmot's Hexa8/Hexa20::getBoundaryElementIndices (the Abaqus S1..S6
+# convention), fan-triangulated from each face's first listed corner.
 _FACE_TABLES = {
     "quad4": {
         1: ((0, 1),),
@@ -116,27 +107,9 @@ _FACE_TABLES = {
     },
 }
 
-# Midside-triangulation tables for higher-order element faces: the full 8-node face boundary
-# polygon (c1, m1, c2, m2, c3, m3, c4, m4) is split into 4 corner triangles (m_prev, c_i, m_i)
-# plus the central midside quad (m1, m2, m3, m4) split into 2 triangles -- 6 flat Tria3 facets
-# using only real nodes (2D quad8 edges: split at the midside node into 2 Line2 facets). NOTE: a
-# naive fan from a *corner* would instead contain the boundary triangles (c1, m1, c2)/(c1, c4, m4)
-# which are exactly degenerate (zero area, collinear nodes) for straight-edged meshes -- the
-# midside-quad split has no such degenerate members. Identical coverage to the corner reduction
-# for straight-edged meshes, strictly more accurate for curved faces (offset midside nodes).
-# hexa20 corner cycles and midside indices are transcribed from Marmot's Hexa20::
-# getBoundaryElementIndices (4 corners + 4 edge-midside nodes per face, same corner cycle as the
-# corner table above); midside local indices 8-19 follow edelweissfe's/Marmot's own Hexa20 edge
-# numbering (8-19 on edges 0-1, 1-2, 2-3, 3-0, 4-5, 5-6, 6-7, 7-4, 0-4, 1-5, 2-6, 3-7). All verified
-# numerically against boxgen's actual node construction (face-plane membership, outward
-# cross-product normals, non-degeneracy, area tiling, midside-between-corners positions).
-# Weight map of the 'serendipityOptimal' option for a midside-triangulated quadratic face's
-# corner triangles, whose table order is (m_prev, c, m_next): it reassigns the corner's (local
-# index 1) interpolation weight in equal halves to its two adjacent midside nodes, which for this
-# triangulation are exactly the facet's own other two nodes -- so the map never has to reach
-# outside the facet. Column-stochastic, hence force-preserving. This is the facet-local form of
-# the modified serendipity shape functions Ntilde_mid = N_mid + 1/2 (N_c1 + N_c2),
-# Ntilde_corner = 0; see _applyModifiedSerendipityShares for the rationale.
+# Weight map of the 'serendipityOptimal' option for a midside-triangulated corner triangle (m_prev, c, m_next):
+# the corner's weight goes in equal halves to its two adjacent midside nodes (column-stochastic, hence
+# force-preserving). Facet-local form of Ntilde_mid = N_mid + 1/2 (N_c1 + N_c2), Ntilde_corner = 0.
 _MODIFIED_CORNER_TRIANGLE_TRANSFORM = np.array(
     [
         [1.0, 0.5, 0.0],
@@ -145,6 +118,11 @@ _MODIFIED_CORNER_TRIANGLE_TRANSFORM = np.array(
     ]
 )
 
+# Midside-triangulation tables for higher-order element faces: the 8-node face boundary polygon
+# (c1, m1, c2, m2, c3, m3, c4, m4) is split into 4 corner triangles (m_prev, c_i, m_i) plus the central
+# midside quad (m1, m2, m3, m4) split into 2 triangles (2D quad8 edges: 2 Line2 facets). A fan from a
+# corner would instead contain degenerate (collinear) triangles on straight-edged meshes.
+# hexa20 midside indices 8-19 lie on edges 0-1, 1-2, 2-3, 3-0, 4-5, 5-6, 6-7, 7-4, 0-4, 1-5, 2-6, 3-7.
 _MIDSIDE_FACE_TABLES = {
     "quad8": {
         1: ((0, 4), (4, 1)),
@@ -383,9 +361,7 @@ def buildContactFacets(
         raise ValueError(f"surfaceElementGenerator: surface '{surfaceName}' is not defined.")
 
     if nodalWeights == "serendipityOptimal" and triangulation != "midside":
-        # The corner reduction keeps no midside nodes in the facets, so there would be nothing to
-        # reassign the corner shares to: every share of a quadratic face would be zeroed and the
-        # surface would silently stop making contact. Refuse rather than produce that.
+        # Without midside nodes in the facets, all shares of a quadratic face would be zeroed.
         offending = sorted(
             {
                 sourceElement.ensightType
@@ -402,14 +378,8 @@ def buildContactFacets(
             )
 
     if nodalWeights == "serendipityOptimal":
-        # The redistribution is applied to the four corner *triangles* of a midside-triangulated
-        # quadratic face, so it only ever fires for a face that tiles into six Tria3 facets. A 2D
-        # quadratic element edge tiles into two Line2 facets instead and reaches neither branch, so
-        # without this the option would pass validation and then do nothing at all. Refuse: a
-        # silent no-op is the worst of the three possible behaviours. It is also not merely
-        # unimplemented -- a quadratic edge's consistent weights are Simpson's (L/6, 2L/3, L/6),
-        # all non-negative, so there the mismatch is removable exactly and a corner-share
-        # reassignment is the wrong instrument for it in the first place.
+        # Only applies to the corner triangles of 3D quadratic faces; on 2D quadratic edges (Line2 facets)
+        # it would silently do nothing (and their Simpson weights L/6, 2L/3, L/6 are non-negative anyway).
         unsupported = set()
         for elementSet in model.surfaces[surfaceName].values():
             for sourceElement in elementSet:
@@ -438,11 +408,8 @@ def buildContactFacets(
 
     surfaceDef = model.surfaces[surfaceName]
 
-    # Facet numbers come from the model's monotonic allocator, NOT from max(model.elements)+1. The
-    # old expression read the maximum *after* the stale facets above were deleted, so a rebuild
-    # handed the dead facets' numbers straight back out -- making element numbering a function of
-    # the deletion history, which a restart replay cannot reproduce. See
-    # TopologyPipeline.reserveElementNumbers.
+    # Facet numbers come from the model's monotonic allocator (TopologyPipeline.reserveElementNumbers),
+    # never reusing deleted numbers, so that a restart replay reproduces them.
     newElements = {}
 
     for faceNumber, elementSet in surfaceDef.items():
@@ -491,27 +458,13 @@ def buildContactFacets(
                 newElements[elNumber] = facetElement
 
             if len(faceFacets) == 2 and all(len(f.nodes) == 3 for f in faceFacets):
-                # Two Tria3 from a linear quad face (fixed diagonal split): the per-triangle
-                # equal split (measure/3 each) would give diagonal-position-dependent nodal
-                # tributary areas, inconsistent with the unique lumping of a uniform pressure on
-                # a bilinear quad face (face area / 4 per corner) -- the resulting force-vs-area
-                # mismatch shows up as spurious contact pressure oscillation in an otherwise
-                # exact patch test. Override: distribute each corner's area/4 evenly over the
-                # triangles of THIS face containing it.
+                # Two Tria3 from a linear quad face: use the bilinear quad's lumping (area / 4 per corner)
+                # instead of the diagonal-dependent per-triangle split.
                 _assignQuadConsistentShares(faceFacets)
 
             elif len(faceFacets) == 6 and all(len(f.nodes) == 3 for f in faceFacets):
-                # Midside triangulation of a quadratic face: 4 corner triangles followed by the
-                # 2 triangles of the central midside quad (table order). The central quad's fixed
-                # diagonal would give its two diagonal midside nodes more incident triangles than
-                # the other two -- asymmetric tributary areas on a symmetric face. Apply the same
-                # quad-consistent lumping (area/4 per node) to the central quad; the corner
-                # triangles keep their equal per-triangle split. NOTE: exact pointwise pressure
-                # consistency is fundamentally unattainable for serendipity faces regardless of
-                # the weights -- the consistent nodal forces of a uniform pressure on a quad8
-                # face are NEGATIVE at the corners, which no unilateral per-node spring scheme
-                # can reproduce (see the constraint documentation). nodalWeights=
-                # 'serendipityOptimal' minimises, but cannot remove, that mismatch.
+                # Midside triangulation: 4 corner triangles, then the 2 triangles of the central midside quad,
+                # which gets the quad-consistent lumping (area / 4 per node) to avoid diagonal asymmetry.
                 _assignQuadConsistentShares(faceFacets[4:])
                 if nodalWeights == "serendipityOptimal":
                     _applyModifiedSerendipityShares(faceFacets[:4])
@@ -519,18 +472,11 @@ def buildContactFacets(
     for facetElement in newElements.values():
         model.createElement(facetElement)
 
-    # this function is the one that mutates model.elements outside the mesh modifier (removing the
-    # stale facets above and inserting newElements here), so model.elementSets["all"] must be
-    # resynced here to mirror model.elements -- otherwise "all" keeps dangling references to the
-    # popped stale facets and misses the new ones for the rest of the refinement window.
+    # model.elements was mutated outside the mesh modifier, so resync model.elementSets["all"].
     if "all" in model.elementSets:
         model.elementSets["all"].replaceMembers(list(model.elements.values()))
 
-    # stable identity across rebuilds (mutate in place rather than replace under the same key), like
-    # every other AMR-mutated topological container -- a consumer that merely caches
-    # model.elementSets[facetsSetName]/model.nodeSets[nodesSetName] (e.g. a fromExpression
-    # FieldOutput reading a contact constraint's per-facet-node result) would otherwise keep
-    # referencing the pre-rebuild object and silently go stale/size-mismatched on the next rebuild.
+    # Mutate the sets in place to keep a stable identity across rebuilds, as consumers may cache them.
     if facetsSetName in model.elementSets:
         model.elementSets[facetsSetName].replaceMembers(list(newElements.values()))
     else:

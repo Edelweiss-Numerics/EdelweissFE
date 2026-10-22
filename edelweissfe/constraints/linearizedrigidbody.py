@@ -190,9 +190,8 @@ class Constraint(ConstraintBase):
             # filling diagonal elements with 1
             dG_dU[i, i] = 1
 
-            # 2) Set the values for d_duxRP, d_duyRP and d_duzRP columns
-            # This ensures that the block starts at nConstraints and then
-            # cycles every nDim rows
+            # 2) Set the values for d_duxRP, d_duyRP and d_duzRP columns,
+            # starting at nConstraints and cycling every nDim rows
             col_index = nConstraints + (i % nDim)
 
             # make sure we don't go out of bounds
@@ -202,15 +201,10 @@ class Constraint(ConstraintBase):
             # 3) Set the values for the last columns d_dRx, d_dRy, d_dRz
             # index for distances
             index = i // nDim
-            # make sure we don't go out of bounds when calling
-            # np.array(distances)[index]. It means: if index < number of
-            # rows in distances array.
+            # make sure we don't go out of bounds of the distances array
             if index < np.array(distances).shape[0]:
                 # 3D
                 if nDim == 3:
-                    # Accesses the row at the specified index. Unpacks the
-                    # x, y, and z components of that row into the variables
-                    # dx, dy, and dz, respectively
                     dx, dy, dz = np.array(distances)[index]
                     # Row 0, 3, 6, ...
                     if i % nDim == 0:

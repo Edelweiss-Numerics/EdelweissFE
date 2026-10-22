@@ -78,9 +78,7 @@ def createSolver(opts) -> Callable:
         (matching the pre-refactor behaviour), not deferred to the first solve.
     """
 
-    # Imported inside the function body, not at module scope: this extension is optional, so at
-    # module scope its absence would break anyone who merely resolves a `linsolver` registry name
-    # rather than this one.
+    # Imported lazily: this extension is optional.
     from edelweissfe.linsolve.klu.klu import kluSolve
 
     return KLUSolver(kluSolve)

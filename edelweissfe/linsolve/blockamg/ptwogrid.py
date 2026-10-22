@@ -79,39 +79,23 @@ from edelweissfe.linsolve.base import FieldBlock
 from edelweissfe.linsolve.nullspace import rigidBodyNullspace, translationNullspace
 from edelweissfe.utils import performancetiming
 
-#: Coarse-level Chebyshev degree/sweep-count configuration, from a config sweep across degree and
-#: npre/npost on a real coupled system: halving the Chebyshev degree (8 -> 4) at npre=2/npost=2
-#: matches a higher-degree hierarchy's outer-iteration count almost exactly while cutting the coarse
-#: apply's own cost -- npre=1/npost=1 variants were cheaper per call but pushed outer GMRES
-#: iterations up enough to be a wash or a regression (a weaker coarse correction is not free). A
-#: direct PARDISO factorization of A1 was also tried and rejected: exact (residual ~1e-14) but no
-#: cheaper per call -- A1 fills in heavily under a general (unsymmetric) LU at the problem sizes
-#: tested, so an exact triangular solve costs about as much as the approximate V-cycle here.
-#: power_iters=300 (was 50): the coarse solve uses the identical AMGCL Chebyshev relaxation code path
-#: as blockamg's own single-level default, just on the coarse P1 operator instead of the full field
-#: block, and is subject to the identical thread-count-dependent spectral-radius-estimate issue (see
-#: blockamg.py's own comment on ``power_iters`` for the mechanism) -- bumped for the same reason and
-#: by the same amount, not independently re-tuned at this exact value for the coarse operator's own
-#: (much smaller) size.
+#: Coarse-level AMGCL configuration, tuned on a coupled system. ``power_iters`` as in blockamg.py's
+#: single-level default (a short power iteration gives a thread-count-dependent spectral radius).
 _DEFAULT_COARSE_PRECOND = {
     "coarsening": {"type": "smoothed_aggregation", "aggr": {"eps_strong": 0.01}},
     "relax": {"type": "chebyshev", "degree": 4, "power_iters": 300, "lower": 0.01},
     "npre": 2,
     "npost": 2,
 }
-#: The fine smoother's defaults, the best of a sweep over sweep counts and degrees on a coupled system: one sweep
-#: of a degree-5 Chebyshev polynomial.
+#: The fine smoother's defaults: one sweep of a degree-5 Chebyshev polynomial.
 _DEFAULT_NU = 1
 _DEFAULT_FINE_DEGREE = 5
-#: The fine Chebyshev smoother's spectral bounds and power iteration: ``higher`` = 1.1 is a safety
-#: margin above the estimated spectral radius (AMGCL's own chebyshev defaults it to 1.0, which would
-#: silently retune the validated smoother); a short, badly under-converged power iteration can make
-#: Chebyshev smoothing diverge outright, hence 300 iterations.
+#: The fine Chebyshev smoother's spectral bounds and power iteration: ``higher`` is a safety margin above
+#: the estimated spectral radius; an under-converged power iteration can make Chebyshev smoothing diverge.
 _DEFAULT_FINE_LOWER = 0.01
 _DEFAULT_FINE_HIGHER = 1.1
 _DEFAULT_FINE_POWER_ITERS = 300
-#: Power iterations of the re-check of a reused fine spectral radius, from the previous build's dominant
-#: vector -- a few sparse products instead of the full estimate's 300.
+#: Power iterations of the re-check of a reused fine spectral radius, from the previous dominant vector.
 _DEFAULT_FINE_RECHECK_ITERS = 15
 
 
@@ -220,8 +204,7 @@ class PTwoGridPreconditioner:
         }
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLPTwoGrid
 
-        # The C++ class parses and validates every parameter in its constructor -- the one place they are
-        # checked -- so a bad value fails here, before anything is built.
+        # the C++ constructor validates every parameter
         try:
             self._preconditioner = PyAMGCLPTwoGrid(self._params)
         except RuntimeError as error:
@@ -281,11 +264,8 @@ class PTwoGridPreconditioner:
         with performancetiming.timeit("coarse nullspace"):
             nullspace = None
             if self._useCoarseNullspace and n > 0:
-                # Build the full (unrestricted) coarse-DOF near null-space first, then restrict to the
-                # free coarse DOFs -- same two-step shape as the rest of blockamg's null-space
-                # construction, just applied to the corner-node subset's own synthetic block instead of
-                # the full field. The coarse DOFs are the corners' DOFs in node order; the Dirichlet rows
-                # are the C++ build's own (a nonzero diagonal and no nonzero off-diagonal entry).
+                # Build the near null-space on all corner DOFs (in node order), then restrict it to the
+                # free ones; Dirichlet rows are detected as the C++ build does.
                 isDirichlet = PyAMGCLPTwoGrid.dirichletRows(A)
                 cornerNodeRows = np.nonzero(self._isCorner)[0]
                 nCorners = len(cornerNodeRows)

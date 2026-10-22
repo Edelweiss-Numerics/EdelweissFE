@@ -256,10 +256,7 @@ cdef class PyAMGCLSolver:
         self.solver.solve(n, _intData(indptr), _intData(indices), _constDoubleData(data), _constDoubleData(rhsArray),
                           _doubleData(x), iters, error)
 
-        # AMGCL reports these by reference and they were being dropped on the floor, which left an
-        # unconverged solve indistinguishable from a converged one: an iterative solver that hits
-        # maxiter still returns a finite x, so the nonlinear solvers' NaN check does not catch it and
-        # the Newton loop silently consumes a wrong correction. Surfaced here so callers can check.
+        # Stored so callers can detect an unconverged solve (which still returns a finite x).
         self.lastIterations = iters
         self.lastError = error
 
@@ -406,17 +403,11 @@ cdef int _lgmresPrecondApplyTrampoline(void* ctx, int n, const double* rhs, doub
     """
     cdef PyAMGCLLGMRESSolver self = <PyAMGCLLGMRESSolver> ctx
     cdef Py_ssize_t i
-    # rhs arrives as a `const double*` (it is AMGCL's own internal Arnoldi-vector storage, never meant
-    # to be written through) -- copied element-by-element into a fresh, ordinary (non-const) numpy
-    # array rather than wrapped in a zero-copy memoryview, which would need casting away the pointer's
-    # constness. n is the system size, so this is one pass over a vector per preconditioner
-    # application -- small against the application itself (a block Gauss-Seidel sweep of AMG cycles),
-    # which reads every matrix entry at least once.
+    # rhs is AMGCL's const internal storage: copied into a fresh numpy array rather than cast to non-const.
     cdef np.ndarray[np.float64_t, ndim=1, mode="c"] rhsArr
     cdef double[::1] xView
     try:
-        # inside the try: a MemoryError here must be stashed and re-raised like any other failure, not
-        # swallowed by this noexcept function, which would leave x stale and the solve "successful"
+        # inside the try, so that a MemoryError is stashed and re-raised like any other failure
         rhsArr = np.empty(n, dtype=np.float64)
         for i in range(n):
             rhsArr[i] = rhs[i]
@@ -545,10 +536,7 @@ cdef class PyAMGCLLGMRESSolver:
         cdef int iters = 0
         cdef double error = 0.0
 
-        # self is passed through as the callback's opaque context, cast to void* and back in
-        # _lgmresPrecondApplyTrampoline -- see that function's own docstring for why this needs no
-        # manual PyObject* reference counting (self is kept alive by this very call's own stack frame
-        # for as long as the cast pointer is in use).
+        # self is the callback's opaque context (see _lgmresPrecondApplyTrampoline).
         self._precondCallable = applyPreconditioner
         self._pendingException = None
         cdef void* ctx = <void*> self

@@ -77,9 +77,7 @@ def createSolver(opts) -> Callable:
         If the optional ``petsc4py`` dependency is not installed -- raised here, at construction
         time (matching the pre-refactor behaviour), not deferred to the first solve.
     """
-    # Imported inside the function body, not at module scope: `petsc4py` is an optional dependency,
-    # so at module scope its absence would break anyone who merely resolves a `linsolver` registry
-    # name rather than this one.
+    # Imported lazily: petsc4py is optional.
     from edelweissfe.linsolve.petsclu.petsclu import petscluSolve
 
     return PetscLUSolver(petscluSolve)

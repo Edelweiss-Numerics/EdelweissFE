@@ -72,10 +72,9 @@ class StepActionBase(OptionSchemaProvider, ABC):
         The journal object for logging.
     """
 
-    #: The state this step action carries from one increment to the next -- and across step
-    #: boundaries, e.g. an accumulated load -- by attribute name and type; see
-    #: :mod:`~edelweissfe.utils.checkpointedstate`. Every step action declares it, or overrides
-    #: :meth:`getRestartData` and :meth:`setRestartData`. Undeclared, it cannot be checkpointed.
+    #: The state this step action carries from one increment (and step) to the next, by attribute name and type;
+    #: see :mod:`~edelweissfe.utils.checkpointedstate`. Undeclared, :meth:`getRestartData` and
+    #: :meth:`setRestartData` must be overridden for checkpointing.
     checkpointedState: dict | None = None
 
     def getRestartData(self) -> dict[str, np.ndarray]:

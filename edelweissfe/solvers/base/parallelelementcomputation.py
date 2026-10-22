@@ -79,8 +79,7 @@ def computeElementsInParallel(
     time = timeStep.totalTime
     dT = timeStep.timeIncrement
 
-    # Process a CHUNK of elements per task, not just one, to keep the per-task
-    # dispatch overhead negligible compared to the actual element computation.
+    # One chunk of elements per task, to keep the dispatch overhead negligible.
     def computeElementsWorker(elementChunk):
         for element in elementChunk:
             Pe = scatter_P[element]
@@ -109,15 +108,11 @@ def computeElementsInParallel(
 
 #: How many chunks of elements each thread is handed in the explicit element loop, so that the
 #: executor can balance unequal chunks dynamically; see :func:`computeElementsInParallelForExplicit`.
-#: Raising it costs one plan entry and one buffer allocation per chunk, and buys finer balancing,
-#: so it pays until the chunks get small enough for that per-chunk cost to show.
 _chunksPerThread = 16
 
 
-#: Single-entry cache of the per-chunk gather plan; see :func:`_chunkedGatherPlan`. One entry
-#: suffices because a solver works on one element set at a time, and holding a reference to the
-#: entity mapping it was built for keeps that mapping alive, so identity comparison against it is
-#: sound (a freed dict could otherwise have its id reused by a different one).
+#: Single-entry cache of the per-chunk gather plan; see :func:`_chunkedGatherPlan`. It holds
+#: references to the mappings it was built for, which keeps identity comparison against them sound.
 _gatherPlanCache = None
 
 
@@ -155,12 +150,8 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, scatterOffsetM
 
     global _gatherPlanCache
 
-    # Read the global ONCE. Checking the guard against the global and then returning the plan out
-    # of the global again is a time-of-check-to-time-of-use gap: with the GIL disabled, another
-    # thread reaching this function between the two can replace the entry, and the caller would be
-    # handed a plan that was never checked against its own elements -- the exact silent wrong-DOF
-    # failure the guard below exists to prevent. A tuple is replaced atomically, so one read is
-    # a consistent snapshot; the worst a race can then do is have both threads rebuild the plan.
+    # Read the global once: under PYTHON_GIL=0 another thread may replace it between check and use.
+    # The tuple is replaced atomically, so one read is a consistent snapshot.
     cached = _gatherPlanCache
 
     if (
@@ -168,15 +159,9 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, scatterOffsetM
         and cached[0] is entitiesInDofVector
         and cached[1] == chunkSize
         and cached[2] == len(elements)
-        # The scatter layout is rebuilt whenever the entity mapping is, but it is a separate
-        # object, and the plan stores positions into it -- so it is compared in its own right.
+        # The plan stores positions into the scatter layout, so it is compared in its own right.
         and cached[5] is scatterOffsetMap
-        # Keyed on the collection itself, not just its length: the plan stores the chunked
-        # ELEMENTS, so a second caller in the same increment passing a different but equal-length
-        # subset against the same DofManager would otherwise be handed a plan for the wrong
-        # elements with correctly shaped buffers -- the silent wrong-DOF failure this cache is
-        # documented to guard against. Only NEDParallel calls this today, always with
-        # model.elements, so this is latent rather than live.
+        # The plan stores the chunked elements, so an equal-length different collection must miss.
         and cached[4] is elements
     ):
         return cached[3]
@@ -187,8 +172,7 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, scatterOffsetM
         offsets = np.zeros(len(chunk) + 1, dtype=np.intp)
         np.cumsum([len(indices) for indices in indicesPerElement], out=offsets[1:])
 
-        # Where this chunk's forces belong in the scatter buffer, laid out in the same order as
-        # the chunk's own force buffer -- so the write back is one indexed assignment.
+        # The chunk's slots in the scatter buffer, in the order of its own force buffer.
         scatterSlots = [scatterOffsetMap[element] for element in chunk]
         scatterIndices = np.concatenate([np.arange(offset, offset + size) for offset, size in scatterSlots])
 
@@ -231,36 +215,26 @@ def computeElementsInParallelForExplicit(
     time = timeStep.totalTime
     dT = timeStep.timeIncrement
 
-    # Both vectors come from DofManager.constructDofVector, which hands every DofVector the same
-    # idcsOfHigherOrderEntitiesInDofVector object -- so one index plan serves both. Assert it
-    # rather than assume it: gathering dU through indices built for a different layout would
-    # produce wrong forces silently.
+    # One index plan serves both vectors only if they share the same entity mapping.
     if dU.entitiesInDofVector is not Un1.entitiesInDofVector:
         raise ValueError(
             "The solution and increment vectors carry different entity mappings, so a shared "
             "gather plan cannot be used for both."
         )
 
-    # Plain ndarray aliases: the gather below indexes them directly, bypassing the DofVector
-    # entity lookup entirely for the hot path. Taken from the vector's own cached view rather than
-    # built here, so this shares the one alias every entity access already goes through.
+    # Plain ndarray views, so the gather bypasses the DofVector entity lookup.
     Un1_plain = Un1.asPlainArray()
     dU_plain = dU.asPlainArray()
 
     def compute_chunk(plannedChunk) -> float:
         chunkElements, flatIndices, offsets, scatterIndices = plannedChunk
 
-        # One gather per chunk rather than two per element. The elements then take views into
-        # these buffers, which allocate nothing.
+        # One gather per chunk; the elements take views into these buffers.
         gatheredU = Un1_plain[flatIndices]
         gatheredDU = dU_plain[flatIndices]
 
-        # The chunk's OWN force buffer, rather than a view into the scatter buffer per element.
-        # Taking that view is what stopped this loop from scaling once the GIL was gone: a view
-        # holds a reference to the buffer it looks into, and the scatter buffer is one object
-        # every thread looks into, so every element made all the cores take turns updating the
-        # single reference count in it. This buffer is reached by one thread only, and the shared
-        # one is written once per chunk instead of once per element.
+        # The chunk's own force buffer: per-element views into the shared scatter buffer would make
+        # all threads contend on its reference count under PYTHON_GIL=0.
         Pe = np.zeros(offsets[-1])
 
         chunk_psi = 0.0
@@ -271,22 +245,15 @@ def computeElementsInParallelForExplicit(
             element.computeKernelsExplicit(Pe[begin:end], gatheredU[begin:end], gatheredDU[begin:end], time, dT)
             chunk_psi += element.computeInternalEnergy()
 
-        # Each element owns its slot in the scatter buffer and appears in exactly one chunk, so
-        # this assigns rather than accumulates -- as the per-element writes it replaces did.
+        # Each element owns its slot in the scatter buffer, so this assigns rather than accumulates.
         scatter_P[scatterIndices] = Pe
 
         return chunk_psi
 
     numThreads = getNumberOfWorkerThreads()
 
-    # Many small chunks per thread rather than one large one each, because the elements are not
-    # equally expensive: a quadrature point that is yielding or damaging pays for a return mapping
-    # that an elastic one does not, so the elements at a propagating front cost several times what
-    # the bulk costs. Those elements sit next to each other in the mesh, and therefore next to each
-    # other in element order, so chunks cut from that order are systematically unequal -- and with
-    # one chunk per thread the whole map waits for whichever thread drew the front. Handing the
-    # executor many more chunks than it has threads lets it even that out as it goes: a thread that
-    # drew cheap elements comes back for more work instead of idling.
+    # Many small chunks per thread for load balancing: inelastic elements (e.g. at a damage front) are
+    # more expensive and adjacent in element order.
     chunk_size = (
         max(1, len(elements) // (numThreads * _chunksPerThread)) if numThreads > 1 else min(len(elements), 4000)
     )

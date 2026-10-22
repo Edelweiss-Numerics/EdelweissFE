@@ -41,7 +41,5 @@ with properties, such as materials.
         all
 """
 
-# This module holds no code. Sections are resolved through the ``section`` category of
-# :mod:`edelweissfe.config.registry`. The docstring above is rendered by Sphinx via
-# ``.. automodule:: edelweissfe.config.sections`` in ``doc/source/documentation/sections.rst``;
-# do not delete this file.
+# No code: sections are resolved via the registry. The docstring above is rendered by Sphinx
+# (``doc/source/documentation/sections.rst``); do not delete this file.

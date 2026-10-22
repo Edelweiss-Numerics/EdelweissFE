@@ -128,9 +128,8 @@ class RegistryConflictError(RegistryLookupError):
     """
 
 
-#: Static built-in table: ``(category, name)`` (both stored casefolded) -> ``"module.path:Attr"``.
-#: Never imports anything by itself -- it is a table of strings, resolved lazily by
-#: :func:`_resolveDottedString` only when :func:`lookup` actually needs that entry.
+#: Static built-in table: ``(category, name)`` (both stored casefolded) -> ``"module.path:Attr"``,
+#: resolved lazily by :func:`lookup`.
 _BUILTINS: dict[tuple[str, str], str] = {}
 
 
@@ -248,13 +247,8 @@ _addBuiltins(
     "edelweissfe.analyticalfields",
 )
 
-# solver / step / modelmodifier / statetransferstrategy are not "one module per name" -- this table
-# is their only copy. config/solvers.py's Sphinx ``.. pprint::`` directive reads this registry
-# directly rather than keeping its own copy.
-#
-# The value is ``<module>:<class>`` rather than a bare module name: the deck-facing solver name and
-# the class name coincide for most solvers, but not for all (``NID`` is
-# ``NonlinearImplicitDynamic``), so the class is spelled out rather than assumed to equal the key.
+# solver / step / modelmodifier / statetransferstrategy: not "one module per name", so each entry
+# names its ``<module>:<class>`` (e.g. ``NID`` is ``NonlinearImplicitDynamic``).
 for _solverName, _target in {
     "NIST": "nonlinearimplicitstatic:NIST",
     "NEST": "nonlinearexplicitstatic:NEST",
@@ -280,10 +274,7 @@ _BUILTINS[("statetransferstrategy", "nearestqp")] = "edelweissfe.adaptivity.stat
 _BUILTINS[("statetransferstrategy", "projection")] = "edelweissfe.adaptivity.statetransfer:PolynomialProjection"
 _BUILTINS[("statetransferstrategy", "virgin")] = "edelweissfe.adaptivity.statetransfer:VirginState"
 
-# AMR refinement markers -- resolved by a ``>>marker, type=<name>`` block, one module (marking.py)
-# per marker class. Kept a registry category, like statetransferstrategy, so any adaptivity
-# mechanism (or a third-party package via entry points) constructs markers by name rather than
-# through a hardcoded if/elif living inside one model modifier.
+# AMR refinement markers, resolved by a ``>>marker, type=<name>`` block.
 for _markerName, _markerClass in {
     "fieldOutput": "FieldOutputMarker",
     "elementSet": "ElementSetMarker",
@@ -293,13 +284,8 @@ for _markerName, _markerClass in {
 }.items():
     _BUILTINS[("marker", _markerName.casefold())] = f"edelweissfe.adaptivity.marking:{_markerClass}"
 
-# The element category is keyed by element *type*, and 42 types share just 2 formulation classes, so
-# `_addBuiltins`'s "one module per name, fixed attribute name" convention does not apply -- hence two
-# explicit lists. This table is the single source of truth for type -> class, pinned against
-# `elements/library.py`'s `elLibrary` by
-# `tests/test_registry.py::test_element_category_covers_every_element_type_exactly`; the types are
-# written out as literals rather than imported from `elements.library` so that this module keeps
-# importing nothing (property 1 above).
+# The element category is keyed by element *type*; many types share one formulation class. The types
+# are literals, not imported from `elements.library`, so that this module imports nothing (property 1).
 for _elementTypeName in [
     "CPE4",
     "CPE4R",
@@ -354,10 +340,7 @@ for _elementTypeName in [
         "edelweissfe.elements.displacementtlelement.element:DisplacementTLElement"
     )
 
-# The material category covers the `provider=edelweiss` materials, one module and one class name per
-# material -- so neither `_addBuiltins` variant fits and each entry names its own target. Originally
-# transcribed from `config/materiallibrary.py`'s if/elif chain, which is now gone, so these are the
-# only copy.
+# The `provider=edelweiss` materials, one module and one class name per material.
 for _materialName, _materialDotted in {
     "linearelastic": "edelweissfe.materials.linearelastic.linearelastic:LinearElasticMaterial",
     "vonmises": "edelweissfe.materials.vonmises.vonmises:VonMisesMaterial",
@@ -377,9 +360,7 @@ for _materialName, _materialDotted in {
     _BUILTINS[("material", _materialName)] = _materialDotted
 
 # The linsolver category: every `linsolve/*` subpackage exposes a module-level
-# `createSolver(opts) -> Callable[[A, b], x]` factory. See each solver's own module docstring
-# for what it does and how the optional-backend import is handled, and
-# doc/source/documentation/linsolvers.rst for how the solvers relate to one another.
+# `createSolver(opts) -> Callable[[A, b], x]` factory.
 for _linsolverName in [
     "superlu",
     "umfpack",
@@ -395,9 +376,7 @@ for _linsolverName in [
     _BUILTINS[("linsolver", _linsolverName)] = f"edelweissfe.linsolve.{_linsolverName}:createSolver"
 
 
-# The "keyword" category: each top-level keyword is its own module with its own class name, so,
-# like the `material` table above, this is an explicit dict rather than `_addBuiltins`'s "one fixed
-# attribute name" convention.
+# The "keyword" category: each top-level keyword is its own module with its own class name.
 for _keywordName, _keywordDotted in {
     "element": "edelweissfe.keywords.element:ElementKeyword",
     "elSet": "edelweissfe.keywords.elset:ElSetKeyword",
@@ -430,25 +409,12 @@ for _keywordName, _keywordDotted in {
 #: by ``_lock`` (see :func:`lookup`).
 _resolved: dict[tuple[str, str], tuple[Any, type | None]] = {}
 
-#: Guards read-check-write access to ``_resolved``. Chosen strategy (see :func:`lookup`): a plain
-#: mutex around "look up the dotted string, import it, store it" rather than a lock-free/idempotent
-#: design, because resolving a dotted string can execute arbitrary module-level code (the target
-#: module's imports) whose *side effects* -- not just the returned object -- must not race under
-#: PYTHON_GIL=0. A dict-level race (two threads both missing the cache and both importing) would
-#: itself be harmless (importlib's own per-module lock in ``sys.modules`` already deduplicates the
-#: actual import, and re-running ``getattr`` is pure), but without this lock two threads could still
-#: both observe a cache miss, both resolve, and then interleave two dict insertions for the *same*
-#: key with two (structurally equal but not necessarily identical, e.g. if resolution ever grows a
-#: per-call side effect) values. Serializing the whole resolve-and-store makes the outcome
-#: independent of scheduling: exactly one thread resolves, every other thread either sees the
-#: cached result or waits for the lock and then sees it.
+#: Serializes resolve-and-store of ``_resolved``: resolving may import modules, whose side effects
+#: must not race under PYTHON_GIL=0.
 _lock = threading.Lock()
 
-#: Explicit :func:`register` calls: ``(category, name)`` -> ``(target, schema)``. Kept separate from
-#: ``_resolved`` (which also holds lazily-memoized *resolutions*) so that whether a registration
-#: collides does not depend on whether something happened to look the name up first -- i.e. so
-#: collision detection is not itself import-order dependent, which is the pathology this module
-#: exists to remove.
+#: Explicit :func:`register` calls: ``(category, name)`` -> ``(target, schema)``. Separate from
+#: ``_resolved`` so that collision detection does not depend on lookup order.
 _registered: dict[tuple[str, str], tuple[Any, type | None]] = {}
 
 #: Whether :func:`_auditEntryPoints` has already run in this process.
@@ -498,9 +464,7 @@ def _entryPointDottedString(category: str, name: str) -> str | None:
     matches = {ep.value for ep in entry_points(group=ENTRY_POINT_GROUP) if ep.name.casefold() == wantedName}
 
     if len(matches) > 1:
-        # Every match is collected rather than returning the first, because `entry_points()` has no
-        # documented ordering: taking the first made the winner depend on installation order, and
-        # differ between environments with the same packages installed.
+        # `entry_points()` has no defined ordering, so several matches are an error, not "first wins".
         raise RegistryConflictError(
             f"Several packages claim the '{category}' name '{name}' via '{ENTRY_POINT_GROUP}' entry "
             f"points: {', '.join(sorted(matches))}. Uninstall one, or have the packages agree on "
@@ -554,9 +518,7 @@ def _auditEntryPoints() -> None:
 
     shadowed = _entryPointsShadowingBuiltins()
     if shadowed:
-        # Deliberately NOT setting _entryPointsAudited here: a conflict must keep raising on every
-        # call until the environment is actually fixed, rather than being permanently silenced by
-        # whichever call happens to discover it first.
+        # _entryPointsAudited stays False: a conflict keeps raising until the environment is fixed.
         details = "; ".join(
             f"'{epName}' is built in as '{builtinDotted}' but an entry point claims it as " f"'{entryPointDotted}'"
             for epName, (builtinDotted, entryPointDotted) in sorted(shadowed.items())
@@ -667,8 +629,7 @@ def register(category: str, name: str, target: Any, *, schema: type | None = Non
                     "deliberately."
                 )
 
-            # Checked against the *table of strings*, so this neither imports the built-in nor
-            # depends on whether anything resolved it earlier.
+            # Checked against the table of strings, so the built-in is not imported.
             builtinDotted = _BUILTINS.get(key)
             if builtinDotted is not None and previous is None:
                 raise RegistryConflictError(
@@ -677,10 +638,7 @@ def register(category: str, name: str, target: Any, *, schema: type | None = Non
                     "Choose a different name, or pass override=True to shadow it deliberately."
                 )
 
-            # A name resolved via an earlier lookup() (built-in table or entry point) is memoized
-            # into _resolved directly, without ever touching _registered -- so the checks above miss
-            # it. Without this, register() for an already-resolved key silently overwrites the
-            # memoized entry a few lines below instead of raising.
+            # A name memoized by an earlier lookup() is in _resolved only, not in _registered.
             resolvedEntry = _resolved.get(key)
             resolvedDiffersFromTarget = resolvedEntry is not None and (
                 resolvedEntry[0] is not target or resolvedEntry[1] is not schema

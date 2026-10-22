@@ -174,10 +174,7 @@ def computePolyhedronMassProperties(
     signedVolumes = np.einsum("ij,ij->i", a, np.cross(b, c)) / 6.0
     volume = np.sum(signedVolumes)
 
-    # Scale-relative zero check: comparing against the summed absolute
-    # tetrahedron volumes keeps the test meaningful regardless of the
-    # length unit of the mesh (an absolute tolerance would falsely reject
-    # legitimately watertight meshes in small units).
+    # Zero check relative to the summed absolute tetrahedron volumes, independent of the mesh's length unit.
     volumeScale = np.sum(np.abs(signedVolumes))
     if volumeScale == 0.0 or abs(volume) < 1e-10 * volumeScale:
         raise ValueError(

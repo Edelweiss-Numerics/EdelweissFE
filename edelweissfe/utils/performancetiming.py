@@ -265,12 +265,9 @@ def makePrettyTable(maxLevels: int = 4, wallTime: float = None) -> PrettyTable:
 
     theTable = _makeTable(_mergedSnapshot(), 0, maxLevels)
 
-    # Top level only: the nested rows are already counted inside their parents, so summing every
-    # row would double-count everything below level 0.
+    # Top level only: nested rows are already counted inside their parents.
     timed = sum(t for level, _, t, _ in theTable if level == 0)
-    # Every share is relative to the same reference -- the wall clock if it is known, otherwise
-    # what was timed -- so nested rows read directly as a fraction of the whole run, not of their
-    # parent.
+    # All shares, nested ones included, are relative to the whole run, not to their parent.
     reference = wallTime if wallTime is not None else timed
 
     def share(t: float) -> str:

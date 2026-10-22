@@ -87,8 +87,7 @@ class NISTPArcLength(NISTParallel):
         self.Lambda = 0.0
         self.dLambda = 0.0
         self.arcLengthController = None
-        # arcLengthController/stopCondition are not consulted through self.options -- beginStep
-        # reads them from here directly, every step, unconditionally (see applyOptionsOverride).
+        # arcLengthController/stopCondition, read by beginStep (see applyOptionsOverride).
         self._arcLengthOptions = {}
 
         return super().__init__(jobInfo, journal, **kwargs)
@@ -141,9 +140,7 @@ class NISTPArcLength(NISTParallel):
         if "arc length parameter" in model.additionalParameters:
             self.Lambda = model.additionalParameters["arc length parameter"]
 
-        # Sticky: whatever the last >>options, name=<this solver's name>, arcLengthController=...
-        # block set (applyOptionsOverride) -- not re-fetched from step.actions, and not reset if a
-        # later step omits it.
+        # Sticky: set by the last >>options block, not reset if a later step omits it.
         arcLengthControllerOptions = self._arcLengthOptions
 
         if arcLengthControllerOptions:

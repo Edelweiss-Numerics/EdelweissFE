@@ -151,9 +151,7 @@ class OutputManager(OutputManagerBase):
             those two columns are then written as ``-`` rather than refusing to write anything.
         """
 
-        # Extracted once, not once per consumer: extractIncrementTimeRows advances the snapshot the
-        # next delta is measured against, so a second call within the same increment would report
-        # zeros -- which is how writing to the file went missing-in-effect rather than just missing.
+        # Extracted once: each call advances the snapshot, so a second call would report zeros.
         rows = extractIncrementTimeRows()
 
         self.journal.printPrettyTable(makeIncrementTimesPrettyTable(rows), self.identification)

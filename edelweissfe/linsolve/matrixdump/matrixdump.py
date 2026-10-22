@@ -99,8 +99,6 @@ class MatrixDumpSolver(LinearSolver):
     """
 
     #: How many instances have been created in this process, so each can name its dumps distinctly.
-    #: Class-level rather than passed in, because nothing at the construction site knows which step
-    #: it is building a solver for.
     _instancesCreated = 0
 
     #: Dumps written across all instances, so ``maxDumps`` is a genuine process-wide ceiling.
@@ -197,8 +195,7 @@ class MatrixDumpSolver(LinearSolver):
         matrixPath = os.path.join(self._directory, "A_{:}.npz".format(stem))
         rhsPath = os.path.join(self._directory, "b_{:}.npy".format(stem))
 
-        # Uncompressed: these matrices are large, and compression would spend more time than the
-        # solve being investigated -- distorting the very run whose timings are being measured.
+        # uncompressed: compression would distort the timings of the run being measured
         save_npz(matrixPath, A, compressed=False)
         np.save(rhsPath, np.asarray(b))
 
@@ -211,11 +208,7 @@ class MatrixDumpSolver(LinearSolver):
             "matrixFile": os.path.basename(matrixPath),
             "rhsFile": os.path.basename(rhsPath),
             "matrixBytes": os.path.getsize(matrixPath),
-            # Cheap fingerprints, so an offline replay can assert it is reading back the system that
-            # was actually written -- and so the sequence can be recognised: successive Newton
-            # iterates of one increment show a monotonically falling residual norm, which is how a
-            # dumped range is identified as a converging sequence rather than a set of unrelated
-            # systems.
+            # cheap fingerprints, for an offline replay to verify what it reads back
             "rhsNorm": float(np.linalg.norm(np.asarray(b))),
             "diagonalNorm": float(np.linalg.norm(A.diagonal())),
         }

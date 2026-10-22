@@ -101,65 +101,33 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.linsolve.base import FieldBlock, LinearSolver, LinearSolveSummary
 from edelweissfe.linsolve.nullspace import rigidBodyNullspace, translationNullspace
 
-# Ordered low-to-high; index comparison decides whether a message at a given level should print.
-# "warning": only abnormal conditions (excessive outer iterations, unmet true-residual tolerance,
-# non-convergence) -- the default, so a normal run stays quiet. "info": one compact line per solve.
-# "debug": full detail, including every true-residual continuation attempt. Independent of, and does
-# not affect, the Journal instance's own message-level suppression (see _log()) -- this gate decides
-# whether blockamg attempts to log at all; Journal's own level decides whether the attempt is shown.
+# Ordered low-to-high. "warning" (default): abnormal conditions only; "info": one line per solve; "debug": full
+# detail. This gates whether blockamg logs at all; the Journal's own level still decides what is shown.
 _VERBOSITY_LEVELS = ("silent", "warning", "info", "debug")
-# Journal indentation level, not verbosity: every message nests at level 2, alongside the Newton residual
-# line each solve corresponds to -- all of them are per-Newton-iteration details, just gated by different
-# verbosity settings. A warning keeps that nesting too, and stands out by its "⚠" marker instead.
+# Journal indentation level, not verbosity: messages nest with the Newton residual line of their solve.
 _JOURNAL_LEVEL = 2
 _WARNING_MARKER = "⚠ "
 _IDENTIFICATION = "BlockAMGSolver"
 
-# "backendPrecision" and "backendBlockSize" are not AMGCL parameters -- they select the AMGCL
-# wrapper's own backend value type ("double" or "float" for backendPrecision; 1 (scalar), 2, or 3 for a
-# block-valued backend operating on B x B nodal blocks for backendBlockSize). Omitted from a fieldPreconds
-# tree they fall back to "double" and 1; the default trees (_defaultFieldPrecond) set both per dimension.
-# _buildFieldPreconditioner pops both, and "blockTranslationNullspace" (see below), out of whichever precond
-# dict applies (default or a fieldPreconds override) before forwarding the rest verbatim as the AMGCL JSON
-# parameter tree.
+# "backendPrecision" ("double"/"float") and "backendBlockSize" (1 = scalar, 2 or 3 = B x B nodal blocks) select
+# the AMGCL wrapper's backend; they are not AMGCL parameters. Omitted, they default to "double" and 1.
+# _buildFieldPreconditioner pops them and "blockTranslationNullspace" out of the field's tree and forwards the
+# rest verbatim as the AMGCL JSON parameter tree.
 #
-# backendPrecision defaults to "double" when omitted from a fieldPreconds tree -- not what the shipped
-# field defaults use: _defaultFieldPrecond's own 3D tree sets it to "float" explicitly (see below). On
-# the scalar backend "float" is AMGCL's builtin<float>,
-# which builds the whole hierarchy in single precision; measured across a set of dumped systems of a
-# real reference model, it inflated outer GMRES iterations and only won on wall-clock part of the
-# time, netting only a small aggregate gain -- plausibly because the Chebyshev smoother's own
-# power-iteration spectral-radius estimate then runs in float32 too. With backendBlockSize 3, "float"
-# instead sets the hierarchy up in double and only stores the level matrices the cycle reads in float
-# (see builtin_float_matrices in amgcl-wrapper.hpp): measured with outer iteration counts identical to
-# the double hierarchy's on a captured damage-onset sequence, and faster.
+# "float" on the scalar backend builds the whole hierarchy in single precision; with backendBlockSize 3 the
+# hierarchy is set up in double and only the level matrices the cycle reads are stored in float
+# (builtin_float_matrices in amgcl-wrapper.hpp).
 #
-# backendBlockSize defaults to the field's own nodal dimension (see _defaultFieldPrecond below): 3 for
-# a 3D vector field, 2 for a 2D one, 1 (scalar) otherwise. Setting it > 1 gives up the rotational
-# rigid-body modes (see _buildFieldPreconditioner): a block hierarchy takes the translations as its
-# near-null-space at most, and AMGCL's own identity blocks are constants per component in the equilibrated
-# variables, i.e. D-weighted translations rather than the translations D^-1 t of the scaled block (nullspace.py).
-# "blockTranslationNullspace": true, part of the 2D and 3D default trees, gives a block hierarchy those
-# translations instead (amgcl-block-translations.hpp); false falls back to the identity blocks. Inside this
-# block Gauss-Seidel preconditioner, 3x3 blocks stored in float with a smoothed-aggregation spectral-radius
-# estimate and the translations are nevertheless the measured winner on the reference models (less index and
-# value traffic per cycle than the scalar backend, fewer outer iterations than the identity blocks) -- the
-# code default.
+# backendBlockSize > 1 gives up the rotational rigid-body modes: a block hierarchy takes the translations at most.
+# "blockTranslationNullspace": true gives it the translations D^-1 t of the scaled block
+# (amgcl-block-translations.hpp); false uses AMGCL's identity blocks, i.e. D-weighted translations (nullspace.py).
+# E.g. {"displacement": {**_defaultFieldPrecond(3), "backendBlockSize": 1, "backendPrecision": "double"}} puts a
+# 3D field on the scalar backend in double, with the full rigid-body modes.
 #
-# All three are set per field via fieldPreconds, e.g.
-# {"displacement": {**_defaultFieldPrecond(3), "backendBlockSize": 1, "backendPrecision": "double"}} to put a
-# 3D field on the scalar backend, in double (see above), which takes the full rigid-body modes, rotations
-# included (blockTranslationNullspace has nothing to add there, see _takesBlockTranslations).
-# power_iters 300: AMGCL's default (0) bounds the spectral radius by Gershgorin's theorem, pessimistically; a
-# power iteration is tighter but starts from a vector seeded per OpenMP thread, so it depends on the thread count.
-# The former 50 iterations left it badly under-converged on hard operators at some thread counts (needing far
-# more outer iterations than an otherwise identical solve), 300 do not (see the Chebyshev section of the theory page).
-#
-# The coarsening/relaxation recipe every vector field shares, whatever its dimension -- the measured
-# winner on the reference models (see the theory page's "why the defaults are what they are"):
-# estimate_spectral_radius/power_iters 20 sharpens smoothed aggregation's own prolongation-smoother
-# weight; degree 16 with npre 0, npost 1 (one high-degree post-smoothing sweep, no pre-smoothing) beats
-# the former symmetric V(1,1) cycle at degree 5 for the same number of preconditioner applications.
+# power_iters 300: AMGCL's default (0) uses a pessimistic Gershgorin bound; the power iteration is tighter but
+# seeded per OpenMP thread, and too few iterations leave it under-converged at some thread counts.
+# Shared vector-field recipe (see the theory page): power_iters 20 sharpens smoothed aggregation's
+# prolongation-smoother weight; one degree-16 Chebyshev post-smoothing sweep (npre 0, npost 1).
 _VECTOR_PRECOND_BASE = {
     "coarsening": {
         "type": "smoothed_aggregation",
@@ -756,23 +724,14 @@ class BlockAMGSolver(LinearSolver):
     #: See :attr:`~edelweissfe.linsolve.base.LinearSolver.identification`.
     identification = _IDENTIFICATION
 
-    #: See :attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`. ``True``: a
-    #: changing pattern (e.g. from ``pruneCondensedMatrixZeros`` on a multi-point-constrained model)
-    #: forces a hierarchy rebuild on every solve (see the ``patternChanged``/nnz rule in ``__call__``,
-    #: which this ``nnz != self._lastNnz`` proxy trips on almost every Newton iteration when pruning
-    #: churns the pattern), which was measured to cost a contact model with many
-    #: multi-point-constraint slaves noticeably more wall-clock over several increments.
+    #: See :attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`. ``True``: a changing
+    #: pattern forces a hierarchy rebuild on every solve (the nnz rule in ``__call__``).
     needsStableSparsityPattern = True
 
-    #: Degradation dumps written across every instance in this process, so
-    #: ``dumpOnDegradationMaxDumps`` is a genuine process-wide ceiling -- the same reasoning as
-    #: :class:`~edelweissfe.linsolve.matrixdump.matrixdump.MatrixDumpSolver`'s ``_totalDumpsWritten``.
+    #: Degradation dumps written across all instances, so ``dumpOnDegradationMaxDumps`` is a process-wide ceiling.
     _degradationDumpsWritten = 0
 
-    #: How many instances have been created in this process (one nonlinear solver may build a fresh
-    #: ``BlockAMGSolver`` per analysis step), so dumps from different instances get distinct filenames
-    #: -- same reasoning as :class:`~edelweissfe.linsolve.matrixdump.matrixdump.MatrixDumpSolver`'s
-    #: ``_instancesCreated``.
+    #: Instances created in this process (one may be built per analysis step), so dumps get distinct filenames.
     _instancesCreated = 0
 
     def __init__(
@@ -836,9 +795,8 @@ class BlockAMGSolver(LinearSolver):
         self._symmetric = symmetric
         self._fieldPreconds = fieldPreconds or {}
         self._useRigidBodyNullspace = useRigidBodyNullspace
-        # Explicitly supplied offline maps: never invalidated, since they are not derived from any
-        # model this solver was handed. Lazily computed ones go here too but are tracked in
-        # _lazyP1MapNames so setModel() can drop exactly those on an AMR/connectivity rebuild.
+        # Supplied offline maps are never invalidated; lazily computed ones are tracked in _lazyP1MapNames so
+        # setModel() drops exactly those on a mesh change.
         self._p1Maps = p1Maps or {}
         self._lazyP1MapNames = set()
         # Per-field node coordinates, derived from self._model; dropped in setModel().
@@ -882,19 +840,14 @@ class BlockAMGSolver(LinearSolver):
         self._dumpOnDegradationMaxDumps = dumpOnDegradationMaxDumps
         self._dumpOnDegradationContextSolves = dumpOnDegradationContextSolves
 
-        # Hot reload: the path to watch, and the file contents it was last applied from. Seeded as
-        # None rather than from the file, so the first solve reads and reports the settings actually
-        # in force -- which is the whole point when the file is being edited during a long run.
+        # Hot reload: the watched path and the file contents last applied. Seeded as None so that the first
+        # solve reads and reports the settings in force.
         self._hotReloadConfigFile = hotReloadConfigFile
         self._hotReloadStamp = None
-        # Rolling window of the last dumpOnDegradationContextSolves solves (each entry: solveCount, A,
-        # b, blocks, mustRefresh, patternChanged, newIncrement, previousOuterIters), oldest first --
-        # only populated when dumpOnDegradationDir is set, so this costs nothing otherwise. Bounded by
-        # maxlen, so memory is O(contextSolves) regardless of run length.
+        # Rolling window of the last dumpOnDegradationContextSolves solves, oldest first; only populated when
+        # dumpOnDegradationDir is set.
         self._recentSolveHistory = collections.deque(maxlen=max(self._dumpOnDegradationContextSolves, 0))
-        # solveCounts already written to disk this run, so an overlapping context window on a second
-        # nearby trigger never dumps (or double-counts against dumpOnDegradationMaxDumps) the same
-        # solve twice.
+        # solveCounts already dumped, so overlapping context windows never dump a solve twice.
         self._dumpedSolveCounts = set()
 
         self._instanceOrdinal = BlockAMGSolver._instancesCreated
@@ -921,11 +874,8 @@ class BlockAMGSolver(LinearSolver):
         self._trueResidualGap = 1.0
         self._refreshNext = False
 
-        # The persistent AMGCL lgmres outer-solver instance (only used when outerSolver ==
-        # "amgcl_lgmres"), and the problem size it was built for. Unlike the per-field AMG
-        # hierarchies above, it is not rebuilt when mustRefresh fires: it holds no state of a solve,
-        # only AMGCL's scratch vectors preallocated for a fixed size. It is rebuilt on a size change
-        # (see __call__) and when its own settings change (hot reload).
+        # The persistent AMGCL lgmres outer solver and the size it was built for. It holds only scratch vectors,
+        # so it is rebuilt on a size or settings change, not when mustRefresh fires.
         self._lgmresSolver = None
         self._lgmresN = None
 
@@ -943,9 +893,7 @@ class BlockAMGSolver(LinearSolver):
                 "blockamg: " + "; ".join("{:} {:}".format(name, reason) for name, reason in rejections.items())
             )
 
-        # Created only once construction is known to succeed: a configuration rejected above must not
-        # leave a directory behind, and an uncreatable path should raise the ValueError above naming
-        # dumpOnDegradationDir, not a bare OSError from makedirs() before validation even ran.
+        # Created only after validation, so that a rejected configuration leaves no directory behind.
         if self._dumpOnDegradationDir is not None:
             os.makedirs(self._dumpOnDegradationDir, exist_ok=True)
 
@@ -1034,9 +982,7 @@ class BlockAMGSolver(LinearSolver):
 
         lumped = ""
         if self._hierarchyDropLumping:
-            # Row-sum-preserving filtering: the discarded content of each row goes onto its diagonal, so
-            # A_filtered @ 1 == A @ 1 exactly and the constant vector is unaffected by filtering. The
-            # diagonal is always kept, so this does not change the sparsity pattern.
+            # Row-sum-preserving: the discarded content of each row goes onto its diagonal, so A_filtered @ 1 == A @ 1.
             discardedRowSums = np.bincount(coo.row[~keep], weights=coo.data[~keep], minlength=block.shape[0])
             dropped = (dropped + sp.diags(discardedRowSums, format="csr")).tocsr()
             lumped = ", lumped onto the diagonal"
@@ -1061,9 +1007,7 @@ class BlockAMGSolver(LinearSolver):
         across that jump does not reflect Newton convergence and is not meaningful).
         """
         if self._lastResidualNorm is None or newIncrement or self._lastResidualNorm == 0.0:
-            # A previous residual of exactly zero (typically an already-converged, e.g.
-            # linear-elastic, prior iterate) makes the ratio undefined rather than just
-            # uninformative -- fall back the same way as the no-history case.
+            # A zero previous residual (e.g. an already-converged iterate) makes the ratio undefined.
             return self._etaMax
 
         ratio = residualNorm / self._lastResidualNorm
@@ -1124,10 +1068,7 @@ class BlockAMGSolver(LinearSolver):
         field = self._model.nodeFields.get(fieldName)
         if field is None:
             return None
-        # Cached per field: node coordinates do not change, but this is reached from the hierarchy
-        # refresh, which fires essentially every Newton iteration on contact/tie models whose
-        # sparsity pattern churns -- so the O(nNodes) Python loop below would otherwise rerun on
-        # every linear solve. Invalidated by setModel(), the one point where the mesh can differ.
+        # Cached because the hierarchy refresh can fire every Newton iteration; invalidated by setModel().
         coordinates = np.array([node.coordinates for node in field.nodes], dtype=float)
         self._nodeCoordinateCache[fieldName] = coordinates
         return coordinates
@@ -1179,9 +1120,7 @@ class BlockAMGSolver(LinearSolver):
             raise ValueError("blockamg: field blocks cover {:} dofs, but the matrix is {:}x{:}".format(cursor, n, n))
         return blocks
 
-    # translationNullspace/rigidBodyNullspace live in edelweissfe.linsolve.nullspace --
-    # pure functions of a field's block layout, equilibration scaling, and (for the richer basis) node
-    # coordinates, with no BlockAMGSolver-instance state, so there is nothing to keep here as a method.
+    # translationNullspace/rigidBodyNullspace live in edelweissfe.linsolve.nullspace (pure functions, no state).
 
     def _dumpOneSystem(
         self,
@@ -1208,8 +1147,7 @@ class BlockAMGSolver(LinearSolver):
         matrixPath = os.path.join(self._dumpOnDegradationDir, "A_{:}.npz".format(stem))
         rhsPath = os.path.join(self._dumpOnDegradationDir, "b_{:}.npy".format(stem))
 
-        # Uncompressed, same reasoning as MatrixDumpSolver: these systems are large, and compression
-        # would spend more time than the degraded solve being captured.
+        # Uncompressed, like MatrixDumpSolver: compression would cost more than the captured solve.
         sp.save_npz(matrixPath, A, compressed=False)
         np.save(rhsPath, np.asarray(b))
 
@@ -1278,16 +1216,13 @@ class BlockAMGSolver(LinearSolver):
                 stateFields=entry["state"],
             )
 
-    # Settings whose stored attribute does not follow the self._<name> convention. Listed
-    # explicitly rather than inferred, because a wrong guess here would apply a setting to nothing
-    # and report success while doing so.
+    # Settings whose stored attribute does not follow the self._<name> convention.
     _HOT_RELOAD_ALIASES = {
         "verbosity": "_verbosityIndex",
         "p1FieldNames": "_p1FieldNamesRequested",
     }
-    # Changing which file is watched, from inside that file, is not a thing worth supporting.
-    # The deprecated LGMRES recycling keys have no setting left to change. p1Maps are arrays handed to the
-    # constructor, not a configuration file setting.
+    # Keys a hot reload does not apply: the watched file itself, the deprecated LGMRES recycling keys, and p1Maps
+    # (constructor arrays, not a file setting).
     _HOT_RELOAD_IGNORED = ("hotReloadConfigFile", "lgmresAlwaysReset", "lgmresResetOnNewIncrement", "p1Maps")
 
     def _fieldDimensions(self) -> dict:
@@ -1555,12 +1490,8 @@ class BlockAMGSolver(LinearSolver):
             with performancetiming.timeit("p1 topology"):
                 p1Map = self._getP1Map(block.name)
 
-        # Node coordinates cost an O(nNodes) Python loop on first gather (cached after); only fetch them
-        # for a field whose near null-space can actually use them -- p-two-grid's coarse solve always
-        # runs on the plain scalar backend (see its own docstring), but a single-level field's own
-        # backend might not: the default fieldPreconds tree puts a 2D/3D vector field on a block backend,
-        # which never takes the rotations (a block hierarchy takes the translations only, with
-        # blockTranslationNullspace), so coordinates would be gathered and then simply discarded.
+        # Node coordinates (an O(nNodes) gather) are only needed for the rotations, which only the scalar backend
+        # takes; p-two-grid's coarse solve always runs on it.
         # the field's tree, resolved once (an explicit {} stays "AMGCL's defaults")
         fieldTree = (
             self._fieldPreconds[block.name]
@@ -1599,8 +1530,7 @@ class BlockAMGSolver(LinearSolver):
         backendBlockSize = precondParams.pop("backendBlockSize", 1)
         precondParams.pop("blockTranslationNullspace", None)
         blockTranslations = _takesBlockTranslations(fieldTree)
-        # The hierarchy is only ever applied as a preconditioner: "preonly" keeps AMGCL from allocating the
-        # work vectors of an iterative solver (BiCGStab by default) that would never run.
+        # "preonly": the hierarchy is only applied as a preconditioner, so no Krylov work vectors are allocated.
         preconditioner = PyAMGCLSolver(
             {
                 "precond": precondParams,
@@ -1653,9 +1583,7 @@ class BlockAMGSolver(LinearSolver):
         if self._hotReloadConfigFile is None:
             return False
 
-        # The contents themselves are the stamp, not (mtime, size): on kernels with coarse file
-        # timestamps, two same-size saves within one clock tick share an mtime, and the second edit
-        # would be skipped for good. The file is a few hundred bytes, read once per solve.
+        # The file contents are the stamp, not (mtime, size): coarse timestamps can hide a second same-size edit.
         try:
             with open(self._hotReloadConfigFile, "r") as configFile:
                 stamp = configFile.read()
@@ -1747,9 +1675,7 @@ class BlockAMGSolver(LinearSolver):
             self._hotReloadRollback = [(name, attribute, oldValue) for name, attribute, oldValue, _ in pending]
             self._refreshNext = True
 
-        # Reported at "warning" so it lands in the log of a run whose verbosity is not raised: what
-        # settings were in force from which solve onwards is the one thing a later reader of a
-        # hot-reloaded run cannot reconstruct otherwise.
+        # At "warning", so that the settings in force from each solve onwards are always in the log.
         if pending or rejected or unknown:
             summary = ["hot reload of {:} at solve #{:}".format(self._hotReloadConfigFile, self._solveCount)]
             for name, _, oldValue, newValue in pending:
@@ -1811,17 +1737,12 @@ class BlockAMGSolver(LinearSolver):
         newIncrement = (
             self._lastResidualNorm is not None and residualNorm > self._residualGrowthFactor * self._lastResidualNorm
         )
-        # A hierarchy built for another sparsity pattern can be a far worse preconditioner (measured to need
-        # far more outer iterations than a fresh one). nnz is an O(1) proxy for a pattern change; it errs on
-        # the safe side.
+        # A hierarchy built for another sparsity pattern can be a far worse preconditioner; nnz is an O(1) proxy.
         patternChanged = self._lastNnz is not None and A.nnz != self._lastNnz
 
-        # Refresh the per-field AMG hierarchies (rather than reuse the standing ones) when there is
-        # nothing to reuse yet, the field-block layout changed (e.g. an AMR event resized the DOF
-        # vector), the sparsity pattern changed, a residual jump marks a new increment, or the
-        # previous solve asked for it: its outer count drifted too far from that of the solve the hierarchies
-        # were built for, or it hit the cap (_hierarchyIsStale), or the model or the settings changed. With
-        # reuseHierarchy off, every solve refreshes them.
+        # Refresh the hierarchies when there is nothing to reuse, the field-block layout or sparsity pattern
+        # changed, a new increment starts, the previous solve asked for it (_hierarchyIsStale, model, settings),
+        # or reuseHierarchy is off.
         wasStale = self._refreshNext
         mustRefresh = (
             self._preconditioners is None
@@ -1833,9 +1754,7 @@ class BlockAMGSolver(LinearSolver):
             or not self._reuseHierarchy
         )
 
-        # Captured now, in priority order matching mustRefresh above -- by the time the debug detail
-        # is built at the end of this call, self._refreshNext has already been overwritten for the
-        # *next* call, so "why" has to be recorded at the point mustRefresh itself is decided.
+        # Recorded now: self._refreshNext is overwritten for the next call before the debug detail is built.
         if not mustRefresh:
             rebuildReason = None
         elif self._preconditioners is None:
@@ -1859,16 +1778,8 @@ class BlockAMGSolver(LinearSolver):
         with performancetiming.timeit("equilibration"):
             if mustRefresh:
                 diagonal = PyAMGCLEquilibratedSystem.absoluteDiagonal(A)
-                # A zero diagonal entry cannot be equilibrated: 1/sqrt(0) is inf, which would poison
-                # A_scaled and b_scaled with non-finite values before the hierarchy build, and the failure would
-                # surface much later as a NaN correction (i.e. as DivergingSolution, which reads like
-                # a physics problem rather than an unsupported system). Flooring the divisor is not a
-                # fix either -- a 1e-300 floor merely turns inf into ~1e150 and blows the scaled
-                # operator up to ~1e149, which is finite and equally useless. The honest answer is
-                # that a system with a structurally zero diagonal is a saddle-point system (e.g. the
-                # multiplier block of a Lagrangian constraint, which never writes its own diagonal),
-                # and smoothed-aggregation AMG on a zero block is not something this solver does.
-                # Say so, and name the offending dofs.
+                # A zero diagonal cannot be equilibrated (1/sqrt(0) = inf). It marks a saddle-point system (e.g. the
+                # multiplier block of a Lagrangian constraint), which this AMG scheme does not support: say so.
                 zeroDiagonal = np.nonzero(diagonal == 0.0)[0]
                 if zeroDiagonal.size:
                     raise ValueError(
@@ -1880,11 +1791,8 @@ class BlockAMGSolver(LinearSolver):
                             zeroDiagonal.size, int(zeroDiagonal[0])
                         )
                     )
-                # A diagonal entry that is NaN or infinite is no better: it makes the scaling, and with it the
-                # translations' weights 1/scaling of a block hierarchy, non-finite, which AMGCL's hierarchy build
-                # rejects with a RuntimeError -- which nothing in the nonlinear solvers catches, whereas a NaN
-                # correction is a DivergingSolution and a cutback. Decline the solve like a non-finite right-hand
-                # side (checked after the zero diagonal, which is the user's error to see first).
+                # A non-finite diagonal would make AMGCL's hierarchy build raise, which the nonlinear solvers do not
+                # catch; declining the solve gives a NaN correction and thus a cutback instead.
                 nonFiniteDiagonal = np.nonzero(~np.isfinite(diagonal))[0]
                 if nonFiniteDiagonal.size:
                     return self._notSolved(
@@ -1895,10 +1803,8 @@ class BlockAMGSolver(LinearSolver):
                     )
                 scaling = 1.0 / np.sqrt(diagonal)
             else:
-                # Reuse the equilibration the standing hierarchies were built for. Any D gives the same
-                # system in other variables (A_scaled z = b_scaled with x = D z), so the outer solve still solves the
-                # *current* A x = b; only the preconditioner's quality can drift -- which costs outer
-                # iterations and, if it drives the solve to the cap, the accuracy of that one solve.
+                # Reuse the standing equilibration: any D still solves the current A x = b (x = D z); only the
+                # preconditioner's quality can drift.
                 scaling = self._scaling
 
             b_scaled = scaling * b
@@ -1973,9 +1879,8 @@ class BlockAMGSolver(LinearSolver):
                     sweepOnce(range(nFields - 2, -1, -1), residual, v, visited)
             return np.concatenate(v)
 
-        # krylovOnScaledSystem = False: the outer solve runs on A itself, preconditioned by x = D M^-1 (D r) --
-        # M built on D A D as always -- so that the residual it converges is the true one the solve is accepted
-        # on.
+        # krylovOnScaledSystem = False: the outer solve runs on A, preconditioned by x = D M^-1 (D r), so that it
+        # converges the true residual.
         if onScaledSystem:
             outerRightHandSide, outerPreconditioner = b_scaled, blockGaussSeidel
         else:
@@ -1990,10 +1895,8 @@ class BlockAMGSolver(LinearSolver):
         else:
             eta = self._forcingTolerance(residualNorm, newIncrement)
 
-        # the outer Krylov converges the *scaled* residual, but acceptance is on the *true*
-        # residual; ask the first pass for gapSafetyFactor * eta / gap (gap learned from previous solves) so
-        # that it lands on target in one pass instead of paying a warm-restart continuation.
-        # On the unscaled system there is no gap to compensate: the outer solve converges the true residual.
+        # On the scaled system, ask the first pass for gapSafetyFactor * eta / gap (gap learned from previous
+        # solves), so that the *true* residual meets eta without a continuation.
         if self._gapCompensatedTolerance and onScaledSystem:
             firstPassEta = max(self._gapSafetyFactor * eta / max(self._trueResidualGap, 1.0), 1e-14)
         else:
@@ -2055,9 +1958,7 @@ class BlockAMGSolver(LinearSolver):
             capHit = info != 0
             continuationEta = min(eta, firstPassEta) if self._gapCompensatedTolerance else eta
             continuations = 0
-            # On the unscaled system AMGCL's (right-preconditioned) LGMRES already converged the true
-            # residual: a miss is a cap hit, and a warm restart with the same preconditioner would only
-            # extend the cap.
+            # On the unscaled system LGMRES already converged the true residual: a miss is a cap hit, not a gap.
             while onScaledSystem and trueResidual > eta and continuations < self._trueResidualMaxContinuations:
                 continuations += 1
                 # with gapCompensatedTolerance: aim at eta / gap (with a safety factor), at least 2x tighter
@@ -2094,9 +1995,7 @@ class BlockAMGSolver(LinearSolver):
 
         solveElapsedTime = time.time() - solveStartTime
 
-        # Populated unconditionally (cheap: one dataclass construction) -- reportsSolveSummary, not
-        # this, is what decides whether the nonlinear solver ever looks at it, so there is nothing to
-        # gate here beyond detailLines, which is genuinely wasted work at anything below "debug".
+        # Always populated (cheap); only detailLines, built at "debug" only, costs real work.
         detailLines = ()
         if self._verbosityIndex >= _VERBOSITY_LEVELS.index("debug"):
             precondWord = "rebuilt({:})".format(rebuildReason) if mustRefresh else "reused"
@@ -2112,8 +2011,6 @@ class BlockAMGSolver(LinearSolver):
             detailLines=detailLines,
         )
         if outerIters > self._warnOuterIterationsThreshold:
-            # Rare and actionable, so this is a "warning" (marked "⚠" in the log) and spells out the likely
-            # cause, unlike the routine per-solve line above it.
             self._log(
                 "warning",
                 "⚠ solve #{:} needed {:} outer Krylov iterations, above the warning threshold of {:}. "
@@ -2146,17 +2043,12 @@ class BlockAMGSolver(LinearSolver):
             and BlockAMGSolver._degradationDumpsWritten < self._dumpOnDegradationMaxDumps
         ):
             self._dumpDegradedSystem(A, b, blocks, solveState)
-        # Recorded *after* the dump above, so a trigger's own context window (from
-        # _recentSolveHistory) never includes itself -- only solves strictly preceding it. Guarded on
-        # dumpOnDegradationContextSolves so a run with the feature off never holds onto extra matrices.
+        # Recorded after the dump, so that a trigger's context window holds only the solves preceding it.
         if self._dumpOnDegradationDir is not None and self._dumpOnDegradationContextSolves > 0:
             self._recentSolveHistory.append(
                 {
                     "solveCount": self._solveCount,
-                    # Copied, not referenced: NIST hands the same CSR matrix and residual buffer back
-                    # every Newton iteration (CSRGenerator.updateInPlace, and `R[:] = ...`), so storing
-                    # references would make every history entry alias the trigger-time values -- the
-                    # exact opposite of the authentic preceding-solve sequence this window exists for.
+                    # Copied: the nonlinear solver reuses the same CSR matrix and residual buffer every iteration.
                     "A": A.copy(),
                     "b": np.array(b, copy=True),
                     "blocks": blocks,

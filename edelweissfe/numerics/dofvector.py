@@ -65,21 +65,9 @@ class DofVector(np.ndarray):
         self._plainView = None
 
     def __getitem__(self, key):
-        # The entity lookup is the hottest access pattern in the code base: the explicit
-        # element loop performs three of these per element per increment. Two things that
-        # look harmless dominated the cost, measured at 0.78 us per call on a 280155-dof
-        # model:
-        #
-        #   * the isinstance() chain, paid by every entity access before it can miss it;
-        #   * the numpy subclass machinery, which wrapped each result back into a
-        #     DofVector and ran __array_finalize__ -- 54 % of the total on its own.
-        #
-        # Trying the dictionary first and returning a plain ndarray view of the same
-        # buffer removes both, and measures 3.0x faster (0.78 -> 0.26 us). Element kernels
-        # only ever need a buffer, never the DofVector behaviour. Non-entity keys (ints,
-        # slices, arrays) miss the dictionary via KeyError/TypeError and fall through to
-        # normal ndarray indexing at the cost of one exception -- paid on cold paths such
-        # as ``P[:] = 0.0``, not per element.
+        # Hot path (called per element per increment): try the entity dictionary first, skipping an isinstance()
+        # chain, and return a plain ndarray view, skipping numpy's subclass wrapping. Non-entity keys (ints,
+        # slices, arrays) fall through to normal ndarray indexing at the cost of one exception.
         try:
             indices = self.entitiesInDofVector[key]
         except (KeyError, TypeError):
@@ -156,9 +144,8 @@ class DofVector(np.ndarray):
         if self.entitiesInDofVector is None:
             raise ValueError("Cannot create a ScatterDofVector: entitiesInDofVector is None.")
 
-        # __array_finalize__ inherits _scatterTemplate across views/copies, but a view's
-        # entitiesInDofVector may later be replaced by a different mapping (e.g. copy()
-        # assigns a fresh dict) - guard against reusing a template built for a stale one.
+        # The template is inherited across views/copies, but entitiesInDofVector may since have been replaced
+        # (e.g. by copy()): do not reuse a template built for a stale mapping.
         if self._scatterTemplate is None or self._scatterTemplate.entitiesInDofVector is not self.entitiesInDofVector:
             self._scatterTemplate = edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate(
                 self.entitiesInDofVector, self.size
