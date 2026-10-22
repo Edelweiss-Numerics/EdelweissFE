@@ -9,6 +9,7 @@
    the default rebuilds them, as before.
 3. A requested rebuild (setModel, a hot reload, a stale hierarchy) stands until a build succeeds.
 4. A right-hand side that is not finite is not solved, and leaves the solver's state as it was.
+5. ``reuseHierarchy=False`` rebuilds the hierarchies for every solve; the default reuses them.
 """
 
 import numpy as np
@@ -110,3 +111,16 @@ def test_a_diagonal_that_is_not_finite_is_not_solved(entry):
     # nothing was built, and the solver's state is as it was
     assert solver._preconditioners is None
     assert solver._lastResidualNorm is None
+
+
+@pytest.mark.parametrize("reuse", [True, False])
+def test_the_hierarchies_are_reused_only_if_asked(reuse):
+    A, b, blocks = displacementDamageSystem(12, coupling="one-way", rowScaling=True)
+    solver = _solver(blocks, outerTol=1e-6, reuseHierarchy=reuse, hierarchyStalenessFactor=1e9)
+    solver(A, b)
+    standing = solver._preconditioners
+
+    # The same system again: no rebuild trigger fires, only the option decides.
+    solver(A, b)
+
+    assert (solver._preconditioners is standing) is reuse

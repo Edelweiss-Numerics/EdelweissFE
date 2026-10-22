@@ -332,6 +332,7 @@ CONFIG_CASTS = {
     "residualGrowthFactor": float,
     "hierarchyStalenessFactor": float,
     "refreshOnNewIncrement": _boolFromConfig,
+    "reuseHierarchy": _boolFromConfig,
     "krylovOnScaledSystem": _boolFromConfig,
     "trueResidualMaxContinuations": int,
     "gapCompensatedTolerance": _boolFromConfig,
@@ -653,6 +654,11 @@ class BlockAMGSolver(LinearSolver):
         (default ``True``). With ``False`` a new increment alone keeps the standing hierarchies -- the
         first Newton iteration's Jacobian is the converged one of the previous increment -- and only
         the layout/pattern checks and ``hierarchyStalenessFactor`` decide.
+    reuseHierarchy
+        Reuse the AMG hierarchies across solves until one of the rebuild triggers fires (default
+        ``True``). With ``False`` every solve builds them for its own matrix: more builds, but no solve
+        on hierarchies built for an older Jacobian -- measured faster on a large contact model with live
+        adaptive refinement, where the reused hierarchies needed several times the outer iterations.
     trueResidualMaxContinuations
         How many times to warm-restart the outer solve (``x0`` from the previous pass, the same ``A_scaled``,
         ``b_scaled`` and ``M``, a tighter tolerance) if the true relative residual still exceeds ``eta`` after
@@ -804,6 +810,7 @@ class BlockAMGSolver(LinearSolver):
         residualGrowthFactor: float = 4.0,
         hierarchyStalenessFactor: float = 3.0,
         refreshOnNewIncrement: bool = True,
+        reuseHierarchy: bool = True,
         krylovOnScaledSystem: bool = False,
         gapCompensatedTolerance: bool = False,
         gapSafetyFactor: float = 0.3,
@@ -858,6 +865,7 @@ class BlockAMGSolver(LinearSolver):
         self._residualGrowthFactor = residualGrowthFactor
         self._hierarchyStalenessFactor = hierarchyStalenessFactor
         self._refreshOnNewIncrement = refreshOnNewIncrement
+        self._reuseHierarchy = reuseHierarchy
         self._krylovOnScaledSystem = krylovOnScaledSystem
         self._gapCompensatedTolerance = gapCompensatedTolerance
         self._gapSafetyFactor = gapSafetyFactor
@@ -1812,7 +1820,8 @@ class BlockAMGSolver(LinearSolver):
         # nothing to reuse yet, the field-block layout changed (e.g. an AMR event resized the DOF
         # vector), the sparsity pattern changed, a residual jump marks a new increment, or the
         # previous solve asked for it: its outer count drifted too far from that of the solve the hierarchies
-        # were built for, or it hit the cap (_hierarchyIsStale), or the model or the settings changed.
+        # were built for, or it hit the cap (_hierarchyIsStale), or the model or the settings changed. With
+        # reuseHierarchy off, every solve refreshes them.
         wasStale = self._refreshNext
         mustRefresh = (
             self._preconditioners is None
@@ -1821,6 +1830,7 @@ class BlockAMGSolver(LinearSolver):
             or patternChanged
             or (newIncrement and self._refreshOnNewIncrement)
             or wasStale
+            or not self._reuseHierarchy
         )
 
         # Captured now, in priority order matching mustRefresh above -- by the time the debug detail
@@ -1836,8 +1846,10 @@ class BlockAMGSolver(LinearSolver):
             rebuildReason = "pattern"
         elif newIncrement and self._refreshOnNewIncrement:
             rebuildReason = "increment"
-        else:
+        elif wasStale:
             rebuildReason = "stale"
+        else:
+            rebuildReason = "always"
 
         # (2) Equilibration: build the field preconditioners from A_scaled = D A D, D = diag(scaling)
         #     with scaling = 1 / sqrt|a_ii| (b_scaled = D b in the code). With

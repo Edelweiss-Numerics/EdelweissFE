@@ -717,6 +717,7 @@ accuracy of that one Newton step; the next solve is then rebuilt (see below).
 
 The hierarchies are rebuilt when
 
+* ``reuseHierarchy`` is off: then every solve builds its own, and none of the triggers below matters,
 * there is nothing to reuse yet (the first solve),
 * the field-block layout or the system size changed (e.g. an adaptive-refinement event),
 * the number of stored nonzeros changed -- a free :math:`O(1)` proxy for "the sparsity pattern
@@ -1039,6 +1040,13 @@ Hierarchy reuse
       - Refresh the hierarchies on a residual jump (a new increment). With ``false`` the
         first Newton iteration of an increment keeps the standing hierarchies; the layout/pattern
         checks and ``hierarchyStalenessFactor`` still apply.
+    * - ``reuseHierarchy``
+      - ``true``
+      - Reuse the hierarchies across solves until a rebuild trigger fires. With ``false`` every
+        solve builds them for its own matrix (logged as ``rebuilt(always)``): more builds, but no
+        solve on hierarchies built for an older Jacobian. Measured faster on a large contact model
+        with live adaptive refinement, where the reused hierarchies needed several times the outer
+        iterations of fresh ones.
     * - ``hierarchyDropTol``
       - ``0.0`` (off)
       - Build each field's AMG hierarchy from a *sparsified* copy of its diagonal block: drop
