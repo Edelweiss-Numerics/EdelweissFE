@@ -268,8 +268,11 @@ extensions += [
         "*",
         sources=["edelweissfe/linsolve/amgcl/amgcl.pyx"],
         # Reached only through an #include in amgcl-wrapper.hpp, which neither Cython's dependency scan nor
-        # setuptools follows: without this entry, a header-only edit leaves the up-to-date-looking extension stale.
-        depends=["edelweissfe/linsolve/amgcl/amgcl-block-translations.hpp"],
+        # setuptools follows: without these entries, a header-only edit leaves the up-to-date-looking extension stale.
+        depends=[
+            "edelweissfe/linsolve/amgcl/amgcl-block-translations.hpp",
+            "edelweissfe/linsolve/amgcl/amgcl-smoothed-prolongation.hpp",
+        ],
         include_dirs=[numpy.get_include(), join(native_prefix, "include"), "."],
         language="c++",
         # MSVC's default language standard (C++14) already covers AMGCL's C++11 requirement.
