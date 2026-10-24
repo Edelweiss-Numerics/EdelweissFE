@@ -24,7 +24,9 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+from libcpp.pair cimport pair
 from libcpp.string cimport string
+from libcpp.vector cimport vector
 
 
 cdef extern from "amgcl-wrapper.hpp":
@@ -89,9 +91,23 @@ cdef extern from "amgcl-wrapper.hpp":
                    double& error,
                    bint onUnscaledOperator) except +
 
+    # The two-grid cycle of the p-two-grid: the cycle itself, the fine spectral radius, the timings and the report --
+    # see TwoGridPreconditioner's own comment.
+    cdef cppclass TwoGridPreconditioner:
+        void apply(int n, const double* r, double* x) except +
+        double fineSpectralRadius()
+        int fineSpectralRadiusSource()
+        int fineDominantVectorSize()
+        void copyFineDominantVector(double* out)
+        int nCoarse()
+        string report() except +
+        vector[pair[string, double]] setupSeconds_
+        double applyFineSeconds_
+        double applyCoarseSeconds_
+
     # The p-two-grid (P1) preconditioner of edelweissfe/linsolve/blockamg/ptwogrid.py, built and
     # applied entirely in C++ (OpenMP) -- see PTwoGridPreconditionerT's own comment.
-    cdef cppclass PTwoGridPreconditioner:
+    cdef cppclass PTwoGridPreconditioner(TwoGridPreconditioner):
         PTwoGridPreconditioner(const char* json_params) except +
 
         @staticmethod
@@ -100,17 +116,4 @@ cdef extern from "amgcl-wrapper.hpp":
                    int nNodes, const signed char* isCorner, const int* edgeEndpoints,
                    const double* nullspace, int nullspaceRows, int nullspaceCols,
                    double spectralRadius, const double* dominantVector, int dominantVectorSize) except +
-        void apply(int n, const double* r, double* x) except +
-        double fineSpectralRadius()
-        int fineSpectralRadiusSource()
-        int fineDominantVectorSize()
-        void copyFineDominantVector(double* out)
         int nCoarseFree()
-        string report() except +
-        double setupDirichletAndPSeconds_
-        double setupGalerkinSeconds_
-        double setupCoarseSeconds_
-        double setupFineOperatorSeconds_
-        double setupSpectralRadiusSeconds_
-        double applyFineSeconds_
-        double applyCoarseSeconds_

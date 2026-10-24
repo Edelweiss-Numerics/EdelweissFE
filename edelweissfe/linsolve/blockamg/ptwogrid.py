@@ -76,6 +76,7 @@ block storage of the fine operator (``fineBlockSize``) on partially constrained 
 import numpy as np
 
 from edelweissfe.linsolve.base import FieldBlock
+from edelweissfe.linsolve.blockamg.twogrid import TwoGridPreconditioner
 from edelweissfe.linsolve.nullspace import rigidBodyNullspace, translationNullspace
 from edelweissfe.utils import performancetiming
 
@@ -115,10 +116,9 @@ _DEFAULT_FINE_POWER_ITERS = 300
 _DEFAULT_FINE_RECHECK_ITERS = 15
 
 
-class PTwoGridPreconditioner:
-    """A p-two-grid preconditioner for one vector field's diagonal block, built once per hierarchy
-    refresh (mirroring :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLSolver`'s ``build`` /
-    ``applyPreconditioner`` life cycle) and applied many times within the outer GMRES.
+class PTwoGridPreconditioner(TwoGridPreconditioner):
+    """A p-two-grid preconditioner for one vector field's diagonal block, a two-grid preconditioner
+    (:class:`~edelweissfe.linsolve.blockamg.twogrid.TwoGridPreconditioner`) whose coarse level is the P1 corner nodes.
 
     Parameters
     ----------
@@ -154,15 +154,10 @@ class PTwoGridPreconditioner:
         memory traffic per product, the dominant cost of the apply. Both give the same cycle up to
         floating-point summation order.
     fineSpectralRadius, fineDominantVector
-        The fine operator's spectral radius for the Chebyshev bounds, or ``None`` to estimate it by
-        ``finePowerIters`` power iterations from a deterministic start vector -- the single most
-        expensive stage of :meth:`build`. A caller rebuilding on a slowly changing operator can hand
-        back a previous build's :attr:`fineSpectralRadius` and :attr:`fineDominantVector` (see
-        blockamg's ``p1FineSpectralRadiusReuse``). The radius is then not reused blindly but
-        re-checked by ``fineRecheckIters`` power iterations continued from that vector: a re-check
-        estimate more than 1% above the supplied radius replaces it, and one beyond the ``fineHigher`` safety
-        margin -- the operator stiffened more than the smoother's bounds cover -- triggers the full
-        estimate. A radius without a vector is used as supplied.
+        A previous build's fine spectral radius and dominant vector to start from (blockamg's
+        ``p1FineSpectralRadiusReuse``), or ``None`` to estimate the radius in full by ``finePowerIters`` power
+        iterations; the re-check takes ``fineRecheckIters`` and the margin ``fineHigher``, see
+        :class:`~edelweissfe.linsolve.blockamg.twogrid.TwoGridPreconditioner`.
     fineValueType
         ``"double"`` (default) or ``"float"``: the value type the fine operator is stored in for the
         smoother and the residual -- fine smoothing dominates an outer iteration's cost, which is
@@ -203,8 +198,6 @@ class PTwoGridPreconditioner:
         self._isCorner = np.ascontiguousarray(isCorner, dtype=np.int8)
         self._edgeEndpoints = np.ascontiguousarray(edgeEndpoints, dtype=np.int32)
         self._useCoarseNullspace = useCoarseNullspace
-        self._fineSpectralRadius = fineSpectralRadius
-        self._fineDominantVector = fineDominantVector
         self._params = {
             "nuPre": int(nu if nuPre is None else nuPre),
             "nuPost": int(nu if nuPost is None else nuPost),
@@ -220,33 +213,7 @@ class PTwoGridPreconditioner:
         }
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLPTwoGrid
 
-        # The C++ class parses and validates every parameter in its constructor -- the one place they are
-        # checked -- so a bad value fails here, before anything is built.
-        try:
-            self._preconditioner = PyAMGCLPTwoGrid(self._params)
-        except RuntimeError as error:
-            raise ValueError(str(error)) from error
-
-    @property
-    def fineSpectralRadius(self) -> float:
-        """The fine spectral radius the smoother was built with (estimated, or the one supplied).
-
-        Exposed so a caller that reconstructs this object per hierarchy refresh can hand it back via
-        the ``fineSpectralRadius`` constructor argument instead of paying for the estimate again.
-        """
-        return self._preconditioner.fineSpectralRadius
-
-    @property
-    def fineDominantVector(self) -> np.ndarray:
-        """The estimate of the fine operator's dominant eigenvector, to hand back together with
-        :attr:`fineSpectralRadius` for the re-check of a reused radius."""
-        return self._preconditioner.fineDominantVector
-
-    @property
-    def fineSpectralRadiusSource(self) -> str:
-        """``"estimated"``, ``"supplied"``, ``"raised"`` or ``"re-estimated"`` -- see the
-        ``fineSpectralRadius`` parameter."""
-        return self._preconditioner.fineSpectralRadiusSource
+        super().__init__(PyAMGCLPTwoGrid, self._params, fineSpectralRadius, fineDominantVector)
 
     def build(self, A, scaling: np.ndarray, coords: np.ndarray = None) -> None:
         """Build the restricted ``P``, the Galerkin coarse operator, its AMGCL hierarchy, and the fine
@@ -307,32 +274,12 @@ class PTwoGridPreconditioner:
                 self._isCorner,
                 self._edgeEndpoints,
                 nullspace,
-                self._fineSpectralRadius if self._fineSpectralRadius is not None else 0.0,
+                self._suppliedFineSpectralRadius(),
                 self._fineDominantVector,
             )
 
-    def applyPreconditioner(self, r: np.ndarray) -> np.ndarray:
-        """One two-grid V-cycle: pre-smooth, coarse-grid correction, post-smooth, on the free DOFs;
-        Dirichlet rows are solved exactly, ``x[i] = r[i] / A[i, i]`` (``r[i]`` itself for the unit diagonal of
-        an equilibrated block)."""
-        return self._preconditioner.applyPreconditioner(r)
-
-    def timings(self) -> dict:
-        """Wall time [s] of the last build's stages and the cumulative apply (fine vs. coarse) --
-        kept measured, not assumed, since the split decides where the next optimization goes."""
-        return self._preconditioner.timings()
-
-    def report(self) -> str:
-        """The coarse level's AMGCL hierarchy report (context/diagnostics only, not a convergence gate)."""
-        return self._preconditioner.report()
-
 
 def parameterRejection(**parameters) -> "str | None":
-    """Why these p-two-grid settings -- :class:`PTwoGridPreconditioner` keywords -- cannot be used, or ``None``.
-    The C++ class validates them in its constructor, the one place they are checked; this asks it, without a
-    topology map."""
-    try:
-        PTwoGridPreconditioner(np.zeros(0, dtype=bool), np.zeros((0, 2), dtype=int), **parameters)
-    except (TypeError, ValueError) as error:
-        return str(error)
-    return None
+    """Why these p-two-grid settings -- :class:`PTwoGridPreconditioner` keywords -- cannot be used, or ``None``,
+    asked without a topology map."""
+    return PTwoGridPreconditioner.parameterRejection(np.zeros(0, dtype=bool), np.zeros((0, 2), dtype=int), **parameters)

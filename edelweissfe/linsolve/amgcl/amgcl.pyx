@@ -30,6 +30,8 @@ import numpy as np
 import scipy.sparse
 
 cimport numpy as np
+from libcpp.pair cimport pair
+from libcpp.string cimport string
 
 
 def _csrArrays(object A):
@@ -574,7 +576,68 @@ cdef class PyAMGCLLGMRESSolver:
         return np.ldexp(x, exponent)
 
 
-cdef class PyAMGCLPTwoGrid:
+cdef class _PyAMGCLTwoGrid:
+    """What the two-grid preconditioners share (``TwoGridPreconditioner`` in ``amgcl-wrapper.hpp``): the cycle, the
+    fine spectral radius it was built with, the timings and the report. A derived class creates the C++ object and
+    points :attr:`twoGrid` at it."""
+    cdef TwoGridPreconditioner* twoGrid
+
+    def applyPreconditioner(self, object r):
+        """One two-grid cycle: returns M^-1 r as a new float64 array (Dirichlet rows solved exactly)."""
+        rArray = np.ascontiguousarray(r, dtype=np.float64).reshape(-1)
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] x = np.empty(rArray.shape[0], dtype=np.float64)
+        # the C++ apply checks the length against the built size
+        self.twoGrid.apply(rArray.shape[0], _constDoubleData(rArray), _doubleData(x))
+        return x
+
+    @property
+    def fineSpectralRadius(self):
+        """The fine operator's spectral radius the Chebyshev smoother was built with -- estimated, or
+        the one handed to ``build``."""
+        return self.twoGrid.fineSpectralRadius()
+
+    @property
+    def fineDominantVector(self):
+        """The power iteration's last iterate, the estimate of the fine operator's dominant
+        eigenvector -- hand it back to the next ``build`` with :attr:`fineSpectralRadius`. Empty
+        if the radius was used as supplied, without a re-check."""
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] v = np.empty(
+            self.twoGrid.fineDominantVectorSize(), dtype=np.float64
+        )
+        cdef double[::1] v_ = v
+        if v.shape[0] > 0:
+            self.twoGrid.copyFineDominantVector(&v_[0])
+        return v
+
+    @property
+    def fineSpectralRadiusSource(self):
+        """How the last build arrived at its fine spectral radius: ``"estimated"`` in full,
+        ``"supplied"`` and kept, ``"raised"`` by the re-check, or ``"re-estimated"`` in full because
+        the re-check found the operator stiffened beyond the smoother's margin."""
+        return ("estimated", "supplied", "raised", "re-estimated")[self.twoGrid.fineSpectralRadiusSource()]
+
+    @property
+    def nCoarse(self):
+        """The number of coarse DOFs, the rows of the Galerkin coarse operator (0 without a coarse level)."""
+        return self.twoGrid.nCoarse()
+
+    def timings(self):
+        """Wall time [s] of the stages of the last build (``"setup: <stage>"``) and the cumulative wall time of the
+        apply (fine smoothing incl. the residual, coarse correction incl. restriction and prolongation)."""
+        cdef pair[string, double] stage
+        result = {}
+        for stage in self.twoGrid.setupSeconds_:
+            result["setup: " + stage.first.decode("utf-8")] = stage.second
+        result["apply: fine"] = self.twoGrid.applyFineSeconds_
+        result["apply: coarse"] = self.twoGrid.applyCoarseSeconds_
+        return result
+
+    def report(self):
+        """The report of the coarse level and its AMGCL hierarchy."""
+        return self.twoGrid.report().decode("utf-8")
+
+
+cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoGrid):
     """The p-two-grid (P1) preconditioner of :mod:`edelweissfe.linsolve.blockamg.ptwogrid`, built and
     applied entirely in C++: Dirichlet detection, the restricted prolongation ``P``, the Galerkin
     coarse operator ``P^T A P``, the coarse AMGCL hierarchy, the fine Chebyshev smoother and the
@@ -596,6 +659,7 @@ cdef class PyAMGCLPTwoGrid:
         cdef bytes json_bytes = json.dumps(params).encode("utf-8")
         cdef const char* c_json = json_bytes
         self.preconditioner = new PTwoGridPreconditioner(c_json)
+        self.twoGrid = self.preconditioner
 
     def __dealloc__(self):
         if self.preconditioner != NULL:
@@ -645,58 +709,7 @@ cdef class PyAMGCLPTwoGrid:
                                   _constDoubleData(B.reshape(-1)), B.shape[0], B.shape[1],
                                   spectralRadius, _constDoubleData(dominant), dominant.shape[0])
 
-    def applyPreconditioner(self, object r):
-        """One two-grid cycle: returns M^-1 r as a new float64 array (Dirichlet rows solved exactly)."""
-        rArray = np.ascontiguousarray(r, dtype=np.float64).reshape(-1)
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] x = np.empty(rArray.shape[0], dtype=np.float64)
-        # the C++ apply checks the length against the built size
-        self.preconditioner.apply(rArray.shape[0], _constDoubleData(rArray), _doubleData(x))
-        return x
-
-    @property
-    def fineSpectralRadius(self):
-        """The fine operator's spectral radius the Chebyshev smoother was built with -- estimated, or
-        the one handed to :meth:`build`."""
-        return self.preconditioner.fineSpectralRadius()
-
-    @property
-    def fineDominantVector(self):
-        """The power iteration's last iterate, the estimate of the fine operator's dominant
-        eigenvector -- hand it back to the next :meth:`build` with :attr:`fineSpectralRadius`. Empty
-        if the radius was used as supplied, without a re-check."""
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] v = np.empty(
-            self.preconditioner.fineDominantVectorSize(), dtype=np.float64
-        )
-        cdef double[::1] v_ = v
-        if v.shape[0] > 0:
-            self.preconditioner.copyFineDominantVector(&v_[0])
-        return v
-
-    @property
-    def fineSpectralRadiusSource(self):
-        """How the last build arrived at its fine spectral radius: ``"estimated"`` in full,
-        ``"supplied"`` and kept, ``"raised"`` by the re-check, or ``"re-estimated"`` in full because
-        the re-check found the operator stiffened beyond the smoother's margin."""
-        return ("estimated", "supplied", "raised", "re-estimated")[self.preconditioner.fineSpectralRadiusSource()]
-
     @property
     def nCoarseFree(self):
         """The number of free coarse DOFs (rows of the Galerkin operator)."""
         return self.preconditioner.nCoarseFree()
-
-    def timings(self):
-        """Cumulative wall time [s] of the build stages (of the last build) and of the apply (fine
-        smoothing incl. the residual, coarse correction incl. restriction and prolongation)."""
-        return {
-            "setup: dirichlet + P": self.preconditioner.setupDirichletAndPSeconds_,
-            "setup: galerkin P^T A P": self.preconditioner.setupGalerkinSeconds_,
-            "setup: coarse hierarchy": self.preconditioner.setupCoarseSeconds_,
-            "setup: fine operator": self.preconditioner.setupFineOperatorSeconds_,
-            "setup: fine spectral radius": self.preconditioner.setupSpectralRadiusSeconds_,
-            "apply: fine": self.preconditioner.applyFineSeconds_,
-            "apply: coarse": self.preconditioner.applyCoarseSeconds_,
-        }
-
-    def report(self):
-        """The coarse level's AMGCL hierarchy report."""
-        return self.preconditioner.report().decode("utf-8")
