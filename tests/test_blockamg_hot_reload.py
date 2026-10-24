@@ -188,7 +188,7 @@ def test_a_reload_drops_caches_derived_from_the_old_settings(configuredSolver):
     _reload(solver)
 
     solver._nodeCoordinateCache["displacement"] = "stale"
-    solver._p1FineSpectralRadiusCache["displacement"] = (1.0, None)
+    solver._fineSpectralRadiusCache["displacement"] = (1.0, None)
     solver._p1Maps["displacement"] = "stale"
     solver._lazyP1MapNames.add("displacement")
 
@@ -196,7 +196,7 @@ def test_a_reload_drops_caches_derived_from_the_old_settings(configuredSolver):
     assert _reload(solver) is True
 
     assert solver._nodeCoordinateCache == {}
-    assert solver._p1FineSpectralRadiusCache == {}
+    assert solver._fineSpectralRadiusCache == {}
     # a lazily built map belongs to the old settings; an explicitly supplied one would not
     assert "displacement" not in solver._p1Maps
     assert solver._lazyP1MapNames == set()

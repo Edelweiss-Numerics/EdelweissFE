@@ -271,6 +271,7 @@ extensions += [
         # setuptools follows: without these entries, a header-only edit leaves the up-to-date-looking extension stale.
         depends=[
             "edelweissfe/linsolve/amgcl/amgcl-block-translations.hpp",
+            "edelweissfe/linsolve/amgcl/amgcl-rigid-body-coarse-level.hpp",
             "edelweissfe/linsolve/amgcl/amgcl-smoothed-prolongation.hpp",
         ],
         include_dirs=[numpy.get_include(), join(native_prefix, "include"), "."],

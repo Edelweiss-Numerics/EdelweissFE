@@ -91,8 +91,8 @@ cdef extern from "amgcl-wrapper.hpp":
                    double& error,
                    bint onUnscaledOperator) except +
 
-    # The two-grid cycle of the p-two-grid: the cycle itself, the fine spectral radius, the timings and the report --
-    # see TwoGridPreconditioner's own comment.
+    # The two-grid cycle the p-two-grid and the rigid-body coarse level share: the cycle itself, the fine spectral
+    # radius, the timings and the report -- see TwoGridPreconditioner's own comment.
     cdef cppclass TwoGridPreconditioner:
         void apply(int n, const double* r, double* x) except +
         double fineSpectralRadius()
@@ -117,3 +117,25 @@ cdef extern from "amgcl-wrapper.hpp":
                    const double* nullspace, int nullspaceRows, int nullspaceCols,
                    double spectralRadius, const double* dominantVector, int dominantVectorSize) except +
         int nCoarseFree()
+
+    # The rigid-body coarse level preconditioner of edelweissfe/linsolve/blockamg/rigidbodycoarselevel.py, built and
+    # applied entirely in C++ (OpenMP) -- see RigidBodyCoarseLevelPreconditioner's own comment, and
+    # amgcl-rigid-body-coarse-level.hpp for its steps.
+    cdef cppclass RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):
+        void build(int n, const int* ptr, const int* col, const double* val,
+                   const double* coordinates, int nNodes, const double* scaling,
+                   double spectralRadius, const double* dominantVector, int dominantVectorSize) except +
+        int blockSize()
+        int modesPerAggregate()
+        int nNodes()
+        int nAggregates()
+        int droppedModes()
+        double prolongationSmoothingWeight()
+        int coarseNullspaceColumns()
+        void copyAggregateOfNode(long long* out)
+        void copyCoarseNullspace(double* out)
+        void prolongationCsr(vector[int]& ptr, vector[int]& col, vector[double]& val) except +
+        void coarseOperatorCsr(vector[int]& ptr, vector[int]& col, vector[double]& val) except +
+
+    # The rigid-body coarse level preconditioner for the field's backendBlockSize (2 or 3), owned by the caller.
+    RigidBodyCoarseLevelPreconditioner* makeRigidBodyCoarseLevelPreconditioner(const char* json_params) except +

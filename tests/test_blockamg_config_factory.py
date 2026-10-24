@@ -66,6 +66,7 @@ def test_a_non_mapping_config_still_means_all_defaults():
         "examples/WinklerL/blockamg.json",
         "examples/AnchorPryOut/blockamg.json",
         "testfiles/edelweiss-only/CantileverBeamQuad4BlockAMG/blockamg.json",
+        "testfiles/edelweiss-only/CantileverBeamHexa20BlockAMGRigidBody/blockamg.json",
     ],
 )
 def test_the_shipped_configurations_are_accepted(configFile):

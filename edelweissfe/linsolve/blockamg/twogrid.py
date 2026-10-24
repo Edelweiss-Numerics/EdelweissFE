@@ -24,10 +24,11 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """What the two-grid preconditioners of a vector field in :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`
-share, such as the p-two-grid (:mod:`~edelweissfe.linsolve.blockamg.ptwogrid`).
+share: the p-two-grid (:mod:`~edelweissfe.linsolve.blockamg.ptwogrid`) and the rigid-body coarse level
+(:mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`).
 
-A two-grid preconditioner is one two-grid cycle -- fine Chebyshev sweeps on the field's equilibrated block, and the
-coarse-grid correction through an AMGCL hierarchy on the Galerkin coarse operator -- defined by its coarse level, built
+Both are one two-grid cycle -- fine Chebyshev sweeps on the field's equilibrated block, and the coarse-grid correction
+through an AMGCL hierarchy on the Galerkin coarse operator -- that differ in their coarse level alone, and both are built
 and applied in C++: the shared cycle is ``TwoGridPreconditioner`` in ``amgcl-wrapper.hpp``, wrapped as
 ``_PyAMGCLTwoGrid`` in ``amgcl.pyx``. :class:`TwoGridPreconditioner` mirrors those bases here: it creates the C++ object,
 which validates every parameter, keeps the fine spectral radius a build may start from, and passes the cycle, the fine

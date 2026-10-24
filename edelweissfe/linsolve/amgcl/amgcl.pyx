@@ -32,6 +32,7 @@ import scipy.sparse
 cimport numpy as np
 from libcpp.pair cimport pair
 from libcpp.string cimport string
+from libcpp.vector cimport vector
 
 
 def _csrArrays(object A):
@@ -576,6 +577,24 @@ cdef class PyAMGCLLGMRESSolver:
         return np.ldexp(x, exponent)
 
 
+cdef np.ndarray _intArray(const vector[int]& values):
+    """A C++ vector of ints as a new int32 array."""
+    cdef np.ndarray[np.int32_t, ndim=1, mode="c"] array = np.empty(values.size(), dtype=np.int32)
+    cdef size_t i
+    for i in range(values.size()):
+        array[i] = values[i]
+    return array
+
+
+cdef np.ndarray _doubleArray(const vector[double]& values):
+    """A C++ vector of doubles as a new float64 array."""
+    cdef np.ndarray[np.float64_t, ndim=1, mode="c"] array = np.empty(values.size(), dtype=np.float64)
+    cdef size_t i
+    for i in range(values.size()):
+        array[i] = values[i]
+    return array
+
+
 cdef class _PyAMGCLTwoGrid:
     """What the two-grid preconditioners share (``TwoGridPreconditioner`` in ``amgcl-wrapper.hpp``): the cycle, the
     fine spectral radius it was built with, the timings and the report. A derived class creates the C++ object and
@@ -713,3 +732,123 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoGrid):
     def nCoarseFree(self):
         """The number of free coarse DOFs (rows of the Galerkin operator)."""
         return self.preconditioner.nCoarseFree()
+
+
+cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoGrid):
+    """The rigid-body coarse level preconditioner of :mod:`edelweissfe.linsolve.blockamg.rigidbodycoarselevel`, built
+    and applied entirely in C++ (``RigidBodyCoarseLevelPreconditionerT`` in ``amgcl-wrapper.hpp``, its steps in
+    ``amgcl-rigid-body-coarse-level.hpp``): the aggregates, the tentative prolongation from the rigid-body modes, the
+    smoothed prolongation, the Galerkin coarse operator, the AMGCL hierarchy below it, the fine Chebyshev smoother and
+    the cycle, all OpenMP-threaded -- no Python runs inside :meth:`applyPreconditioner`.
+    """
+    cdef RigidBodyCoarseLevelPreconditioner* preconditioner
+
+    def __cinit__(self, dict params):
+        """
+        params: {"backendBlockSize": 3, "backendPrecision": "float", "prolongation": "smoothed",
+        "coarseHierarchyPrecision": "double", "rotations": true, "amgcl": {<the field's AMGCL tree>}}, see
+        ``RigidBodyCoarseLevelPreconditioner`` in ``amgcl-wrapper.hpp``. Validated here, before any build.
+        """
+        cdef bytes json_bytes = json.dumps(params).encode("utf-8")
+        cdef const char* c_json = json_bytes
+        self.preconditioner = makeRigidBodyCoarseLevelPreconditioner(c_json)
+        self.twoGrid = self.preconditioner
+
+    def __dealloc__(self):
+        if self.preconditioner != NULL:
+            del self.preconditioner
+
+    def build(self, object A, object coordinates, object scaling, double spectralRadius=0.0,
+              object dominantVector=None):
+        """
+        Build the preconditioner for A (scipy.sparse csr_matrix, the field's equilibrated diagonal block D K D with
+        its Dirichlet identity rows, node-major with ``backendBlockSize`` DOFs per node).
+
+        coordinates: (nNodes, backendBlockSize) float64, the field's node coordinates, in its DOF order.
+        scaling: the field's equilibration D (n entries).
+        spectralRadius: > 0 to start from this fine spectral radius instead of estimating it in full.
+        dominantVector: with spectralRadius, the previous build's :attr:`fineDominantVector`, to re-check it from.
+        """
+        if not scipy.sparse.isspmatrix_csr(A):
+            A = A.tocsr()
+        if not A.has_sorted_indices:
+            A = A.sorted_indices()
+        A, indptr, indices, data = _csrArrays(A)
+        cdef int n = A.shape[0]
+        cdef int blockSize = self.preconditioner.blockSize()
+        coords = np.ascontiguousarray(coordinates, dtype=np.float64)
+        if coords.ndim != 2 or coords.shape[1] != blockSize:
+            raise ValueError(
+                "the coordinates must have the shape (nNodes, {:}), got {:}".format(blockSize, coords.shape)
+            )
+        scalingArray = _vector(scaling, n, "scaling")
+        dominant = np.zeros(0) if dominantVector is None else np.ascontiguousarray(dominantVector, dtype=np.float64)
+        # the C++ build checks that the nodes are the field's (nNodes blockSize = n)
+        self.preconditioner.build(n, _intData(indptr), _intData(indices), _constDoubleData(data),
+                                  _constDoubleData(coords.reshape(-1)), coords.shape[0], _constDoubleData(scalingArray),
+                                  spectralRadius, _constDoubleData(dominant), dominant.shape[0])
+
+    @property
+    def nAggregates(self):
+        """The number of aggregates of the last build."""
+        return self.preconditioner.nAggregates()
+
+    @property
+    def modesPerAggregate(self):
+        """The coarse DOFs per aggregate, one per rigid-body mode: 6 in 3D, 3 in 2D."""
+        return self.preconditioner.modesPerAggregate()
+
+    @property
+    def droppedModes(self):
+        """The number of modes the last build dropped as linearly dependent (e.g. the rotations of a single-node
+        aggregate)."""
+        return self.preconditioner.droppedModes()
+
+    @property
+    def prolongationSmoothingWeight(self):
+        """The damping weight omega of the prolongation smoothing of the last build (0 for a tentative one)."""
+        return self.preconditioner.prolongationSmoothingWeight()
+
+    @property
+    def aggregates(self):
+        """The aggregate of every node of the last build, ``< 0`` for a node in none."""
+        cdef int nNodes = self.preconditioner.nNodes()
+        cdef np.ndarray[np.longlong_t, ndim=1, mode="c"] ids = np.empty(nNodes, dtype=np.longlong)
+        cdef long long[::1] ids_ = ids
+        if nNodes > 0:
+            self.preconditioner.copyAggregateOfNode(&ids_[0])
+        return ids
+
+    def prolongationMatrix(self):
+        """The prolongation P of the last build as :meth:`applyPreconditioner` uses it (stored in
+        ``backendPrecision``, widened to double): a scipy.sparse csr_matrix of n rows and :attr:`nCoarse` columns, for
+        inspection."""
+        cdef vector[int] ptr
+        cdef vector[int] col
+        cdef vector[double] val
+        self.preconditioner.prolongationCsr(ptr, col, val)
+        return scipy.sparse.csr_matrix(
+            (_doubleArray(val), _intArray(col), _intArray(ptr)), shape=(ptr.size() - 1, self.preconditioner.nCoarse())
+        )
+
+    def coarseOperator(self):
+        """The Galerkin coarse operator P^T A P of the last build as its AMGCL hierarchy holds it (with the padded
+        diagonal entries of dropped modes): a scipy.sparse csr_matrix, for inspection."""
+        cdef vector[int] ptr
+        cdef vector[int] col
+        cdef vector[double] val
+        self.preconditioner.coarseOperatorCsr(ptr, col, val)
+        return scipy.sparse.csr_matrix(
+            (_doubleArray(val), _intArray(col), _intArray(ptr)), shape=(ptr.size() - 1, ptr.size() - 1)
+        )
+
+    def coarseNullspace(self):
+        """The near null-space of the AMGCL hierarchy below, the coefficients of the field's rigid-body modes in the
+        coarse basis: (:attr:`nCoarse`, modes) float64."""
+        cdef int rows = self.preconditioner.nCoarse()
+        cdef int cols = self.preconditioner.coarseNullspaceColumns()
+        cdef np.ndarray[np.float64_t, ndim=2, mode="c"] B = np.empty((rows, cols), dtype=np.float64)
+        cdef double[:, ::1] B_ = B
+        if rows > 0 and cols > 0:
+            self.preconditioner.copyCoarseNullspace(&B_[0, 0])
+        return B

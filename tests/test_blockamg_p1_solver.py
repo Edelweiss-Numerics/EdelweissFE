@@ -104,7 +104,7 @@ def test_a_rebuild_reuses_the_cached_fine_spectral_radius(problem):
     solver(A, b)
     first = solver._preconditioners[0]
     assert first.fineSpectralRadiusSource == "estimated"
-    cachedRadius, cachedVector = solver._p1FineSpectralRadiusCache["displacement"]
+    cachedRadius, cachedVector = solver._fineSpectralRadiusCache["displacement"]
     assert cachedRadius == first.fineSpectralRadius and len(cachedVector) == A.shape[0]
 
     # the same operator again, rebuilt: the re-check from the cached dominant vector keeps the radius
@@ -124,7 +124,7 @@ def test_without_reuse_every_rebuild_estimates_in_full(problem):
     solver._refreshNext = True
     solver(A, b)
     assert solver._preconditioners[0].fineSpectralRadiusSource == "estimated"
-    assert not solver._p1FineSpectralRadiusCache
+    assert not solver._fineSpectralRadiusCache
 
 
 def test_setModel_drops_the_cached_radius_and_rebuilds(problem):
@@ -135,7 +135,7 @@ def test_setModel_drops_the_cached_radius_and_rebuilds(problem):
 
     # the same layout and sparsity pattern: only setModel can ask for the rebuild
     solver.setModel(*_stubModel(coords))
-    assert not solver._p1FineSpectralRadiusCache
+    assert not solver._fineSpectralRadiusCache
     # the residual history of the previous model does not enter the forcing of the new one
     assert solver._lastResidualNorm is None
     x = solver(A, b)

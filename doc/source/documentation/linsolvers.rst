@@ -71,7 +71,9 @@ the run's bottleneck or exceeds available memory.
   precondition an outer GMRES/LGMRES. This is the route to problem sizes a direct factorization
   cannot reach at all.
   With ``schurComplement``, it condenses selected dofs exactly first, for dofs on which AMG alone
-  stalls, such as those of bars tied to their host elements by bond springs.
+  stalls, such as those of bars tied to their host elements by bond springs. With
+  ``rigidBodyCoarseLevel``, a displacement field gets the rotations into its coarse space, for
+  bending-dominated structures.
 
 **A diagnostic wrapper**, which does not solve anything itself:
 
@@ -109,7 +111,7 @@ The block structure -- which DOFs belong to which field, and each field's dimens
         "symmetric": false
     }
 
-The method, the near-null-space construction, the adaptive outer tolerance, hierarchy reuse, every configuration key with its default, and the experimental p-multigrid variant are documented in detail on their own page:
+The method, the near-null-space construction, the adaptive outer tolerance, hierarchy reuse, every configuration key with its default, the experimental p-multigrid variant, the rigid-body coarse level and the Schur complement condensation are documented in detail on their own page:
 
 .. toctree::
    :maxdepth: 1
@@ -153,6 +155,36 @@ elements are marked -- are condensed. For embedded bars, mark the bar and the bo
 ``bars`` and ``bondElements`` are the element sets of the bar and the bond elements. A ``fieldOutput`` marker
 condenses, e.g., a softening zone instead (testfile ``GradientEnhancedDamageSchurComplement``). The method, every
 key and the caveats are on the :doc:`blockamgtheory` page (section "Schur complement condensation").
+
+
+Rigid-body coarse level (``blockamg``)
+--------------------------------------
+
+The hierarchy ``blockamg`` builds for a 2D or 3D displacement field stores the field in node-wise blocks, and its
+coarse space holds the **translations** of every aggregate of nodes, not their rotations. In a bending-dominated
+structure -- a slender beam, a tunnel lining, a plate -- the slowly converging error is bending, under which every
+aggregate rotates almost as a rigid body: neither the coarse space nor the smoother reduces it, and the outer solve
+needs many iterations. The ``rigidBodyCoarseLevel`` option of ``blockamg`` gives the fields it names a first coarse
+level built from all rigid-body modes, translations and rotations, and keeps everything else as it is:
+
+.. code-block:: edelweiss
+
+    *solver, solver=NISTParallel, name=theSolver
+    linsolver=blockamg
+    linsolverConfigFile=blockamg.json
+
+.. code-block:: json
+
+    {
+        "rigidBodyCoarseLevel": ["displacement"]
+    }
+
+The testfile deck ``testfiles/edelweiss-only/CantileverBeamHexa20BlockAMGRigidBody``, a slender cantilever, shows the
+effect: with the option, each linear solve converges in some 20 outer iterations; without it, every solve stops at the
+iteration cap. On an elastic tunnel segment of quadratic hexahedra, it cut the outer iterations of the displacement
+block from 67 to 22; where the default already needs few iterations, or once softening dominates, it gains less. A
+scalar field (e.g. nonlocal damage) has no rotations and is rejected. The method, its options and the measurements are
+on the :doc:`blockamgtheory` page (section "Rigid-body coarse level").
 
 
 The ``amgcl`` solver
